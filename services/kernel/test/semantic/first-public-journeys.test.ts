@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
@@ -154,6 +156,17 @@ test('the first-public inventory names 31 unique user-visible journeys', () => {
     expect(row.path.length).toBeGreaterThan(8);
     expect(row.native.length).toBeGreaterThan(8);
     expect(row.browser.length).toBeGreaterThan(8);
+  }
+});
+
+test('the admitted walk executes every first-public inventory id', () => {
+  const source = readFileSync(
+    resolve(import.meta.dir, '../../../../apps/web/scripts/semantic-first-public-walk.ts'),
+    'utf8',
+  );
+  expect(source).toContain("from '../../../services/kernel/test/semantic/first-public-inventory.ts'");
+  for (const row of FIRST_PUBLIC_JOURNEYS) {
+    expect(source).toContain(`'${row.id}'`);
   }
 });
 

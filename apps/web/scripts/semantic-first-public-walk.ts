@@ -263,6 +263,40 @@ function fail(transition: string, expected: string, actual: string, owner = owne
   return { transition, expected, actual: actual.slice(0, 800), owner };
 }
 
+function failingRow(row: (typeof FIRST_PUBLIC_JOURNEYS)[number], cause: string, persona = 'setup'): Result {
+  return {
+    id: row.id,
+    name: row.name,
+    status: 'Failing',
+    ms: 0,
+    persona,
+    failure: fail(row.id, row.native, cause, ownerOf(cause)),
+  };
+}
+
+function inventoryCell(row: Result, revision: string, utc: string): string {
+  if (row.status === 'Passing') return `Passing ${revision.slice(0, 12)} ${utc} ${row.persona}`;
+  const actual = (row.failure?.actual ?? 'unknown').replaceAll('|', '/').slice(0, 120);
+  return `Failing ${row.failure?.owner ?? 'semantic'} ${actual}`;
+}
+
+async function recordInventory(revision: string, utc: string, results: Result[]): Promise<void> {
+  const path = join(root, 'docs/goals/semantic.capabilities.md');
+  const byName = new Map(results.map((row) => [row.name, row]));
+  const text = await readFile(path, 'utf8');
+  const next = text
+    .split('\n')
+    .map((line) => {
+      const match = /^\| (?<name>[^|]+?) \| (?<path>[^|]+) \| (?<result>[^|]+) \|$/.exec(line);
+      if (!match?.groups) return line;
+      const row = byName.get(match.groups.name.trim());
+      if (!row) return line;
+      return `| ${match.groups.name.trim()} | ${match.groups.path.trim()} | ${inventoryCell(row, revision, utc)} |`;
+    })
+    .join('\n');
+  if (next !== text) await writeFile(path, next);
+}
+
 type Session = {
   stack: Stack;
   call: KernelCall;
@@ -411,13 +445,18 @@ async function main() {
   await retireDevelopmentSeedState(root);
   const kernelEnv = await kernelEnvironment();
   if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
-  await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
+  let personaCause: string | undefined;
+  const personaCode = await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona', process.env, {
+    allowFailure: true,
+  });
+  if (personaCode !== 0)
+    personaCause = `persona ${((await lastLogLine('persona')) ?? `exited ${personaCode} without a log line`)}`;
   let seedCode = 0;
   let seedCause: string | undefined;
-  if (!kernelCause) {
+  if (!kernelCause && !personaCause) {
     const seedEnv = {
       ...process.env,
-      ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))),
+      ...(await parseEnv(join(root, '.temp/local-stack/seed.env')).catch(() => ({}))),
       AUTH_ORIGIN: stack.native,
       KERNEL_ORIGIN: stack.kernel,
     };
@@ -429,7 +468,7 @@ async function main() {
         ? undefined
         : `seed ${((await lastLogLine('seed')) ?? `exited ${seedCode} without a log line`)}`;
   }
-  const setupRecord = kernelCause ?? seedCause;
+  const setupRecord = kernelCause ?? personaCause ?? seedCause;
   if (setupRecord)
     await writeFile(
       join(evidenceDir, 'setup-failure.json'),
@@ -458,24 +497,49 @@ async function main() {
       { mode: 0o600 },
     );
   }
-  const keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };
+  let keys: { password: string } | undefined;
+  try {
+    keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };
+  } catch (error) {
+    personaCause ??= error instanceof Error ? error.message : String(error);
+  }
   let editor = '';
   let editorCause: string | undefined;
-  try {
-    editor = await accessToken(stack, 'developer@rezics.test', keys.password);
-  } catch (error) {
-    editorCause = error instanceof Error ? error.message : String(error);
+  if (keys) {
+    try {
+      editor = await accessToken(stack, 'developer@rezics.test', keys.password);
+    } catch (error) {
+      editorCause = error instanceof Error ? error.message : String(error);
+    }
+  } else {
+    editorCause = personaCause ?? 'persona keys.json missing';
   }
   const call = fetchCall(stack);
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
-  const browser: Browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
-  const anonymous = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
-  const member = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
   const results: Result[] = [];
-  const session: Session = { stack, call, editor, anonymous, member, revision, frontendCause };
+  let browser: Browser | undefined;
   try {
-    if (editor && !frontendCause) {
-      const signIn = await member.newPage();
+    browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    results.push(...FIRST_PUBLIC_JOURNEYS.map((row) => failingRow(row, cause)));
+  }
+  const anonymous = browser
+    ? await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } })
+    : undefined;
+  const member = browser
+    ? await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } })
+    : undefined;
+  const session: Session | undefined =
+    anonymous && member
+      ? { stack, call, editor, anonymous, member, revision, frontendCause }
+      : undefined;
+  try {
+    if (!session) {
+      // Playwright did not start: every row already carries that cause.
+    } else {
+    if (editor && !frontendCause && keys) {
+      const signIn = await session.member.newPage();
       await signIn.goto(`${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/catalogue/new')}`, {
         waitUntil: 'domcontentloaded',
         timeout: 180_000,
@@ -492,18 +556,11 @@ async function main() {
       }
       await signIn.close();
     }
-    const setupCause = editorCause ?? kernelCause ?? seedCause;
+    const setupCause = editorCause ?? personaCause ?? kernelCause ?? seedCause;
     if (setupCause && !editor) {
       for (const row of FIRST_PUBLIC_JOURNEYS) {
         if (row.id === 'released-definitions' || row.id === 'catalogue-browsing') continue;
-        results.push({
-          id: row.id,
-          name: row.name,
-          status: 'Failing',
-          ms: 0,
-          persona: 'anonymous',
-          failure: fail(row.id, row.native, setupCause, ownerOf(setupCause)),
-        });
+        results.push(failingRow(row, setupCause, 'anonymous'));
       }
     }
 
@@ -673,22 +730,24 @@ async function main() {
       }),
     );
 
-    const termsBook = await createSubject(call, editor, 'schema:Book', `Walk terms ${token}`);
+    let termsBookId = '';
     results.push(
       await journey(session, 'multilingual-terms', async () => {
-        await patchTerms(call, editor, termsBook.id, termsBook.revision, {
+        const termsBook = await createSubject(call, editor, 'schema:Book', `Walk terms ${token}`);
+        termsBookId = termsBook.id;
+        await patchTerms(call, editor, termsBookId, termsBook.revision, {
           labels: { en: `Walk terms renamed ${token}`, 'zh-Hant': '術語書籍' },
           descriptions: { en: 'Walk description', ja: '説明' },
         });
-        const current = await readSubject(call, termsBook.id);
+        const current = await readSubject(call, termsBookId);
         requireStatus(current, 200, 'terms readback');
         if ((current.body.subject as { labels: Record<string, string> }).labels['zh-Hant'] !== '術語書籍')
           throw new Error('zh-Hant label missing after terms patch');
         return {
-          native: { id: termsBook.id },
+          native: { id: termsBookId },
           browser: await visit(
             session,
-            `${stack.web}${subjectHref(termsBook.id, `Walk terms renamed ${token}`, 'en', 'terms')}`,
+            `${stack.web}${subjectHref(termsBookId, `Walk terms renamed ${token}`, 'en', 'terms')}`,
             { persona: 'member' },
           ),
         };
@@ -696,14 +755,14 @@ async function main() {
     );
     results.push(
       await journey(session, 'cited-fact-correction', async () => {
-        const proposal = await propose(call, editor, termsBook.id, cited('schema:inLanguage', 'ja'));
-        const current = await readSubject(call, termsBook.id);
+        const proposal = await propose(call, editor, termsBookId, cited('schema:inLanguage', 'ja'));
+        const current = await readSubject(call, termsBookId);
         requireStatus(current, 200, 'fact public read');
         return {
           native: { candidate: proposal.candidate, public: current.status },
           browser: await visit(
             session,
-            `${stack.web}${subjectHref(termsBook.id, `Walk terms renamed ${token}`, 'en', 'edit')}`,
+            `${stack.web}${subjectHref(termsBookId, `Walk terms renamed ${token}`, 'en', 'edit')}`,
             { persona: 'member' },
           ),
         };
@@ -714,10 +773,10 @@ async function main() {
         const proposal = await propose(
           call,
           editor,
-          termsBook.id,
+          termsBookId,
           citedDocument('schema:abstract', `Walk abstract ${token}`),
         );
-        const publicRead = await readSubject(call, termsBook.id);
+        const publicRead = await readSubject(call, termsBookId);
         requireStatus(publicRead, 200, 'authored public');
         const selected = (publicRead.body.subject as { statements?: Record<string, { id: string }[]> }).statements?.[
           'schema:abstract'
@@ -728,7 +787,7 @@ async function main() {
           native: { candidate: proposal.candidate, publicSelected: selected?.[0]?.id ?? null },
           browser: await visit(
             session,
-            `${stack.web}${subjectHref(termsBook.id, `Walk terms renamed ${token}`, 'en', 'authored')}`,
+            `${stack.web}${subjectHref(termsBookId, `Walk terms renamed ${token}`, 'en', 'authored')}`,
             { persona: 'member' },
           ),
         };
@@ -737,12 +796,12 @@ async function main() {
     results.push(
       await journey(session, 'relationship-correction', async () => {
         const author = await createSubject(call, editor, 'schema:Person', `Walk author ${token}`);
-        const proposal = await propose(call, editor, termsBook.id, cited('schema:author', author.id));
+        const proposal = await propose(call, editor, termsBookId, cited('schema:author', author.id));
         return {
           native: { author: author.id, candidate: proposal.candidate },
           browser: await visit(
             session,
-            `${stack.web}${subjectHref(termsBook.id, `Walk terms renamed ${token}`, 'en', 'relations')}`,
+            `${stack.web}${subjectHref(termsBookId, `Walk terms renamed ${token}`, 'en', 'relations')}`,
             { persona: 'member' },
           ),
         };
@@ -751,7 +810,7 @@ async function main() {
     results.push(
       await journey(session, 'missing-related-work', async () => {
         const related = await createSubject(call, editor, 'schema:BookSeries', `Walk missing series ${token}`);
-        const proposal = await propose(call, editor, termsBook.id, cited('wdt:P179', related.id));
+        const proposal = await propose(call, editor, termsBookId, cited('wdt:P179', related.id));
         requireStatus(await readSubject(call, related.id), 200, 'created related identity');
         return {
           native: { related: related.id, candidate: proposal.candidate },
@@ -764,16 +823,16 @@ async function main() {
         const proposal = await propose(
           call,
           editor,
-          termsBook.id,
+          termsBookId,
           cited('schema:sameAs', `https://example.test/isbn/${token}`),
         );
-        const publicRead = await readSubject(call, termsBook.id);
+        const publicRead = await readSubject(call, termsBookId);
         requireStatus(publicRead, 200, 'identifier public');
         return {
           native: { candidate: proposal.candidate },
           browser: await visit(
             session,
-            `${stack.web}${subjectHref(termsBook.id, `Walk terms renamed ${token}`, 'en', 'identifiers')}`,
+            `${stack.web}${subjectHref(termsBookId, `Walk terms renamed ${token}`, 'en', 'identifiers')}`,
             { persona: 'member' },
           ),
         };
@@ -783,17 +842,17 @@ async function main() {
       await journey(session, 'why-this-value-and-history', async () => {
         const value = await visit(
           session,
-          `${stack.web}${subjectHref(termsBook.id, `Walk terms renamed ${token}`, 'en', 'value')}`,
+          `${stack.web}${subjectHref(termsBookId, `Walk terms renamed ${token}`, 'en', 'value')}`,
         );
         const changes = await visit(
           session,
-          `${stack.web}${subjectHref(termsBook.id, `Walk terms renamed ${token}`, 'en', 'changes')}`,
+          `${stack.web}${subjectHref(termsBookId, `Walk terms renamed ${token}`, 'en', 'changes')}`,
         );
         const sources = await visit(
           session,
-          `${stack.web}${subjectHref(termsBook.id, `Walk terms renamed ${token}`, 'en', 'sources')}`,
+          `${stack.web}${subjectHref(termsBookId, `Walk terms renamed ${token}`, 'en', 'sources')}`,
         );
-        return { native: { id: termsBook.id }, browser: { value, changes, sources } };
+        return { native: { id: termsBookId }, browser: { value, changes, sources } };
       }),
     );
     results.push(
@@ -809,16 +868,16 @@ async function main() {
     );
     results.push(
       await journey(session, 'context-editorial-decisions', async () => {
-        const proposal = await propose(call, editor, termsBook.id, cited('schema:inLanguage', 'zh'));
-        await acceptCandidate(call, editor, termsBook.id, proposal.candidate);
-        await adoptCandidate(call, editor, termsBook.id, proposal.candidate, 'schema:inLanguage');
-        const publicRead = await readSubject(call, termsBook.id);
+        const proposal = await propose(call, editor, termsBookId, cited('schema:inLanguage', 'zh'));
+        await acceptCandidate(call, editor, termsBookId, proposal.candidate);
+        await adoptCandidate(call, editor, termsBookId, proposal.candidate, 'schema:inLanguage');
+        const publicRead = await readSubject(call, termsBookId);
         requireStatus(publicRead, 200, 'adopted language');
         return {
           native: { candidate: proposal.candidate },
           browser: await visit(
             session,
-            `${stack.web}${subjectHref(termsBook.id, `Walk terms renamed ${token}`, 'en', 'context-review')}`,
+            `${stack.web}${subjectHref(termsBookId, `Walk terms renamed ${token}`, 'en', 'context-review')}`,
             { persona: 'member' },
           ),
         };
@@ -827,7 +886,7 @@ async function main() {
     results.push(
       await journey(session, 'statement-consent', async () => {
         const person = await createSubject(call, editor, 'schema:Person', `Walk consent person ${token}`);
-        const proposal = await propose(call, editor, termsBook.id, cited('schema:author', person.id));
+        const proposal = await propose(call, editor, termsBookId, cited('schema:author', person.id));
         const disclosed = await discloseStatement(call, editor, proposal.candidate);
         const retracted = await retractStatement(call, editor, proposal.candidate);
         if (![200, 400, 403, 404, 409].includes(disclosed.status))
@@ -836,7 +895,7 @@ async function main() {
           native: { candidate: proposal.candidate, disclose: disclosed.status, retract: retracted.status },
           browser: await visit(
             session,
-            `${stack.web}${subjectHref(termsBook.id, `Walk terms renamed ${token}`, 'en', 'statement-consent')}?property=${encodeURIComponent('schema:author')}&candidate=${proposal.candidate}`,
+            `${stack.web}${subjectHref(termsBookId, `Walk terms renamed ${token}`, 'en', 'statement-consent')}?property=${encodeURIComponent('schema:author')}&candidate=${proposal.candidate}`,
             { persona: 'member' },
           ),
         };
@@ -930,11 +989,20 @@ async function main() {
       }),
     );
     }
+    }
   } finally {
-    await browser.close();
+    await browser?.close();
     await frontends.stop();
   }
 
+  const missing = FIRST_PUBLIC_JOURNEYS.filter((row) => !results.some((result) => result.id === row.id));
+  if (missing.length) {
+    results.push(
+      ...missing.map((row) =>
+        failingRow(row, `walk omitted this row after recording ${results.length}/${FIRST_PUBLIC_JOURNEYS.length}`),
+      ),
+    );
+  }
   const passing = results.filter((row) => row.status === 'Passing');
   const failing = results.filter((row) => row.status === 'Failing').sort((a, b) => b.ms - a.ms);
   const slowest = failing[0];
@@ -946,6 +1014,7 @@ async function main() {
     seedCause: seedCause ?? null,
     kernelCause: kernelCause ?? null,
     editorCause: editorCause ?? null,
+    personaCause: personaCause ?? null,
     frontendCause: frontendCause ?? null,
     passing: passing.length,
     total: FIRST_PUBLIC_JOURNEYS.length,
@@ -955,14 +1024,12 @@ async function main() {
     results,
   };
   await writeFile(join(evidenceDir, 'evidence.json'), `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
+  await recordInventory(revision, summary.utc, results);
   console.log(
     `semantic first-public ${passing.length}/${FIRST_PUBLIC_JOURNEYS.length}; slowest failing: ${
       slowest ? `${slowest.name} (${slowest.failure?.owner})` : 'none'
     }`,
   );
-  if (results.length !== FIRST_PUBLIC_JOURNEYS.length) {
-    throw new Error(`walk recorded ${results.length} rows, expected ${FIRST_PUBLIC_JOURNEYS.length}`);
-  }
   if (failing.length) process.exitCode = 1;
 }
 
