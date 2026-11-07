@@ -10,7 +10,9 @@ import {
   developmentAuthPageBindings,
   developmentWebsiteScopeConfiguration,
   developmentWebsiteBindings,
+  developmentJwksFetch,
   developmentKernelBindings,
+  issuerPublicJwksUrl,
   retireStaleSeedJournals,
   root,
   developmentBindings,
@@ -28,9 +30,18 @@ import {
   stackProcessCommands,
   walkSetupScripts,
 } from '../scripts/dev-stack.ts';
+import { localJwksTransport, readMembershipWorkConfig } from '../../kernel/src/access/membership-work-config.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
 import { readPoolAcquireTimeoutMillis } from '../../kernel/src/database/pool.ts';
+
+test('walk host Kernel Access authenticates a seeded persona against issuer JWKS', async () => {
+  const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
+  expect(source).toContain('jwksUrl = issuerPublicJwksUrl(origins.issuer)');
+  expect(source).toContain('access: (mounted) => createAccess({ ...mounted, auth: kernelAuth })');
+  expect(source).toContain('const actor = await access.authenticate(bearer, context)');
+  expect(source).toContain("if (actor.kind !== 'account') throw new Error('Local persona is not an account')");
+});
 
 test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', async () => {
   const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
@@ -51,10 +62,81 @@ test('isolated Kernel bindings verify the selected Auth issuer and bind the sele
   ).toEqual({
     AUTH_ISSUER: 'http://127.0.0.1:20021',
     AUTH_AUDIENCE: 'https://api.rezics.test',
-    AUTH_JWKS_URL: 'http://127.0.0.1:20022/.well-known/jwks.json',
+    AUTH_JWKS_URL: 'http://127.0.0.1:20021/.well-known/jwks.json',
+    REZICS_LOCAL_STACK_NATIVE_ORIGIN: 'http://127.0.0.1:20022',
     KERNEL_HOSTNAME: '127.0.0.1',
     KERNEL_PORT: '20023',
   });
+});
+
+test('every walk-stack process names AUTH_JWKS_URL on the issuer origin that signs tokens', () => {
+  const walk = developmentKernelBindings({
+    issuer: 'http://127.0.0.1:20011',
+    audience: 'https://api.rezics.test',
+    kernel: 'http://127.0.0.1:20013',
+    native: 'http://127.0.0.1:20012',
+  });
+  expect(new URL(walk.AUTH_JWKS_URL).origin).toBe(new URL(walk.AUTH_ISSUER).origin);
+  expect(walk.AUTH_JWKS_URL).toBe(issuerPublicJwksUrl(walk.AUTH_ISSUER));
+  expect(walk.AUTH_JWKS_URL).not.toContain(':20012');
+  const keys = {
+    KERNEL_ROUTE_KEY: Buffer.alloc(32, 1).toString('base64url'),
+    KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 2).toString('base64url')}`,
+  };
+  const config = readMembershipWorkConfig({ ...keys, ...walk });
+  expect(config.auth.issuer).toBe(walk.AUTH_ISSUER);
+  expect(config.auth.jwksUrl).toBe(walk.AUTH_JWKS_URL);
+  expect(config.auth.fetch).toBeTypeOf('function');
+});
+
+test('isolated stacks keep issuer, JWKS and audience consistent with each other', () => {
+  const first = developmentKernelBindings({
+    issuer: 'http://127.0.0.1:20021',
+    audience: 'https://api.rezics.test',
+    kernel: 'http://127.0.0.1:20023',
+    native: 'http://127.0.0.1:20022',
+  });
+  const second = developmentKernelBindings({
+    issuer: 'http://127.0.0.1:20031',
+    audience: 'https://api.rezics.test',
+    kernel: 'http://127.0.0.1:20033',
+    native: 'http://127.0.0.1:20032',
+  });
+  for (const bindings of [first, second]) {
+    expect(new URL(bindings.AUTH_JWKS_URL).origin).toBe(new URL(bindings.AUTH_ISSUER).origin);
+    expect(bindings.AUTH_AUDIENCE).toBe('https://api.rezics.test');
+    expect(bindings.REZICS_LOCAL_STACK_NATIVE_ORIGIN).not.toBe(bindings.AUTH_ISSUER);
+  }
+  expect(first.AUTH_ISSUER).not.toBe(second.AUTH_ISSUER);
+  expect(first.AUTH_JWKS_URL).not.toBe(second.AUTH_JWKS_URL);
+  expect(first.REZICS_LOCAL_STACK_NATIVE_ORIGIN).not.toBe(second.REZICS_LOCAL_STACK_NATIVE_ORIGIN);
+});
+
+test('local JWKS transport fetches only the issuer JWKS URL from native Auth', async () => {
+  const native = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: (request) => {
+      const url = new URL(request.url);
+      if (url.pathname !== '/.well-known/jwks.json') return new Response('not jwks', { status: 404 });
+      return Response.json({ keys: [{ kty: 'EC', kid: 'walk' }] });
+    },
+  });
+  try {
+    const issuer = 'http://127.0.0.1:20011';
+    const nativeOrigin = `http://127.0.0.1:${native.port}`;
+    const jwksUrl = issuerPublicJwksUrl(issuer);
+    const fetch = developmentJwksFetch(jwksUrl, nativeOrigin);
+    const response = await fetch(jwksUrl);
+    expect(response.ok).toBe(true);
+    expect(await response.json()).toEqual({ keys: [{ kty: 'EC', kid: 'walk' }] });
+    await expect(fetch(`${issuer}/signin`)).rejects.toThrow('only the configured issuer JWKS URL');
+    expect(
+      localJwksTransport({}, { issuer, audience: 'https://api.rezics.test', jwksUrl: 'https://other.test/jwks' }).fetch,
+    ).toBeUndefined();
+  } finally {
+    await native.stop(true);
+  }
 });
 
 test('Auth page scope configuration carries trusted siteActions and records native fallback explicitly', () => {

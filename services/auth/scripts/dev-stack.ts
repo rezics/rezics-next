@@ -21,7 +21,6 @@ import {
 import {
   admitWalkStack,
   firstRedactedDiagnostic,
-  nativeJwksUrl,
   SEED_JOURNAL_IDENTITY_FILE,
   seedJournalDatabaseIdentity,
   seedJournalsNameDifferentDatabase,
@@ -36,6 +35,7 @@ import {
   waitUntilWalkReady,
   type WalkNames,
 } from '../../../scripts/walk-stack.ts';
+import { localJwksTransport } from '../../kernel/src/access/membership-work-config.ts';
 
 export const root = resolve(import.meta.dir, '../../..');
 const state = resolve(root, '.temp/local-stack');
@@ -76,6 +76,11 @@ export const origins = {
   audience: 'https://api.rezics.test',
 };
 
+/** Public JWKS identity is the issuer origin; native Auth is only the local transport. */
+export function issuerPublicJwksUrl(issuer: string): string {
+  return `${issuer.replace(/\/$/, '')}/.well-known/jwks.json`;
+}
+
 /** Every process in an isolated stack uses the same issuer identity, including its port. */
 export function developmentKernelBindings(
   selected: Pick<typeof origins, 'issuer' | 'audience' | 'kernel' | 'native'> = origins,
@@ -83,10 +88,25 @@ export function developmentKernelBindings(
   return {
     AUTH_ISSUER: selected.issuer,
     AUTH_AUDIENCE: selected.audience,
-    AUTH_JWKS_URL: nativeJwksUrl(selected.native),
+    AUTH_JWKS_URL: issuerPublicJwksUrl(selected.issuer),
+    REZICS_LOCAL_STACK_NATIVE_ORIGIN: selected.native,
     KERNEL_HOSTNAME: '127.0.0.1',
     KERNEL_PORT: String(localPort(selected.kernel)),
   };
+}
+
+/** Trusted local composition: fetch only the configured issuer JWKS from native Auth. */
+export function developmentJwksFetch(issuerJwksUrl: string, nativeOrigin: string) {
+  const fetch = localJwksTransport(
+    { REZICS_LOCAL_STACK_NATIVE_ORIGIN: nativeOrigin },
+    {
+      issuer: new URL(issuerJwksUrl).origin,
+      audience: origins.audience,
+      jwksUrl: issuerJwksUrl,
+    },
+  ).fetch;
+  if (!fetch) throw new Error('development JWKS fetch requires a distinct native Auth origin');
+  return fetch;
 }
 
 export function authSecurityScopeConfiguration(siteActions?: Iterable<string>): string {
@@ -476,23 +496,30 @@ export async function assemble(options?: {
   const kernelPool = new Pool({ connectionString: config.databaseUrl });
   const database = new Pool({ connectionString: options?.authDatabaseUrl ?? (await authDatabaseUrl()) });
   const keys = options?.keys ?? (await developmentKeys());
+  let service: import('../src/index.ts').AuthService;
+  const jwksUrl = issuerPublicJwksUrl(origins.issuer);
+  const kernelAuth = {
+    issuer: origins.issuer,
+    audience: origins.audience,
+    jwksUrl,
+    fetch: async (url: string | URL, init?: RequestInit) => {
+      const requested = typeof url === 'string' ? url : url.href;
+      if (requested !== jwksUrl) throw new TypeError('Local JWKS transport serves only the configured issuer JWKS URL');
+      return service.handler(new Request(jwksUrl, init));
+    },
+  };
   const kernel = createKernel({
     pool: kernelPool,
     tokens: config.tokens,
     routeKey: config.routeKey,
     ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
+    access: (mounted) => createAccess({ ...mounted, auth: kernelAuth }),
   });
   const actions = accessActionCatalogue(actionCatalogue(kernel));
   const website = developmentWebsiteScopeConfiguration(mountedWebsiteConfiguration(actionCatalogue(kernel)));
-  let service: import('../src/index.ts').AuthService;
   const access = createAccess({
     actions,
-    auth: {
-      issuer: origins.issuer,
-      audience: origins.audience,
-      jwksUrl: `${origins.issuer}/.well-known/jwks.json`,
-      fetch: async () => service.handler(new Request(`${origins.issuer}/.well-known/jwks.json`)),
-    },
+    auth: kernelAuth,
   });
   const proofs = auth.createNativeWorkflowProofPorts({ database });
   const bindings = createNativeAccountBindings({
@@ -849,8 +876,9 @@ export function walkSetupScripts(env: Record<string, string | undefined> = proce
 }
 
 /**
- * Starts native Auth, the worker and Kernel first. Kernel reads issuer JWKS from native Auth, so Auth pages and Web
- * can wait until seeding finishes on an admitted walk. Local `task dev` still starts pages after Kernel.
+ * Starts native Auth, the worker and Kernel first. Kernel verifies issuer-origin JWKS and fetches that exact
+ * document from native Auth, so Auth pages and Web can wait until seeding finishes on an admitted walk.
+ * Local `task dev` still starts pages after Kernel.
  * Explicit deferred account walks serve Kernel HTTP from the Auth host and omit the worker and OpenSearch.
  */
 async function start() {
