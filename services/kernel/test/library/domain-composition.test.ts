@@ -29,6 +29,7 @@ import { LIBRARY_IDENTITY_SELECTED_STATEMENTS } from '../../src/library/identity
 import { preparePresentationSelection } from '../../src/library/collection-presentation.ts';
 import { libraryActorOf } from '../../src/library/contract/index.ts';
 import { admitComposedEntryProgress, libraryCommandAuthorization } from '../../src/library/command-support.ts';
+import { createLibraryObservationApplication } from '../../src/semantic/library-observation.ts';
 
 const accountId = '00000000-0000-7000-8000-000000000001';
 const collectionId = '00000000-0000-7000-8000-000000000002';
@@ -83,6 +84,7 @@ function fakeCapabilities(
 ): LibraryCapabilities {
   const authority = overrides.sourceAuthority ?? { kind: 'curated' as const };
   return {
+    semanticObservations: createLibraryObservationApplication(),
     authorization: {
       async admitCollectionRead() {
         return { authorized: true };
