@@ -1,5 +1,6 @@
 import type { LibraryActor, LibraryAccountActor } from './actors.ts';
 import type { CopyInput, CopyPatch, CopyPageOptions } from './copy-values.ts';
+import type { LibraryCursorBinding } from './cursor.ts';
 import type {
   CopyOperationPlan,
   CopyMutationOperation,
@@ -33,10 +34,7 @@ export interface CopyNativeTypes {
   inventoryValues: unknown;
 }
 export type CopyRestoreInput = { copyId: string; deletionId: string; revision: number };
-export type CopyCursorBinding = Readonly<{
-  operation: string;
-  parameters: Readonly<Record<string, string | number | null>>;
-}>;
+export type CopyCursorBinding = LibraryCursorBinding;
 export type CopyCommandSpec<N extends CopyNativeTypes, Prepared> = {
   action: string;
   kind: string;

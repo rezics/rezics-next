@@ -12,7 +12,6 @@ import { readPartition } from '../../partition/partition.ts';
 import type { AccountActor } from '../../request/access.ts';
 import { withRequestDeadline } from '../../request/deadline.ts';
 import { newId, partitionOf } from '../../route/route.ts';
-import { decodeCursor, encodeCursor } from '../../tokens/cursor.ts';
 import { LibraryNotFoundError, requireRoute, sameAccountRoute, workStepDeadline } from '../collection-command-work.ts';
 import type { Copy, CopyChanges } from '../entry-model.ts';
 import * as store from '../entry-store.ts';
@@ -45,7 +44,8 @@ import {
   type CopyConditionPatch,
 } from '../copy-condition.ts';
 import type { CommandAttempt, CommandOutcome } from '../../command/command.ts';
-import type { CopyApplicationPorts, CopyPatch } from '../contract/index.ts';
+import type { CopyApplicationPorts, CopyPatch, LibraryCursorCapability } from '../contract/index.ts';
+import type { KeyRing } from '../../tokens/seal.ts';
 import { CopyConflictError } from '../contract/index.ts';
 
 type Command = { transactionId: string; time: AuthoritativeTime };
@@ -132,6 +132,7 @@ async function assertNoOpenLoan(
 export function createNativeCopyPorts(
   config: NativeCopyConfig,
   producers: NativeCopyProducers,
+  cursors: LibraryCursorCapability<KeyRing>,
 ): CopyApplicationPorts<NativeCopyTypes> {
   const { pool, access, tokens, clock } = config;
   const plans = createCopyOperationPlans(producers.work);
@@ -389,8 +390,8 @@ export function createNativeCopyPorts(
         producers.profileSource,
       ),
     partition: (tx, route) => readPartition(tx, partitionOf(route)).then((partition) => partition ?? null),
-    decodeCursor: (binding, cursor) => decodeCursor(tokens, binding, cursor),
-    encodeCursor: (binding, cursor) => encodeCursor(tokens, binding, cursor),
+    decodeCursor: (binding, cursor) => cursors.decode(tokens, binding, cursor),
+    encodeCursor: (binding, cursor) => cursors.encode(tokens, binding, cursor),
     page: (tx, route, accountId, page, subjectId, kind, status) =>
       store.pageCopies(tx, route, accountId, page, subjectId, kind, status, producers.work.sessionProfileMigrationWork),
     inventoryValues: readCopyInventoryValues,

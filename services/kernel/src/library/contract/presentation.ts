@@ -20,11 +20,15 @@ export class SubjectIdentityUnavailableError extends Error {
 }
 
 /** Mapping is only a hint. Both original and terminal retain their native authorization. */
-export interface SubjectIdentityCapability<Context, Mapping extends SubjectIdentityObservation> {
+export interface SubjectIdentityCapability<
+  Context,
+  Mapping extends SubjectIdentityObservation,
+  Reference extends SubjectReferenceObservation = SubjectReferenceObservation,
+> {
   validId(id: string): boolean;
   redirected(from: string, to: string): Error;
   readMappings(context: Context, ids: readonly string[]): Promise<readonly Mapping[]>;
-  prepareReference(context: Context, id: string): Promise<() => Promise<SubjectReferenceObservation>>;
+  prepareReference(context: Context, id: string): Promise<() => Promise<Reference>>;
 }
 
 export type CurrentObservation<Value> = Readonly<{ value: Value; current(): Promise<boolean> }>;
