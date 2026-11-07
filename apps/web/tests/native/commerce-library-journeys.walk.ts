@@ -512,8 +512,13 @@ async function main() {
   await writeFile(join(evidenceDir, 'results.json'), `${JSON.stringify({ stack, report: publicFields(report) }, null, 2)}\n`, {
     mode: 0o600,
   });
-  const capabilities = await readFile(join(root, 'docs/goals/commerce.capabilities.md'), 'utf8');
-  await writeFile(join(root, 'docs/goals/commerce.capabilities.md'), applyWalkResults(capabilities, rows));
+  const capabilitiesPath = join(root, 'docs/goals/commerce.capabilities.md');
+  try {
+    const capabilities = await readFile(capabilitiesPath, 'utf8');
+    await writeFile(capabilitiesPath, applyWalkResults(capabilities, rows));
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'ENOENT') throw error;
+  }
   const slowest = report.slowestFailing;
   console.log(
     `first-public walk ${report.passing}/${report.total}` +

@@ -1001,7 +1001,9 @@ Decision: genuine-order native acceptance uses Content's isolated native system 
 history stays on the shared Auth/persona fixture; Accounts consumes `prepareNativeRetainedOrder`.
 Decision: first-public user-visible acceptance is the 26-row seeded walk
 `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/tests/native/commerce-library-journeys.walk.ts`;
-this genuine-order suite remains the financial retention proof. No extra outcome suites.
+this genuine-order suite remains the financial retention proof. No extra outcome suites. Walk evidence keeps all
+26 rows. Seed dump scans throw the shared scan-limit class and the pinned 2026-11-04 VNDB dump fits the release
+budgets, so overflow is a gap rather than a seed crash.
 Decision: Content's canonical issuer owns JWKS: `AUTH_ISSUER` and `AUTH_JWKS_URL` share the issuer origin and port;
 membership admission does not allow a distinct native JWKS port. The walk command stays on the worker host so
 `GOAL_ACCEPTANCE_REQUIRES` is not stripped; Auth pages start before Kernel so issuer JWKS is reachable for seed.
