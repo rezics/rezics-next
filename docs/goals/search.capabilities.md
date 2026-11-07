@@ -173,6 +173,17 @@ authorization, and child stderr is retained during readiness waits so a timeout 
 No timeout or lifecycle assertion is relaxed. Evidence:
 `.temp/goal/checks/worker-check-191c3565-91de-46dd-beb0-8961a4fdd8aa-2026-11-07T11-05-47.789Z-cb565bff.log`.
 
+The final ten-file native run at `4d25eec24f11b2ba659fdd1bcc06a093736f7a16` passed compiler and quality checks;
+the command returned exit 1 in 286.021 seconds on host a. The same seven files passed. Direct Semantic registration
+now passes with bootstrap effects retained; its two original worker lifecycle cases still time out at 30/60 seconds
+and fail again alone. No child phase, stdout or stderr was produced before the readiness failure, so no hidden
+endpoint, status or correlation is inferred. Collection output remains 1/10 and canonical capture 1/16 with the
+same allocation Conflict, projection-plan error and subsequent read-only transaction failure. Their original
+assertions remain required after the existing output-custody, Source-installation and startup repairs integrate.
+Owned evidence: `.temp/goal/checks/worker-check-d2764b95-6e78-4d35-83a8-b70604fa688a-2026-11-07T11-16-04.644Z-7181afbe.log`.
+The remote runner recorded cleanup of its databases, process group and artifact staging. No walk stack was admitted
+or started by this receiving round.
+
 ### Last observed dev census
 
 Observed walk revision: `93eb7908d8e983998d4b280ea275b131aaa444a1` (origin/dev `b94d47ff56` including startup
