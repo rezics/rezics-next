@@ -31,6 +31,7 @@ afterAll(async () => {
 });
 const path = (subjectId: string) => `/v1/libraryEntries/${subjectId}`;
 const scopes = ['subject:read', 'library_entry:read', 'library_entry:update', 'library_entry:delete'];
+const fixtureRequest = <T>(run: () => Promise<T>) => withRequestDeadline(Date.now() + 30_000, run);
 
 async function legacyNull(f: NativeProfileFixture, subjectId: string) {
   // Only historical storage setup: no forged identity, scope, receipt or readiness flag.
@@ -73,19 +74,22 @@ async function historicalDelete(f: NativeProfileFixture, subjectId: string, revi
 
 async function oldReceipts(f: NativeProfileFixture) {
   const subjectId = await f.createSubject('game');
-  const first = (await f.commands.putEntry(f.owner.actor, subjectId, { state: 'playing' }, entryKey())).value.entry;
+  const first = (
+    await fixtureRequest(() => f.commands.putEntry(f.owner.actor, subjectId, { state: 'playing' }, entryKey()))
+  ).value.entry;
   await legacyNull(f, subjectId);
   const key = entryKey(),
     input = { state: 'playing', revision: first.revision };
-  const updated = await f.commands.putEntry(f.owner.actor, subjectId, input, key);
+  const updated = await fixtureRequest(() => f.commands.putEntry(f.owner.actor, subjectId, input, key));
   // The first accepted revisioned write closes legacy NULL compatibility by
   // stamping the exact live row before the ordinary receipt is committed.
   expect(updated.value.entry.incarnationId).not.toBeNull();
   expect(updated.value.entry.incarnationId).not.toBe(first.incarnationId);
   const deleteKey = entryKey();
-  const deleted = await historicalDelete(f, subjectId, updated.value.entry.revision, deleteKey);
-  const replacement = (await f.commands.putEntry(f.owner.actor, subjectId, { state: 'planned' }, entryKey())).value
-    .entry;
+  const deleted = await fixtureRequest(() => historicalDelete(f, subjectId, updated.value.entry.revision, deleteKey));
+  const replacement = (
+    await fixtureRequest(() => f.commands.putEntry(f.owner.actor, subjectId, { state: 'planned' }, entryKey()))
+  ).value.entry;
   const receipts = (await f.inspect(f.owner.actor.accountId)).receipts;
   for (const [kind, requestKey, body] of [
     ['library.entry.put', key, { subjectId, requestedSubjectId: null, ...input }],
@@ -453,19 +457,16 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
     });
     const f = native;
     const target = f.baselineSubject;
-    const {
-      current: initialCurrent,
-      original,
-      old,
-    } = await withRequestDeadline(Date.now() + 30_000, async () => {
-      let current = (await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())).value.entry;
-      const original = current;
-      await f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey(), current.incarnationId!);
-      current = (await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())).value.entry;
-      const old = await oldReceipts(f);
-      return { current, original, old };
-    });
-    let current = initialCurrent;
+    let current = (
+      await fixtureRequest(() => f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey()))
+    ).value.entry;
+    const original = current;
+    await fixtureRequest(() =>
+      f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey(), current.incarnationId!),
+    );
+    current = (await fixtureRequest(() => f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())))
+      .value.entry;
+    const old = await oldReceipts(f);
     const operation = async () => {
       for (const guard of [undefined, entryKey(), original.incarnationId!]) {
         await expect(
