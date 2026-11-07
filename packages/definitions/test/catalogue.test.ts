@@ -25,7 +25,7 @@ test('the committed bundled release is the compilation of the bundled catalogue'
 
 test('book work, edition and recipe are profiles of the catalogue', () => {
   const { types, properties } = bundledRelease;
-  expect(bundledRelease.catalogue).toEqual({ id: 'https://rezics.com/catalogue/rezics', version: '1.0.5' });
+  expect(bundledRelease.catalogue).toEqual({ id: 'https://rezics.com/catalogue/rezics', version: '1.0.10' });
   expect(Object.keys(types)).toEqual(expect.arrayContaining(['bf:Instance', 'schema:Book', 'schema:Recipe']));
   expect(types['schema:Book']).toMatchObject({
     mappings: ['wd:Q47461344'],
@@ -170,54 +170,58 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
   expect(properties['schema:author']!.labels).toMatchObject({ en: 'author', ja: '著者', 'zh-Hant': '作者' });
 });
 
-test('a fixture vertical over the bundled catalogue adds a type without code', async () => {
+test('a fixture vertical extends the bundled catalogue without replacing a released vertical', async () => {
   const sources = bundledSources();
-  const prefixes =
-    'prefixes:\n  linkml: https://w3id.org/linkml/\n  schema: http://schema.org/\n  wd: http://www.wikidata.org/entity/\n';
-  const music = `id: https://rezics.com/catalogue/fixture/music
-name: music
+  const fixture = `id: https://rezics.com/catalogue/fixture/extension
+name: fixture_extension
 version: 1.0.0
-${prefixes}default_range: string
+prefixes:
+  linkml: https://w3id.org/linkml/
+  ex: https://example.org/
+default_range: string
 imports:
   - linkml:types
   - core
 classes:
-  Composition:
-    is_a: Thing
-    class_uri: schema:MusicComposition
-    exact_mappings:
-      - wd:Q207628
+  FixtureComposition:
+    is_a: CreativeWork
+    class_uri: ex:FixtureComposition
     slots:
       - composer
 slots:
   composer:
-    slot_uri: schema:composer
+    slot_uri: ex:composer
     range: Person
     multivalued: true
-    exact_mappings:
-      - wd:P86
     annotations:
       datatype: wikibase-item
 `;
   const root = `id: https://rezics.com/catalogue/fixture
 name: fixture
 version: 1.0.0
-${prefixes}imports:
+prefixes:
+  linkml: https://w3id.org/linkml/
+imports:
   - linkml:types
   - rezics
-  - music
+  - fixture-extension
 `;
-  const labels = 'types:\n  schema:MusicComposition: musical composition\nproperties:\n  schema:composer: composer\n';
+  const labels = 'types:\n  ex:FixtureComposition: fixture composition\nproperties:\n  ex:composer: composer\n';
   const release = await compileCatalogue({
     root: 'fixture.yaml',
-    schemas: { ...sources.schemas, 'fixture.yaml': root, 'music.yaml': music },
-    presentation: { ...sources.presentation, 'music/en': labels },
+    schemas: { ...sources.schemas, 'fixture.yaml': root, 'fixture-extension.yaml': fixture },
+    presentation: { ...sources.presentation, 'fixture-extension/en': labels },
   });
   expect(release.catalogue).toEqual({ id: 'https://rezics.com/catalogue/fixture', version: '1.0.0' });
   expect(Object.keys(release.types).sort()).toEqual(
-    [...Object.keys(bundledRelease.types), 'schema:MusicComposition'].sort(),
+    [...Object.keys(bundledRelease.types), 'ex:FixtureComposition'].sort(),
   );
-  expect(release.properties['schema:composer']).toMatchObject({ targets: ['schema:Person'], multivalued: true });
+  expect(release.types['ex:FixtureComposition']?.iri).toBe('https://example.org/FixtureComposition');
+  expect(release.types['ex:FixtureComposition']?.bases).toEqual(['schema:CreativeWork', 'schema:Thing']);
+  expect(release.types['ex:FixtureComposition']?.properties).toContain('ex:composer');
+  expect(release.types['ex:FixtureComposition']?.properties).toContain('schema:name');
+  expect(release.properties['ex:composer']?.targets).toEqual(['schema:Person']);
+  expect(release.properties['ex:composer']?.multivalued).toBe(true);
   expect(release.properties['schema:isbn']).toEqual(bundledRelease.properties['schema:isbn']!);
 });
 

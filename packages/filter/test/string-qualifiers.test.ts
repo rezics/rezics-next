@@ -78,7 +78,7 @@ test('native string constraints and exact patterns reject invalid operands witho
   expect(validateFilter(leaf('ex:text', Array(65).fill('x')), release)[0]?.problem).toBe('unsupported_query');
 });
 
-test('string qualifiers retain same-statement grammar limits saved pointers and relation barrier', () => {
+test('string qualifiers retain same-statement grammar limits saved pointers and relation admission', () => {
   const filter = {
     statement: {
       property: 'ex:reading',
@@ -111,9 +111,7 @@ test('string qualifiers retain same-statement grammar limits saved pointers and 
       'ex:reading': { ...release.properties['ex:reading']!, relation: { group: 'credit' } },
     },
   };
-  expect(validateFilter(filter, relation)).toEqual([
-    { problem: 'invalid_request', pointer: '/statement/qualifiers', code: 'unsupported' },
-  ]);
+  expect(validateFilter(filter, relation)).toEqual([]);
   const saved = { ...release, filters: { 'samples/bad': { filter: leaf('ex:language', ['EN']) } } };
   expect(validateFilter({ saved: 'samples/bad' }, saved)).toEqual([
     { problem: 'invalid_request', pointer: '/saved', code: 'invalid_format' },

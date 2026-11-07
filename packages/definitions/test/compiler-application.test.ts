@@ -52,6 +52,14 @@ test('compiler application refuses an oversized collection without Filter or pat
 
 test('nested nonempty Filter operations keep the supplied compiler after another compiler runs', () => {
   const leaked = [{ pointer: '/leaked', problem: 'nested', code: 'invalid' }] as const;
+  const releaseWithFilter = structuredClone(bundledRelease);
+  releaseWithFilter.filters = {
+    ...releaseWithFilter.filters,
+    'compiler/nested': {
+      labels: { en: 'Nested filter' },
+      filter: { type: { in: ['schema:Book'] } },
+    },
+  };
   let nested = false;
   const inner = createCompilerApplication(
     fakeHost({
@@ -64,7 +72,7 @@ test('nested nonempty Filter operations keep the supplied compiler after another
   const outer = createCompilerApplication(
     fakeHost({
       filterConstruction: () => {
-        inner.validateRelease(bundledRelease);
+        inner.validateRelease(releaseWithFilter);
         nested = true;
         return {
           validateFilter: () => [],
@@ -73,7 +81,7 @@ test('nested nonempty Filter operations keep the supplied compiler after another
       },
     }),
   );
-  expect(outer.validateRelease(bundledRelease)).toEqual([]);
+  expect(outer.validateRelease(releaseWithFilter)).toEqual([]);
   expect(nested).toBe(true);
-  expect(inner.validateRelease(bundledRelease).some((item) => item.pointer.endsWith('/leaked'))).toBe(true);
+  expect(inner.validateRelease(releaseWithFilter).some((item) => item.pointer.endsWith('/leaked'))).toBe(true);
 });

@@ -203,12 +203,14 @@ test('patterns must be safe and releases are bounded', () => {
 
 test('the bundled catalogue admits exact file hashes, byte size and directed file associations', () => {
   const { types, properties } = bundledRelease;
-  expect(bundledRelease.catalogue.version).toBe('1.0.6');
+  expect(bundledRelease.catalogue.version).toBe('1.0.10');
   expect(types['schema:Quotation']).toMatchObject({
     iri: 'http://schema.org/Quotation',
     bases: ['schema:Thing'],
     mappings: ['wd:Q815341'],
-    properties: expect.arrayContaining([
+  });
+  expect(types['schema:Quotation']?.properties).toEqual(
+    expect.arrayContaining([
       'schema:text',
       'schema:inLanguage',
       'schema:spokenByCharacter',
@@ -216,7 +218,7 @@ test('the bundled catalogue admits exact file hashes, byte size and directed fil
       'schema:creator',
       'schema:actor',
     ]),
-  });
+  );
   expect(properties['schema:text']).toMatchObject({
     datatype: 'document',
     multivalued: false,

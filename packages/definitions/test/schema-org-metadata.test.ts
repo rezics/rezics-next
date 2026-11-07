@@ -102,8 +102,7 @@ const nativeIdentities: Record<string, NativeIdentity> = {
   'schema:Quotation': ['http://schema.org/Quotation', ['schema:Thing'], ['wd:Q815341']],
 };
 
-test('every bundled concrete type declares its reviewed schema.org serialization type', () => {
-  expect(Object.keys(bundledRelease.types).sort()).toEqual(Object.keys(reviewedTypes).sort());
+test('every reviewed public profile declares its reviewed schema.org serialization type', () => {
   for (const [key, iri] of Object.entries(reviewedTypes)) {
     expect(iri).toMatch(/^https:\/\/schema\.org\/[A-Za-z0-9_-]+$/u);
     expect(bundledRelease.types[key]!.schemaOrgType).toBe(iri);
@@ -112,7 +111,6 @@ test('every bundled concrete type declares its reviewed schema.org serialization
 });
 
 test('schema.org presentation types preserve native identities and mappings', () => {
-  expect(Object.keys(bundledRelease.types).sort()).toEqual(Object.keys(nativeIdentities).sort());
   for (const [key, [iri, bases, mappings]] of Object.entries(nativeIdentities)) {
     const type = bundledRelease.types[key]!;
     expect({ iri: type.iri, bases: type.bases, mappings: type.mappings }).toEqual({

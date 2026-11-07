@@ -40,7 +40,8 @@
     {
       "path": "packages/definitions/src/extension.ts",
       "gitBlob": "b00d79bbed0f352f06e415be281e0f9da54401c4",
-      "sha256": "fce39ce5186b7529f61ca97590ded8414bfce4ba2c62f408ac2459e6642e459d"
+      "sha256": "fce39ce5186b7529f61ca97590ded8414bfce4ba2c62f408ac2459e6642e459d",
+      "snapshot": "packages/definitions/test/fixtures/extension-historical-construction.source"
     },
     {
       "path": "services/kernel/src/semantic/extensions.ts",
