@@ -508,6 +508,19 @@ async function setup() {
   );
 }
 
+/** Development-only recovery output stays private; HTTP recovery never returns the token. */
+export function localStackRecoveryDelivery(
+  directory = resolve(state, 'recovery'),
+): NonNullable<import('../src/index.ts').AuthServiceOptions['recoveryDelivery']> {
+  return {
+    async deliver({ accountId, email, token, url }) {
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      await chmod(directory, 0o700);
+      await privateFile(resolve(directory, `${email}.json`), `${JSON.stringify({ accountId, token, url })}\n`);
+    },
+  };
+}
+
 export async function assemble(options?: {
   env: Record<string, string>;
   authDatabaseUrl: string;
@@ -588,7 +601,7 @@ export async function assemble(options?: {
       trustedAccess: bindings.trustedAccess,
       access: bindings.workflowPorts,
       siteActions: actions,
-      ...(options?.recoveryDelivery ? { recoveryDelivery: options.recoveryDelivery } : {}),
+      recoveryDelivery: options?.recoveryDelivery ?? localStackRecoveryDelivery(),
       accountOperations: bindings.accountOperations,
       accountManagementReads: bindings.accountManagementReads,
       // The local widget and verifier never call Cloudflare. Production composition is unchanged.

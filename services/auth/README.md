@@ -2414,8 +2414,13 @@ allows a deployment to inspect those exact operands before construction; it neit
 Delivery remains the installed private `recoveryDelivery.deliver` callback: forward the original native URL and
 delivery identity through the configured delivery owner. A void return retains the native unresolved external-copy
 custody; successful delivery does not certify deletion or make an uncertain command safe to resend. Local
-`assemble({env,authDatabaseUrl,keys,recoveryDelivery})` forwards an explicitly supplied adapter to that same port.
-No local mailbox, public delivery endpoint, provider receipt or new storage is introduced.
+`assemble({env,authDatabaseUrl,keys,recoveryDelivery})` forwards an explicitly supplied adapter to that same port,
+taking precedence over the development fallback. Without an adapter, local assembly writes the original
+`{accountId,token,url}` to `.temp/local-stack/recovery/<email>.json` for local journeys. The directory is owner-only
+(`0700`) and each file is private (`0600`), including replacement of existing permissive output. This local file
+delivery adds no HTTP delivery endpoint or provider receipt; production delivery and HTTP proof secrecy stay unchanged.
+Acceptance choice: extend the existing secret-privacy case with the actual local delivery payload and permissions,
+and retain the installed-host assertion for supplied-adapter precedence alongside all original native/browser cases.
 
 Update registration/configuration together, then deliberately sign out, sign in and complete renewed consent.
 Old sessions/access/refresh ceilings remain unchanged. Registration supplies no resource, exposure, ownership
