@@ -138,6 +138,11 @@ including mixed selections. The existing runner fixture and server-selection tes
 regression stays at file scope and counts linked community icons independently of folding controls. No new stories.
 Reconciliation retains the shared wrapper's cancellation/descendant cleanup test and sticky host-wide admission
 assertions alongside the self-hosted editor selection and occupied-port recovery tests; neither replaces the other.
+Decision: the six original editing cases retain hydration and all interaction assertions. Their bounded diagnostic
+run exposes Worker-only imports in the browser graph through Settings profile helpers and the test binding
+transform; the existing Settings/Web and startup owners receive that complete boundary repair. Failed initial
+opens release their browser context. The same sole walk receives the integrated repair; no browser runtime shim,
+timeout increase, extra story or source-only acceptance replaces it.
 
 ## realms-and-spaces
 
