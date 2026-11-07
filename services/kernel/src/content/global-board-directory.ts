@@ -1,4 +1,4 @@
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';

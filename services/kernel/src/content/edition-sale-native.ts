@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
-import { createInitiatorRestorer, DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
+import { createInitiatorRestorer, commandAccessContext } from './access-port.ts';
+import { DurableInitiatorUnavailableError } from '../access/contract/index.ts';
 import { createAuthConsentReader, readAuthConsentConfig, type CurrentConsentReader } from '../access/auth-consent.ts';
-import { commandAccessContext } from '../access/command-admission.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { accessCheck, type Access } from '../request/access.ts';

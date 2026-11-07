@@ -4,15 +4,14 @@ import readDiscoveryBoard from './discovery-board.sql';
 import { createHash, createHmac } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import {
   createResourceCreationManifest,
   initializeResourceGrants,
   parentCreationAuthorization,
   resourceAuthorization,
-  type ResourceCreationEntry,
-  type ResourceCreationPort,
-} from '../access/index.ts';
+} from './access-port.ts';
+import type { ResourceCreationEntry, ResourceCreationPort } from '../access/content-adapter.ts';
 import defaults from '../access/resource-roles.json';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
 import {

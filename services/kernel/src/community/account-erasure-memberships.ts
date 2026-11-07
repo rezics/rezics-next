@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
-import { createRealmOwnershipCommands, type RealmErasureSuccessionResult } from '../access/realm-ownership.ts';
+import { createRealmOwnershipCommands } from './domain-ports.ts';
+import type { RealmErasureSuccessionResult } from '../access/realm-ownership.ts';
 import { authoritativeTimeValue, noEffect, runCommand, type CommandOutcome } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Access } from '../request/access.ts';

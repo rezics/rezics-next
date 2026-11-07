@@ -118,7 +118,28 @@ and unavailability errors are the Access public entries `resource-access-errors.
 Identity Rating repair values stay on `identity-rating-repair-producer.ts`; Source custody imports Library
 `collection-native-work.ts`; composition binds Kind raw input so Access `access-capabilities.ts` is not a Kind/Source hub.
 
+Decision: Community readers, record projection and governance observations are leaves separate from container writes.
+Shared input errors, continuity vocabulary, discovery descriptions and platform-work identity live in Community's
+contract. Cross-domain behavior uses Community-owned typed bindings in `community/domain-ports.ts`; process
+composition, contract construction and the native test preload install the original owner values before use, preserving overloads,
+constructor identity and native evidence. Type queries do not load providers. Exact provider leaves are public entries
+for those type references and composition; Community never value-imports their implementation barrels.
+
 Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.
+
+Decision: Web routes compose concrete domain-owned page, navigation and reader adapters through their declared
+leaf entries. Register the defining leaf in `modules.json`; do not collect unrelated route APIs in a barrel or widen
+allowed dependencies. Existing Session observation/cache compatibility leaves remain Web adapter entries over the
+browser reader owner. Candidate context comes directly from the page visit port. Reaction command recovery vocabulary
+lives in the Threads contract; its session observer is a separate adapter shared by Home and Threads, so Home does not
+load the reaction widget to observe a session. Album identity syntax and summary property vocabulary live in domain
+contract leaves; release byte measurement is an independent leaf, keeping route intake out of editor/read models.
+
+Decision: Web Semantic, Search and Library readers import shared candidate advice from the subject contract leaf and
+page identity from the visit-host port. Page selectors and type inheritance are independent of page rendering and
+graph loading. Reusable read adapters expose their defining leaves explicitly; browser lifetime consumers use the
+public session adapter. These entries add no dependency allowances. This import-only migration uses workspace typing
+as acceptance; product behavior and existing assertions remain unchanged.
 
 **Enforcement.** One static architecture check (manifest validation plus a dependency-graph check) runs on every
 landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
@@ -143,8 +164,12 @@ Collection mutation contracts own metadata/history and cleanup ports. Pure core 
 the application orders create, metadata/rule, publication-phase and retention effects. Native adapters preserve the
 original command transaction and existing SQL. Composition binds Access rule admission, publication begin and Source
 retirement, so episode readers and history storage do not import those native command implementations. Mechanical
-work/deadline helpers are a leaf shared with command support. The Library adapter declares its inward application
-dependency, and Access exposes its existing command-admission/error leaves for process composition.
+work/deadline helpers are a leaf shared with command support. Library imports error identities, response schemas,
+structured idempotency headers and evaluator-backed Access checks from their defining platform leaves; HTTP and
+request orchestration retain compatibility re-exports. Header names come directly from the operation contract.
+Export and archive merge commands use the existing Library command-authorization capability, with the native
+fallback retained for standalone consumers. This dependency-only migration preserves behaviour. The Library adapter
+declares its inward application dependency, and Access exposes its existing command-admission/error leaves for process composition.
 
 Content's `community-projection/index.ts` is a registered pure core with no dependencies. Board and Realm adapters
 supply selected native activity values and actor identity through that public entry, including its contract types;

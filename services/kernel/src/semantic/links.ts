@@ -9,8 +9,10 @@ import { readWorkReleaseCards, workReleaseCardLimit, type WorkReleaseCards } fro
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { releaseDigest, type Release } from '@rezics/definitions';
-import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
-import { readItemTypes, readLabels, readRelated } from './subject.ts';
+import { activeRelease, readRelease } from './definition-release-read.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
+import { readItemTypes, readLabels } from './subject.ts';
+import { readRelated } from './related-subject-read.ts';
 import { languageRanges } from './language.ts';
 import { holderFacts, labelOrderKey, readHolderKeys } from './link-keys.ts';
 import { factDataTypes, resolveItem, type Statement, type FactRow } from './item.ts';
@@ -37,9 +39,10 @@ import { decodeCursor, encodeCursor, type CursorKey } from '../tokens/cursor.ts'
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 import type { AccessCheck } from '../request/access.ts';
-import { SubjectNotFoundError } from './candidates.ts';
+import { SubjectNotFoundError } from './contract/subject-errors.ts';
 import { moveMergePage } from './merge-moves.ts';
-import { redirectOf, SubjectRedirectError } from './merges.ts';
+import { redirectOf } from './subject-redirect.ts';
+import { SubjectRedirectError } from './contract/subject-errors.ts';
 import { accountAgentsForSubjects } from './agents.ts';
 import {
   LINK_KEYS_CHANGED,

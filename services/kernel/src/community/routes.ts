@@ -12,15 +12,27 @@ import {
   RealmHomeBoardPageSchema,
   RealmHomeBoardQuerySchema,
   realmHomeBoardResponse,
-} from '../content/realm-board-home.ts';
-import { ContentNotFoundError } from '../content/reads.ts';
+  ContentNotFoundError,
+  exactRealmPresentationImage,
+  approveRealmClaim,
+  normalizeHandle,
+  deadlineClient,
+  problemSchema,
+  ResourceAccessWriteDeniedError,
+  IDEMPOTENCY_HEADER,
+  idempotencyKeyOf,
+  SESSION_HEADER,
+  accessCheck,
+  AuthenticationError,
+  MediaUnavailableError,
+  SitemapQuerySchema,
+  readCommunityPresentations,
+} from './domain-ports.ts';
 import { banReviewPageSchema, banReviewPageQuerySchema } from './ban-review-page-schemas.ts';
 import { listRealmDiscovery } from './discovery.ts';
 import { requestRealmClaim } from './realm-continuity.ts';
 import { readOwnRealmClaimPage } from './realm-claim-status.ts';
 import { listRealmClaimRequests } from './realm-claim-review.ts';
-import { exactRealmPresentationImage } from '../content/realm-media.ts';
-import { approveRealmClaim } from '../access/index.ts';
 import { realmClaimApprovalResponseSchema } from './schemas.ts';
 import {
   discoveryQuerySchema,
@@ -34,44 +46,25 @@ import type { Pool } from 'pg';
 import { parseItem } from 'structured-headers';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { RealmLastOwnerError } from '../access/resource-access-errors.ts';
-import { normalizeHandle } from '../access/lifecycle.ts';
-import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { customMethod } from '../http/custom-method.ts';
-import { PROBLEMS, ProblemError, problemSchema, type ProblemCode } from '../http/problem.ts';
-import { ResourceAccessWriteDeniedError } from '../access/resource-denials.ts';
+import { PROBLEMS, ProblemError, type ProblemCode } from '../http/problem-error.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
-import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
-import { accessCheck, AuthenticationError, type Access, type AccessClient } from '../request/access.ts';
-import { MediaUnavailableError } from '../content/media.ts';
-import { SitemapQuerySchema } from '../content/schemas.ts';
+import type { Access, AccessClient } from '../request/access.ts';
 import { SitemapRealmPageSchema, SitemapSpacePageSchema } from './schemas.ts';
 import { InvalidCommunitySitemapCursorError, listSitemapRealms, listSitemapSpaces } from './sitemap.ts';
 import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
-import {
-  createSpace,
-  readSpace,
-  readSpaceForViewer,
-  spaceReadEligibility,
-  SpaceConflictError,
-  SpaceInputError,
-  updateSpace,
-  type SpaceDependencies,
-} from './space.ts';
+import { createSpace, SpaceConflictError, SpaceInputError, updateSpace, type SpaceDependencies } from './space.ts';
+import { readSpace, readSpaceForViewer, spaceReadEligibility } from './space-read.ts';
 import { claimSpaceAddress, readSpaceAddress, SpaceAddressConflictError } from './space-address.ts';
-import {
-  createRealm,
-  readRealm,
-  RealmConflictError,
-  RealmInputError,
-  updateRealm,
-  type RealmDependencies,
-} from './realm.ts';
+import { createRealm, RealmConflictError, updateRealm, type RealmDependencies } from './realm.ts';
+import { readRealm } from './realm-read.ts';
+import { RealmInputError } from './contract/index.ts';
 import {
   ContainerLifecycleConflictError,
   readContainerLifecycle,
@@ -87,7 +80,8 @@ import {
   RealmMembershipConflictError,
   type MembershipDependencies,
 } from './join.ts';
-import { banAccount, unbanAccount, listBans, RealmBanInputError, RealmBanRoleError } from './ban.ts';
+import { banAccount, unbanAccount, listBans, RealmBanRoleError } from './ban.ts';
+import { RealmBanInputError } from './contract/index.ts';
 import { readRealmMembershipInterval } from './membership.ts';
 import {
   assertRealmMemberPageBytes,
@@ -106,7 +100,6 @@ import { listOwnRealms } from './own-realms.ts';
 import type { CommunityAmbient } from './ambient.ts';
 import { RealmPresentationSchema } from './presentation.ts';
 import { CommunityPresentationSchema, communityPresentationResponse } from '../content/community-presentation-model.ts';
-import { readCommunityPresentations } from '../content/community-presentation.ts';
 import { readRealmHomePresentation } from './realm-home-presentation.ts';
 import { readRealmSettingsPage, RealmSettingsPageSchema } from './settings-page.ts';
 import { readRealmRulesAuthoringPage, RulesAuthoringPageSchema, RulesAuthoringQuerySchema } from './rules-authoring.ts';

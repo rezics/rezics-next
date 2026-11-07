@@ -14,7 +14,7 @@ import { partitionOf, routeOf } from '../../route/route.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import type { WorkClient } from '../../work/client.ts';
 import { editorialContextAnchor, publicContextEligibility, readContext, ContextNotFoundError } from '../context.ts';
-import { GLOBAL_CONTEXT } from '../definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from '../contract/subject-values.ts';
 import { subjectReadEligibility } from '../eligibility.ts';
 import { PageCursorError } from '../page.ts';
 import {

@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { readAccount, type Account } from '../access/account-data.ts';
+import { GrantDeniedError, readAccount, type Account } from './dependencies.ts';
+
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import type { IdentityMapping } from '../semantic/contract/index.ts';
 import { ratingVoteSemantic, type RatingVoteSemantic } from './adapters/vote-semantic.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readVisibleRatingQuestion } from './question-directory.ts';
 import { STANDARD_QUESTION_ID } from './standard-question.ts';

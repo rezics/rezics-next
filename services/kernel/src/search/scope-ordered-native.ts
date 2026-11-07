@@ -2,16 +2,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import { ProblemError } from '../http/problem.ts';
-import type {
-  PublicFilterSource,
-  PublicFilterProjectionMeaning,
-  PublicFilterCost,
-} from '../semantic/public-filter-source-contract.ts';
-import type {
-  PublicFilterSourceBootstrapBinding,
-  PublicFilterSourceCaptureInput,
-} from '../semantic/public-filter-source-binding.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import type { PublicFilterSource, PublicFilterProjectionMeaning, PublicFilterCost } from '../semantic/index.ts';
+import type { PublicFilterSourceBootstrapBinding, PublicFilterSourceCaptureInput } from '../semantic/index.ts';
 import {
   createPublicFilterConsumerOperations,
   queryScopeOrderedKeys,
@@ -27,7 +20,7 @@ import type { PublicFilterQueriedObservation } from './public-filter-consumer-co
 import type { OpenSearch } from './opensearch.ts';
 import { discoveryIndexUuid, subjectGenerations } from './indices.ts';
 import type { SearchHit } from './query.ts';
-import { ScopeWork, zeroScopeWork } from './scope-execution.ts';
+import { ScopeWork, zeroScopeWork } from './scope-work.ts';
 import {
   addScopePublicCost,
   emptyScopePublicCost,

@@ -14,14 +14,15 @@ import {
 } from '../command/command.ts';
 import { runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { withConnection } from '../database/pool.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError } from './command-support.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError } from './collection-command-work.ts';
 import { createSessionCommands, ProgressConflictError, ProgressInvalidError } from './sessions.ts';
 import { createEpisodeProgressCommands, MAX_EPISODE_IDS, type EpisodeProgressView } from './episode-progress.ts';
 import {

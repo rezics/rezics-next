@@ -20,7 +20,8 @@ import {
 } from './adapters/follow-count-observation.ts';
 import { readCollectionDiscoveryFollowCounts } from './adapters/follow-count-discovery.ts';
 import { FollowCountUnavailableError } from './contract/index.ts';
-import { prepareReadDecisions, type Actor } from '../request/access.ts';
+import { prepareReadDecisions } from '../request/access-check.ts';
+import { type Actor } from '../request/access.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import {
   collectionPresentation,

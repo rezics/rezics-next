@@ -3,7 +3,8 @@ import type { Pool } from 'pg';
 import { deadlineFor } from '../request/deadline.ts';
 import { installStandingParentGrant } from '../access/index.ts';
 import type { Access, AccountActor } from '../request/access.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from './definitions.ts';
+import { bootstrapRelease } from './definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import readGlobalContext from './setup-read-global.sql';
 
 /** Install the immutable bundled release and global catalogue grants at startup. */

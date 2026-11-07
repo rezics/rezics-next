@@ -3,11 +3,18 @@ import type { RatingCapabilities } from './contract/capabilities.ts';
 import { ratingCapabilities } from './adapters/ambient.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import { within } from '../access/authenticate.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
-import { ProblemError } from '../http/problem.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import {
+  within,
+  GrantDeniedError,
+  accessCommandAuthorization,
+  type Access,
+  type Actor,
+  withReadTransaction,
+  identityEpochStore,
+} from './dependencies.ts';
+
+import { ProblemError } from '../http/problem-error.ts';
+
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
@@ -32,7 +39,7 @@ import {
   type ClassificationAssociationResolution,
 } from './source-classification-semantic.ts';
 import { readItemIdentityVersion } from '../semantic/item-identity.ts';
-import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
+
 import {
   classificationEvidence,
   classificationProvenanceMatches,

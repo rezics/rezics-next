@@ -16,25 +16,20 @@ import {
   StatementDisclosureNotFoundError,
 } from '../statement-disclosure.ts';
 import type { SubjectReadingApplication } from '../subject-reading-application.ts';
+import { nativeSubjectReadingApplication } from '../adapters/subject-reading.ts';
 import { summaryAuthorization } from '../summaries.ts';
 import { languageRanges } from '../language.ts';
 import { CoverSummarySchema, RelatedSubjectSummarySchema, SubjectSummarySchema } from './summaries.ts';
 import { SourceSchema, BatchReferenceSchema } from '@rezics/definitions/bulk';
-import { admitMergeSubjects, observeSubjectIdentityOperation, SubjectRedirectError } from '../merges.ts';
-import { IdentityEpochStoreError } from '../identity-adapters/index.ts';
+import { admitMergeSubjects, observeSubjectIdentityOperation } from '../merges.ts';
+import { SubjectRedirectError } from '../contract/subject-errors.ts';
+import { IdentityEpochStoreError } from '../contract/identity-errors.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import type { KeyRing } from '../../tokens/seal.ts';
-import {
-  adoptCandidates,
-  decideCandidate,
-  EditorialConflictError,
-  listCandidates,
-  listRevisions,
-  proposeStatement,
-  SubjectNotFoundError,
-} from '../candidates.ts';
+import { adoptCandidates, decideCandidate, listCandidates, listRevisions, proposeStatement } from '../candidates.ts';
+import { EditorialConflictError, SubjectNotFoundError } from '../contract/subject-errors.ts';
 import { PageCursorError } from '../page.ts';
 import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
@@ -44,8 +39,10 @@ import { DATA_TYPES, type DataType, type Release } from '@rezics/definitions';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { resourceAuthorization, type AuthorizationAnchor } from '../../access/resource-authorization.ts';
 import { createResourceCreationManifest, parentCreationAuthorization } from '../../access/index.ts';
-import { activeRelease, GLOBAL_CONTEXT, readRelease, StaleEditorialHeadError } from '../definitions.ts';
-import { effectiveRelease } from '../extensions.ts';
+import { activeRelease, readRelease } from '../definition-release-read.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from '../contract/subject-values.ts';
+import { StaleEditorialHeadError } from '../contract/definition-values.ts';
+import { effectiveRelease } from '../definition-release-read.ts';
 import { termContext } from '@rezics/definitions/extension';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import type { Access, AccessCheck, AccountActor, Resource } from '../../request/access.ts';
@@ -667,7 +664,7 @@ type SubjectRouteDependencies = {
   access: () => Access;
   clock: () => Date;
   viewerActionBindings?: () => ViewerActionBindings;
-  reading: SubjectReadingApplication;
+  reading?: SubjectReadingApplication;
 };
 function invalidSubjectInput(error: SubjectInputError): ProblemError {
   return new ProblemError('invalid_request', { errors: error.violations });
@@ -730,6 +727,8 @@ function subjectRoutes(
   app: ReturnType<typeof createApp>,
   { pool, routeKey, tokens, access, clock, viewerActionBindings, reading }: SubjectRouteDependencies,
 ) {
+  const subjectReading = reading ?? nativeSubjectReadingApplication();
+
   function contributionAuthorization(
     actor: AccountActor,
     action: 'statement:delete' | 'statement:restore',
@@ -1272,7 +1271,7 @@ function subjectRoutes(
             bindings = undefined;
           }
         }
-        const result = await reading.readPage({
+        const result = await subjectReading.readPage({
           runtime: {
             pool,
             access: access(),

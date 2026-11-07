@@ -1,5 +1,5 @@
-import { createResourcePublicEligibility } from '../access/index.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { createResourcePublicEligibility } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import { authoritativeTimeValue, mintReadTime, type AuthoritativeTime } from '../command/command.ts';
 import { readRealm, realmReadEligibility, type RealmView } from '../community/realm.ts';
 import realmHead from '../community/realm-read.sql';

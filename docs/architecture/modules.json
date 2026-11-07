@@ -214,6 +214,19 @@
         "services/kernel/src/access/application/**"
       ],
       "publicEntries": [
+        "services/kernel/src/access/account-authority.ts",
+        "services/kernel/src/access/account-data.ts",
+        "services/kernel/src/access/bootstrap-governance.ts",
+        "services/kernel/src/access/handle-holder.ts",
+        "services/kernel/src/access/lifecycle.ts",
+        "services/kernel/src/access/membership-inverse.ts",
+        "services/kernel/src/access/permission.ts",
+        "services/kernel/src/access/realm-membership-transition.ts",
+        "services/kernel/src/access/realm-ownership.ts",
+        "services/kernel/src/access/resource-authorization.ts",
+        "services/kernel/src/access/resource-denials.ts",
+        "services/kernel/src/access/resource-group-grant.ts",
+        "services/kernel/src/access/viewer-actions.ts",
         "services/kernel/src/access/index.ts",
         "services/kernel/src/access/command-admission.ts",
         "services/kernel/src/access/resource-access-errors.ts",
@@ -250,7 +263,10 @@
         "services/kernel/src/access/durable-initiator-capture.ts",
         "services/kernel/src/access/unavailable.ts",
         "services/kernel/src/access/resource-access-errors.ts",
-        "services/kernel/src/access/zone-resource-adapter.ts"
+        "services/kernel/src/access/zone-resource-adapter.ts",
+        "services/kernel/src/access/account-data.ts",
+        "services/kernel/src/access/grant-commands.ts",
+        "services/kernel/src/access/content-adapter.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -310,7 +326,11 @@
       "kind": "adapter",
       "owner": "commerce",
       "paths": ["services/kernel/src/commerce/**", "services/kernel/db/commerce/**"],
-      "publicEntries": ["services/kernel/src/commerce/config.ts", "services/kernel/src/commerce/work-module.ts"],
+      "publicEntries": [
+        "services/kernel/src/commerce/catalogue.ts",
+        "services/kernel/src/commerce/config.ts",
+        "services/kernel/src/commerce/work-module.ts"
+      ],
       "allowedDependencies": [
         "kernel-access",
         "kernel-content",
@@ -336,9 +356,19 @@
         "services/kernel/src/content/application/**"
       ],
       "publicEntries": [
+        "services/kernel/src/content/boards.ts",
+        "services/kernel/src/content/community-presentation-rules.ts",
+        "services/kernel/src/content/community-presentation.ts",
+        "services/kernel/src/content/discovery-mutation.ts",
+        "services/kernel/src/content/discovery.ts",
+        "services/kernel/src/content/notices.ts",
+        "services/kernel/src/content/reads.ts",
+        "services/kernel/src/content/realm-media.ts",
+        "services/kernel/src/content/schemas.ts",
         "services/kernel/src/content/document-public.ts",
         "services/kernel/src/content/realm-board-home.ts",
         "services/kernel/src/content/index.ts",
+        "services/kernel/src/content/access-port.ts",
         "services/kernel/src/content/events.ts",
         "services/kernel/src/content/declared-catalogue.ts",
         "services/kernel/src/content/http.ts",
@@ -352,7 +382,9 @@
         "services/kernel/src/content/cover-reference.ts",
         "services/kernel/src/content/cover-reference-read.ts",
         "services/kernel/src/content/imported-contract.ts",
-        "services/kernel/src/content/media.ts"
+        "services/kernel/src/content/media.ts",
+        "services/kernel/src/content/schema-validation.ts",
+        "services/kernel/src/content/source-fence-schemas.ts"
       ],
       "allowedDependencies": [
         "definitions",
@@ -361,6 +393,7 @@
         "document",
         "filter",
         "kernel-access",
+        "kernel-access-contract",
         "kernel-commerce",
         "kernel-community",
         "kernel-content-application",
@@ -429,6 +462,7 @@
         "services/kernel/src/community/application/**"
       ],
       "publicEntries": [
+        "services/kernel/src/community/domain-ports.ts",
         "services/kernel/src/community/index.ts",
         "services/kernel/src/community/declaration.ts",
         "services/kernel/src/community/http-declaration.ts",
@@ -438,7 +472,8 @@
         "services/kernel/src/community/space-discovery.ts",
         "services/kernel/src/community/membership.ts",
         "services/kernel/src/community/work.ts",
-        "services/kernel/src/community/adapters/index.ts"
+        "services/kernel/src/community/adapters/index.ts",
+        "services/kernel/src/community/realm.ts"
       ],
       "allowedDependencies": [
         "auth-contract",
@@ -501,7 +536,9 @@
         "services/kernel/src/rating/events.ts",
         "services/kernel/src/rating/own-votes-review.ts",
         "services/kernel/src/rating/identity-work-frame-limits.ts",
-        "services/kernel/src/rating/vote-observation.ts"
+        "services/kernel/src/rating/vote-observation.ts",
+        "services/kernel/src/rating/dependencies.ts",
+        "services/kernel/src/rating/standard-question.ts"
       ],
       "allowedDependencies": [
         "kernel-access",
@@ -563,6 +600,7 @@
         "services/kernel/src/library/application/**"
       ],
       "publicEntries": [
+        "services/kernel/src/library/follows.ts",
         "services/kernel/src/library/index.ts",
         "services/kernel/src/library/collection-discovery-source.ts",
         "services/kernel/src/library/collection-discovery-summaries.ts",
@@ -580,7 +618,9 @@
         "services/kernel/src/library/collection-kind-input.ts",
         "services/kernel/src/library/subject-anchor.ts",
         "services/kernel/src/library/zone-collection-adapter.ts",
-        "services/kernel/src/library/members-preparation-source-declaration.ts"
+        "services/kernel/src/library/members-preparation-source-declaration.ts",
+        "services/kernel/src/library/command-support.ts",
+        "services/kernel/src/library/shelf-reader-unavailable.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -655,7 +695,8 @@
         "services/kernel/src/presentation/page-contract.ts",
         "services/kernel/src/presentation/page-semantic-port.ts",
         "services/kernel/src/presentation/page-application.ts",
-        "services/kernel/src/presentation/adapters/semantic-page.ts"
+        "services/kernel/src/presentation/adapters/semantic-page.ts",
+        "services/kernel/src/search/config.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -679,7 +720,9 @@
         "kernel-rating",
         "kernel-semantic",
         "search-text",
-        "kernel-search-contract"
+        "kernel-search-contract",
+        "kernel-identity-core",
+        "kernel-semantic-contract"
       ],
       "capabilities": ["search", "presentation"],
       "postgresPaths": ["services/kernel/src/search/**", "services/kernel/src/presentation/**"]
@@ -690,6 +733,11 @@
       "owner": "semantic",
       "paths": ["services/kernel/src/semantic/**", "services/kernel/db/semantic/**"],
       "publicEntries": [
+        "services/kernel/src/semantic/eligibility.ts",
+        "services/kernel/src/semantic/merges.ts",
+        "services/kernel/src/semantic/references.ts",
+        "services/kernel/src/semantic/subject.ts",
+        "services/kernel/src/semantic/summaries.ts",
         "services/kernel/src/semantic/index.ts",
         "services/kernel/src/semantic/identity-adapter-port.ts",
         "services/kernel/src/semantic/identity-adapter-runtime.ts",
@@ -733,14 +781,35 @@
         "services/kernel/src/semantic/identity-epoch-read-pending.sql",
         "services/kernel/src/semantic/identity-epoch-read-current.sql",
         "services/kernel/src/semantic/definitions.ts",
+        "services/kernel/src/semantic/related-subject-read.ts",
+        "services/kernel/src/semantic/subject-redirect.ts",
+        "services/kernel/src/semantic/definition-release-read.ts",
+        "services/kernel/src/semantic/definition-type-directory-stage.ts",
+        "services/kernel/src/semantic/identity-adapters/native-commit.ts",
+        "services/kernel/src/semantic/identity-adapters/subject-creation.ts",
         "services/kernel/src/semantic/read.ts",
         "services/kernel/src/semantic/search-source.ts",
         "services/kernel/src/semantic/identity-receiving-effects.ts",
         "services/kernel/src/semantic/identity-receiving-effects-types.ts",
         "services/kernel/src/semantic/identity-search-receiving-statements.ts",
-        "services/kernel/src/semantic/character-public-reading-documents.ts"
+        "services/kernel/src/semantic/character-public-reading-documents.ts",
+        "services/kernel/src/semantic/classification-association.ts",
+        "services/kernel/src/semantic/current-relations.ts",
+        "services/kernel/src/semantic/eligibility.ts",
+        "services/kernel/src/semantic/identity-rating-admission.ts",
+        "services/kernel/src/semantic/statement-disclosure.ts",
+        "services/kernel/src/semantic/subject-source-key-pages.ts",
+        "services/kernel/src/semantic/summaries.ts",
+        "services/kernel/src/semantic/context.ts",
+        "services/kernel/src/semantic/copy-work-application.ts",
+        "services/kernel/src/semantic/identity-adapters/identity-epoch-contract.ts",
+        "services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts",
+        "services/kernel/src/semantic/erasure-producer.ts",
+        "services/kernel/src/semantic/public-filter-source-binding.ts",
+        "services/kernel/src/semantic/public-filter-source.ts"
       ],
       "allowedDependencies": [
+        "bounds",
         "composition",
         "definitions",
         "definitions-compiler",
@@ -834,6 +903,8 @@
         "services/kernel/src/route/contract.ts"
       ],
       "publicEntries": [
+        "services/kernel/src/http/problem.ts",
+        "services/kernel/src/http/request.ts",
         "services/kernel/src/command/receipt-key.ts",
         "services/kernel/src/database/json.ts",
         "services/kernel/src/database/statement-bytes.ts",
@@ -841,6 +912,7 @@
         "services/kernel/src/events/consumer-lag.ts",
         "services/kernel/src/clock.ts",
         "services/kernel/src/request/access.ts",
+        "services/kernel/src/partition/partition.ts",
         "services/kernel/src/route/route.ts",
         "services/kernel/src/tokens/seal.ts",
         "services/kernel/src/command/command.ts",
@@ -850,6 +922,11 @@
         "services/kernel/src/request/deadline.ts",
         "services/kernel/src/history/command-evidence.ts",
         "services/kernel/src/http/problem-error.ts",
+        "services/kernel/src/http/problem-schema.ts",
+        "services/kernel/src/http/idempotency-key.ts",
+        "services/kernel/src/http/body.ts",
+        "services/kernel/src/request/authentication-error.ts",
+        "services/kernel/src/request/access-check.ts",
         "services/kernel/src/imports/erasure.ts",
         "services/kernel/src/work/adapters/index.ts",
         "services/kernel/src/work/authorization.ts",
@@ -872,7 +949,9 @@
         "services/kernel/src/command/read-receipt.sql",
         "services/kernel/src/command/work-context.ts",
         "services/kernel/src/command/index.ts",
-        "services/kernel/src/partition/read.sql"
+        "services/kernel/src/partition/read.sql",
+        "services/kernel/src/http/problem.ts",
+        "services/kernel/src/http/request.ts"
       ],
       "allowedDependencies": [
         "auth-contract",
@@ -1129,7 +1208,20 @@
         "apps/web/src/library/loans-actions.ts",
         "apps/web/src/library/settings-contract.ts",
         "apps/web/src/library/settings-adapter.ts",
-        "apps/web/src/library/search-action-binding.tsx"
+        "apps/web/src/library/search-action-binding.tsx",
+        "apps/web/src/library/dynamic-collection.ts",
+        "apps/web/src/library/saved-query-results.tsx",
+        "apps/web/src/library/saved-query-results-windows/index.ts",
+        "apps/web/src/library/mine-collections-windows/visit.ts",
+        "apps/web/src/library/continue-window-navigation.ts",
+        "apps/web/src/library/personal-list-import/address.ts",
+        "apps/web/src/library/showcase-import-return/navigation.ts",
+        "apps/web/src/library/progress-start-draft-navigation.ts",
+        "apps/web/src/library/progress-index-windows/index.ts",
+        "apps/web/src/library/subject-slot-return-context.ts",
+        "apps/web/src/library/title.tsx",
+        "apps/web/src/library/archive-progress-recovery/page.tsx",
+        "apps/web/src/library/copies-query.ts"
       ],
       "allowedDependencies": [
         "client",
@@ -1243,7 +1335,31 @@
         "apps/web/src/features/pages/account-page-application.tsx",
         "apps/web/src/features/pages/page-model.ts",
         "apps/web/src/search/saved-query-selection.ts",
-        "apps/web/src/search/library-action-port.tsx"
+        "apps/web/src/search/library-action-port.tsx",
+        "apps/web/src/features/pages/agent-actions.ts",
+        "apps/web/src/features/pages/data.tsx",
+        "apps/web/src/search/search-query-options.ts",
+        "apps/web/src/features/pages/source-concept-reading/navigation.ts",
+        "apps/web/src/features/pages/graph-browser/public-visit.ts",
+        "apps/web/src/features/pages/graph-browser/public-visit-view.tsx",
+        "apps/web/src/features/pages/subject-ratings.ts",
+        "apps/web/src/features/pages/subject-summary-reading/contract.ts",
+        "apps/web/src/features/pages/subject-summary-reading/visit.ts",
+        "apps/web/src/features/pages/context-subject.ts",
+        "apps/web/src/features/pages/subject.tsx",
+        "apps/web/src/features/pages/context-navigation.tsx",
+        "apps/web/src/features/pages/subject-queries.ts",
+        "apps/web/src/features/pages/type-inheritance.ts",
+        "apps/web/src/features/pages/subject-read.ts",
+        "apps/web/src/features/pages/subject-page-load.ts",
+        "apps/web/src/features/pages/values.tsx",
+        "apps/web/src/features/pages/subject-community-lifetime.tsx",
+        "apps/web/src/features/pages/view-heading.tsx",
+        "apps/web/src/features/pages/scalar-value.tsx",
+        "apps/web/src/features/pages/producer-history-reading/admission.tsx",
+        "apps/web/src/features/pages/view-cursor.ts",
+        "apps/web/src/search/search-window/focus.ts",
+        "apps/web/src/features/pages/home-feed-questions.ts"
       ],
       "allowedDependencies": [
         "client",
@@ -1284,7 +1400,10 @@
         "apps/web/src/accounts/profile-editor/address.ts",
         "apps/web/src/accounts/profile-editor/page.tsx",
         "apps/web/src/accounts/profile-editor/adapters.ts",
-        "apps/web/src/accounts/public-profile/page-binding.tsx"
+        "apps/web/src/accounts/public-profile/page-binding.tsx",
+        "apps/web/src/accounts/public-profile/contribution-windows/state.ts",
+        "apps/web/src/accounts/public-profile/realm-windows/route.tsx",
+        "apps/web/src/accounts/management/window-route.tsx"
       ],
       "allowedDependencies": [
         "client",
@@ -1389,7 +1508,9 @@
         "apps/web/src/checkout/reader-origin.ts",
         "apps/web/src/checkout/creator-offers.ts",
         "apps/web/src/checkout/money-schema.ts",
-        "apps/web/src/checkout/subject-purchase.ts"
+        "apps/web/src/checkout/subject-purchase.ts",
+        "apps/web/src/checkout/buyer-history-visit.ts",
+        "apps/web/src/checkout/creator-offer-editor.tsx"
       ],
       "allowedDependencies": [
         "client",
@@ -1428,7 +1549,31 @@
         "apps/web/src/threads/index.ts",
         "apps/web/src/threads/profile-avatar-upload.ts",
         "apps/web/src/threads/upload-vocabulary.ts",
-        "apps/web/src/threads/write-prompts.tsx"
+        "apps/web/src/threads/write-prompts.tsx",
+        "apps/web/src/threads/board-navigation.ts",
+        "apps/web/src/ratings/own-classifications/types.ts",
+        "apps/web/src/ratings/own-classifications/window-navigation.ts",
+        "apps/web/src/moderation/workbench-queue/window-history.ts",
+        "apps/web/src/moderation/reporter-history/focus.ts",
+        "apps/web/src/moderation/reporter-history/model.ts",
+        "apps/web/src/moderation/reporter-history/coordinates.ts",
+        "apps/web/src/moderation/reporter-history/navigation.ts",
+        "apps/web/src/moderation/workbench-queue/read.ts",
+        "apps/web/src/moderation/workbench-history/window-history.ts",
+        "apps/web/src/threads/historical-reader-provenance.ts",
+        "apps/web/src/threads/revision-return/history-return.ts",
+        "apps/web/src/ratings/question-management/types.ts",
+        "apps/web/src/ratings/question-management/address.ts",
+        "apps/web/src/ratings/question-management/window-navigation.ts",
+        "apps/web/src/community/my-realms-caller.tsx",
+        "apps/web/src/community/space.ts",
+        "apps/web/src/threads/contract/reaction-recovery.ts",
+        "apps/web/src/threads/reaction-session.ts",
+        "apps/web/src/ratings/question-contract.ts",
+        "apps/web/src/ratings/question-ids.ts",
+        "apps/web/src/ratings/question-read.ts",
+        "apps/web/src/ratings/own-votes/readback.ts",
+        "apps/web/src/threads/authoring-departure.tsx"
       ],
       "allowedDependencies": [
         "client",
@@ -1480,7 +1625,50 @@
         "apps/web/src/features/catalogue/screen-reading-application.tsx",
         "apps/web/src/features/catalogue/page-render-binding.tsx",
         "apps/web/src/features/catalogue/character-reading-port.ts",
-        "apps/web/src/features/catalogue/character-reading-application.tsx"
+        "apps/web/src/features/catalogue/character-reading-application.tsx",
+        "apps/web/src/features/catalogue/source-concept-explorer/public-visit.ts",
+        "apps/web/src/features/catalogue/producer-history/visit.ts",
+        "apps/web/src/features/catalogue/addon-public-visit.ts",
+        "apps/web/src/features/catalogue/album-current-visit.tsx",
+        "apps/web/src/features/catalogue/album-current-visit-model.ts",
+        "apps/web/src/features/catalogue/contract/album.ts",
+        "apps/web/src/features/catalogue/authored-field-entry.tsx",
+        "apps/web/src/features/catalogue/authored-public-visit.ts",
+        "apps/web/src/features/catalogue/character-relationships/navigation.ts",
+        "apps/web/src/features/catalogue/character-correction-visit.ts",
+        "apps/web/src/features/catalogue/facts-public-visit.ts",
+        "apps/web/src/features/catalogue/subject-facts-entry.tsx",
+        "apps/web/src/features/catalogue/catalogue-file-profile/origin.ts",
+        "apps/web/src/features/catalogue/game-current-visit.ts",
+        "apps/web/src/features/catalogue/game-current-visit-view.tsx",
+        "apps/web/src/features/catalogue/release-fidelity/encoding.ts",
+        "apps/web/src/features/catalogue/identifier-current-visit.ts",
+        "apps/web/src/features/catalogue/literary-current-visit.ts",
+        "apps/web/src/features/catalogue/manga-public-visit.ts",
+        "apps/web/src/features/catalogue/people-current-visit.ts",
+        "apps/web/src/features/catalogue/people-current-visit-view.tsx",
+        "apps/web/src/features/catalogue/recipe-current-visit.ts",
+        "apps/web/src/features/catalogue/relation-public-visit.ts",
+        "apps/web/src/features/catalogue/release-fidelity/navigation.ts",
+        "apps/web/src/features/catalogue/screen-current-visit.ts",
+        "apps/web/src/features/catalogue/screen-profile-session.tsx",
+        "apps/web/src/features/catalogue/story-arc-public-visit.ts",
+        "apps/web/src/features/catalogue/subject-terms-entry.tsx",
+        "apps/web/src/features/catalogue/terms-public-visit.ts",
+        "apps/web/src/features/catalogue/work-names/navigation.tsx",
+        "apps/web/src/zones/zone-shell.tsx",
+        "apps/web/src/features/catalogue/statement-edit-application.ts",
+        "apps/web/src/features/catalogue/definition-meaning.tsx",
+        "apps/web/src/features/catalogue/music-context-profile/navigation.ts",
+        "apps/web/src/features/catalogue/value-explanation-entry.tsx",
+        "apps/web/src/features/catalogue/work-franchise-reading/navigation.ts",
+        "apps/web/src/features/catalogue/catalogue-entry.ts",
+        "apps/web/src/features/catalogue/statement-summary.tsx",
+        "apps/web/src/features/catalogue/work-tag-reading/entry.tsx",
+        "apps/web/src/features/catalogue/person-reader/contract.ts",
+        "apps/web/src/features/catalogue/people-facts/visit.tsx",
+        "apps/web/src/features/catalogue/source-concept-explorer/index.ts",
+        "apps/web/src/features/catalogue/concept-works/contract.ts"
       ],
       "allowedDependencies": [
         "client",
@@ -1575,6 +1763,7 @@
         "apps/web/src/session/client.ts",
         "apps/web/src/session/request.ts",
         "apps/web/src/subject/reader.ts",
+        "apps/web/src/subject/time-presentation.ts",
         "apps/web/src/subject/definitions.ts",
         "apps/web/src/subject/load-subject.ts",
         "apps/web/src/subject/quantity-presentation.ts",
@@ -1601,7 +1790,22 @@
         "apps/web/src/session/csrf.ts",
         "apps/web/src/features/count.ts",
         "apps/web/src/report/contract/contribution-actions.ts",
-        "apps/web/src/report/index.ts"
+        "apps/web/src/report/index.ts",
+        "apps/web/src/subject/page-visit-binding.tsx",
+        "apps/web/src/kernel/viewer-exposure.ts",
+        "apps/web/src/session/browser-state.ts",
+        "apps/web/src/session/observation.ts",
+        "apps/web/src/subject/candidate-contract.ts",
+        "apps/web/src/subject/read-contract.ts",
+        "apps/web/src/identity/read-contract.ts",
+        "apps/web/src/reader/lease.ts",
+        "apps/web/src/subject/candidate-lifetime.tsx",
+        "apps/web/src/subject/language.ts",
+        "apps/web/src/features/feed/home-reaction-currentness-recovery.tsx",
+        "apps/web/src/kernel/use-sync-external-store-with-selector.ts",
+        "apps/web/src/session/expected-reader.ts",
+        "apps/web/src/kernel/languages.ts",
+        "apps/web/src/shell/route-state.tsx"
       ],
       "allowedDependencies": [
         "content-edition-contract",
@@ -1892,7 +2096,8 @@
       "paths": ["services/kernel/src/semantic/identity-core/**"],
       "publicEntries": [
         "services/kernel/src/semantic/identity-core/index.ts",
-        "services/kernel/src/semantic/identity-core/rating-review-bounds.ts"
+        "services/kernel/src/semantic/identity-core/rating-review-bounds.ts",
+        "services/kernel/src/semantic/identity-core/encoding.ts"
       ],
       "allowedDependencies": ["kernel-semantic-contract"],
       "capabilities": ["canonical-identity-rules"]
@@ -1903,6 +2108,8 @@
       "owner": "semantic",
       "paths": ["services/kernel/src/semantic/contract/**"],
       "publicEntries": [
+        "services/kernel/src/semantic/contract/subject-errors.ts",
+        "services/kernel/src/semantic/contract/definition-values.ts",
         "services/kernel/src/semantic/contract/identity-values.ts",
         "services/kernel/src/semantic/contract/identity-source-schedule.ts",
         "services/kernel/src/semantic/contract/identity-errors.ts",
@@ -1911,9 +2118,10 @@
         "services/kernel/src/semantic/contract/domain-ports.ts",
         "services/kernel/src/semantic/contract/subject-values.ts",
         "services/kernel/src/semantic/contract/summaries.ts",
-        "services/kernel/src/semantic/contract/index.ts"
+        "services/kernel/src/semantic/contract/index.ts",
+        "services/kernel/src/semantic/contract/global-context.ts"
       ],
-      "allowedDependencies": [],
+      "allowedDependencies": ["definitions"],
       "capabilities": ["semantic-contract"]
     },
     {
@@ -1922,6 +2130,7 @@
       "owner": "semantic",
       "paths": ["services/kernel/src/semantic/core/**"],
       "publicEntries": [
+        "services/kernel/src/semantic/core/freeze.ts",
         "services/kernel/src/semantic/core/identity-epoch-sequence.ts",
         "services/kernel/src/semantic/core/item-projection.ts",
         "services/kernel/src/semantic/core/identity-coordination.ts",

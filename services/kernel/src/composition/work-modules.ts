@@ -1,3 +1,4 @@
+import { composeRatingDependencies } from './rating.ts';
 import { installRatingVoteSemantic } from './rating-votes.ts';
 import { createInitiatorRestorer } from '../access/durable-initiator.ts';
 import { erasureWorkModule } from '../access/erasure.ts';
@@ -81,6 +82,7 @@ export function createKernelWorkModules(
   composeCreditSearch?: Parameters<typeof createSearchWorkModule>[2],
   communityAmbient: CommunityAmbient = systemCommunityAmbient,
 ): readonly WorkModule[] {
+  composeRatingDependencies();
   installIdentityRatingRepairProducer();
   installRatingVoteSemantic();
   const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults, composeCreditSearch);

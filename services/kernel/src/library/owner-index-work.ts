@@ -5,7 +5,7 @@ import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
-import { workStepDeadline } from './command-support.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 import { readOwnerIndexFrontier, stepOwnerIndex, type OwnerIndexFrontier } from './owner-index.ts';
 import {
   applyOwnerPinMeaning,

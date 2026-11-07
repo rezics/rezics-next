@@ -81,28 +81,27 @@ function sessionWorkFrom(bound: Bound): SessionWork {
   return sessionWorkOf(bound);
 }
 
-const shelfQueries: Readonly<Record<ProgressShelfStatement, QueryText>> = Object.freeze({
-  'gate-read': gateRead,
-  'gate-ensure': gateEnsure,
-  'gate-lock': gateLock,
-  'gate-share': gateShare,
-  'gate-save': gateSave,
-  inputs: shelfInputs,
-  'run-create': runCreate,
-  'run-read': runRead,
-  'step-save': stepSave,
-  'counter-initialize': counterInitialize,
-  'counter-read': counterRead,
-  'counter-complete': counterComplete,
-  'head-ensure': headEnsure,
-  'head-touch': headTouch,
-  'entry-raise': entryRaise,
-});
-
 export const PROGRESS_MEANING_SQL = meaningSql;
 export const PROGRESS_REFRESH_SQL = refreshSql;
 
 export function createProgressOperationCatalog(): ProgressOperationCatalog {
+  const shelfQueries: Readonly<Record<ProgressShelfStatement, QueryText>> = Object.freeze({
+    'gate-read': gateRead,
+    'gate-ensure': gateEnsure,
+    'gate-lock': gateLock,
+    'gate-share': gateShare,
+    'gate-save': gateSave,
+    inputs: shelfInputs,
+    'run-create': runCreate,
+    'run-read': runRead,
+    'step-save': stepSave,
+    'counter-initialize': counterInitialize,
+    'counter-read': counterRead,
+    'counter-complete': counterComplete,
+    'head-ensure': headEnsure,
+    'head-touch': headTouch,
+    'entry-raise': entryRaise,
+  });
   const access = accessAccountStatements();
   const semantic = semanticProgressIdentityStatements();
   return Object.freeze({

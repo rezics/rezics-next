@@ -9,12 +9,10 @@ import {
   discoverFollowCountOwners,
 } from './follow-count-bootstrap.ts';
 import { sampleFollowCountHealth } from './follow-count-health.ts';
-import {
-  admitFollowCountAccount,
-  FOLLOW_COUNT_ACCOUNT_EVENTS,
-  reconcileFollowCountAccountPage,
-} from './follow-count-lifecycle.ts';
-import { bootstrapFollowCountOwner, pendingFollowCountKeys, countRoute } from './follow-count-source.ts';
+import { admitFollowCountAccount, reconcileFollowCountAccountPage } from './follow-count-lifecycle.ts';
+import { FOLLOW_COUNT_ACCOUNT_EVENTS } from '../contract/index.ts';
+import { bootstrapFollowCountOwner, pendingFollowCountKeys } from './follow-count-source.ts';
+import { countRoute } from './follow-count-runtime.ts';
 import { deliverFollowCount } from './follow-count-target.ts';
 
 const PARTITION_WORK = 'library.followCountPartition';

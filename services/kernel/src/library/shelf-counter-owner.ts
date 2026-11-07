@@ -4,7 +4,7 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { ShelfWrite } from './shelf-contract.ts';
 import initializeQuery from './shelf-counter-owner-initialize.sql';
 import readQuery from './shelf-counter-owner-read.sql';
-import { enterShelfWrite as enterNativeShelfWrite } from './shelf-maintenance-runtime.ts';
+import { enterShelfWrite as enterNativeShelfWrite } from './shelf-maintenance-owner.ts';
 import completeQuery from './shelf-counter-owner-complete.sql';
 import { shelfMaintenanceQuery } from './shelf-maintenance-bounds.ts';
 function initialize() {

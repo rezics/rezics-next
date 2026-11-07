@@ -15,22 +15,19 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
+import { executeStatusTarget, executeCollectionRemoveTarget, reconcileBulkTarget } from './bulk-target-dispatch.ts';
 import {
-  executeStatusTarget,
-  executeCollectionAddTarget,
-  executeCollectionRemoveTarget,
-  executeLibraryRemovalTarget,
-  reconcileBulkTarget,
   type BulkDependencies,
   type BulkReason,
   type OperationView,
   type TargetEvidence,
   type TargetCommand,
 } from './bulk-contract.ts';
+import { executeCollectionAddTarget } from './collection-bulk-add.ts';
+import { executeLibraryRemovalTarget } from './collection-bulk-library-removal.ts';
 import {
   BULK_CHANGED_EVENT,
   BULK_CONFIRMED_EVENT,
-  bulkHash,
   collectionBulkView,
   readCollectionBulkInitiator,
   type CollectionBulkInput,
@@ -42,7 +39,7 @@ import {
   readCollectionBulk,
   type CollectionBulkKey,
 } from './collection-bulk-store.ts';
-import { workStepDeadline } from './command-support.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 
 type Dependencies = {
   pool: Pool;

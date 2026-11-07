@@ -3,12 +3,10 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { resourceAuthorization } from '../../src/access/index.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { noEffect, principalCommandIdentity, runCommand } from '../../src/command/command.ts';
-import {
-  realmGovernanceAuthorization,
-  RealmReadOnlyError,
-  requestRealmClaim,
-} from '../../src/community/realm-continuity.ts';
-import { readRealm, updateRealm } from '../../src/community/realm.ts';
+import { realmGovernanceAuthorization, RealmReadOnlyError } from '../../src/community/realm-governance.ts';
+import { requestRealmClaim } from '../../src/community/realm-continuity.ts';
+import { readRealm } from '../../src/community/realm-read.ts';
+import { updateRealm } from '../../src/community/realm.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import {
@@ -27,7 +25,7 @@ import {
   eraseAccountRealmOwnership,
 } from '../../src/community/account-erasure-memberships.ts';
 import { createRealmOwnershipCommands } from '../../src/access/realm-ownership.ts';
-import { COMMUNITY_PLATFORM_BASIS } from '../../src/community/party-locator.ts';
+import { COMMUNITY_PLATFORM_BASIS } from '../../src/community/contract/index.ts';
 
 let system: NativeContentSystem;
 let at: string;

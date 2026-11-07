@@ -1,6 +1,6 @@
-import { shareAccount } from '../access/account-share.ts';
+import { shareAccount, fenceOperationalAccount } from '../access/account-share.ts';
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
-import { fenceOperationalAccount } from '../access/account-share.ts';
+
 import { hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { LibraryProfilePin } from './profile.ts';

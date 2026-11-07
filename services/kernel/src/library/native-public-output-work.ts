@@ -1,11 +1,10 @@
 import { memoizedValue } from '../memoized.ts';
 import type { PoolClient, QueryConfig, QueryResult } from 'pg';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import {
   nativePublicOutputStatement,
   nativePublicOutputWorkDimensions,
-  nativePublicOutputRetentionSQL,
   PUBLIC_OUTPUT_PARTITION_SIZE_SQL,
   PUBLIC_OUTPUT_XID_SQL,
   type NativePublicOutputStatement,

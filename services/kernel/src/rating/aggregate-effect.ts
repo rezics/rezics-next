@@ -20,9 +20,9 @@ import readPopulationVoteForRekey from './population-vote-rekey-read.sql';
 import rekeyPopulationVote from './population-vote-rekey-upsert.sql';
 import { PopulationTotalCapture, flushPopulationTotalDeliveries } from './population-total.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from './dependencies.ts';
 import readQuestionScale from './question-read.sql';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 import { ratingQuestionIdentity, realmRankQuestionEligible } from './question-directory.ts';
 import {
   assertPostgresBigint,

@@ -1,5 +1,5 @@
 import { Reactions, type ReactionKind } from '@rezics/ui/reactions';
-import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
+import { QueryClientContext } from '@tanstack/react-query';
 import {
   useContext,
   useEffect,
@@ -23,8 +23,8 @@ import {
   type ReactionSnapshot,
 } from './reaction-request';
 import { Button } from '@rezics/ui/shadcn/button';
-import type { useSession } from '../session/query';
-import { browserObservation } from '../reader/lifetime/index';
+import type { ReactionCommandRecovery } from './contract/reaction-recovery';
+import { observeReactionSession } from './reaction-session';
 
 function reactionLabels(failed: string | null, locale: string) {
   const options = { locale: locale as Locale };
@@ -84,18 +84,6 @@ function installSingleReactionMenu() {
   });
 }
 
-/** An opaque original command for Home's existing page owner, independent of later advice. */
-export type ReactionCommandRecovery = {
-  start(command: {
-    key: string;
-    reader: string | null;
-    credential: string | null;
-    retry(): Promise<{ ok: true } | ReactionFailure>;
-  }): void;
-  uncertain(key: string): void;
-  accepted(key: string): void;
-};
-
 export type ThreadReactionsProps = {
   target: { kind: 'thread' | 'post' | 'subject'; id: string };
   counts: Partial<Record<ReactionKind, number>>;
@@ -135,67 +123,6 @@ export type ThreadReactionsProps = {
     read(input: { data: ChangeReactionInput; headers: HeadersInit }): Promise<ReactionSnapshot | ReactionFailure>;
   };
 };
-
-/** Observe the existing cache only. Remember transitions even when React batches away/back into one render. */
-export function observeReactionSession(client: QueryClient | undefined) {
-  // Observe sessionQuery's existing key without importing its server actions into isolated prepared renderers.
-  const read = () => client?.getQueryData<ReturnType<typeof useSession>>(['session']);
-  const queryState = () => client?.getQueryState(['session']);
-  const identity = () => {
-    const session = read();
-    return JSON.stringify([
-      queryState()?.status ?? 'missing',
-      session?.state,
-      session?.subject ?? null,
-      session?.csrfToken ?? null,
-    ]);
-  };
-  let previous = identity();
-  let revision = 0;
-  const snapshot = () => {
-    const next = identity();
-    if (next !== previous) {
-      previous = next;
-      revision++;
-    }
-    return revision;
-  };
-  const healthy = () => queryState()?.status === 'success';
-  return {
-    read,
-    snapshot,
-    healthy,
-    serverSnapshot: () => 0,
-    subscribe: (notify: () => void) => {
-      if (!client) return () => {};
-      const observation = browserObservation(client);
-      let active = true;
-      const publish = () => {
-        if (active) notify();
-      };
-      const stop = observation.subscribeCache((event) => {
-        if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== 'session') return;
-        if (
-          event.type !== 'added' &&
-          event.type !== 'removed' &&
-          !(event.type === 'updated' && (event.action.type === 'success' || event.action.type === 'error'))
-        )
-          return;
-        const next = identity();
-        // Success commits replace this observation, including equal results retained by structural sharing.
-        // Fetch starts, invalidations and observer notifications do not replace it.
-        if (next === previous && !(event.type === 'updated' && event.action.type === 'success')) return;
-        previous = next;
-        revision++;
-        observation.publish(publish);
-      });
-      return () => {
-        active = false;
-        stop();
-      };
-    },
-  };
-}
 
 export function ThreadReactions(props: ThreadReactionsProps) {
   const client = useContext(QueryClientContext);

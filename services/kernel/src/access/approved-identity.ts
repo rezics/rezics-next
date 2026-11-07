@@ -1,3 +1,5 @@
+import { ApprovalIdentityDeniedError } from './contract/index.ts';
+export { ApprovalIdentityDeniedError } from './contract/index.ts';
 import { approvalIdentityBridges, approvalIdentityProofs } from './identity-bridge-maps.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { carryExpiry, identityExpired, type IdentityExpiry } from './identity-expiry.ts';
@@ -11,14 +13,6 @@ import approvalRead from './workflow-approvals-read.sql';
 import { accessRoot } from './derived-access.ts';
 import { accessClock } from './access-clock.ts';
 
-export class ApprovalIdentityDeniedError extends Error {
-  readonly status = 403;
-
-  constructor() {
-    super('Approval denied');
-    this.name = 'ApprovalIdentityDeniedError';
-  }
-}
 export class ApprovalIdentityUnavailableError extends Error {
   readonly status = 503;
 

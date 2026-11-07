@@ -12,8 +12,14 @@ import type {
   SessionReadKind,
 } from '../contract/index.ts';
 import type { LibraryActor } from '../contract/index.ts';
-import { admissionTerm, grantCapable, routeOf, sumAdmission } from '../core/index.ts';
-import { createProgressOperationBounds, sessionWorkOf } from '../core/index.ts';
+import {
+  admissionTerm,
+  grantCapable,
+  routeOf,
+  sumAdmission,
+  createProgressOperationBounds,
+  sessionWorkOf,
+} from '../core/index.ts';
 
 export function createProgressOperationApplication(capabilities: {
   authorization: AuthorizationCapability;

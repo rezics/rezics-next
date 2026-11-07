@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { routeOf } from '../route/route.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';

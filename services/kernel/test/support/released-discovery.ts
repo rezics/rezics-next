@@ -35,6 +35,7 @@ import type { Pool, QueryResult, QueryResultRow } from 'pg';
 import type { HttpResponse, Persona, StatementInput, Subject } from '../../../../specs/semantic-driver.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { nativeSubjectReadingApplication } from '../../src/semantic/adapters/index.ts';
 import { systemClock, type KernelClock } from '../../src/clock.ts';
 import { isRelationProperty } from '../../src/semantic/item.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
@@ -288,6 +289,7 @@ export async function createReleasedDiscoveryFixture(
       createKernel({
         receiptKeys: testReceiptKeys(),
         ...config,
+        subjectReading: nativeSubjectReadingApplication(),
         ...(config.onAccessReady || native
           ? {
               onAccessReady(access, viewerActions) {

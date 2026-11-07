@@ -1,3 +1,4 @@
+import { encodedBytes } from './encoding';
 import { pickText } from '@rezics/composition';
 import { RELEASE_LIMITS, type Release } from '@rezics/definitions';
 import type { SubjectRead } from '@rezics/client';
@@ -52,10 +53,6 @@ export type VisitWork = {
 
 type Definitions = Pick<Release, 'types' | 'properties'>;
 type Statement = SubjectRead['subject']['statements'][string][number];
-
-export function encodedBytes(value: unknown): number {
-  return new TextEncoder().encode(JSON.stringify(value)).length;
-}
 
 export function emptyVisit(): VisitWork {
   return { calls: 0, rows: 0, bytes: 0, components: [] };

@@ -3,7 +3,8 @@ import { noEffect, registerCommandCallback, runCommand } from '../command/comman
 import { withConnection } from '../database/pool.ts';
 import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
-import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './identity-adapters/index.ts';
+import { IdentityEpochStoreError } from './contract/identity-errors.ts';
+import { recordIdentityEpochNativeCommit } from './identity-adapters/native-commit.ts';
 import installation from './identity-epoch-bootstrap-installation.sql';
 import prepare from './identity-epoch-bootstrap-prepare-installation.sql';
 import insert from './identity-epoch-bootstrap-insert-installation.sql';

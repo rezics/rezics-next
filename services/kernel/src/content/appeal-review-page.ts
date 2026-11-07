@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
-import { deadlineClient, within } from '../access/authenticate.ts';
-import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
+import { deadlineClient, within, readPublicIdentities } from './access-port.ts';
+import type { PublicIdentity } from '../access/content-adapter.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';

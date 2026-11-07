@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { readAccountCommandState } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,
@@ -13,7 +13,7 @@ import {
   type CommandResult,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, Actor, AccountActor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
@@ -21,13 +21,10 @@ import { routeOf, partitionOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { receiptKeysFor } from '../command/receipt-key.ts';
-import {
-  createLibraryCommandRunner,
-  LibraryNotFoundError,
-  sameAccountRoute,
-  WORK_STEP_DEADLINE_MS,
-} from './command-support.ts';
-import { LibraryConflictError } from './entries.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError, sameAccountRoute } from './collection-command-work.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
+import { LibraryConflictError } from './entry-errors.ts';
 import { assertAniListLabel, prepareAniListLabel, type AniListLabelGuard } from './list-import-anilist-label-guard.ts';
 import { setLabelAssignment } from './label-assignment-store.ts';
 import { unassignStoredLabelAssignment, restoreStoredLabelAssignment } from './label-assignment-lifecycle-store.ts';

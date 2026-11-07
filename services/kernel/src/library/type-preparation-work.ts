@@ -6,16 +6,13 @@ import {
 } from './type-preparation-schema.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { routeOf } from '../route/route.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { withConnection } from '../database/pool.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { createLibraryCommandRunner } from './command-support.ts';
-import {
-  createShelfTypeKeys,
-  createTypePreparationContinuation,
-  shelfTypeDigestFromEnvironment,
-} from './shelf-type-keys.ts';
+import { createShelfTypeKeys, shelfTypeDigestFromEnvironment } from './shelf-type-dictionary.ts';
+import { createTypePreparationContinuation } from './shelf-type-keys.ts';
 import { observePreparationIdentity } from './preparation-source.ts';
 import type { TypePreparationEvidence, TypePreparationIntent } from './type-preparation-contract.ts';
 import recover from './type-preparation-recover.sql';

@@ -17,6 +17,7 @@ import {
   readOwnerFilterCandidate,
   type OwnerFilterReadBinding,
 } from './owner-filter-plan.ts';
+
 import {
   nativeOwnerFilterBinding,
   releaseNativeOwnerFilterRead,
@@ -24,7 +25,7 @@ import {
   withNativeOwnerFilterSource,
   sameOwnerFilterSource,
 } from './owner-filter-native-binding.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import { retainNativeOwnerFilterPopulation } from './owner-filter-native-closure.ts';
 import { createCollectionSource, type PreparedCollectionSource } from './collection-source.ts';
 import canonicalize from 'canonicalize';
@@ -35,7 +36,13 @@ import { admitFilter, parseFilter, type FilterDocument, type FilterRelease } fro
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { systemClock } from '../clock.ts';
-import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
+import {
+  currentOperationalResources,
+  hasLiveOperationalTransaction,
+  enqueueIntent,
+  runOperationalTransaction,
+  type OperationalTransaction,
+} from '../command/operational.ts';
 import {
   authoritativeTimeValue,
   commandTime,
@@ -44,10 +51,10 @@ import {
   type AuthoritativeTime,
   type CommandAuthorization,
 } from '../command/command.ts';
-import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
+
 import { deadlineFor } from '../request/deadline.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { WorkExecutionOriginal } from '../command/execution-contract.ts';

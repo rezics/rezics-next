@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { createCommunityDeclaration } from '../../src/community/declaration.ts';
 import { createCommunityHttpDeclaration } from '../../src/community/http-declaration.ts';
-import { readRealm } from '../../src/community/realm.ts';
+import { readRealm } from '../../src/community/realm-read.ts';
 import { readPublication } from '../../src/community/publication.ts';
 import { listRealmClaimRequests } from '../../src/community/realm-claim-review.ts';
 import { ProblemError } from '../../src/http/problem.ts';

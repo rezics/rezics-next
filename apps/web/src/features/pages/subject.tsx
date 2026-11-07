@@ -1,4 +1,3 @@
-import { cataloguePageBody, PageReadError, pageReadError, type NativePageBody } from './page-read-failure';
 export { PageReadError, pageReadError } from './page-read-failure';
 import { selectedStreamDocument, type SubjectStreams } from './subject-streams';
 import { SubjectArtworkSession } from '../catalogue/subject-artwork/session';
@@ -51,8 +50,7 @@ import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
-import type { SubjectRead, KernelClient } from '@rezics/client';
-import { assertSubjectPageReadActive, type SubjectPageReadLifetime } from './subject-page-read-lifetime';
+import type { SubjectRead } from '@rezics/client';
 import type { Release, ReleasedRelationDirectionResult } from '@rezics/definitions';
 import {
   planReads,
@@ -76,9 +74,7 @@ import {
   type ComponentType,
   type ReactNode,
 } from 'react';
-import { requestLanguages } from '../../kernel/languages.ts';
 import { originalLanguage } from '../../subject/language';
-import { accountOf } from './account-profile-reading';
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject, Summary } from '../../subject/types';
@@ -130,7 +126,6 @@ import {
   gameClassificationDescriptor,
   mangaObservedOrigin,
   parseRecipeCurrentReturn,
-  readTermsPageAuthority,
   recipeCorrectionHref,
   recipeCurrentReturnState,
   recipePublicSubjectHref,
@@ -142,10 +137,7 @@ import type {
   AlbumCurrentVisitOrigin,
   GameClassificationReturn,
   GameGroup,
-  TermsPageAuthority,
 } from './semantic-render-port';
-
-const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function FramedIdentity() {
   return null;
@@ -163,17 +155,11 @@ function pageComponents(framed: boolean) {
   return framed ? componentSets.framed : componentSets.page;
 }
 
-import type { SubjectPageData as PageModel } from './page-model';
-export type SubjectPageData = PageModel & {
-  /** Optional current Terms operation advice, independent of public names and subject-level actions. */
-  termsAuthority?: TermsPageAuthority;
-};
+import type { SubjectPageData } from './page-model';
+export type { SubjectPageData } from './page-model';
 import { pageContext } from './page-model';
 export { pageContext } from './page-model';
-export type SubjectPageLoad =
-  | { kind: 'missing' }
-  | { kind: 'redirect'; id: string; target?: 'account' }
-  | { kind: 'page'; page: SubjectPageData };
+export type { SubjectPageLoad } from './subject-page-load';
 
 export type SubjectActionsInput = { id: string; type: string; locale: string };
 
@@ -199,166 +185,10 @@ function placesType(content: readonly unknown[], type: string): boolean {
   );
 }
 
-/** A successful planned projection must name the page's already admitted Subject. */
-export function subjectRead(page: SubjectPageData): { subject: Subject; body: Record<string, unknown> } | undefined {
-  const planned = Object.entries(
-    planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads,
-  ).find(([, read]) => read.kind === 'subject' && read.id === page.subject);
-  const result = planned ? page.reads[planned[0]] : undefined;
-  if (
-    result?.status !== 200 ||
-    !isRecord(result.body) ||
-    !isRecord(result.body.subject) ||
-    result.body.subject.id !== page.subject
-  )
-    return;
-  // Merge survivors are admitted by the outer page response and its redirect contract.
-  return { subject: result.body.subject as Subject, body: result.body };
-}
+export { subjectRead, subjectBody } from './subject-read';
+import { subjectRead, subjectBody } from './subject-read';
 
-/** The subject read planned for this page, with the related data its body consumers require. */
-export function subjectBody(page: SubjectPageData):
-  | {
-      subject: Subject;
-      account?: SubjectRead['account'];
-      related: Related;
-      documents?: unknown;
-      summary?: Summary | null;
-    }
-  | undefined {
-  const read = subjectRead(page);
-  if (!read || !isRecord(read.body.related)) return;
-  return {
-    subject: read.subject,
-    related: read.body.related as Related,
-    documents: read.body.documents,
-    ...(Object.hasOwn(read.body, 'account') ? { account: read.body.account as SubjectRead['account'] } : {}),
-    ...(Object.hasOwn(read.body, 'summary')
-      ? { summary: (read.body.summary as Summary | null | undefined) ?? null }
-      : {}),
-  };
-}
-
-/** One `pages.read` of the overview, or of the named view. A merged subject names its survivor; an unknown one is missing. */
-export async function loadSubjectPage(
-  client: KernelClient,
-  id: string,
-  view?: View,
-  locale = 'en',
-  options: {
-    realm?: string | undefined;
-    board?: string | undefined;
-    continuation?: PageContinuation | undefined;
-    stream?: string | undefined;
-    authorization?: string | undefined;
-    signal?: SubjectPageReadLifetime | undefined;
-  } = {},
-): Promise<SubjectPageLoad> {
-  assertSubjectPageReadActive(options.signal);
-  if (!subjectIdPattern.test(id)) return { kind: 'missing' };
-  let result: Awaited<ReturnType<typeof client.pages.$read.post>>;
-  try {
-    result = await client.pages.$read.post(
-      {
-        target: {
-          subject: id,
-          ...(view ? { view } : {}),
-          ...(options.realm ? { realm: options.realm } : {}),
-          ...(options.board ? { board: options.board } : {}),
-        },
-        ...(options.continuation ? { continuation: options.continuation } : {}),
-        ...(options.stream ? { stream: options.stream } : {}),
-        languages: requestLanguages(locale),
-      },
-      {
-        fetch: { redirect: 'manual', ...(options.signal ? { signal: options.signal } : {}) },
-        ...(options.authorization ? { headers: { authorization: options.authorization } } : {}),
-      },
-    );
-  } catch (error) {
-    assertSubjectPageReadActive(options.signal);
-    if (error instanceof TypeError) throw new PageReadError('dependency_unavailable', 503, '1');
-    throw error;
-  }
-  assertSubjectPageReadActive(options.signal);
-  if (result.status === 404) return { kind: 'missing' };
-  if (result.status === 308) {
-    const body = result.data ?? result.error?.value;
-    // A merged subject names its survivor id; a moved account names its handle.
-    if (isRecord(body) && 'redirect' in body && isRecord(body.redirect) && typeof body.redirect.to === 'string')
-      return subjectIdPattern.test(body.redirect.to)
-        ? { kind: 'redirect', id: body.redirect.to }
-        : { kind: 'redirect', id: body.redirect.to, target: 'account' };
-  }
-  if (result.status === 200 && result.data) {
-    const native = result.data as NativePageBody;
-    if (typeof native.account === 'string') {
-      const raw = {
-        ...cataloguePageBody(native),
-        account: { id: native.account, handle: '' },
-      } as SubjectPageData;
-      const reads = planReads(platformRegistry, raw.document as CompositionDocument, pageContext(raw)).reads;
-      for (const [key, read] of Object.entries(reads)) {
-        if (read.kind !== 'account' || raw.reads[key]?.status !== 200) continue;
-        // Account descriptors select by handle, which this envelope does not carry.
-        // The native profile's immutable ID binds the planned slot to the admitted account.
-        const profile = accountOf(raw.reads[key]?.body);
-        if (profile?.id === native.account && subjectIdPattern.test(profile.id) && profile.handle)
-          return { kind: 'redirect', id: profile.handle, target: 'account' };
-      }
-      // An absent, handleless or foreign profile supplies no admitted public @ address.
-      const catalogue = cataloguePageBody(native);
-      if (catalogue.subject !== id || (options.realm && !catalogue.context))
-        throw new PageReadError('dependency_unavailable', 503);
-      return {
-        kind: 'page',
-        page: {
-          ...catalogue,
-          subject: id,
-          ...(options.realm ? { requestedRealm: options.realm } : {}),
-          ...(options.board ? { board: options.board, requestedBoard: options.board } : {}),
-        },
-      };
-    }
-    const survivor = native.subject;
-    if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
-    if (options.realm && !native.context) throw new PageReadError('dependency_unavailable', 503);
-    const page = cataloguePageBody(native);
-    // Read the existing mounted Terms authority resource once, alongside this page reading.
-    // An advice outage must never fail or conceal the admitted public page.
-    const currentPage = page as SubjectPageData;
-    const reading = subjectBody(currentPage);
-    const eligible =
-      reading &&
-      currentPage.catalogue?.state === 'released' &&
-      selectSubjectPageProfiles({
-        type: reading.subject.type,
-        definitions: currentPage.catalogue.definitions,
-      }).releasedWorkNames;
-    let termsAuthority;
-    if (eligible) {
-      assertSubjectPageReadActive(options.signal);
-      termsAuthority = await readTermsPageAuthority(
-        client,
-        options.authorization ? 'signed-in' : 'signed-out',
-        options.authorization,
-        options.signal,
-      );
-      assertSubjectPageReadActive(options.signal);
-    }
-    return {
-      kind: 'page',
-      page: {
-        ...page,
-        subject: page.subject ?? null,
-        ...(options.realm ? { requestedRealm: options.realm } : {}),
-        ...(options.board ? { board: options.board, requestedBoard: options.board } : {}),
-        ...(termsAuthority ? { termsAuthority } : {}),
-      },
-    };
-  }
-  throw pageReadError(result.error?.value ?? result.data, result.status, result.headers);
-}
+export { loadSubjectPage } from './subject-page-load';
 
 /** Composition relation reads plus admitted item statements, so outgoing publisher, counterpart, cast and staff keep labels. */
 export function pageRelationProperties(page: SubjectPageData): string[] {

@@ -1,8 +1,6 @@
-import { publicFilterCatalogue } from '../search/discovery-catalogue.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
 import { nativePopulationStartId } from './public-filter-coverage-population.ts';
-import { publicFilterSource, publicFilterSourceOrigin } from './public-filter-source.ts';
 import {
   readOriginalPublicFilterProjectionPage,
   readRetainedPublicFilterProjectionPage,
@@ -12,13 +10,10 @@ import { systemClock } from '../clock.ts';
 import { runCommand, noEffect, currentCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import {
-  readAccountDiscoveryRepairObservation,
-  type AccountDiscoveryRepairObservation,
-} from '../access/account-discovery-source.ts';
-import { readRelease, freeze } from './definitions.ts';
+import { readRelease } from './definition-release-read.ts';
+import { freeze } from './core/freeze.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import registerSource from './public-filter-source-binding-register.sql';
 import defineSource from './public-filter-source-binding-define.sql';
@@ -28,7 +23,6 @@ import readBootstrap from './public-filter-source-binding-bootstrap.sql';
 import adoptBootstrap from './public-filter-source-binding-adopt.sql';
 import abortBootstrap from './public-filter-source-binding-abort.sql';
 import accountPage from './public-filter-source-binding-account-page.sql';
-import { enrollAccountDiscoveryHome } from '../access/account-discovery-reduction.ts';
 import { publicFilterCoverageKeys } from './public-filter-coverage-pending.ts';
 import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenance.ts';
 import {
@@ -47,7 +41,6 @@ import {
   readPublicFilterRepairHomeSeal,
   advancePublicFilterRepairAckFrontier,
 } from './public-filter-repair-chain.ts';
-import { encodePublicFilterNativeState } from '../search/public-filter-custody.ts';
 import repairState from './public-filter-source-binding-repair-state.sql';
 import repairRead from './public-filter-source-binding-repair-read.sql';
 import repairSave from './public-filter-source-binding-repair-save.sql';
@@ -56,34 +49,14 @@ import repairAdvance from './public-filter-source-binding-repair-advance.sql';
 import repairVersion from './public-filter-source-binding-repair-version.sql';
 import repairCurrent from './public-filter-source-binding-repair-current.sql';
 import type { Pool } from 'pg';
-import { releaseDigest } from '@rezics/definitions';
-import { admitFilter, walkFilter } from '@rezics/filter';
-import type { Access } from '../request/access.ts';
+import type { Access } from '../access/index.ts';
+import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import type {
-  NativePublicFilterRepairSettlement,
-  CustodyDefinition,
-  CustodyRetainedDefinition,
-} from '../search/public-filter-custody-contract.ts';
-import { compileFilter } from '../search/filter.ts';
-import { compileText } from '../search/text.ts';
-import { validateSearchAfter } from '../search/query-payload.ts';
-import { compileDiscoveryConsumerCapture } from '../search/discovery-filter.ts';
-import type { DiscoveryConsumerCaptureInput } from '../search/index.ts';
-import { validatePublicSuggestionInput } from '../search/public-suggestion-input.ts';
-import {
-  readPublicFilterConsumerCustody,
-  readGenerationPublicationCustody,
-  readPublicFilterRepairSettlement,
-  withPublicFilterRepairAllowance,
-} from '../search/public-filter-custody.ts';
-import type {
-  PublicFilterConsumerCaptureInput,
-  PublicFilterConsumerContext,
+  DiscoveryConsumerCaptureInput,
   PublicCanonicalCaptureInput,
-  PublicFilterConsumerUnavailable,
-  PublicFilterQueriedObservation,
+  PublicFilterConsumerCaptureInput,
   PublicSuggestionCaptureInput,
-} from '../search/public-filter-consumer-contract.ts';
+} from '../search/index.ts';
 import type {
   PublicFilterCost,
   PublicFilterDependencyKey,
@@ -98,6 +71,17 @@ import type {
   PrivacyReductionObservationRequest,
   PublicFilterProjectionFrontier,
 } from './public-filter-source-contract.ts';
+import type {
+  NativeSourceBindingPorts,
+  PublicFilterConsumerContext,
+  PublicFilterConsumerUnavailable,
+  PublicFilterQueriedObservation,
+  SourceBindingRetainedDefinition,
+  SourceBindingCustodyDefinition,
+  SourceBindingRepairSettlement,
+  SourceBindingFailureReason,
+} from './source-binding-port.ts';
+import { sourceBindingApplication } from './source-binding-application.ts';
 /** Internal native receipt, resolved from the original independently verified
  * home/window chain. Never accepted by a public callable or a caller ACK setter.
  */
@@ -295,7 +279,7 @@ export interface PublicFilterNativeSource extends PublicFilterSource {
   ): Promise<
     | Readonly<{
         status: 'bound';
-        definition: CustodyDefinition<PublicCanonicalCaptureInput>;
+        definition: SourceBindingCustodyDefinition<PublicCanonicalCaptureInput>;
         cost: PublicFilterCost;
       }>
     | PublicFilterConsumerUnavailable
@@ -307,7 +291,6 @@ export interface PublicFilterNativeSource extends PublicFilterSource {
   ): Promise<PrivacyReductionObservation>;
 }
 
-export type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
 export type NativePublicSource = Readonly<{
   id: string;
   partition: number;
@@ -329,16 +312,7 @@ export type PublicFilterSourceDefinition = Readonly<{
 }>;
 export type PublicFilterBindingFailure = Readonly<{
   status: 'unready' | 'unavailable';
-  reason:
-    | 'source_missing'
-    | 'configuration_changed'
-    | 'definition_missing'
-    | 'observation_lost'
-    | 'execution_missing'
-    | 'binding_mismatch'
-    | 'owner_unavailable'
-    | 'identity_pending'
-    | 'deadline';
+  reason: SourceBindingFailureReason;
   cost: PublicFilterCost;
 }>;
 export type PublicFilterSourceBinding = Readonly<{
@@ -568,7 +542,7 @@ export type NativePublicFilterPublicationCompletion =
       >;
       observation: Extract<PrivacyReductionObservation, { status: 'observed' }>;
       terminal: Readonly<{ step: string; root: string }>;
-      settlement: NativePublicFilterRepairSettlement;
+      settlement: SourceBindingRepairSettlement;
       cost: PublicFilterCost;
     }>
   | PublicFilterBindingFailure;
@@ -583,6 +557,15 @@ const nativePublicationCompletions = new WeakMap<
 /** Resolve the persisted original job/cut, then independently read its native completion.
  * Search calls this from its existing publication writer fence. The result grants no activation.
  */
+/** Public constructor resolves through the application installed by Semantic composition. */
+export function createPublicFilterSourceBinding(
+  pool: Pool,
+  routing: Uint8Array,
+  access: Access,
+): PublicFilterSourceBootstrapBinding {
+  return sourceBindingApplication().createBinding(pool, routing, access);
+}
+
 export async function readNativePublicFilterPublicationCompletion(
   binding: PublicFilterSourceBinding,
   request: NativePublicFilterPublicationRequest,
@@ -765,10 +748,11 @@ class BindingError extends PublicFilterSourceDefinitionError {}
 /** Load only an existing immutable read definition. The optional byte cap lets native callers
  * debit a fixed upper bound before the retained capture and dependency keys are read.
  */
-export async function readPublicFilterSourceDefinition(
+export async function readNativePublicFilterSourceDefinition(
   id: string,
   db: Pool,
   routeDigest: string,
+  search: NativeSourceBindingPorts['search'],
   maxBytes = Number.MAX_SAFE_INTEGER,
 ): Promise<Readonly<{ definition: PublicFilterSourceDefinition; bytes: number }>> {
   if (!uuid.test(id)) throw new BindingError('definition_missing');
@@ -785,7 +769,7 @@ export async function readPublicFilterSourceDefinition(
   const release = await readRelease(db, row.release_digest);
   if (!release || !release.types[row.subject_type]) throw new BindingError('definition_missing');
   let capture: PublicSourceCaptureInput;
-  let keys: PublicFilterDependencyKey[];
+  let keys: readonly PublicFilterDependencyKey[];
   const meaning = {
     digest: row.release_digest,
     release,
@@ -793,7 +777,7 @@ export async function readPublicFilterSourceDefinition(
   };
   try {
     capture = decode<PublicSourceCaptureInput>(row.capture);
-    keys = allCaptureKeys(meaning, capture);
+    keys = search.deriveDependencyKeys(meaning, capture);
   } catch {
     throw new BindingError('binding_mismatch');
   }
@@ -864,140 +848,12 @@ function validatePublicFilterBindingConfiguration(pool: Pool, routing: Uint8Arra
     throw new TypeError('A native Access instance is required');
 }
 
-/** Only the admitted shared tree and existing compilers determine dependency closure. */
-function captureKeys(meaning: PublicFilterProjectionMeaning, input: PublicFilterConsumerCaptureInput) {
-  if (meaning.digest !== releaseDigest(meaning.release) || !meaning.release.types[meaning.type])
-    throw new TypeError('Unknown projection meaning');
-  if (
-    !Object.hasOwn(input, 'filterDocument') ||
-    !Object.hasOwn(input, 'text') ||
-    !Number.isInteger(input.size) ||
-    input.size < 1 ||
-    input.size > 200 ||
-    !['id', 'name', 'relevance', 'collections', 'rating'].includes(input.sort)
-  )
-    throw new TypeError('Complete capture input is required');
-  // Rating's phased tuple is admitted by its existing native planner, not ordinary search_after.
-  // Native rating/generation metadata cannot be verified until the producer registration is available.
-  if (input.sort !== 'rating') validateSearchAfter(input);
-  if (input.filterDocument !== undefined) {
-    for (const node of walkFilter(input.filterDocument))
-      if ('owner' in node || 'saved' in node) throw new TypeError('Only expanded public filters may bind');
-    const admitted = admitFilter(input.filterDocument, meaning.release, {
-      inverse: true,
-    });
-    if (!isDeepStrictEqual(admitted, input.filterDocument)) throw new TypeError('Capture must already be admitted');
-  }
-  const filter =
-    input.filterDocument === undefined
-      ? undefined
-      : compileFilter(input.filterDocument, {
-          prefix: 'f',
-          relationOverflow: true,
-        });
-  const text = input.text === undefined ? undefined : compileText(input.text, { field: 'search_text', prefix: 't' });
-  const overflowProperties = filter
-    ? [...new Set(filter.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : [])))]
-    : undefined;
-  for (const [key, value] of Object.entries({
-    filter: filter?.query,
-    query: text?.query,
-    boost: text?.leaves
-      .filter((leaf) => !leaf.negated)
-      .map((leaf) => leaf.value)
-      .join(' '),
-  })) {
-    if (Object.hasOwn(input, key) && !isDeepStrictEqual(input[key as keyof typeof input], value))
-      throw new TypeError('Compiled capture differs from its retained input');
-  }
-  if (Object.hasOwn(input, 'overflowProperties')) {
-    const actual = input.overflowProperties;
-    const required = overflowProperties ?? [];
-    if (
-      !Array.isArray(actual) ||
-      actual.some((property) => typeof property !== 'string') ||
-      required.some((property) => !actual.includes(property))
-    )
-      throw new TypeError('Compiled capture differs from its retained input');
-  }
-  const keys: PublicFilterDependencyKey[] = [
-    { kind: 'order', order: input.sort },
-    { kind: 'type' },
-    { kind: 'field', field: 'id' },
-  ];
-  for (const leaf of filter?.leaves ?? []) {
-    if (leaf.facet === 'type') keys.push({ kind: 'type' });
-    else {
-      keys.push({ kind: 'property', property: leaf.property });
-      for (const qualifier of leaf.qualifiers ?? []) keys.push({ kind: 'property', property: qualifier.property });
-    }
-  }
-  if (Array.isArray(input.overflowProperties))
-    for (const property of input.overflowProperties) keys.push({ kind: 'property', property });
-  if (text)
-    keys.push(
-      ...(['labels', 'aliases', 'descriptions'] as const).map((field) => ({
-        kind: 'field' as const,
-        field,
-      })),
-    );
-  if (['name', 'collections', 'rating'].includes(input.sort))
-    keys.push({ kind: 'field', field: 'name_sort' }, { kind: 'field', field: 'labels' });
-  if (input.sort === 'collections') keys.push({ kind: 'function', input: 'public_collection_count' });
-  if (input.sort === 'rating') keys.push({ kind: 'function', input: 'public_rating' });
-  return keys.filter((key, index) => keys.findIndex((other) => isDeepStrictEqual(key, other)) === index);
-}
-
-function deriveCaptureKeys(
-  meaning: PublicFilterProjectionMeaning,
-  input: PublicSourceCaptureInput,
-): PublicFilterDependencyKey[] {
-  if (meaning.digest !== releaseDigest(meaning.release) || !meaning.release.types[meaning.type])
-    throw new TypeError('Unknown native meaning');
-  let keys: readonly PublicFilterDependencyKey[];
-  if ('purpose' in input) {
-    validatePublicSuggestionInput(input);
-    keys = [
-      { kind: 'type' },
-      { kind: 'field', field: 'id' },
-      { kind: 'field', field: 'labels' },
-      { kind: 'field', field: 'aliases' },
-      { kind: 'field', field: 'name_sort' },
-      { kind: 'order', order: 'name' },
-      { kind: 'order', order: 'id' },
-    ];
-  } else if ('representation' in input) {
-    keys = [
-      ...compileDiscoveryConsumerCapture(input, meaning, undefined).dependencyKeys,
-      { kind: 'field', field: 'id' },
-      ...(input.sort === 'name'
-        ? [
-            { kind: 'field' as const, field: 'name_sort' as const },
-            { kind: 'field' as const, field: 'labels' as const },
-            { kind: 'field' as const, field: 'aliases' as const },
-          ]
-        : []),
-    ];
-  } else keys = captureKeys(meaning, input);
-  return keys.filter((key, i) => keys.findIndex((other) => isDeepStrictEqual(key, other)) === i);
-}
-
-function allCaptureKeys(
-  meaning: PublicFilterProjectionMeaning,
-  input: PublicSourceCaptureInput,
-): PublicFilterDependencyKey[] {
-  try {
-    return deriveCaptureKeys(meaning, input);
-  } catch {
-    throw new BindingError('binding_mismatch');
-  }
-}
-
 /** Native Source-owned registration; the origin association only locates the constructor configuration. */
-export function createPublicFilterSourceBinding(
+export function createNativePublicFilterSourceBinding(
   pool: Pool,
   routing: Uint8Array,
   access: Access,
+  ports: NativeSourceBindingPorts,
 ): PublicFilterSourceBootstrapBinding {
   validatePublicFilterBindingConfiguration(pool, routing, access);
   const nativeRouting = new Uint8Array(routing);
@@ -1024,19 +880,19 @@ export function createPublicFilterSourceBinding(
     } catch (error) {
       if (error instanceof BindingError) return fail(error.reason, cost);
       if (error instanceof TypeError || error instanceof RangeError) return fail('binding_mismatch', cost);
-      const reason = classifyUnavailability(error);
+      const reason = ports.access.classifyUnavailability(error);
       if (reason !== undefined || (error && typeof error === 'object' && 'code' in error))
         return fail(Date.now() >= deadline ? 'deadline' : 'owner_unavailable', cost);
       throw error;
     }
   }
   async function loadDefinition(id: string, db: Pool): Promise<PublicFilterSourceDefinition> {
-    return (await readPublicFilterSourceDefinition(id, db, routeDigest)).definition;
+    return (await readNativePublicFilterSourceDefinition(id, db, routeDigest, ports.search)).definition;
   }
   const readers = new Map<string, PublicFilterSource>();
   const sourceReader = (definition: PublicFilterSourceDefinition) =>
     readers.get(definition.source.id) ??
-    publicFilterSource({
+    ports.sourceFactory({
       pool,
       routeKey: new Uint8Array(nativeRouting),
       access,
@@ -1047,7 +903,7 @@ export function createPublicFilterSourceBinding(
       throw new BindingError('observation_lost');
     return locator.slice(2);
   }
-  function requireSameDefinition(own: PublicFilterSourceDefinition, retained: CustodyRetainedDefinition): void {
+  function requireSameDefinition(own: PublicFilterSourceDefinition, retained: SourceBindingRetainedDefinition): void {
     if (
       encode(own.source) !== encode(retained.source) ||
       own.readDefinition !== retained.readDefinition ||
@@ -1551,8 +1407,8 @@ export function createPublicFilterSourceBinding(
           // may silently drop a previously indexed Account.
           next = await nextAccountRepair(next, db, cost);
         } else if (state.phase === 'account' && state.subject !== null) {
-          account = replay?.account ?? (await readAccountDiscoveryRepairObservation(db, state.subject, context));
-          const current = await readAccountDiscoveryRepairObservation(db, state.subject, context);
+          account = replay?.account ?? (await ports.access.readAccountRepair(db, state.subject, context));
+          const current = await ports.access.readAccountRepair(db, state.subject, context);
           if (
             account.head.partition !== state.partition ||
             account.head.epoch !== owner.epoch ||
@@ -1609,7 +1465,7 @@ export function createPublicFilterSourceBinding(
           {
             partition: state.partition,
             deadline: context.deadline,
-            clock: publicFilterSourceOrigin(sourceReader(bootstrap.definition))?.clock ?? systemClock,
+            clock: ports.sourceOrigin(sourceReader(bootstrap.definition))?.clock ?? systemClock,
           },
           async (tx) => {
             const existing = await repairVersion.run(tx, values);
@@ -1650,7 +1506,7 @@ export function createPublicFilterSourceBinding(
         };
       } else {
         const source = sourceReader(bootstrap.definition);
-        const origin = publicFilterSourceOrigin(source);
+        const origin = ports.sourceOrigin(source);
         if (!origin) throw new BindingError('source_missing');
         if (
           replay?.output &&
@@ -1673,6 +1529,7 @@ export function createPublicFilterSourceBinding(
             execution: request.execution,
             predecessor: request.frontier,
           },
+          ports.access,
         );
         addCost(cost, page.cost);
         if (page.status !== 'progress' && page.status !== 'complete') {
@@ -1789,7 +1646,7 @@ export function createPublicFilterSourceBinding(
     }
     const deadline = context.deadline;
     return run({ deadline }, async (cost, db) => {
-      const retained = await readPublicFilterConsumerCustody(pool, input, {
+      const retained = await ports.search.readConsumerCustody(pool, input, {
         deadline,
       });
       addCost(cost, retained.cost);
@@ -1831,7 +1688,7 @@ export function createPublicFilterSourceBinding(
             !start ||
             start.bootstrap !== cut.row.bootstrap ||
             start.read_definition !== definition.readDefinition ||
-            start.consumer !== encodePublicFilterNativeState(retained.queried.consumer) ||
+            start.consumer !== ports.search.encodeConsumer(retained.queried.consumer) ||
             start.observation !== retained.queried.snapshot.observation ||
             start.covered_generation !== cut.row.coverage_generation ||
             start.owner_epoch !== definition.source.epoch
@@ -1865,7 +1722,7 @@ export function createPublicFilterSourceBinding(
     async resolve(request, context) {
       // Capture all caller data and constructor identity before the first suspension.
       let meaning: PublicFilterProjectionMeaning, capture: PublicSourceCaptureInput;
-      const origin = publicFilterSourceOrigin(request.source);
+      const origin = ports.sourceOrigin(request.source);
       if (!origin || origin.pool !== pool || origin.access !== access || hash(origin.routeKey) !== routeDigest)
         return fail('source_missing');
       try {
@@ -1875,7 +1732,7 @@ export function createPublicFilterSourceBinding(
         return fail('binding_mismatch');
       }
       return run(context, async (cost, db) => {
-        const keys = allCaptureKeys(meaning, capture);
+        const keys = ports.search.deriveDependencyKeys(meaning, capture);
         const encoded = encode(capture);
         if (Buffer.byteLength(encoded) > 1048576) throw new BindingError('binding_mismatch');
         // Caller digest equality is checked again against the actual immutable release owner.
@@ -1893,7 +1750,7 @@ export function createPublicFilterSourceBinding(
             subject_type: meaning.type,
             capture_digest: hash(encoded),
             capture: encoded,
-            dependency_keys: keys,
+            dependency_keys: [...keys],
             coverage_keys: [
               ...publicFilterCoverageKeys(keys),
               ...('representation' in capture ? [PUBLIC_FILTER_ACCOUNT_DOMAIN] : []),
@@ -1919,7 +1776,7 @@ export function createPublicFilterSourceBinding(
     try {
       capture = structuredClone(request.capture);
       consumer = structuredClone(request.consumer);
-      publicFilterCatalogue(consumer, 'representation' in capture);
+      ports.search.catalogue(consumer, 'representation' in capture);
     } catch {
       return fail('binding_mismatch');
     }
@@ -1930,7 +1787,7 @@ export function createPublicFilterSourceBinding(
     return run({ deadline }, async (cost, db) => {
       addCost(cost, resolved.cost);
       // Validate the already registered physical consumer through its real owner, before making a cut.
-      const registration = await readGenerationPublicationCustody(pool, consumer, 0, { deadline });
+      const registration = await ports.search.readGenerationPublicationCustody(pool, consumer, 0, { deadline });
       addCost(cost, registration.cost);
       if (!('definition' in registration)) return { ...registration, cost };
       requireSameDefinition(resolved.definition, registration.definition);
@@ -1966,7 +1823,7 @@ export function createPublicFilterSourceBinding(
           bootstrap: inserted.bootstrap,
           registration: registration.registration,
           definition: resolved.definition.readDefinition,
-          consumer: encodePublicFilterNativeState(consumer),
+          consumer: ports.search.encodeConsumer(consumer),
           accounts: 'representation' in capture,
         };
         await beginPublicFilterCoverageBaseline(db, baseline, deadline);
@@ -1980,7 +1837,7 @@ export function createPublicFilterSourceBinding(
         cost.inputKeys += 2;
         cost.dependencyPoints += 2;
         cost.rows += 2;
-        const receipt = await enrollAccountDiscoveryHome(
+        const receipt = await ports.access.enrollAccountHome(
           db,
           {
             partition: cut.row.account_after,
@@ -2147,10 +2004,10 @@ export function createPublicFilterSourceBinding(
       };
       const before = await authority();
       const readSettlement = () =>
-        readPublicFilterRepairSettlement(pool, { queried: input.queried, execution: input.execution }, { deadline });
+        ports.search.readRepairSettlement(pool, { queried: input.queried, execution: input.execution }, { deadline });
       const spent = publicationCost ? { ...publicationCost } : undefined;
       if (spent) addCost(spent, cost);
-      const settled = await (spent ? withPublicFilterRepairAllowance(spent, readSettlement) : readSettlement());
+      const settled = await (spent ? ports.search.withRepairAllowance(spent, readSettlement) : readSettlement());
       addCost(cost, settled.cost);
       if (settled.status !== 'settled') return { ...settled, cost };
       requireSameDefinition(cut.definition, settled.definition);
@@ -2182,7 +2039,7 @@ export function createPublicFilterSourceBinding(
           observation: settled.queried.snapshot.observation,
           execution: settled.execution.id,
           settlement: settled.settlement.id,
-          consumer: encodePublicFilterNativeState(settled.queried.consumer),
+          consumer: ports.search.encodeConsumer(settled.queried.consumer),
           physicalTarget: settled.queried.consumer.physicalTarget,
           incarnation: settled.queried.consumer.incarnation,
         };
@@ -2382,7 +2239,7 @@ export function createPublicFilterSourceBinding(
             receiptDigests.length !== 0
           )
             throw new BindingError('binding_mismatch');
-          const current = await readAccountDiscoveryRepairObservation(db, record.account.id, { deadline });
+          const current = await ports.access.readAccountRepair(db, record.account.id, { deadline });
           if (
             !isDeepStrictEqual({ ...current, position: record.account.position }, record.account) ||
             record.account.head.partition !== record.input.partition ||
@@ -2704,7 +2561,7 @@ export function createPublicFilterSourceBinding(
           return { status: 'pending' as const, cost };
         // Search may have committed retain/open before the caller crashed before adoption.
         // Resolve its actual owner record; an absent/uncertain observation never proves no physical effect.
-        const native = await readGenerationPublicationCustody(
+        const native = await ports.search.readGenerationPublicationCustody(
           pool,
           cut.bootstrap.consumer,
           0,
@@ -2820,7 +2677,7 @@ export function createPublicFilterSourceBinding(
         record.account.head.epoch !== record.input.epoch
       )
         throw new BindingError('binding_mismatch');
-      const current = await readAccountDiscoveryRepairObservation(db, record.account.id, context);
+      const current = await ports.access.readAccountRepair(db, record.account.id, context);
       if (!isDeepStrictEqual({ ...current, position: record.account.position }, record.account))
         throw new BindingError('configuration_changed');
       const original = await loadBootstrap(request.bootstrap, db, joined.definition);
@@ -2929,7 +2786,7 @@ export function createPublicFilterSourceBinding(
       const bootstrap = '0:' + retained.bootstrap;
       const cut = await loadBootstrap(bootstrap, db);
       // Never use the "latest observation" lookup, even when adoption lost its reply.
-      const native = await readGenerationPublicationCustody(
+      const native = await ports.search.readGenerationPublicationCustody(
         pool,
         cut.bootstrap.consumer,
         0,

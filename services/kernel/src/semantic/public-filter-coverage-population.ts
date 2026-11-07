@@ -1,19 +1,11 @@
-import { publicFilterCatalogue } from '../search/discovery-catalogue.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
-import { classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import {
-  decodePublicFilterNativeState as decode,
-  encodePublicFilterNativeState as encode,
-} from '../search/public-filter-custody.ts';
-import type { CustodyRetainedDefinition, CustodyExecution } from '../search/public-filter-custody-contract.ts';
 import { publicFilterCoverageKeys } from './public-filter-coverage-pending.ts';
-import { publicFilterCoverageStart } from '../search/public-filter-coverage-page.ts';
 import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenance.ts';
-import type { PublicCanonicalCaptureInput } from '../search/public-filter-consumer-contract.ts';
+import type { PublicCanonicalCaptureInput } from '../search/index.ts';
 import type {
   PrivacyReductionObservation,
   PrivacyReductionObservationRequest,
@@ -21,6 +13,12 @@ import type {
   PublicFilterDependencyKey,
   PrivacyReductionStart,
 } from './public-filter-source-contract.ts';
+import type {
+  PublicFilterAccessBindingPort,
+  PublicFilterSearchBindingPort,
+  SourceBindingCustodyExecution as CustodyExecution,
+  SourceBindingRetainedDefinition as CustodyRetainedDefinition,
+} from './source-binding-port.ts';
 
 const statement = readFileSync(new URL('./public-filter-coverage-population.sql', import.meta.url), 'utf8');
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -102,19 +100,23 @@ type Row = {
   own_homes: number;
   own_subjects: number;
 };
-function validBindings(row: Row, request: Extract<PrivacyReductionObservationRequest, { kind: 'population' }>) {
+function validBindings(
+  row: Row,
+  request: Extract<PrivacyReductionObservationRequest, { kind: 'population' }>,
+  search: PublicFilterSearchBindingPort,
+) {
   const q = request.queried;
-  const retained = decode<{ digest: string; data: CustodyRetainedDefinition }>(row.definition);
+  const retained = search.decodeState<{ digest: string; data: CustodyRetainedDefinition }>(row.definition);
   const definition = retained.data;
-  const capture = decode<PublicCanonicalCaptureInput>(row.capture);
-  publicFilterCatalogue(q.consumer, 'representation' in capture);
-  const covered = decode<{ observation: string }>(row.covered);
+  const capture = search.decodeState<PublicCanonicalCaptureInput>(row.capture);
+  search.catalogue(q.consumer, 'representation' in capture);
+  const covered = search.decodeState<{ observation: string }>(row.covered);
   const expectedKeys = [
     ...publicFilterCoverageKeys(row.dependency_keys),
     ...('representation' in capture ? [PUBLIC_FILTER_ACCOUNT_DOMAIN] : []),
   ].sort();
   if (
-    retained.digest !== createHash('sha256').update(encode(definition)).digest('hex') ||
+    retained.digest !== createHash('sha256').update(search.encodeState(definition)).digest('hex') ||
     definition.readDefinition !== row.read_definition ||
     !isDeepStrictEqual(definition.source, {
       id: row.source_id,
@@ -127,11 +129,11 @@ function validBindings(row: Row, request: Extract<PrivacyReductionObservationReq
     !isDeepStrictEqual(definition.capture, capture) ||
     !isDeepStrictEqual(definition.dependencyKeys, row.dependency_keys) ||
     !isDeepStrictEqual(expectedKeys, row.coverage_keys) ||
-    !isDeepStrictEqual(decode(row.bootstrap_consumer), q.consumer) ||
+    !isDeepStrictEqual(search.decodeState(row.bootstrap_consumer), q.consumer) ||
     covered.observation !== `0:${row.bootstrap}` ||
     row.snapshot_kind !== q.snapshot.kind ||
-    row.queried !== encode(q) ||
-    row.consumer !== encode(q.consumer) ||
+    row.queried !== search.encodeState(q) ||
+    row.consumer !== search.encodeConsumer(q.consumer) ||
     q.consumer.meaningDigest !== row.release_digest ||
     q.consumer.readDefinition !== row.read_definition
   )
@@ -151,7 +153,7 @@ function validBindings(row: Row, request: Extract<PrivacyReductionObservationReq
       )
         return false;
       let parent = row.boundary;
-      let previous = row.boundary_window === null ? null : decode<NativeWindow>(row.boundary_window);
+      let previous = row.boundary_window === null ? null : search.decodeState<NativeWindow>(row.boundary_window);
       let charged = 0;
       for (const [index, child] of row.page_children.entries()) {
         if (
@@ -163,8 +165,8 @@ function validBindings(row: Row, request: Extract<PrivacyReductionObservationReq
           child.page_size === null
         )
           return false;
-        const execution = decode<CustodyExecution>(child.execution);
-        const window = decode<NativeWindow>(child.consumer_window);
+        const execution = search.decodeState<CustodyExecution>(child.execution);
+        const window = search.decodeState<NativeWindow>(child.consumer_window);
         const consumed = child.page_consumed;
         if (
           !validWindow(execution, window, request.start) ||
@@ -202,10 +204,11 @@ function validBindings(row: Row, request: Extract<PrivacyReductionObservationReq
       );
     }
     if (row.execution === null || row.consumer_window === null) return false;
-    const execution = decode<CustodyExecution>(row.execution);
-    const window = decode<{ raw: ({ id: string } | { key: { id: string; owner: string } })[]; rounds: number }>(
-      row.consumer_window,
-    );
+    const execution = search.decodeState<CustodyExecution>(row.execution);
+    const window = search.decodeState<{
+      raw: ({ id: string } | { key: { id: string; owner: string } })[];
+      rounds: number;
+    }>(row.consumer_window);
     if (
       execution.id !== request.execution ||
       !isDeepStrictEqual(execution.start, request.start) ||
@@ -267,6 +270,8 @@ export async function readPublicFilterPopulation(
   pool: Pool,
   routeKey: Uint8Array,
   request: Extract<PrivacyReductionObservationRequest, { kind: 'population' }>,
+  search: PublicFilterSearchBindingPort,
+  access: PublicFilterAccessBindingPort,
 ): Promise<PrivacyReductionObservation> {
   const final = request.start !== null;
   // Reserve misses, controls and the attempted start write before submitting SQL.
@@ -290,7 +295,7 @@ export async function readPublicFilterPopulation(
   const unready = (): PrivacyReductionObservation => ({ status: 'unready', reason: 'metadata_missing', cost });
   try {
     const deadline = request.context.deadline;
-    requireAccessDeadline(deadline);
+    access.requireDeadline(deadline);
     if (!Number.isSafeInteger(deadline)) return unready();
     // A malformed final role must never fall through SQL's NULL execution
     // branch and attempt a new start without its write reservation.
@@ -300,7 +305,7 @@ export async function readPublicFilterPopulation(
       return unready();
     const q = request.queried;
     if (!q || !/^0:/.test(q.snapshot.observation)) return unready();
-    const pageId = final ? null : publicFilterCoverageStart(request.context);
+    const pageId = final ? null : search.coverageStart(request.context);
     const start = final ? nativePopulationStartId(request.start!.observation) : (pageId ?? randomUUID());
     if (pageId !== null) cost.resultWrites++;
     if (final) cost.resultWrites++; // attempted native root finish, including misses
@@ -308,8 +313,8 @@ export async function readPublicFilterPopulation(
     const values = [
       0,
       q.snapshot.observation,
-      encode(q),
-      encode(q.consumer),
+      search.encodeState(q),
+      search.encodeConsumer(q.consumer),
       Date.now(),
       q.consumer.physicalTarget,
       q.consumer.incarnation,
@@ -320,25 +325,25 @@ export async function readPublicFilterPopulation(
       pageId,
     ];
     cost.statements++;
-    cost.bytes += Buffer.byteLength(sql) + Buffer.byteLength(encode(values));
+    cost.bytes += Buffer.byteLength(sql) + Buffer.byteLength(search.encodeState(values));
     const query = { text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) };
     const result = await withRequestDeadline(deadline, () => pool.query<Row>(query));
-    cost.bytes += Buffer.byteLength(encode(result.rows));
+    cost.bytes += Buffer.byteLength(search.encodeState(result.rows));
     const row = result.rows[0];
     if (!row || result.rows.length !== 1) {
       accounted = true;
-      requireAccessDeadline(deadline);
+      access.requireDeadline(deadline);
       return unready();
     }
     cost.inputKeys += row.coverage_keys.length + 5 * row.own_homes + 2 * row.own_subjects;
     cost.dependencyPoints += 2 * row.heads.length + 2 * row.own_homes + row.own_subjects;
     cost.rows += 2 * row.heads.length + 2 * row.own_homes + row.own_subjects;
     accounted = true;
-    requireAccessDeadline(deadline);
+    access.requireDeadline(deadline);
     if (
       cost.inputKeys > 1000 ||
       cost.bytes > 4 * 1024 * 1024 ||
-      !validBindings(row, request) ||
+      !validBindings(row, request, search) ||
       row.pending ||
       row.fenced ||
       row.heads.some(
@@ -381,7 +386,7 @@ export async function readPublicFilterPopulation(
       cost.rows += 468 + 4;
     }
     if (error instanceof TypeError || error instanceof RangeError || error instanceof SyntaxError) return unready();
-    if (classifyUnavailability(error) !== undefined || (error && typeof error === 'object' && 'code' in error))
+    if (access.classifyUnavailability(error) !== undefined || (error && typeof error === 'object' && 'code' in error))
       return {
         status: 'unavailable',
         reason: Date.now() >= request.context.deadline ? 'deadline' : 'dependency_unavailable',

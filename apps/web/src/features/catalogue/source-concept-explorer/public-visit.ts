@@ -1,4 +1,4 @@
-import { candidateContext } from '../../../subject/candidates';
+import { candidateContext } from '../../pages/visit-host-port';
 import { locales } from '../../../paraglide/runtime.js';
 import { subjectVisitReturn } from '../../pages/subject-visit-navigation';
 

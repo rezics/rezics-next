@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import type { CommandOutcome, CommandTransaction } from '../command/command.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { ProblemError } from '../http/problem.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { AccountActor, Actor } from '../request/access.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
-import { LibraryConflictError } from './entries.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError, requireRoute } from './collection-command-work.ts';
+import { LibraryConflictError } from './entry-errors.ts';
 import { createPersonalLabelCommands } from './label-commands.ts';
 import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';

@@ -32,24 +32,17 @@ import { routeOf } from '../../route/route.ts';
 import { MAX_BODY_LIMIT } from '../../http/body.ts';
 import type { Resource } from '../../request/access.ts';
 import { previewImportedDocument, type DefinitionImportRequest, type ImportedPreview } from '../definition-import.ts';
+import { activateExtension, ExtensionInputError, publishExtension } from '../extensions.ts';
+import { activeExtension, readPublishedExtension } from '../definition-release-read.ts';
+import { activateRelease, publishRelease } from '../definitions.ts';
+import { activeRelease, readRelease } from '../definition-release-read.ts';
 import {
-  activateExtension,
-  activeExtension,
-  ExtensionInputError,
-  publishExtension,
-  readPublishedExtension,
-} from '../extensions.ts';
-import {
-  activateRelease,
-  activeRelease,
   DefinitionAccessDeniedError,
   DefinitionInputError,
   DefinitionNotFoundError,
-  GLOBAL_CONTEXT,
-  publishRelease,
-  readRelease,
   StaleEditorialHeadError,
-} from '../definitions.ts';
+} from '../contract/definition-values.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from '../contract/subject-values.ts';
 
 function resource() {
   return memoizedValue(resource, () => ({ route: 0, id: GLOBAL_CONTEXT }));

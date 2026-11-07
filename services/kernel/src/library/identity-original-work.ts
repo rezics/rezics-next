@@ -14,7 +14,7 @@ import { nativePublicOutputFootprint } from './native-public-output-work.ts';
 import {
   declareNativeIdentitySourceBasisStatements,
   libraryIdentitySelectedFootprint,
-} from './identity-native-planner-selected-pricing.ts';
+} from './identity-native-bounds.ts';
 import { LIBRARY_IDENTITY_SELECTED_STATEMENTS } from './identity-native-planner-projection.ts';
 import { COMMAND_DISPATCH_ALLOWANCE } from '../command/dispatch-lifetime.ts';
 

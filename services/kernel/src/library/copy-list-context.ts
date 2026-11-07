@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { classifyUnavailability, AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { Fact } from '../search/hits.ts';
 import { routeOf } from '../route/route.ts';

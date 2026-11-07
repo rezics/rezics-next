@@ -1,14 +1,18 @@
+import { composeRatingDependencies } from '../src/composition/rating.ts';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { createPool } from '../src/database/pool.ts';
 import { createAccess } from '../src/access/index.ts';
 import { createKernel } from '../src/http/kernel.ts';
+import { composeCommunityDomainPorts } from '../src/composition/community-domain-ports.ts';
 import { formatDocument, openApiDocument } from '../src/http/openapi.ts';
 import { testReceiptKeys } from '../test/support/receipt-keys.ts';
 
 export const CONTRACT = resolve(import.meta.dir, '../../../contracts/openapi.json');
 
 export async function kernelContract(): Promise<string> {
+  composeRatingDependencies();
+  composeCommunityDomainPorts();
   const pool = createPool('postgres://kernel.invalid/openapi');
   try {
     return formatDocument(

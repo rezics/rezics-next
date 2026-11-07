@@ -1,5 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
-import { ProblemError } from './problem.ts';
+import { ProblemError } from './problem-error.ts';
 import { RELEASE_LIMITS } from '@rezics/definitions';
 import { parseStrictJson } from './strict-json.ts';
 

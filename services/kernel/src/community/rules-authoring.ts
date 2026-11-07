@@ -7,8 +7,8 @@ import {
   readExactPublishedRulesForAuthoring,
   readBoardPageActionEvidence,
   ContentNotFoundError,
-} from '../content/reads.ts';
-import { listRealmBoards } from '../content/boards.ts';
+  listRealmBoards,
+} from './domain-ports.ts';
 import type { ReadContext } from '../content/model.ts';
 import { readRealmSettingsPage, type RealmSettingsPage } from './settings-page.ts';
 import type { CommunityAmbient } from './ambient.ts';

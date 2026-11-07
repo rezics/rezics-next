@@ -13,7 +13,7 @@ import { withConnection } from '../database/pool.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { partitionOf } from '../route/route.ts';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
-import { requireRoute } from './command-support.ts';
+import { requireRoute } from './collection-command-work.ts';
 import apply from './listing-apply.sql';
 import { executeSubjectCollectionPairs, subjectCollectionPairPlan } from './subject-collection-read-bounds.ts';
 import {

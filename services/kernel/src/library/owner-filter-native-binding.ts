@@ -17,14 +17,15 @@ import {
   type CommandAttempt,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccessContext, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { scopeAllowance, zeroScopeWork } from '../search/scope-execution.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import type { IdentityScopeLibraryIdentity, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { freeze } from '../semantic/definitions.ts';
-import { nativeSourceFence, type CanonicalAllowance, type CanonicalWork } from './canonical-source-store.ts';
+import { nativeSourceFence } from './native-source-fence.ts';
+import { type CanonicalAllowance, type CanonicalWork } from './canonical-source-store.ts';
 import {
   createCollectionSource,
   createOrdinaryCollectionPageSource,
@@ -32,12 +33,9 @@ import {
 } from './collection-source.ts';
 import { type WorkAllowance, type WorkDimensions } from './contract/work-dimensions.ts';
 import { readNativeCollectionMetadata, type NativeCollectionMetadata } from './collection-source-native.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
-import {
-  prepareNativeCollectionMemberAuthority,
-  readNativeCollectionMemberAdmission,
-  type CollectionMemberAdmission,
-} from './owner-filter.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
+import { prepareNativeCollectionMemberAuthority, type CollectionMemberAdmission } from './owner-filter.ts';
+import { readNativeCollectionMemberAdmission } from './owner-filter-admission.ts';
 import type { OwnerFilterReadBinding } from './owner-filter-plan.ts';
 import { withAdmittedOwnerWorkingSource } from './owner-filter-working-source.ts';
 import scopeQuery from './owner-filter-native-binding-scope.sql';

@@ -119,8 +119,15 @@ export type {
 } from './identity-source-support-contract.ts';
 export {
   createPublicFilterSourceBinding,
+  createNativePublicFilterSourceBinding,
+  readNativePublicFilterSourceDefinition,
+  joinNativePublicFilterRepair,
+  readNativePublicFilterRepairStart,
   readNativePublicFilterPublicationCompletion,
+  readNativePublicFilterAccountRepair,
+  advanceNativePublicFilterPreparation,
 } from './public-filter-source-binding.ts';
+export { PublicFilterSourceDefinitionError } from './public-filter-source-binding.ts';
 export type {
   NativePublicSource,
   NativePublicFilterPublication,
@@ -152,8 +159,41 @@ export type {
   SubjectSourceKeyPage,
   SubjectSourceKeyPages,
 } from './subject-source-key-pages.ts';
-export { publicFilterSource, recordPrivacyReduction } from './public-filter-source.ts';
-export type { PrivacyReductionHead, PrivacyReductionObservation } from './public-filter-source-contract.ts';
+export {
+  publicFilterSource,
+  publicFilterSourceOrigin,
+  createNativePublicFilterSource,
+  recordPrivacyReduction,
+} from './public-filter-source.ts';
+export type * from './public-filter-source-contract.ts';
+export {
+  bindSourceBindingApplication,
+  createSourceBindingApplication,
+  readPublicFilterSourceDefinition,
+  sourceBindingApplication,
+} from './source-binding-application.ts';
+export type {
+  NativeSourceBindingPorts,
+  PublicFilterAccessBindingPort,
+  PublicFilterConsumerContext,
+  PublicFilterConsumerUnavailable,
+  PublicFilterSearchBindingPort,
+  SourceBindingApplication,
+  SourceBindingApplicationPorts,
+  SourceBindingCaptureInput,
+  SourceBindingConfiguration,
+  SourceBindingCustodyDefinition,
+  SourceBindingCustodyExecution,
+  SourceBindingCustodyResult,
+  SourceBindingFailure,
+  SourceBindingFailureReason,
+  SourceBindingFactory,
+  SourceBindingGenerationResult,
+  SourceBindingNativeOwner,
+  SourceBindingRepairSettlement,
+  SourceBindingRetainedDefinition,
+  SourceBindingSettlementResult,
+} from './source-binding-port.ts';
 export type { RelatedSubjectSummary, SubjectSummary, SummaryReaderDependencies } from './summaries.ts';
 export {
   characterDocumentBounds,

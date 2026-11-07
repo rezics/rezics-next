@@ -1,11 +1,8 @@
 import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck } from '../request/access.ts';
+import { accessCheck, subjectReadEligibility, SubjectRedirectError, readSubjectReference } from './domain-ports.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { subjectReadEligibility } from '../semantic/eligibility.ts';
-import { SubjectRedirectError } from '../semantic/merges.ts';
-import { readSubjectReference } from '../semantic/references.ts';
 import type { SubjectComponent } from '../semantic/subject.ts';
 import type { PublicationDependencies, PublicationReadContext } from './publication.ts';
 

@@ -1,4 +1,4 @@
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import { personBiographyReturn, subjectVisitReturn } from '../pages/subject-visit-navigation';
 import { subjectHref } from '../../subject/subject-href';
 import { peopleUuid } from './people-profile';

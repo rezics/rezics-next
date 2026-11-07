@@ -10,7 +10,8 @@ import {
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { readNativeCollectionMemberAdmission, type CollectionMemberAdmission } from './owner-filter.ts';
+import { readNativeCollectionMemberAdmission } from './owner-filter-admission.ts';
+import { type CollectionMemberAdmission } from './owner-filter.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
 
 type Context = Readonly<{

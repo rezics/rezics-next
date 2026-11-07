@@ -1,5 +1,5 @@
 import type { CommandEvent, CommandTransaction } from '../command/command.ts';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 import type { IdentityRepairPage } from './identity-work-frame.ts';
 import { identityRoute } from './identity-work-frame.ts';
 import { RatingIdentityVotePending, type RatingIdentityMapping } from './segment-identity-guard.ts';

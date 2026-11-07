@@ -1,6 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import type { ShelfTypeKeys } from './shelf-contract.ts';
-import { applyShelfTypeDigest, sha256ShelfTypeDigest, type ShelfTypeDigest } from './shelf-type-keys.ts';
+import { applyShelfTypeDigest, sha256ShelfTypeDigest } from './shelf-type-dictionary.ts';
+import { type ShelfTypeDigest } from './shelf-type-keys.ts';
 import root from './shelf-reader-type-root.sql';
 import edge from './shelf-reader-type-edge.sql';
 import equal from './shelf-reader-type-equal.sql';

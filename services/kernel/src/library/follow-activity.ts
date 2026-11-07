@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { within } from '../access/authenticate.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { decodeCursor, encodeCursor } from '../content/feed-source-cursor.ts';

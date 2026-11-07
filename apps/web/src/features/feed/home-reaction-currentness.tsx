@@ -1,7 +1,7 @@
 import { useContext, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { browserObservation, type BrowserObservationSnapshot } from '../../session/observation';
-import { observeReactionSession } from '../../threads/thread-reactions';
+import { observeReactionSession } from '../../threads/reaction-session';
 import type { FeedInput, FeedStream, HomeFeedResult } from '../pages/home-feed-read';
 
 const admittedPages = new WeakSet<object>();

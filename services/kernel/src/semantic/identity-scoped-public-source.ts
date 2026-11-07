@@ -16,7 +16,8 @@ import {
 import { createSubjectSourceKeyPages } from './subject-source-key-pages.ts';
 import { publicFilterSource } from './public-filter-source.ts';
 import { withReadTransaction } from './read.ts';
-import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './identity-adapters/index.ts';
+import { IdentityEpochStoreError } from './contract/identity-errors.ts';
+import { recordIdentityEpochNativeCommit } from './identity-adapters/native-commit.ts';
 
 declare const publicSourceCapture: unique symbol;
 export type PublicIdentitySourceCapture = Readonly<{ [publicSourceCapture]: true }>;

@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
-import { captureDurableInitiator, durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
+import {
+  commandAccessContext,
+  requireCommandAdmission,
+  captureDurableInitiator,
+  durableInitiatorCommitment,
+  deadlineClient,
+  within,
+} from './access-port.ts';
 import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
 import { deriveAccess } from '../access/derived-access.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import {
   authoritativeTimeValue,

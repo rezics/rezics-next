@@ -1,4 +1,4 @@
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { libraryIdentitySQL } from './identity-native-planner-statements.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -36,7 +36,7 @@ import type {
   IdentityReceivingDisposition,
   IdentityReceivingSelection,
 } from '../semantic/identity-receiving-effects-types.ts';
-import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-source-work.ts';
+import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-native-work.ts';
 import {
   createNativeLibrarySourceCustodyWithWork,
   readNativeIdentitySourceBasis,

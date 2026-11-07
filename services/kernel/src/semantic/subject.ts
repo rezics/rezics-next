@@ -9,7 +9,7 @@ import { initializeSubjectPagePublication, retainSubjectPageSource } from './sub
 import { subjectPageFacts, recordSubjectPageDiff, invalidateSubjectPage } from './subject-page-publication-native.ts';
 import { disclosureAccount, keepStatementPrivate } from './statement-disclosure.ts';
 import type { Source } from '@rezics/definitions/bulk';
-import { SubjectRedirectError } from './merges.ts';
+import { SubjectRedirectError } from './contract/subject-errors.ts';
 import { checkSubjectInput } from '@rezics/definitions/validate';
 import type { DataType, Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
@@ -52,7 +52,7 @@ import {
   accountAgentId,
   accountAgentsForSubjects,
 } from './agents.ts';
-import { identityEpochStore } from './identity-adapters/index.ts';
+import { initializeIdentitySubject } from './identity-adapters/subject-creation.ts';
 import { initializeRevisionAuthorship, revisionResource } from './authorship.ts';
 import { creationDeclares } from '../access/index.ts';
 import { declareCommandHistory } from '../history/application/index.ts';
@@ -242,7 +242,7 @@ export async function writeSubject(
   if (authored && creationDeclares(tx, revisionResource(subjectId, 1)))
     await initializeRevisionAuthorship(tx, { subject: subjectId, revision: 1 });
   if (domain) await domain.subjects.initializeIdentity(tx, subjectId);
-  else await identityEpochStore().initializeSubject(tx, subjectId);
+  else await initializeIdentitySubject(tx, subjectId);
   const events: { type: string; subject: string; data: unknown }[] = [
     { type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } },
   ];
@@ -410,13 +410,7 @@ export function readSubject(
   return nativeSubjectReadingApplication().readSubject(pool, id, authorize, context, routeKey, options);
 }
 
-export function readRelated(db: Pool | PoolClient, ids: readonly string[]) {
-  return nativeSubjectReadingApplication().readRelated(db, ids);
-}
-
-export function loadRelated(client: object, ids: readonly string[]) {
-  return nativeSubjectReadingApplication().loadRelated(client, ids);
-}
+export { readRelated, loadRelated } from './related-subject-read.ts';
 
 export function accountSource(tx: CommandTransaction, statementSubjects: readonly string[]): AgentSelfSource | null {
   const basis = currentCommand(tx).basis;

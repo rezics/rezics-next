@@ -19,10 +19,7 @@ import { compileCreditedText } from './credit-search-query.ts';
 import { compileMatchEvidence, type MatchEvidenceQuery } from './match-evidence.ts';
 import { discoveryNativeQuery } from './discovery-native-query.ts';
 import { compileFilter } from './filter.ts';
-import type {
-  PublicFilterDependencyKey,
-  PublicFilterProjectionMeaning,
-} from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterDependencyKey, PublicFilterProjectionMeaning } from '../semantic/index.ts';
 
 type Query = Record<string, unknown>;
 const none: Query = { match_none: {} };

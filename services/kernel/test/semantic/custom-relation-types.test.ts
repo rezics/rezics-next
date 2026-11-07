@@ -13,7 +13,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { effectiveRelease } from '../../src/semantic/extensions.ts';
+import { effectiveRelease } from '../../src/semantic/definition-release-read.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { readSubject } from '../../src/semantic/subject.ts';
 import { createRealAccess } from './real-access.ts';

@@ -12,15 +12,12 @@ import type {
   IdentityFrontier,
   IdentityNativeReceipt,
 } from '../semantic/identity-epoch-contract.ts';
-import {
-  bindSemanticProducerRoles,
-  identityEpochStore,
-  identityErasureRoles,
-  identityJobPartition,
-  IdentityEpochStoreError,
-  recordIdentityEpochNativeCommit,
-  serializeIdentityValue as json,
-} from '../semantic/identity-adapters/index.ts';
+import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
+import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
+import { identityJobPartition } from '../semantic/identity-adapters/identity-epoch-contract.ts';
+import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
+import { recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/identity-epoch-binding.ts';
+import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
 import {
   activeIdentitySourceConsumerMaintenance,
   currentIdentitySourceConsumerMaintenance,

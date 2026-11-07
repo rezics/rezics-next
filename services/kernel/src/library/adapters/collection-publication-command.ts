@@ -16,34 +16,26 @@ import {
   runCommand,
   type CommandAttempt,
   type CommandAuthorization,
-  type CommandOutcome,
-  type CommandTransaction,
 } from '../../command/command.ts';
 import { ProblemError } from '../../http/problem-error.ts';
-import {
-  accessCheck,
-  type Access,
-  type AccessContext,
-  type AccessClient,
-  type AccountActor,
-} from '../../request/access.ts';
+import { accessCheck } from '../../request/access-check.ts';
+import { type Access, type AccessContext, type AccessClient, type AccountActor } from '../../request/access.ts';
 import { deadlineFor } from '../../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../route/route.ts';
 import { stageHistoryWork } from '../../work/history-enqueue.ts';
-import { initializeCanonicalCollectionSource, nativeSourceFence } from '../canonical-source-store.ts';
+import { initializeCanonicalCollectionSource } from '../canonical-source-store.ts';
+import { nativeSourceFence } from '../native-source-fence.ts';
 import { prepareBuiltinMaterialization } from '../builtin-materialization.ts';
 import { readCollection } from '../collection-store.ts';
-import type { Collection } from '../collection-model.ts';
+
 import { readNativeCollectionWorkingMetadata } from '../collection-source-native.ts';
 import {
   authorizeCollectionRule,
   prepareCollectionRuleAuthority,
-  readSavedCollectionRule,
   type SavedCollectionRule,
 } from '../collection-rules.ts';
 import { admitSavedCollectionMemberQuery, prepareNativeCollectionMemberAuthority } from '../owner-filter.ts';
 import type {
-  CollectionPublicationBeginInput,
   CollectionPublicationSource,
   CollectionPublicationRuleRef,
 } from '../collection-publication-episode-contract.ts';
@@ -53,9 +45,8 @@ import type { NativeSourceIdentity } from '../native-source-custody.ts';
 import { commandHistoryIdentityAccounts } from '../../history/application/index.ts';
 import { encodeRoles, unionHistoryScope } from '../../history/contract/index.ts';
 
+import { COLLECTION_PUBLICATION_COMMAND, COLLECTION_PUBLICATION_WORKFLOW } from '../contract/index.ts';
 import {
-  COLLECTION_PUBLICATION_COMMAND,
-  COLLECTION_PUBLICATION_WORKFLOW,
   loadCollectionPublicationCreation as load,
   loadCollectionPublicationLocator as loadLocator,
   readCollectionPublicationMeaning as readCurrentMeaning,

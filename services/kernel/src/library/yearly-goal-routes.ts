@@ -2,12 +2,15 @@ import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import type { KernelClock } from '../clock.ts';
-import { ProblemError, problemSchema } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { problemSchema } from '../http/problem-schema.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
-import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
-import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
+import { IDEMPOTENCY_HEADER } from '@rezics/operations/protocol';
+import { idempotencyKeyOf } from '../http/idempotency-key.ts';
+import { AuthenticationError } from '../request/authentication-error.ts';
+import { type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {
   createYearlyCompletionGoalCommands,

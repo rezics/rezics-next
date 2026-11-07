@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { ProblemError } from '../../src/http/problem.ts';
+import { ProblemError } from '../../src/http/problem-error.ts';
 import { parseCollectionRule } from '../../src/library/collection-rules.ts';
 
 const filter = { type: { in: ['schema:Book'] } };

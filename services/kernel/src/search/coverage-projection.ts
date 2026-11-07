@@ -1,6 +1,6 @@
 import type { BatchResult, Envelope } from '../events/log.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readIdentityHome, type HomeIdentity } from '../semantic/identity-basis.ts';
 import { withConnection } from '../database/pool.ts';
 import { createSubjectIndexer } from './indexer.ts';

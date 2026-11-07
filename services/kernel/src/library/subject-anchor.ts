@@ -3,7 +3,7 @@ import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { Access, AccessContext, Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { requireLibraryPresentation } from './domain-binding.ts';
 export { SubjectIdentityUnavailableError, type ResolvedSubject } from './contract/index.ts';
 

@@ -35,14 +35,8 @@ const title = (kind: 'biography' | 'occupations' | 'languages', locale: string) 
       ? m.people_occupations_title({}, options(locale))
       : m.people_languages_title({}, options(locale));
 
-export type ProfileReading = {
-  public: SubjectRead;
-  documents?: unknown;
-  locale: string;
-  release: PersonDefinitions;
-  link?: PageLink;
-  reader?: Reader;
-};
+import type { ProfileReading } from './contract';
+export type { ProfileReading } from './contract';
 type Reading = ProfileReading;
 
 /** Every item, including a qualifier or citation, needs its own disclosed summary. */

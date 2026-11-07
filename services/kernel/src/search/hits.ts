@@ -1,5 +1,5 @@
 import type { CalendarDate, FilterRelease } from '@rezics/filter';
-import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
+import { ProblemError, type FieldErrorCode } from '../http/problem-error.ts';
 import { chooseTexts } from './disclosure/admission.ts';
 export { chooseTexts } from './disclosure/admission.ts';
 import { codeFacet, discloseFacetValues } from './facets.ts';

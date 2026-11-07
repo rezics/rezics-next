@@ -2,25 +2,28 @@ import { memoizedValue } from '../memoized.ts';
 import { documentText, DocumentSnapshotSchema } from '@rezics/document';
 import { t } from 'elysia';
 import type { Static, TSchema } from 'typebox';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import {
+  deadlineClient,
+  within,
+  readExactPublishedRules,
+  rulesKey,
+  exactRealmPresentationImage,
+  RealmMediaImageSchema as RealmPresentationImageSchema,
+  readRealmPresentationImages,
+  accessCheck,
+} from './domain-ports.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
-import { readExactPublishedRules } from '../content/reads.ts';
-import { rulesKey } from '../content/community-presentation-rules.ts';
-import {
-  exactRealmPresentationImage,
-  RealmPresentationImageSchema,
-  readRealmPresentationImages,
-} from '../content/realm-media.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Actor } from '../request/access.ts';
+import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import bindingRead from './container-lifecycle-binding.sql';
 import { RealmPresentationSchema } from './presentation.ts';
-import { readRealm, readRealmSettingsHead, realmReadEligibility, type RealmDependencies } from './realm.ts';
-import { readSpace, spaceReadEligibility } from './space.ts';
+import { readRealm, readRealmSettingsHead, realmReadEligibility } from './realm-read.ts';
+import { type RealmDependencies } from './realm.ts';
+import { readSpace, spaceReadEligibility } from './space-read.ts';
 import type { CommunityAmbient } from './ambient.ts';
 
 const closed = { additionalProperties: false } as const;

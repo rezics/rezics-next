@@ -1,3 +1,5 @@
+import { collectionPublicationScopeRuntimes } from './scope-runtime.ts';
+import { readSearchConfig } from './config.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { runCommand, noEffect } from '../command/command.ts';
@@ -11,7 +13,6 @@ import { createPublicPreparation, type PublicPreparation } from './public-prepar
 import { createScopePreparation } from './scope-preparation.ts';
 import { createScopePreparationStore, SCOPE_PREPARATION_WORKFLOW } from './scope-preparation-store.ts';
 import { PUBLIC_PREPARATION_WORKFLOW } from './public-preparation-store.ts';
-import { ConfigError } from '../commerce/config.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
@@ -26,13 +27,9 @@ import { requestReviewDiscoveryReceiving } from './review-discovery-receiving.ts
 import { startSearchIndexing } from './runner.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { registerSearchErasure, markSearchPersonalErasure, stepSearchErasure } from './erasure.ts';
-import type { ScopeRuntime } from './service-scope.ts';
-import { isAdmittedSearchPrefix } from './consumer-name.ts';
 import type { SubjectSource } from './source.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetAccessObservationPort } from './facet-access-port.ts';
-
-export type SearchConfig = { url: string; prefix: string };
 
 /** DBOS recovers workflows during launch, before addService offers the live preparation. */
 export function createSearchServiceGate<T>(unavailable: () => Error) {
@@ -68,28 +65,9 @@ export function createSearchServiceGate<T>(unavailable: () => Error) {
   };
 }
 
-const collectionPublicationScopeRuntimes = new WeakMap<WorkContext, ScopeRuntime>();
+export { collectionPublicationScopeRuntime } from './scope-runtime.ts';
 
-/** The Library consumer borrows this worker's existing Search client and rated source for a guarded step. */
-export function collectionPublicationScopeRuntime(context: WeakKey): ScopeRuntime | undefined {
-  return collectionPublicationScopeRuntimes.get(context as WorkContext);
-}
-
-/** `undefined` when search is not configured. The URL and prefix are refused by name. */
-export function readSearchConfig(env: { readonly [name: string]: string | undefined }): SearchConfig | undefined {
-  const url = env.OPENSEARCH_URL;
-  if (!url) return undefined;
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new ConfigError('OPENSEARCH_URL');
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new ConfigError('OPENSEARCH_URL');
-  const prefix = env.KERNEL_SEARCH_PREFIX ?? 'rezics-';
-  if (!isAdmittedSearchPrefix(prefix)) throw new ConfigError('KERNEL_SEARCH_PREFIX');
-  return { url, prefix };
-}
+export { readSearchConfig, type SearchConfig } from './config.ts';
 
 type SearchDiscoveryComposer = (input: {
   pool: Pool;
@@ -103,7 +81,7 @@ type SearchDiscoveryComposer = (input: {
 type SearchRuntimeDefaults = Required<
   Pick<
     Parameters<typeof createKernel>[0],
-    'tokens' | 'receiptKeys' | 'writeRate' | 'rateAttribution' | 'clock' | 'access'
+    'tokens' | 'receiptKeys' | 'writeRate' | 'rateAttribution' | 'clock' | 'access' | 'subjectReading'
   >
 > & {
   facetAccess: FacetAccessObservationPort;

@@ -10,13 +10,13 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import * as semanticPublicCapture from '../semantic/identity-scoped-public-source.ts';
 import { observeNativePublicCollectionOutput, type CanonicalRangeKey } from './collection-source-native.ts';
 import type { CollectionOutputPublication } from './collection-source-output.ts';
-import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-native-work.ts';
 import type { NativePublicOutputIdentity } from './native-source-output-types.ts';
 import type {
   LockPublicOutputDisposition,

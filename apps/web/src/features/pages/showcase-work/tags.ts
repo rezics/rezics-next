@@ -1,7 +1,7 @@
 import type { SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { facetProperties, readNativeSpoilerLevel, type FilterQualifier } from '@rezics/filter';
-import type { Related, Subject } from '../../../subject/types';
+import type { Related, Subject } from '../../../subject/read-contract';
 import { bestRank, isRecord, pageText, spoilerLevel, type Stmt } from '../shared';
 
 type Statement = SubjectRead['subject']['statements'][string][number];

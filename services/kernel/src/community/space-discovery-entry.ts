@@ -1,7 +1,6 @@
 import { systemCommunityClock } from './ambient.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { readViewerActions, type ViewerActionBindings, type ViewerActionResources } from '../access/viewer-actions.ts';
-import { readRealmPresentationImages } from '../content/realm-media.ts';
+import { deadlineClient, readViewerActions, readRealmPresentationImages } from './domain-ports.ts';
+import type { ViewerActionBindings, ViewerActionResources } from '../access/viewer-actions.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

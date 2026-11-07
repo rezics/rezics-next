@@ -1,7 +1,7 @@
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import { durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
+import { durableInitiatorCommitment } from './access-port.ts';
 import type { DurableInitiatorReader, DurableInitiatorRecord } from '../access/durable-initiator.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { AccessClient } from '../request/access.ts';

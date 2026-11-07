@@ -122,12 +122,8 @@ export function isExploreId(value: string): boolean {
   return uuid.test(value);
 }
 
-export function typeExtends(release: Definitions, type: string, target: string, seen = new Set<string>()): boolean {
-  if (type === target) return true;
-  if (seen.has(type)) return false;
-  seen.add(type);
-  return (release.types[type]?.bases ?? []).some((base) => typeExtends(release, base, target, seen));
-}
+export { typeExtends } from '../type-inheritance';
+import { typeExtends } from '../type-inheritance';
 
 export function graphQueryOf(input: {
   property?: string | readonly string[] | undefined;

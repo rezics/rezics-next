@@ -1,5 +1,5 @@
 import type { FilterDocument } from '@rezics/filter';
-import type { PublicFilterCost, PublicFilterProjectionMeaning } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterCost, PublicFilterProjectionMeaning } from '../semantic/index.ts';
 import type {
   PublicFilterConsumerCapture,
   PublicFilterConsumerContext,

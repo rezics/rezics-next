@@ -13,15 +13,10 @@ import type {
 } from './public-filter-source-contract.ts';
 import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
 import type { JoinedPopulationRequest, PublicFilterNativeSource } from './public-filter-source-binding.ts';
-import type {
-  PublicFilterConsumerContext,
-  PublicCanonicalCaptureInput,
-} from '../search/public-filter-consumer-contract.ts';
-import { readPublicFilterPopulation } from './public-filter-coverage-population.ts';
-import { createPublicFilterSourceBinding } from './public-filter-source-binding.ts';
+import type { PublicCanonicalCaptureInput } from '../search/index.ts';
+import type { PublicFilterConsumerContext } from './source-binding-port.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
 import { routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Pool } from 'pg';
@@ -30,6 +25,12 @@ import type {
   PrivacyReductionLogPage,
   PrivacyReductionObservation,
 } from './public-filter-source-contract.ts';
+import { sourceBindingApplication } from './source-binding-application.ts';
+import type {
+  PublicFilterAccessBindingPort,
+  PublicFilterSearchBindingPort,
+  SourceBindingFactory,
+} from './source-binding-port.ts';
 import readPrivacyHead from './public-filter-source-head.sql';
 import readPrivacyEntries from './public-filter-source-log-page.sql';
 import ensurePrivacyHead from './public-filter-source-head-ensure.sql';
@@ -37,18 +38,16 @@ import lockPrivacyHead from './public-filter-source-head-lock.sql';
 import advancePrivacyHead from './public-filter-source-head-advance.sql';
 import appendPrivacyEntry from './public-filter-source-log-append.sql';
 import { enqueuePublicFilterCoverage } from './public-filter-coverage-pending.ts';
+import { readPublicFilterPopulation } from './public-filter-coverage-population.ts';
 import { readPublicFilterProjectionPage as readProjectionPage } from './public-filter-projection.ts';
 import { isDeepStrictEqual } from 'node:util';
 import realmOfBoard from '../content/realm-of-board.sql';
 import ownerRead from './public-filter-collection-reduction-owner.sql';
 import { runPublicFilterCollectionReductionQuery } from './public-filter-collection-reduction-work.ts';
-
 type SourceConfiguration = Parameters<PublicFilterSourceFactory>[0];
-const origins = new WeakMap<PublicFilterSource, SourceConfiguration>();
 
-/** Internal constructor routing only. The binding independently validates persisted owner rows. */
 export function publicFilterSourceOrigin(source: PublicFilterSource): SourceConfiguration | undefined {
-  return origins.get(source);
+  return sourceBindingApplication().sourceOrigin(source);
 }
 
 const cost = (inputKeys = 0) => ({
@@ -224,16 +223,21 @@ function validatePrivacyReduction(tx: CommandTransaction, reduction: PrivacyRedu
   return command;
 }
 
-async function inReadSnapshot<T>(pool: Pool, deadline: number, read: (client: import('pg').PoolClient) => Promise<T>) {
+async function inReadSnapshot<T>(
+  pool: Pool,
+  deadline: number,
+  read: (client: import('pg').PoolClient) => Promise<T>,
+  accessPort: PublicFilterAccessBindingPort,
+) {
   return withConnection(pool, async (client) => {
-    requireAccessDeadline(deadline);
+    accessPort.requireDeadline(deadline);
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
       const remaining = Math.max(1, Math.floor(deadline - Date.now()));
       await client.query(`SET LOCAL statement_timeout = '${remaining}ms'`);
-      requireAccessDeadline(deadline);
+      accessPort.requireDeadline(deadline);
       const result = await read(client);
-      requireAccessDeadline(deadline);
+      accessPort.requireDeadline(deadline);
       await client.query('COMMIT');
       return result;
     } catch (error) {
@@ -242,7 +246,7 @@ async function inReadSnapshot<T>(pool: Pool, deadline: number, read: (client: im
       } catch (rollbackError) {
         discardConnection(client, rollbackError as Error);
       }
-      requireAccessDeadline(deadline);
+      accessPort.requireDeadline(deadline);
       throw error;
     }
   });
@@ -252,7 +256,12 @@ async function inReadSnapshot<T>(pool: Pool, deadline: number, read: (client: im
  * Constructor-origin routing is internal; the binding independently registers and verifies
  * persisted Source metadata. Population coverage stays closed until its retained cut is complete.
  */
-export const publicFilterSource: PublicFilterSourceFactory = (config) => {
+export function createNativePublicFilterSource(
+  config: SourceConfiguration,
+  bindingFactory: SourceBindingFactory,
+  search: PublicFilterSearchBindingPort,
+  accessPort: PublicFilterAccessBindingPort,
+): PublicFilterSource {
   if (!config.pool || typeof config.pool.connect !== 'function' || typeof config.pool.query !== 'function')
     throw new TypeError('A native pool is required');
   if (!(config.routeKey instanceof Uint8Array) || config.routeKey.byteLength < 32)
@@ -268,8 +277,7 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
       request: Readonly<{ meaning: PublicFilterProjectionMeaning; capture: PublicCanonicalCaptureInput }>,
       context: PublicFilterConsumerContext,
     ) {
-      const native = origins.get(source)!;
-      const result = await createPublicFilterSourceBinding(native.pool, native.routeKey, native.access).resolve(
+      const result = await bindingFactory(config.pool, config.routeKey, config.access).resolve(
         { source, ...request },
         context,
       );
@@ -281,7 +289,7 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
       };
     },
     async readPublicFilterProjectionPage(request: PublicFilterProjectionRequest) {
-      return readProjectionPage(config, request);
+      return readProjectionPage(config, request, accessPort);
     },
     async readPrivacyReductionHeads(
       request: PrivacyReductionObservationRequest | JoinedPopulationRequest,
@@ -290,28 +298,33 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
       const readContext = 'context' in request ? request.context : context;
       if (!readContext) return unready('metadata_missing');
       if (request.kind === 'population') {
-        return readPublicFilterPopulation(config.pool, config.routeKey, request);
+        return readPublicFilterPopulation(config.pool, config.routeKey, request, search, accessPort);
       }
       if (request.kind !== 'home') return unready('metadata_missing');
       try {
-        requireAccessDeadline(readContext.deadline);
+        accessPort.requireDeadline(readContext.deadline);
         return await withRequestDeadline(readContext.deadline, () =>
-          inReadSnapshot(config.pool, readContext.deadline, async (client) => {
-            const owner = await readPartition(client, request.partition);
-            if (!owner) return unavailable('missing_owner');
-            if (owner.writeState === 'moved') return unavailable('moved');
-            if (owner.writeState !== 'active') return unready('owner_pending');
-            const row = await readPrivacyHead.run(client, {
-              partition_no: request.partition,
-            });
-            if (!row) return unready('metadata_missing');
-            if (row.population_fenced || row.owner_epoch !== owner.epoch) return unready('owner_pending');
-            const head = privacyHead(request.partition, owner.epoch, row.position);
-            return { status: 'home', head, cost: cost(1) };
-          }),
+          inReadSnapshot(
+            config.pool,
+            readContext.deadline,
+            async (client) => {
+              const owner = await readPartition(client, request.partition);
+              if (!owner) return unavailable('missing_owner');
+              if (owner.writeState === 'moved') return unavailable('moved');
+              if (owner.writeState !== 'active') return unready('owner_pending');
+              const row = await readPrivacyHead.run(client, {
+                partition_no: request.partition,
+              });
+              if (!row) return unready('metadata_missing');
+              if (row.population_fenced || row.owner_epoch !== owner.epoch) return unready('owner_pending');
+              const head = privacyHead(request.partition, owner.epoch, row.position);
+              return { status: 'home', head, cost: cost(1) };
+            },
+            accessPort,
+          ),
         );
       } catch (error) {
-        if (error instanceof AccessUnavailableError) return unavailable('deadline');
+        if (accessPort.isUnavailable(error)) return unavailable('deadline');
         throw error;
       }
     },
@@ -330,100 +343,105 @@ export const publicFilterSource: PublicFilterSourceFactory = (config) => {
       )
         throw new RangeError('Invalid native privacy log page');
       try {
-        requireAccessDeadline(request.context.deadline);
+        accessPort.requireDeadline(request.context.deadline);
         return await withRequestDeadline(request.context.deadline, () =>
-          inReadSnapshot(config.pool, request.context.deadline, async (client) => {
-            const owner = await readPartition(client, request.partition);
-            if (!owner) return unavailable('missing_owner');
-            if (owner.writeState === 'moved') return unavailable('moved');
-            if (owner.writeState !== 'active') return unready('owner_pending');
-            if (owner.epoch !== request.epoch) return { status: 'changed', cost: cost() };
-            const currentRow = await readPrivacyHead.run(client, {
-              partition_no: request.partition,
-            });
-            if (!currentRow) return unready('metadata_missing');
-            if (currentRow.population_fenced || currentRow.owner_epoch !== owner.epoch) return unready('owner_pending');
-            const current = BigInt(currentRow.position);
-            if (request.through > current) return { status: 'changed', cost: cost(1) };
-            if (request.after === request.through)
-              return {
-                status: 'complete',
-                head: { partition: request.partition, epoch: owner.epoch, position: request.through },
-                entries: [],
-                after: request.through,
-                cost: cost(1),
-              };
-            const found = rows(
-              await readPrivacyEntries.run(client, {
+          inReadSnapshot(
+            config.pool,
+            request.context.deadline,
+            async (client) => {
+              const owner = await readPartition(client, request.partition);
+              if (!owner) return unavailable('missing_owner');
+              if (owner.writeState === 'moved') return unavailable('moved');
+              if (owner.writeState !== 'active') return unready('owner_pending');
+              if (owner.epoch !== request.epoch) return { status: 'changed', cost: cost() };
+              const currentRow = await readPrivacyHead.run(client, {
                 partition_no: request.partition,
-                after: request.after.toString(),
-                through: request.through.toString(),
-                input_limit: request.inputLimit,
-              }),
-            );
-            const entries: PrivacyReductionLogEntry[] = [];
-            for (const row of found) {
-              const { affected, impacts } = row;
+              });
+              if (!currentRow) return unready('metadata_missing');
+              if (currentRow.population_fenced || currentRow.owner_epoch !== owner.epoch)
+                return unready('owner_pending');
+              const current = BigInt(currentRow.position);
+              if (request.through > current) return { status: 'changed', cost: cost(1) };
+              if (request.after === request.through)
+                return {
+                  status: 'complete',
+                  head: { partition: request.partition, epoch: owner.epoch, position: request.through },
+                  entries: [],
+                  after: request.through,
+                  cost: cost(1),
+                };
+              const found = rows(
+                await readPrivacyEntries.run(client, {
+                  partition_no: request.partition,
+                  after: request.after.toString(),
+                  through: request.through.toString(),
+                  input_limit: request.inputLimit,
+                }),
+              );
+              const entries: PrivacyReductionLogEntry[] = [];
+              for (const row of found) {
+                const { affected, impacts } = row;
+                if (
+                  !Array.isArray(affected) ||
+                  !affected.every((value) => validDependency(value, request.partition)) ||
+                  !Array.isArray(impacts) ||
+                  !impacts.every((value) => validImpact(value, request.partition))
+                )
+                  return { ...unready('metadata_missing'), cost: cost(found.length) };
+                entries.push({
+                  head: privacyHead(request.partition, owner.epoch, row.position),
+                  transactionId: row.transaction_id,
+                  cause: row.cause,
+                  affected,
+                  impacts,
+                });
+              }
               if (
-                !Array.isArray(affected) ||
-                !affected.every((value) => validDependency(value, request.partition)) ||
-                !Array.isArray(impacts) ||
-                !impacts.every((value) => validImpact(value, request.partition))
+                entries.some(
+                  (entry) =>
+                    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                      entry.transactionId,
+                    ) ||
+                    ![
+                      'subject',
+                      'candidate',
+                      'selection',
+                      'sourceTuple',
+                      'consent',
+                      'collection',
+                      'realm',
+                      'board',
+                    ].includes(entry.cause) ||
+                    !validBroadReduction(entry),
+                )
               )
                 return { ...unready('metadata_missing'), cost: cost(found.length) };
-              entries.push({
-                head: privacyHead(request.partition, owner.epoch, row.position),
-                transactionId: row.transaction_id,
-                cause: row.cause,
-                affected,
-                impacts,
-              });
-            }
-            if (
-              entries.some(
-                (entry) =>
-                  !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-                    entry.transactionId,
-                  ) ||
-                  ![
-                    'subject',
-                    'candidate',
-                    'selection',
-                    'sourceTuple',
-                    'consent',
-                    'collection',
-                    'realm',
-                    'board',
-                  ].includes(entry.cause) ||
-                  !validBroadReduction(entry),
-              )
-            )
-              return { ...unready('metadata_missing'), cost: cost(found.length) };
-            const after = entries.at(-1)?.head.position ?? request.after;
-            const contiguous = entries.every(
-              (entry, index) => entry.head.position === request.after + BigInt(index) + 1n,
-            );
-            if (!contiguous || (entries.length === 0 && request.after < request.through))
-              return { ...unready('metadata_missing'), cost: cost(found.length) };
-            const complete = after === request.through;
-            return {
-              status: complete ? ('complete' as const) : ('progress' as const),
-              head: { partition: request.partition, epoch: owner.epoch, position: request.through },
-              entries,
-              after,
-              cost: cost(found.length),
-            };
-          }),
+              const after = entries.at(-1)?.head.position ?? request.after;
+              const contiguous = entries.every(
+                (entry, index) => entry.head.position === request.after + BigInt(index) + 1n,
+              );
+              if (!contiguous || (entries.length === 0 && request.after < request.through))
+                return { ...unready('metadata_missing'), cost: cost(found.length) };
+              const complete = after === request.through;
+              return {
+                status: complete ? ('complete' as const) : ('progress' as const),
+                head: { partition: request.partition, epoch: owner.epoch, position: request.through },
+                entries,
+                after,
+                cost: cost(found.length),
+              };
+            },
+            accessPort,
+          ),
         );
       } catch (error) {
-        if (error instanceof AccessUnavailableError) return unavailable('deadline');
+        if (accessPort.isUnavailable(error)) return unavailable('deadline');
         throw error;
       }
     },
   };
-  origins.set(source, Object.freeze({ ...config, routeKey: new Uint8Array(config.routeKey) }));
   return Object.freeze(source);
-};
+}
 
 export const recordPrivacyReduction: RecordPrivacyReductionType = async (
   tx: CommandTransaction,
@@ -494,3 +512,7 @@ export const recordPrivacyReduction: RecordPrivacyReductionType = async (
   await enqueuePublicFilterCoverage(tx, entry);
   return entry;
 };
+
+/** Public Source factory resolves through the single application installed by Semantic composition. */
+export const publicFilterSource: PublicFilterSourceFactory = (config) =>
+  sourceBindingApplication().createSource(config);

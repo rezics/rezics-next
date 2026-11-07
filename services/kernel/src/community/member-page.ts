@@ -1,8 +1,8 @@
 import { createHmac } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { readCurrentResourceRolePage } from '../access/current-resource-roles.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
+import { deadlineClient, readPublicIdentities } from './domain-ports.ts';
+import type { PublicIdentity } from '../access/account-data.ts';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';

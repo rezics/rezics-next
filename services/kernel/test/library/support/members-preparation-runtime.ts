@@ -11,7 +11,8 @@ import {
   type PreparationDefinition,
   type PreparationLocator,
 } from '../../../src/library/members-preparation.ts';
-import { accessCheck, actorOf } from '../../../src/request/access.ts';
+import { accessCheck } from '../../../src/request/access-check.ts';
+import { actorOf } from '../../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { bindExecutionContract } from '../../../src/command/execution-contract.ts';
 import { historyExecutionPort } from '../../../src/history/application/index.ts';

@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
-import { subjectBody, type SubjectPageData } from '../src/features/pages/subject.tsx';
+import { subjectBody } from '../src/features/pages/subject-read';
+import type { SubjectPageData } from '../src/features/pages/page-model';
 import { createStoryRecordedKernelFetch, type KernelRecording } from '../src/kernel/fake.ts';
 import { routes as pageRoutes } from '../src/kernel/fake/pages.ts';
 import { routes as sourceRoutes } from '../src/kernel/fake/subject-sources.ts';

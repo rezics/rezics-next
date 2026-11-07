@@ -12,7 +12,8 @@ import { composeContentApplication } from './content.ts';
 import { composeWorkApplication } from './work.ts';
 import { installSemanticCopyWork } from './semantic-copy-work.ts';
 import { installNativeHistory } from './history.ts';
-import { composeSemanticAdapters } from './semantic.ts';
+import { composeRatingDependencies } from './rating.ts';
+import { composeSemanticAdapters, composeSubjectReadingApplication } from './semantic.ts';
 import { composeSearchSemanticSource } from './search-semantic.ts';
 import { composePresentationApplication } from './presentation.ts';
 import { ConfigError } from '../commerce/config.ts';
@@ -27,6 +28,7 @@ import { createNativeLibraryScopeWork, createSearchLibraryScopePort } from './se
 import type { SearchLibraryScopePort } from '../search/index.ts';
 import { composeSearchAccess } from './search-access.ts';
 import type { FacetAccessObservationPort } from '../search/facet-access-port.ts';
+import type { SubjectReadingApplication } from '../semantic/index.ts';
 
 export type KernelRuntimeDefaults = {
   /** Bind the complete native application for each Search transport. */
@@ -44,6 +46,8 @@ export type KernelRuntimeDefaults = {
   facetAccess: FacetAccessObservationPort;
   /** Constructed Library capability retained by each scoped Search application. */
   libraryScope: SearchLibraryScopePort;
+  /** Native Subject and Character reads supplied to every ordinary Kernel host. */
+  subjectReading: SubjectReadingApplication;
 };
 
 export type KernelRuntimeOverrides = {
@@ -90,14 +94,16 @@ export function createKernelCreditSearchSource(pool: Pool, routeKey: Uint8Array)
 
 const systemDeadlineNow = (): number => Date.now();
 
-/** Shared runtime defaults for the HTTP server and Search work factory. */
+/** Shared runtime defaults for the HTTP server, Search work factory and compatibility hosts. */
 export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = {}): KernelRuntimeDefaults {
   const libraryScope = createSearchLibraryScopePort();
+  composeRatingDependencies();
   composeAccessApplication();
   composeWorkApplication();
   composeContentApplication();
   composeCommunityApplication();
   installNativeHistory();
+  // Install the shared native Source binding before Search constructs any consumer factories.
   composeSemanticAdapters();
   composeSearchSemanticSource();
   composePresentationApplication();
@@ -131,6 +137,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
     access,
     facetAccess: composeSearchAccess(),
     libraryScope,
+    subjectReading: composeSubjectReadingApplication(),
     ...(auth === undefined ? {} : { auth }),
   };
 }

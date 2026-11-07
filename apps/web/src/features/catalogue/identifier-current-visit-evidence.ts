@@ -1,10 +1,10 @@
 import type { Release } from '@rezics/definitions';
-import type { SubjectPageData } from '../pages/subject';
-import { subjectBody } from '../pages/subject';
+import type { SubjectPageData } from '../pages/page-model';
+import { subjectBody } from '../pages/subject-read';
 import { bestRank, spoilerLevel, type Stmt } from '../pages/shared';
 import { defaultReader } from '../../subject/reader';
-import { candidateContext } from '../../subject/candidates';
-import type { Subject, Related } from '../../subject/types';
+import { candidateContext } from '../pages/visit-host-port';
+import type { Subject, Related } from '../../subject/read-contract';
 import { identifierProperties } from './identifiers-profile';
 import type { IdentifierInspection, IdentifierVisitOrigin } from './identifier-current-visit';
 

@@ -1,4 +1,4 @@
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import {
   recipeCurrentReturnHref,
   recipeSourceHref,
@@ -39,7 +39,7 @@ import { useSpecialistLanguageAddFocus } from './specialist-language-add-focus';
 import { editorLabels } from '../../threads/composer';
 import { PageHeading } from '../../shell/page-heading';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
-import type { CandidateSlot } from '../../subject/candidates';
+import type { CandidateSlot } from '../../subject/candidate-contract';
 import { subjectHref } from '../../subject/subject-href';
 import { CandidateValue } from '../pages/data';
 import { spoilerLevel } from '../pages/shared';

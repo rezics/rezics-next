@@ -1,7 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { FactSchema } from '../search/http/routes.ts';
-import { SHELF_DIRECTIONS, SHELF_ORDERS } from './shelf-contract.ts';
+import { SHELF_DIRECTIONS, SHELF_ORDERS } from './contract/index.ts';
 import { embedded, subjectFields, viewQuery } from './views.ts';
 import { libraryStoredVocabularySchema } from './profile-schemas.ts';
 

@@ -1,12 +1,7 @@
 import { routeOf } from '../route/route.ts';
 import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
-import {
-  isShelfEntryState,
-  MAX_SHELF_PAGE_SIZE,
-  type ShelfDirection,
-  type ShelfPriorityReader,
-  type ShelfPriorityRows,
-} from './shelf-contract.ts';
+import { isShelfEntryState, MAX_SHELF_PAGE_SIZE } from './contract/index.ts';
+import { type ShelfDirection, type ShelfPriorityReader, type ShelfPriorityRows } from './shelf-contract.ts';
 import ascPage from './entry-priority-page-asc.sql';
 import descPage from './entry-priority-page-desc.sql';
 

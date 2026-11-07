@@ -6,7 +6,7 @@ import { contextHref } from '../../pages/context-navigation';
 import { ValueExplanationEntry } from '../value-explanation-entry';
 import { historicalStatement } from '../release-fidelity/model';
 import { profileSourceRecords } from '../music-reader';
-import type { NativeOperationAvailability } from '../../../subject/candidates';
+import type { NativeOperationAvailability } from '../../../subject/candidate-contract';
 import { musicReleaseDate, type MusicReleaseRead } from './model';
 import { musicReleaseLinkHref, musicReleaseReturnHref, type MusicReleaseReturn } from './navigation';
 

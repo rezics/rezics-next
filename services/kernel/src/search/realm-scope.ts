@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import {
@@ -17,7 +17,8 @@ import {
   compileCurrentRealmFilter,
   type CurrentRealmFilterPlan,
 } from './current-filter-plan.ts';
-import { evaluateScopeSubjects, ScopeWork, zeroScopeWork } from './scope-execution.ts';
+import { evaluateScopeSubjects } from './scope-execution.ts';
+import { ScopeWork, zeroScopeWork } from './scope-work.ts';
 import type { RelationFacetMatch } from './source.ts';
 import { routeOf } from '../route/route.ts';
 

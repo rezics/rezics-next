@@ -5,10 +5,11 @@ import {
 import type { AgentIdentityMaintenancePort } from '../../access/adapters/index.ts';
 import { readOriginalAccountAgentIdentity } from '../account-agent-identity-recovery.ts';
 import { accountAgentId } from '../agents.ts';
-import { activeRelease } from '../definitions.ts';
+import { activeRelease } from '../definition-release-read.ts';
 import { verifyAccountAgent, unverifyAccountAgent } from '../account-agents.ts';
 import { withReadTransaction } from '../read.ts';
-import { identityEpochStore, identityJobPartition } from '../identity-adapters/index.ts';
+import { identityEpochStore } from '../identity-adapters/index.ts';
+import { identityJobPartition } from '../identity-adapters/identity-epoch-contract.ts';
 import {
   identityBindingData,
   readAcceptedAccountIdentityBinding,

@@ -1,7 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { statementBytes } from '../database/statement-bytes.ts';
 import type { Pool } from 'pg';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import {
   currentCommand,
   currentCommandResources,
@@ -19,7 +19,8 @@ import {
   identitySourceConsumerLibraryWork,
   type IdentitySourceConsumerMaintenanceContext,
 } from './identity-source-consumer-maintenance.ts';
-import { recordIdentityEpochNativeCommit, serializeIdentityValue as json } from './identity-adapters/index.ts';
+import { recordIdentityEpochNativeCommit } from './identity-adapters/native-commit.ts';
+import { serializeIdentityValue as json } from './identity-core/index.ts';
 import { IDENTITY_SCOPE_NATIVE_ASSOCIATED, IDENTITY_SCOPE_DIRECTORY_ENROLLED } from './events.ts';
 import insert from './identity-scope-native-association-insert.sql';
 import native from './identity-epoch-store-insert-native-commit.sql';

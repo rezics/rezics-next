@@ -1,7 +1,7 @@
 import { NATIVE_CONTAINER_ACTIONS } from './actions.ts';
-import { realmViewerActionResource } from './realm.ts';
+import { realmViewerActionResource } from './realm-read.ts';
 import { communityRoutes, type CommunityRouteDependencies } from './routes.ts';
-import { spaceViewerActionResource } from './space.ts';
+import { spaceViewerActionResource } from './space-read.ts';
 import type { CommunityAmbient } from './ambient.ts';
 
 /**

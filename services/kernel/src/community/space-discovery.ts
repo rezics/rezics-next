@@ -1,3 +1,4 @@
+import { exactRealmPresentationImage, readRealmPresentationImages } from './domain-ports.ts';
 import type { RealmPresentationImage } from '../content/realm-media.ts';
 import type { Access } from '../request/access.ts';
 import { prepareSpaceDiscovery, spaceDiscoveryRound, spaceDiscoverySnapshot } from './space-discovery-read.ts';
@@ -363,7 +364,6 @@ export async function readSpaceDiscoverySummaries(
     group.push(key);
     groups.set(partition, group);
   }
-  const { exactRealmPresentationImage, readRealmPresentationImages } = await import('../content/realm-media.ts');
   for (const [partition, group] of groups) {
     const first = await spaceDiscoveryRound(deps, decisions, partition, group, context.deadline);
     const avatars = new Map<string, RealmPresentationImage>();

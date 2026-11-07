@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import type { FollowDiscovery, FollowDiscoveryTarget } from '../library/follow-discovery.ts';
 import { Compile } from 'typebox/compile';
 import type { Actor } from '../request/access.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import {
   SpaceEntryFollowSchema,
   SpaceEntryPresentationSchema,

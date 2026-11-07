@@ -1,14 +1,19 @@
+import { composeCommunityDomainPorts } from './community-domain-ports.ts';
 import {
   ensureCommunityApplication,
-  startCommunityApplication,
+  startCommunityApplication as startNativeCommunityApplication,
   tryCommunityApplication,
 } from '../community/adapters/index.ts';
 import type { CommunityAmbient, CommunityApplication } from '../community/contract/index.ts';
 
-export { startCommunityApplication };
+export function startCommunityApplication(ambient: Partial<CommunityAmbient> = {}) {
+  composeCommunityDomainPorts();
+  return startNativeCommunityApplication(ambient);
+}
 
-/** Ordinary createKernel/server/worker composition binds the native Community adapters. */
+/** Server and worker composition binds the native Community adapters before mounting the kernel. */
 export function composeCommunityApplication(ambient?: Partial<CommunityAmbient>): CommunityApplication {
+  composeCommunityDomainPorts();
   return ensureCommunityApplication(ambient ?? {});
 }
 

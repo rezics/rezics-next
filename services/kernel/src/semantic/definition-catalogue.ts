@@ -22,7 +22,9 @@ import { readNativeAccessTime } from '../access/authenticate.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { withReadTransaction } from './read.ts';
-import { DefinitionAccessDeniedError, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
+import { DefinitionAccessDeniedError } from './contract/definition-values.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
+import { readRelease } from './definition-release-read.ts';
 import { globalReadEligibility } from './eligibility.ts';
 import {
   catalogueKey,

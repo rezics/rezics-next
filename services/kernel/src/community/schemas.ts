@@ -2,7 +2,11 @@ import { memoizedValue } from '../memoized.ts';
 import { REACTION_KINDS } from '../content/events.ts';
 import { RealmPresentationSchema } from './presentation.ts';
 import { t } from 'elysia';
-import { ContentIdSchema, RealmPresentationImageSchema, sitemapPageSchema } from '../content/schemas.ts';
+import {
+  ContentIdSchema,
+  ContentRealmImageSchema as RealmPresentationImageSchema,
+  sitemapPageSchema,
+} from './domain-ports.ts';
 
 const closed = { additionalProperties: false } as const;
 const instant = t.String({ format: 'date-time' });

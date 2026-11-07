@@ -1,7 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { routeOf } from '../route/route.ts';
 import type { ShelfCounters, ShelfPlacement, ShelfWrite } from './shelf-contract.ts';
-import { isLegacyEntryState } from './shelf-contract.ts';
+import { isLegacyEntryState } from './contract/index.ts';
 import { enterShelfWrite, NIL_SHELF_GENERATION } from './shelf-counter-owner.ts';
 import deltaQuery from './shelf-counter-delta.sql';
 import { shelfMaintenanceQuery } from './shelf-maintenance-bounds.ts';

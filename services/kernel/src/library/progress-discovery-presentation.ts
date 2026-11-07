@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { presentProgressSession } from './progress-presentation.ts';
 import type { ProgressDiscoveryFact } from './progress-store.ts';
 import type { ProgressPresentation, ProgressMeasurePresentation } from './progress-model.ts';

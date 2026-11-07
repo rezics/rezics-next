@@ -6,7 +6,7 @@ import type { Pool } from 'pg';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { createPublicRatingSource } from '../rating/public-rating-source.ts';
-import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
+import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
 import { subjectSource } from '../semantic/search-source.ts';
 import type { PublicRatingSource } from './rating-source.ts';
 import { withPublicRatings } from './rating-subject-source.ts';

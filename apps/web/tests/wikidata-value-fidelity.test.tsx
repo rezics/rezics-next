@@ -6,7 +6,7 @@ import { quantityPresentation } from '../src/subject/quantity-presentation';
 import { GREGORIAN_CALENDAR, JULIAN_CALENDAR, timePresentation } from '../src/subject/time-presentation';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { CandidateValue } = await import('../src/features/pages/data');
+const { CandidateValue } = await import('../src/features/pages/scalar-value');
 const { subjectJsonLd } = await import('../src/features/pages/jsonld');
 
 const supported = {

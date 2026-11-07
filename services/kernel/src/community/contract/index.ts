@@ -39,3 +39,8 @@ export type {
 export type { CommunityFollowCountProducer } from './follow-counts.ts';
 
 export type { ScopeEvidenceObservation, ScopeEvidenceHost } from './scope-evidence.ts';
+
+export { RealmInputError, RealmBanInputError } from './errors.ts';
+export type { RealmContinuity } from './realm.ts';
+export { COMMUNITY_PLATFORM_BASIS } from './platform-work.ts';
+export { discoveryDescription } from './discovery.ts';

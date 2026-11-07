@@ -9,7 +9,7 @@ import type { KernelClock } from '../clock.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { readAccountDiscoveryWitness } from '../access/account-discovery-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
-import type { PublicFilterConsumer } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterConsumer } from '../semantic/index.ts';
 import type {
   SearchNativePublicationCompletionReader,
   SearchPublicFilterCost,

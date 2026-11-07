@@ -12,7 +12,7 @@ import {
 } from '../../src/library/preparation-bindings.ts';
 import { readPreparationNativeHeader } from '../../src/library/preparation-native-reader.ts';
 import { createShelfTypeSource } from '../../src/library/shelf-type-source.ts';
-import { accessCheck } from '../../src/request/access.ts';
+import { accessCheck } from '../../src/request/access-check.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';

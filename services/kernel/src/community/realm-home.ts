@@ -2,28 +2,30 @@ import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import type { KeyRing } from '../tokens/seal.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import {
+  deadlineClient,
+  accessCheck,
+  createRealmHomeBoardObservationReader,
+  RealmHomeBoardPageSchema,
+  realmHomeBoardResponse,
+} from './domain-ports.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { mintReadTime, authoritativeTimeValue } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { accessCheck } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { ReadContext } from '../content/model.ts';
 import {
   CommunityPresentationSchema,
   communityPresentationResponse,
   type CommunityPresentation,
 } from '../content/community-presentation-model.ts';
-import {
-  createRealmHomeBoardObservationReader,
-  RealmHomeBoardPageSchema,
-  realmHomeBoardResponse,
-  type RealmHomeBoardPage,
-} from '../content/realm-board-home.ts';
+import type { RealmHomeBoardPage } from '../content/realm-board-home.ts';
 import { readContainerBinding, revalidateContainerBinding } from './container-lifecycle.ts';
-import { readRealm, type RealmDependencies, type RealmView } from './realm.ts';
-import { readSpace, spaceReadEligibility, type Space } from './space.ts';
+import { readRealm } from './realm-read.ts';
+import { type RealmDependencies, type RealmView } from './realm.ts';
+import { readSpace, spaceReadEligibility } from './space-read.ts';
+import { type Space } from './space.ts';
 import { createRealmViewerObservation, type RealmViewerObservation } from './own-realms-viewer.ts';
 import { readRealmHomePresentation } from './realm-home-presentation.ts';
 import { realmViewerActionsSchema, RealmSchema, SpaceSchema } from './schemas.ts';

@@ -4,7 +4,7 @@ import { ContentNotFoundError, discloseThreads, readCitationDisclosure, readPost
 import type { ContentReadDependencies, PostEntry, ThreadView } from './reads.ts';
 import type { AnchoredPosition, FeedParentAuthor, FeedParentContext, FeedReviewContext, ReadContext } from './model.ts';
 import type { AccountDiscoverySummary } from '../search/index.ts';
-import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
+import { readAccountDiscoverySummaries } from './access-port.ts';
 import { readSubjectSummaries, readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readVisibleRatingQuestion } from '../rating/question-directory.ts';

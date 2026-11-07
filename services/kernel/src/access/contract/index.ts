@@ -114,3 +114,12 @@ export type {
   LiveContributionAttribution,
   DeletedContributionAttribution,
 } from './contribution-attribution.ts';
+
+export {
+  ResourceAccessWriteDeniedError,
+  GrantDeniedError,
+  RealmLastOwnerError,
+  ApprovalIdentityDeniedError,
+  DurableInitiatorUnavailableError,
+  PlatformClosedError,
+} from './errors.ts';

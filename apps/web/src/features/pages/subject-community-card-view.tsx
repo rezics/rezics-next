@@ -3,7 +3,7 @@ import { RevisionProvenance } from '../../threads/revision-provenance-view';
 import { conversationActivity, formatConversationReplyCount, threadActivity } from '../../threads/activity';
 import { fullDateTime, timeText } from '../../threads/byline';
 import { NativeDocumentImage } from '../../threads/document-media';
-import type { PageAuthor } from '../../identity/read';
+import type { PageAuthor } from '../../identity/read-contract';
 import type { CommunityCard, CommunityNativeCard } from './subject-community-card';
 import { Byline } from '../../threads/byline';
 import { SpoilerGate } from './values';

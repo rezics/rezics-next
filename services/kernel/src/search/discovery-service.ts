@@ -1,7 +1,7 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { FilterRelease } from '@rezics/filter';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { SearchOperationError } from './operation-outcomes.ts';
 import { compileText, type TextNode } from './text.ts';
 import { boundMatchEvidencePage, compileMatchEvidence } from './match-evidence.ts';
@@ -15,7 +15,7 @@ import {
   projectCollectionDirectoryPage,
 } from './collection-directory.ts';
 import type { DiscoveryOwnerMetadataSummary } from './discovery.ts';
-import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterSource } from '../semantic/index.ts';
 import type { SpaceSubjectPopulation } from '../content/feed-subject-scope.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeDiscoveryCursor, decodeSearchCursor, encodeDiscoveryCursor, encodeSearchCursor } from './cursor.ts';

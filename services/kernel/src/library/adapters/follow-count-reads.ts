@@ -2,7 +2,8 @@ import type { Pool } from 'pg';
 import { authoritativeTimeValue, mintReadTime, type AuthoritativeTime } from '../../command/command.ts';
 import { withConnection } from '../../database/pool.ts';
 import { ProblemError } from '../../http/problem-error.ts';
-import { accessCheck, type Access, type AccessClient } from '../../request/access.ts';
+import { accessCheck } from '../../request/access-check.ts';
+import { type Access, type AccessClient } from '../../request/access.ts';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import partitionRead from '../../partition/read.sql';
 import { createFollowCountReadApplication } from '../application/index.ts';
@@ -13,9 +14,11 @@ import {
   type CountDestination,
   type FollowCountReads,
   type FollowCountTarget,
+  SubjectIdentityUnavailableError,
 } from '../contract/index.ts';
 import { readCollection } from '../collection-store.ts';
-import { resolveSubject, SubjectIdentityUnavailableError } from '../subject-anchor.ts';
+import { resolveSubject } from '../subject-anchor.ts';
+
 import { countRoute } from './follow-count-runtime.ts';
 import { requireFollowCountHealth } from './follow-count-observation.ts';
 

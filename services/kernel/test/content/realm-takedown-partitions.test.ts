@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/index.ts';
 import { erasePost, takedown } from '../../src/content/moderation.ts';
 import boardRealm from '../../src/content/realm-of-board.sql';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';

@@ -1,8 +1,18 @@
+import {
+  LibraryEntryInvalidError,
+  LibraryEntryLifecycleConflictError,
+  LibraryEntryStateRestoreConflictError,
+} from './entry-lifecycle-errors.ts';
+export {
+  LibraryEntryInvalidError,
+  LibraryEntryLifecycleConflictError,
+  LibraryEntryStateRestoreConflictError,
+} from './entry-lifecycle-errors.ts';
 import { memoizedValue } from '../memoized.ts';
 import type { Pool, PoolClient } from 'pg';
 import canonicalize from 'canonicalize';
 import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import {
   authoritativeTimeValue,
   CommandUnavailableError,
@@ -14,23 +24,20 @@ import {
 } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import {
-  admitComposedEntryProgress,
-  createLibraryCommandRunner,
-  LibraryNotFoundError,
-  requireRoute,
-  WORK_STEP_DEADLINE_MS,
-} from './command-support.ts';
+import { admitComposedEntryProgress, createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError, requireRoute } from './collection-command-work.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { createShelfHeads } from './shelf-heads.ts';
 import { createShelfCounters } from './shelf-counters.ts';
-import { createShelfTypeKeys, type ShelfTypeDigest } from './shelf-type-keys.ts';
-import { createTypePreparationPorts } from './type-preparation-contract.ts';
+import { createShelfTypeKeys } from './shelf-type-dictionary.ts';
+import { type ShelfTypeDigest, createTypePreparationPorts } from './shelf-type-keys.ts';
+
 import type { PreparedType } from './type-preparation-contract.ts';
 import { observePreparationSource, observePreparationIdentity } from './preparation-source.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
@@ -96,44 +103,8 @@ function MAX_STATE_HISTORY_PAGE_SIZE() {
   return memoizedValue(MAX_STATE_HISTORY_PAGE_SIZE, () => ENTRY_STATE_HISTORY_PAGE_LIMIT);
 }
 
-export class LibraryEntryInvalidError extends TypeError {
-  constructor(message = 'Unknown library entry state') {
-    super(message);
-    this.name = 'LibraryEntryInvalidError';
-  }
-}
-
 /** Unwinds the owner checkout before the independently committed preparation command. */
 class TypePreparationRequired extends Error {}
-
-export function LibraryEntryLifecycleConflictError() {
-  return memoizedValue(
-    LibraryEntryLifecycleConflictError,
-    () =>
-      class LibraryEntryLifecycleConflictError extends LibraryConflictError {
-        constructor(readonly reason: 'stale' | 'occupied' | 'expired') {
-          super();
-        }
-      },
-  );
-}
-export type LibraryEntryLifecycleConflictError = InstanceType<ReturnType<typeof LibraryEntryLifecycleConflictError>>;
-
-export function LibraryEntryStateRestoreConflictError() {
-  return memoizedValue(
-    LibraryEntryStateRestoreConflictError,
-    () =>
-      class LibraryEntryStateRestoreConflictError extends LibraryConflictError {
-        constructor(readonly reason: 'stale' | 'unavailable' | 'unchanged') {
-          super();
-          this.name = 'LibraryEntryStateRestoreConflictError';
-        }
-      },
-  );
-}
-export type LibraryEntryStateRestoreConflictError = InstanceType<
-  ReturnType<typeof LibraryEntryStateRestoreConflictError>
->;
 
 function account(actor: Actor, action: string): AccountActor {
   if (actor.kind !== 'account' || routeOf(actor.accountId) === null || !actor.scopes.includes(action))

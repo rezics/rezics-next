@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { Static } from 'typebox';
-import { readPublicIdentityObservations, type PublicIdentityObservation } from '../access/account-data.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { readPublicIdentityObservations, deadlineClient, within } from './access-port.ts';
+import type { PublicIdentityObservation } from '../access/content-adapter.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { readAvatarSummaries, type AvatarSummary } from './avatar.ts';

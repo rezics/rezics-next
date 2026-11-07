@@ -1,7 +1,7 @@
 import { relationFacetProperty, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
-import { ProblemError } from '../http/problem.ts';
-import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { routeOf } from '../route/route.ts';
 import type { Access, Actor } from '../request/access.ts';

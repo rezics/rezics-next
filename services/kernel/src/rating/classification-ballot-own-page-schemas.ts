@@ -1,6 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
-import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
+import { GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 import { ClassificationBallotAggregateResponseSchema } from './schemas.ts';
 
 const closed = { additionalProperties: false } as const;

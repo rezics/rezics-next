@@ -1,7 +1,7 @@
 import { accessClock } from '../access/access-clock.ts';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';

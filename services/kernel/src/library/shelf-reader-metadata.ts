@@ -1,6 +1,6 @@
-import { EMPTY_SHELF_GENERATION } from './shelf-maintenance-ops-contract.ts';
+import { EMPTY_SHELF_GENERATION, ENTRY_STATES } from './contract/index.ts';
+
 import {
-  ENTRY_STATES,
   type ShelfFacetReader,
   type ShelfReadGenerationReader,
   type ShelfSummary,

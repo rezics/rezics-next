@@ -1,5 +1,5 @@
 import { pageDocumentReferences, pickText } from '@rezics/composition';
-import { CandidateValue } from '../../../pages/data';
+import { CandidateValue } from '../../../pages/scalar-value';
 import { LanguageTag } from '../../../pages/values';
 import { type PageLink, type Snak } from '../../../pages/shared';
 import { subjectHref } from '../../../../subject/subject-href';

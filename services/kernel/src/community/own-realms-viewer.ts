@@ -1,19 +1,20 @@
-import { deadlineClient } from '../access/authenticate.ts';
 import {
+  deadlineClient,
   readRealmOwnerLeaveObservation,
   readRealmOwnershipRoles,
   REALM_OWNER_ROLE,
-} from '../access/realm-ownership.ts';
+  accessCheck,
+} from './domain-ports.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Actor, type AccessClient } from '../request/access.ts';
+import type { Actor, AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { sameOwnRealmMembership, type OwnRealmMembership, type OwnRealmsDependencies } from './own-realms-shape.ts';
 import { createRealmParticipationCheck } from './participation.ts';
-import { readRealm, readRealmSettingsHead, realmReadEligibility } from './realm.ts';
-import { spaceReadEligibility } from './space.ts';
+import { readRealm, readRealmSettingsHead, realmReadEligibility } from './realm-read.ts';
+import { spaceReadEligibility } from './space-read.ts';
 import bindingRead from './container-lifecycle-binding.sql';
 import membershipRead from './own-realms-membership.sql';
 

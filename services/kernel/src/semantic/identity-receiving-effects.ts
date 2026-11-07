@@ -22,12 +22,10 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from './read.ts';
 import { IDENTITY_EPOCH_ADMITTED } from './events.ts';
 import { identityErasureRoles, bindSemanticProducerRoles } from './erasure-producer.ts';
-import {
-  IdentityEpochStoreError,
-  identityJobPartition,
-  recordIdentityEpochNativeCommit,
-  serializeIdentityValue as json,
-} from './identity-adapters/index.ts';
+import { IdentityEpochStoreError } from './contract/identity-errors.ts';
+import { identityJobPartition } from './identity-adapters/identity-epoch-contract.ts';
+import { recordIdentityEpochNativeCommit } from './identity-adapters/native-commit.ts';
+import { serializeIdentityValue as json } from './identity-core/index.ts';
 import type { IdentityNativeReceipt, NativeStepWork } from './identity-epoch-contract.ts';
 import type {
   IdentityReceivingBinding,

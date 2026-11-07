@@ -27,7 +27,7 @@ import {
   kindTypeAnchorLockFootprint,
   type NativeKindTypeAnchor,
 } from './scope-leaf-selection.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import bodyWrite from './kind-type-evidence-write.sql';
 import bodyRead from './kind-type-evidence-read.sql';
 

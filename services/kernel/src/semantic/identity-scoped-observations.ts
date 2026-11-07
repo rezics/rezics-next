@@ -41,12 +41,10 @@ import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import { bindSemanticProducerRoles } from './erasure-producer.ts';
 import type { IdentityPrearmTicketData } from './identity-epoch-prearm-contract.ts';
 import type { IdentityReceivingRecord, IdentityReceivingSelection } from './identity-receiving-effects-types.ts';
-import {
-  IdentityEpochStoreError,
-  identityJobPartition,
-  recordIdentityEpochNativeCommit,
-  serializeIdentityValue as json,
-} from './identity-adapters/index.ts';
+import { IdentityEpochStoreError } from './contract/identity-errors.ts';
+import { identityJobPartition } from './identity-adapters/identity-epoch-contract.ts';
+import { recordIdentityEpochNativeCommit } from './identity-adapters/native-commit.ts';
+import { serializeIdentityValue as json } from './identity-core/index.ts';
 import {
   publicIdentityCaptureLocator,
   verifyPublicIdentitySourceCaptureLocator,

@@ -1,7 +1,7 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { Release } from '@rezics/definitions';
-import type { Related } from '../../../subject/types';
+import type { Related } from '../../../subject/read-contract';
 import { catalogueEntries } from '../catalogue-entry';
 import { SourceTagWeight } from '../source-tag-weight';
 import { m } from '../../../paraglide/messages.js';

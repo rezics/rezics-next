@@ -30,7 +30,7 @@ import { publicFilterSource } from './public-filter-source.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from '../library/collection-source-work.ts';
 import type { WorkAllowance } from '../library/contract/work-dimensions.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
-import { recordIdentityEpochNativeCommit } from './identity-adapters/index.ts';
+import { recordIdentityEpochNativeCommit } from './identity-adapters/native-commit.ts';
 import { readIdentityMappings } from './identity-adapters/identity-epoch-read.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { identityScopeAddress } from './identity-scoped-observations.ts';

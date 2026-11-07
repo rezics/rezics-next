@@ -1,22 +1,26 @@
 import type { RatingCapabilities } from './contract/capabilities.ts';
 import { ratingCapabilities } from './adapters/ambient.ts';
 import type { Pool, PoolClient } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import {
+  readAccount,
+  GrantDeniedError,
+  readCurrentClassificationAssociation,
+  type CurrentClassificationAssociation,
+  withReadTransaction,
+  readSubjectSummaryObservation,
+  type SubjectSummary,
+} from './dependencies.ts';
+
 import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import {
-  readCurrentClassificationAssociation,
-  type CurrentClassificationAssociation,
-} from '../semantic/classification-association.ts';
-import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
-import { withReadTransaction } from '../semantic/read.ts';
-import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
+
+import { GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
+
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {

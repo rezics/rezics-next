@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { newId } from '../../src/route/route.ts';
-import { readRelated, updateSubjectIdentity } from '../../src/semantic/subject.ts';
+import { updateSubjectIdentity } from '../../src/semantic/subject.ts';
+import { readRelated } from '../../src/semantic/related-subject-read.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { deadline, identityFixture, release } from './identity-fixture.ts';
 

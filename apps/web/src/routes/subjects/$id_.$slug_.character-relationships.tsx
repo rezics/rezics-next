@@ -11,7 +11,7 @@ import {
 import { validatePageRealm } from '../../features/pages/view-cursor';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../../features/pages/visit-host-port';
 import { canonicalRedirect, keepSearch } from '../../subject/load-subject';
 
 const canonicalCharacterRelationships = createServerFn({ method: 'GET', strict: false })

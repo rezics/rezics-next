@@ -1,16 +1,27 @@
 import type { Pool } from 'pg';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
-import { resolveSubject, SubjectIdentityUnavailableError } from '../library/subject-anchor.ts';
+import {
+  accessCheck,
+  type Access,
+  type Actor,
+  resolveSubject,
+  SubjectIdentityUnavailableError,
+  readContext,
+  publicContextEligibility,
+  currentRelationFacts,
+  currentRelationKey,
+  readRelease,
+  withReadTransaction,
+  withPublicStatementReader,
+  identityEpochStore,
+} from './dependencies.ts';
+
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { readContext, publicContextEligibility } from '../semantic/context.ts';
-import { currentRelationFacts, currentRelationKey } from '../semantic/current-relations.ts';
+
 import { candidateSources } from '../semantic/fences.ts';
-import { readRelease } from '../semantic/definitions.ts';
-import { withReadTransaction } from '../semantic/read.ts';
-import { withPublicStatementReader } from '../semantic/statement-disclosure.ts';
+
 import { readItemIdentityVersion } from '../semantic/item-identity.ts';
-import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
+
 import {
   classificationAssociationKey,
   classificationDigest,

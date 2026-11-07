@@ -8,7 +8,8 @@ import type {
 import { pickText } from '@rezics/composition';
 import { gameGroups, gameType, gameUuid, type GameGroup } from '../game-profile';
 import type { GuideRelease } from '../definition-guide';
-import { isA, selectedStatements, encodedBytes } from '../release-fidelity/model';
+import { isA, selectedStatements } from '../release-fidelity/model';
+import { encodedBytes } from '../release-fidelity/encoding';
 
 export const editionProperty = 'schema:exampleOfWork';
 export const gameReaderLimit = 20;

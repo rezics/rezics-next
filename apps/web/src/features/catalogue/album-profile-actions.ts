@@ -5,14 +5,8 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
-import {
-  albumType,
-  albumUuid,
-  createAlbum,
-  readAlbumProfile,
-  type AlbumCommand,
-  type AlbumRead,
-} from './album-profile';
+import { albumType, createAlbum, readAlbumProfile, type AlbumCommand, type AlbumRead } from './album-profile';
+import { albumUuid } from './contract/album';
 import type { CreateResult } from './create-subject';
 import { fetchGuideRelease } from './definition-guide';
 import {

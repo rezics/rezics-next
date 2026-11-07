@@ -22,8 +22,8 @@ import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
 import { canonicalRedirect, keepSearch } from '../../subject/subject-href';
 import { synopsisVisit, SUMMARY_VISIT_ADDRESS_BYTE_CAP } from '../../features/pages/subject-summary-reading/visit';
-import { SUMMARY_PROPERTY } from '../../features/pages/subject-summary-reading/model';
-import { candidateContext } from '../../subject/candidates';
+import { SUMMARY_PROPERTY } from '../../features/pages/subject-summary-reading/contract';
+import { candidateContext } from '../../features/pages/visit-host-port';
 import {
   authoredGlobalVisitHref,
   authoredPublicVisitUnsupported,

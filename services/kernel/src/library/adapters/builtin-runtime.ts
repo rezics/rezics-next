@@ -7,14 +7,14 @@ import { createBuiltinOwnerAdmission, createBuiltinMembersApplication } from '..
 import type { NativeLibraryPresentationPorts } from './presentation.ts';
 import { deadlineClient } from '../../access/authenticate.ts';
 import { withConnection } from '../../database/pool.ts';
-import { ProblemError } from '../../http/problem.ts';
+import { ProblemError } from '../../http/problem-error.ts';
 import type { Access, Actor, AccountActor } from '../../request/access.ts';
 import { deadlineFor } from '../../request/deadline.ts';
 import { routeOf } from '../../route/route.ts';
 import { builtinCollectionId, type BuiltinCollectionKey } from '../builtin-identity.ts';
 import { readBuiltinStateReference } from '../builtin-reference-store.ts';
 import { readOwnerIndexFrontier, readOwnerOriginalPrefix, readOwnerOriginalTruth } from '../owner-index.ts';
-import { WORK_STEP_DEADLINE_MS } from '../command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from '../work-step-deadline.ts';
 import type { CollectionKind } from '../collection-kind.ts';
 import type { OwnerQueryDependencies } from '../builtin-runtime-query.ts';
 import type { FilterDocument } from '@rezics/filter';

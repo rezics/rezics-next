@@ -1,9 +1,6 @@
-import {
-  exactRealmPresentationImage,
-  readRealmPresentationImages,
-  type RealmPresentationImage,
-} from '../content/realm-media.ts';
-import { ProblemError } from '../http/problem.ts';
+import { exactRealmPresentationImage, readRealmPresentationImages } from './domain-ports.ts';
+import type { RealmPresentationImage } from '../content/realm-media.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -41,9 +38,7 @@ export function discoveryLimit(limit: number = 20): { limit: number; candidates:
   return { limit, candidates: Math.min(limit, DISCOVERY_CANDIDATE_CAP) };
 }
 
-export function discoveryDescription(summary: string): string {
-  return Array.from(summary.replace(/\s+/gu, ' ').trim()).slice(0, 160).join('');
-}
+export { discoveryDescription } from './contract/index.ts';
 
 /** Internal rank position only. A position conveys no source or visibility authority. */
 export type DiscoveryPosition = { count: string; realmId: string };

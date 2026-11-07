@@ -2257,6 +2257,13 @@ The retryable dependency failure returns no partial page or replacement cursor, 
 
 ## Construction
 
+Decision: `composeRatingDependencies` is the owning install. `createKernelRuntimeDefaults` binds the exact native
+functions and errors before any Kernel or Rating constructor; server, worker, preload and OpenAPI keep the same
+call. `createKernel` and `createRatingModule` consume the bound port and do not import the installer. testKernel
+and other compatibility hosts go through that shared runtime, so they need no test-wide preload residue. Fewest
+tests: extend module-construction and test-kernel to unbind, construct that host, and pin declaration inventory
+plus original native binding/error identity; no new stories.
+
 Decision: native composition constructs Rating once from `createRatingDefinition` and a supplied
 `RatingCapabilities` record. HTTP route schemas, paths, operation/permission metadata, event schemas, effects,
 workflows and services are declared before mounting or starting. The HTTP and work hosts consume that definition;

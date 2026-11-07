@@ -18,7 +18,7 @@ import {
   createSubjectPresentationApplication,
 } from '../../src/library/application/index.ts';
 import type { SubjectIdentityObservation, SubjectIdentityCapability } from '../../src/library/contract/index.ts';
-import { ProblemError } from '../../src/http/problem.ts';
+import { ProblemError } from '../../src/http/problem-error.ts';
 import { withFollowContribution } from '../../src/library/follow-contribution.ts';
 
 // The consumer seam replaces global module mocks; all existing observable assertions stay intact.

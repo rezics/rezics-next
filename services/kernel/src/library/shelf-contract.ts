@@ -1,7 +1,39 @@
+import {
+  type LegacyEntryState,
+  type ShelfOrder,
+  type ShelfDirection,
+  type ShelfQuery,
+  type ShelfCursorBinding,
+} from './contract/index.ts';
+export {
+  ENTRY_STATES,
+  type LegacyEntryState,
+  isLegacyEntryState,
+  isShelfEntryState,
+  SHELF_ORDERS,
+  SHELF_DIRECTIONS,
+  type ShelfOrder,
+  type ShelfDirection,
+  SHELF_DEFAULT_ORDER,
+  MAX_SHELF_PAGE_SIZE,
+  DEFAULT_SHELF_PAGE_SIZE,
+  type ShelfQuery,
+  type ShelfCursorBinding,
+  normalizeShelfQuery,
+  shelfCursorBinding,
+  shelfTypeCursorBinding,
+  SHELF_TYPE_CHUNK_BYTES,
+  SHELF_TYPE_EDGE_BATCH,
+  SHELF_TYPE_RESPONSE_BYTES,
+  SHELF_LIST_ACTION,
+  SHELF_PROGRESS_ACTION,
+  SHELF_PROGRESS_GATE,
+} from './contract/index.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { ShelfTitleSource } from './shelf-title-source.ts';
 import type { PersonalScoreCurrentness } from '../rating/personal-score.ts';
-import { createShelfTypeKeys as nativeShelfTypeKeys, type ShelfTypeKeysOptions } from './shelf-type-keys.ts';
+import { createShelfTypeKeys as nativeShelfTypeKeys } from './shelf-type-dictionary.ts';
+import { type ShelfTypeKeysOptions } from './shelf-type-keys.ts';
 import { createShelfCounters as nativeShelfCounters } from './shelf-counters.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Partition } from '../partition/partition.ts';
@@ -33,44 +65,6 @@ function notImplemented(operation: string): never {
 }
 
 // --- Query model ----------------------------------------------------------------------------------------------
-
-export const ENTRY_STATES = ['planned', 'in_progress', 'completed', 'paused', 'dropped'] as const;
-export type LegacyEntryState = (typeof ENTRY_STATES)[number];
-export function isLegacyEntryState(value: string): value is LegacyEntryState {
-  return ENTRY_STATES.some((state) => state === value);
-}
-/** Original profile vocabulary grammar; chronological reads preserve the exact state identifier. */
-export function isShelfEntryState(value: string): boolean {
-  return /^[a-z][a-z0-9_.-]{0,63}$(?![\s\S])/.test(value);
-}
-export const SHELF_ORDERS = ['lastActivity', 'finishedAt', 'createdAt', 'personalScore', 'priority', 'title'] as const;
-export const SHELF_DIRECTIONS = ['desc', 'asc'] as const;
-export type ShelfOrder = (typeof SHELF_ORDERS)[number];
-export type ShelfDirection = (typeof SHELF_DIRECTIONS)[number];
-
-/** The sort each status tab opens with. The web sends these explicitly; the API has no per-state default. */
-export const SHELF_DEFAULT_ORDER: Readonly<Record<LegacyEntryState, ShelfOrder>> = {
-  in_progress: 'lastActivity',
-  planned: 'createdAt',
-  completed: 'finishedAt',
-  paused: 'lastActivity',
-  dropped: 'lastActivity',
-};
-
-export const MAX_SHELF_PAGE_SIZE = 100;
-export const DEFAULT_SHELF_PAGE_SIZE = 20;
-
-/** Effective SQL predicate after exact owner-scoped full-CURIE resolution. Null means unfiltered. */
-export type ShelfQuery = {
-  state: EntryState | null;
-  typeId: string | null;
-  orderBy: ShelfOrder;
-  direction: ShelfDirection;
-  limit: number;
-  cursor?: string;
-  /** Internal native binding, resolved only after currentness admission. */
-  titleGeneration?: string;
-};
 
 /**
  * The seek position after the last row of a page. `key` is the exact stored `timestamptz` text, microseconds kept,
@@ -192,11 +186,7 @@ export type EntryShelfWrite = {
 // --- Cursor ---------------------------------------------------------------------------------------------------
 
 /** Structural port for tokens/list-cursor.ts; no dependency on its runtime or local cryptography. */
-export type ShelfCursorBinding = {
-  route: string;
-  viewer: string | null;
-  query: Readonly<Record<string, string | number | boolean | null>>;
-};
+
 export type ShelfCursorPosition = { epoch: number; after: readonly (string | number)[] };
 export interface ShelfCursorCodec {
   encode(ring: KeyRing, binding: ShelfCursorBinding, position: ShelfCursorPosition, now: Date): Promise<string>;
@@ -204,38 +194,13 @@ export interface ShelfCursorCodec {
 }
 
 /** Normalize once before SQL and binding. The caller has validated orderBy and resolved the public type. */
-export function normalizeShelfQuery(
-  query: Pick<ShelfQuery, 'orderBy'> & Partial<Omit<ShelfQuery, 'orderBy'>>,
-): ShelfQuery {
-  return {
-    state: query.state ?? null,
-    typeId: query.typeId ?? null,
-    orderBy: query.orderBy,
-    direction: query.direction ?? 'desc',
-    limit: query.limit ?? DEFAULT_SHELF_PAGE_SIZE,
-    ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
-  };
-}
 
 /** Bind every effective predicate and page size; cursor and presentation view are not predicates. */
-export function shelfCursorBinding(
-  accountId: string,
-  query: Pick<ShelfQuery, 'orderBy'> & Partial<Omit<ShelfQuery, 'orderBy'>>,
-): ShelfCursorBinding {
-  const { cursor: _cursor, ...effective } = normalizeShelfQuery(query);
-  return { route: 'GET /v1/libraryEntries', viewer: accountId, query: effective };
-}
-
-export function shelfTypeCursorBinding(accountId: string, limit: number): ShelfCursorBinding {
-  return { route: 'GET /v1/libraryShelfTypes', viewer: accountId, query: { limit } };
-}
 
 // --- Exact private type identity ------------------------------------------------------------------------------
 
-export const SHELF_TYPE_CHUNK_BYTES = 256;
-export const SHELF_TYPE_EDGE_BATCH = 100;
 /** Enough for a complete release-bounded ASCII identifier and the JSON envelope; no per-type cap. */
-export const SHELF_TYPE_RESPONSE_BYTES = 8 * 1024 * 1024;
+
 export type ShelfTypeIdentity = { typeId: string; type: string; byteLength: number };
 export type ShelfTypeReservation = { reservationId: string };
 export type ShelfTypeResolution = { done: true; typeId: string } | { done: false; reservation: ShelfTypeReservation };
@@ -498,10 +463,6 @@ export function verifyShelfEntryType(
 }
 
 // --- HTTP ----------------------------------------------------------------------------------------------------
-
-export const SHELF_LIST_ACTION = 'library_entry:list';
-export const SHELF_PROGRESS_ACTION = 'progress_session:list';
-export const SHELF_PROGRESS_GATE = 'reading_progress';
 
 /**
  * Called by the list route when `orderBy` is present. Refuses with `forbidden` unless the actor holds

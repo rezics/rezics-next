@@ -12,7 +12,7 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
-import { readRealm } from '../../src/community/realm.ts';
+import { readRealm } from '../../src/community/realm-read.ts';
 import {
   checkGrowth,
   measure,

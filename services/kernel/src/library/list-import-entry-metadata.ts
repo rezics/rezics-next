@@ -16,15 +16,15 @@ import {
 } from './entry-personal-model.ts';
 import type { Actor } from '../request/access.ts';
 import type { CommandOutcome } from '../command/command.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { LibraryNotFoundError } from './command-support.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { LibraryNotFoundError } from './collection-command-work.ts';
 import { LibraryConflictError } from './entry-errors.ts';
 import {
   createEntryPersonalCommands,
   entryPersonalAnnotationRequestInput,
   entryPersonalSourceObservationRequestInput,
 } from './entry-personal.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 
 export function ENTRY_IMPORT_METADATA_LIMITS() {

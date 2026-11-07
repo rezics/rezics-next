@@ -1,12 +1,12 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../../clock.ts';
 import type { AccessWorkAccounting } from '../../access/work.ts';
-import { deadlineClient } from '../../access/authenticate.ts';
+import { deadlineClient, accessCheck } from '../domain-ports.ts';
 import { withConnection } from '../../database/pool.ts';
-import { accessCheck, type Access, type Actor } from '../../request/access.ts';
+import type { Access, Actor } from '../../request/access.ts';
 import { mintReadTime, authoritativeTimeValue } from '../../command/command.ts';
 import { routeOf } from '../../route/route.ts';
-import { readSpace, spaceReadEligibility } from '../space.ts';
+import { readSpace, spaceReadEligibility } from '../space-read.ts';
 
 /** Space/Realm disclosure is prepared anew before each native read, including final disclosure. */
 export async function observeLibrarySpaceSummary(

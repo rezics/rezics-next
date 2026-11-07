@@ -6,7 +6,7 @@ import { currentRelationFacts, currentRelationKey, type CurrentRelationCandidate
 import { readSubjectSummaries, type SubjectSummary } from './summaries.ts';
 import { slotView } from './slots.ts';
 import listOutboundLinks from './list-outbound-links-by-property.sql';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { isRelationProperty, type FactRow, type Statement } from './item.ts';
 import { withReadTransaction } from './read.ts';
 import { waitForSubjectLinks } from './link-freshness.ts';
