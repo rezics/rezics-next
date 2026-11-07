@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { historyComposition } from '../../src/history/application/composition.ts';
-import { installNativeHistory, nativeHistoryComposition } from '../../src/composition/history.ts';
+import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
+import { nativeHistoryComposition } from '../../src/composition/history.ts';
 import {
   IDENTITY_HISTORY_ACCOUNTS_DECLARATION,
   IDENTITY_HISTORY_COMMAND_CONTROL,
@@ -23,7 +24,7 @@ import { ratingIdentityProducer, unavailableRatingIdentityProducer } from '../..
 import { identitySourceConsumerRuntime } from '../../src/semantic/identity-source-consumer-ports.ts';
 
 test('ordinary native composition binds the production adapters themselves', () => {
-  installNativeHistory();
+  installNativeHistoryPreload();
   expect(identitySourceConsumerRuntime().originalSourceDeclaration().engineRequests).toBe(0);
   expect(ratingIdentityProducer()).not.toBe(unavailableRatingIdentityProducer);
   const installed = historyComposition();

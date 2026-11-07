@@ -402,7 +402,7 @@ appendFileSync(${JSON.stringify(join(f.root, 'commands'))}, ${JSON.stringify(exe
 import { run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck } from ${JSON.stringify(join(repository, `services/${workspace}/scripts/typecheck.ts`))};
 // Bun's package-script launcher prepends ancestor node_modules bins. Confine both lookup paths to inert executables.
 process.env.PATH = ${JSON.stringify(bin)};
-process.exitCode = await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck(process.env, {
+process.exit(await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck(process.env, {
   recognize: () => (${JSON.stringify(admitted())}),
   place: async () => { throw new Error('nested placement'); },
   ${
@@ -410,7 +410,7 @@ process.exitCode = await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typeche
       ? `prepareSqlAnalysis: async (env) => ({ available: false, environment: env, analyzedFiles: 0, totalFiles: 0, writtenEntries: 0, dispose() {} }),`
       : ''
   }
-});
+}));
 `,
     );
   }

@@ -34,11 +34,11 @@ function admittedEntrypoint(workspace: string, directory: string): string {
     fixture,
     `
 import { run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck } from ${JSON.stringify(join(repository, `services/${workspace}/scripts/typecheck.ts`))};
-process.exitCode = await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck(process.env, {
+process.exit(await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck(process.env, {
   recognize: () => (${JSON.stringify(physicalAdmission)}),
   place: async () => { throw new Error('nested host admission'); },
   ${workspace === 'kernel' ? `prepareSqlAnalysis: async (env) => ({ available: false, environment: env, analyzedFiles: 0, totalFiles: 0, writtenEntries: 0, dispose() {} }),` : ''}
-});
+}));
 `,
   );
   return fixture;
@@ -578,7 +578,7 @@ test('auth preserves tsc failure status and diagnostic lines with an existing, l
     fixture,
     `import { runAuthTypecheck } from ${JSON.stringify(join(repository, 'services/auth/scripts/typecheck.ts'))};
 const prepareCompilerDatabase = async () => ({ url: 'postgres://fixture.test/auth', remove() {} });
-process.exitCode = await runAuthTypecheck(process.env, {
+process.exit(await runAuthTypecheck(process.env, {
   prepareCompilerDatabase,
   recognize: () => process.argv[2] === 'host'
     ? ({ outcome: 'refused', reason: 'cwd-outside-runs' }) : (${JSON.stringify(physicalAdmission)}),
@@ -586,7 +586,7 @@ process.exitCode = await runAuthTypecheck(process.env, {
     prepareCompilerDatabase, recognize: () => (${JSON.stringify(physicalAdmission)}),
     place: async () => { throw new Error('nested placement'); },
   }),
-});
+}));
 `,
   );
   for (const placement of ['existing', 'local', 'host']) {
@@ -741,6 +741,18 @@ exit 23
       expect(result.stdout).toBe(`${diagnostic}\n`);
       expect(result.stderr).toBe('compiler stderr\n');
     }
+  }
+});
+
+test('direct compiler CLIs exit the process with the completed status', () => {
+  for (const file of [
+    'scripts/typecheck.ts',
+    'services/kernel/scripts/typecheck.ts',
+    'services/auth/scripts/typecheck.ts',
+    'apps/web/scripts/typecheck.ts',
+    'services/kernel/scripts/construct.ts',
+  ]) {
+    expect(readFileSync(join(repository, file), 'utf8')).toMatch(/process\.exit\(/);
   }
 });
 

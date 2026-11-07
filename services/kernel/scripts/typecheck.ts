@@ -243,9 +243,9 @@ export async function runKernelTypecheck(
 
 if (import.meta.main) {
   try {
-    process.exitCode = await runKernelTypecheck();
+    process.exit(await runKernelTypecheck());
   } catch (error) {
     console.error(error);
-    process.exitCode = 1;
+    process.exit(1);
   }
 }

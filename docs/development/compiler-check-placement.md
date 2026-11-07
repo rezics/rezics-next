@@ -49,7 +49,9 @@ Decision: Root, Kernel and Auth classify placed host statuses 75, 124, 130 and 1
 retaining the raw host status and `phase=placement` in diagnostics. Other placed statuses and ordinary compiler
 statuses remain native. Exceptions at placement, database setup and executable launch are infrastructure failures,
 not compiler diagnostics. Direct wrappers report `placement`, `database-setup`, `compiler` or `database-cleanup`;
-Kernel output publication has its own phase. Ordinary cleanup still runs after compiler failure, verifies container
+Kernel output publication has its own phase. Kernel construct and the Kernel, Auth and Web typecheck CLIs call
+`process.exit` with the completed status, matching root typecheck, so leftover mapper work cannot replace it after
+return. Ordinary cleanup still runs after compiler failure, verifies container
 and volume settlement, and reports that error beside the original compiler identity without replacing a completed
 native status. Invalid external configuration continues to fail validation before any placement or database starts.
 

@@ -89,9 +89,9 @@ export async function runAuthTypecheck(
 
 if (import.meta.main) {
   try {
-    process.exitCode = await runAuthTypecheck();
+    process.exit(await runAuthTypecheck());
   } catch (error) {
     console.error(error);
-    process.exitCode = 1;
+    process.exit(1);
   }
 }
