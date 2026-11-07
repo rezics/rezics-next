@@ -1,3 +1,4 @@
+import { composeRatingDependencies } from './composition/rating.ts';
 import { createNativeRatingCapabilities } from './rating/module.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './commerce/money.ts';
 import type { WriteRateLimiter } from './access/write-rate.ts';
@@ -119,6 +120,7 @@ async function fillPool(pool: Pool): Promise<void> {
 }
 
 export function startServer(config: ServerConfig): Promise<RunningServer> & RunningServer {
+  composeRatingDependencies();
   installNativeHistory();
   const defaults = createKernelRuntimeDefaults({
     tokens: config.tokens,

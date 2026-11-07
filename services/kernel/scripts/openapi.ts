@@ -1,3 +1,4 @@
+import { composeRatingDependencies } from '../src/composition/rating.ts';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { createPool } from '../src/database/pool.ts';
@@ -9,6 +10,7 @@ import { testReceiptKeys } from '../test/support/receipt-keys.ts';
 export const CONTRACT = resolve(import.meta.dir, '../../../contracts/openapi.json');
 
 export async function kernelContract(): Promise<string> {
+  composeRatingDependencies();
   const pool = createPool('postgres://kernel.invalid/openapi');
   try {
     return formatDocument(

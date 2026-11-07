@@ -1,7 +1,7 @@
 # Architecture check
 
-Decision: Rating owns its foreign runtime capabilities in `rating/dependencies.ts`. Kernel process, reading and
-worker composition bind the exact native functions and constructors before Rating use; live bindings preserve
+Decision: Rating owns its foreign runtime capabilities in `rating/dependencies.ts`. Server, worker, preload and
+OpenAPI composition bind the exact native functions and constructors before Rating use; live bindings preserve
 error identity, generic signatures and overloads. Rating imports shared Global context vocabulary from Semantic's
 contract and Content schema helpers from their defining leaves. Existing facade exports and behavior assertions
 stay compatible. Typing is the acceptance for this import-only migration; runtime checks run after integration.
