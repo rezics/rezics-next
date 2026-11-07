@@ -578,7 +578,8 @@
         "kernel-semantic",
         "operations",
         "progress",
-        "kernel-library-core"
+        "kernel-library-core",
+        "kernel-library-application"
       ],
       "capabilities": ["library"],
       "postgresPaths": ["services/kernel/src/library/**"]
@@ -779,6 +780,7 @@
         "services/kernel/src/database/json.ts",
         "services/kernel/src/database/statement-bytes.ts",
         "services/kernel/src/events/catalogue.ts",
+        "services/kernel/src/events/consumer-lag.ts",
         "services/kernel/src/clock.ts",
         "services/kernel/src/request/access.ts",
         "services/kernel/src/route/route.ts",

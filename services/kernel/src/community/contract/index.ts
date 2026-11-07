@@ -36,3 +36,4 @@ export type {
   CommunitySurfaceDeclaration,
   CommunityWorkModule,
 } from './ports.ts';
+export type { CommunityFollowCountProducer } from './follow-counts.ts';

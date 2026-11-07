@@ -28,3 +28,5 @@ export {
   exactPublicationLocator,
   type PublicationLocator,
 } from './publication-admission.ts';
+
+export { followCountScalar, followCountHealthCurrent } from './follow-counts.ts';

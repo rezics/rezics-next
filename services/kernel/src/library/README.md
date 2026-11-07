@@ -2,7 +2,7 @@
 
 Decision: `collection-native-work.ts` is the mechanical NativeCollectionWork leaf (ProblemError from `http/problem-error.ts`). Access `access-capabilities.ts` re-exports that leaf and Kind input work/types only. Kind raw resolution stays on `collection-kind-input.ts`; composition binds it into Access native ports. Canonical Source sweep/repair stays on `collection-source-work.ts`.
 
-Decision: AniList/MAL list-import vote types consume Rating `VoteObservation` from `rating/index.ts`. Progress adoption classifies Access grant denial and unavailability through `resource-access-errors.ts` and `unavailable.ts`, keeping those error identities. Follow count reads keep Access `public-identity.ts`; public identity no longer value-imports Semantic `subject.ts` or `link-keys.ts`.
+Decision: AniList/MAL list-import vote types consume Rating `VoteObservation` from `rating/index.ts`. Progress adoption classifies Access grant denial and unavailability through `resource-access-errors.ts` and `unavailable.ts`, keeping those error identities. Follow count composition supplies Access `public-identity.ts` through the account producer; public identity no longer value-imports Semantic `subject.ts` or `link-keys.ts`.
 
 Decision: ordinary filtered Collection pages consume one immutable finite page plan; Library's native admission, SQL observation, receipts and refusal remain authoritative. Canonical generation repair uses one closed 9-axis plan.
 
@@ -2860,6 +2860,20 @@ not raw outgoing intent or this counter. No count becomes publicly exposed by th
   neither local typing nor shared occurrence-custody delivery establishes a calibrated native pass.
 
 ### Maintain and read private follow counts
+
+Decision: Follow counts use Library contract vocabulary/errors, pure scalar/health rules, port-driven read,
+delivery and bounded partition applications, and native SQL/DBOS adapters. Default Library composition binds
+Access account/authentication/public-agent observations, Community Space existence and Semantic epoch admission.
+Producer contracts retain their owners; the application passes the original actor, native instant and deadline.
+Compatibility entries keep callers and error identities stable. Public Collection discovery imports only the
+independent aggregate and health observation adapters, never private count reads, source delivery or target work.
+The application dependency points inward; platform consumer-lag metadata is a public constant-cost observation.
+
+Fewest tests: `follow-count-application.test.ts` pins authority/health ordering, zero versus unknown, identity and
+agent-binding changes, nonpublic curator fencing, retained source delivery, bounded segments and executable default
+composition. Existing Following sparse order, opaque cursors, read-loss unfollow, native count outcomes and growth
+assertions remain unchanged. This restructuring adds no query, fallback or policy; native/browser/growth acceptance
+runs after integration under the worker typing-only protocol.
 
 The [private-count authority](../../../../docs/private-follow-counts.md) owns disclosure, canonical totals,
 readiness and terminal custody. The default Library worker installs bounded source/target bootstrap, current-source

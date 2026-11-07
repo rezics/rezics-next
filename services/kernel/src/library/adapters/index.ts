@@ -11,3 +11,5 @@ export {
 export { createSearchPreparationAdapter, type SearchPreparationAdapterPorts } from './search-scope.ts';
 export { createContentPublicationAdapter, type ContentPublicationAdapterPorts } from './publication-foreign.ts';
 export { createNativeSourceCaptureAdapter } from './native-source.ts';
+
+export { createNativeFollowCountReads, type NativeFollowCountReadPorts } from './follow-count-reads.ts';

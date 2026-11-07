@@ -73,3 +73,24 @@ export type {
   PublicationAdmissionResult,
   SourceCaptureResult,
 } from './results.ts';
+
+export {
+  FollowCountUnavailableError,
+  FollowCountTargetAbsentError,
+  FollowCountReadRefusedError,
+  FOLLOW_COUNT_ACCOUNT_EVENTS,
+} from './follow-counts.ts';
+export type {
+  CountKey,
+  CountReplacement,
+  CountDestination,
+  FollowTargetType,
+  FollowCountTarget,
+  FollowCountPage,
+  FollowCountHealthObservation,
+  FollowCountReadPorts,
+  FollowCountReads,
+  FollowCountDeliveryPorts,
+  FollowCountPartitionPorts,
+  FollowCountRuntime,
+} from './follow-counts.ts';
