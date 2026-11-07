@@ -1,8 +1,18 @@
-import type { KernelClient } from './index.ts';
+import type { KernelClient, ZoneCollectionPublicView } from './index.ts';
 
 type ZonePath = ReturnType<KernelClient['zones']>;
-export type ZoneCollectionsClient = ZonePath['collections'];
-export type ZoneCollectionsQuery = NonNullable<Parameters<ZoneCollectionsClient['get']>[0]>['query'];
+type ZoneCollectionsEndpoint = ZonePath['collections'];
+type ZoneCollectionsGet = ZoneCollectionsEndpoint['get'];
+type ZoneCollectionsResponse = { collections: ZoneCollectionPublicView[]; next: string | null };
+type ZoneCollectionsCallResult = Awaited<ReturnType<ZoneCollectionsGet>>;
+
+/** The mounted Zone resource schema is selected by Library at composition time. */
+export type ZoneCollectionsClient = Omit<ZoneCollectionsEndpoint, 'get'> & {
+  get: (
+    ...args: Parameters<ZoneCollectionsGet>
+  ) => Promise<Omit<ZoneCollectionsCallResult, 'data'> & { data: ZoneCollectionsResponse | null }>;
+};
+export type ZoneCollectionsQuery = NonNullable<Parameters<ZoneCollectionsGet>[0]>['query'];
 export type ZoneCollectionsCall = Awaited<ReturnType<ZoneCollectionsClient['get']>>;
 export type ZoneCollectionsPage = NonNullable<ZoneCollectionsCall['data']>;
 
@@ -20,7 +30,7 @@ export type ZoneSubjectListProgress = Exclude<NonNullable<ZoneSubjectsCall['data
 
 /** Return the generated, native Zone Collection endpoint for the selected Zone. */
 export function zoneCollections(client: KernelClient, zoneId: string): ZoneCollectionsClient {
-  return client.zones({ id: zoneId }).collections;
+  return client.zones({ id: zoneId }).collections as ZoneCollectionsClient;
 }
 
 /** Return the generated Zone page composition for the selected Zone. */
