@@ -733,6 +733,15 @@ if (import.meta.main) {
     await persist();
   }
 
+  async function failRemaining(cause: string, reached: string) {
+    await failDependents(
+      JOURNEYS.map((journey) => journey.id),
+      cause,
+      reached,
+    );
+  }
+
+  try {
   await untilAnswers(`${stack.native}/`, 'native Auth');
   note('native-ready');
   await persist();
@@ -1508,12 +1517,20 @@ if (import.meta.main) {
     await persist();
   }
 
-  const passing = [...rows.values()].filter((row) => row.result === 'PASS').length;
-  const failing = [...rows.values()].filter((row) => row.result === 'FAIL');
-  const slowest = [...failing].sort((left, right) => parseInt(right.elapsed, 10) - parseInt(left.elapsed, 10))[0];
-  const nextHourly = new Date(Date.now() + 3_600_000).toISOString().replace(/\.\d+Z$/, 'Z');
-  console.log(
-    `accounts-goal-walk: ${passing}/19 passing; slowest failing ${slowest ? `${slowest.id} ${slowest.elapsed} ${slowest.cause}` : 'none'}; next hourly due ${nextHourly}`,
-  );
-  await persist();
+  } catch (error) {
+    const cause = error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300);
+    await failRemaining(cause, 'walk ended');
+    note(`walk ended: ${cause}`);
+  } finally {
+    if ([...rows.values()].some((row) => row.result === 'unobserved'))
+      await failRemaining('walk ended before every journey ran', 'walk ended');
+    const passing = [...rows.values()].filter((row) => row.result === 'PASS').length;
+    const failing = [...rows.values()].filter((row) => row.result === 'FAIL');
+    const slowest = [...failing].sort((left, right) => parseInt(right.elapsed, 10) - parseInt(left.elapsed, 10))[0];
+    const nextHourly = new Date(Date.now() + 3_600_000).toISOString().replace(/\.\d+Z$/, 'Z');
+    console.log(
+      `accounts-goal-walk: ${passing}/19 passing; slowest failing ${slowest ? `${slowest.id} ${slowest.elapsed} ${slowest.cause}` : 'none'}; next hourly due ${nextHourly}`,
+    );
+    await persist();
+  }
 }

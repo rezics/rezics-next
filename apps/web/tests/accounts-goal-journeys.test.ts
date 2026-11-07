@@ -54,6 +54,7 @@ test('a website-bearer Kernel 401 fails only dependent Kernel journeys and keeps
   expect([...KERNEL_BEARER_JOURNEYS]).toEqual(['J05', 'J10', 'J11', 'J15', 'J16', 'J17', 'J19']);
   const source = readFileSync(walk, 'utf8');
   expect(source).toContain('failDependents([...KERNEL_BEARER_JOURNEYS], kernelBearerCause, label)');
+  expect(source).toContain("failRemaining('walk ended before every journey ran', 'walk ended')");
   expect(source).toContain('person public HTTP 200 without private fields; not reached:');
   expect(source).toContain('anonymous outgoing HTTP');
   expect(source).toContain('exited ${child.exitCode} before becoming ready');
