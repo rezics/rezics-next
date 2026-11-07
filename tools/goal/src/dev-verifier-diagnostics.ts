@@ -127,6 +127,20 @@ function normalizedTestPath(rawPath: string, workspace: string, context: Diagnos
 function commandTestFiles(check: Pick<VerifierCheckInput, 'command' | 'cwd'>, context: DiagnosticWorkspaceContext): string[] {
   const workspace = check.cwd ?? context.workspace ?? '';
   const files = new Set<string>();
+  const webCheck = webCheckCommandIndex(check.command);
+  if (webCheck >= 0) {
+    const separator = check.command.indexOf('--', webCheck + 1);
+    const end = separator < 0 ? check.command.length : separator;
+    const hostFlag = check.command.indexOf('--host', webCheck + 1);
+    const selected = hostFlag >= 0 && hostFlag + 1 < end
+      ? [check.command[hostFlag + 1]!]
+      : check.command.slice(webCheck + 1, end).filter((argument) => TEST_FILE.test(argument));
+    for (const argument of selected) {
+      const file = normalizedTestPath(argument, workspace, context);
+      if (file) files.add(file);
+    }
+    return [...files];
+  }
   const start = testOperandStart(check.command);
   if (start < 0) return [];
   for (const argument of check.command.slice(start)) {
@@ -138,6 +152,12 @@ function commandTestFiles(check: Pick<VerifierCheckInput, 'command' | 'cwd'>, co
     if (file) files.add(file);
   }
   return [...files];
+}
+
+function webCheckCommandIndex(command: readonly string[]): number {
+  return command.findIndex((argument, index) =>
+    argument.replaceAll('\\', '/') === 'scripts/check.ts' && command[index - 1] === 'bun',
+  );
 }
 
 function testOperandStart(command: readonly string[]): number {
@@ -172,10 +192,13 @@ export function extractNamedTestFiles(
   context: DiagnosticWorkspaceContext = {},
 ): string[] {
   const files = new Set(commandTestFiles(check, context));
+  const selectedByWebCheck = webCheckCommandIndex(check.command) >= 0 && files.size > 0;
   let workspace = check.cwd ?? context.workspace ?? '';
   for (const line of evidence.output.split(/\r?\n/)) {
     workspace = workspaceForOutputLine(line, workspace);
     if (parseTypeScriptLocation(line)) continue;
+    // The wrapper receives one selected test file and may print child/fixture paths as context.
+    if (selectedByWebCheck) continue;
     const reporterLine = /(?:^|\b)(?:FAIL|failed|fail|at|Test file|Error in)\b/i.test(line) || /\.(?:test|spec)\.[cm]?[jt]sx?\s*[:(]/i.test(line);
     if (!reporterLine) continue;
     const paths = line.matchAll(/((?:[A-Za-z]:)?(?:\.\.?[\\/])?(?:[A-Za-z0-9_.@+-]+[\\/])*[A-Za-z0-9_.@+-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/gi);

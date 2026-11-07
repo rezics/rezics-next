@@ -80,6 +80,13 @@ export type TestFailure = {
   command?: DevVerifierCommand;
   sourceRevision?: string;
   evidenceLogPath?: string;
+  evidence?: TestFailureEvidence[];
+};
+export type TestFailureEvidence = {
+  command?: DevVerifierCommand;
+  sourceRevision?: string;
+  evidenceLogPath?: string;
+  output: string;
 };
 export type TestFailureRepair = {
   goal: string;
@@ -90,6 +97,44 @@ export type TestFailureRepair = {
   paths: string[];
   existingTaskId?: string;
 };
+
+function failureEvidence(failure: TestFailure): TestFailureEvidence[] {
+  return failure.evidence ?? [{
+    ...(failure.command ? { command: failure.command } : {}),
+    ...(failure.sourceRevision ? { sourceRevision: failure.sourceRevision } : {}),
+    ...(failure.evidenceLogPath ? { evidenceLogPath: failure.evidenceLogPath } : {}),
+    output: failure.error,
+  }];
+}
+
+function mergeRepeatedNamedTestFailures(failures: readonly TestFailure[]): TestFailure[] {
+  const result: TestFailure[] = [];
+  const byIdentity = new Map<string, number>();
+  for (const failure of failures) {
+    if (!failure.test || !TEST_FILE.test(failure.test)) {
+      result.push(failure);
+      continue;
+    }
+    const key = JSON.stringify([failure.owner.id, failure.cause ?? 'product-runtime', failure.test]);
+    const existingIndex = byIdentity.get(key);
+    if (existingIndex === undefined) {
+      byIdentity.set(key, result.length);
+      result.push(failure);
+      continue;
+    }
+    const existing = result[existingIndex]!;
+    const evidence = [...failureEvidence(existing), ...failureEvidence(failure)];
+    const uniqueEvidence = [...new Map(evidence.map((item) => [JSON.stringify(item), item])).values()];
+    const outputs = [...new Set(uniqueEvidence.map(({ output }) => output))];
+    result[existingIndex] = {
+      ...existing,
+      assertions: [...new Set([...existing.assertions, ...failure.assertions])],
+      error: outputs.join('\n\n--- separate verifier result ---\n\n'),
+      evidence: uniqueEvidence,
+    };
+  }
+  return result;
+}
 
 export type DevVerifierOptions = {
   settings: Settings;
@@ -280,30 +325,37 @@ export function testFailureRepairBrief(repair: TestFailureRepair, policy = defau
   const failures = repair.failures
     .map((failure) => {
       const assertions = failure.assertions.map((assertion) => '- ' + assertion).join('\n');
-      const subject = failure.test
+      const isNamedTest = !!failure.test && TEST_FILE.test(failure.test);
+      const subject = isNamedTest
         ? '- Test file: ' + tick + failure.test + tick
+        : failure.command || failure.test
+          ? '- Command: ' + tick + (failure.command ? JSON.stringify(failure.command.argv) : failure.test) + tick
         : '- ' + (failure.cause ?? 'Verifier') + ' diagnostic: ' + (failure.diagnostic?.message ?? 'unresolved failure');
+      const sources = failureEvidence(failure);
       const provenance = [
-        failure.sourceRevision ? '  Source revision: ' + tick + failure.sourceRevision + tick : '',
-        failure.command
-          ? '  Command: ' + tick + JSON.stringify(failure.command.argv) + tick + ' (cwd ' + tick + (failure.command.cwd ?? '.') + tick + ')'
-          : '',
-        failure.evidenceLogPath ? '  Original result: ' + tick + failure.evidenceLogPath + tick : '',
+        ...sources.map((source, index) => [
+          sources.length > 1 ? '  Evidence ' + (index + 1) + ':' : '',
+          source.sourceRevision ? '  Source revision: ' + tick + source.sourceRevision + tick : '',
+          source.command
+            ? '  Command: ' + tick + JSON.stringify(source.command.argv) + tick + ' (cwd ' + tick + (source.command.cwd ?? '.') + tick + ')'
+            : '',
+          source.evidenceLogPath ? '  Original result: ' + tick + source.evidenceLogPath + tick : '',
+        ].filter(Boolean).join('\n')),
         failure.diagnostic?.location
           ? '  Location: ' + tick + failure.diagnostic.location.file + ':' + (failure.diagnostic.location.line ?? '?') + ':' + (failure.diagnostic.location.column ?? '?') + tick
           : '',
       ].filter(Boolean).join('\n');
+      const output = sources.map(({ output: evidenceOutput }, index) =>
+        (sources.length > 1 ? `  Evidence ${index + 1}:\n` : '') +
+        evidenceOutput.slice(-policy.diagnosticCharacters).split('\n').map((line) => '  ' + line).join('\n'),
+      ).join('\n\n');
       return (
         subject +
         (provenance ? '\n' + provenance : '') +
         '\n  Assertions:\n' +
         assertions +
         '\n\n  Output:\n\n  ' +
-        failure.error
-          .slice(-policy.diagnosticCharacters)
-          .split('\n')
-          .map((line) => '  ' + line)
-          .join('\n')
+        output
       );
     })
     .join('\n\n');
@@ -362,14 +414,7 @@ function dispatchTestRepairs(options: DevVerifierOptions, failures: readonly Tes
     const owner = items[0]!.owner;
     const paths = cause === 'compiler'
       ? [...new Set(items.flatMap(({ diagnostic }) => diagnostic?.location?.file ? [diagnostic.location.file] : []))]
-      : [
-          ...new Set(
-            items.flatMap(({ owner: itemOwner, test }) => [
-              ...(itemOwner.brief.paths ?? []),
-              ...(test && TEST_FILE.test(test) ? [test] : []),
-            ]),
-          ),
-        ];
+      : [...new Set(items.flatMap(({ test }) => test && TEST_FILE.test(test) ? [test] : []))];
     const existing = cause === 'compiler' ? undefined : openTestRepair(options.store, goal);
     try {
       options.dispatchTestRepair({
@@ -565,7 +610,7 @@ export function recordVerifierResults(
       );
     }
   }
-  return { testsRun: runs.length, passed, failed, unknown, repairs };
+  return { testsRun: runs.length, passed, failed, unknown, repairs: mergeRepeatedNamedTestFailures(repairs) };
 }
 
 function saveRoundRecord(options: DevVerifierOptions, summary: DevVerifierRoundSummary): void {

@@ -34,7 +34,7 @@ test('runtime repair callback dispatches one urgent task with all failing files 
       manager: owner.brief.manager,
       commit: 'broken-head',
       owner,
-      paths: ['apps/web/**', 'services/kernel/**'],
+      paths: ['apps/web/tests/library.test.ts', 'services/kernel/test/session.test.ts'],
       failures: [
         {
           test: 'apps/web/tests/library.test.ts',
