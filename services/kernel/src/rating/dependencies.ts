@@ -110,7 +110,7 @@ export let withPublicStatementReader: RatingDependencies['withPublicStatementRea
 export let withReadTransaction: RatingDependencies['withReadTransaction'];
 export let within: RatingDependencies['within'];
 
-/** Called by the ordinary process composition before constructing Rating handlers or work. */
+/** Called by the shared native runtime, server, worker, preload and OpenAPI before Rating handlers or work. */
 export function bindRatingDependencies(dependencies: RatingDependencies): void {
   ({
     AuthenticationError,

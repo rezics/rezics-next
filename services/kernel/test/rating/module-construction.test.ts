@@ -10,8 +10,31 @@ import type { WorkContext } from '../../src/work/registry.ts';
 import type { Effect } from '../../src/events/effects.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { EVENT_TYPES } from '../../src/events/catalogue.ts';
+import { composeRatingDependencies } from '../../src/composition/rating.ts';
+import { createKernelRuntimeDefaults } from '../../src/composition/runtime-defaults.ts';
+import { GrantDeniedError as nativeGrantDeniedError } from '../../src/access/grant-commands.ts';
+import { problemSchema as nativeProblemSchema } from '../../src/http/problem.ts';
+import { LibraryNotFoundError as nativeLibraryNotFoundError } from '../../src/library/command-support.ts';
+import { ShelfReadUnavailableError as nativeShelfReadUnavailableError } from '../../src/library/shelf-reader-unavailable.ts';
+import { SubjectIdentityUnavailableError as nativeSubjectIdentityUnavailableError } from '../../src/library/subject-anchor.ts';
+import {
+  AuthenticationError as nativeAuthenticationError,
+  accessCheck as nativeAccessCheck,
+} from '../../src/request/access.ts';
+import {
+  AuthenticationError,
+  GrantDeniedError,
+  LibraryNotFoundError,
+  ShelfReadUnavailableError,
+  SubjectIdentityUnavailableError,
+  accessCheck,
+  bindRatingDependencies,
+  problemSchema,
+  type RatingDependencies,
+} from '../../src/rating/dependencies.ts';
 import {
   createNativeRatingCapabilities,
+  createRatingDefinition,
   createRatingModule,
   type RatingCapabilities,
 } from '../../src/rating/module.ts';
@@ -129,6 +152,43 @@ function application() {
     routeKey,
   });
 }
+
+test('shared native runtime installs Rating declarations without prior bind or test-preload residue', () => {
+  bindRatingDependencies({} as RatingDependencies);
+  try {
+    expect(problemSchema).toBeUndefined();
+    createKernelRuntimeDefaults({
+      tokens,
+      receiptKeys: testReceiptKeys(),
+      writeRate: access.writeRate,
+      clock: capabilities.clock,
+    });
+    expect(problemSchema).toBe(nativeProblemSchema);
+    expect(AuthenticationError).toBe(nativeAuthenticationError);
+    expect(GrantDeniedError).toBe(nativeGrantDeniedError);
+    expect(LibraryNotFoundError).toBe(nativeLibraryNotFoundError);
+    expect(ShelfReadUnavailableError).toBe(nativeShelfReadUnavailableError);
+    expect(SubjectIdentityUnavailableError).toBe(nativeSubjectIdentityUnavailableError);
+    expect(accessCheck).toBe(nativeAccessCheck);
+    const definition = createRatingDefinition();
+    expect(definition.http).toHaveLength(28);
+    const constructed = createRatingModule({ pool: database.pool, capabilities });
+    expect(constructed.definition.http.map((route) => `${route.method} ${route.path}`)).toEqual(
+      definition.http.map((route) => `${route.method} ${route.path}`),
+    );
+    expect(constructed.definition.work.effects.map((entry) => entry.name)).toEqual(
+      definition.work.effects.map((entry) => entry.name),
+    );
+    expect(constructed.definition.work.workflows.map((entry) => entry.name)).toEqual(
+      definition.work.workflows.map((entry) => entry.name),
+    );
+    expect(constructed.definition.work.services.map((entry) => entry.name)).toEqual(
+      definition.work.services.map((entry) => entry.name),
+    );
+  } finally {
+    composeRatingDependencies();
+  }
+});
 
 // The owner factory is exercised through native adapters, with current Access and no global replacements.
 test('declared routes, permission contributions and events are the native mounted inventory', () => {

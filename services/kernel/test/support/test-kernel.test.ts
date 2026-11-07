@@ -6,6 +6,17 @@ import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import type { WriteRateLimiter } from '../../src/access/write-rate.ts';
 import { defineRateLimit } from '../../src/http/rate-limit.ts';
 import type { Access } from '../../src/request/access.ts';
+import { composeRatingDependencies } from '../../src/composition/rating.ts';
+import { GrantDeniedError as nativeGrantDeniedError } from '../../src/access/grant-commands.ts';
+import { problemSchema as nativeProblemSchema } from '../../src/http/problem.ts';
+import { AuthenticationError as nativeAuthenticationError } from '../../src/request/access.ts';
+import {
+  AuthenticationError,
+  GrantDeniedError,
+  bindRatingDependencies,
+  problemSchema,
+  type RatingDependencies,
+} from '../../src/rating/dependencies.ts';
 import { createKernelRuntimeDefaults } from '../../src/server.ts';
 import { createKernel, createKernelAccessResolver, type Kernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, mountedRouteCatalogue } from '../../src/http/request.ts';
@@ -68,16 +79,26 @@ function productionComposition(): { kernel: Kernel; access: Access } {
 }
 
 test('testKernel shares production routes, declarations, rate metadata and Access configuration', () => {
-  const production = productionComposition();
-  const testComposition = testKernel({ pool });
+  bindRatingDependencies({} as RatingDependencies);
+  try {
+    expect(problemSchema).toBeUndefined();
+    const production = productionComposition();
+    expect(problemSchema).toBe(nativeProblemSchema);
+    expect(AuthenticationError).toBe(nativeAuthenticationError);
+    expect(GrantDeniedError).toBe(nativeGrantDeniedError);
+    expect(routeContract(production.kernel).some((route) => route.path === '/v1/subjects/:id/ratings')).toBe(true);
+    const testComposition = testKernel({ pool });
 
-  expect(routeContract(testComposition)).toEqual(routeContract(production.kernel));
-  expect([...actionCatalogue(testComposition)]).toEqual([...actionCatalogue(production.kernel)]);
-  expect(resourceRoleCatalogue(testComposition.testAccess)).toEqual(resourceRoleCatalogue(production.access));
-  expect(testComposition.testAccess.replayAuthorization?.('post:erase')).toBe('self-account-read');
-  expect(testComposition.testAccess.replayAuthorization?.('post:erase')).toBe(
-    production.access.replayAuthorization?.('post:erase'),
-  );
+    expect(routeContract(testComposition)).toEqual(routeContract(production.kernel));
+    expect([...actionCatalogue(testComposition)]).toEqual([...actionCatalogue(production.kernel)]);
+    expect(resourceRoleCatalogue(testComposition.testAccess)).toEqual(resourceRoleCatalogue(production.access));
+    expect(testComposition.testAccess.replayAuthorization?.('post:erase')).toBe('self-account-read');
+    expect(testComposition.testAccess.replayAuthorization?.('post:erase')).toBe(
+      production.access.replayAuthorization?.('post:erase'),
+    );
+  } finally {
+    composeRatingDependencies();
+  }
 }, 180_000);
 
 test('testApp mounts the rate stage and testAccess binds the mounted action catalogue and resource types', async () => {

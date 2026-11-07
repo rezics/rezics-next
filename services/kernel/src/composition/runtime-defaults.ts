@@ -12,6 +12,7 @@ import { composeContentApplication } from './content.ts';
 import { composeWorkApplication } from './work.ts';
 import { installSemanticCopyWork } from './semantic-copy-work.ts';
 import { installNativeHistory } from './history.ts';
+import { composeRatingDependencies } from './rating.ts';
 import { composeSemanticAdapters } from './semantic.ts';
 import { composeSearchSemanticSource } from './search-semantic.ts';
 import { composePresentationApplication } from './presentation.ts';
@@ -90,9 +91,10 @@ export function createKernelCreditSearchSource(pool: Pool, routeKey: Uint8Array)
 
 const systemDeadlineNow = (): number => Date.now();
 
-/** Shared runtime defaults for the HTTP server and Search work factory. */
+/** Shared runtime defaults for the HTTP server, Search work factory and compatibility hosts. */
 export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = {}): KernelRuntimeDefaults {
   const libraryScope = createSearchLibraryScopePort();
+  composeRatingDependencies();
   composeAccessApplication();
   composeWorkApplication();
   composeContentApplication();

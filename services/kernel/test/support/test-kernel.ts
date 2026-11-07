@@ -57,6 +57,7 @@ function authConfig(options: TestAccessOptions): AuthenticationConfig {
   return options.auth ?? testAuth;
 }
 
+/** Compatibility host: the shared runtime installs native Rating before Kernel construction. */
 function runtimeDefaults(options: KernelRuntimeOverrides & { auth: AuthenticationConfig }) {
   return createKernelRuntimeDefaults({
     ...options,

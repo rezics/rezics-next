@@ -1,10 +1,13 @@
 # Architecture check
 
-Decision: Rating owns its foreign runtime capabilities in `rating/dependencies.ts`. Server, worker, preload and
-OpenAPI composition bind the exact native functions and constructors before Rating use; live bindings preserve
-error identity, generic signatures and overloads. Rating imports shared Global context vocabulary from Semantic's
+Decision: Rating owns its foreign runtime capabilities in `rating/dependencies.ts`. The shared native runtime
+(`createKernelRuntimeDefaults`), server, worker, preload and OpenAPI composition bind the exact native functions
+and constructors at that owning composition boundary before Rating use; live bindings preserve error identity,
+generic signatures and overloads. Compatibility and test hosts consume that same runtime, so ordinary constructors
+do not require ambient test-preload state. Rating imports shared Global context vocabulary from Semantic's
 contract and Content schema helpers from their defining leaves. Existing facade exports and behavior assertions
-stay compatible. Typing is the acceptance for this import-only migration; runtime checks run after integration.
+stay compatible. Construction acceptance is the module-construction and test-kernel host cases; native, browser
+and growth stay on the sole Performance walk.
 
 Decision: Search result saving and configured Concept following invert private Library save, owner observation and follow through a Search-owned `SearchLibraryActionPort`. `library-action-port.tsx` and `saved-query-selection.ts` are Search public entries; `search-action-binding.tsx` is the Library public adapter installed once by `LibraryApplicationBoundary`. Search results and `source-concept-view` consume the host; they no longer value-import `save-query`, `saved-query-editor/selection` or `follow-target-control`. Subject `pages/data`, overview and `load-subject` stay read/href composition for this pair.
 
