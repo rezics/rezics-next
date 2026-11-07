@@ -32,6 +32,32 @@ import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
 import { readPoolAcquireTimeoutMillis } from '../../kernel/src/database/pool.ts';
 
+import { AUTH_STARTUP_TESTS, STARTUP_UNIT_TESTS, startupCommands } from '../../../scripts/check-startup.ts';
+
+test('integrated startup keeps the full regression selection and original native acceptance', () => {
+  const focused = startupCommands(false);
+  expect(focused[0]!.argv.slice(2)).toEqual([...STARTUP_UNIT_TESTS]);
+  expect(focused.find((step) => step.phase === 'auth-composition')!.argv.slice(2)).toEqual([...AUTH_STARTUP_TESTS]);
+  expect(focused.find((step) => step.phase === 'kernel-startup')!.argv).toContain('test/check.test.ts');
+  expect(focused.find((step) => step.phase === 'kernel-startup')!.argv).toContain(
+    'test/history/record-source-set.test.ts',
+  );
+  expect(focused.find((step) => step.phase === 'web-programs-and-ratings')!.argv).toEqual([
+    'bun',
+    'apps/web/scripts/focused.ts',
+    '--private-network',
+    '--',
+    'bun',
+    'test',
+    'scripts/typecheck.test.ts',
+    'tests/seeded-content-ratings-reviews.test.ts',
+    'tests/subject-entry-state-review.test.tsx',
+  ]);
+  const acceptance = startupCommands(true);
+  expect(acceptance[0]!.argv).toContain('scripts/typecheck.test.ts');
+  expect(acceptance.at(-1)!.argv).toEqual(['bun', 'test', 'services/auth/test/dev-stack.test.ts']);
+});
+
 test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', async () => {
   const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
   expect(source).toContain('SEEDED_WEB_READY_PATH');

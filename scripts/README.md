@@ -25,6 +25,30 @@ five minutes.
 
 ## Check hosts
 
+`bun scripts/check-startup.ts` owns the combined compiler-database, SSH/remote transport, command-phase/lifetime,
+stack/walk, worker memory, root/direct placement, Kernel startup, Auth composition and Web dual-program/ratings
+regression selection. It runs inside the existing placement boundary, in sequence, preserving each command's argv,
+phase and raw status. Auth composition consumes a real migrated Kernel/Auth compiler database through test exit and
+owned cleanup. Go Task is a pinned, trusted project dependency, installed before the immutable dependency tree is
+published; it needs no global host installation. Preparation verifies the public `bin/task` identity once (30s bound)
+and ignores Bun store copies of the same package. Result-wait test clients and run heartbeat SSH children are reaped
+before their owned fixtures or remote directories are removed. Only one heartbeat channel may be outstanding.
+
+After integration, append `--acceptance` to retain the original live root relation, Home and VN Realm walks and Auth native/browser suites.
+Each native suite prepares its own development database, without an inherited compiler URL overriding its generated
+environment. Ratings' existing native-walk opt-in remains explicit; a skipped walk establishes no native acceptance.
+Ordinary landing verification typechecks each changed workspace. The combined unit selection and `--acceptance`
+native/browser/root suites run after landing:
+
+```sh
+bun scripts/worker-check.ts -- sh -c 'bun run --cwd services/kernel typecheck; s=$?; bun run --cwd services/auth typecheck || s=1; bun run --cwd apps/web typecheck || s=1; exit $s'
+```
+
+`bun scripts/check-startup.ts` remains the owning combined wrapper for compiler-database, remote-check, lifetime,
+walk, placement and Auth composition. Worker attempts that mix those tests into the landing typecheck wrapper are
+refused before upload, except urgent briefs whose host-run budget is off. Infrastructure 75, absent results, skips
+and budget refusal never establish a typing pass.
+
 ### Check cost ledger
 
 Physical worker check runs are recorded as JSON under the main checkout's
@@ -64,13 +88,14 @@ owned directory `$XDG_RUNTIME_DIR/rezics-ssh/<host>` (or `/tmp/rezics-ssh-<uid>/
 overrides that directory. OpenSSH's `unix_listener` adds a `.XXXXXXXXXX` suffix, so a path at or over 97 bytes is
 relocated to a hashed `/tmp/rs<uid>-<digest>` that still names one socket per host. Concurrent callers reuse that
 master. Completing a run releases its channels and never `-O exit`s a master other runs still use; ControlPersist reaps
-idle sockets. Acquisition retries never stop an answering master: `-O exit` would cut every run multiplexed through
-it (their rsync sessions end with exit 255). A placement-probe timeout checks the master and may recover it with
-`-O exit` before a fresh auto connection, at most once per host per minute across processes and never while a run
-holds its lease and the master answers. Placement probes retry after recovery; five minutes of consecutive
-probe-timeout skips report one environment event naming the host and error. A socket file left by a killed master is
-removed when `-O check` reports a refused or missing listener; while it remains, OpenSSH prints `already exists,
-disabling multiplexing` and every connection pays a full handshake.
+idle sockets. A failed probe never stops a master: a busy master times out too, and `-O exit` would cut every run
+multiplexed through it (their rsync sessions end with exit 255). A socket file left by a killed master is removed when
+`-O check` reports a refused or missing listener; while it remains, OpenSSH prints `already exists, disabling
+multiplexing` and every connection pays a full handshake.
+Decision: retirement holds the host's exclusive lease lock through the control check and socket cleanup; acquisition
+holds that same lock shared before probing and through execution. A delayed control answer remains uncertain, even
+without a current lease. Affirmatively dead masters may be recovered at most once per minute. Five minutes of
+placement-probe timeouts emits one host environment event; it does not authorize retiring a live master.
 Expired immutable bases are renamed aside under `bases/.lock` and deleted after it is released, so a base lookup never
 waits behind another run's recursive delete.
 Stderr reports connection work and probe failures (including `unix_listener` overflow) separately from admitted
@@ -80,22 +105,14 @@ including the 11 GiB wait that still places on host b.
 Decision: leftover History callers use the contract and application public entries; placement-path units inject a
 refusing recognizer so check-host execution still relocates; Kernel/Auth map host 75/124/130/143 and placement
 exceptions to infrastructure 75. Pin with the existing typecheck-placement and root-typecheck-placement files.
-A waiting check stays on the host that holds its upload while that host has a free slot. After two minutes with none,
-if another performance host can start it now, the check uploads there, takes the slot, and releases the first copy
-for host cleanup. A later move needs another two minutes full on the new host. Gate and landing-priority runs keep
-today's waiter order on the host they move to. `REMOTE_CHECK_PLACEMENT_MOVE_MS` is the test seam for that wait.
-Decision: pin the move with both host names and the wait before it in the check log; a host with a free slot never
-moves.
-
-Decision: pin hung ControlMaster placement recovery, once-per-minute cross-process recovery, the five-minute
-probe-timeout environment event, user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion
-behaviour with the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
+Decision: pin user-visible transport, empty-directory return, 11 GiB/b-placement and host-exclusion behaviour with
+the existing remote-check/check-ssh unit files rather than a second suite. Admitted stack databases use `--rm`,
 labelled owner-pid cleanup, 120s `docker run`/`rm -f` and 5s probes, 600s `docker build`/`pull`, a labelled volume
 rather than 1 GiB tmpfs, nonce reap on create failure, `container:<id>` attachment and an independent TCP-to-Unix
 forwarder after in-container `pg_isready` plus a protocol reply; Docker stdout/stderr is UTF-8 text whether the runtime
 returns a string or a Buffer; cleanup retains the original failure and the exact cleanup diagnostic. Host-lifetime
 Python cleanup uses those same 120s/5s bounds and does not classify a `docker rm` timeout as install/preparation;
-SIGTERM removal is detached. Compiler identity includes the installed Reylo mapper and Web/Auth manifests so local and
+ordinary compiler-database cleanup waits in-process for container and volume settlement and keeps native status; only SIGTERM/SIGINT removal is detached. Compiler identity includes the installed Reylo mapper and Web/Auth manifests so local and
 remote typing share one workspace. Mapper-enabled workspace typechecks run one at a time so Kernel, Auth and Web
 compilers do not share an admitted 6GiB slice. Admitted runs reclaim inactive file pages in that slice after install
 and before each mapper compiler. Vite starts only after complete Paraglide modules exist, and `/en` is
@@ -198,8 +215,7 @@ bun scripts/check-run-settlement.ts reconcile <invocation-id> [--hosts <absolute
 
 Reconciliation without `--hosts` handles a prepared/queued invocation with no physical run: it durably cancels the
 start, then removes only the recorded snapshot and records that custody. If a physical host/run was already recorded,
-reconciliation requires the host file and observes only that run; unavailable proof keeps the exact snapshot. While the
-invocation is still uploading, a placement move may replace that physical identity; once running it stays fixed. A final
+reconciliation requires the host file and observes only that run; unavailable proof keeps the exact snapshot. A final
 record is replayed by `status`; `run-prepared` rejects its descriptor after the one claim and never starts a replacement.
 For a preparation process lost before a registration record exists, use
 `bun scripts/check-run-settlement.ts reconcile --descriptor <absolute-private-json> [--state-dir <absolute-dir>]`.
@@ -567,10 +583,9 @@ either stopgap, remain with the supermanager. Post-admission throughput and host
 remain separate questions for the existing compiler/health chain; this cohort supplies neither.
 
 1. Select a responding eligible host and verify its shared SSH control master with a trivial command before using it.
-   The acquisition probe is bounded to ninety seconds. Its retry never stops an answering master; only a socket whose
-   listener `-O check` reports refused or missing is removed. The probe then runs once more; the second failure is
-   `RemoteTransportError` for the host and `control probe` stage. Placement-probe timeout recovery follows the shared
-   lease and once-per-minute guards above. Completing a run never `-O exit`s a master.
+   The probe is bounded to ninety seconds. A failed probe never stops the master, because a busy master times out too;
+   only a socket whose listener `-O check` reports refused is removed. The probe then runs once more; the second
+   failure is `RemoteTransportError` for the host and `control probe` stage. No run ever `-O exit`s a master.
 2. Rsync existing tracked and unignored untracked files into `/srv/rezics-check/runs/<run-id>` without an execution
    slot.
    Omit Git metadata, `node_modules` and root `.temp` files. For Bun-backed commands, stage a native Git snapshot in

@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fromPlainText } from '@rezics/document';
+import { withWalkResources } from '../../../scripts/walk-stack.ts';
 import { startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -347,9 +348,10 @@ async function walkPersonas(stack: Origins, identities: Identities, evidence: Ev
   const require = createRequire(resolve(root, 'apps/web/package.json'));
   const { chromium } = require('playwright') as typeof import('playwright');
   const { expect } = require('playwright/test') as typeof import('playwright/test');
-  const browser = await chromium.launch({ headless: true });
-  const realmPath = (locale: string) => `${stack.web}/${locale}/realms/${identities.realmId}`;
-  try {
+  await withWalkResources(async (own) => {
+    const browser = await chromium.launch({ headless: true });
+    own('VN Realm browser', () => browser.close());
+    const realmPath = (locale: string) => `${stack.web}/${locale}/realms/${identities.realmId}`;
     const capture = async (
       page: import('playwright').Page,
       persona: string,
@@ -481,9 +483,7 @@ async function walkPersonas(stack: Origins, identities: Identities, evidence: Ev
     evidence.sequence.push('realm-member-readback');
     await capture(signed, 'realm-member', 'en', 1440, 'dark');
     await member.close();
-  } finally {
-    await browser.close();
-  }
+  });
 }
 
 const sourceRevision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();
@@ -529,63 +529,66 @@ evidence.native.push({
   works: works.map((work) => ({ source: work.source, externalId: work.externalId })),
 });
 // Auth pages and Web start after the seed, as an admitted stack requires; `stop` follows the persona walk.
-const frontends = await startSeededFrontends();
+const { bearer, identities, discoveryListed } = await withWalkResources(async (own) => {
+  const frontends = await startSeededFrontends();
+  own('VN Realm frontends', () => frontends.stop());
 
-const bearer = await websiteToken(stack);
-let created: Omit<Identities, 'discoveryListed'>;
-if (evidence.seed.showcaseBoardRealmId && uuid.test(evidence.seed.showcaseBoardRealmId)) {
-  const realmId = evidence.seed.showcaseBoardRealmId;
-  const current = requireOk(await kernel(stack, 'GET', `/v1/realms/${realmId}`), 'seeded realm').realm as Json;
-  created = {
-    realmId,
-    spaceId: asId(current.spaceId, 'seeded space'),
-    boardId: asId(showcaseBoard?.id, 'seeded board'),
-    threadId: asId(
-      (community?.thread as Json | undefined)?.threadId ?? (community?.thread as Json | undefined)?.id,
-      'seeded thread',
-    ),
-    works,
-  };
-} else {
-  created = await provisionRealm(stack, bearer, works);
-}
+  const bearer = await websiteToken(stack);
+  let created: Omit<Identities, 'discoveryListed'>;
+  if (evidence.seed.showcaseBoardRealmId && uuid.test(evidence.seed.showcaseBoardRealmId)) {
+    const realmId = evidence.seed.showcaseBoardRealmId;
+    const current = requireOk(await kernel(stack, 'GET', `/v1/realms/${realmId}`), 'seeded realm').realm as Json;
+    created = {
+      realmId,
+      spaceId: asId(current.spaceId, 'seeded space'),
+      boardId: asId(showcaseBoard?.id, 'seeded board'),
+      threadId: asId(
+        (community?.thread as Json | undefined)?.threadId ?? (community?.thread as Json | undefined)?.id,
+        'seeded thread',
+      ),
+      works,
+    };
+  } else {
+    created = await provisionRealm(stack, bearer, works);
+  }
 
-const home = await waitForHome(stack, created.realmId);
-const boards = await kernel(stack, 'GET', `/v1/realms/${created.realmId}/boardShelf`);
-const publications = await kernel(stack, 'GET', `/v1/realms/${created.realmId}/publicationShelf`, {
-  query: { languages: 'en' },
+  const home = await waitForHome(stack, created.realmId);
+  const boards = await kernel(stack, 'GET', `/v1/realms/${created.realmId}/boardShelf`);
+  const publications = await kernel(stack, 'GET', `/v1/realms/${created.realmId}/publicationShelf`, {
+    query: { languages: 'en' },
+  });
+  evidence.native.push({
+    home: {
+      status: 200,
+      boards: Array.isArray((home.boards as Json | undefined)?.items)
+        ? ((home.boards as Json).items as unknown[]).length
+        : 0,
+    },
+    boards: {
+      status: boards.status,
+      count: Array.isArray(boards.value.items) ? (boards.value.items as unknown[]).length : 0,
+    },
+    publications: {
+      status: publications.status,
+      count: Array.isArray(publications.value.items) ? (publications.value.items as unknown[]).length : 0,
+    },
+  });
+  const discoveryListed = await waitForDiscovery(stack, created.realmId);
+  const identities: Identities = { ...created, discoveryListed };
+  evidence.native.push({
+    identities: {
+      realmId: identities.realmId,
+      spaceId: identities.spaceId,
+      boardId: identities.boardId,
+      threadId: identities.threadId,
+      discoveryListed,
+    },
+  });
+  await writeFile(join(evidenceDir, 'identities.json'), `${JSON.stringify(identities, null, 2)}\n`);
+  evidence.pages.push(...(await localeLabels(stack, identities.realmId)));
+  await walkPersonas(stack, identities, evidence);
+  return { bearer, identities, discoveryListed };
 });
-evidence.native.push({
-  home: {
-    status: 200,
-    boards: Array.isArray((home.boards as Json | undefined)?.items)
-      ? ((home.boards as Json).items as unknown[]).length
-      : 0,
-  },
-  boards: {
-    status: boards.status,
-    count: Array.isArray(boards.value.items) ? (boards.value.items as unknown[]).length : 0,
-  },
-  publications: {
-    status: publications.status,
-    count: Array.isArray(publications.value.items) ? (publications.value.items as unknown[]).length : 0,
-  },
-});
-const discoveryListed = await waitForDiscovery(stack, created.realmId);
-const identities: Identities = { ...created, discoveryListed };
-evidence.native.push({
-  identities: {
-    realmId: identities.realmId,
-    spaceId: identities.spaceId,
-    boardId: identities.boardId,
-    threadId: identities.threadId,
-    discoveryListed,
-  },
-});
-await writeFile(join(evidenceDir, 'identities.json'), `${JSON.stringify(identities, null, 2)}\n`);
-evidence.pages.push(...(await localeLabels(stack, identities.realmId)));
-await walkPersonas(stack, identities, evidence);
-await frontends.stop();
 const members = await kernel(stack, 'GET', `/v1/realms/${identities.realmId}/members`, {
   bearer,
   query: { limit: '20' },

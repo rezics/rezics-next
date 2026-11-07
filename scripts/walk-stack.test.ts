@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
+  withWalkResources,
   firstRedactedDiagnostic,
   hydrationMonitorMessage,
   isStartupTransportError,
@@ -207,4 +208,41 @@ test('seeded Web is ready only on useful /en HTML, not a Vite missing-module ove
     await page.stop(true);
     await jwks.stop(true);
   }
+});
+
+test('walk acquisition failure settles all acquired resources and retains its original error', async () => {
+  const original = new Error('persona failed after frontend and browser acquisition');
+  const settled: string[] = [];
+  await expect(
+    withWalkResources(async (own) => {
+      own('frontends', async () => {
+        await Bun.sleep(5);
+        settled.push('frontends');
+      });
+      own('browser', () => {
+        settled.push('browser');
+      });
+      throw original;
+    }),
+  ).rejects.toBe(original);
+  expect(settled.sort()).toEqual(['browser', 'frontends']);
+  let failure: unknown;
+  try {
+    await withWalkResources(async (own) => {
+      own('frontends', () => {
+        throw new Error('frontend stop');
+      });
+      own('browser', async () => {
+        await Bun.sleep(5);
+        settled.push('browser settled');
+      });
+      throw original;
+    });
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(AggregateError);
+  expect((failure as AggregateError).cause).toBe(original);
+  expect((failure as AggregateError).message).toContain('frontend stop');
+  expect(settled).toContain('browser settled');
 });

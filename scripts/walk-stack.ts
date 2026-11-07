@@ -466,3 +466,32 @@ export const SEED_JOURNAL_IDENTITY_FILE = 'database-identity';
 export function stackPhaseLine(phase: string, identity: string): string {
   return `stack: ${phase} ${identity}`;
 }
+
+/** Each acquired walk resource registers immediately; every cleanup settles before the original failure escapes. */
+export async function withWalkResources<T>(
+  run: (own: (name: string, cleanup: () => void | Promise<void>) => void) => Promise<T>,
+): Promise<T> {
+  const owned: { name: string; cleanup: () => void | Promise<void> }[] = [];
+  let failed = false;
+  let original: unknown;
+  try {
+    return await run((name, cleanup) => owned.push({ name, cleanup }));
+  } catch (error) {
+    failed = true;
+    original = error;
+    throw error;
+  } finally {
+    const results = await Promise.allSettled(owned.map(({ cleanup }) => Promise.resolve().then(cleanup)));
+    const failures = results.flatMap((result, index) =>
+      result.status === 'rejected'
+        ? [new Error(`${owned[index]!.name}: ${String(result.reason)}`, { cause: result.reason })]
+        : [],
+    );
+    if (failures.length)
+      throw new AggregateError(
+        [...(failed ? [original] : []), ...failures],
+        `Walk cleanup failed${failed ? ` after ${String(original)}` : ''}: ${failures.map((error) => error.message).join('; ')}`,
+        { cause: failed ? original : failures[0] },
+      );
+  }
+}

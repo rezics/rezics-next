@@ -37,6 +37,7 @@ import { run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck } from ${JSON
 process.exitCode = await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck(process.env, {
   recognize: () => (${JSON.stringify(physicalAdmission)}),
   place: async () => { throw new Error('nested host admission'); },
+  ${workspace === 'kernel' ? `prepareSqlAnalysis: async (env) => ({ available: false, environment: env, analyzedFiles: 0, totalFiles: 0, writtenEntries: 0, dispose() {} }),` : ''}
 });
 `,
   );
@@ -703,7 +704,7 @@ test('A compiler database remains reachable from the actual selected typecheck p
   }
 });
 
-test('Compiler connection and SQL analysis failures keep their real diagnostics and status without disabling analysis', () => {
+test('Compiler connection and SQL diagnostic fixtures retain exact output, argv and native status', () => {
   mkdirSync(join(repository, '.temp'), { recursive: true });
   const directory = mkdtempSync(join(repository, '.temp/compiler-diagnostics-'));
   temporaryDirectories.push(directory);
@@ -830,7 +831,7 @@ test('direct compiler setup, launch and cleanup failures keep their cause, phase
                 },
                 [],
               );
-        expect(result).toBe(75);
+        expect(result).toBe(failedPhase === 'database-cleanup' ? 23 : 75);
         expect(removed).toBe(failedPhase === 'database-setup' ? 0 : 1);
         expect(compiled).toBe(failedPhase === 'database-setup' ? 0 : 1);
         const diagnostic = output.mock.calls.flat().join('\n');

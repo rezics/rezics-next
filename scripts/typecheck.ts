@@ -17,6 +17,7 @@ import {
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { keepCompilerStatusAfterCleanup } from './compiler-database.ts';
 import { resolveBunCommand } from './gate.ts';
 import { runOnCheckHost, type StackRun } from './stack-run.ts';
 import { recognizeCheckHostRun } from './check-placement.ts';
@@ -665,7 +666,7 @@ async function withStartedDatabase(
   }
   if (cleanupFailure) {
     state?.discard();
-    return infrastructure('root typecheck', `compiler database cleanup could not be proven: ${cleanupFailure}`);
+    return keepCompilerStatusAfterCleanup(result, cleanupFailure, 'root typecheck');
   }
   if (failure) {
     state?.discard();

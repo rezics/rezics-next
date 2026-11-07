@@ -80,7 +80,7 @@ appendFileSync(${JSON.stringify(join(root, 'consumers'))}, JSON.stringify({ name
   };
 }
 
-test.each([0, 23, 75, 130, 143])(
+test.each([0, 23, 75, 124, 130, 143])(
   'root and direct entrypoints never replay a placed status %i locally',
   async (status) => {
     const f = fixture();

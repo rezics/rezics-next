@@ -19,9 +19,13 @@ import {
   advanceSelectedHistoryOriginal as nativeAdvanceSelectedHistoryOriginal,
   sharedHistoryWorkModule as nativeSharedHistoryWorkModule,
 } from '../../src/history/adapters/work.ts';
+import { ratingIdentityProducer, unavailableRatingIdentityProducer } from '../../src/rating/segment-identity-guard.ts';
+import { identitySourceConsumerRuntime } from '../../src/semantic/identity-source-consumer-ports.ts';
 
 test('ordinary native composition binds the production adapters themselves', () => {
   installNativeHistory();
+  expect(identitySourceConsumerRuntime().originalSourceDeclaration().engineRequests).toBe(0);
+  expect(ratingIdentityProducer()).not.toBe(unavailableRatingIdentityProducer);
   const installed = historyComposition();
   const composed = nativeHistoryComposition();
   expect(installed.declareCommandHistory).toBe(nativeDeclareCommandHistory);

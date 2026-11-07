@@ -83,7 +83,7 @@ export function searchRunArgs(image: string, env: NodeJS.ProcessEnv = process.en
   return [
     'run',
     '-d',
-    ...cgroupArgs(),
+    ...cgroupArgs(env),
     ...(memory ? ['--memory', memory] : []),
     '--name',
     container,
