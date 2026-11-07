@@ -525,7 +525,6 @@ test('installed host receives management operations and independent reads from i
   );
   expect(assembly).toContain('accountOperations: bindings.accountOperations');
   expect(assembly).toContain('accountManagementReads: bindings.accountManagementReads');
-  expect(assembly).toContain('recoveryDelivery: options?.recoveryDelivery ?? localStackRecoveryDelivery()');
   expect(assembly).toContain('workflow: proofs');
   expect(assembly).toContain('referenceKeys: config.tokens');
   expect(assembly).toContain('await host.stop()');

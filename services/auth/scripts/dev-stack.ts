@@ -467,23 +467,6 @@ async function setup() {
   );
 }
 
-/** Local assemble writes recovery proofs privately; HTTP recovery never returns the token. */
-function localStackRecoveryDelivery(): NonNullable<
-  import('../src/index.ts').AuthServiceOptions['recoveryDelivery']
-> {
-  return {
-    async deliver({ accountId, email, token, url }) {
-      const directory = resolve(state, 'recovery');
-      await mkdir(directory, { recursive: true, mode: 0o700 });
-      await writeFile(
-        resolve(directory, `${email}.json`),
-        `${JSON.stringify({ accountId, token, url })}\n`,
-        { mode: 0o600 },
-      );
-    },
-  };
-}
-
 export async function assemble(options?: {
   env: Record<string, string>;
   authDatabaseUrl: string;
@@ -562,7 +545,7 @@ export async function assemble(options?: {
     trustedAccess: bindings.trustedAccess,
     access: bindings.workflowPorts,
     siteActions: actions,
-    recoveryDelivery: options?.recoveryDelivery ?? localStackRecoveryDelivery(),
+    ...(options?.recoveryDelivery ? { recoveryDelivery: options.recoveryDelivery } : {}),
     accountOperations: bindings.accountOperations,
     accountManagementReads: bindings.accountManagementReads,
     // The local widget and verifier never call Cloudflare. Production composition is unchanged.
