@@ -48,7 +48,7 @@ type SignupJourney = {
   freshAfterReturn: SignupReturnSummary['kind'] | null;
   requestBody: SignupBody | null;
   signInCredentials: { email: string; password: string } | null;
-  clearChallenge: (() => void) | null;
+  retainOutcome: () => void;
 };
 
 type ActiveSignupJourney = SignupJourney & { attempt: SignupAttemptController };
@@ -82,7 +82,6 @@ function clearJourneySecrets(journey: SignupJourney) {
     journey.signInCredentials.password = '';
   }
   journey.signInCredentials = null;
-  journey.clearChallenge?.();
 }
 
 function retireSignupJourney(journey: SignupJourney) {
@@ -249,15 +248,18 @@ function SignupPage() {
       freshAfterReturn: SignupReturnSummary['kind'] | null = null,
     ): SignupJourney => {
       const nextSequence = ++sequence.current;
+      const attempt = withAttempt ? new SignupAttemptController(nextSequence) : null;
       return {
         active: true,
         sequence: nextSequence,
         query,
-        attempt: withAttempt ? new SignupAttemptController(nextSequence) : null,
+        attempt,
+        retainOutcome: () => {
+          if (attempt) returnController.retain(attempt.phase);
+        },
         freshAfterReturn,
         requestBody: null,
         signInCredentials: null,
-        clearChallenge: null,
       };
     };
     const retireCurrent = (current: SignupJourney | null) => {
@@ -465,6 +467,7 @@ function SignupActivePageState({
   }, [controller, journey]);
 
   const leave = useCallback(() => {
+    journey.retainOutcome();
     retireSignupJourney(journey);
   }, [journey]);
 
@@ -604,11 +607,15 @@ function SignupCompletion({
   query: string;
   follow: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
+  const alert = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (phase.kind === 'sign-in-failed') alert.current?.focus();
+  }, [phase.kind]);
   return (
     <div className="auth-login-form" aria-busy={phase.kind === 'signing-in'}>
       <p role="status">{phase.kind === 'signing-in' ? m.auth_signup_signing_in() : m.auth_signup_created()}</p>
       {phase.kind === 'sign-in-failed' ? (
-        <ErrorAlert tabIndex={-1}>
+        <ErrorAlert ref={alert} tabIndex={-1}>
           <p>{phase.message}</p>
         </ErrorAlert>
       ) : null}
@@ -701,6 +708,7 @@ function SignupForm({
   const { siteKey, scriptUrl, requirements } = registration;
   const { query, attempt: controller } = journey;
   const turnstile = useRef<TurnstileHandle>(null);
+  const form = useRef<HTMLFormElement>(null);
   // Keep this journey's challenge/token generation when shell presentation changes.
   const challengeLanguage = useRef(getLocale()).current;
   const alert = useRef<HTMLDivElement>(null);
@@ -710,17 +718,15 @@ function SignupForm({
   const [errors, setErrors] = useState<SignupCredentialErrors>(emptyErrors);
   const [turnstileError, setTurnstileError] = useState('');
   const [retryClock, setRetryClock] = useState(Date.now());
+  const draftForm = phase.kind === 'draft' || phase.kind === 'handle-unavailable' || phase.kind === 'dispatched';
 
   useLayoutEffect(() => {
-    const clearChallenge = () => {
-      submitting.current = false;
-      turnstile.current?.reset();
-    };
-    journey.clearChallenge = clearChallenge;
+    if (!draftForm) return;
+    const ownedInputs = [...form.current!.querySelectorAll('input')];
     return () => {
-      if (journey.clearChallenge === clearChallenge) journey.clearChallenge = null;
+      for (const input of ownedInputs) input.value = '';
     };
-  }, [journey]);
+  }, [draftForm]);
 
   const values: SignupDraft | null =
     phase.kind === 'draft'
@@ -846,7 +852,6 @@ function SignupForm({
     document.getElementById(handleId)?.focus();
   }
 
-  const draftForm = phase.kind === 'draft' || phase.kind === 'handle-unavailable' || phase.kind === 'dispatched';
   return (
     <>
       {journey.freshAfterReturn === 'created' ? (
@@ -855,6 +860,7 @@ function SignupForm({
         <p role="status">{m.auth_signup_return_new_attempt()}</p>
       ) : null}
       <form
+        ref={form}
         id="signup-form"
         className="auth-login-form"
         method="post"

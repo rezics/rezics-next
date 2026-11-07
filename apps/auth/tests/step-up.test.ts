@@ -181,14 +181,29 @@ async function open(path = '/step-up', options: BrowserContextOptions = {}) {
   });
   const page = await context.newPage();
   page.setDefaultTimeout(10_000);
+  const clientFailures: string[] = [];
+  page.on('pageerror', (error) => clientFailures.push(error.message));
+  page.on('requestfailed', (request) => {
+    if (['script', 'stylesheet'].includes(request.resourceType()))
+      clientFailures.push(`${request.resourceType()}: ${request.failure()?.errorText}`);
+  });
   try {
     const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     return { page, origin };
   } catch (error) {
+    // Preserve readiness evidence before closing the page without reading form values.
+    const state = await page
+      .evaluate(() => ({
+        readyState: document.readyState,
+        hydrated: document.documentElement.hasAttribute('data-hydrated'),
+        heading: document.querySelector('h1')?.textContent,
+        clientRenderFallback: document.documentElement.innerHTML.includes('<!--$!-->'),
+      }))
+      .catch(() => null);
     await context.close();
-    throw error;
+    throw new Error(`Auth page readiness failed: ${JSON.stringify({ state, clientFailures })}`, { cause: error });
   }
 }
 

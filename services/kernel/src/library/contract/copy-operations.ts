@@ -64,3 +64,18 @@ export type CopyMutationWork = Readonly<{
   eventFence: CopyBound;
   terminal: CopyBound;
 }>;
+
+/** Native owners supply static work descriptions; planning never loads their runners. */
+export interface CopyOperationWork {
+  account: {
+    floor(route: number, accountId: string): CopyBound;
+    share(route: number, accountId: string): CopyBound;
+    command(route: number, accountId: string): CopyBound;
+  };
+  sessionPartitionWork(partition: number): CopyBound;
+  sessionProfileMigrationWork(route: number, accountId: string): CopyBound;
+  sessionReadTimeWork(): CopyBound;
+  sessionReleaseWork(digest: string, active?: boolean): CopyBound;
+  sessionShelfWork(route: number, accountId: string, counters: boolean): CopyBound;
+  sessionSourceWork(subjectId: string, withProfile: boolean): CopyBound;
+}

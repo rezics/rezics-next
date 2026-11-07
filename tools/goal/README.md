@@ -1578,8 +1578,13 @@ prefix. It runs `bun scripts/page-data-check.ts`, records each section's class a
 `flow_events`, and includes the section results by run in flow reports. A section moving from `DATA`, `EMPTY`,
 `UNAUTHORIZED` or `UNAVAILABLE` to `API`, `WEB` or `SEED` returns to the latest integrated task that changed one of
 its mapped files when its retained session can resume; otherwise one repair task is dispatched to that section's
-Goal. A local-stack boot failure is recorded and sent to the supermanager with its first substantive error line in the same
-run, skipping Task `$ ` command echoes, retaining the useful log reference, and redacting credentials.
+Goal. Boot and check failures write their bounded captured stack output, plus failing command output when present, to
+`stateDirectory/page-data-failures/<runId>-<phase>.log`; the supermanager notice includes that log path. When the stack
+exits, the notice selects its final substantive error line and skips Task command echoes. When readiness expires while
+the stack remains alive, the notice uses the last failed probe with its origin and HTTP status or error. Logs and notices
+redact recognized credentials.
+
+Decision: persist each bounded page-data boot/check transcript in a run-scoped state-directory log, name that path in the supermanager notice, report the terminal process error or final origin-specific readiness probe, and redact recognized credentials.
 
 A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and tells the manager to
 split them into a dev task. Without a `target` line it starts from `dev` and lands there mechanically, with unlimited

@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, createRef, StrictMode, type ReactNode } from 'react';
 import type { TurnstileHandle } from '../src/turnstile.tsx';
@@ -48,12 +48,25 @@ document.head.appendChild = <T extends Node>(node: T): T => {
 };
 const { createRoot } = await import('react-dom/client');
 const { TurnstileWidget, loadTurnstile } = await import('../src/turnstile.tsx');
+const registration = await import('../src/registration-page');
 const { Route } = await import('../src/routes/signup');
 const { Route: LoginRoute } = await import('../src/routes/login');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider, Outlet } =
   await import('@tanstack/react-router');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 overwriteGetLocale(() => 'en');
+
+beforeAll(() => {
+  for (const [name, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
+  overwriteGetLocale(() => 'en');
+});
+const mountedOwners = new Set<() => Promise<void>>();
+afterEach(async () => {
+  for (const close of mountedOwners) await close();
+  const fetchDescriptor = previous.get('fetch')!;
+  Object.defineProperty(globalThis, 'fetch', fetchDescriptor);
+});
 
 afterAll(async () => {
   for (const [name, descriptor] of previous) {
@@ -143,6 +156,15 @@ async function mounted() {
   document.body.append(host);
   const root = createRoot(host);
   let closed = false;
+  const close = async () => {
+    if (closed) return;
+    closed = true;
+    await act(async () => root.unmount());
+    host.remove();
+    mountedOwners.delete(close);
+    await flush();
+  };
+  mountedOwners.add(close);
   return {
     host,
     async render(node: ReactNode) {
@@ -154,14 +176,9 @@ async function mounted() {
       closed = true;
       root.unmount();
       host.remove();
+      mountedOwners.delete(close);
     },
-    async close() {
-      if (closed) return;
-      closed = true;
-      await act(async () => root.unmount());
-      host.remove();
-      await flush();
-    },
+    close,
   };
 }
 async function withWidget(run: (fixture: Awaited<ReturnType<typeof widget>>) => Promise<void>) {
@@ -427,17 +444,59 @@ test('unmount before load/ready and retirement inside render suppress late work 
   }
 });
 
+// Advice is a separate read, never a registration/authentication acknowledgement.
+const adviceQueries: string[] = [];
+function mutations(fetch: typeof globalThis.fetch) {
+  globalThis.fetch = (async (input, init) => {
+    if (String(input) === '/signin/page') {
+      adviceQueries.push(JSON.parse(String(init?.body)).query);
+      return Response.json({
+        methods: { password: true, passkey: true },
+        viewer: { kind: 'signed-out' },
+        continuation: { href: '/security', requires_sign_in: true },
+      });
+    }
+    return fetch(input, init);
+  }) as typeof globalThis.fetch;
+}
+
 async function signup() {
   delete window.turnstile;
   const ui = await mounted();
   const config = { siteKey: 'default-page-key', scriptUrl: source() };
+  const advice = spyOn(registration, 'readRegistrationPage').mockImplementation(async () =>
+    registration.parseRegistrationPage(
+      {
+        kind: 'registration',
+        viewer: null,
+        requirements: {
+          handle: { minLength: 3, maxLength: 64 },
+          email: { maxLength: 254 },
+          password: { minLength: 8, maxLength: 128 },
+          verification: { provider: 'turnstile', required: true },
+        },
+        verification: { configured: true },
+        actions: { register: true, continue: false },
+      },
+      config,
+    ),
+  );
+  const close = ui.close;
+  ui.close = async () => {
+    try {
+      await close();
+    } finally {
+      advice.mockRestore();
+      mountedOwners.delete(ui.close);
+    }
+  };
+  mountedOwners.add(ui.close);
   const rootRoute = createRootRoute({ component: Outlet });
-  // Mount the actual file route; only its server configuration read is controlled.
+  // Mount the real route; control its current advice boundary, not an unused loader.
   const route = Route.update({
     id: '/signup',
     path: '/signup',
     getParentRoute: () => rootRoute,
-    loader: () => config,
   } as never);
   const query =
     '?client_id=web&state=opaque&resource=one&resource=two&empty=&sig=private&exp=1&prompt=login&max_age=600';
@@ -448,12 +507,22 @@ async function signup() {
     ]),
     history: createMemoryHistory({ initialEntries: [`/signup${query}`] }),
   });
-  await router.load();
-  await ui.render(createElement(RouterProvider, { router }));
+  try {
+    await router.load();
+    await ui.render(createElement(RouterProvider, { router }));
+    expect(
+      ui.host.querySelector('input[name=handle]'),
+      'native registration advice renders the real form',
+    ).not.toBeNull();
+  } catch (error) {
+    await ui.close();
+    throw error;
+  }
   const input = (name: string) => ui.host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
   const fill = async (name: string, value: string) =>
     flush(() => {
       // Bypass React's value tracker so the event represents a person's edit.
+      expect(input(name), `the mounted form contains ${name}`).not.toBeNull();
       Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, 'value')!.set!.call(input(name), value);
       input(name).dispatchEvent(new dom.Event('input', { bubbles: true }) as unknown as Event);
     });
@@ -467,21 +536,30 @@ async function signup() {
     [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent === 'Retry security check',
     )!;
+  const retryOriginal = () =>
+    flush(() => {
+      const button = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (item) => item.textContent === 'Retry original attempt',
+      )!;
+      expect(button, 'uncertain creation has an explicit retry').toBeDefined();
+      button.click();
+    });
   const fillAll = async () => {
     await fill('handle', 'Reader_1');
     await fill('email', 'reader@example.test');
     await fill('password', 'private-password');
+    await fill('confirm', 'private-password');
   };
-  return { ui, config, query, router, fill, fillAll, input, submit, retry };
+  return { ui, config, query, router, fill, fillAll, input, submit, retry, retryOriginal };
 }
 
 test('mounted default signup recovers a failed script by explicit accessible retry and retains its fields', async () => {
   const page = await signup();
   const calls: unknown[] = [];
-  globalThis.fetch = (async (...args: unknown[]) => {
+  mutations((async (...args: unknown[]) => {
     calls.push(args);
     throw Error('No request expected');
-  }) as typeof fetch;
+  }) as typeof fetch);
   try {
     await page.fillAll();
     const oldScript = scripts().at(-1)!;
@@ -502,6 +580,7 @@ test('mounted default signup recovers a failed script by explicit accessible ret
     expect(page.input('handle').value).toBe('Reader_1');
     expect(page.input('email').value).toBe('reader@example.test');
     expect(page.input('password').value).toBe('private-password');
+    expect(page.input('confirm').value).toBe('private-password');
     expect(page.ui.host.querySelector(`a[href="/login${page.query}"]`)).not.toBeNull();
     await page.submit();
     expect(calls).toHaveLength(0);
@@ -515,7 +594,7 @@ test('mounted default signup preserves the key and original request token, consu
   const api = provider();
   const requests: { path: string; init: RequestInit; body: Record<string, unknown> }[] = [];
   let release!: () => void;
-  globalThis.fetch = (async (path: string, init: RequestInit) => {
+  mutations((async (path: string, init: RequestInit) => {
     requests.push({ path, init, body: JSON.parse(String(init.body)) });
     if (requests.length === 1) {
       await new Promise<void>((resolve) => {
@@ -524,27 +603,31 @@ test('mounted default signup preserves the key and original request token, consu
       throw Error('network failed');
     }
     return Response.json({ error: 'handle_unavailable' }, { status: 409 });
-  }) as typeof fetch;
+  }) as typeof fetch);
   try {
     await page.fillAll();
     await scriptEvent(scripts().at(-1)!, 'load', api.api);
     await flush(() => api.widgets[0]!.options.callback('original-token'));
+    const retiredInputs = [...page.ui.host.querySelectorAll<HTMLInputElement>('input')];
     await page.submit();
     expect(requests).toHaveLength(1);
     await page.submit();
     expect(requests).toHaveLength(1);
-    expect(page.ui.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+    expect(page.ui.host.querySelector('button[type=submit]')).toBeNull();
+    expect(page.input('password').readOnly).toBe(true);
     await flush(() => api.widgets[0]!.options.callback('changed-while-pending'));
     expect(requests[0]!.body.turnstile_token).toBe('original-token');
     await flush(release);
+    expect(retiredInputs.every((input) => input.value === '')).toBe(true);
     await page.submit();
+    await page.retryOriginal();
     expect(requests).toHaveLength(1);
     const current = api.widgets.at(-1)!.options;
     await flush(() => {
       api.widgets[0]!.options.callback('retired-token');
       current.callback('fresh-token');
     });
-    await page.submit();
+    await page.retryOriginal();
     expect(requests).toHaveLength(2);
     expect(requests[1]!.body).toEqual({ ...requests[0]!.body, turnstile_token: 'fresh-token' });
     expect(requests[0]!.body.key).toMatch(/^[a-f0-9]{32}$/);
@@ -554,14 +637,14 @@ test('mounted default signup preserves the key and original request token, consu
           request.path === '/signup' && request.init.credentials === 'same-origin' && request.init.redirect === 'error',
       ),
     ).toBe(true);
-    expect(page.input('handle').getAttribute('aria-describedby')).toBe('signup-handle-error');
-    expect(document.activeElement).toBe(page.input('handle'));
-    for (const [field, value] of Object.entries({
-      handle: 'Reader_1',
-      email: 'reader@example.test',
-      password: 'private-password',
-    }))
-      expect(page.input(field).value).toBe(value);
+    // A later refusal cannot turn an earlier unknown write into an editable draft.
+    expect(page.ui.host.querySelector('input')).toBeNull();
+    const uncertain = page.ui.host.querySelector('[role=alert]')!;
+    expect(uncertain.textContent).toContain('may have completed');
+    expect(uncertain.textContent).toContain('reader_1');
+    expect(uncertain.textContent).toContain('reader@example.test');
+    expect(uncertain.textContent).not.toContain('private-password');
+    expect(document.activeElement?.contains(uncertain)).toBe(true);
   } finally {
     release?.();
     await page.ui.close();
@@ -572,10 +655,10 @@ test('mounted default signup refuses invalid passwords before dispatch without c
   const page = await signup();
   const api = provider();
   let requests = 0;
-  globalThis.fetch = (async () => {
+  mutations((async () => {
     requests++;
     return Response.json({ error: 'unavailable' }, { status: 503 });
-  }) as typeof fetch;
+  }) as typeof fetch);
   try {
     await page.fillAll();
     await scriptEvent(scripts().at(-1)!, 'load', api.api);
@@ -590,6 +673,7 @@ test('mounted default signup refuses invalid passwords before dispatch without c
       expect(api.live.size).toBe(1);
     }
     await page.fill('password', 'valid-password');
+    await page.fill('confirm', 'valid-password');
     await page.submit();
     expect(requests).toBe(1);
     expect(api.resets).toHaveLength(1);
@@ -635,10 +719,10 @@ test('mounted default signup exposes bounded loading and API failure recovery th
       const page = await signup();
       const api = provider();
       let requests = 0;
-      globalThis.fetch = (async () => {
+      mutations((async () => {
         requests++;
         throw Error('No challenge token');
-      }) as typeof fetch;
+      }) as typeof fetch);
       try {
         await page.fillAll();
         expect(page.ui.host.querySelector('[role="status"]')!.textContent).toContain('Loading');
@@ -680,12 +764,12 @@ test('default signup success still sends the original signup and signin protocol
   window.location.assign = (target) => {
     navigations.push(String(target));
   };
-  globalThis.fetch = (async (path: string, init: RequestInit) => {
+  mutations((async (path: string, init: RequestInit) => {
     requests.push({ path, init, body: JSON.parse(String(init.body)) });
     return path === '/signup'
       ? Response.json({ accountId: 'account-id' }, { status: 201 })
       : Response.json(nativeSignInProof(JSON.parse(String(init.body))));
-  }) as typeof fetch;
+  }) as typeof fetch);
   try {
     await page.fillAll();
     await scriptEvent(scripts().at(-1)!, 'load', api.api);
@@ -694,7 +778,7 @@ test('default signup success still sends the original signup and signin protocol
     expect(requests.map((request) => request.path)).toEqual(['/signup', '/signin']);
     expect(requests[0]!.body).toEqual({
       key: expect.stringMatching(/^[a-f0-9]{32}$/),
-      handle: 'Reader_1',
+      handle: 'reader_1',
       email: 'reader@example.test',
       password: 'private-password',
       turnstile_token: 'exact-submitted-token',
@@ -735,57 +819,65 @@ test('default signup success still sends the original signup and signin protocol
   }
 });
 
-test('default signup keeps handle privacy, rate limits, outages and recovery links while refreshing each failed request', async () => {
-  const page = await signup();
-  const api = provider();
-  let status = 409;
-  let code = 'registration_denied';
-  const bodies: Record<string, unknown>[] = [];
-  globalThis.fetch = (async (_path: string, init: RequestInit) => {
-    bodies.push(JSON.parse(String(init.body)));
-    return Response.json(
-      { error: code, message: 'An account with this email already exists' },
-      { status, headers: { 'Retry-After': '37' } },
-    );
-  }) as typeof fetch;
-  try {
-    await page.fillAll();
-    await scriptEvent(scripts().at(-1)!, 'load', api.api);
-    for (const [nextStatus, nextCode] of [
-      [409, 'handle_unavailable'],
-      [409, 'registration_denied'],
-      [429, 'rate_limited'],
-      [503, 'unavailable'],
-    ] as const) {
-      status = nextStatus;
-      code = nextCode;
-      await flush(() => api.widgets.at(-1)!.options.callback(`token-${bodies.length}`));
+test('default signup keeps handle privacy, unsupported rate limits, outages and recovery links while refreshing each failed request', async () => {
+  for (const [status, code] of [
+    [409, 'handle_unavailable'],
+    [409, 'registration_denied'],
+    [429, 'rate_limited'],
+    [503, 'unavailable'],
+  ] as const) {
+    const page = await signup();
+    const api = provider();
+    const bodies: Record<string, unknown>[] = [];
+    mutations((async (_path: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      return Response.json(
+        status === 429 || status === 503
+          ? { error: code, message: 'An account with this email already exists' }
+          : { error: code },
+        { status, headers: { 'Retry-After': '37' } },
+      );
+    }) as typeof fetch);
+    try {
+      await page.fillAll();
+      await scriptEvent(scripts().at(-1)!, 'load', api.api);
+      await flush(() => api.widgets.at(-1)!.options.callback('first-token'));
       await page.submit();
+      expect(bodies).toHaveLength(1);
       expect(page.ui.host.textContent).not.toContain('An account with this email already exists');
-      expect(page.input('email').getAttribute('aria-describedby')).toBeNull();
       if (code === 'handle_unavailable') {
+        expect(page.input('email').getAttribute('aria-describedby')).toBeNull();
         expect(document.activeElement).toBe(page.input('handle'));
         expect(page.ui.host.querySelector('#signup-handle-error')!.textContent).toContain('taken or reserved');
       } else {
-        const alert = page.ui.host.querySelector('[role="alert"]')!;
-        expect(alert.textContent).not.toContain('reader@example.test');
-        if (status === 409) {
-          expect(alert.querySelector(`a[href="/login${page.query}"]`)).not.toBeNull();
-          expect(alert.querySelector(`a[href="/recovery${page.query}"]`)).not.toBeNull();
+        const alert = page.ui.host.querySelector('[role=alert]')!;
+        expect(alert.querySelector(`a[href="/login${page.query}"]`)).not.toBeNull();
+        expect(alert.querySelector(`a[href="/recovery${page.query}"]`)).not.toBeNull();
+        expect(page.ui.host.querySelector('input')).toBeNull();
+        if (status === 409) expect(alert.textContent).not.toContain('reader@example.test');
+        else {
+          // The installed writer has no 429 branch: unsupported output stays unknown.
+          expect(alert.textContent).toContain('may have completed');
+          expect(alert.textContent).toMatch(/try again|later/i);
+          expect(alert.textContent).not.toContain('37');
+          await page.submit();
+          await page.retryOriginal();
+          expect(bodies).toHaveLength(1);
+          await flush(() => api.widgets.at(-1)!.options.callback('fresh-token'));
+          await page.retryOriginal();
+          expect(bodies).toHaveLength(2);
+          expect(bodies[1]).toEqual({ ...bodies[0], turnstile_token: 'fresh-token' });
         }
-        if (status === 429) expect(alert.textContent).toContain('37');
-        if (status === 503) expect(alert.textContent).toMatch(/try again|later/i);
       }
       const count = bodies.length;
-      await page.submit();
+      if (page.ui.host.querySelector('form')) await page.submit();
       expect(bodies).toHaveLength(count);
+      expect(new Set(bodies.map((body) => body.key)).size).toBe(1);
+      expect(new Set(bodies.map((body) => body.turnstile_token)).size).toBe(count);
+      expect(api.resets).toHaveLength(count);
+    } finally {
+      await page.ui.close();
     }
-    expect(bodies).toHaveLength(4);
-    expect(new Set(bodies.map((body) => body.key)).size).toBe(1);
-    expect(new Set(bodies.map((body) => body.turnstile_token)).size).toBe(4);
-    expect(api.resets).toHaveLength(4);
-  } finally {
-    await page.ui.close();
   }
 });
 
@@ -828,12 +920,12 @@ test('leaving default signup during a pending request prevents late page state a
   const page = await signup();
   const api = provider();
   let release!: () => void;
-  globalThis.fetch = (async () => {
+  mutations((async () => {
     await new Promise<void>((resolve) => {
       release = resolve;
     });
     return Response.json({ error: 'handle_unavailable' }, { status: 409 });
-  }) as typeof fetch;
+  }) as typeof fetch);
   try {
     await page.fillAll();
     await scriptEvent(scripts().at(-1)!, 'load', api.api);
@@ -902,14 +994,14 @@ test('created accounts keep sign-in failure feedback and finish through login wi
     const page = await signup();
     const api = provider();
     const paths: string[] = [];
-    globalThis.fetch = (async (path: string) => {
+    mutations((async (path: string) => {
       paths.push(path);
       if (path === '/signup') return Response.json({ accountId: 'account-id' }, { status: 201 });
       return Response.json(
         { error: status === 401 ? 'authentication_denied' : status === 429 ? 'rate_limited' : 'unavailable' },
         { status, headers: { 'Retry-After': '37' } },
       );
-    }) as typeof fetch;
+    }) as typeof fetch);
     try {
       await page.fillAll();
       await scriptEvent(scripts().at(-1)!, 'load', api.api);
@@ -933,17 +1025,19 @@ test('created accounts keep sign-in failure feedback and finish through login wi
       expect(login.getAttribute('href')).toBe(`/login${page.query}`);
       expect(page.ui.host.querySelector('a[href^="/recovery"]')!.getAttribute('href')).toBe(`/recovery${page.query}`);
       await flush(() => page.router.history.push(login.getAttribute('href')!));
-      await page.router.load();
+      await flush(() => page.router.load());
+      expect(adviceQueries.at(-1)).toBe(page.query);
+      expect(page.input('email')).not.toBeNull();
       const assign = window.location.assign;
       const targets: string[] = [];
       window.location.assign = (target) => {
         targets.push(String(target));
       };
       try {
-        globalThis.fetch = (async (path: string, init: RequestInit) => {
+        mutations((async (path: string, init: RequestInit) => {
           paths.push(path);
           return Response.json(nativeSignInProof(JSON.parse(String(init.body))));
-        }) as typeof fetch;
+        }) as typeof fetch);
         await page.fill('email', 'reader@example.test');
         await page.fill('password', 'private-password');
         await page.submit();
@@ -974,7 +1068,7 @@ for (const stage of ['creation', 'sign-in'])
         };
         let release!: (response: Response) => void;
         let signInBody: { client_id: string; scope: string[] } | undefined;
-        globalThis.fetch = (async (path: string, init: RequestInit) => {
+        mutations((async (path: string, init: RequestInit) => {
           paths.push(path);
           if (stage === 'sign-in' && path === '/signup')
             return Response.json({ accountId: 'account-id' }, { status: 201 });
@@ -982,9 +1076,10 @@ for (const stage of ['creation', 'sign-in'])
           return new Promise<Response>((resolve) => {
             release = resolve;
           });
-        }) as typeof fetch;
+        }) as typeof fetch);
         try {
           await page.fillAll();
+          const retiredInputs = [...page.ui.host.querySelectorAll<HTMLInputElement>('input')];
           await scriptEvent(scripts().at(-1)!, 'load', api.api);
           await flush(() => api.widgets[0]!.options.callback('signup-token'));
           await page.submit();
@@ -1001,9 +1096,11 @@ for (const stage of ['creation', 'sign-in'])
               );
           } else
             await flush(() => {
-              window.dispatchEvent(new dom.Event('pagehide') as unknown as Event);
+              window.dispatchEvent(Object.assign(new dom.Event('pagehide'), { persisted: true }) as unknown as Event);
               window.dispatchEvent(Object.assign(new dom.Event('pageshow'), { persisted: true }) as unknown as Event);
             });
+          expect(retiredInputs.every((input) => input.value === '')).toBe(true);
+          const resets = api.resets.length;
           await flush(() =>
             release(
               Response.json(
@@ -1018,12 +1115,24 @@ for (const stage of ['creation', 'sign-in'])
               ),
             ),
           );
+          await flush(() => {
+            for (const widget of api.widgets) {
+              widget.options.callback('late-retired-token');
+              widget.options['expired-callback']();
+              widget.options['error-callback']();
+            }
+          });
+          expect(api.resets).toHaveLength(resets);
+          expect(api.live.size).toBe(0);
+          expect(retiredInputs.every((input) => input.value === '')).toBe(true);
           expect(paths).toEqual(stage === 'creation' ? ['/signup'] : ['/signup', '/signin']);
           expect(targets).toEqual([]);
           expect(page.ui.host.querySelector('[role="alert"]')).toBeNull();
           if (boundary !== 'unmount') {
-            for (const name of ['handle', 'email', 'password']) expect(page.input(name).value).toBe('');
-            expect(page.ui.host.querySelector('[role="status"]')?.textContent ?? '').not.toContain('created');
+            expect(page.ui.host.querySelector('input')).toBeNull();
+            expect(page.ui.host.textContent).toContain(
+              stage === 'creation' ? 'may have completed' : 'Your account was created',
+            );
           }
         } finally {
           window.location.assign = assign;

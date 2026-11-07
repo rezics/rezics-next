@@ -1,6 +1,11 @@
-import { builtinModules } from 'node:module';
+import { builtinModules, createRequire } from 'node:module';
+import type { Node } from 'oxc-parser';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, extname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:path';
+
+const { parseSync, Visitor } = createRequire(new URL('../package.json', import.meta.url))(
+  'oxc-parser',
+) as typeof import('oxc-parser');
 
 type PackageManifest = {
   name?: string;
@@ -75,7 +80,7 @@ function checkDirectory(root: string, workspaceDirectory: string, manifest: Pack
 
   for (const file of sourceFiles(workspaceDirectory)) {
     const source = readFileSync(file, 'utf8');
-    for (const specifier of collectModuleSpecifiers(source)) {
+    for (const specifier of collectModuleSpecifiers(file, source)) {
       if (isExemptSpecifier(specifier, aliases)) continue;
 
       const packageName = packageNameOf(specifier);
@@ -109,124 +114,39 @@ function isSourceFile(filename: string): boolean {
   return filename.endsWith('.d.ts') || sourceExtensions.has(extname(filename));
 }
 
-function collectModuleSpecifiers(source: string): string[] {
+function collectModuleSpecifiers(file: string, source: string): string[] {
+  const parsed = parseSync(file, source);
+  if (parsed.errors.length) throw new Error(`${file}: ${parsed.errors[0]!.message}`);
   const specifiers: string[] = [];
-  const codeStarts = codeCharacterMap(source);
-  const patterns = [
-    // Imports with a from clause, including default, named, namespace and type-only imports.
-    /\bimport\s+(?:type\s+)?(?:(?:[\w$]+)\s*,\s*)?(?:\{[^}]*\}|\*\s+as\s+[\w$]+|[\w$]+)?\s+from\s*(['"])([^'"]+)\1/g,
-    // Re-exports, including `export type` and namespace re-exports.
-    /\bexport\s+(?:type\s+)?(?:\*(?:\s+as\s+[\w$]+)?|\{[^}]*\})\s+from\s*(['"])([^'"]+)\1/g,
-    // Side-effect imports.
-    /\bimport\s*(['"])([^'"]+)\1/g,
-    // Literal dynamic imports and CommonJS require calls.
-    /\bimport\s*\(\s*(['"])([^'"]+)\1\s*\)/g,
-    /\brequire\s*\(\s*(['"])([^'"]+)\1\s*\)/g,
-  ];
+  const collect = (node: Node | null | undefined): void => {
+    if (node?.type === 'Literal' && typeof node.value === 'string') specifiers.push(node.value);
+  };
 
-  for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) {
-      if (!codeStarts[match.index ?? 0]) continue;
-      const specifier = match[2];
-      if (specifier !== undefined) specifiers.push(specifier);
-    }
-  }
+  // Visit syntax rather than import-shaped text: JSX, regexes and template substitutions all have distinct nodes.
+  new Visitor({
+    ImportDeclaration(node) {
+      collect(node.source);
+    },
+    ExportNamedDeclaration(node) {
+      collect(node.source);
+    },
+    ExportAllDeclaration(node) {
+      collect(node.source);
+    },
+    ImportExpression(node) {
+      collect(node.source);
+    },
+    TSImportType(node) {
+      collect(node.source);
+    },
+    TSExternalModuleReference(node) {
+      collect(node.expression);
+    },
+    CallExpression(node) {
+      if (node.callee.type === 'Identifier' && node.callee.name === 'require') collect(node.arguments[0]);
+    },
+  }).visit(parsed.program);
   return specifiers;
-}
-
-function codeCharacterMap(source: string): Uint8Array {
-  const code = new Uint8Array(source.length);
-  const regexPrefixWords = new Set([
-    'await',
-    'case',
-    'delete',
-    'do',
-    'else',
-    'in',
-    'instanceof',
-    'new',
-    'of',
-    'return',
-    'throw',
-    'typeof',
-    'void',
-    'yield',
-  ]);
-  let state: 'code' | 'single' | 'double' | 'template' | 'line-comment' | 'block-comment' | 'regex' = 'code';
-  let escaped = false;
-  let regexCharacterClass = false;
-  let canStartRegex = true;
-
-  for (let index = 0; index < source.length; index += 1) {
-    const character = source[index];
-    const next = source[index + 1];
-    if (state === 'code') {
-      if (character === '/' && next === '/') {
-        state = 'line-comment';
-        index += 1;
-      } else if (character === '/' && next === '*') {
-        state = 'block-comment';
-        index += 1;
-      } else if (character === "'") {
-        state = 'single';
-        escaped = false;
-        canStartRegex = false;
-      } else if (character === '"') {
-        state = 'double';
-        escaped = false;
-        canStartRegex = false;
-      } else if (character === '`') {
-        state = 'template';
-        escaped = false;
-        canStartRegex = false;
-      } else if (character === '/' && canStartRegex) {
-        state = 'regex';
-        escaped = false;
-        regexCharacterClass = false;
-      } else if (/[A-Za-z_$]/.test(character ?? '')) {
-        const start = index;
-        while (index + 1 < source.length && /[w$]/.test(source[index + 1]!)) index += 1;
-        code.fill(1, start, index + 1);
-        const word = source.slice(start, index + 1);
-        canStartRegex = regexPrefixWords.has(word);
-      } else if (/[0-9]/.test(character ?? '')) {
-        const start = index;
-        while (index + 1 < source.length && /[\w.]/.test(source[index + 1]!)) index += 1;
-        code.fill(1, start, index + 1);
-        canStartRegex = false;
-      } else {
-        code[index] = 1;
-        if (/\s/.test(character ?? '')) continue;
-        canStartRegex = ![')', ']', '}', '.', '++', '--'].includes(character ?? '');
-      }
-    } else if (state === 'line-comment') {
-      if (character === '\n') state = 'code';
-    } else if (state === 'block-comment') {
-      if (character === '*' && next === '/') {
-        state = 'code';
-        index += 1;
-      }
-    } else if (state === 'single' || state === 'double' || state === 'template') {
-      const delimiter = state === 'single' ? "'" : state === 'double' ? '"' : '`';
-      if (escaped) escaped = false;
-      else if (character === '\\') escaped = true;
-      else if (character === delimiter) {
-        state = 'code';
-        canStartRegex = false;
-      }
-    } else if (state === 'regex') {
-      if (escaped) escaped = false;
-      else if (character === '\\') escaped = true;
-      else if (character === '[') regexCharacterClass = true;
-      else if (character === ']') regexCharacterClass = false;
-      else if (character === '/' && !regexCharacterClass) {
-        state = 'code';
-        canStartRegex = false;
-        while (index + 1 < source.length && /[A-Za-z]/.test(source[index + 1]!)) index += 1;
-      }
-    }
-  }
-  return code;
 }
 
 function isExemptSpecifier(specifier: string, aliases: string[]): boolean {

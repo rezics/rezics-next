@@ -14,16 +14,18 @@ import {
   runCommand,
   withSingleCommandAttempt,
   type CommandTransaction,
+  type AuthoritativeTime,
 } from '../command/command.ts';
 import type {
+  NativePublicOutputApplication,
   NativePublicOutputBinding,
   PublicOutputCommandContext,
   PublicOutputDispositionSelection,
   LockPublicOutputDisposition,
   LockedPublicOutputDisposition,
-} from '../library/native-public-output-contract.ts';
-const native = () => import('../library/collection-source-native.ts');
-import type { CanonicalRangeKey } from '../library/collection-source-native.ts';
+} from '../library/contract/native-public-output.ts';
+import type { CollectionSourceRawKey } from '../library/contract/source.ts';
+type NativePublicOutputPort = NativePublicOutputApplication<CommandTransaction, Pool, AuthoritativeTime>;
 import type { PublicFilterSourceFactory } from './public-filter-source-contract.ts';
 import { createPublicFilterSourceBinding, type PublicFilterSourceDefinition } from './public-filter-source-binding.ts';
 import { publicFilterSource } from './public-filter-source.ts';
@@ -134,16 +136,16 @@ type Accepted = {
 type Cut = { home: number; original: string; terminal: string; generation: string; epoch: string };
 type Mapping = { original: string; terminal: string; epoch: string };
 type Plan = {
-  before: CanonicalRangeKey | null;
-  after: CanonicalRangeKey | null;
+  before: CollectionSourceRawKey | null;
+  after: CollectionSourceRawKey | null;
   exhausted: boolean;
-  rows: readonly CanonicalRangeKey[];
+  rows: readonly CollectionSourceRawKey[];
   mappings: Mapping[];
   cuts: Cut[];
 };
 type Progress = {
   version: string;
-  after_key: CanonicalRangeKey | null;
+  after_key: CollectionSourceRawKey | null;
   exhausted: boolean;
   manifest_digest: string;
   raw_count: string;
@@ -240,7 +242,7 @@ function context(
   pool: Pool,
   deadline: number,
   allowance: WorkAllowance,
-): PublicOutputCommandContext {
+): PublicOutputCommandContext<Pool, AuthoritativeTime> {
   return { pool, at: currentCommand(tx).time, deadline, allowance };
 }
 async function component(tx: CommandTransaction, purpose = PURPOSE): Promise<IdentityNativeReceipt> {
@@ -277,6 +279,7 @@ async function eligible(
   a: Accepted,
   work: NativeCollectionWork,
   deadline: number,
+  nativeOutput: NativePublicOutputPort,
 ): Promise<void> {
   const l = locator(a),
     pool = currentCommandResources(tx).pool;
@@ -297,15 +300,11 @@ async function eligible(
     return refuse('closure', 'changed');
   if (await one(tx, fenceSQL, [l.partition, l.captureId])) return refuse('fenced', 'changed');
   const held = await work.compose(async (allowance) =>
-    (await native()).revalidateNativePublicCollectionOutputHold(tx, a.binding, context(tx, pool, deadline, allowance)),
+    nativeOutput.revalidateNativePublicCollectionOutputHold(tx, a.binding, context(tx, pool, deadline, allowance)),
   );
   if (held.status !== 'locked' || !equal(held.binding, a.binding)) return refuse('current', 'changed');
   const current = await work.compose(async (allowance) =>
-    (await native()).lockNativePublicCollectionOutput(
-      tx,
-      a.binding.tuple.identity,
-      context(tx, pool, deadline, allowance),
-    ),
+    nativeOutput.lockNativePublicCollectionOutput(tx, a.binding.tuple.identity, context(tx, pool, deadline, allowance)),
   );
   if (current.status !== 'locked' || !samePublication(current.tuple, a.binding.tuple))
     return refuse('current', 'changed');
@@ -317,7 +316,10 @@ function samePublication(a: NativePublicOutputBinding['tuple'], b: NativePublicO
 }
 
 /** Every call owns one finite frame. Command retries are surrendered; continuation is persisted. */
-export function createPublicIdentityOutputCapture(config: Parameters<PublicFilterSourceFactory>[0]) {
+export function createPublicIdentityOutputCapture(
+  config: Parameters<PublicFilterSourceFactory>[0],
+  nativeOutput: NativePublicOutputPort,
+) {
   const { pool } = config;
   const binding = createPublicFilterSourceBinding(pool, config.routeKey, config.access);
   const source = publicFilterSource(config);
@@ -421,14 +423,14 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
             )
           )
             return refuse('binding', 'changed');
-          await eligible(tx, a, work, options.deadline);
+          await eligible(tx, a, work, options.deadline, nativeOutput);
           await component(tx);
           return { status: 'accepted' as const, capture: locator(a) };
         }
         if (await one(tx, existingSQL, [home, r.captureId])) return refuse('provenance');
         const accepted = await component(tx);
         const result = await work.compose(async (allowance) =>
-          (await native()).bindAndHoldNativePublicCollectionOutput(
+          nativeOutput.bindAndHoldNativePublicCollectionOutput(
             tx,
             { captureId: r.captureId, definitionDigest: hash(r.definition), publication: r.publication },
             context(tx, pool, options.deadline, allowance),
@@ -628,7 +630,7 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
     return execute(options, async (work) => {
       const a = await read(options.deadline, (tx) => load(tx, l));
       let p = await command(l.partition, options.deadline, l.captureId, async (tx) => {
-        await eligible(tx, a, work, options.deadline);
+        await eligible(tx, a, work, options.deadline, nativeOutput);
         const p = await one<Progress>(tx, progressSQL, [l.partition, l.captureId]);
         if (!p || p.version !== continuation) return refuse('continuation', 'changed');
         await component(tx);
@@ -637,7 +639,7 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
       if (p.exhausted) return { status: 'exhausted' as const, capture: l, continuation: p.version };
       if (!p.pending) {
         const page = await work.compose(async (allowance) =>
-          (await native()).readNativePublicCollectionOutput(pool, a.binding.tuple.identity, {
+          nativeOutput.readNativePublicCollectionOutput(pool, a.binding.tuple.identity, {
             allowance,
             deadline: options.deadline,
             after: p!.after_key,
@@ -648,12 +650,12 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
           return refuse('current', 'changed');
         if (
           page.rows.length > Math.min(inputLimit, 8) ||
-          page.rows.some((r: CanonicalRangeKey) => r.driver !== 'output') ||
+          page.rows.some((r: CollectionSourceRawKey) => r.driver !== 'output') ||
           !equal(page.after, page.rows.at(-1) ?? p.after_key) ||
           (!page.exhausted && (!page.rows.length || equal(page.after, p.after_key)))
         )
           return refuse('continuation');
-        const originals = [...new Set<string>(page.rows.map((r: CanonicalRangeKey) => r.storedSubjectId))];
+        const originals = [...new Set<string>(page.rows.map((r: CollectionSourceRawKey) => r.storedSubjectId))];
         const first = await currentMappings(originals, work, options.deadline);
         const terminals = await currentMappings([...new Set(first.map((m) => m.terminal))], work, options.deadline);
         if (
@@ -674,7 +676,7 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
           65536,
         );
         await command(l.partition, options.deadline, l.captureId, async (tx) => {
-          await eligible(tx, a, work, options.deadline);
+          await eligible(tx, a, work, options.deadline, nativeOutput);
           const now = await one<Progress>(tx, progressSQL, [l.partition, l.captureId]);
           if (!now || now.version !== continuation || now.pending) return refuse('continuation', 'changed');
           if (
@@ -702,7 +704,7 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
       )
         return refuse('closure', 'changed');
       return command(l.partition, options.deadline, l.captureId, async (tx) => {
-        await eligible(tx, a, work, options.deadline);
+        await eligible(tx, a, work, options.deadline, nativeOutput);
         const now = await one<Progress>(tx, progressSQL, [l.partition, l.captureId]);
         if (!now || now.version !== continuation || !equal(now.pending, plan)) return refuse('continuation', 'changed');
         const version = (BigInt(now.version) + 1n).toString(),
@@ -743,7 +745,7 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
     return execute(options, (work) =>
       command(l.partition, options.deadline, l.captureId, async (tx) => {
         const a = await load(tx, l);
-        await eligible(tx, a, work, options.deadline);
+        await eligible(tx, a, work, options.deadline, nativeOutput);
         const previous = await one<Seal>(tx, sealSQL, [l.partition, l.captureId]);
         if (previous) {
           await component(tx);
@@ -776,7 +778,7 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
     return execute(options, (work) =>
       command(l.partition, options.deadline, l.captureId, async (tx) => {
         const a = await load(tx, l);
-        await eligible(tx, a, work, options.deadline);
+        await eligible(tx, a, work, options.deadline, nativeOutput);
         const s = await one<Seal>(tx, sealSQL, [l.partition, l.captureId]);
         if (!s) return refuse('closure');
         await component(tx);
@@ -804,7 +806,7 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
     return execute(options, (work) =>
       command(l.partition, options.deadline, l.captureId, async (tx) => {
         const a = await load(tx, l);
-        await eligible(tx, a, work, options.deadline);
+        await eligible(tx, a, work, options.deadline, nativeOutput);
         const s = await one<Seal>(tx, sealSQL, [l.partition, l.captureId]);
         if (!s) return refuse('closure');
         const rows =
@@ -839,7 +841,7 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
     return execute(options, (work) =>
       command(l.partition, options.deadline, l.captureId, async (tx) => {
         const a = await load(tx, l);
-        await eligible(tx, a, work, options.deadline);
+        await eligible(tx, a, work, options.deadline, nativeOutput);
         if (!(await one(tx, sealSQL, [l.partition, l.captureId]))) return refuse('closure');
         const n = await component(tx);
         // Intent precedes every foreign writer dispatch. Missing closure of even an uncertain intent retains custody.
@@ -1006,14 +1008,14 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
       const result =
         kind === 'applied'
           ? await work.compose(async (allowance) =>
-              (await native()).transferNativePublicCollectionOutputHold(
+              nativeOutput.transferNativePublicCollectionOutputHold(
                 tx,
                 original,
                 context(tx, pool, deadline, allowance),
               ),
             )
           : await work.compose(async (allowance) =>
-              (await native()).releaseNativePublicCollectionOutputHold(
+              nativeOutput.releaseNativePublicCollectionOutputHold(
                 tx,
                 original,
                 context(tx, pool, deadline, allowance),
@@ -1029,7 +1031,7 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
     const seal = await one<Seal>(tx, sealSQL, [l.partition, l.captureId]);
     if (kind === 'applied') {
       if (!seal) return refuse('closure');
-      await eligible(tx, a, work, deadline);
+      await eligible(tx, a, work, deadline, nativeOutput);
     } else if (BigInt(p.closure_after) < BigInt(p.version) + (p.pending ? 1n : 0n)) return refuse('closure');
     const fence = await one<{ kind: string }>(tx, fenceSQL, [l.partition, l.captureId]);
     if (fence && fence.kind !== kind) return refuse('fenced');
@@ -1107,18 +1109,14 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
     const result =
       kind === 'applied'
         ? await work.compose(async (allowance) =>
-            (await native()).transferNativePublicCollectionOutputHold(
+            nativeOutput.transferNativePublicCollectionOutputHold(
               tx,
               selection,
               context(tx, pool, deadline, allowance),
             ),
           )
         : await work.compose(async (allowance) =>
-            (await native()).releaseNativePublicCollectionOutputHold(
-              tx,
-              selection,
-              context(tx, pool, deadline, allowance),
-            ),
+            nativeOutput.releaseNativePublicCollectionOutputHold(tx, selection, context(tx, pool, deadline, allowance)),
           );
     if (result.status !== 'transferred' && result.status !== 'released') return refuse('current');
     const nativeReceipt = result.status === 'transferred' ? result.transfer : result.release;
@@ -1163,11 +1161,11 @@ export function createPublicIdentityOutputCapture(config: Parameters<PublicFilte
 }
 
 /** Commerce calls this on the actual original Collection command. No caller payload is evidence. */
-export const resolvePublicIdentityOutputCaptureDisposition: LockPublicOutputDisposition = async (
-  tx,
-  selection,
-  ctx,
-) => {
+export const resolvePublicIdentityOutputCaptureDisposition: LockPublicOutputDisposition<
+  CommandTransaction,
+  Pool,
+  AuthoritativeTime
+> = async (tx, selection, ctx) => {
   const command = currentCommand(tx),
     resources = currentCommandResources(tx);
   if (
@@ -1285,7 +1283,8 @@ export const resolvePublicIdentityOutputCaptureDisposition: LockPublicOutputDisp
 export async function lockPublicIdentityOutputCaptureCurrent(
   tx: CommandTransaction,
   selection: T.PublicIdentityOutputCapture | IdentityScopeKey,
-  ctx: PublicOutputCommandContext,
+  ctx: PublicOutputCommandContext<Pool, AuthoritativeTime>,
+  nativeOutput: NativePublicOutputPort,
   retained = false,
 ) {
   const command = currentCommand(tx),
@@ -1320,7 +1319,7 @@ export async function lockPublicIdentityOutputCaptureCurrent(
         }
         const a = await load(tx, l);
         if (!('kind' in selection) && !equal(scope(a), selection)) return refuse('binding');
-        if (!retained) await eligible(tx, a, work, ctx.deadline);
+        if (!retained) await eligible(tx, a, work, ctx.deadline, nativeOutput);
         const seal = await one<Seal>(tx, sealSQL, [l.partition, l.captureId]);
         if (!retained && !seal) return refuse('closure');
         return {
@@ -1350,6 +1349,7 @@ export async function readPublicIdentityOutputCaptureCurrent(
   pool: Pool,
   selection: T.PublicIdentityOutputCapture | IdentityScopeKey,
   options: T.PublicIdentityOutputWork,
+  nativeOutput: NativePublicOutputPort,
 ) {
   const work = new NativeCollectionWork(options.allowance, options.deadline);
   const home = 'kind' in selection ? selection.partition : identityScopeAddress(selection).partition;
@@ -1362,7 +1362,12 @@ export async function readPublicIdentityOutputCaptureCurrent(
         withSingleCommandAttempt(() =>
           runCommand(pool, { partition: home, deadline: options.deadline }, async (tx) => {
             const result = await work.compose((allowance) =>
-              lockPublicIdentityOutputCaptureCurrent(tx, selection, context(tx, pool, options.deadline, allowance)),
+              lockPublicIdentityOutputCaptureCurrent(
+                tx,
+                selection,
+                context(tx, pool, options.deadline, allowance),
+                nativeOutput,
+              ),
             );
             if (result.status !== 'current') return refuse('current', 'changed');
             await component(tx);

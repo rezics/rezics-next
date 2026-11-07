@@ -12,10 +12,12 @@ import { createProgressOperationApplication } from './progress-operations.ts';
 export { createOwnerQueryApplication } from './owner-query.ts';
 export { createSourceCaptureApplication, createOrderedCollectionSourceApplication } from './source-capture.ts';
 export { createMemberPreparationApplication, createMembersWorkDefinitionApplication } from './member-preparation.ts';
+export { createMembersPreparationApplication } from './members-preparation.ts';
 export { createPublicationAdmissionApplication } from './publication.ts';
 export { createIdentityNativeApplication } from './identity-native.ts';
 export { createEntryProgressApplication } from './entry-progress.ts';
 export { createProgressOperationApplication } from './progress-operations.ts';
+export { createNativePublicOutputApplication } from './native-public-output.ts';
 
 export function createLibraryApplications(
   capabilities: LibraryCapabilities & { search?: unknown; access?: unknown; routeKey?: Uint8Array },

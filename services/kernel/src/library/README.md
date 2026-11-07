@@ -27,6 +27,8 @@ already composed Access capability. No additional Source registry, work plan, pu
 
 Decision: Members Source paths use one memoized callable declaration, and Shelf maintenance reads statement-bound values through memoized accessors during use; these preserve path and cost identity without load-time cross-module reads.
 
+Decision: Library installs one Members preparation application with explicit owner-filter native and durable reservation capabilities; ordinary planning, prepared reads, worker execution and scoped Source getters use that instance, while compatibility calls delegate to it.
+
 Acceptance choice: extend the existing native Source outcome test through default composed admission, and add one
 missing-worker-runtime case; preserve all existing outcome assertions. Workspace typing is worker acceptance;
 native growth, public Search settlement/discovery and default-worker runtime proof remain in the owning Goal walks.
@@ -124,6 +126,17 @@ and response/input limits. Full frozen acceptance and independent native growth 
 slot, parallel reader, route, writer, score cache or GET repair is introduced.
 
 ## Module layers and measured boundary
+
+Copy applications retain one supplied native account authority, released-definition reader, profile-source reader
+and work catalog through create/read/list/update/delete/restore, inventory and condition presentation. Composition
+binds the same real producers for server, worker and standalone presentation preloads. Compatibility factories
+resolve that installed binding. Current profile selection uses the supplied active-release reader; historical kind,
+status and condition meaning uses only each exact accepting release and profile pin. Static operation construction
+consumes supplied work descriptions; statement execution shares a separate accounting frame with the original
+command/client/deadline. The pre-profile row gate loads no current-source adapter. Native locks, open-loan checks,
+disposition constraints, receipt replay and subject-disclosure fences retain their authority. Focused construction
+tests pin producer propagation and exact retained/current meaning; this migration's worker acceptance is typing only,
+with native/browser/growth acceptance remaining in their existing Goal walks.
 
 Collection rule authority consumes only `CollectionRuleAuthorityCapability.readAccount`. Composition supplies the
 Access-owned `createNativeCollectionRuleAccountAuthority` capability, preserving the original client and account key,
@@ -296,9 +309,12 @@ Current implementation evidence is narrower than the capability:
   at the current Collection source fence; it never reads live private facts. Missing/pending output and headerless
   references remain unavailable. These helpers do not implement the shared members service or the adopted complete
   indexed filter/identity plan.
-- `native-public-output-custody.ts` is the original-command consumer of that activated public output. Observation,
-  lock, bind-and-hold, retained revalidation, successor transfer and exact release share one descriptor with the
-  SQL adapter. Current, retained, transferred, released and unavailable outcomes use the existing contract types.
+- `native-public-output-custody.ts` is the original-command consumer of that activated public output. Composition
+  supplies the Library metadata observer and Semantic persisted-disposition lock, builds the SQL custody operation,
+  and installs it as the Library application. Observation, lock, bind-and-hold, retained revalidation, successor
+  transfer and exact release share one descriptor with the SQL adapter; Semantic capture receives that application
+  directly. The `collection-source-native.ts` functions remain compatibility facades over the installed application.
+  Current, retained, transferred, released and unavailable outcomes use the existing contract types.
   Revalidation cannot create a missing hold. Partition node projection requires a same-snapshot size admission.
   Identity-plan, selected-publication, whole-query and account `active_explicit_output` capture keep their own
   scopes. Disposition ports that are not installed stay unavailable. Retirement hooks remain additive: exact owner

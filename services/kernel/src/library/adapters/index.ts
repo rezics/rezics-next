@@ -18,6 +18,8 @@ export {
 } from './identity-statements.ts';
 export { createSearchPreparationAdapter, type SearchPreparationAdapterPorts } from './search-scope.ts';
 export { createContentPublicationAdapter, type ContentPublicationAdapterPorts } from './publication-foreign.ts';
+export { createNativePublicOutputAdapter, type NativePublicOutputAdapterPorts } from './native-public-output.ts';
+export { observeNativePublicCollectionOutput } from '../collection-source-native.ts';
 export { createNativeSourceCaptureAdapter } from './native-source.ts';
 export {
   createScopedSearchLibraryOperations,
@@ -31,6 +33,8 @@ export { nativeCollectionOrdinalPageBound } from '../collection-source-native.ts
 export type { NativeCollectionOrdinalPageBound } from '../collection-source-native.ts';
 export { createMembersPreparation } from '../members-preparation.ts';
 export type { MembersPreparationWorkDefinition, PreparationLocator } from '../members-preparation.ts';
+export { createMembersPreparationAdapter } from './members-preparation.ts';
+export type { LibraryMembersPreparationRuntime, MembersPreparationStoreDependencies } from '../domain.ts';
 export { NativeCollectionWork } from '../collection-native-work.ts';
 export type { NativeSourceIdentity } from '../native-source-custody.ts';
 export { CANONICAL_SOURCE_RECEIVING_COST } from '../canonical-source-bounds.ts';
@@ -82,3 +86,10 @@ export type {
   NativeLibraryPresentationPorts,
   LibraryPresentationDependencies,
 } from './presentation.ts';
+
+/** Copy construction leaves used only by composition. */
+export { readLibraryProfileSourceObservation, readLibraryProfileAnchor } from '../profile-source.ts';
+export { createNativeCopyProducers } from './copy-producers.ts';
+export { createCopyOperationPlans } from '../copy-operation-bounds.ts';
+export type { NativeCopyDefinitions, CopyProfileSource } from '../copy-model.ts';
+export { createLibraryCommandRunner } from '../command-support.ts';

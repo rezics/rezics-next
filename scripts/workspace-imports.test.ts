@@ -52,15 +52,63 @@ test('a workspace that imports a package its package.json does not declare fails
         'src/side-effect.ts': "import '@fixture/missing/side-effect';\n",
         'src/dynamic.ts': "const module = import('@fixture/missing/dynamic');\n",
         'src/require.ts': "const module = require('@fixture/missing/require');\n",
+        'src/import-type.ts': "type Value = import('@fixture/missing/type').Value;\n",
+        'src/import-equals.ts': "import module = require('@fixture/missing/equals');\n",
+        'src/export-all.ts': "export * from '@fixture/missing/all';\n",
       },
     );
 
     expect(checkWorkspaceImports(root)).toEqual(
-      ['dynamic', 'reexport', 'require', 'side-effect', 'static', 'type'].map(
+      [
+        'dynamic',
+        'export-all',
+        'import-equals',
+        'import-type',
+        'reexport',
+        'require',
+        'side-effect',
+        'static',
+        'type',
+      ].map(
         (file) =>
           `error: @fixture/web apps/web/src/${file}.ts imports @fixture/missing, which its package.json does not declare`,
       ),
     );
+  } finally {
+    remove();
+  }
+});
+
+test('TSX titles and source examples are not dependencies while imports inside expressions retain attribution', () => {
+  const { root, remove } = fixture();
+  try {
+    writeWorkspace(
+      root,
+      'apps/web',
+      { name: '@fixture/web' },
+      {
+        'src/story.tsx': [
+          'function ImportShell() { return <main><span title="import ignored">import ignored</span></main>; }',
+          "const meta = { title: 'Pages/Library/VNDB import',",
+          "  parameters: { layout: 'fullscreen' } };",
+          "const example = `require('@fixture/ignored') ${import('@fixture/template')}`;",
+          'const quoted = "import \'@fixture/ignored\'";',
+          "// import '@fixture/ignored-comment';",
+          "function regex() { return /import('ignored')/; }",
+          'const quotient = 12 / 3 / 2;',
+          "const element = <section>{import('@fixture/jsx')}</section>;",
+          "import /* syntax can contain comments */ '@fixture/static';",
+        ].join('\n'),
+      },
+    );
+    expect(checkWorkspaceImports(root)).toEqual(
+      ['jsx', 'static', 'template'].map(
+        (name) =>
+          `error: @fixture/web apps/web/src/story.tsx imports @fixture/${name}, which its package.json does not declare`,
+      ),
+    );
+    writeFile(root, 'apps/web/src/broken.ts', 'import {');
+    expect(() => checkWorkspaceImports(root)).toThrow('broken.ts:');
   } finally {
     remove();
   }
