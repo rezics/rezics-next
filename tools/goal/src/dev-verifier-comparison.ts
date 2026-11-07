@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
@@ -61,7 +61,7 @@ function toolchainIdentity(settings: Settings, commit?: string): unknown {
 
 export function checkSignature(check: Check, index: number): string {
   return hash({
-    version: 3,
+    version: 4,
     index,
     command: check.command,
     closure: [...check.closure].sort(),
@@ -76,7 +76,7 @@ export function selectionIdentity(checks: readonly IndexedCheck[]): string {
 
 export function dependencySetupKey(settings: Settings, commit: string): string {
   return hash({
-    version: 3,
+    version: 4,
     phase: 'dependency-setup',
     commit,
     command: ['bun', 'install', '--frozen-lockfile'],
@@ -88,7 +88,7 @@ export function dependencySetupKey(settings: Settings, commit: string): string {
 
 export function runCacheKey(settings: Settings, commit: string, check: IndexedCheck, selection: string): string {
   return hash({
-    version: 3,
+    version: 4,
     phase: 'head-check',
     commit,
     signature: check.signature,
@@ -161,7 +161,7 @@ export async function runChecksAtHead(
     index,
     signature: checkSignature(check, index),
   }));
-  const selection = selectionIdentity(indexed) + ':' + randomUUID();
+  const selection = selectionIdentity(indexed);
   const bootRunner =
     options.runBootSmoke ??
     options.runGate ??

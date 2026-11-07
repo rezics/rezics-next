@@ -91,19 +91,41 @@ export function installDependenciesCached(
       result: result.passed ? 'pass' : 'infrastructure',
     },
   };
-  if (result.passed) persistRun(execution, run);
+  persistRun(execution, run);
   return result;
 }
 
 export function withTreeBun(command: readonly string[], tree: string, fallbackRoot = tree): string[] {
-  let index = command[0] === 'env' ? 1 : 0;
-  while (command[index] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(command[index]!)) index++;
+  const hasEnv = command[0] === 'env';
+  let index = hasEnv ? 1 : 0;
+  while (hasEnv && command[index]) {
+    const argument = command[index]!;
+    if (argument === '--') {
+      index++;
+      break;
+    }
+    if (['-u', '--unset', '-C', '--chdir'].includes(argument)) {
+      index += 2;
+      continue;
+    }
+    if (/^(?:--unset=|--chdir=)/u.test(argument) || argument === '-i' || argument === '--ignore-environment') {
+      index++;
+      continue;
+    }
+    if (/^-u.+$/u.test(argument) || /^[A-Za-z_][A-Za-z0-9_]*=/u.test(argument)) {
+      index++;
+      continue;
+    }
+    break;
+  }
   if (command[index] !== 'bun') return [...command];
   const artifactRoot = existsSync(join(tree, 'node_modules/bun/package.json')) ? tree : fallbackRoot;
   const executable = repositoryBun(tree, artifactRoot).binary;
   const bins = [...new Set([join(tree, 'node_modules/.bin'), join(fallbackRoot, 'node_modules/.bin')])];
   const path = [...bins, process.env.PATH ?? ''].filter(Boolean).join(':');
-  return ['env', `PATH=${path}`, ...command.map((argument, position) => (position === index ? executable : argument))];
+  if (!hasEnv) return ['env', `PATH=${path}`, executable, ...command.slice(index + 1)];
+  const prefix = command.slice(0, index).filter((argument) => argument !== '--');
+  return [...prefix, `PATH=${path}`, executable, ...command.slice(index + 1)];
 }
 
 function cachedRun(execution: DevVerifierExecution, key: string): DevVerifierEvidence | undefined {
@@ -200,10 +222,18 @@ export async function executeCheck(
         timedOut: signal?.aborted ?? false,
       };
     }
-    attempts.push(`attempt ${attempt + 1}: ${final.output}`);
+    attempts.push(final.output);
     if (final.passed || signal?.aborted || !infraFailure(final.output, final.timedOut)) break;
   }
-  const fullOutput = attempts.length > 1 ? attempts.join('\n') : final.output;
+  const fullOutput =
+    attempts.length > 1
+      ? attempts
+          .map(
+            (output, index) =>
+              `--- verifier attempt ${index + 1} (${index === attempts.length - 1 ? 'final' : 'retry'}) ---\n${output}`,
+          )
+          .join('\n')
+      : final.output;
   const result = createEvidence(
     commit,
     check,
@@ -211,6 +241,7 @@ export async function executeCheck(
     finalLog,
     execution.settings.policy?.verifier,
   );
+  result.result = classifyRun(final, execution.settings.policy?.verifier);
   const createdAt = new Date().toISOString();
   if (classifyRun(result, execution.settings.policy?.verifier) !== 'infrastructure')
     persistRun(execution, { key, createdAt, evidence: result });
