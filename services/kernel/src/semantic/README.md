@@ -51,6 +51,9 @@ Public entries: `semantic/contract/index.ts` (values and ports), `semantic/core/
 
 ## Bounded current relation visits
 
+Decision: the public `search-source.ts` producer exposes `conceptBrowse` and `readConceptStatements` from the same
+native relation source; Search binds them through its own Semantic source port.
+
 `currentRelationFacts` is the native authority used by forward and inverse relation pages. It resolves only supplied
 candidate keys, then the mounted page reader rechecks current statement, revision, disclosure and target state before
 returning the page. Compact facts use exact slot and statement keys; expanded candidates retain the bounded native

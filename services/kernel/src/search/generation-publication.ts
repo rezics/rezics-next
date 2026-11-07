@@ -1,25 +1,25 @@
 import { advanceNativeGenerationSource } from './public-filter-consumer.ts';
-import { readNativePublicFilterPublicationCompletion } from '../semantic/public-filter-source-binding.ts';
-import { bindSearchWriterPublicationSource, readSearchWriterGenerationActions } from './writer-guard.ts';
+import { bindSearchWriterPublicationReader, readSearchWriterGenerationActions } from './writer-guard.ts';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { releaseDigest } from '@rezics/definitions';
+import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { readAccountDiscoveryWitness } from '../access/account-discovery-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
+import type { PublicFilterConsumer } from '../semantic/public-filter-source-contract.ts';
 import type {
-  PublicFilterConsumer,
-  PublicFilterCost,
-  PublicFilterProjectionMeaning,
-  PublicFilterSource,
-} from '../semantic/public-filter-source-contract.ts';
-import type {
-  PublicFilterSourceBinding,
-  PublicFilterSourceDefinition,
-} from '../semantic/public-filter-source-binding.ts';
-import type { SubjectSourceKeyPages, SubjectSourceKeyCursor } from '../semantic/subject-source-key-pages.ts';
+  SearchNativePublicationCompletionReader,
+  SearchPublicFilterCost,
+  SearchPublicFilterProjectionMeaning,
+  SearchPublicFilterSource,
+  SearchPublicFilterSourceBinding,
+  SearchPublicFilterSourceDefinition,
+  SearchPublicFilterSourceKeyCursor,
+  SearchPublicFilterSourceKeyPages,
+} from './semantic-source-port.ts';
 import type {
   PublicCanonicalCaptureInput,
   PublicFilterConsumerCaptureInput,
@@ -67,21 +67,21 @@ export type SearchGenerationPublication = Readonly<{
     consumer: PublicFilterConsumer,
     context: PublicFilterConsumerContext,
   ): Promise<
-    { status: 'preparing'; job: GenerationPublicationJob; cost: PublicFilterCost } | PublicFilterConsumerUnavailable
+    { status: 'preparing'; job: GenerationPublicationJob; cost: SearchPublicFilterCost } | PublicFilterConsumerUnavailable
   >;
   step(
     job: GenerationPublicationJob,
     context: PublicFilterConsumerContext,
   ): Promise<
-    | { status: 'progress' | 'reconciled'; job: GenerationPublicationJob; cost: PublicFilterCost }
+    | { status: 'progress' | 'reconciled'; job: GenerationPublicationJob; cost: SearchPublicFilterCost }
     | PublicFilterConsumerUnavailable
   >;
   activate(
     job: GenerationPublicationJob,
     context: PublicFilterConsumerContext,
   ): Promise<
-    | { status: 'activated'; consumer: PublicFilterConsumer; cost: PublicFilterCost }
-    | { status: 'preparing'; job: GenerationPublicationJob; cost: PublicFilterCost }
+    | { status: 'activated'; consumer: PublicFilterConsumer; cost: SearchPublicFilterCost }
+    | { status: 'preparing'; job: GenerationPublicationJob; cost: SearchPublicFilterCost }
     | PublicFilterConsumerUnavailable
   >;
   close(): Promise<void>;
@@ -89,16 +89,17 @@ export type SearchGenerationPublication = Readonly<{
 export type SearchGenerationPublicationConfig = Readonly<{
   pool: Pool;
   search: OpenSearch;
-  source: PublicFilterSource;
-  sourceKeys: SubjectSourceKeyPages;
-  binding: PublicFilterSourceBinding;
+  source: SearchPublicFilterSource;
+  sourceKeys: SearchPublicFilterSourceKeyPages;
+  binding: SearchPublicFilterSourceBinding;
+  readPublicationCompletion: SearchNativePublicationCompletionReader;
   clock: KernelClock;
-  meaning: PublicFilterProjectionMeaning;
+  meaning: SearchPublicFilterProjectionMeaning;
   writerGuard: SearchWriterPublicationGuard;
   registry?: DiscoveryRegistry;
 }>;
 
-type Meter = { -readonly [K in keyof PublicFilterCost]: number };
+type Meter = { -readonly [K in keyof SearchPublicFilterCost]: number };
 const cost = (): Meter => ({
   inputKeys: 0,
   candidates: 0,
@@ -126,7 +127,7 @@ function check(context: PublicFilterConsumerContext) {
   requireValue(Number.isFinite(context.deadline));
   if (context.deadline <= Date.now()) throw new Pending('deadline');
 }
-function add(meter: Meter, value: PublicFilterCost) {
+function add(meter: Meter, value: SearchPublicFilterCost) {
   for (const key of Object.keys(meter) as (keyof Meter)[]) {
     requireValue(Number.isSafeInteger(value[key]) && value[key] >= 0);
     meter[key] += value[key];
@@ -134,9 +135,23 @@ function add(meter: Meter, value: PublicFilterCost) {
   if (meter.inputKeys > 1000 || meter.resultWrites > 1000) throw new Pending('dependency_unavailable');
 }
 function locator(consumer: PublicFilterConsumer) {
+  requireValue(object(consumer));
+  const keys = Object.keys(consumer);
+  const expected = new Set([
+    'physicalTarget',
+    'incarnation',
+    'consumerGeneration',
+    'projectionGeneration',
+    'meaningDigest',
+    'readDefinition',
+    ...(Object.hasOwn(consumer, 'catalogue') ? ['catalogue'] : []),
+  ]);
   requireValue(
-    object(consumer) && Object.keys(consumer).length === 6 && Buffer.byteLength(JSON.stringify(consumer)) <= 2048,
+    keys.length === expected.size &&
+      keys.every((key) => expected.has(key)) &&
+      Buffer.byteLength(JSON.stringify(consumer)) <= 2048,
   );
+  publicFilterCatalogue(consumer);
   for (const key of ['physicalTarget', 'incarnation', 'consumerGeneration', 'projectionGeneration'] as const)
     requireValue(typeof consumer[key] === 'string' && consumer[key].length > 0 && consumer[key].length <= 255);
   requireValue(
@@ -157,7 +172,7 @@ function locator(consumer: PublicFilterConsumer) {
   );
   return { prefix, family, generation };
 }
-function bindingKey(definition: PublicFilterSourceDefinition) {
+function bindingKey(definition: SearchPublicFilterSourceDefinition) {
   return {
     source: definition.source,
     meaning: { digest: definition.meaning.digest, type: definition.meaning.type },
@@ -226,13 +241,14 @@ export function createSearchGenerationPublication(
       config.source &&
       config.sourceKeys &&
       config.binding &&
+      typeof config.readPublicationCompletion === 'function' &&
       typeof config.clock === 'function' &&
       config.writerGuard &&
       typeof config.writerGuard.write === 'function',
   );
   requireValue(config.meaning.digest === releaseDigest(config.meaning.release));
-  const { pool, search, source, sourceKeys, binding, writerGuard, registry } = config;
-  bindSearchWriterPublicationSource(writerGuard, binding);
+  const { pool, search, source, sourceKeys, binding, readPublicationCompletion, writerGuard, registry } = config;
+  bindSearchWriterPublicationReader(writerGuard, readPublicationCompletion);
   const meaning = structuredClone(config.meaning);
   const kinds = registry
     ? registry.entries.map(({ kind, owner }) => ({ kind, owner })).sort((a, b) => a.kind.localeCompare(b.kind))
@@ -362,7 +378,7 @@ export function createSearchGenerationPublication(
     if (!('sort' in capture)) throw new Pending('registration_missing');
     return capture;
   }
-  function populationDefinition(definition: PublicFilterSourceDefinition) {
+  function populationDefinition(definition: SearchPublicFilterSourceDefinition) {
     const capture = publicationCapture(definition.capture);
     if (
       capture.filterDocument !== undefined ||
@@ -411,7 +427,7 @@ export function createSearchGenerationPublication(
     )
       throw new Pending('source_pending');
     if (!needObservation) return;
-    const completion = await readNativePublicFilterPublicationCompletion(binding, { job: job.job }, context);
+    const completion = await readPublicationCompletion({ job: job.job }, context);
     add(meter, completion.cost);
     if (completion.status !== 'complete') throw new Pending('source_pending');
     const pin = publicationPinFromNative(completion.publication);
@@ -647,7 +663,7 @@ export function createSearchGenerationPublication(
         ],
       );
   }
-  function cursor(job: Job): SubjectSourceKeyCursor | null {
+  function cursor(job: Job): SearchPublicFilterSourceKeyCursor | null {
     return job.after_id === null ? null : { route: job.after_route!, id: job.after_id };
   }
   async function keysFor(partition: number, ids: readonly string[]): Promise<DiscoveryKey[] | undefined> {
@@ -755,7 +771,7 @@ export function createSearchGenerationPublication(
       await remember(job, before, client);
       const after = cursor(job);
       let ids: readonly string[],
-        next: SubjectSourceKeyCursor | null,
+        next: SearchPublicFilterSourceKeyCursor | null,
         complete: boolean,
         keys: DiscoveryKey[] | undefined;
       if (job.phase === 'subject') {

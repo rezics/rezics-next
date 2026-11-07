@@ -1,6 +1,6 @@
 import type { DiscoveryFilterDocument } from '@rezics/filter';
 import type { Pool } from 'pg';
-import { relationSource } from '../semantic/search-relations.ts';
+import { searchSourcePublicationApplication } from './source-publication-application.ts';
 import { createConceptBrowseStore } from './concept-browse-store.ts';
 import { prepareConceptDisclosure } from './disclosure-application.ts';
 
@@ -18,7 +18,7 @@ export async function prepareConceptDiscoveryFilter(
     now?: () => number;
   }>,
 ) {
-  const source = relationSource(input.pool, input.routeKey);
+  const source = searchSourcePublicationApplication().subjectSource(input.pool, input.routeKey);
   return prepareConceptDisclosure(
     { ...input, now: input.now ?? Date.now },
     {

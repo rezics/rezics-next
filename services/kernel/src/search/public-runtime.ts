@@ -8,17 +8,12 @@ import type { Pool } from 'pg';
 import type { DiscoveryRegistry } from './discovery.ts';
 import { nativeDiscoveryRegistry } from './account-discovery.ts';
 import { discoveryIndexName } from './indices.ts';
-import { createSearchGenerationPublication, type SearchGenerationPublication } from './generation-publication.ts';
+import type { SearchGenerationPublication } from './generation-publication.ts';
 import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
-import { activeRelease, readRelease } from '../semantic/definitions.ts';
-import { publicFilterSource } from '../semantic/public-filter-source.ts';
-import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
-import { createSubjectSourceKeyPages } from '../semantic/subject-source-key-pages.ts';
 import { createPublicFilterCustody } from './public-filter-custody.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
-import { createSearchWriterGuard } from './writer-guard.ts';
 import { subjectConsumer } from './runner.ts';
 import type { PublicFilterConsumer } from '../semantic/public-filter-source-contract.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -48,6 +43,7 @@ import { createFacetNativeOperations } from './facet-discovery-operations.ts';
 import type { FacetAccessObservationPort } from './facet-access-port.ts';
 import { createScopedFacetApplication } from './scoped-facet-application.ts';
 import { createQueryPrivacyConsumer, type QueryPrivacyConsumer } from './query-privacy-consumer.ts';
+import { searchSourcePublicationApplication } from './source-publication-application.ts';
 
 export type DefaultPublicFilterRuntimeConfig = Readonly<{
   pool: Pool;
@@ -116,16 +112,17 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   const scopedFacets = createScopedFacetApplication({
     ...(config.facetAccess === undefined ? {} : { access: config.facetAccess }),
   }).source;
+  const sourcePublication = searchSourcePublicationApplication();
   async function requestMeaning(acceptedRelease?: string) {
-    if (acceptedRelease === undefined) return activeRelease(config.pool);
-    const release = await readRelease(config.pool, acceptedRelease);
+    if (acceptedRelease === undefined) return sourcePublication.activeRelease(config.pool);
+    const release = await sourcePublication.readRelease(config.pool, acceptedRelease);
     return release ? { digest: acceptedRelease, release } : null;
   }
   if (!(config.routeKey instanceof Uint8Array) || config.routeKey.byteLength !== 32)
     throw new TypeError('Public Search requires the canonical route key');
-  const source = publicFilterSource(config);
-  const binding = createPublicFilterSourceBinding(config.pool, config.routeKey, config.access);
-  const sourceKeys = createSubjectSourceKeyPages(config.pool, config.routeKey, config.access);
+  const source = sourcePublication.publicFilterSource(config);
+  const binding = sourcePublication.createPublicFilterSourceBinding(config.pool, config.routeKey, config.access);
+  const sourceKeys = sourcePublication.createSubjectSourceKeyPages(config.pool, config.routeKey, config.access);
   const custody = createPublicFilterCustody(config.pool);
   const nativeSource = createRatedSubjectSource(config.pool, config.routeKey, config.creditSearch).source;
   const listing = subjectListingSource(config.pool);
@@ -150,7 +147,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     checkDeadline(context);
     const digest = consumer.meaningDigest;
     if (digest === null) notReady();
-    const release = await readRelease(config.pool, digest);
+    const release = await sourcePublication.readRelease(config.pool, digest);
     const match = /subjects-g([1-9][0-9]*)$/.exec(consumer.physicalTarget);
     const generation = Number(match?.[1]);
     if (
@@ -161,24 +158,22 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       notReady();
     const calendarFormat = await readSubjectCalendarMappingFormat(config.search, config.prefix, generation);
     const creditFormat = await readSubjectCreditMappingFormat(config.search, config.prefix, generation);
-    return createSearchGenerationPublication({
+    return sourcePublication.createGenerationPublication({
       pool: config.pool,
       search: config.search,
       source,
       sourceKeys,
-      binding,
       clock: config.clock,
       meaning: { digest, release, type: 'schema:Thing' },
-      writerGuard: createSearchWriterGuard({
-        pool: config.pool,
-        search: config.search,
+      binding,
+      writer: {
         index: consumer.physicalTarget,
         consumer: subjectConsumer(config.prefix, generation),
         source: nativeSource,
         listing,
         ...(calendarFormat === null ? {} : { calendarFormat }),
         ...(creditFormat === null ? {} : { creditFormat }),
-      }),
+      },
     });
   }
   const publication: SearchGenerationPublication = {
@@ -218,7 +213,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   };
   async function create(
     physicalTarget: string,
-    meaning: Pick<NonNullable<Awaited<ReturnType<typeof activeRelease>>>, 'digest' | 'release'>,
+    meaning: Pick<ActiveRelease, 'digest' | 'release'>,
     context: PublicFilterConsumerContext,
     registry?: DiscoveryRegistry,
   ): Promise<PublicDiscoveryConsumerOperations> {
@@ -271,7 +266,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   }
   async function subjectOperations(
     physicalTarget: string,
-    meaning: Pick<NonNullable<Awaited<ReturnType<typeof activeRelease>>>, 'digest' | 'release'>,
+    meaning: Pick<ActiveRelease, 'digest' | 'release'>,
     context: PublicFilterConsumerContext,
   ): Promise<PublicDiscoveryConsumerOperations> {
     const key = JSON.stringify([physicalTarget, meaning.digest]);
@@ -298,7 +293,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     openDiscovery(registry, digest, context, queried) {
       return track(async () => {
         checkDeadline(context);
-        const release = await activeRelease(config.pool);
+        const release = await sourcePublication.activeRelease(config.pool);
         if (!release) notReady();
         if (release.digest !== digest) throw new ProblemError('search_restart_required');
         const query: import('pg').QueryConfig & { query_timeout: number } = {
@@ -342,7 +337,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     preparePublication(generation, context) {
       return track(async () => {
         checkDeadline(context);
-        const current = await activeRelease(config.pool);
+        const current = await sourcePublication.activeRelease(config.pool);
         if (!current) notReady();
         const resolved = await binding.resolve(
           {
@@ -411,7 +406,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     bindSuggestion(request, context) {
       return track(async () => {
         checkDeadline(context);
-        const release = await activeRelease(config.pool);
+        const release = await sourcePublication.activeRelease(config.pool);
         if (!release) notReady();
         const state = await subjectGenerations(config.search, config.prefix);
         if (state.active === null) notReady();
@@ -450,7 +445,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       return track(async () => {
         checkDeadline(context);
         const digest = job.consumer.meaningDigest;
-        const release = digest === null ? null : await readRelease(config.pool, digest);
+        const release = digest === null ? null : await sourcePublication.readRelease(config.pool, digest);
         if (!release || digest === null) notReady();
         // The job only locates producer state. Native repair resolves incarnation, definition and grant again.
         const registry = job.consumer.physicalTarget.startsWith(`${config.prefix}discovery-g`)
@@ -472,7 +467,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     },
     facetProvider() {
       return track(async () => {
-        const current = await activeRelease(config.pool);
+        const current = await sourcePublication.activeRelease(config.pool);
         const state = await subjectGenerations(config.search, config.prefix);
         const generation = state.active;
         if (!current || generation === null || !current.release.types['schema:Thing']) return undefined;
@@ -500,7 +495,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
             },
             async repair(job, context) {
               const digest = job.consumer.meaningDigest;
-              const release = digest === null ? null : await readRelease(config.pool, digest);
+              const release = digest === null ? null : await sourcePublication.readRelease(config.pool, digest);
               if (!release || digest === null) notReady();
               return (await subjectOperations(job.consumer.physicalTarget, { digest, release }, context)).repairStep(
                 job,

@@ -7,6 +7,7 @@ import type { Persona } from '../../../../../specs/semantic-driver.ts';
 import { routeOf } from '../../../src/route/route.ts';
 import { STANDARD_QUESTION_ID } from '../../../src/rating/votes.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
+import { composeSearchSemanticSource } from '../../../src/composition/search-semantic.ts';
 import { systemClock } from '../../../src/clock.ts';
 import { createWorkClient, type WorkClient } from '../../../src/work/client.ts';
 import {
@@ -467,6 +468,7 @@ function supervise(parent: OutcomeRpc) {
                   keys,
                 });
               };
+              composeSearchSemanticSource();
               publicFilters = createDefaultPublicFilterRuntime({
                 pool: config.pool,
                 routeKey: config.routeKey,

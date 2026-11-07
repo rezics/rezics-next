@@ -1995,12 +1995,21 @@ Native acceptance remains deferred to integration; local compilation supplies no
 
 ## Bounded generation publication
 
+Decision: Search owns the typed Semantic source port; composition binds Semantic's public producers, and Search publication, writer admission and discovery share one original-job completion reader through that application boundary.
+`composition/search-semantic.ts` binds the Semantic public-filter source and binding factory, source key pages, identity
+mapping read, release reads and `subjectSource`; `runtime-defaults.ts` installs the port before server and worker
+consumers are constructed.
+
 Decision: publication pins the original job, bootstrap, queried observation and execution on the generation row
 and encodes that proof with tagged scalar, bigint and undefined meaning. Resume and activation reuse that tuple.
 
-`createSearchGenerationPublication` in `generation-publication.ts` is the shared worker/CLI publication port.
-Its synchronous configuration is `{pool, search, source, sourceKeys, binding, clock, meaning, writerGuard,
-registry?}`. `writerGuard` is the extended **same native ordinary writer**, `SearchWriterPublicationGuard`.
+`createSearchSourcePublicationApplication` in `source-publication-application.ts` is the normal worker/CLI
+composition. `public-runtime.ts` creates one Semantic binding and shares it with generation and discovery operations;
+the application binds the original-job completion reader from that same binding to the extended **same native
+ordinary writer**, and constructs `createSearchGenerationPublication` with that reader and the public source key
+pages. The low-level generation operation remains in `generation-publication.ts`; its configuration is
+`{pool, search, source, sourceKeys, binding, readPublicationCompletion, clock, meaning, writerGuard, registry?}`.
+`writerGuard` is the `SearchWriterPublicationGuard` used by ordinary writes and generation admission.
 The optional registry pins the actual mixed Accounts/Subject producers and registered kinds. The four methods
 are `prepare(consumer, context)`, `step(job, context)`, `activate(job, context)` and draining `close()`; close
 never closes supplied resources. A job contains only `{consumer, job}` and resolves retained native work.
