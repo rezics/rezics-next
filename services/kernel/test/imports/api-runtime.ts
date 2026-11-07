@@ -12,7 +12,6 @@ import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/
 import type { SourceRecord } from '../../../../packages/conversion/src/index.ts';
 import { Importer } from '../../../importer/src/importer.ts';
 import { createImportTransport } from '../../../importer/src/import-client.ts';
-import { GLOBAL_CONTEXT } from '../../../importer/src/public-bulk-client.ts';
 import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
 import { createMediaResolver } from '../../../importer/src/media-resolver.ts';
 import { readDump } from '../../../importer/src/dumps.ts';
@@ -402,21 +401,8 @@ export async function openApiRuntime(
       }
     }
 
-    // Batch authority admits the envelope; each fact still needs its ordinary
-    // Global proposal grant. The identity-only fixture keeps its minimal scopes.
-    const proposalGrant = await request(
-      '/v1/grants',
-      {
-        resource: { route: 0, id: GLOBAL_CONTEXT },
-        subject: { kind: 'account', id: bulk.accountId },
-        actions: ['statement:propose'],
-        valid: '(,)',
-      },
-      identitySupport(identity).managementBearer,
-    );
-    if (proposalGrant.status !== 201)
-      throw new Error(`Importer proposal grant setup: HTTP ${proposalGrant.status}: ${await proposalGrant.text()}`);
-    await proposalGrant.body?.cancel();
+    // publication:true already provisions statement:propose through the ordinary
+    // owner command. A second grant with a fresh key is a duplicate refusal.
 
     if (options.sourceStatistics === 'vndb') {
       const response = await request(
