@@ -94,6 +94,15 @@ import {
   CHECK_HOST_NAME_PATTERN,
   performanceHosts,
 } from './check-placement.ts';
+import {
+  CHECK_HOST_DUMP_CACHE,
+  CROSS_MEDIA_DUMP_CACHE_ENV,
+  assertPinnedCrossMediaDumpCache,
+  commandNeedsCrossMediaDumpCache,
+  dumpCacheRsyncArgs,
+  hostDumpExtractScript,
+} from './cross-media-dump-cache.ts';
+import { crossMediaDumpCacheRoot } from './datasets/fetch-dumps.ts';
 
 /** Exact root-relative files owned by the remote-check producer lifecycle. */
 export const REMOTE_CHECK_PRODUCER_CONTROL_FILES = [
@@ -4044,7 +4053,7 @@ host=$REMOTE_CHECK_HOST
     exit $code`;
   const script = `mkdir -p ${wrapperDirectory} && cat > ${wrapperDirectory}/docker <<'WRAPPER' && chmod +x ${wrapperDirectory}/docker || exit 1
 ${dockerWrapper}WRAPPER
-export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_TIMINGS=${quote(`${directory}/.temp/kernel-check/timings`)} AUTH_CHECK_TIMINGS=${quote(`${directory}/.temp/auth-check/timings`)} KERNEL_CHECK_ON_REMOTE=1 REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id} REZICS_CHECK_MEMORY_PER_RUN_GIB=${quote(String(memoryPerRunGiB))}
+export PATH=${wrapperDirectory}:/usr/local/bin:$PATH BUN_INSTALL_CACHE_DIR=${ROOT}/bun-cache BUN_RUNTIME_TRANSPILER_CACHE_PATH=${directory}/bun-runtime-transpiler-cache PLAYWRIGHT_BROWSERS_PATH=${ROOT}/browsers KERNEL_CHECK_TIMINGS=${quote(`${directory}/.temp/kernel-check/timings`)} AUTH_CHECK_TIMINGS=${quote(`${directory}/.temp/auth-check/timings`)} KERNEL_CHECK_ON_REMOTE=1 ${CROSS_MEDIA_DUMP_CACHE_ENV}=${quote(CHECK_HOST_DUMP_CACHE)} REZICS_STACK_LEASE=off REMOTE_CHECK_HOST=${quote(hostName)} REZICS_CHECK_SLICE=${runSlice(id)} REZICS_CHECK_RUN=${id} REZICS_CHECK_MEMORY_PER_RUN_GIB=${quote(String(memoryPerRunGiB))}
 export REZICS_CHECK_PHASES=${quote(`${directory}/command-phases.tsv`)}
 printf 'remote-check: run priority %s on %s\n' ${quote(priorityClass)} ${quote(hostName)} >&2
 cd ${directory} || exit 1
@@ -6971,6 +6980,41 @@ print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':rea
   };
 }
 
+/** Copy pinned dump archives and extract them on the host before a seeded walk enters the 6 GiB slice. */
+async function restorePinnedDumpCache(
+  host: Host,
+  connectionId: string,
+  command: string[],
+  signal: AbortSignal,
+  transferLimit: number,
+): Promise<void> {
+  if (!commandNeedsCrossMediaDumpCache(command)) return;
+  const cacheRoot = crossMediaDumpCacheRoot();
+  assertPinnedCrossMediaDumpCache(cacheRoot);
+  const rsyncStarted = performance.now();
+  const sync = Bun.spawn(dumpCacheRsyncArgs(cacheRoot, host.address, rshOptions(host, connectionId)), {
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const { code: synced } = await finishedRsync(sync, signal, host, 'dump cache', transferLimit);
+  reportDuration('dump cache', rsyncStarted, host.name);
+  if (signal.aborted) throw new Aborted();
+  if ([10, 12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'dump cache', synced);
+  if (synced !== 0 && synced !== 24)
+    throw new Error(`dump cache rsync to ${host.name} failed with exit code ${synced}`);
+  const extracted = await boundedSsh(
+    host,
+    connectionId,
+    hostDumpExtractScript(),
+    'dump extract',
+    DEFAULT_PREPARATION_TIMEOUT_MS,
+  );
+  if (extracted.output.trim()) console.error(extracted.output.trimEnd());
+  if (extracted.code !== 0)
+    throw new Error(`dump cache extract on ${host.name} failed with exit code ${extracted.code}`);
+}
+
 /** Executes only after upload and slot admission; releases the lease before returns and cleanup. */
 async function runLeased(
   lease: Lease,
@@ -7019,6 +7063,8 @@ async function runLeased(
     assertExecutionAllowed(options, signal);
     console.error(`remote-check: running on ${host.name}`);
     options.started?.(host.name);
+    assertExecutionAllowed(options, signal);
+    await restorePinnedDumpCache(host, connectionId, options.command, signal, transferTimeout(options));
     assertExecutionAllowed(options, signal);
     const envelope = remoteLaunch(
       runScript(

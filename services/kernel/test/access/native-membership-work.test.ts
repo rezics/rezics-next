@@ -18,6 +18,9 @@ import { readMembershipWorkConfig } from '../../src/access/membership-work-confi
 import { createWorkClient } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
+
+process.env.KERNEL_RECEIPT_KEYS ??= workerTestEnv().KERNEL_RECEIPT_KEYS!;
 
 const pool = createPool(process.env.DATABASE_URL!);
 pool.options.max = 1;
@@ -33,6 +36,7 @@ const env = {
     current: 7,
     keys: { 7: Buffer.alloc(32, 71).toString('base64url') },
   }),
+  KERNEL_RECEIPT_KEYS: process.env.KERNEL_RECEIPT_KEYS,
   AUTH_ISSUER: issuer,
   AUTH_AUDIENCE: 'https://api.membership.test',
   AUTH_JWKS_URL: `${issuer}/jwks`,
@@ -141,7 +145,18 @@ async function registered() {
   }) as never);
   try {
     await createAccountsWorkModule().register(context);
-    expect(step.mock.calls.filter((call) => call[1]?.name?.startsWith('accounts.membership.'))).toHaveLength(4);
+    expect(
+      step.mock.calls
+        .flatMap((call) => (call[1]?.name?.startsWith('accounts.membership.') ? [call[1].name] : []))
+        .sort(),
+    ).toEqual([
+      'accounts.membership.cancel',
+      'accounts.membership.finalize',
+      'accounts.membership.publish',
+      'accounts.membership.release',
+      'accounts.membership.reserve',
+      'accounts.membership.terminalize',
+    ]);
     expect(DBOS.isInitialized()).toBe(false);
   } finally {
     step.mockRestore();
@@ -516,4 +531,35 @@ test('existing deployment seal ring is reused with bounded rotation and canonica
     [0, 1, 2, 3, 4].map((id) => `${id}:${key}`).join(','),
   ])
     expect(() => readMembershipWorkConfig({ ...env, KERNEL_SESSION_KEYS: value })).toThrow('KERNEL_SESSION_KEYS');
+});
+
+test('walk stacks fetch the public issuer JWKS URL from native Auth only', async () => {
+  const native = Bun.serve({
+    port: 0,
+    hostname: '127.0.0.1',
+    fetch: () => Response.json({ keys: [{ kty: 'EC', kid: 'walk-native' }] }),
+  });
+  const jwksGet = {
+    headers: new Headers(),
+    method: 'GET' as const,
+    redirect: 'manual' as const,
+    signal: new AbortController().signal,
+  };
+  try {
+    const config = readMembershipWorkConfig({
+      ...env,
+      REZICS_WALK_STACK_SLOT: '1',
+      REZICS_LOCAL_STACK_NATIVE_ORIGIN: `http://127.0.0.1:${native.port}`,
+    });
+    expect(config.auth.jwksUrl).toBe(env.AUTH_JWKS_URL);
+    expect(config.auth.fetch).toBeTypeOf('function');
+    const admitted = await config.auth.fetch!(env.AUTH_JWKS_URL, jwksGet);
+    expect(await admitted.json()).toEqual({ keys: [{ kty: 'EC', kid: 'walk-native' }] });
+    await expect(config.auth.fetch!('https://example.test/.well-known/jwks.json', jwksGet)).rejects.toThrow(
+      'Local JWKS transport serves only the configured issuer JWKS URL',
+    );
+    expect(readMembershipWorkConfig(env).auth.fetch).toBeUndefined();
+  } finally {
+    native.stop();
+  }
 });

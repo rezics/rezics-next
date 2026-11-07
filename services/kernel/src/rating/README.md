@@ -1616,8 +1616,8 @@ captured upper key stay on the retained obligation and converge through another 
 
 Decision: fewest tests for this Cost close: extend identity-repair, identity-repair-native, growth-identity-repair
 and realm-rank-repair; pin later-vote and pending-event handoff in those suites; keep injected seam `checkGrowth`
-distinct from installed native growth; no new stories. Native, browser and growth execution stay on the sole
-Goal walks; implementation acceptance is changed-workspace typing.
+distinct from installed native growth; no new stories. Native, browser and growth execution belong to the
+sole Goal walks after implementation typing.
 
 Decision: composition binds `createIdentityRatingRepairProducer` through Rating's public `bindRatingIdentityProducer`
 and Semantic's public producer/continuation contract; server, default-worker and test preload install before commands

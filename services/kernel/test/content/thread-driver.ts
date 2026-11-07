@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createHash } from 'node:crypto';
 import {
   createAuthHost,
@@ -342,6 +343,7 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
     const clock = () => new Date();
     let nativeAuth: AuthService;
     const kernel = createKernel({
+      receiptKeys: testReceiptKeys(),
       pool: database.pool,
       routeKey,
       tokens: tokenKeys,

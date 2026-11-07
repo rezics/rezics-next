@@ -22,6 +22,7 @@ import {
   developmentRegistrationPassword,
   developmentContentBindings,
   issuerRequest,
+  identityEpochBootstrapRemaining,
   localDatabase,
   localStackRecoveryDelivery,
   openLocalShowcase,
@@ -379,6 +380,12 @@ test('database reset retires old native-ID journals and preserves the developmen
 test('local setup refuses remote databases', () => {
   expect(() => localDatabase('postgres://rezics:rezics@production.example/rezics')).toThrow('127.0.0.1');
   expect(localDatabase('postgres://rezics:rezics@127.0.0.1:54329/rezics').hostname).toBe('127.0.0.1');
+});
+
+test('identity remaining reads only the local stack database', async () => {
+  await expect(identityEpochBootstrapRemaining('postgres://rezics:rezics@production.example/rezics')).rejects.toThrow(
+    '127.0.0.1',
+  );
 });
 
 test('persona retries open mixed Search and POST facets alongside anonymous GET groups only', async () => {

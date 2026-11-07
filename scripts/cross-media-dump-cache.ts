@@ -19,7 +19,20 @@ export const CHECK_HOST_DUMP_CACHE = '/srv/rezics-check/datasets/dumps';
 export const CHECK_HOST_DUMP_CACHE_LOCK_DIR = '/srv/rezics-check/datasets';
 export const DUMP_PIN_MARKER = '.cross-media-dump-sha256';
 
-const DUMP_CACHE_SCRIPTS = new Set(['vndb-seeded-journey.ts', 'cross-media-seed.ts', 'fetch-dumps.ts']);
+const DUMP_CACHE_SCRIPTS = new Set([
+  'vndb-seeded-journey.ts',
+  'seeded-content-goal-walk.ts',
+  'seeded-content-ratings-reviews-walk.ts',
+  'first-public-scope-walk.ts',
+  'semantic-first-public-walk.ts',
+  'home-seeded-walk.ts',
+  'vn-realm-seeded-walk.ts',
+  'managed-accounts-seeded-walk.ts',
+  'thread-board-reading.walk.ts',
+  'commerce-library-journeys.walk.ts',
+  'cross-media-seed.ts',
+  'fetch-dumps.ts',
+]);
 
 /** Walk/seed argv that will read the development dump cache on the host. */
 export function commandNeedsCrossMediaDumpCache(command: readonly string[]): boolean {

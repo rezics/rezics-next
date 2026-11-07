@@ -62,12 +62,14 @@ const serverIndependentTests = [
   'scripts/storybook-dev.test.ts',
   'tests/accounts-goal-journeys.test.ts',
   'tests/focused-runner.test.ts',
+  // This journey owns a server with private issuer/client bindings.
+  'tests/post-editing.test.ts',
   'tests/root-application-shell.test.tsx',
   'tests/server-custody.test.ts',
   'tests/with-dev-server.test.ts',
 ];
 
-/** These explicit unit selections own their fixtures; every page or mixed selection still starts Vite. */
+/** These explicit selections own their fixtures; other page or mixed selections still start Vite. */
 export function commandNeedsSharedDevServer(command: string[]): boolean {
   if (command[0] !== 'bun' || command[1] !== 'test') return false;
   const files = command.filter((argument) => testFileArgument.test(argument));

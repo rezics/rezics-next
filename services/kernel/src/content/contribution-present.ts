@@ -43,10 +43,12 @@ export async function readContributedPost(
   threadId: string,
   postId: string,
   context: ReadContext,
+  retain?: RetainContentRead<PostEntry>,
 ): Promise<Anchored<ContributedPostEntry>> {
   let currentPost: Parameters<RetainContentRead<PostEntry>>[0] | undefined;
   const post = await readPost(dependencies, threadId, postId, context, undefined, (current) => {
     currentPost = current;
+    retain?.(current);
   });
   if (!post.value) throw new ProblemError('not_found');
   const value = post.value;

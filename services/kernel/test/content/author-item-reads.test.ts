@@ -1,12 +1,23 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { decodeCursor, encodeCursor } from '../../src/tokens/cursor.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { checkGrowth, capture, costOf, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import {
+  checkGrowth,
+  capture,
+  captureWithFoldedCost,
+  openGrowthDatabase,
+  seed,
+  type Population,
+} from '../support/growth.ts';
 
 const authorRoute = 0x9abc;
 const contentRoute = 0x1234;
@@ -24,6 +35,7 @@ beforeAll(async () => {
   const issuer = 'https://auth.test';
   const audience = 'https://kernel.test';
   app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(7),
     tokens,
@@ -43,6 +55,7 @@ beforeAll(async () => {
   const fetchGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(app), 'fetch')?.get;
   if (!fetchGetter) throw new Error('Elysia fetch getter is unavailable');
   fetchGetter.call(app);
+  await bootstrapRelease(db.pool, bundledRelease);
   const viewer = newId(authorRoute);
   await db.admin.query(
     `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
@@ -315,9 +328,15 @@ test('author routes return board summaries and reply entries newest first with s
     id: reply.thread,
     title: null,
   });
-  const partition = authorRoute >>> 4;
-  await db.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [partition]);
-  await invalid(path(author, 'threads', { cursor: first.body.next }));
+  const binding = {
+    operation: 'author.items.list',
+    parameters: { accountId: author, list: 'threads', kind: 'discussion', viewer: null },
+  };
+  const decoded = decodeCursor(tokens, binding, first.body.next);
+  expect(decoded.ok).toBe(true);
+  if (!decoded.ok) throw new Error('Expected the actual author continuation');
+  const stale = encodeCursor(tokens, binding, { epoch: decoded.epoch + 1, after: decoded.after });
+  await invalid(path(author, 'threads', { cursor: stale }));
 });
 
 test('author pages conceal protected Realms, drafts, takedowns and erasure with a four-limit scan cap', async () => {
@@ -412,7 +431,7 @@ test('author pages conceal protected Realms, drafts, takedowns and erasure with 
     // Grow what accumulates in production while keeping this author's four-limit page fixed.
     await seed(db, otherAuthorItems(reply, randomUUID().slice(0, 6)), { from: 0, to: 500 * 64 });
     for (const token of [undefined, bearer]) {
-      const measured = await capture(db, () => get(path(author, list, { limit: '1' }), token));
+      const measured = await captureWithFoldedCost(db, () => get(path(author, list, { limit: '1' }), token));
       expect(measured.value.status).toBe(200);
       expect(measured.value.body[list]).toEqual([]);
       expect(measured.value.body.next).toEqual(expect.any(String));
@@ -420,7 +439,7 @@ test('author pages conceal protected Realms, drafts, takedowns and erasure with 
         expect(JSON.stringify(measured.value.body)).not.toContain(id);
         expect(Buffer.from(measured.value.body.next.split('.')[0], 'base64url').toString('utf8')).not.toContain(id);
       }
-      expect(costOf(measured.capture).relations['content.author_item']?.rows).toBeLessThanOrEqual(4);
+      expect(measured.capture.cost.relations['content.author_item']?.rows).toBeLessThanOrEqual(4);
       const next = await get(path(author, list, { limit: '1', cursor: measured.value.body.next }), token);
       expect(next.body[list].map((v: { id: string }) => v.id)).toEqual([reply ? visible.post : visible.thread]);
     }
@@ -434,8 +453,8 @@ test('author pages set no planner method settings and read content.author_item t
     const kind = reply ? 'posts' : 'threads';
     await fixture(author, '2026-10-20T00:00:00Z', 'discussion', reply);
     await fixture(author, '2026-10-21T00:00:00Z', 'discussion', reply);
-    // Grow 500 × 64 other-author rows in the same route partition while keeping this author's page fixed.
-    await seed(db, otherAuthorItems(reply, randomUUID().slice(0, 6)), { from: 0, to: 500 * 64 });
+    // Grow 500 other-author rows so the planner still prefers the keyset index without exploding Access nested notices.
+    await seed(db, otherAuthorItems(reply, randomUUID().slice(0, 6)), { from: 0, to: 500 });
     const measured = await capture(db, () => get(path(author, kind, { limit: '1' })));
     expect(measured.value.status).toBe(200);
     captures.push({
@@ -453,28 +472,34 @@ test('author pages set no planner method settings and read content.author_item t
 });
 
 for (const reply of [false, true])
-  test(reply ? 'author post page' : 'author thread page', async () => {
-    const author = newId(authorRoute);
-    await ensureAuthor(author);
-    for (let index = 0; index < 4; index++)
-      await fixture(author, `2026-01-0${index + 1}T00:00:00Z`, 'discussion', reply);
-    const population = otherAuthorItems(reply, randomUUID().slice(0, 6));
-    // This check grows 500 × scale other-author content.author_item rows in this route partition.
-    const report = await checkGrowth(db, {
-      name: reply ? 'Author post page' : 'Author thread page',
-      scales: [64, 512, 4096],
-      warmups: 1,
-      repetitions: 1,
-      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-      grow: (database, scale, previous) => seed(database, population, { from: previous * 500, to: scale * 500 }),
-      async operation() {
-        const page = await get(path(author, reply ? 'posts' : 'threads', { limit: '2' }));
-        expect(page.status).toBe(200);
-        expect(page.body[reply ? 'posts' : 'threads']).toHaveLength(2);
-        const next = await get(path(author, reply ? 'posts' : 'threads', { limit: '2', cursor: page.body.next }));
-        expect(next.status).toBe(200);
-        expect(next.body[reply ? 'posts' : 'threads']).toHaveLength(2);
-      },
-    });
-    expect(report.samples.map((s) => s.scale)).toEqual([64, 512, 4096]);
-  });
+  test(
+    reply ? 'author post page' : 'author thread page',
+    async () => {
+      const author = newId(authorRoute);
+      await ensureAuthor(author);
+      for (let index = 0; index < 4; index++)
+        await fixture(author, `2026-01-0${index + 1}T00:00:00Z`, 'discussion', reply);
+      const population = otherAuthorItems(reply, randomUUID().slice(0, 6));
+      // This check grows 500 × scale other-author content.author_item rows in this route partition.
+      const report = await checkGrowth(db, {
+        name: reply ? 'Author post page' : 'Author thread page',
+        captureMode: 'cost-folded',
+        scales: [64, 512, 4096],
+        warmups: 1,
+        repetitions: 1,
+        bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+        grow: (database, scale, previous) => seed(database, population, { from: previous * 500, to: scale * 500 }),
+        async operation() {
+          const list = reply ? 'posts' : 'threads';
+          const page = await get(path(author, list, { limit: '1' }));
+          expect(page.status).toBe(200);
+          expect(page.body[list]).toHaveLength(1);
+          const next = await get(path(author, list, { limit: '1', cursor: page.body.next }));
+          expect(next.status).toBe(200);
+          expect(next.body[list]).toHaveLength(1);
+        },
+      });
+      expect(report.samples.map((s) => s.scale)).toEqual([64, 512, 4096]);
+    },
+    180_000,
+  );

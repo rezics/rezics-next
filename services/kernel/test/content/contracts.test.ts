@@ -93,6 +93,7 @@ function publishedSignatures(): void {
         deps: reads.ContentReadDependencies,
         id: string,
         context: model.ReadContext,
+        retain?: reads.RetainContentRead<reads.ThreadView>,
       ) => Promise<model.Anchored<reads.ThreadView | null>>
     >
   >();
@@ -118,6 +119,7 @@ function publishedSignatures(): void {
         context: model.ReadContext,
         cursor?: string,
         limit?: number,
+        beforeFinal?: (entries: readonly reads.PostEntry[]) => Promise<void>,
       ) => Promise<model.Page<reads.PostEntry>>
     >
   >();
@@ -339,7 +341,15 @@ function publishedModels(): void {
   same<
     Equal<
       reads.ContentReadDependencies,
-      Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock: () => Date; deadlineNow?: () => number }>
+      Readonly<{
+        pool: Pool;
+        access: Access;
+        tokens: KeyRing;
+        clock: () => Date;
+        disclosureBarrier?: reads.DisclosureBarrier;
+        pageDisclosureBarrier?: reads.PageDisclosureBarrier;
+        deadlineNow?: () => number;
+      }>
     >
   >();
   same<

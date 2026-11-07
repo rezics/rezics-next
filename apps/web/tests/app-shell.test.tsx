@@ -44,38 +44,6 @@ test('the top bar keeps search and logo, offers Create and counted notifications
       />,
     );
 
-  test('the shared shell keeps one page landmark with its header, rail and phone destinations', async () => {
-    mock.module('@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url', () => ({
-      default: '/manrope.woff2',
-    }));
-    const { AppShell } = await import('../src/shell/app-shell');
-    const { createRootRoute, createRouter, createMemoryHistory, RouterProvider } =
-      await import('@tanstack/react-router');
-    const session = await import('../src/session/query');
-    const member = spyOn(session, 'useSession').mockReturnValue({
-      state: 'signed-in',
-      subject: 'viewer',
-      csrfToken: 'csrf',
-    });
-    const root = createRootRoute({
-      component: () => (
-        <AppShell communities={null} search={<input aria-label="Existing header search" />}>
-          <h1>Page content</h1>
-        </AppShell>
-      ),
-    });
-    const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) });
-    try {
-      await router.load();
-      const markup = html(<RouterProvider router={router} />);
-      expect(markup.match(/<main\b/g)).toHaveLength(1);
-      expect(markup.match(/<header\b/g)).toHaveLength(1);
-      for (const text of ['Page content', 'Existing header search', 'REZICS', 'Main navigation', 'Phone navigation'])
-        expect(markup).toContain(text);
-    } finally {
-      member.mockRestore();
-    }
-  });
   const member = render('signed-in');
   expect(member.match(/<header/g)).toHaveLength(1);
   for (const text of ['REZICS', 'Search', 'Create', 'Notifications', '99+ unread notifications', 'Account controls'])
@@ -103,6 +71,38 @@ test('the top bar keeps search and logo, offers Create and counted notifications
       />,
     ),
   ).not.toContain('unread notifications');
+});
+
+test('the default shell rail renders outside the Library boundary with one page landmark and phone destinations', async () => {
+  mock.module('@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url', () => ({
+    default: '/manrope.woff2',
+  }));
+  const { AppShell } = await import('../src/shell/app-shell');
+  const { createRootRoute, createRouter, createMemoryHistory, RouterProvider } = await import('@tanstack/react-router');
+  const session = await import('../src/session/query');
+  const member = spyOn(session, 'useSession').mockReturnValue({
+    state: 'signed-in',
+    subject: 'viewer',
+    csrfToken: 'csrf',
+  });
+  const root = createRootRoute({
+    component: () => (
+      <AppShell search={<input aria-label="Existing header search" />}>
+        <h1>Page content</h1>
+      </AppShell>
+    ),
+  });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) });
+  try {
+    await router.load();
+    const markup = html(<RouterProvider router={router} />);
+    expect(markup.match(/<main\b/g)).toHaveLength(1);
+    expect(markup.match(/<header\b/g)).toHaveLength(1);
+    for (const text of ['Page content', 'Existing header search', 'REZICS', 'Main navigation', 'Phone navigation'])
+      expect(markup).toContain(text);
+  } finally {
+    member.mockRestore();
+  }
 });
 
 test('main and phone navigation mark the current page, and followed communities keep icons and locale-safe destinations', () => {
@@ -144,7 +144,7 @@ test('main and phone navigation mark the current page, and followed communities 
       />,
     );
     expect(communities).toContain('href="/en/spaces/reading" title="Reading together" aria-current="page"');
-    expect(communities.match(/<svg/g)).toHaveLength(2);
+    expect(communities.match(/<a\b[^>]*title="[^"]*"[^>]*><svg\b/g)).toHaveLength(2);
     expect(communities).toContain('Quiet space');
     const phone = html(
       <PhoneNavigationView pathname="/library" library signedIn actions={[]} account={<button>You</button>} />,

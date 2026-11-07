@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
@@ -88,7 +89,8 @@ beforeAll(async () => {
   const issuer = 'https://ranking.auth.test';
   const audience = 'https://content.test';
   bearer = async ({ actor }) => {
-    const iat = Math.floor(instant / 1000) - 2;
+    // Access checks iat/exp against wall time. Ranking formulas keep `instant` as the kernel clock.
+    const iat = Math.floor(Date.now() / 1000) - 2;
     return new SignJWT({
       client_id: actor.clientId,
       scope: actor.scopes.join(' '),
@@ -105,6 +107,7 @@ beforeAll(async () => {
       .sign(pair.privateKey);
   };
   kernel = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool: system.database.pool,
     routeKey: system.routeKey,
     tokens: system.tokenKeys,

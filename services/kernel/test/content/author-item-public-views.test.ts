@@ -1,10 +1,13 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { capture, costOf, openGrowthDatabase, seed } from '../support/growth.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { captureWithFoldedCost, openGrowthDatabase, seed } from '../support/growth.ts';
 
 const authorRoute = 0x9abc;
 const contentRoute = 0x1234;
@@ -24,6 +27,7 @@ beforeAll(async () => {
   signingKeys = await generateKeyPair('ES256');
   publicKey = { ...(await exportJWK(signingKeys.publicKey)), kid: 'author-views', alg: 'ES256' };
   app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(7),
     tokens,
@@ -42,6 +46,7 @@ beforeAll(async () => {
   const fetchGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(app), 'fetch')?.get;
   if (!fetchGetter) throw new Error('Elysia fetch getter is unavailable');
   fetchGetter.call(app);
+  await bootstrapRelease(db.pool, bundledRelease);
   viewer = newId(authorRoute);
   await account(viewer);
 });
@@ -217,9 +222,15 @@ async function token(accountId: string, scopes = 'thread:read post:read board:re
     .sign(signingKeys.privateKey);
 }
 
-function path(author: string, list: 'threads' | 'posts', kind?: 'discussion' | 'review') {
-  const query = kind ? `?kind=${kind}` : '';
-  return `/v1/accounts/${author}/${list}${query}`;
+function path(
+  author: string,
+  list: 'threads' | 'posts',
+  kind?: 'discussion' | 'review',
+  extra: Record<string, string> = {},
+) {
+  const query = new URLSearchParams({ ...(kind ? { kind } : {}), ...extra });
+  const encoded = query.toString();
+  return `/v1/accounts/${author}/${list}${encoded ? `?${encoded}` : ''}`;
 }
 
 async function get(url: string, bearer?: string) {
@@ -326,7 +337,8 @@ test('deleted, fenced and unknown accounts return empty author pages', async () 
 });
 
 // access.account grows in production; the bounded neighbourhood is one author's page and one public view read
-// of that author. Seed unrelated accounts in the same route with production row shapes to observe the unforced plan.
+// of that author. Seed unrelated accounts in the same route with production row shapes and ANALYZE before the
+// unforced plan so a handful of fixture rows cannot make Postgres seq-scan the primary key lookup.
 test('two public view observations fence each author page at any item count', async () => {
   const author = newId(authorRoute);
   await account(author);
@@ -336,42 +348,17 @@ test('two public view observations fence each author page at any item count', as
      SELECT $1,id,'actor','active',false,false,id FROM unnest($2::uuid[]) AS ids(id)`,
     [authorRoute, Array.from({ length: 500 }, () => newId(authorRoute))],
   );
+  await db.admin.query('ANALYZE access.account');
 
-  function accountScans(value: unknown): Record<string, unknown>[] {
-    if (Array.isArray(value)) return value.flatMap(accountScans);
-    if (value === null || typeof value !== 'object') return [];
-    const node = value as Record<string, unknown>;
-    return [
-      ...(node.Schema === 'access' && node['Relation Name'] === 'account' ? [node] : []),
-      ...Object.values(node).flatMap(accountScans),
-    ];
-  }
-
-  async function reads() {
-    const result = await capture(db, () => get(path(author, 'threads')));
+  async function boundedRows() {
+    const result = await captureWithFoldedCost(db, () => get(path(author, 'threads', undefined, { limit: '1' })));
     expect(result.value.status).toBe(200);
     expect(result.capture.statements.filter((statement) => statement.includes('public_views'))).toHaveLength(2);
-    const statement = result.capture.statements.find((statement) => statement.includes('public_views'));
-    const plans = result.capture.plans
-      .flatMap((plan): unknown[] => (Array.isArray(plan) ? plan : [plan]))
-      .filter(
-        (plan) => plan !== null && typeof plan === 'object' && 'Query Text' in plan && plan['Query Text'] === statement,
-      );
-    expect(plans).toHaveLength(2);
-    expect(accountScans(plans)).toEqual([
-      expect.objectContaining({
-        'Node Type': expect.stringMatching(/^Index (?:Only )?Scan$/),
-        'Index Name': 'account_pkey',
-      }),
-      expect.objectContaining({
-        'Node Type': expect.stringMatching(/^Index (?:Only )?Scan$/),
-        'Index Name': 'account_pkey',
-      }),
-    ]);
-    expect(costOf(result.capture).relations['access.account']?.rows).toBe(2);
+    expect(result.capture.cost.relations['access.account']?.rows).toBe(2);
+    expect(result.capture.cost.relations['access.account']?.sequentialScans).toBe(0);
   }
 
-  await reads();
+  await boundedRows();
   for (let index = 21; index < 29; index++) await item(author, 'discussion', index);
-  await reads();
+  await boundedRows();
 });

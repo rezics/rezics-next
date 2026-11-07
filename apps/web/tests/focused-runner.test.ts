@@ -124,7 +124,7 @@ test('an explicit nested host file executes when bunfig excludes host discovery'
   }
 });
 
-test('a bun test command reuses one with-dev-server wrapper when the app has Vite', async () => {
+test('isolated test files receive shared Vite bindings while a self-hosted journey retains its own server', async () => {
   mkdirSync(join(workspace, '.temp'), { recursive: true });
   const project = mkdtempSync(join(workspace, '.temp/focused-shared-wrap-'));
   try {
@@ -151,12 +151,24 @@ test('a bun test command reuses one with-dev-server wrapper when the app has Vit
       join(project, 'tests', 'two.test.ts'),
       "import { expect, test } from 'bun:test';\ntest('two', () => { console.log('FILE_TWO ' + process.env.WEB_TEST_DEV_SERVER); expect(process.env.WEB_TEST_DEV_SERVER).toBe('shared-descriptor.json'); });\n",
     );
-    const result = await runFocused(project, ['bun', 'test', 'tests/one.test.ts', 'tests/two.test.ts']);
+    writeFileSync(
+      join(project, 'tests', 'post-editing.test.ts'),
+      "import { expect, test } from 'bun:test';\ntest('self-hosted', () => { console.log('SELF_HOSTED_EXECUTED'); expect(process.env.WEB_TEST_DEV_SERVER).not.toBe('shared-descriptor.json'); });\n",
+    );
+    const result = await runFocused(project, [
+      'bun',
+      'test',
+      'tests/one.test.ts',
+      'tests/post-editing.test.ts',
+      'tests/two.test.ts',
+    ]);
     expect(result.status, result.output).toBe(0);
-    expect(result.output).toContain('SHARED_WRAP bun test tests/one.test.ts tests/two.test.ts');
-    expect(result.output.match(/SHARED_WRAP /g)?.length).toBe(1);
+    expect(result.output).toContain('SHARED_WRAP bun test --max-concurrency=1 tests/one.test.ts');
+    expect(result.output).toContain('SHARED_WRAP bun test --max-concurrency=1 tests/two.test.ts');
+    expect(result.output.match(/SHARED_WRAP /g)?.length).toBe(2);
     expect(result.output).toContain('FILE_ONE shared-descriptor.json');
     expect(result.output).toContain('FILE_TWO shared-descriptor.json');
+    expect(result.output).toContain('SELF_HOSTED_EXECUTED');
   } finally {
     rmSync(project, { recursive: true, force: true });
   }

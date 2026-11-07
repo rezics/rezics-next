@@ -215,9 +215,7 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
   if (routed !== null) return routed;
   const admitted = admitSerialBunTestCommand(admitExplicitHostTestCommand(selection.command));
   const wrapShared =
-    commandNeedsSharedDevServer(admitted) &&
-    existsSync(join(appDirectory, 'vite.config.ts')) &&
-    existsSync(join(appDirectory, 'scripts/with-dev-server.ts'));
+    existsSync(join(appDirectory, 'vite.config.ts')) && existsSync(join(appDirectory, 'scripts/with-dev-server.ts'));
   const stateDirectory = mkdtempSync(join(tmpdir(), 'rezics-web-focused-'));
   const childEnvironment: NodeJS.ProcessEnv = {
     ...routedEnvironment,
@@ -238,7 +236,7 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     delete childEnvironment[name];
   delete childEnvironment.REZICS_WEB_TEST_SELECTION_CONTEXT;
   const invocations = focusedTestCommands(admitted).map((command) =>
-    wrapShared
+    wrapShared && commandNeedsSharedDevServer(command)
       ? ['bun', 'scripts/with-dev-server.ts', '--', ...command]
       : options.privateNetwork
         ? privateNetworkCommand(command)

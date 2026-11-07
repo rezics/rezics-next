@@ -65,6 +65,8 @@ export type FeedActionBarProps = {
   library?: { href: string } | { control: ReactNode } | undefined;
   /** Existing author/report menu. Its owner retains edit, erasure and report ceremonies. */
   overflow?: ReactNode;
+  /** Anonymous SSR has not yet observed the browser session; do not offer a stranger menu. */
+  overflowPending?: boolean;
   /** Continue and other installed actions remain owned by the caller. */
   children?: ReactNode;
   /** Detail hosts can keep the reaction/menu cluster at top right and actions beside the body. */
@@ -347,6 +349,7 @@ function ActionVisit({
   reply,
   library,
   overflow,
+  overflowPending = false,
   children,
   layout = 'row',
   origin,
@@ -597,7 +600,32 @@ function ActionVisit({
           />
         )}
         {layout === 'detail'
-          ? (activeOverflow ?? (
+          ? overflowPending
+            ? null
+            : (activeOverflow ?? (
+                <Menu
+                  title={m.report_more({}, options)}
+                  entries={entries}
+                  trigger={
+                    <Button
+                      ref={menuButton}
+                      variant="ghost"
+                      size="icon"
+                      className={actionClass}
+                      aria-label={m.report_more({}, options)}
+                    >
+                      <EllipsisIcon aria-hidden />
+                    </Button>
+                  }
+                />
+              ))
+          : null}
+      </div>
+      {actions}
+      {layout === 'row'
+        ? overflowPending
+          ? null
+          : (activeOverflow ?? (
               <Menu
                 title={m.report_more({}, options)}
                 entries={entries}
@@ -606,7 +634,7 @@ function ActionVisit({
                     ref={menuButton}
                     variant="ghost"
                     size="icon"
-                    className={actionClass}
+                    className={`${actionClass} min-w-11 sm:min-w-8 pointer-coarse:min-w-11`}
                     aria-label={m.report_more({}, options)}
                   >
                     <EllipsisIcon aria-hidden />
@@ -614,27 +642,6 @@ function ActionVisit({
                 }
               />
             ))
-          : null}
-      </div>
-      {actions}
-      {layout === 'row'
-        ? (activeOverflow ?? (
-            <Menu
-              title={m.report_more({}, options)}
-              entries={entries}
-              trigger={
-                <Button
-                  ref={menuButton}
-                  variant="ghost"
-                  size="icon"
-                  className={`${actionClass} min-w-11 sm:min-w-8 pointer-coarse:min-w-11`}
-                  aria-label={m.report_more({}, options)}
-                >
-                  <EllipsisIcon aria-hidden />
-                </Button>
-              }
-            />
-          ))
         : null}
       {reactionStatus ? (
         <div data-slot="feed-reaction-admission" className="basis-full min-w-0 text-sm text-muted-foreground">

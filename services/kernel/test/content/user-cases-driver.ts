@@ -17,6 +17,7 @@ import type {
 } from '../../../../specs/content-user-cases-driver.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createPublicRatingSource } from '../../src/rating/public-rating-source.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import type { PublicFigureView } from '../../src/rating/public-figure-http.ts';
@@ -92,6 +93,7 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
     populationId: GLOBAL_CONTEXT,
   });
   const holds = new Set<HeldPage>();
+  const pageHolds = new Map<string, { enter(): void; released: Promise<void> }>();
   let worker: Awaited<ReturnType<typeof startUserCasesWorker>> | undefined;
   let workClient: WorkClient | undefined;
   let closing: Promise<void> | undefined;
@@ -139,10 +141,21 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
       pool,
       routeKey: system.routeKey,
       tokens: system.tokenKeys,
+      receiptKeys: testReceiptKeys(),
       workClient,
       requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
       clock: () => new Date(fixtureTime),
-      content: { cursorNow: () => fixtureTime },
+      content: {
+        cursorNow: () => fixtureTime,
+        async pageDisclosureBarrier(target) {
+          const key = target.threadId ?? target.boardId;
+          const hold = pageHolds.get(key);
+          if (!hold) return;
+          pageHolds.delete(key);
+          hold.enter();
+          await hold.released;
+        },
+      },
       access: () => system.access,
       writeRate: createWriteRateLimiter({ secret: crypto.randomUUID() + crypto.randomUUID(), overrides: highRates }),
       ratePeer: () => '127.0.0.1',
@@ -522,80 +535,42 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
         return result(await send('GET', `${path}?${params}`, request.actor), (json) => page<{ id: string }>(json));
       },
       async holdPage(request: PageRequest) {
-        // Board candidates are read before the parent decision; content.thread
-        // is first read after it. Post-page reaction enrichment follows the
-        // root and entry checks. pg_stat_activity confirms this request reached
-        // its later read before a mutation can run. No query hook or result
-        // modification participates in the barrier.
-        const table = request.kind === 'board' ? 'content.thread' : 'content.reaction_total';
-        const lock = await pool.connect();
-        let released = false;
-        let held: HeldPage;
-        let releasePromise: Promise<void> | undefined;
-        try {
-          await lock.query('BEGIN');
-          await lock.query(`LOCK TABLE ${table} IN ACCESS EXCLUSIVE MODE`);
-          const {
-            rows: [owner],
-          } = await lock.query<{ pid: number }>('SELECT pg_backend_pid() AS pid');
-          const requestStartedAt = Date.now();
-          const response = driver.page(request);
-          void response.catch(() => {});
-          let finished = false;
-          void response.then(
-            () => {
-              finished = true;
-            },
-            () => {
-              finished = true;
-            },
-          );
-          const reached = (async () => {
-            const deadline = Date.now() + 10_000;
-            for (;;) {
-              const waiting = await pool.query(
-                `
-                SELECT 1 FROM pg_stat_activity
-                WHERE datname=current_database() AND wait_event_type='Lock'
-                  AND $1::integer=ANY(pg_blocking_pids(pid))
-                  AND query_start >= to_timestamp($2::double precision / 1000)
-                  AND position($3::text in query) > 0 LIMIT 1`,
-                [owner!.pid, requestStartedAt, table],
-              );
-              if (waiting.rowCount) return;
-              if (released || finished) throw new Error('Page finished before the post-authorization lock barrier');
-              if (Date.now() >= deadline) throw new Error(`Page never reached its post-authorization ${table} lock`);
-            }
-          })();
-          void reached.catch(() => {});
-          held = {
+        // This seam only delays the completed native selection/enrichment. It holds
+        // no database lock and cannot prevent the independent mutation from committing.
+        const key = request.kind === 'board' ? request.boardId : request.threadId;
+        let enter!: () => void;
+        const reached = new Promise<void>((resolve) => {
+          enter = resolve;
+        });
+        let resume!: () => void;
+        const released = new Promise<void>((resolve) => {
+          resume = resolve;
+        });
+        pageHolds.set(key, { enter, released });
+        const response = driver.page(request);
+        void response.catch(() => {});
+        let releasing: Promise<void> | undefined;
+        const held: HeldPage = {
+          reached: Promise.race([
             reached,
-            response,
-            release: () =>
-              (releasePromise ??= (async () => {
-                released = true;
-                try {
-                  await lock.query('ROLLBACK');
-                } finally {
-                  lock.release();
-                }
-                try {
-                  await response;
-                } finally {
-                  holds.delete(held);
-                }
-              })()),
-          };
-          holds.add(held);
-          return held;
-        } catch (error) {
-          try {
-            await lock.query('ROLLBACK');
-          } finally {
-            lock.release();
-          }
-          throw error;
-        }
+            response.then(() => {
+              throw new Error('Page finished before final disclosure barrier');
+            }),
+          ]),
+          response,
+          release: () =>
+            (releasing ??= (async () => {
+              pageHolds.delete(key);
+              resume();
+              try {
+                await response;
+              } finally {
+                holds.delete(held);
+              }
+            })()),
+        };
+        holds.add(held);
+        return held;
       },
       effects,
     };
