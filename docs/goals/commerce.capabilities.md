@@ -62,6 +62,10 @@ The walk report supplies `passing/26` and the slowest failing path with its firs
 After the initial walk, new briefs repair observed failing paths; they do not add outcomes or boundary-baseline
 refactors. Same-day newly introduced boundary violations remain repairable. Existing detailed scenarios and
 promotion obligations remain open until their own evidence is supplied.
+Decision: first-public acceptance is the seeded walk
+`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/tests/native/commerce-library-journeys.walk.ts`
+using `services/kernel/test/commerce/support/goal-journey-walk.ts`. Genuine-order retention stays
+`test/commerce/erasure-participant.test.ts`. No extra outcome suites.
 
 ## Evidence and stages
 

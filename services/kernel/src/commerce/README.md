@@ -998,6 +998,9 @@ minimization, deadline purge and separate Access resolution; it distinguishes th
 production financial retention and remaining shared custody.
 Decision: genuine-order native acceptance uses Content's isolated native system and Access `grant.create`; operator
 history stays on the shared Auth/persona fixture; Accounts consumes `prepareNativeRetainedOrder`.
+Decision: first-public user-visible acceptance is the 26-row seeded walk
+`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/tests/native/commerce-library-journeys.walk.ts`;
+this genuine-order suite remains the financial retention proof. No extra outcome suites.
 Decision: one native purchase/retention/expiry journey uses two quantity-one editions so refund and late paid stay on distinct genuine orders; unused-actor operator history stays the second case. The composed kernel uses the 30-second native test request deadline; the production two-second default is not this fixture's Access admission budget. Reylo page and locator statements are normalized to a list so a single entitlement or order is purged. Board and offer
 grants, edition publication and Commerce HTTP share one composed kernel. That kernel reuses Content's native Access,
 which is already compiled from the full mounted catalogue (including Commerce) and Score `nativeAuth.handler`; Auth
