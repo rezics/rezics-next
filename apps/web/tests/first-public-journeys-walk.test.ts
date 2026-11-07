@@ -65,8 +65,8 @@ test('the walk continues mixed anonymous paths when seed writes no result.json',
   expect(source.slice(seed, frontends)).toContain("handle: 'developer'");
   expect(source).toContain("`${stack.web}/auth/sign-in?return_to=${encodeURIComponent('/en/settings')}`");
   expect(source).not.toContain('/en/auth/sign-in?return_to');
-  expect(source).toContain('/v1/definitions/active');
-  expect(source).toContain('`${stack.kernel}/v1/definitions`');
+  expect(source).toContain('`${stack.kernel}/v1/definitions/active`');
+  expect(source).not.toContain('`${stack.kernel}/v1/definitions`)');
   expect(source).toContain('`${stack.kernel}/health`');
   expect(source).toContain("query: { accountId: ctx.seed.accountId, limit: '5' }");
   const markdown = capabilitiesTableMarkdown(

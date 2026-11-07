@@ -269,7 +269,6 @@ async function probeSignIn(stack: Stack): Promise<{ ok: boolean; detail: string 
 }
 
 async function probeKernel(stack: Stack): Promise<{ ok: boolean; detail: string }> {
-  const definitions = await http(`${stack.kernel}/v1/definitions`);
   const active = await http(`${stack.kernel}/v1/definitions/active`);
   const nativeJwks = await http(`${stack.native}/.well-known/jwks.json`);
   const worker = await http(`${stack.kernel}/health`).catch((error: Error) => ({
@@ -277,10 +276,10 @@ async function probeKernel(stack: Stack): Promise<{ ok: boolean; detail: string 
     headers: {},
     text: error.message,
   }));
-  const ok = definitions.status < 400 && nativeJwks.status < 500;
+  const ok = active.status < 400 && nativeJwks.status < 500;
   return {
     ok,
-    detail: `kernel /v1/definitions HTTP ${definitions.status}; kernel /v1/definitions/active HTTP ${active.status}; native JWKS HTTP ${nativeJwks.status}; kernel /health HTTP ${worker.status}`,
+    detail: `kernel /v1/definitions/active HTTP ${active.status}; native JWKS HTTP ${nativeJwks.status}; kernel /health HTTP ${worker.status}`,
   };
 }
 

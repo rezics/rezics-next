@@ -33,7 +33,9 @@ every applicable cell and exact scenario execution, zero skips/todos, real nativ
 workers where relevant, and recorded revision evidence.
 
 Decision: Label unique-key points and FULL assignment pages keep MATERIALIZED input, Access ROW-bounded index
-range and `OFFSET 0`; prefix/FULL growth allow only that `OFFSET 0` fence and still refuse `LIKE`. Auth setup does
+range and `OFFSET 0`; prefix/FULL growth allow only that `OFFSET 0` fence and still refuse `LIKE`. FULL entry tiles
+and active-session seeks unnest subject IDs through a MATERIALIZED keys CTE with that same fence, so a custom plan
+cannot Seq Scan `library.entry` or `progress_session`. Auth setup does
 not copy the host-scope `catalogue_only` URL into `process.env`, so Reylo keeps cached analysis when a real
 `DATABASE_URL` is already present. Seeded frontends wait until `/auth/sign-in` redirects before signed-in probes.
 
@@ -46,7 +48,7 @@ and launcher failures are recorded causes; this walk does not repair startup. A 
 does not fail-rest the 17 paths: mixed anonymous P02/P17 and other seed-free surfaces still run on the admitted
 stack, and each signed-in row records its own first unreached cause. Semantic owns importer
 `Import transport request failed`. Native Web sign-in is `/auth/sign-in` (302 to Auth); Kernel probes the stack-ready
-`/v1/definitions` URL and `/v1/definitions/active`; public Log list GET requires `accountId`. The walk source pin does not start
+`GET /v1/definitions/active` and `GET /health` (there is no `GET /v1/definitions`); public Log list GET requires `accountId`. The walk source pin does not start
 shared Vite. Fewest tests: `apps/web/tests/first-public-journeys-walk.test.ts` plus the walk itself.
 
 <!-- first-public-journeys:begin -->

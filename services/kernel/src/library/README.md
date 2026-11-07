@@ -142,7 +142,9 @@ text. A unique point may be one row or a one-element array; UNION ALL pages are 
 or the first array element. They do not UNION ALL `include_deleted`. Existing Label command, HTTP and growth suites
 pin this; no extra tests. Prefix `ORDER BY` names `personal_label_live_name`
 `(route, account_id, normalized_name)`. Folded FULL warmup sees 34 `personal_label` parent observations and
-zero sequential scans. Set, unassign, restore and rename select each named operand once in the one-row request
+zero sequential scans on `personal_label`, `label_assignment`, `entry` and `progress_session`. FULL
+entry tiles and active-session seeks unnest subject IDs through a MATERIALIZED keys CTE plus the same
+Access ROW-bounded `OFFSET 0` fence; active-session `LIMIT 1` stays after that fence. Set, unassign, restore and rename select each named operand once in the one-row request
 and read those columns in the mutation WHERE.
 
 Decision: Source capture, member preparation, owner-query preparation, publication, presentation and Entry/progress admission use

@@ -49,12 +49,16 @@ FULL empty-shelf gate denials keep raw capture so private Library plans must be 
 growth folds native plan notices so Access formula EXPLAIN stays inside the telemetry cap, charging one
 provenance summary per notice rather than one telemetry entry per EXPLAIN node, and walks each notice
 under the per-tree node cap rather than the capture-wide 20 000-node telemetry budget; Seq Scan
-on Library relations stays refused. FULL assignment pages hydrate Subject summaries from the admitted
+on Library relations stays refused. FULL entry tiles and active-session seeks unnest subject IDs through
+a MATERIALIZED keys CTE, then the same Access ROW-bounded `OFFSET 0` fence, so a custom plan cannot
+inline the UUID array and Seq Scan `library.entry` or `progress_session`. Active-session `LIMIT 1` stays
+after that fence and still names `progress_session_active`. FULL assignment pages hydrate Subject summaries from the admitted
 request deadline and one Semantic `prepareReadDecisions` page, not per-subject Access point formulas.
 A concealed or moved Source on FULL by-label withholds (`subject: null`) through `withholdChangedSource`;
 it does not 503 the assignment page or shrink the raw cursor.
 The folded FULL warmup still sees 34 `personal_label` parent
-observations and zero sequential scans on `personal_label` and `label_assignment`. Point reads use that typed MATERIALIZED LATERAL unique-key inner with the ROW-bounded
+observations and zero sequential scans on `personal_label`, `label_assignment`, `entry` and
+`progress_session`. Point reads use that typed MATERIALIZED LATERAL unique-key inner with the ROW-bounded
 primary-key range and `OFFSET 0`; the store filters
 `include_deleted` on the unique row so a generic prepared plan cannot hide `personal_label_pkey` behind
 `OR deleted_at IS NULL`, inline a `NOT MATERIALIZED` CTE, stop a Seq Scan at `LIMIT 1`, or Seq Scan a small
