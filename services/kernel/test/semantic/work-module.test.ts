@@ -24,10 +24,13 @@ afterAll(async () => {
 
 // Each child owns the SDK singleton. Decorations observe the real default services and retain their handles.
 const program = `
-  import assert from 'node:assert/strict';
-  import { DBOS } from '@dbos-inc/dbos-sdk';
-  import { spyOn } from 'bun:test';
-  import * as relayModule from './src/events/relays.ts';
+  const phase = name => console.error('semantic-work-phase: ' + name);
+  phase('entry');
+  const { default: assert } = await import('node:assert/strict');
+  const { DBOS } = await import('@dbos-inc/dbos-sdk');
+  const { spyOn } = await import('bun:test');
+  phase('sdk-loaded');
+  const relayModule = await import('./src/events/relays.ts');
   let identityRegistrations = 0;
   let launches = 0;
   const registerWorkflow = DBOS.registerWorkflow;
@@ -36,9 +39,12 @@ const program = `
     return registerWorkflow.call(DBOS, workflow, config);
   });
   const launch = DBOS.launch;
-  spyOn(DBOS, 'launch').mockImplementation((...args) => {
+  spyOn(DBOS, 'launch').mockImplementation(async (...args) => {
+    phase('sdk-launch');
     launches++;
-    return launch.apply(DBOS, args);
+    const result = await launch.apply(DBOS, args);
+    phase('sdk-launched');
+    return result;
   });
   const startRelays = relayModule.startRelays;
   let projectors = 0;
@@ -50,18 +56,43 @@ const program = `
     }
     return startRelays(nativePool, relays, ...rest);
   });
+  phase('worker-import');
   const { readWorkerConfig, startWorker } = await import('./src/worker.ts');
+  phase('worker-imported');
+  const workClient = await import('./src/work/client.ts');
+  const createWorkClient = workClient.createWorkClient;
+  spyOn(workClient, 'createWorkClient').mockImplementation(async (...args) => {
+    phase('client-create');
+    const client = await createWorkClient(...args);
+    phase('client-created');
+    return client;
+  });
   let pool;
   let starts = 0;
   let stops = 0;
   let registrations = 0;
   const fail = process.env.SEMANTIC_START_FAILURE === 'true';
   const decorate = nativeModules => {
+    phase('bindings-installed');
     assert.equal(nativeModules.filter(m => m.name === 'semantic').length, 1);
     const modules = nativeModules.map(module => ({
       name: module.name,
       async register(context) {
-        if (module.name !== 'semantic') return module.register(context);
+        phase('register:' + module.name);
+        const nativeContext = context;
+        context = { ...context, addService(start) {
+          nativeContext.addService(async () => {
+            phase('service-start:' + module.name);
+            const service = await start();
+            phase('service-started:' + module.name);
+            return service;
+          });
+        }};
+        if (module.name !== 'semantic') {
+          await module.register(context);
+          phase('registered:' + module.name);
+          return;
+        }
         registrations++;
         pool = context.pool;
         assert.equal(DBOS.isInitialized(), false);
@@ -86,6 +117,7 @@ const program = `
             }};
           });
         }});
+        phase('registered:' + module.name);
       }
     }));
     if (fail) modules.push({ name: 'startup-failure', register(context) {
@@ -94,6 +126,7 @@ const program = `
     return modules;
   };
   try {
+    phase('worker-start');
     const worker = await startWorker(readWorkerConfig(process.env), decorate);
     assert.equal(fail, false);
     assert.equal(registrations, 1);
@@ -178,6 +211,11 @@ function runtime(fail = false) {
       await readErrors;
       expect(status, `${output}\n${errors}`).toBe(0);
     },
+    async dispose() {
+      if (child.exitCode === null) child.kill('SIGKILL');
+      await child.exited;
+      await Promise.all([read, readErrors]);
+    },
   };
 }
 
@@ -213,8 +251,7 @@ test('default semantic WorkModule registers and starts the existing native seman
     ]);
     expect(rows).toEqual([]);
   } finally {
-    child.child.kill();
-    await child.child.exited;
+    await child.dispose();
   }
 }, 30_000);
 
@@ -372,8 +409,7 @@ test('actual native subject relation events converge through registered Semantic
     await admin.query('DROP TRIGGER IF EXISTS hold_semantic_checkpoint ON core.consumer_checkpoint');
     await admin.query('DROP FUNCTION IF EXISTS public.hold_semantic_checkpoint()');
     lock.release();
-    child.child.kill();
-    await child.child.exited;
+    await child.dispose();
   }
 }, 60_000);
 

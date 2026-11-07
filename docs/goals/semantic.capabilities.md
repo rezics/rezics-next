@@ -105,6 +105,9 @@ the existing native journeys; integration alone establishes no first-public or C
 Worker lifecycle fixtures decorate the worker's installed module list after History composition and supply the same
 dedicated worker environment to direct registration. Registration counts, native link convergence and shutdown
 drain assertions remain unchanged; these fixture checks do not establish an admitted first-public pass.
+Direct registration uses the mounted worker authorization. Lifecycle readiness failures retain streamed child
+diagnostics and startup phases; failed fixture cleanup kills only its own child so a stalled graceful stop cannot
+hide the first failure. The tested successful shutdown still drains the native projector under its original lock.
 
 ## Evidence stages
 
