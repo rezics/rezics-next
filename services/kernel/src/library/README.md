@@ -124,12 +124,14 @@ Selected identity seal cases keep the selected bind vector; transform fixtures u
 identity, Source/member/publication, assignment-growth and lifecycle-growth cases keep their unchanged assertions.
 Label catalogue, assignment and parent SQL use typed input CTEs and LATERAL primary-key or reserved-source
 points so generic prepared plans cannot Seq Scan an owner catalogue. Those `ORDER BY` lists name the index
-columns in index order. Point reads bind the unique primary key as Entry does (`route`, `account_id`, `label_id` with no casts,
-CTE, `OR`, or `LIMIT`). The store then filters `include_deleted` on that row; a wrapping CTE plus SQL
-`OR` Seq Scanned all 34 FULL parents, and LATERAL `ORDER BY` PK `LIMIT 1` Seq Scanned once per parent under
-generic prepared plans. They project `createdAt` as insert RETURNING does so Reylo still decodes timestamptz text. A unique point
-may be one row or a one-element array; UNION ALL pages are arrays, so the store takes that row or the first
-array element. They do not UNION ALL `include_deleted`. Existing Label command, HTTP and growth suites pin this; no extra tests. Prefix `ORDER BY` names `personal_label_live_name`
+columns in index order. Point reads take a typed `NOT MATERIALIZED` input row and LATERAL unique
+`(route, account_id, label_id)` so the inner is a parameterized `personal_label_pkey` nested loop. `ORDER BY`
+names that primary key. They do not `LIMIT 1` or `OR include_deleted` in SQL: top-level PK equality Seq Scanned a
+small catalogue, `LIMIT 1` lets Seq Scan stop early, and `OR` hides the unique index. The store filters
+`include_deleted` on that row. They project `createdAt` as insert RETURNING does so Reylo still decodes timestamptz
+text. A unique point may be one row or a one-element array; UNION ALL pages are arrays, so the store takes that row
+or the first array element. They do not UNION ALL `include_deleted`. Existing Label command, HTTP and growth suites
+pin this; no extra tests. Prefix `ORDER BY` names `personal_label_live_name`
 `(route, account_id, normalized_name)`. Folded FULL warmup sees 34 `personal_label` parent observations and
 zero sequential scans. Set, unassign, restore and rename select each named operand once in the one-row request
 and read those columns in the mutation WHERE.

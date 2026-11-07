@@ -18,10 +18,11 @@ declaration equality, ordinary native adapter install, Search filter-leaf ports,
 Source/member/publication, assignment-growth and lifecycle-growth cases keep their existing assertions.
 The Source adapter ABI keeps Search `ScopeWorkContext`; contract `work` stays unknown. Label
 catalogue, assignment and reserved-source SQL drives from the one-row request through typed input CTEs and LATERAL
-primary-key or reserved-source points, with `ORDER BY` naming the index columns in index order. Point reads bind
-the unique primary key as Entry does (`route`, `account_id`, `label_id` with no casts, CTE, `OR`, or `LIMIT`).
-The store then filters `include_deleted` on that row. A wrapping CTE plus SQL `OR` Seq Scanned all 34 FULL
-parents; LATERAL `ORDER BY` PK `LIMIT 1` Seq Scanned once per parent under generic prepared plans. Restore and rename lock the exact parent rather than scanning the owner catalogue. Those
+primary-key or reserved-source points, with `ORDER BY` naming the index columns in index order. Point reads take a typed
+`NOT MATERIALIZED` input row and LATERAL unique `(route, account_id, label_id)` so the inner is a parameterized
+`personal_label_pkey` nested loop. `ORDER BY` names that primary key. They do not `LIMIT 1` or `OR include_deleted` in
+SQL: top-level PK equality Seq Scanned a small catalogue, `LIMIT 1` lets Seq Scan stop early, and `OR` hides the unique
+index. The store filters `include_deleted` on that row. Restore and rename lock the exact parent rather than scanning the owner catalogue. Those
 growth suites remain the oracles; this landing adds no parallel Label suite.
 Decision: native Label fixtures create the steward's Global `definitions:publish` / `definitions:activate` grants
 through the ordinary command after Access bootstrap; Access keeps Global point checks on the SQL evaluator so
@@ -48,8 +49,8 @@ request deadline and one Semantic `prepareReadDecisions` page, not per-subject A
 A concealed or moved Source on FULL by-label withholds (`subject: null`) through `withholdChangedSource`;
 it does not 503 the assignment page or shrink the raw cursor.
 The folded FULL warmup still sees 34 `personal_label` parent
-observations and zero sequential scans. Point reads bind the unique primary key as prepared parameters; the
-store filters `include_deleted` on that row so a generic prepared plan cannot hide the unique index behind
+observations and zero sequential scans. Point reads use that typed LATERAL unique-key inner; the store filters
+`include_deleted` on the unique row so a generic prepared plan cannot hide `personal_label_pkey` behind
 `OR deleted_at IS NULL` or stop a Seq Scan at `LIMIT 1`. They project `createdAt` as insert RETURNING does. The
 store takes a unique point as a row or the first array element. They do not UNION ALL `include_deleted`. Prefix
 still UNION ALLs `upper_bound`, and its `ORDER BY` names `personal_label_live_name`
