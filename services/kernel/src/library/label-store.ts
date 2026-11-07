@@ -144,8 +144,8 @@ export async function readPersonalLabel(
     },
     outputRows: 1,
   });
-  const row = await executeLabelSql(plan, (operands) => readLabel.run(queryClient(client), operands));
-  return row ? asRecord(row) : null;
+  const rows = await executeLabelSql(plan, (operands) => readLabel.run(queryClient(client), operands));
+  return rows[0] ? asRecord(rows[0]) : null;
 }
 
 export async function renamePersonalLabel(
