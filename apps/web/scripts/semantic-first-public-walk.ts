@@ -247,6 +247,7 @@ type Session = {
   anonymous: BrowserContext;
   member: BrowserContext;
   revision: string;
+  frontendCause?: string;
 };
 
 async function visit(
@@ -254,6 +255,7 @@ async function visit(
   href: string,
   options: { width?: number; theme?: 'light' | 'dark'; persona?: 'anonymous' | 'member' } = {},
 ) {
+  if (session.frontendCause) throw new Error(session.frontendCause);
   const context = options.persona === 'member' ? session.member : session.anonymous;
   const opened = await openPage(context, href, { width: options.width ?? 1280, height: 900 }, options.theme ?? 'light');
   const title = await opened.page.title();
@@ -395,7 +397,18 @@ async function main() {
       `${JSON.stringify({ utc: new Date().toISOString(), error: seedCause, seedExit: seedCode, stack, readiness }, null, 2)}\n`,
       { mode: 0o600 },
     );
-  const frontends = await startSeededFrontends();
+  let frontends: { stop(): Promise<void> } = { stop: async () => undefined };
+  let frontendCause: string | undefined;
+  try {
+    frontends = await startSeededFrontends();
+  } catch (error) {
+    frontendCause = error instanceof Error ? error.message : String(error);
+    await writeFile(
+      join(evidenceDir, 'frontend-failure.json'),
+      `${JSON.stringify({ utc: new Date().toISOString(), error: frontendCause, stack, readiness }, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+  }
   const keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };
   let editor = '';
   let editorCause: string | undefined;
@@ -410,9 +423,9 @@ async function main() {
   const anonymous = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
   const member = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
   const results: Result[] = [];
-  const session: Session = { stack, call, editor, anonymous, member, revision };
+  const session: Session = { stack, call, editor, anonymous, member, revision, frontendCause };
   try {
-    if (editor) {
+    if (editor && !frontendCause) {
       const signIn = await member.newPage();
       await signIn.goto(`${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/catalogue/new')}`, {
         waitUntil: 'domcontentloaded',
@@ -883,6 +896,7 @@ async function main() {
     seedExit: seedCode,
     seedCause: seedCause ?? null,
     editorCause: editorCause ?? null,
+    frontendCause: frontendCause ?? null,
     passing: passing.length,
     total: FIRST_PUBLIC_JOURNEYS.length,
     slowestFailing: slowest
