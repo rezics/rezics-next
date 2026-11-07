@@ -189,6 +189,12 @@ and original screenshots remain unmeasured until admitted. Native query semantic
 The launcher remains page-local. A future header filter region should open this same editor with the page's supplied
 properties and applied params, without introducing another filter store or claiming unsupported backend scopes.
 
+Search integration uses consumer-owned directory and saved-rule presentation ports, bound by ordinary routes.
+The [directory contract](public-collection-discovery.md#search-integration) and
+[rule boundary](saved-query-results.md#rule-presentation-boundary) own the binding and its unchanged privacy,
+release, mutation and traversal semantics. Search owns native production and rendering; Library owns its command
+and reader lifetimes. Settings and Inbox consumers do not share these bindings.
+
 An admitted Collection filter document, or a Library type/label selection, can open `/library/rules/new` as a private
 saved dynamic Collection. A Library state ID without profile and state set stays unsaved with correction. Built-in
 Collections keep their immutable rules. Native member execution remains Commerce.

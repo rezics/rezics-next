@@ -959,19 +959,56 @@
       "capabilities": ["imports"]
     },
     {
+      "id": "web-search-contract",
+      "kind": "contract",
+      "owner": "search",
+      "paths": ["apps/web/src/search/contracts/**"],
+      "publicEntries": [
+        "apps/web/src/search/contracts/collection-directory.ts",
+        "apps/web/src/search/contracts/condition-metadata.ts"
+      ],
+      "allowedDependencies": ["filter"],
+      "capabilities": ["search-public-vocabulary"]
+    },
+    {
+      "id": "web-saved-query-presentation",
+      "kind": "UI/transport library",
+      "owner": "commerce",
+      "paths": ["apps/web/src/library/saved-query-editor/presentation.ts"],
+      "publicEntries": ["apps/web/src/library/saved-query-editor/presentation.ts"],
+      "allowedDependencies": ["filter", "web-search-contract"],
+      "capabilities": ["saved-query-condition-presentation"]
+    },
+    {
+      "id": "web-public-collection-discovery-contract",
+      "kind": "contract",
+      "owner": "commerce",
+      "paths": [
+        "apps/web/src/library/public-collection-discovery/read.ts",
+        "apps/web/src/library/public-collection-discovery/request.ts"
+      ],
+      "publicEntries": [
+        "apps/web/src/library/public-collection-discovery/read.ts",
+        "apps/web/src/library/public-collection-discovery/request.ts"
+      ],
+      "allowedDependencies": ["web-search-contract"],
+      "capabilities": ["public-collection-directory-port"]
+    },
+    {
       "id": "web-public-collection-discovery",
       "kind": "UI/transport library",
-      "owner": "search",
+      "owner": "commerce",
       "paths": ["apps/web/src/library/public-collection-discovery/**"],
+      "excludes": [
+        "apps/web/src/library/public-collection-discovery/read.ts",
+        "apps/web/src/library/public-collection-discovery/request.ts"
+      ],
       "publicEntries": [
-        "apps/web/src/library/public-collection-discovery/address.ts",
         "apps/web/src/library/public-collection-discovery/page.tsx",
         "apps/web/src/library/public-collection-discovery/query.ts",
-        "apps/web/src/library/public-collection-discovery/read.ts",
-        "apps/web/src/library/public-collection-discovery/request.ts",
         "apps/web/src/library/public-collection-discovery/window-navigation.ts"
       ],
-      "allowedDependencies": ["client", "composition", "ui", "web-app", "web-library", "web-search"],
+      "allowedDependencies": ["ui", "web-app", "web-search-contract", "web-public-collection-discovery-contract"],
       "capabilities": ["public-collection-directory"]
     },
     {
@@ -979,7 +1016,10 @@
       "kind": "UI/transport library",
       "owner": "commerce",
       "paths": ["apps/web/src/library/**"],
-      "excludes": ["apps/web/src/library/public-collection-discovery/**"],
+      "excludes": [
+        "apps/web/src/library/public-collection-discovery/**",
+        "apps/web/src/library/saved-query-editor/presentation.ts"
+      ],
       "publicEntries": [
         "apps/web/src/library/follow-control.tsx",
         "apps/web/src/library/score-write.ts",
@@ -999,7 +1039,9 @@
         "web-performance",
         "web-search",
         "web-semantic",
-        "progress"
+        "progress",
+        "web-search-contract",
+        "web-saved-query-presentation"
       ],
       "capabilities": ["library-pages"]
     },
@@ -1068,7 +1110,8 @@
         "apps/web/src/features/pages/subject-page-read-lifetime/**",
         "apps/web/src/features/pages/subject-canonical-lifetime/**",
         "apps/web/src/features/pages/subject-catalogue-metadata/**",
-        "apps/web/src/features/pages/public-reaction-recovery/**"
+        "apps/web/src/features/pages/public-reaction-recovery/**",
+        "apps/web/src/search/contracts/**"
       ],
       "publicEntries": [
         "apps/web/src/search/search.tsx",
@@ -1079,7 +1122,9 @@
         "apps/web/src/search/condition-weight.tsx",
         "apps/web/src/features/pages/agent-reader-read/index.ts",
         "apps/web/src/features/pages/showcase-work/index.ts",
-        "apps/web/src/features/pages/shared.tsx"
+        "apps/web/src/features/pages/shared.tsx",
+        "apps/web/src/search/public-collection-directory/index.ts",
+        "apps/web/src/search/saved-query-condition-input.tsx"
       ],
       "allowedDependencies": [
         "client",
@@ -1099,7 +1144,10 @@
         "curation-opening-read",
         "subject-page-read-lifetime",
         "subject-catalogue-metadata",
-        "public-reaction-recovery"
+        "public-reaction-recovery",
+        "web-search-contract",
+        "web-public-collection-discovery-contract",
+        "web-saved-query-presentation"
       ],
       "capabilities": ["search-pages"]
     },
@@ -1232,6 +1280,7 @@
         "web-performance",
         "web-public-collection-discovery",
         "web-search",
+        "web-search-contract",
         "subject-canonical-lifetime",
         "web-semantic"
       ],
@@ -1287,7 +1336,10 @@
         "apps/web/src/session/guard.ts",
         "apps/web/src/shell/page-heading.tsx",
         "apps/web/src/shell/head.ts",
-        "apps/web/src/shell/head-context.ts"
+        "apps/web/src/shell/head-context.ts",
+        "apps/web/src/subject/subject-href.ts",
+        "apps/web/src/subject/collection-return.ts",
+        "apps/web/src/shell/collection-presentation.tsx"
       ],
       "allowedDependencies": [
         "client",

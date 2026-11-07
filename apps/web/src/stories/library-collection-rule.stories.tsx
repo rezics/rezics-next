@@ -1,3 +1,4 @@
+import { SavedQueryConditionInput } from '../search/saved-query-condition-input';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { savedRuleReadyId, savedRuleUnavailableId } from '../kernel/fake/collection-rules';
@@ -32,6 +33,7 @@ const draft: RulePage = {
 function UnavailableDraft() {
   return (
     <CollectionRuleEditor
+      ConditionInput={SavedQueryConditionInput}
       page={draft}
       viewerId="story-viewer"
       collectionId={null}
@@ -111,6 +113,7 @@ export const Denied: Story = {
     <PatternStory visitor="Signed In" path={`/collections/${savedRuleUnavailableId}/rule`}>
       <AppShell>
         <CollectionRuleEditor
+          ConditionInput={SavedQueryConditionInput}
           page={{ state: 'denied' }}
           viewerId="story-viewer"
           collectionId={savedRuleUnavailableId}

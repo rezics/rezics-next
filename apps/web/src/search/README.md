@@ -149,6 +149,17 @@ a future Retry-After deadline withhold every read; expiry only enables an explic
 cursor, never a queued request. Local property lookup and shown-set selection stay available during those states. A new
 query identity starts a fresh admitted state.
 
+## Library integration
+
+Decision: Search provides the public Collection directory read and row-presentation adapters and the saved-rule
+ConditionEditor adapter; the ordinary Collection and new-rule routes choose them. Library owns the request/result
+and presentation ports. Search's adapters import those public ports, with no Library implementation dependency.
+Pure directory addresses and released condition metadata live in the separately registered Search contract module.
+The directory uses one native 24-hit request with its exact frontier and the existing card renderer; no facet,
+count, browser filter, refill, secondary renderer or private rule query is added. Shared Collection chrome and exact
+occurrence-return vocabulary are shell/Subject public leaves. The [directory](../library/public-collection-discovery.md)
+and [rule boundary](../library/saved-query-results.md#rule-presentation-boundary) retain the reader and mutation contracts.
+
 ## Route, query recovery and navigation
 
 Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only

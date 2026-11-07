@@ -1,3 +1,4 @@
+import { SavedQueryConditionInput } from '../../../search/saved-query-condition-input';
 import { createFileRoute } from '@tanstack/react-router';
 import { SavedQueryEditor } from '../../../library/saved-query-editor/editor';
 import { readCollectionRule } from '../../../library/collection-rule-actions';
@@ -15,5 +16,5 @@ export const Route = createFileRoute('/library/rules/new')({
 });
 function NewRulePage() {
   const loaded = Route.useLoaderData();
-  return <SavedQueryEditor page={loaded.page} collectionId={null} />;
+  return <SavedQueryEditor ConditionInput={SavedQueryConditionInput} page={loaded.page} collectionId={null} />;
 }

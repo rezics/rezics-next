@@ -22,3 +22,17 @@ recency units, nullability and follow-count authority remain Commerce facts.
 The mounted form accepts an explicit presentation Type ID or `mixed`, curator UUID, Subject UUID and order. It
 does not search display names or infer a Collection kind from its members. A not-ready Search/Commerce directory
 contract is presented as preparing; the page never falls back to an unfiltered Collection result.
+
+## Search integration
+
+Decision: Library owns the anonymous directory read port, generic result envelope, shell and bounded cursor visit;
+Search supplies native request construction, whole-page admission and row presentation at `/collections` route
+composition. The port has no Search runtime import or default implementation. `search/contracts/collection-directory`
+owns the pure public address vocabulary used by both consumers; it contains no Library implementation dependency.
+The Search adapter uses the existing native search read once and preserves every refusal, opaque frontier and row
+order. Its existing card and compatibility-summary renderer move together; Library adds no renderer or query.
+
+The query key remains anonymous and selection-bound. The route's public SSR cache fence, native result checkpoint,
+explicit Retry and exact continuation/return coordinates are unchanged. Row DTOs remain Search-owned; the consumer
+knows only row identity and delegates presentation. Shared Collection presentation and occurrence-return vocabulary
+live in shell and Subject leaves, so rendering a public card does not load Library's private reader implementation.

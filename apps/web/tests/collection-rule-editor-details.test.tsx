@@ -1,3 +1,4 @@
+import { SavedQueryConditionInput } from '../src/search/saved-query-condition-input';
 import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type ComponentProps } from 'react';
@@ -110,6 +111,7 @@ async function mount(initial: Partial<Props> = {}, locale = getLocale()) {
   window.document.body.append(host);
   const root = createRoot(host);
   let props: Props = {
+    ConditionInput: SavedQueryConditionInput,
     page: ready(),
     locale,
     viewerId: 'alice',

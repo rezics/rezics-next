@@ -1,10 +1,10 @@
 import { Cover } from '@rezics/ui/cover';
-import type { PublicCollectionSummary } from '../../search/discovery';
+import type { PublicCollectionSummary } from '../discovery';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
-import { collectionComparisonHref } from '../collection-comparison/model';
-import { CollectionPresentationSummary } from './presentation';
+import { collectionMemberSubjectHref } from '../../subject/subject-href';
+import { CollectionPresentationSummary } from '../../shell/collection-presentation';
 
 /** One admitted Search card, including its bounded native preview. No Collection or Subject hydration. */
 export function CollectionDiscoveryCard({ card, locale }: { card: PublicCollectionSummary['card']; locale: string }) {
@@ -70,9 +70,8 @@ export function CollectionDiscoveryCard({ card, locale }: { card: PublicCollecti
               <li key={member.id} data-collection-member-id={member.id} className="min-w-0">
                 <a
                   lang={member.subject.label?.language}
-                  href={collectionComparisonHref(
-                    member.subject.id,
-                    member.subject.label?.value ?? '',
+                  href={collectionMemberSubjectHref(
+                    { id: member.subject.id, label: member.subject.label?.value ?? '' },
                     locale,
                     href,
                     member.id,

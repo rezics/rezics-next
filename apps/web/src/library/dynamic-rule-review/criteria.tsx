@@ -1,8 +1,8 @@
 import type { FilterDocument } from '@rezics/filter';
 import { memo, useMemo } from 'react';
 import type { LibraryProfile } from '@rezics/definitions';
-import type { ConditionMetadata } from '../../search/condition-editor-model';
-import { localizedLabel } from '../../search/results';
+import type { ConditionMetadata } from '../../search/contracts/condition-metadata';
+import { pickText } from '@rezics/composition';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { RuleChoices, SavedRule } from '../collection-rule-read';
@@ -190,7 +190,7 @@ function ExactValues({
     <ul className="min-w-0 space-y-2">
       {values.map((entry, index) => {
         const currentValue = property ? labels[property]?.[entry.exact] : undefined;
-        const currentLabel = currentValue ? localizedLabel(currentValue, locale).text : entry.currentTypeLabel;
+        const currentLabel = currentValue ? pickText(currentValue, locale).text : entry.currentTypeLabel;
         return (
           <li key={`${entry.exact}:${index}`} className="min-w-0 break-words">
             <LabelPair accepted={entry.acceptedLabel} current={currentLabel} />

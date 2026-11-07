@@ -4,7 +4,7 @@ import {
   parsePublicCollectionDirectoryAddress,
   publicCollectionDirectoryHref,
   selectPublicCollectionDirectory,
-} from '../src/library/public-collection-discovery/address';
+} from '../src/search/contracts/collection-directory';
 
 const selection = {
   presentationKind: 'mixed',

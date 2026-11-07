@@ -1,3 +1,4 @@
+import type { SavedQueryConditionInput } from './saved-query-editor/presentation';
 import { useRef } from 'react';
 import type { FilterDocument } from '@rezics/filter';
 import { CollectionRuleEditor } from './collection-rule-editor';
@@ -28,7 +29,9 @@ export function CollectionRuleCurrent({
   resultsHref,
   seed,
   seedSource,
+  ConditionInput,
 }: {
+  ConditionInput: SavedQueryConditionInput;
   page: RulePage;
   collectionId: string | null;
   navigate?: (id: string) => void;
@@ -67,6 +70,7 @@ export function CollectionRuleCurrent({
       : undefined;
   return (
     <CollectionRuleEditor
+      ConditionInput={ConditionInput}
       key={owner.generation}
       page={currentPage}
       viewerId={owner.subject}

@@ -1,3 +1,4 @@
+import { SavedQueryConditionInput } from '../src/search/saved-query-condition-input';
 import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, useState, type ComponentProps } from 'react';
@@ -62,6 +63,7 @@ test('new and saved rule drafts protect navigation, preserve originals and retir
   let navigatedClean = false;
   type Props = ComponentProps<typeof CollectionRuleEditor>;
   let props: Props = {
+    ConditionInput: SavedQueryConditionInput,
     page: { state: 'new', viewerId: 'alice', intent: crypto.randomUUID(), choices },
     viewerId: 'alice',
     collectionId: null,

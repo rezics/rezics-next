@@ -41,3 +41,7 @@ The Web binding uses the installed Collection detail, metadata update and delete
 and writes. Commerce retains native authorization, revision/CAS and deletion semantics. Its remaining Web-facing
 producer gaps are complete paged dynamic owner metadata, dynamic member preparation and their required native outcome
 proof; Web adds no endpoint or successful fixture for those gaps.
+
+The new-rule route composes Library's `SavedQueryEditor` with Search's `SavedQueryConditionInput` adapter.
+The carried private selection still enters the existing owner-bound rule editor; the injected presentation neither
+owns the handoff nor sends a command. Settings and Inbox Library contracts remain independent of this binding.

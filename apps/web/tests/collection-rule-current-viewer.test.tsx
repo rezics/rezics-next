@@ -1,3 +1,4 @@
+import { SavedQueryConditionInput } from '../src/search/saved-query-condition-input';
 import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type ComponentProps } from 'react';
@@ -85,6 +86,7 @@ async function mount(initial: Partial<Props> = {}) {
   window.document.body.append(host);
   const root = createRoot(host);
   let props: Props = {
+    ConditionInput: SavedQueryConditionInput,
     page: ready(),
     viewerId: 'alice',
     collectionId: 'alpha',
@@ -203,7 +205,7 @@ async function mountCurrent(page: RulePage) {
       root.render(
         <StrictMode>
           <QueryClientProvider client={client}>
-            <CollectionRuleCurrent page={page} collectionId={null} />
+            <CollectionRuleCurrent ConditionInput={SavedQueryConditionInput} page={page} collectionId={null} />
           </QueryClientProvider>
         </StrictMode>,
       ),

@@ -11,7 +11,7 @@ import {
 import { searchContextSource, searchReviewContext, validReviewContextBinding } from './review-context';
 import { isCalendarDate } from '@rezics/filter';
 import type { KernelClient } from '@rezics/client';
-import type { PublicCollectionDirectorySelection } from '../library/public-collection-discovery/address';
+import type { PublicCollectionDirectorySelection } from './contracts/collection-directory';
 import { GLOBAL, PUBLIC_RATING_SCALE, QUESTION } from '../features/pages/subject-ratings';
 import { readSearchPage } from './search-request';
 import { isPlatformClosedError } from '../kernel/platform-closed';

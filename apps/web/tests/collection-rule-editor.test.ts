@@ -1,3 +1,4 @@
+import { SavedQueryConditionInput } from '../src/search/saved-query-condition-input';
 import { expect, mock, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { createKernelClient } from '@rezics/client';
@@ -176,6 +177,7 @@ test('all locales retain historical owner meanings in the shared structured comp
       setLocale(locale, { reload: false });
       const html = renderToStaticMarkup(
         createElement(CollectionRuleEditor, {
+          ConditionInput: SavedQueryConditionInput,
           page: {
             state: 'ready',
             viewerId: 'owner',

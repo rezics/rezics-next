@@ -1,3 +1,4 @@
+import { SavedQueryConditionInput } from '../search/saved-query-condition-input';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { CollectionRuleEditor } from '../library/collection-rule-editor';
@@ -90,6 +91,7 @@ function SuppliedEditor({ page = available, narrow = false }: { page?: RulePage;
   return (
     <div className={narrow ? 'w-full max-w-sm p-4' : 'w-full p-4 md:p-6'}>
       <CollectionRuleEditor
+        ConditionInput={SavedQueryConditionInput}
         page={page}
         viewerId="supplied-viewer"
         collectionId={page.state === 'new' ? null : 'supplied-rule'}
