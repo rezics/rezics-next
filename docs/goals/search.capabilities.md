@@ -56,6 +56,24 @@ and Source factory delivery `5db0f76f7fc3e81841541152cb1a471692fa5ff7` are also 
 The complete installed-producer repair remains with its existing Search owner; the original default-worker assertions
 remain required after its repair commit and integrated revision are supplied.
 
+The complete producer range `311230ca33..91c91989eb` is now received, together with the cumulative root/custody
+and Settings deliveries ending at `1b0a5e366a` and `90fe893300`. This includes deferred startup imports, generator
+settlement, Library capabilities around the root shell, normalized test selectors and the Settings browser/worker
+split. Conflict resolution follows those complete deliveries; the exact issuer-origin JWKS tests and original
+Mapping receipt assertions remain. One identical overlapping source-binding test is deduplicated without removing
+an assertion. No second stack is launched by this integration.
+
+The preceding fifteen-file Web selection at `dfad29c91c92f247a0f6b8ff43d79819b2248fa5` returned exit 1 after its
+own infrastructure rerun. The first physical run, host b `mw6ekf4h-47d3d1a9`, reached four pre-Vite readiness failures
+and then `remote-check: deadline reached after 7200000 ms`; its command ran 6996.010 seconds. The wrapper retried
+that transport failure on host c. All fifteen selections then failed before test execution, each waiting approximately
+150 seconds for a Vite ready line; the command ran 2308.792 seconds, peaking at 5302 MiB. Its first exact diagnostic:
+`dev server ready failed for /en; elapsed 150000.10742100002 ms; last error: Error: phase timed out; last error: Error: Vite ready line has not been printed`.
+No selected test, including the log-redaction assertion, passed or failed its product assertions. These are setup
+measurements, not journey durations. The original startup owner receives both physical outcomes; unchanged
+reruns do not replace the newly delivered class repair. Evidence:
+`.temp/goal/checks/worker-check-195d7b92-d55d-43de-85b4-07051749241c-2026-11-07T12-51-05.691Z-ee9a9f5d.log`.
+
 Fixture decision: reconcile the genuine completed Mapping receipt before asserting the control ACK in native Search
 receiving. Keep the existing 128-step bound and every original custody, transaction, replay and completion assertion.
 Do not increase limits to substitute for receipt reconciliation. Setup evidence is checkpointed before each phase;
