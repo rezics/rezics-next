@@ -3,10 +3,7 @@ import { MAX_PAGE_DOCUMENTS, pageDocumentReferences } from '@rezics/composition'
 import type { Release } from '@rezics/definitions';
 import { serializeDocument } from '@rezics/document';
 import { createHash } from 'node:crypto';
-import {
-  readCurrentContentDocument,
-  type CurrentContentDocumentRuntime,
-} from '../content/adapters/index.ts';
+import { readCurrentContentDocument, type CurrentContentDocumentRuntime } from '../content/adapters/index.ts';
 import { publicDocument, type PublicDocumentView } from '../content/document-public.ts';
 import type { Actor } from '../request/access.ts';
 import type { Item } from './item.ts';

@@ -396,7 +396,6 @@ function listed<T>(result: T[] | T | null): T[] {
   return Array.isArray(result) ? result : [result];
 }
 
-
 export type RelatedState = import('./subject-reading-application.ts').RelatedState;
 export type { SubjectReadOptions, SubjectReadResult } from './subject-reading-application.ts';
 

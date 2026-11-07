@@ -19,7 +19,14 @@ import { deadlineFor } from '../request/deadline.ts';
 import { partitionReadClient, partitionReadClients } from '../database/read-snapshot.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartitions, readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type AccessCheck, type AccessClient, type Actor, type Resource } from '../request/access.ts';
+import {
+  accessCheck,
+  type Access,
+  type AccessCheck,
+  type AccessClient,
+  type Actor,
+  type Resource,
+} from '../request/access.ts';
 import { relatedReadEligibility, subjectReadEligibility } from './eligibility.ts';
 import { factDataTypes, isRelationProperty, resolveItem, type FactRow, type Item, type Statement } from './item.ts';
 import { slotId, slotView } from './slots.ts';
@@ -28,8 +35,17 @@ import readSummaries from './summaries-read.sql';
 import readRepresentativeEditions from './summaries-representative-editions.sql';
 import { currentReadSnapshot, withReadTransaction } from './read.ts';
 import { SubjectRedirectError } from './merges.ts';
-import { selectedSynopsisFact, redactSynopsisFact, type SelectedSynopsisInput, type SelectedSynopsisResult } from './selected-synopsis.ts';
-import { observeReviewedPersonIdentity, type ReviewedPersonEndpoint, type ReviewedPersonSource } from './reviewed-person-identity.ts';
+import {
+  selectedSynopsisFact,
+  redactSynopsisFact,
+  type SelectedSynopsisInput,
+  type SelectedSynopsisResult,
+} from './selected-synopsis.ts';
+import {
+  observeReviewedPersonIdentity,
+  type ReviewedPersonEndpoint,
+  type ReviewedPersonSource,
+} from './reviewed-person-identity.ts';
 import { privateLinks, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
 import { currentRelationFacts, currentRelationKey } from './current-relations.ts';
 import { readSourceRecords } from './source-records.ts';
@@ -42,7 +58,11 @@ import readSourceMembers from './source-records-members.sql';
 import readRelatedStatement from './read-related.sql';
 import { withConnection } from '../database/pool.ts';
 import { memoizedValue } from '../memoized.ts';
-import { authorizedContextMetadata, contextNativeActions, ContextDirectoryPreparingError } from './context-application.ts';
+import {
+  authorizedContextMetadata,
+  contextNativeActions,
+  ContextDirectoryPreparingError,
+} from './context-application.ts';
 import {
   readViewerActions,
   type ViewerActionBinding,
@@ -90,9 +110,7 @@ export type SubjectReadingPorts = SubjectReadingNativePort<
 >;
 
 type SubjectFenceTuple = SubjectReadingFenceTuple & { field_group: ContentImportedFieldGroup };
-type SubjectFence = SubjectReadingFenceTuple &
-  { field_group: ContentImportedFieldGroup } &
-  SubjectReadingFence;
+type SubjectFence = SubjectReadingFenceTuple & { field_group: ContentImportedFieldGroup } & SubjectReadingFence;
 
 export type SubjectReadOptions = {
   reviewIdentity?: ReviewedPersonSource;
@@ -150,7 +168,9 @@ export type SubjectReadingPageAnswer = {
     }
   >;
   documents?: Record<string, unknown>;
-  viewerActions?: { state: 'available'; actions: { action: string; operations: string[] }[] } | { state: 'unavailable' };
+  viewerActions?:
+    | { state: 'available'; actions: { action: string; operations: string[] }[] }
+    | { state: 'unavailable' };
 };
 export type SubjectReadingPageResult =
   | { kind: 'not-found' }
@@ -667,7 +687,6 @@ async function projectSummaries(
   }
   return results;
 }
-
 
 // Native Subject projection and related identity reads moved behind the supplied-port application.
 type SubjectReadRow = {
@@ -1212,7 +1231,6 @@ async function readSubjectNative(
   };
 }
 
-
 type Queryable = Pick<PoolClient, 'query'>;
 
 const BATCH_LIMIT = 256;
@@ -1431,54 +1449,46 @@ async function readSubjectPage(
   const synopsisAnchors: SubjectComponent[] = [];
   const result = await input
     .runNative(() =>
-      application.readSubject(
-        pool,
-        input.subject,
-        async () => false,
-        input.context,
-        routeKey,
-        {
-          languages: input.languages,
-          ...(input.reviewIdentity ? { reviewIdentity: input.reviewIdentity } : {}),
-          ...(input.selectedSynopsis
-            ? {
-                selectedSynopsis: {
-                  input: input.selectedSynopsis,
-                  admit: async () => {
-                    const admitted = await ports.readCurrentDocument(runtime, input.selectedSynopsis!.document);
-                    for (const anchor of admitted?.anchors ?? [])
-                      synopsisAnchors.push({
-                        partition: anchor.partition.partitionNo,
-                        epoch: anchor.epoch,
-                        position: anchor.position,
-                      });
-                    const document = admitted?.document;
-                    return (
-                      !!document &&
-                      document.availability === 'available' &&
-                      document.subjectId === input.subject &&
-                      document.candidateId === input.selectedSynopsis!.statement &&
-                      document.digest === input.selectedSynopsis!.digest &&
-                      document.language === input.selectedSynopsis!.language
-                    );
-                  },
+      application.readSubject(pool, input.subject, async () => false, input.context, routeKey, {
+        languages: input.languages,
+        ...(input.reviewIdentity ? { reviewIdentity: input.reviewIdentity } : {}),
+        ...(input.selectedSynopsis
+          ? {
+              selectedSynopsis: {
+                input: input.selectedSynopsis,
+                admit: async () => {
+                  const admitted = await ports.readCurrentDocument(runtime, input.selectedSynopsis!.document);
+                  for (const anchor of admitted?.anchors ?? [])
+                    synopsisAnchors.push({
+                      partition: anchor.partition.partitionNo,
+                      epoch: anchor.epoch,
+                      position: anchor.position,
+                    });
+                  const document = admitted?.document;
+                  return (
+                    !!document &&
+                    document.availability === 'available' &&
+                    document.subjectId === input.subject &&
+                    document.candidateId === input.selectedSynopsis!.statement &&
+                    document.digest === input.selectedSynopsis!.digest &&
+                    document.language === input.selectedSynopsis!.language
+                  );
                 },
-              }
-            : {}),
-          authorize: authorizeSummary,
-          seen: input.seen,
-          deadline,
-          prepareAuthorize: input.authorization.prepareDetail,
-          readAs: input.readAs,
-        },
-      ),
+              },
+            }
+          : {}),
+        authorize: authorizeSummary,
+        seen: input.seen,
+        deadline,
+        prepareAuthorize: input.authorization.prepareDetail,
+        readAs: input.readAs,
+      }),
     )
     .catch((error: unknown) => {
       if (error instanceof SubjectRedirectError) return { redirect: error } as const;
       throw error;
     });
-  if (result && 'redirect' in result)
-    return { kind: 'redirect', from: result.redirect.from, to: result.redirect.to };
+  if (result && 'redirect' in result) return { kind: 'redirect', from: result.redirect.from, to: result.redirect.to };
   if (!result) return { kind: 'not-found' };
 
   const release = await ports.readRelease(pool, result.subject.release);
@@ -1577,7 +1587,12 @@ async function readSubjectPage(
     );
     if (
       Buffer.byteLength(
-        JSON.stringify({ input: input.selectedSynopsis, result: result.selectedSynopsis, labels, subject: result.subject.labels }),
+        JSON.stringify({
+          input: input.selectedSynopsis,
+          result: result.selectedSynopsis,
+          labels,
+          subject: result.subject.labels,
+        }),
         'utf8',
       ) > 262144
     )
@@ -1614,8 +1629,6 @@ async function readSubjectPage(
     private: Boolean(input.includeViewerActions || documentRead || input.reviewIdentity || input.selectedSynopsis),
   };
 }
-
-
 
 // Viewer action resources and correction advice now share the composed reading application.
 /** Shared native evidence for ordinary subject disclosure and personal batches. */

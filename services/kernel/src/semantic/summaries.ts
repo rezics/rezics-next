@@ -37,4 +37,3 @@ export function readSubjectSummaryObservation(
 ): Promise<SubjectSummaryObservation> {
   return nativeSubjectReadingApplication().readSubjectSummaryObservation(deps, ids, options);
 }
-
