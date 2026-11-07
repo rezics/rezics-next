@@ -18,7 +18,11 @@ an accepted native work plan. Unknown SQL, including additions to transaction co
 Native receiving fixtures finish all 4,096 homes through the existing bounded preparation continuation and retain
 the original bootstrap; their full-domain timeout covers those native steps. Unexpected SQL errors propagate.
 The shelf deletion race fixture takes internal action metadata from Access's public catalogue; its account deletion
-authority and native race assertions are unchanged.
+authority and native race assertions are unchanged. Every command pool receives the trusted receipt-key configuration
+before constructing its command entry points.
+Source-funded Core commands open one serializable transaction inside Core's cleanup scope. Binding the live query
+surface requires no preceding transaction; a second BEGIN would conflict with the native ledger's retained COMMIT
+and ROLLBACK funding. The existing public-output capture and deferred-COMMIT rollback assertions retain this contract.
 
 Public-filter Collection reduction exposes `adapters/collection-reduction.ts` contract statement declarations
 without command-work implementation. Native reduction executes that exact SQL/bind plan; Library composes complete

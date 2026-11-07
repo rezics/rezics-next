@@ -10,9 +10,11 @@ import { createCollectionReads } from '../../src/library/collection-reads.ts';
 import { newId } from '../../src/route/route.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 let db: GrowthDatabase;
 beforeAll(async () => {
   db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool);
 });
 afterAll(async () => db?.close());
 async function fixture() {
@@ -45,6 +47,7 @@ async function fixture() {
   await real.grant({ route, id: ownerId }, 'owner', 'account:delete');
   // A separate native command pool lets the race reach PostgreSQL's account lock.
   const nativePool = db.openPool();
+  configureTestReceiptKeys(nativePool);
   const nativeAccounts = createLifecycleCommands({ pool: nativePool, access });
   const tombstone = async () =>
     nativeAccounts.tombstone(
@@ -85,6 +88,7 @@ for (const when of ['before', 'after'] as const) {
       reached.resolve(backend.rows[0]!.pid);
       await release.promise;
     });
+    configureTestReceiptKeys(pool);
     const commands = createCollectionCommands({ pool, access: f.access });
     const key = randomUUID(),
       input = { revision: 1, title: 'Before barrier' };
