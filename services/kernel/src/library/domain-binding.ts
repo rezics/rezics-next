@@ -1,8 +1,9 @@
 import type { LibraryAccessPorts } from './access-port.ts';
 import type { NativeCopyListContext } from '../semantic/adapters/index.ts';
 /** Process composition binds the Library domain once. Compatibility entries read this handle. */
-import type { CopyApplicationPorts } from './contract/index.ts';
-import type { NativeCopyConfig, NativeCopyTypes } from './adapters/copies.ts';
+import type { CopyApplicationPorts, CopyOperationWork } from './contract/index.ts';
+import type { NativeCopyTypes } from './adapters/copies.ts';
+import type { NativeCopyConfig, NativeCopyProducers } from './copy-model.ts';
 import type { NativeLibraryPresentation } from './adapters/presentation.ts';
 import type { LibraryDomain } from './contract/index.ts';
 import type { NativePreparationWorkFactory, NativeScopeWork } from './adapters/preparation-work.ts';
@@ -20,12 +21,23 @@ export type NativeLibraryDomain = LibraryDomain &
     nativePublicOutput?: NativePublicOutputApplication<CommandTransaction, Pool, AuthoritativeTime>;
   }>;
 
-let binding: { domain?: NativeLibraryDomain; presentation?: NativeLibraryPresentation; access?: LibraryAccessPorts } =
-  {};
+export type NativeLibraryCopyBinding = Readonly<{
+  producers(config: NativeCopyConfig): NativeCopyProducers;
+  ports(config: NativeCopyConfig): CopyApplicationPorts<NativeCopyTypes>;
+  work: CopyOperationWork;
+}>;
+
+let binding: {
+  domain?: NativeLibraryDomain;
+  presentation?: NativeLibraryPresentation;
+  access?: LibraryAccessPorts;
+  copy?: NativeLibraryCopyBinding;
+} = {};
 
 export function bindLibraryDomain(value: NativeLibraryDomain): NativeLibraryDomain {
   binding = {
     ...(binding.access ? { access: binding.access } : {}),
+    ...(binding.copy ? { copy: binding.copy } : {}),
     domain: value,
     ...(value.presentation ? { presentation: value.presentation } : {}),
   };
@@ -43,7 +55,10 @@ export function requireLibraryDomain(): NativeLibraryDomain {
 
 /** Tests restore the process binding; createKernel/server/worker rebind native adapters. */
 export function unbindLibraryDomain(): void {
-  binding = { ...(binding.access ? { access: binding.access } : {}) };
+  binding = {
+    ...(binding.access ? { access: binding.access } : {}),
+    ...(binding.copy ? { copy: binding.copy } : {}),
+  };
 }
 
 /** The single Library domain binding also owns its native presentation capabilities. */
@@ -65,4 +80,15 @@ export function bindLibraryAccess(access: LibraryAccessPorts): void {
 
 export function requireLibraryAccess(): LibraryAccessPorts {
   return binding.access!;
+}
+
+/** Composition installs real native copy producers for server, worker and standalone construction. */
+export function bindLibraryCopy(value: NativeLibraryCopyBinding): void {
+  binding = { ...binding, copy: value };
+}
+export function requireLibraryCopyBinding(): NativeLibraryCopyBinding {
+  return binding.copy!;
+}
+export function requireLibraryCopyWork(): CopyOperationWork {
+  return requireLibraryCopyBinding().work;
 }

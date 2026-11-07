@@ -1,7 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { Release } from '@rezics/definitions';
-import { copyReleasedDefinitions } from './adapters/copy-producers.ts';
-import type { NativeCopyProducers } from './adapters/copies.ts';
+import type { NativeCopyDefinitions } from './copy-model.ts';
 import { chooseLabel } from '@rezics/definitions';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import { resolveLibraryProfilePin } from './profile.ts';
@@ -113,8 +112,8 @@ export async function prepareCopyInventory(
   pool: Pool,
   values: readonly CopyInventoryValue[],
   deadline: number,
-  languages: readonly string[] = [],
-  definitions: NativeCopyProducers['definitions'] = copyReleasedDefinitions(),
+  languages: readonly string[],
+  definitions: NativeCopyDefinitions,
 ): Promise<CopyInventory> {
   const kinds = values.filter((value) => value.dimension === 'kind');
   const statuses = values.filter((value) => value.dimension === 'status');

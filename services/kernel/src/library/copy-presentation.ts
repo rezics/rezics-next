@@ -1,21 +1,15 @@
 import type { Release } from '@rezics/definitions';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { copyReleasedDefinitions } from './adapters/copy-producers.ts';
-import type { NativeCopyProducers } from './adapters/copies.ts';
+import { sameCopyProfileAnchor } from './copy-model.ts';
+import type { NativeCopyDefinitions, CopyProfileSource } from './copy-model.ts';
 import { chooseLabel } from '@rezics/definitions';
 import { COPY_CONDITION_CHOICES } from './contract/index.ts';
 import { copyConditionAdmission, presentCopyCondition, type CopyConditionDisplay } from './copy-condition.ts';
 import type { CopyPresentation } from './copy-model.ts';
 import type { Copy } from './entry-model.ts';
 import { hasCopyStatus, resolveLibraryProfilePin, type LibraryProfilePin } from './profile.ts';
-import {
-  readLibraryProfileAnchor,
-  readLibraryProfileSourceObservation,
-  sameLibraryProfileAnchor,
-  type LibraryProfileSource,
-  type LibraryProfileSourceDependencies,
-} from './profile-source.ts';
+import type { LibraryProfileSource, LibraryProfileSourceDependencies, LibraryProfileAnchor } from './profile-source.ts';
 
 export type CopyPresentationFact = {
   copy: Copy;
@@ -130,11 +124,12 @@ export async function prepareCopyPresentation(
   deps: LibraryProfileSourceDependencies,
   fact: CopyPresentationFact,
   languages: readonly string[],
-  definitions: NativeCopyProducers['definitions'] = copyReleasedDefinitions(),
+  definitions: NativeCopyDefinitions,
+  profileSource: CopyProfileSource,
 ) {
   const snapshots = new Map<string, Snapshot>();
   let source: LibraryProfileSource = null;
-  let anchor: Awaited<ReturnType<typeof readLibraryProfileAnchor>> = null;
+  let anchor: LibraryProfileAnchor | null = null;
   // Resolve only the exact immutable releases that accepted these observations, never a history walk.
   const pins = [
     fact.kindPin,
@@ -146,7 +141,9 @@ export async function prepareCopyPresentation(
     if (!pin || snapshots.has(pin.releaseDigest)) continue;
     let snapshot: Snapshot = null;
     try {
-      const release = await definitions.read(deps.pool, pin.releaseDigest, { composed: false });
+      const release = await definitions.read(deps.pool, pin.releaseDigest, {
+        composed: false,
+      });
       if (release) snapshot = { digest: pin.releaseDigest, release };
     } catch {
       // Optional display dependency failure cannot select another release.
@@ -154,13 +151,13 @@ export async function prepareCopyPresentation(
     snapshots.set(pin.releaseDigest, snapshot);
   }
   try {
-    const observed = await readLibraryProfileSourceObservation(deps, fact.copy.subjectId);
+    const observed = await profileSource.observe(deps, fact.copy.subjectId);
     source = observed?.source ?? null;
     anchor = observed?.anchor ?? null;
   } catch {
     // Concealed or failed current evidence cannot prove retirement.
     try {
-      anchor = await readLibraryProfileAnchor(deps, fact.copy.subjectId);
+      anchor = await profileSource.anchor(deps, fact.copy.subjectId);
     } catch {
       // Current summaries remain independently unavailable on source failure.
     }
@@ -176,10 +173,7 @@ export async function prepareCopyPresentation(
     ),
     disclosure: { subject: anchor !== null },
     async verify(at: AuthoritativeTime) {
-      if (
-        anchor &&
-        !sameLibraryProfileAnchor(anchor, await readLibraryProfileAnchor({ ...deps, at }, fact.copy.subjectId))
-      )
+      if (anchor && !sameCopyProfileAnchor(anchor, await profileSource.anchor({ ...deps, at }, fact.copy.subjectId)))
         throw new ProblemError('semantic_not_ready');
     },
   };

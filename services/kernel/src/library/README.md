@@ -125,6 +125,17 @@ slot, parallel reader, route, writer, score cache or GET repair is introduced.
 
 ## Module layers and measured boundary
 
+Copy applications retain one supplied native account authority, released-definition reader, profile-source reader
+and work catalog through create/read/list/update/delete/restore, inventory and condition presentation. Composition
+binds the same real producers for server, worker and standalone presentation preloads. Compatibility factories
+resolve that installed binding. Current profile selection uses the supplied active-release reader; historical kind,
+status and condition meaning uses only each exact accepting release and profile pin. Static operation construction
+consumes supplied work descriptions; statement execution shares a separate accounting frame with the original
+command/client/deadline. The pre-profile row gate loads no current-source adapter. Native locks, open-loan checks,
+disposition constraints, receipt replay and subject-disclosure fences retain their authority. Focused construction
+tests pin producer propagation and exact retained/current meaning; this migration's worker acceptance is typing only,
+with native/browser/growth acceptance remaining in their existing Goal walks.
+
 Collection rule authority consumes only `CollectionRuleAuthorityCapability.readAccount`. Composition supplies the
 Access-owned `createNativeCollectionRuleAccountAuthority` capability, preserving the original client and account key,
 current state/fence and bigint authentication floor. The producer charges the existing command Access ledger;

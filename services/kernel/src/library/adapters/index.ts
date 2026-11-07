@@ -84,3 +84,10 @@ export type {
   NativeLibraryPresentationPorts,
   LibraryPresentationDependencies,
 } from './presentation.ts';
+
+/** Copy construction leaves used only by composition. */
+export { readLibraryProfileSourceObservation, readLibraryProfileAnchor } from '../profile-source.ts';
+export { createNativeCopyProducers } from './copy-producers.ts';
+export { createCopyOperationPlans } from '../copy-operation-bounds.ts';
+export type { NativeCopyDefinitions, CopyProfileSource } from '../copy-model.ts';
+export { createLibraryCommandRunner } from '../command-support.ts';

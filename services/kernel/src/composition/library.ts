@@ -1,5 +1,5 @@
 import { createLibraryAccessPorts } from '../access/adapters/library.ts';
-import { createNativeCopyAccountAdmission } from '../access/adapters/copy-account.ts';
+import { createNativeCopyAccountAdmission, nativeCopyAccountWork } from '../access/adapters/copy-account.ts';
 import { nativeReleasedDefinitions, nativeCopyListContext } from '../semantic/adapters/index.ts';
 import {
   createLibrarySubjectIdentityAdapter,
@@ -53,6 +53,9 @@ import {
   readBuiltinPublicationRule,
   createNativeCollectionMutationPorts,
   createNativeCopyPorts,
+  createLibraryCommandRunner,
+  readLibraryProfileSourceObservation,
+  readLibraryProfileAnchor,
   createAuthorizationAdapter,
   type AuthorizationAdapterPorts,
   createContentPublicationAdapter,
@@ -72,6 +75,8 @@ import { resolvePublicIdentityOutputCaptureDisposition } from '../semantic/ident
 import { createLibraryCollectionPolicyMethods } from '../access/adapters/collection-policy.ts';
 import {
   bindLibraryDomain,
+  bindLibraryCopy,
+  requireLibraryCopyBinding,
   bindLibraryAccess,
   bindLibraryPresentation,
   peekLibraryDomain,
@@ -85,7 +90,7 @@ import {
   type PreparedCollectionSource,
   type PreparedSearchScope,
 } from '../library/contract/index.ts';
-import { admissionTerm, sumAdmission } from '../library/core/index.ts';
+import { admissionTerm, sumAdmission, createProgressOperationBounds } from '../library/core/index.ts';
 
 function nativeAuthorizationPorts(): AuthorizationAdapterPorts {
   const collectionPolicy = createLibraryCollectionPolicyMethods();
@@ -268,13 +273,37 @@ function nativeLibraryPresentation() {
   });
 }
 
+/** One native producer set serves every Copy factory and its reached profile reads. */
+function composeLibraryCopies(): void {
+  const definitions = nativeReleasedDefinitions();
+  const work = {
+    ...createProgressOperationBounds(createProgressOperationCatalog()),
+    account: nativeCopyAccountWork(),
+  };
+  const profileSource = {
+    observe: (deps: Parameters<typeof readLibraryProfileSourceObservation>[0], subjectId: string) =>
+      readLibraryProfileSourceObservation(deps, subjectId, definitions),
+    anchor: readLibraryProfileAnchor,
+  };
+  const producers = (config: Parameters<typeof createNativeCopyPorts>[0]) => ({
+    account: createNativeCopyAccountAdmission(config),
+    commands: createLibraryCommandRunner(config),
+    definitions,
+    profileSource,
+    work,
+  });
+  bindLibraryCopy({ producers, work, ports: (config) => createNativeCopyPorts(config, producers(config)) });
+}
+
 /** Preloads install the same native presentation as server/worker without a placeholder Collection Source. */
 export function composeLibraryPresentation(): void {
+  composeLibraryCopies();
   bindLibraryAccess(createLibraryAccessPorts());
   bindLibraryPresentation(nativeLibraryPresentation());
 }
 
 export function composeLibraryDomain(options: LibraryComposeOptions = {}): ReturnType<typeof bindLibraryDomain> {
+  composeLibraryCopies();
   bindLibraryAccess(createLibraryAccessPorts());
   const identityNative =
     options.capabilities?.identityNative ?? createIdentityNativeApplication(createIdentityNativeCatalog());
@@ -391,11 +420,7 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
     ...createLibraryApplications(capabilities),
     nativePublicOutput,
     copyContext: nativeCopyListContext(),
-    copyPorts: (config) =>
-      createNativeCopyPorts(config, {
-        account: createNativeCopyAccountAdmission(config),
-        definitions: nativeReleasedDefinitions(),
-      }),
+    copyPorts: requireLibraryCopyBinding().ports,
     presentation: nativeLibraryPresentation(),
     followCounts: nativeFollowCountRuntime(),
     preparationWork: options.preparationWork ?? previous?.preparationWork ?? createLibraryPreparationWork,

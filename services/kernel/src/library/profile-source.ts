@@ -1,5 +1,4 @@
-import type { Pool, PoolClient } from 'pg';
-import migrationPhase from './entry-profile-migration-phase-read.sql';
+import type { Pool } from 'pg';
 import { readAccount, deadlineClient } from './access-port.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
@@ -9,6 +8,7 @@ import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { activeRelease } from '../semantic/definitions.ts';
+import type { NativeCopyDefinitions } from './copy-model.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
 import { readSubjectReference } from '../semantic/references.ts';
@@ -45,13 +45,18 @@ export async function readLibraryProfileSource(
 }
 
 /** The same source producer with its private before/final fence retained for a bounded detail. */
-export function readLibraryProfileSourceObservation(deps: LibraryProfileSourceDependencies, subjectId: string) {
-  return withRequestDeadline(deps.deadline, () => readSource(deps, subjectId));
+export function readLibraryProfileSourceObservation(
+  deps: LibraryProfileSourceDependencies,
+  subjectId: string,
+  definitions: Pick<NativeCopyDefinitions, 'active'> = { active: activeRelease },
+) {
+  return withRequestDeadline(deps.deadline, () => readSource(deps, subjectId, definitions));
 }
 
 async function readSource(
   deps: LibraryProfileSourceDependencies,
   subjectId: string,
+  definitions: Pick<NativeCopyDefinitions, 'active'>,
 ): Promise<{
   source: NonNullable<LibraryProfileSource>;
   anchor: LibraryProfileAnchor;
@@ -61,7 +66,7 @@ async function readSource(
   const { acceptingType, identityEpoch: _identityEpoch, ...source } = anchor;
   // The source RR has ended before Global's independently anchored observation.
   requireAccessDeadline(deps.deadline);
-  const active = await activeRelease(deps.pool);
+  const active = await definitions.active(deps.pool);
   requireAccessDeadline(deps.deadline);
   if (!active) throw new ProblemError('semantic_not_ready');
   const profile = selectLibraryProfile(active.release, acceptingType);
@@ -145,26 +150,6 @@ export async function readLibraryProfileAnchor(
   }
 }
 
-export function sameLibraryProfileAnchor(before: LibraryProfileAnchor, after: LibraryProfileAnchor | null): boolean {
-  return (
-    after !== null &&
-    before.subjectId === after.subjectId &&
-    before.requestedSubjectId === after.requestedSubjectId &&
-    before.acceptingType === after.acceptingType &&
-    before.identityEpoch === after.identityEpoch &&
-    before.component.partition === after.component.partition &&
-    before.component.epoch === after.component.epoch &&
-    before.component.position === after.component.position
-  );
-}
+export { sameCopyProfileAnchor as sameLibraryProfileAnchor } from './copy-model.ts';
 
-/** Read-only rollout boundary. Existing fixed-contract DTOs can expose an unpinned
- * historical fact only before that owner's live-fact cutover. A missing job never
- * prevents reading a current pinned fact, and reads never create owner metadata.
- */
-export async function assertPreProfileLibraryRead(client: Pick<PoolClient, 'query'>, accountId: string): Promise<void> {
-  const route = routeOf(accountId);
-  if (route === null) throw new TypeError('Invalid Library owner');
-  const migration = await migrationPhase.run(client, { route, account_id: accountId });
-  if (migration?.phase === 'ready') throw new Error('Unpinned Library fact after owner cutover');
-}
+export { assertPreProfileLibraryRead } from './profile-read-gate.ts';
