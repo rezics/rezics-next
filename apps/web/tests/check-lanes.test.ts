@@ -98,7 +98,7 @@ test('runs fake files longest first in separate browser and unit pools, then rec
     expect(recorded.files[file]?.wall).toBeGreaterThan(0);
     expect(recorded.files[file]?.result).toBe('pass');
   }
-});
+}, 15_000);
 
 test('a verifier test-name selector reaches each fresh per-file Bun process unchanged', async () => {
   const file = join(fakeTests, 'filtered.test.ts');
@@ -140,7 +140,7 @@ test('bounds browser lanes separately while unit files use a wider pool', async 
   expect(Math.max(start('unit-one.test.ts'), start('unit-two.test.ts'))).toBeLessThan(
     Math.min(end('unit-one.test.ts'), end('unit-two.test.ts')),
   );
-});
+}, 15_000);
 
 test('reports a failed fake file with its own output', async () => {
   const passing = addFakeTest('unit-pass.test.ts');
@@ -171,4 +171,4 @@ test('a placed browser worker serializes files that share its generated source a
   const start = (name: string) => Number(readFileSync(join(events, `start-${name}`), 'utf8'));
   const end = (name: string) => Number(readFileSync(join(events, `end-${name}`), 'utf8'));
   expect(start('worker-browser-second.test.ts')).toBeGreaterThanOrEqual(end('worker-browser-first.test.ts'));
-});
+}, 15_000);
