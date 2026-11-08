@@ -11,6 +11,8 @@ Decision: capability rows record source-backed native coverage and its evidence 
 Decision: API capture requires the admitted runtime and its bound credential paths; catalogue seed completion and
 result bytes are observations, never J03/J04/J10 prerequisites.
 
+Decision: authority loss qualifies only on Auth `401 authentication_denied` or Kernel `401 invalid_credentials`; overload, transport and setup outcomes stay unknown and never count as denial or PASS.
+
 Adopt the [capture research](../research/accounts-post-seed-api-capture-codex.md) as the acceptance contract for
 the original recovery, credential replacement and website refresh-family revocation API journeys. Reuse the
 original runner functions and assertions with three independent newly registered ordinary humans on one admitted
@@ -27,15 +29,23 @@ supplies no result for an unreached API phase.
 | Original journey | Required reached phases and independent readback |
 | --- | --- |
 | Recovery | Sign up and sign in; start recovery; receive the actual private local delivery; complete recovery; try both old and new passwords; read with the original session. |
-| Credential replacement | Sign up and sign in; stage, approve and apply the original effect with the same subject/session binding; read back password and current-session consequences independently. |
+| Credential replacement | Sign up and sign in; stage, approve and apply the original effect with the same subject/session binding; independently prove old-password refusal, replacement-password sign-in and a current session in the sessions readback. |
 | Website refresh-family revocation | Sign up and obtain website OAuth authority; prove a Kernel read with the original bearer; send the original six form fields with their client, resource, issuer and token-kind bindings; independently repeat the Kernel read with that same bearer after revocation. |
 
 Record elapsed time, reached phase, first failing operation, allowlisted public response codes/shapes, request-field
-names and presence, authority relationships and native readbacks. Keep passwords, credentials, proofs, assertions,
-raw private keys and fixture contents private. Trusted internal diagnostics become causal evidence only when the
-runtime owner supplies an actual request correlation; nearby log lines supply none. A response status alone does
-not locate a service defect. In particular, a successful revocation response does not establish the original
-family or Kernel-authority consequence without the formerly admitted bearer readback.
+names and presence, authority relationships and native readbacks. Qualify stale-password and stale-session loss only
+on Auth HTTP 401 `authentication_denied`; qualify the formerly admitted bearer loss only on Kernel HTTP 401
+`invalid_credentials`. Overload (including 503), transport, OAuth/runtime setup and other unqualified responses are
+unknown, never denial evidence or PASS. Preserve a causal assertion failure separately from an unknown outcome and
+continue collecting siblings. Keep passwords, credentials, proofs, assertions, raw private keys and fixture contents
+private. Trusted internal diagnostics become causal evidence only when the runtime owner supplies an actual request
+correlation; nearby log lines supply none. A response status alone does not locate a service defect. In particular,
+a successful revocation response does not establish the original family or Kernel-authority consequence without the
+formerly admitted bearer readback.
+
+The focused `apps/web/tests/accounts-api-capture.test.ts` regression pins exact denial codes, overload uncertainty,
+sibling continuation, seed-independent runtime admission and secret redaction. The API capture, native acceptance,
+browser evidence and whole Goal stages remain separate.
 
 [Guarded recovery](../../services/auth/README.md#guarded-human-recovery),
 [trusted account effects](../../services/auth/README.md#trusted-account-effects),

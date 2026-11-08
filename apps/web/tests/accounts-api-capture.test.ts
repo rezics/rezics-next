@@ -4,8 +4,11 @@ import { join, resolve } from 'node:path';
 import {
   API_CAPTURE_DIRECTORY,
   API_CAPTURE_JOURNEYS,
+  assertAuthorityDenial,
   captureResponse,
+  classifyAuthorityDenial,
   collectApiCapture,
+  hasNativeCaptureOwnership,
   parseCaptureHandoff,
   runApiCaptureOnHandoff,
 } from '../scripts/accounts-goal-walk.ts';
@@ -76,6 +79,63 @@ test('capture response allowlist excludes arbitrary values and private fields', 
   expect(captureResponse({ error: 'private diagnostic', effect_status: 'private' })).toEqual({
     shape: { error: 'string', effect_status: 'string' },
   });
+});
+
+test('authority loss requires the owning denial code and classifies overload as unknown', async () => {
+  expect(classifyAuthorityDenial('auth', { status: 401, value: { error: 'authentication_denied' } })).toBe(
+    'qualified-denial',
+  );
+  expect(classifyAuthorityDenial('auth', { status: 302, value: { error: 'authentication_denied' } })).toBe('not-denial');
+  expect(classifyAuthorityDenial('kernel', { status: 401, value: { code: 'invalid_credentials' } })).toBe(
+    'qualified-denial',
+  );
+  expect(classifyAuthorityDenial('kernel', { status: 401, value: { code: 'authentication_required' } })).toBe(
+    'not-denial',
+  );
+  expect(classifyAuthorityDenial('auth', { status: 503, value: { error: 'overloaded' } })).toBe('unknown');
+
+  const called: string[] = [];
+  const cases = await collectApiCapture(
+    {
+      J03: async () => {
+        called.push('J03');
+        assertAuthorityDenial('auth', { status: 503, value: { error: 'overloaded' } }, 'old password');
+      },
+      J04: async () => {
+        called.push('J04');
+      },
+      J10: async () => {
+        called.push('J10');
+      },
+    },
+    async () => {},
+  );
+  expect(called).toEqual([...API_CAPTURE_JOURNEYS]);
+  expect(cases.map((entry) => entry.result)).toEqual(['unknown', 'PASS', 'PASS']);
+  expect(cases[0]?.phases).toMatchObject([{ classification: 'unknown', unknownKind: 'overload' }]);
+});
+
+test('API capture requires the registered native task attempt', () => {
+  expect(
+    hasNativeCaptureOwnership({
+      GOAL_TASK_ID: '292712ee-3fd6-4e9d-8dd5-3e5265f620d2',
+      GOAL_ATTEMPT: '1',
+      GOAL_ACCEPTANCE_REQUIRES: 'native',
+    }),
+  ).toBe(true);
+  expect(
+    hasNativeCaptureOwnership({
+      GOAL_TASK_ID: '292712ee-3fd6-4e9d-8dd5-3e5265f620d2',
+      GOAL_ATTEMPT: '1',
+      GOAL_ACCEPTANCE_REQUIRES: 'notnative',
+    }),
+  ).toBe(false);
+  expect(
+    hasNativeCaptureOwnership({
+      GOAL_TASK_ID: '292712ee-3fd6-4e9d-8dd5-3e5265f620d2',
+      GOAL_ACCEPTANCE_REQUIRES: 'native',
+    }),
+  ).toBe(false);
 });
 
 test('capture admits the supplied runtime while seed is running and its result bytes are absent', async () => {
