@@ -7,12 +7,7 @@ export {
   viewerFactsCurrent,
   viewerFactsResponseSchema,
 } from './viewer-facts.ts';
-export type {
-  PreparedViewerFacts,
-  ViewerFact,
-  ViewerFactInput,
-  ViewerQuestion,
-} from './viewer-facts.ts';
+export type { PreparedViewerFacts, ViewerFact, ViewerFactInput, ViewerQuestion } from './viewer-facts.ts';
 export type { ViewerFactsPage, ViewerPersonalActionsPage, PublicCollectionDiscoverySummary } from './contract/index.ts';
 export type { ViewerPersonalActionsReader } from './viewer-personal-actions.ts';
 export { viewerPersonalActionsResponseSchema } from './viewer-personal-actions-schema.ts';
