@@ -3200,6 +3200,7 @@ and splits mixed selections so Auth script unit tests keep their direct Bun lane
 selected-file classification; changing cwd alone does not provide database placement.
 Kernel tests under services/kernel/test similarly use the existing Kernel check runner, which owns the SQL mapper's
 database context. Boot smoke retains its selected file and flags through that runner.
+The Kernel runner separates selected files from forwarded Bun test options and program operands with `--`.
 
 Compiler, product runtime, setup, transport and resource cleanup causes remain separate findings over the original
 command evidence. Auth database-placement denial is setup evidence and never a product defect. Rsync byte totals are

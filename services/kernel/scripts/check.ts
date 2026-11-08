@@ -195,7 +195,7 @@ function seconds(started: number): number {
   return Math.round(((performance.now() - started) / 1000) * 1000) / 1000;
 }
 
-export type CheckPlan = { files: string[] | null; tests: string[] };
+export type CheckPlan = { files: string[] | null; tests: string[]; testArguments?: string[] };
 
 function resolveTypeScriptImport(fromFile: string, specifier: string, moduleDirectory: string): string | null {
   if (!specifier.startsWith('.')) return null;
@@ -369,6 +369,11 @@ export function planCheck(
   moduleDirectory: string,
   options: { env?: NodeJS.ProcessEnv; changed?: (revision: string) => string[] } = {},
 ): { plan: CheckPlan; announcement: string | null } {
+  const separator = args.indexOf('--');
+  if (separator >= 0) {
+    const selected = planCheck(args.slice(0, separator), moduleDirectory, options);
+    return { ...selected, plan: { ...selected.plan, testArguments: args.slice(separator + 1) } };
+  }
   const { revision, files } = affectedRevision(args, options.env ?? process.env);
   if (files.length > 0 || revision === null) return { plan: checkPlan(files, moduleDirectory), announcement: null };
 
@@ -1394,6 +1399,7 @@ async function main(): Promise<void> {
           service: 'kernel',
           directory,
           files: testFiles,
+          ...(plan.testArguments ? { testArguments: plan.testArguments } : {}),
           partial: plan.files !== null,
           runTiming: (): CheckRunTiming => {
             const testSeconds = seconds(testStarted);
