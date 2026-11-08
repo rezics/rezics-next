@@ -1,7 +1,7 @@
 import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool } from 'pg';
+import { type CurrentClassificationAssociation } from './dependencies.ts';
 import type { KernelClock } from '../clock.ts';
-import { type CurrentClassificationAssociation } from '../semantic/classification-association.ts';
 import type { Access, Actor } from '../request/access.ts';
 export declare const CLASSIFICATION_BALLOT_SET = "classification_ballot:set";
 export declare const CLASSIFICATION_BALLOT_READ_OWN = "classification_ballot:read_own";

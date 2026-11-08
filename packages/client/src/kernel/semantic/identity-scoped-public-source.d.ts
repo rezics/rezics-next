@@ -1,4 +1,6 @@
-import type { CommandTransaction } from '../command/command.ts';
+import type { CommandTransaction, AuthoritativeTime } from '../command/command.ts';
+import type { Pool } from 'pg';
+import type { PublicOutputCommandContext, PublicOutputDispositionSelection } from '../library/contract/native-public-output.ts';
 import type { PublicFilterSourceFactory, PublicFilterReadContext, PublicFilterCost } from './public-filter-source-contract.ts';
 import { type NativePublicSource, type PublicFilterSourceDefinition } from './public-filter-source-binding.ts';
 declare const publicSourceCapture: unique symbol;
@@ -44,9 +46,9 @@ export declare const createPublicIdentitySourceCapture: CreatePublicIdentitySour
 export declare function verifyPublicIdentitySourceCapture(tx: CommandTransaction, capture: PublicIdentitySourceCapture): Promise<boolean>;
 export declare function verifyPublicIdentitySourceCaptureLocator(tx: CommandTransaction, locator: Locator): Promise<boolean>;
 /** Native receiving uses only persisted Semantic selectors on the actual shared command. */
-export declare function lockPublicIdentityOutputCaptureDisposition(tx: CommandTransaction, selection: import('../library/native-public-output-contract.ts').PublicOutputDispositionSelection, context: import('../library/native-public-output-contract.ts').PublicOutputCommandContext): Promise<Readonly<{
+export declare function lockPublicIdentityOutputCaptureDisposition(tx: CommandTransaction, selection: PublicOutputDispositionSelection, context: PublicOutputCommandContext<Pool, AuthoritativeTime>): Promise<Readonly<{
     status: 'changed' | 'unavailable';
     dependency?: string;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 }> | import("../library/native-public-output-contract.ts").LockedPublicOutputDisposition>;
 export {};

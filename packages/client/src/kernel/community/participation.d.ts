@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
-import { type Access, type AccessClient, type Actor, type Resource } from '../request/access.ts';
+import type { Access, AccessClient, Actor, Resource } from '../request/access.ts';
 export type RealmParticipationReadDecision = {
     readable?: boolean;
 };

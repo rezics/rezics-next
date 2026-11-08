@@ -1,14 +1,14 @@
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { type AuthoritativeTime, type CommandAttempt } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccessContext, Actor } from '../request/access.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { type CanonicalAllowance, type CanonicalWork } from './canonical-source-store.ts';
 import { type CollectionSourceObservation } from './collection-source.ts';
-import { type WorkAllowance, type WorkDimensions } from './contract/work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions } from './contract/work-dimensions.ts';
 import { type NativeCollectionMetadata } from './collection-source-native.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import { type CollectionMemberAdmission } from './owner-filter.ts';
 import type { OwnerFilterReadBinding } from './owner-filter-plan.ts';
 import type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';

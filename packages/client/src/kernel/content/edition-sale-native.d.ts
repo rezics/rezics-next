@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { type CurrentConsentReader } from '../access/auth-consent.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
-import { type Access } from '../request/access.ts';
+import type { Access } from '../request/access.ts';
 import type { ContentEditionSaleAuthority } from './edition-model.ts';
 import type { ReadContext } from './model.ts';
 import { type EditionRow } from './edition-store.ts';

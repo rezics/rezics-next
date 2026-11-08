@@ -1,45 +1,9 @@
 import type { LibraryCopyKindDescriptor, LibraryProfilePin } from './profile.ts';
-/** Library vocabulary, independent of catalogue labels, sellers and valuations. */
-export declare const COPY_CONDITION_VOCABULARY = "physical-v1";
-export declare const COPY_CONDITION_CHOICES: readonly [Readonly<{
-    id: "unknown";
-    label: "Unknown";
-    description: "Assessed without a known grade.";
-}>, Readonly<{
-    id: "mint";
-    label: "Mint";
-    description: "No observable wear or defects.";
-}>, Readonly<{
-    id: "near_mint";
-    label: "Near mint";
-    description: "Almost no observable wear.";
-}>, Readonly<{
-    id: "very_good_plus";
-    label: "Very good plus";
-    description: "Minor observable wear.";
-}>, Readonly<{
-    id: "very_good";
-    label: "Very good";
-    description: "Noticeable wear, still fully usable.";
-}>, Readonly<{
-    id: "good";
-    label: "Good";
-    description: "Substantial wear, still usable.";
-}>, Readonly<{
-    id: "fair";
-    label: "Fair";
-    description: "Damage limits ordinary use.";
-}>, Readonly<{
-    id: "poor";
-    label: "Poor";
-    description: "Severe damage prevents ordinary use.";
-}>];
-export type CopyConditionValue = (typeof COPY_CONDITION_CHOICES)[number]['id'];
-export type CopyConditionField = 'mediaCondition' | 'packagingCondition';
-export type CopyConditionPatch = Readonly<{
-    mediaCondition?: CopyConditionValue | null;
-    packagingCondition?: CopyConditionValue | null;
-}>;
+import { COPY_CONDITION_CHOICES, COPY_CONDITION_VOCABULARY } from './contract/index.ts';
+import type { CopyConditionValue, CopyConditionPatch } from './contract/index.ts';
+export { COPY_CONDITION_CHOICES, COPY_CONDITION_VOCABULARY } from './contract/index.ts';
+export type { CopyConditionValue, CopyConditionField, CopyConditionPatch } from './contract/index.ts';
+export { parseCopyConditionFields, isCopyConditionValue, CopyConditionInvalidError } from './core/index.ts';
 /** An absent observation predates assessment; null is an intentional clear. */
 export type CopyConditionObservation = Readonly<{
     value: CopyConditionValue | null;
@@ -52,15 +16,6 @@ export type CopyConditionFacts = Readonly<{
 }>;
 /** Decode only the private row representation; absent observations remain absent. */
 export declare function decodeCopyConditionFacts(mediaCondition: unknown, packagingCondition: unknown): CopyConditionFacts | undefined;
-export declare class CopyConditionInvalidError extends Error {
-    readonly field: CopyConditionField;
-    constructor(field: CopyConditionField);
-}
-export declare function isCopyConditionValue(value: unknown): value is CopyConditionValue;
-/** Merge this result into the existing complete command input before hashing it.
- * Missing fields stay missing, so old receipts retain their original operands.
- */
-export declare function parseCopyConditionFields(input: Readonly<Record<string, unknown>>): CopyConditionPatch;
 export type CopyConditionAdmission = Readonly<{
     state: 'supported';
     vocabulary: typeof COPY_CONDITION_VOCABULARY;
@@ -82,17 +37,8 @@ export type CopyConditionAcceptance = Readonly<{
  * Call only after the existing writer's whole-copy revision and current-source checks.
  */
 export declare function mergeCopyConditionFields(current: CopyConditionFacts, patch: CopyConditionPatch, acceptance: CopyConditionAcceptance): CopyConditionFacts;
-export type CopyConditionDisplay = Readonly<{
-    state: 'not_recorded';
-} | {
-    state: 'unavailable';
-} | {
-    state: 'cleared';
-} | {
-    state: 'recorded';
-    id: CopyConditionValue;
-    label: string;
-}>;
+export type { CopyConditionDisplay } from './contract/index.ts';
+import type { CopyConditionDisplay } from './contract/index.ts';
 /** The caller resolves each observation's actual accepting pin, with deduplicated exact-release reads.
  * Current retirement cannot erase accepted display meaning. A missing exact release cannot supply a grade.
  */

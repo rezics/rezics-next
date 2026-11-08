@@ -1,26 +1,8 @@
-import { type CommandTransaction } from '../command/command.ts';
-import { type IdentityRatingReviewOperand } from './identity-adapters/identity-epoch-read.ts';
-declare const preparation: unique symbol;
-/** Factory-local immutable input only; it conveys neither authorization nor a held lock. */
-export type IdentityRatingCommitPreparation = Readonly<{
-    [preparation]: true;
-}>;
-export type IdentityRatingCommitHeld = Readonly<{
-    ownerId: string;
-    ownerEpoch: number;
-    partition: number;
-    subjectId: string;
-    publishedHeads: readonly Readonly<{
-        partition: number;
-        group: string;
-        epoch: string;
-    }>[];
-}>;
-export type IdentityRatingCommitParticipant = Readonly<{
-    prepare(operand: IdentityRatingReviewOperand): IdentityRatingCommitPreparation;
-    /** Fresh command body only, after receipt lookup and before no-op, cleanup or effects. */
-    admit(tx: CommandTransaction, prepared: IdentityRatingCommitPreparation): Promise<IdentityRatingCommitHeld>;
-}>;
+import type { CommandTransaction } from '../command/command.ts';
+import type { NativeIdentityCapabilities } from './identity-adapter-port.ts';
+import type { IdentityRatingCommitParticipant as CommitParticipant } from './contract/index.ts';
+export type { IdentityRatingCommitPreparation, IdentityRatingCommitHeld } from './contract/index.ts';
+export type IdentityRatingCommitParticipant = CommitParticipant<CommandTransaction>;
 export declare function IdentityRatingCommitUnavailableError(): {
     new (identityState: "absent" | "foreign-control" | "moved" | "pending" | "unavailable" | "undisclosed", home?: number | undefined): {
         readonly identityState: 'pending' | 'moved' | 'absent' | 'undisclosed' | 'unavailable' | 'foreign-control';
@@ -41,5 +23,4 @@ export declare function IdentityRatingCommitUnavailableError(): {
 };
 export type IdentityRatingCommitUnavailableError = InstanceType<ReturnType<typeof IdentityRatingCommitUnavailableError>>;
 /** Native same-home mapping participant. Its stable core owner lock lasts to executor COMMIT/ROLLBACK. */
-export declare function createIdentityRatingCommitParticipant(): IdentityRatingCommitParticipant;
-export {};
+export declare function createIdentityRatingCommitParticipant(capabilities?: NativeIdentityCapabilities): IdentityRatingCommitParticipant;

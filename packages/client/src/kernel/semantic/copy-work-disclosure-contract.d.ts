@@ -1,5 +1,4 @@
-import type { Pool } from 'pg';
-import type { Access, Actor } from '../request/access.ts';
+import type { Release } from '@rezics/definitions';
 /** Raw identities, including duplicates, before any source deduplication. */
 export declare const COPY_WORK_DISCLOSURE_MAX_RAW = 100;
 /** Disclosed canonical works per source; a fourth current member is overflow. */
@@ -8,13 +7,9 @@ export declare const COPY_WORK_DISCLOSURE_MAX_WORKS = 3;
 export declare const COPY_WORK_DISCLOSURE_LOOKAHEAD: number;
 /** Released copy/release-to-work property. Same UUID, digest or label is never membership. */
 export declare const COPY_WORK_PROPERTY = "schema:exampleOfWork";
-export type CopyWorkDisclosureDependencies = {
-    pool: Pool;
-    access: Access;
-    actor: Actor;
-    routeKey: Uint8Array;
-    deadline: number;
-};
+export type CopyWorkAdmission = 'admitted' | 'scope' | 'unsupported';
+/** One released policy shared by the native prefilter and Semantic result classification. */
+export declare function admittedCopyWork(release: Release, type: string, isRelationProperty: (release: Release, property: string) => boolean): CopyWorkAdmission;
 export type CopyWorkDisclosureRequest = Readonly<{
     identities: readonly string[];
     languages?: readonly string[];

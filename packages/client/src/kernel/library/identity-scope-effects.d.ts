@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { type CommandTransaction } from '../command/command.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import type { IdentityJobRef, IdentityFrontier, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type { IdentityReceivingSelection, IdentityReceivingDisposition } from '../semantic/identity-receiving-effects-types.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';

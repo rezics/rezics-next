@@ -1,7 +1,7 @@
 import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool } from 'pg';
+import { type Access, type Actor } from './dependencies.ts';
 import type { KernelClock } from '../clock.ts';
-import { type Access, type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 type Dependencies = {
     pool: Pool;

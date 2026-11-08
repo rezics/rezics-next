@@ -1,10 +1,11 @@
+import type { SubjectReadingApplication } from '../subject-reading-application.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import type { Pool } from 'pg';
 import { type Item } from '../item.ts';
 import type { Access, AccessCheck, AccountActor, Resource } from '../../request/access.ts';
 import { createApp } from '../../http/app.ts';
 import { type SubjectRelationCountResponse } from '../counts.ts';
-import type { ViewerActionBindings } from '../../access/viewer-actions.ts';
+import type { ViewerActionBindings } from '../../access/index.ts';
 export declare function ItemSchema(): import("typebox").TObject<{
     id: import("typebox").TString;
     type: import("typebox").TString;
@@ -157,8 +158,9 @@ type SubjectRouteDependencies = {
     access: () => Access;
     clock: () => Date;
     viewerActionBindings?: () => ViewerActionBindings;
+    reading?: SubjectReadingApplication;
 };
-declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, tokens, access, clock, viewerActionBindings }: SubjectRouteDependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
+declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, tokens, access, clock, viewerActionBindings, reading }: SubjectRouteDependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{
         error: Error;

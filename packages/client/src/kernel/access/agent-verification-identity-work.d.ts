@@ -1,10 +1,10 @@
 import { type AccessWorkDimensions } from './core/index.ts';
+import { ACCOUNT_IDENTITY_FENCE_SQL } from './agent-verification-identity-literals.ts';
 export type AccountIdentityWorkDeclaration = Readonly<{
     work: AccessWorkDimensions;
     engineRequests: 0;
 }>;
-/** Account terminal fence preceding any intent or technical disclosure. */
-export declare const ACCOUNT_IDENTITY_FENCE_SQL = "SELECT kind,state,authn_fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE";
+export { ACCOUNT_IDENTITY_FENCE_SQL };
 /** Subject-only technical role inventory; LIMIT 2 refuses a widened payload. */
 export declare const ACCOUNT_IDENTITY_TECHNICAL_ROLE_SQL = "SELECT role_account_id::text AS account_id,roles FROM access.agent_identity_technical_role\n     WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4\n     ORDER BY role_account_id LIMIT 2 FOR SHARE";
 export declare function ACCOUNT_IDENTITY_FENCE_DECLARATION(): Readonly<{
@@ -19,10 +19,7 @@ export declare function ACCOUNT_IDENTITY_TECHNICAL_READ_DECLARATION(): Readonly<
     work: AccessWorkDimensions;
     engineRequests: 0;
 }>;
-export declare function ACCOUNT_IDENTITY_ACCEPTED_BINDING_DECLARATION(): Readonly<{
-    work: AccessWorkDimensions;
-    engineRequests: 0;
-}>;
+export declare function ACCOUNT_IDENTITY_ACCEPTED_BINDING_DECLARATION(): import("./contract/bounds.ts").AccessWorkDeclaration;
 export declare function ACCOUNT_IDENTITY_ROLE_INVENTORY_DECLARATION(): Readonly<{
     work: AccessWorkDimensions;
     engineRequests: 0;
@@ -48,10 +45,7 @@ export declare function ACCOUNT_IDENTITY_SETTLEMENT_SELECT_DECLARATION(): Readon
     work: AccessWorkDimensions;
     engineRequests: 0;
 }>;
-export declare function ACCOUNT_IDENTITY_RETAINED_REFERENCE_DECLARATION(): Readonly<{
-    work: AccessWorkDimensions;
-    engineRequests: 0;
-}>;
+export declare function ACCOUNT_IDENTITY_RETAINED_REFERENCE_DECLARATION(): import("./contract/bounds.ts").AccessWorkDeclaration;
 export declare function ACCOUNT_IDENTITY_OBLIGATION_DECLARATION(): Readonly<{
     work: AccessWorkDimensions;
     engineRequests: 0;

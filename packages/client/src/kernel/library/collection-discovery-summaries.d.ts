@@ -1,6 +1,6 @@
 import { type CollectionDiscoveryContext, type CollectionCurator } from './collection-discovery-context.ts';
 import { type AuthoritativeTime } from '../command/command.ts';
-import { type Actor } from '../request/access.ts';
+import type { Actor } from '../request/access.ts';
 import { type CollectionPresentation, type PresentationDependencies } from './collection-presentation.ts';
 import type { CollectionDiscoveryQuery, CollectionDiscoveryRecency, CollectionPresentationKind } from './collection-discovery-source.ts';
 export declare const MAX_COLLECTION_DISCOVERY_SUMMARIES = 100;

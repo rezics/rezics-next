@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { Access, Actor } from '../request/access.ts';
+import { type RatingVoteSemantic } from './adapters/vote-semantic.ts';
 import { STANDARD_QUESTION_ID } from './standard-question.ts';
 import { type VoteReviewGuard, type VoteReviewSlot } from './own-votes-review.ts';
 export declare const OWN_COUNTED_VOTE_TARGET_LIMIT = 100;
@@ -132,6 +133,7 @@ export type OwnCountedVoteResult = Readonly<{
 export type OwnCountedVoteReaderDependencies = Readonly<{
     pool: Pool;
     access: Access;
+    semantic?: RatingVoteSemantic;
 }>;
 export type OwnCountedVoteReader = Readonly<{
     prepare(request: OwnCountedVoteRequest, deadline: number): Promise<OwnCountedVotePrepareResult>;

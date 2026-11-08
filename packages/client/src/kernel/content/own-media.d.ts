@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { KeyRing } from '../tokens/seal.ts';
-import { type Access, type AccountActor, type Actor } from '../request/access.ts';
+import type { Access, AccountActor, Actor } from '../request/access.ts';
 import type { OwnMediaInventoryPage } from './schemas.ts';
 export declare const OWN_MEDIA_PAGE_SIZE = 20;
 export type OwnMediaDependencies = Readonly<{

@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { type CommandOutcome } from '../command/command.ts';
-import { type Access, type Actor, type Resource } from '../request/access.ts';
+import type { Access, Actor, Resource } from '../request/access.ts';
 import { type RealmParticipationCheck } from '../community/participation.ts';
 import type { ContentCommandValue, PostInput, RequestContext, RevisionInput, ThreadInput } from './model.ts';
 export type { ReviewVoteCitation } from './model.ts';

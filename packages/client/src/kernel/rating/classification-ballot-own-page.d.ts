@@ -2,7 +2,7 @@ import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
+import { GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { classificationAggregateView, type Assessment } from './classification-ballot.ts';
 export declare const CLASSIFICATION_BALLOT_OWN_PAGE_SIZE = 20;

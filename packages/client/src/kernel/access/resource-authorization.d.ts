@@ -1,6 +1,6 @@
 import { type AuthoritativeTime, type CommandAuthorization } from '../command/command.ts';
 import type { ResourceEligibility } from './eligibility.ts';
-import { type ResourcePage, type Access, type AccessClient, type AccessContext, type Actor, type Resource } from '../request/access.ts';
+import { type ResourcePage, type Access, type AccessClient, type AccessContext, type Actor, type Resource } from './check.ts';
 /** Trusted server binding to the authorization resource. validate checks THAT
  * anchor's existence and domain prerequisites at command T on its supplied client;
  * it is never a request-supplied callback or an authorization formula.

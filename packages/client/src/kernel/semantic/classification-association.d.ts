@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { type Access, type Actor } from '../request/access.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 export type CurrentClassificationAssociation = Readonly<{
     subjectId: string;
     subjectRoute: number;

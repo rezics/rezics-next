@@ -7,8 +7,9 @@ import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
-import type { ScopeWorkContext } from '../search/scope-work-context.ts';
+import type { ScopeWorkContext } from './adapters/preparation-work.ts';
 export { COLLECTION_SOURCE_DRIVER_COUNT } from './canonical-source-limits.ts';
+import type { LibrarySemanticObservationCapability } from './contract/semantic-observation.ts';
 import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 export type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 import { nativeEvidence, preparedSource, type CanonicalCollectionCandidate, type CanonicalCollectionPrefix, type CollectionAliasProgress, type CollectionSourceAfter, type CollectionSourceAuthority, type CollectionSourceBasis, type CollectionSourceObservation, type CollectionSourceEvidence, type CollectionSubjectMembership, type NativeIdentityBasis, type PreparedCollectionSource, type RawStoredCollectionPrefix } from './contract/index.ts';
@@ -59,10 +60,12 @@ export declare function createCollectionSource(dependencies: {
     pool: Pool;
     access: Access;
     clock?: KernelClock;
+    semanticObservations?: LibrarySemanticObservationCapability;
 }): CollectionSource;
 /** Local bridge for one ordinary page: fixed structural limits drive Source work, receipts still admit it. */
 export declare function createOrdinaryCollectionPageSource(dependencies: {
     pool: Pool;
     access: Access;
     clock?: KernelClock;
+    semanticObservations?: LibrarySemanticObservationCapability;
 }): CollectionSource;

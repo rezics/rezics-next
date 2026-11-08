@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { type CommandOutcome } from '../command/command.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { type Access, type Actor, type ActionCatalogue } from '../request/access.ts';
+import { type Access, type Actor, type ActionCatalogue } from './check.ts';
 import type { LifecycleRequest, OpeningManagement } from './lifecycle.ts';
 export declare const OPERATOR_RECEIPT_TTL_MS = 60000;
 export declare class OperatorDeniedError extends Error {

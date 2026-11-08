@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { DurableOperationAnchor, InitiatorRestorer } from '../access/durable-initiator.ts';
 import { type CommandOutcome } from '../command/command.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 export type ErasePostDependencies = Readonly<{
     pool: Pool;
     access: Access;

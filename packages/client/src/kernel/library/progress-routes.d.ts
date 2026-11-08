@@ -1,7 +1,7 @@
 import type { OperationCatalogue } from '@rezics/operations';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import { type Access } from '../request/access.ts';
+import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type ReportedYearSummary } from './reported-year-summary.ts';
@@ -6457,6 +6457,57 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
 } & {
     v1: {
         definitions: {
+            get: {
+                body: unknown;
+                params: {};
+                query: unknown;
+                headers: unknown;
+                response: {
+                    200: {
+                        digest: string;
+                        head: number;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             active: {
                 get: {
                     body: unknown;
@@ -7444,15 +7495,17 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     meaning: 'known' | 'unknown' | 'unavailable';
                                     unitLabel?: string;
                                     unitLabelLanguage?: string;
-                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                    unitCountForms?: Readonly<{
+                                        other: string;
+                                        zero?: string;
+                                        one?: string;
+                                        two?: string;
+                                        few?: string;
+                                        many?: string;
+                                    }>;
                                     dimension?: string;
                                     structure: 'unverified';
-                                    recording: Readonly<{
-                                        state: 'supported';
-                                        inputRules: import("@rezics/progress").ProgressInputRules;
-                                    } | {
-                                        state: 'unsupported' | 'unavailable';
-                                    }>;
+                                    recording: import("./contract/continue.ts").ContinueProgressRecording;
                                 }>;
                             }[];
                         };
@@ -7566,15 +7619,17 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     meaning: 'known' | 'unknown' | 'unavailable';
                                     unitLabel?: string;
                                     unitLabelLanguage?: string;
-                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                    unitCountForms?: Readonly<{
+                                        other: string;
+                                        zero?: string;
+                                        one?: string;
+                                        two?: string;
+                                        few?: string;
+                                        many?: string;
+                                    }>;
                                     dimension?: string;
                                     structure: 'unverified';
-                                    recording: Readonly<{
-                                        state: 'supported';
-                                        inputRules: import("@rezics/progress").ProgressInputRules;
-                                    } | {
-                                        state: 'unsupported' | 'unavailable';
-                                    }>;
+                                    recording: import("./contract/continue.ts").ContinueProgressRecording;
                                 }>;
                             }[];
                             subject?: {
@@ -7787,15 +7842,17 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     meaning: 'known' | 'unknown' | 'unavailable';
                                     unitLabel?: string;
                                     unitLabelLanguage?: string;
-                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                    unitCountForms?: Readonly<{
+                                        other: string;
+                                        zero?: string;
+                                        one?: string;
+                                        two?: string;
+                                        few?: string;
+                                        many?: string;
+                                    }>;
                                     dimension?: string;
                                     structure: 'unverified';
-                                    recording: Readonly<{
-                                        state: 'supported';
-                                        inputRules: import("@rezics/progress").ProgressInputRules;
-                                    } | {
-                                        state: 'unsupported' | 'unavailable';
-                                    }>;
+                                    recording: import("./contract/continue.ts").ContinueProgressRecording;
                                 }>;
                             }[];
                             subject?: {
@@ -7882,15 +7939,17 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 meaning: 'known' | 'unknown' | 'unavailable';
                                 unitLabel?: string;
                                 unitLabelLanguage?: string;
-                                unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                unitCountForms?: Readonly<{
+                                    other: string;
+                                    zero?: string;
+                                    one?: string;
+                                    two?: string;
+                                    few?: string;
+                                    many?: string;
+                                }>;
                                 dimension?: string;
                                 structure: 'unverified';
-                                recording: Readonly<{
-                                    state: 'supported';
-                                    inputRules: import("@rezics/progress").ProgressInputRules;
-                                } | {
-                                    state: 'unsupported' | 'unavailable';
-                                }>;
+                                recording: import("./contract/continue.ts").ContinueProgressRecording;
                             }>;
                             allowedActions: {
                                 open: {
@@ -8027,15 +8086,17 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                         meaning: 'known' | 'unknown' | 'unavailable';
                                         unitLabel?: string;
                                         unitLabelLanguage?: string;
-                                        unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                        unitCountForms?: Readonly<{
+                                            other: string;
+                                            zero?: string;
+                                            one?: string;
+                                            two?: string;
+                                            few?: string;
+                                            many?: string;
+                                        }>;
                                         dimension?: string;
                                         structure: 'unverified';
-                                        recording: Readonly<{
-                                            state: 'supported';
-                                            inputRules: import("@rezics/progress").ProgressInputRules;
-                                        } | {
-                                            state: 'unsupported' | 'unavailable';
-                                        }>;
+                                        recording: import("./contract/continue.ts").ContinueProgressRecording;
                                     }>;
                                 }[];
                                 subject?: {
@@ -8122,15 +8183,17 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     meaning: 'known' | 'unknown' | 'unavailable';
                                     unitLabel?: string;
                                     unitLabelLanguage?: string;
-                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                    unitCountForms?: Readonly<{
+                                        other: string;
+                                        zero?: string;
+                                        one?: string;
+                                        two?: string;
+                                        few?: string;
+                                        many?: string;
+                                    }>;
                                     dimension?: string;
                                     structure: 'unverified';
-                                    recording: Readonly<{
-                                        state: 'supported';
-                                        inputRules: import("@rezics/progress").ProgressInputRules;
-                                    } | {
-                                        state: 'unsupported' | 'unavailable';
-                                    }>;
+                                    recording: import("./contract/continue.ts").ContinueProgressRecording;
                                 }>;
                             };
                         };
@@ -8146,6 +8209,17 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             errors: unknown;
                         };
                         401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -8495,15 +8569,17 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                             meaning: 'known' | 'unknown' | 'unavailable';
                                             unitLabel?: string;
                                             unitLabelLanguage?: string;
-                                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                            unitCountForms?: Readonly<{
+                                                other: string;
+                                                zero?: string;
+                                                one?: string;
+                                                two?: string;
+                                                few?: string;
+                                                many?: string;
+                                            }>;
                                             dimension?: string;
                                             structure: 'unverified';
-                                            recording: Readonly<{
-                                                state: 'supported';
-                                                inputRules: import("@rezics/progress").ProgressInputRules;
-                                            } | {
-                                                state: 'unsupported' | 'unavailable';
-                                            }>;
+                                            recording: import("./contract/continue.ts").ContinueProgressRecording;
                                         }>;
                                     }[];
                                 };
@@ -8633,15 +8709,17 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                             meaning: 'known' | 'unknown' | 'unavailable';
                                             unitLabel?: string;
                                             unitLabelLanguage?: string;
-                                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                            unitCountForms?: Readonly<{
+                                                other: string;
+                                                zero?: string;
+                                                one?: string;
+                                                two?: string;
+                                                few?: string;
+                                                many?: string;
+                                            }>;
                                             dimension?: string;
                                             structure: 'unverified';
-                                            recording: Readonly<{
-                                                state: 'supported';
-                                                inputRules: import("@rezics/progress").ProgressInputRules;
-                                            } | {
-                                                state: 'unsupported' | 'unavailable';
-                                            }>;
+                                            recording: import("./contract/continue.ts").ContinueProgressRecording;
                                         }>;
                                     }[];
                                 };
@@ -8771,15 +8849,17 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                             meaning: 'known' | 'unknown' | 'unavailable';
                                             unitLabel?: string;
                                             unitLabelLanguage?: string;
-                                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                            unitCountForms?: Readonly<{
+                                                other: string;
+                                                zero?: string;
+                                                one?: string;
+                                                two?: string;
+                                                few?: string;
+                                                many?: string;
+                                            }>;
                                             dimension?: string;
                                             structure: 'unverified';
-                                            recording: Readonly<{
-                                                state: 'supported';
-                                                inputRules: import("@rezics/progress").ProgressInputRules;
-                                            } | {
-                                                state: 'unsupported' | 'unavailable';
-                                            }>;
+                                            recording: import("./contract/continue.ts").ContinueProgressRecording;
                                         }>;
                                     }[];
                                 };
@@ -8909,15 +8989,17 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                             meaning: 'known' | 'unknown' | 'unavailable';
                                             unitLabel?: string;
                                             unitLabelLanguage?: string;
-                                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                            unitCountForms?: Readonly<{
+                                                other: string;
+                                                zero?: string;
+                                                one?: string;
+                                                two?: string;
+                                                few?: string;
+                                                many?: string;
+                                            }>;
                                             dimension?: string;
                                             structure: 'unverified';
-                                            recording: Readonly<{
-                                                state: 'supported';
-                                                inputRules: import("@rezics/progress").ProgressInputRules;
-                                            } | {
-                                                state: 'unsupported' | 'unavailable';
-                                            }>;
+                                            recording: import("./contract/continue.ts").ContinueProgressRecording;
                                         }>;
                                     }[];
                                 };
@@ -9047,15 +9129,17 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                             meaning: 'known' | 'unknown' | 'unavailable';
                                             unitLabel?: string;
                                             unitLabelLanguage?: string;
-                                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                            unitCountForms?: Readonly<{
+                                                other: string;
+                                                zero?: string;
+                                                one?: string;
+                                                two?: string;
+                                                few?: string;
+                                                many?: string;
+                                            }>;
                                             dimension?: string;
                                             structure: 'unverified';
-                                            recording: Readonly<{
-                                                state: 'supported';
-                                                inputRules: import("@rezics/progress").ProgressInputRules;
-                                            } | {
-                                                state: 'unsupported' | 'unavailable';
-                                            }>;
+                                            recording: import("./contract/continue.ts").ContinueProgressRecording;
                                         }>;
                                     }[];
                                 };

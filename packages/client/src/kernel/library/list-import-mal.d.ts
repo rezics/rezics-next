@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { type CommandOutcome } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 import type { ProgressSessionJournalDate } from './progress-model.ts';

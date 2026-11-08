@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import { type RealmParticipationCheck } from '../community/participation.ts';
 import { REACTION_KINDS } from './events.ts';
 import type { RequestContext } from './model.ts';

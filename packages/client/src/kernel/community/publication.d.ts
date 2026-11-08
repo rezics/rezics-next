@@ -1,4 +1,4 @@
-import { type Actor } from '../request/access.ts';
+import type { Actor } from '../request/access.ts';
 import type { SpaceDependencies } from './space.ts';
 import type { CommunityAmbient } from './ambient.ts';
 export type PublicationDependencies = SpaceDependencies & CommunityAmbient;

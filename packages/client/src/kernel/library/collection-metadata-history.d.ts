@@ -1,65 +1,11 @@
 import type { PoolClient } from 'pg';
 import type { Collection, CollectionDraft } from './collection-model.ts';
-import type { LibraryCoverSummary } from './contract/index.ts';
 import { COLLECTION_METADATA_HISTORY_LIMIT, COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE, COLLECTION_METADATA_HISTORY_PAGE_SIZE } from './collection-history-bounds.ts';
 type Client = Pick<PoolClient, 'query'>;
 export { COLLECTION_METADATA_HISTORY_LIMIT, COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE, COLLECTION_METADATA_HISTORY_PAGE_SIZE, };
-export declare const COLLECTION_METADATA_FIELDS: readonly ['title', 'description', 'visibility', 'presentationKind', 'coverMediaId'];
-export type CollectionMetadataField = (typeof COLLECTION_METADATA_FIELDS)[number];
-export type CollectionMetadataHistoryCoverage = 'complete' | 'partial' | 'unknown';
-export type CollectionMetadataSnapshot = Pick<Collection, 'title' | 'description' | 'visibility' | 'presentationKind' | 'coverMediaId'>;
-export type CollectionMetadataHistoryEntry = {
-    revision: number;
-    transactionId: string;
-    recordedAt: string;
-    changedFields: CollectionMetadataField[];
-    before: CollectionMetadataSnapshot;
-    after: CollectionMetadataSnapshot;
-};
-export type CollectionMetadataHistoryBasis = {
-    collectionRevision: number;
-    curatorAccountId: string;
-    viewerAccountId: string;
-    authnEpoch: number;
-    minimumAuthnEpoch: string;
-};
-export type CollectionMetadataHistoryPageItem = Pick<CollectionMetadataHistoryEntry, 'revision' | 'recordedAt' | 'changedFields'>;
-export type CollectionMetadataHistoryPage = {
-    collectionId: string;
-    basis: CollectionMetadataHistoryBasis;
-    coverage: CollectionMetadataHistoryState;
-    items: CollectionMetadataHistoryPageItem[];
-    next: string | null;
-    actions: {
-        review: true;
-        reapply: false;
-    };
-};
-export type CollectionMetadataHistoryCover = {
-    state: 'none';
-} | {
-    state: 'unavailable';
-} | {
-    state: 'available';
-    mediaId: string;
-    summary: LibraryCoverSummary;
-};
-export type CollectionMetadataHistorySnapshot = Omit<CollectionMetadataSnapshot, 'coverMediaId'> & {
-    cover: CollectionMetadataHistoryCover;
-};
-export type CollectionMetadataHistoryDetail = {
-    collectionId: string;
-    revision: number;
-    recordedAt: string;
-    changedFields: CollectionMetadataField[];
-    before: CollectionMetadataHistorySnapshot;
-    after: CollectionMetadataHistorySnapshot;
-    basis: CollectionMetadataHistoryBasis;
-    actions: {
-        review: true;
-        reapply: false;
-    };
-};
+export { COLLECTION_METADATA_FIELDS } from './contract/index.ts';
+export type { CollectionMetadataField, CollectionMetadataHistoryCoverage, CollectionMetadataSnapshot, CollectionMetadataHistoryEntry, CollectionMetadataHistoryBasis, CollectionMetadataHistoryPageItem, CollectionMetadataHistoryPage, CollectionMetadataHistoryCover, CollectionMetadataHistorySnapshot, CollectionMetadataHistoryDetail, CollectionMetadataHistoryState, } from './contract/index.ts';
+import { type CollectionMetadataField, type CollectionMetadataHistoryEntry, type CollectionMetadataHistoryState } from './contract/index.ts';
 export declare function initializeCollectionMetadataHistory(client: Client, input: {
     route: number;
     collection: Pick<CollectionDraft, 'id' | 'curatorAccountId'>;
@@ -74,7 +20,9 @@ export declare function initializeCollectionMetadataHistory(client: Client, inpu
         transaction_id: string;
         updated_at: string;
     }>;
-    total: import("@rezics/bounds").Bound;
+    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+        engineRequests: number;
+    }>;
     withinExistingCeiling: boolean;
 }>): Promise<void>;
 /** Capture one committed metadata transition; replay and no-op metadata commands add no row. */
@@ -88,29 +36,26 @@ export declare function captureCollectionMetadataHistory(client: Client, input: 
     kind: 'collection.metadata-history.no-change' | 'collection.metadata-history.capture';
     input: Readonly<{
         route: number;
-        before: import("./collection-history-bounds.ts").CollectionMetadataSnapshotInput;
-        after: import("./collection-history-bounds.ts").CollectionMetadataSnapshotInput;
+        before: import("./collection-metadata-history.ts").CollectionMetadataSnapshot;
+        after: import("./collection-metadata-history.ts").CollectionMetadataSnapshot;
         collectionId: string;
         curatorAccountId: string;
         revision: number;
         transactionId: string;
         time: string;
     }>;
-    changedFields: readonly import("./collection-history-bounds.ts").CollectionMetadataFieldInput[];
+    changedFields: readonly ("coverMediaId" | "description" | "presentationKind" | "title" | "visibility")[];
     leaves: Readonly<{
         owner?: import("./collection-history-bounds.ts").CollectionMetadataHistorySqlPlan;
         append?: import("./collection-history-bounds.ts").CollectionMetadataHistorySqlPlan;
         prune?: import("./collection-history-bounds.ts").CollectionMetadataHistorySqlPlan;
         pruned?: import("./collection-history-bounds.ts").CollectionMetadataHistorySqlPlan;
     }>;
-    total: import("@rezics/bounds").Bound;
+    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+        engineRequests: number;
+    }>;
     withinExistingCeiling: boolean;
 }>): Promise<void>;
-export type CollectionMetadataHistoryState = {
-    coverage: CollectionMetadataHistoryCoverage;
-    knownFromRevision: number | null;
-    prunedBeforeRevision: number | null;
-};
 export declare function readCollectionMetadataHistoryState(client: Client, input: {
     route: number;
     collectionId: string;
@@ -122,7 +67,9 @@ export declare function readCollectionMetadataHistoryState(client: Client, input
         collection_id: string;
         curator_account_id: string;
     }>;
-    total: import("@rezics/bounds").Bound;
+    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+        engineRequests: number;
+    }>;
     withinExistingCeiling: boolean;
 }>): Promise<CollectionMetadataHistoryState>;
 export declare function pageCollectionMetadataHistory(client: Client, input: {
@@ -140,7 +87,9 @@ export declare function pageCollectionMetadataHistory(client: Client, input: {
         after_revision: number | null;
         page_limit: number;
     }>;
-    total: import("@rezics/bounds").Bound;
+    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+        engineRequests: number;
+    }>;
     withinExistingCeiling: boolean;
 }>): Promise<{
     revision: number;
@@ -162,7 +111,9 @@ export declare function readCollectionMetadataHistoryEntry(client: Client, input
         curator_account_id: string;
         revision: number;
     }>;
-    total: import("@rezics/bounds").Bound;
+    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+        engineRequests: number;
+    }>;
     withinExistingCeiling: boolean;
 }>): Promise<{
     revision: number;

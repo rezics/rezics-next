@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { type KernelClock } from '../clock.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { type LibraryCoverSummary } from './contract/index.ts';
 import { type CollectionKind } from './collection-kind.ts';

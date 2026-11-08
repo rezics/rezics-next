@@ -1,7 +1,7 @@
 import { type MediaImportRequest, type MediaImportStatus } from '@rezics/definitions/media-import';
 import type { Pool } from 'pg';
 import { type CommandOutcome } from '../command/command.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 /** Trusted host configuration, never accepted as caller JSON. Runtime must
  * revalidate exact HTTPS hosts on every redirect and enforce fetch bounds.
  */

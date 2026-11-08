@@ -1,4 +1,5 @@
-export type FollowTargetType = 'subject' | 'collection' | 'space';
+import type { FollowTargetType } from './contract/index.ts';
+export type { FollowTargetType } from './contract/index.ts';
 export type FollowState = 'following' | 'unfollowed';
 export type FollowReason = 'explicit' | 'library' | 'membership';
 export type FollowIntent = 'implied' | 'follow' | 'unfollow';

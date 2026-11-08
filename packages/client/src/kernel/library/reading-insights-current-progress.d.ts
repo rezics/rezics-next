@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { type Actor } from '../request/access.ts';
+import type { Actor } from '../request/access.ts';
 import type { LibraryProfilePin } from './profile.ts';
 import type { ProgressMode } from './progress.ts';
 export declare const READING_INSIGHTS_CURRENT_PROGRESS_GROUP_LIMIT = 8;

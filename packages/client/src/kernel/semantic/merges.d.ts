@@ -3,12 +3,8 @@ import type { Pool } from 'pg';
 import { type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import type { AccountActor } from '../request/access.ts';
 import type { Release } from '@rezics/definitions';
-export declare class SubjectRedirectError extends Error {
-    readonly from: string;
-    readonly to: string;
-    constructor(from: string, to: string);
-}
-export declare function redirectOf(client: CommandTransaction, id: string): Promise<string | null>;
+export { SubjectRedirectError } from './contract/subject-errors.ts';
+export { redirectOf } from './subject-redirect.ts';
 export declare function mergeSubjects(pool: Pool, options: {
     subjects: string[];
     survivor?: string;

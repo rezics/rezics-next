@@ -1,19 +1,8 @@
 import type { Release } from '@rezics/definitions';
-import { type CommandTransaction } from '../command/command.ts';
-export type ReviewedPersonEndpoint = {
-    subject: string;
-    revision: number;
-    securityRevision: string;
-    source: 'bangumi' | 'vndb' | 'bangumi_cross_media' | 'vndb_cross_media';
-    externalId: string;
-    claimTransactionId: string;
-    property: 'wdt:P6298' | 'wdt:P3180';
-    value: string;
-};
-export type ReviewedPersonSource = Pick<ReviewedPersonEndpoint, 'source' | 'externalId'>;
-export type ReviewedPersonExpectation = {
-    endpoints: [ReviewedPersonEndpoint, ReviewedPersonEndpoint];
-};
+import type { CommandTransaction } from '../command/command.ts';
+import type { NativeIdentityCapabilities, NativeReviewedPersonOperations } from './identity-adapter-port.ts';
+import type { ReviewedPersonEndpoint, ReviewedPersonExpectation, ReviewedPersonSource } from './identity-adapters/identity-epoch-contract.ts';
+export type { ReviewedPersonEndpoint, ReviewedPersonExpectation, ReviewedPersonSource };
 export declare const ReviewedPersonEndpointSchema: import("typebox").TObject<{
     subject: import("typebox").TString;
     revision: import("typebox").TInteger;
@@ -75,6 +64,8 @@ export declare function ReviewedPersonGuardUnavailableError(): {
     stackTraceLimit: number;
 };
 export type ReviewedPersonGuardUnavailableError = InstanceType<ReturnType<typeof ReviewedPersonGuardUnavailableError>>;
+/** Reviewed Person observe/guard closed over one routing, slot and command set. */
+export declare function createReviewedPersonOperations(capabilities: NativeIdentityCapabilities): NativeReviewedPersonOperations;
 /** Caller has already authorized this original in its final read transaction. Never follows redirects. */
 export declare function observeReviewedPersonIdentity(tx: CommandTransaction, subject: string, source: ReviewedPersonSource, routeKey: Uint8Array, release: Release, lockSelected?: boolean): Promise<ReviewedPersonEndpoint | null>;
 /** Runs only inside the authorized first-effect callback; every restarted callback reacquires exclusions. */

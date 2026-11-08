@@ -1,4 +1,4 @@
-import { type Access } from '../request/access.ts';
+import type { Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 export type Dependencies = {
@@ -6446,6 +6446,57 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
                         error: never;
                     };
                 };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
+            get: {
+                body: unknown;
+                params: {};
+                query: unknown;
+                headers: unknown;
+                response: {
+                    200: {
+                        digest: string;
+                        head: number;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
             };
         };
     };

@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { type Actor } from '../request/access.ts';
+import type { Actor } from '../request/access.ts';
 /** Counts are decimal strings: a long history must never lose integer precision. */
 export type ConsumptionSummary = Readonly<{
     scope: 'retained_native_sessions';

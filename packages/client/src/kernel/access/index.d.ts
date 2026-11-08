@@ -1,5 +1,7 @@
 export { createAccountPublicEligibility } from './account-authority.ts';
-export type { AccessCheck, PreparedAccessCheckInvocation, PreparedAccessCheckWork } from '../request/access.ts';
+export type { Access, AccessCheck, AccessContext, Actor, Resource, PreparedAccessCheckInvocation, PreparedAccessCheckWork, } from '../request/access.ts';
+/** Compatibility exports; implementation consumers import the defining public leaf. */
+export { authorizePlatformGate, viewerActionReadTime } from './read-bindings.ts';
 export type * from './kind-audience.ts';
 export { AccessWorkAccounting, AccessWorkUnavailableError, EMPTY_ACCESS_WORK, isAccessWorkDispatch, type AccessWork, type AccessWorkSink, type AccessWorkProducer, type AccessWorkResult, } from './work.ts';
 export { accountStandingCheck, type AccountStandingInput, type AccountStandingDecisions } from './account-standing.ts';
@@ -11,37 +13,7 @@ export { AccessUnavailableError } from './unavailable.ts';
 export { createContentEditionBuyerFact, type ContentEditionBenefit, type ContentEditionBuyerFact, type ContentEditionBuyerFactInput, type ContentEditionBuyerFactReader, } from './authenticated-benefit.ts';
 export { createRatingCounter, type RatingCounter } from './rating-counter.ts';
 export { accessClock } from './access-clock.ts';
-import type { Access, AccessConfig as KernelAccessConfig, AccessClient, AccessContext, Actor, Resource, ActionCatalogue } from '../request/access.ts';
-import { type AuthoritativeTime } from '../command/command.ts';
-import { type AuthenticationConfig } from './authenticate.ts';
 export { createResourcePublicEligibility, createResourceAnonymousEligibility, type ResourceEligibility, type ResourceIdentity, type ResourceEligibilityOptions, type ResourceEligibilityPrepareContext, type ResourceEligibilityVerifyContext, } from './eligibility.ts';
-export type AccessConfig = KernelAccessConfig & {
-    auth?: AuthenticationConfig;
-};
-/** Fixed native checks without mounted routes; call sites are listed in the Access README. */
-export declare const INTERNAL_ACTIONS: ActionCatalogue;
-/** Also called at kernel startup, before its lazy Access is first used. */
-export declare function assertInternalActionDeclarations(actions: ActionCatalogue): void;
-export declare function accessActionCatalogue(declared: ActionCatalogue): Map<string, {
-    anonymous: boolean;
-    replay?: 'self-account-read';
-    authority?: 'own-account';
-    'x-resource-types'?: readonly string[];
-}>;
-/** The native batch's already-observed kernel instant; no second clock query. */
-export declare function viewerActionReadTime(access: Access, context: AccessContext): AuthoritativeTime;
-/**
- * App-local Access factory; the kernel supplies the mounted route catalogue.
- * Optional auth overrides the deployment's AUTH_ISSUER (HTTPS origin),
- * AUTH_AUDIENCE (HTTPS API URL), and AUTH_JWKS_URL (HTTPS public JWKS on the
- * issuer origin). All three are required only when authentication is used.
- * Only ES256 public keys are accepted; Auth credentials/private keys are never needed.
- */
-export declare function createAccess(config: AccessConfig): Access;
-/** Evaluate exact gate actions on the Global Context, borrowing the mounted operation's scope operand. */
-export declare function authorizePlatformGate(access: Access, actor: Actor, actions: readonly string[], clientAction: string, resource: Resource, context: AccessContext, at: string, client?: AccessClient): Promise<boolean>;
-/** Standalone instance denies authorization until an app supplies its own catalogue. */
-export declare function access(): Access;
 export { visibleOperations, type VisibleOperation } from './gates/visibility.ts';
 export { ACTIVE_ACCOUNTS, type GrantSubject } from './grant-subject.ts';
 export { captureDurableInitiator, durableInitiatorCommitment, DurableInitiatorCaptureUnavailableError, } from './durable-initiator-capture.ts';
@@ -56,7 +28,9 @@ export { endResourceDenial, recordResourceDenial } from './resource-denials.ts';
 export { grantGroupRole } from './resource-group-grant.ts';
 export { installStandingParentGrant } from './standing-parent.ts';
 export type { ResourceRoleCatalogue } from './resource-roles.ts';
+export { compileViewerActionBindings, readViewerActions, viewerActionBindingActions, type ViewerActionBinding, type ViewerActionBindings, type ViewerActionResource, type ViewerActionResources, } from './viewer-actions.ts';
 export { createWorkflowApprovals, sweepWorkflowApprovals, workflowApprovalBinding, MAX_WORKFLOW_APPROVAL_LIFETIME_MS, WorkflowApprovalUnavailableError, type WorkflowApproval, type WorkflowApprovalConfig, type WorkflowApprovalRequest, type WorkflowApprovalBinding, } from './workflow-approvals.ts';
 export { createCredentialCapability, type CredentialCapability, type CredentialCapabilityConfig, type CredentialOpeningLocator, } from './auth-credential-capability.ts';
 export { createCommittedContinuations, deletionAllowlist, COMMITTED_CONTINUATION_ACTIONS, COMMITTED_CONTINUATION_PURPOSE, COMMITTED_CONTINUATION_TTL_MS, ContinuationDeniedError, type CommittedContinuations, type ContinuationBinding, type ContinuationEntry, type ContinuationView, } from './committed-continuations.ts';
 export { createPreferenceCommands, readAccountPreferences, notificationAllowed, projectPreferencePage, projectReadingAdvice, projectShelfAdvice, withPreferencePage, withReadingPreferencePage, DEFAULT_ACCOUNT_PREFERENCES, type AccountPreferences, type PreferenceChange, type PreferencePage, type PreferencePageAction, type PreferencePageKind, type PreferenceActionAdvice, type PreferenceReadingAdvice, type PreferenceShelfAdvice, type PreferencePageObservation, } from './preferences.ts';
+export { access, createAccess, accessActionCatalogue, assertInternalActionDeclarations, INTERNAL_ACTIONS, type AccessConfig, } from './factory.ts';

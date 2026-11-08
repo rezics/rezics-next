@@ -1,6 +1,7 @@
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import { type AuthoritativeTime } from '../command/command.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
+import type { NativeCopyDefinitions } from './copy-model.ts';
 import { type SubjectComponent } from '../semantic/subject.ts';
 import { type LibraryProfileDescriptor, type LibraryProfilePin } from './profile.ts';
 export type LibraryProfileSourceDependencies = {
@@ -32,16 +33,11 @@ export type LibraryProfileSource = (Source & {
 /** Private, current observations only: native T binds Access, not historical SQL snapshots. */
 export declare function readLibraryProfileSource(deps: LibraryProfileSourceDependencies, subjectId: string): Promise<LibraryProfileSource>;
 /** The same source producer with its private before/final fence retained for a bounded detail. */
-export declare function readLibraryProfileSourceObservation(deps: LibraryProfileSourceDependencies, subjectId: string): Promise<{
+export declare function readLibraryProfileSourceObservation(deps: LibraryProfileSourceDependencies, subjectId: string, definitions?: Pick<NativeCopyDefinitions, 'active'>): Promise<{
     source: NonNullable<LibraryProfileSource>;
     anchor: LibraryProfileAnchor;
 } | null>;
 /** Current source/type/disclosure only. No profile or release lookup; each foreign home is released. */
 export declare function readLibraryProfileAnchor(deps: LibraryProfileSourceDependencies, subjectId: string): Promise<LibraryProfileAnchor | null>;
-export declare function sameLibraryProfileAnchor(before: LibraryProfileAnchor, after: LibraryProfileAnchor | null): boolean;
-/** Read-only rollout boundary. Existing fixed-contract DTOs can expose an unpinned
- * historical fact only before that owner's live-fact cutover. A missing job never
- * prevents reading a current pinned fact, and reads never create owner metadata.
- */
-export declare function assertPreProfileLibraryRead(client: Pick<PoolClient, 'query'>, accountId: string): Promise<void>;
-export {};
+export { sameCopyProfileAnchor as sameLibraryProfileAnchor } from './copy-model.ts';
+export { assertPreProfileLibraryRead } from './profile-read-gate.ts';

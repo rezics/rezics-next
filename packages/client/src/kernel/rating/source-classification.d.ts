@@ -1,7 +1,7 @@
 import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import { type Access, type Actor } from './dependencies.ts';
 import { type ClassificationAssociation, type ClassificationObservation, type ClassificationClear, type ImmutableClassificationObservation, type SourceClassificationRead } from './source-classification-contract.ts';
 /** Reuses the existing bulk/governance authority. It grants no native ballot or public fence access. */
 export declare const SOURCE_CLASSIFICATION_WRITE_ACTION = "source_statistic:write";

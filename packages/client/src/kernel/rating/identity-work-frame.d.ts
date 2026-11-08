@@ -1,5 +1,5 @@
 import type { CommandTransaction } from '../command/command.ts';
-export declare const RATING_IDENTITY_PAGE_SIZE = 64;
+export { RATING_IDENTITY_PAGE_SIZE } from './identity-work-frame-limits.ts';
 export type IdentityVoteKey = {
     questionId: string;
     targetId: string;

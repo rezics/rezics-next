@@ -1,6 +1,6 @@
 import type { TSchema } from 'typebox';
 import type { Pool } from 'pg';
-import { type Access } from '../../request/access.ts';
+import { type Access } from '../check.ts';
 import type { definitionRoutes } from '../../semantic/http/definitions.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: {
@@ -6451,6 +6451,57 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
 } & {
     v1: {
         definitions: {
+            get: {
+                body: unknown;
+                params: {};
+                query: unknown;
+                headers: unknown;
+                response: {
+                    200: {
+                        digest: string;
+                        head: number;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             active: {
                 get: {
                     body: unknown;
@@ -6976,15 +7027,15 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: import("../../request/access.ts").AccountActor | {
+        readonly actor: import("../check.ts").AccountActor | {
             kind: 'anonymous';
         };
         readonly session: {
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+        readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+        readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -7192,15 +7243,15 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: import("../../request/access.ts").AccountActor | {
+            readonly actor: import("../check.ts").AccountActor | {
                 kind: 'anonymous';
             };
             readonly session: {
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+            readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+            readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -7218,15 +7269,15 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: import("../../request/access.ts").AccountActor | {
+    readonly actor: import("../check.ts").AccountActor | {
         kind: 'anonymous';
     };
     readonly session: {
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+    readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+    readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
 }) => Promise<Response>, {
     response: {
         200: import("typebox").TObject<{
@@ -13725,6 +13776,57 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
 } & {
     v1: {
         definitions: {
+            get: {
+                body: unknown;
+                params: {};
+                query: unknown;
+                headers: unknown;
+                response: {
+                    200: {
+                        digest: string;
+                        head: number;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             active: {
                 get: {
                     body: unknown;
@@ -14443,15 +14545,15 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: import("../../request/access.ts").AccountActor | {
+        readonly actor: import("../check.ts").AccountActor | {
             kind: 'anonymous';
         };
         readonly session: {
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+        readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+        readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -14965,15 +15067,15 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: import("../../request/access.ts").AccountActor | {
+            readonly actor: import("../check.ts").AccountActor | {
                 kind: 'anonymous';
             };
             readonly session: {
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+            readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+            readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -14995,15 +15097,15 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: import("../../request/access.ts").AccountActor | {
+    readonly actor: import("../check.ts").AccountActor | {
         kind: 'anonymous';
     };
     readonly session: {
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+    readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+    readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
 }) => Promise<{
     exposure: import("./catalogue.ts").ExposureValue;
 }>, {
@@ -21620,6 +21722,57 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
 } & {
     v1: {
         definitions: {
+            get: {
+                body: unknown;
+                params: {};
+                query: unknown;
+                headers: unknown;
+                response: {
+                    200: {
+                        digest: string;
+                        head: number;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             active: {
                 get: {
                     body: unknown;
@@ -22145,15 +22298,15 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: import("../../request/access.ts").AccountActor | {
+        readonly actor: import("../check.ts").AccountActor | {
             kind: 'anonymous';
         };
         readonly session: {
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+        readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+        readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -22317,15 +22470,15 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: import("../../request/access.ts").AccountActor | {
+            readonly actor: import("../check.ts").AccountActor | {
                 kind: 'anonymous';
             };
             readonly session: {
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+            readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+            readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -22343,15 +22496,15 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: import("../../request/access.ts").AccountActor | {
+    readonly actor: import("../check.ts").AccountActor | {
         kind: 'anonymous';
     };
     readonly session: {
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+    readonly authorize: (resource: import("../index.ts").Resource) => Promise<import("../index.ts").AccessCheck>;
+    readonly authorizeCommand: (resource: import("../index.ts").Resource, denied: () => Error) => Promise<import("../check.ts").AccessCommandAuthorization>;
 }) => Promise<{
     admitted: string[];
 }>, {
