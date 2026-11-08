@@ -13,6 +13,9 @@ import {
 import { join, resolve } from 'node:path';
 import {
   acquireHostControl,
+  collectSshStderr,
+  scrubSshDiagnostic,
+  SSH_DIAGNOSTIC_TAIL_BYTES,
   activeHostControlCount,
   clearPlacementProbeTimeout,
   controlSocketDirectoryPath,
@@ -672,4 +675,29 @@ console.log('REMOTE_CHECK_CONTROL_OK');
     }
     process.env = previous;
   }
+});
+
+test('SSH diagnostic collection concurrently drains bounded bytes and scrubs split private endpoints', async () => {
+  const endpoint = { name: 'b', address: 'ops@private.example', identity: '/keys/private-identity' };
+  expect(
+    scrubSshDiagnostic(
+      endpoint,
+      'ops@private.example private.example /keys/private-identity 192.168.1.4 fd12:abcd::42 ::1 /home/user/.ssh/key',
+    ),
+  ).toBe('[private] [private] [private] [address] [address] [address] [private-path]');
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(Buffer.alloc(128 * 1024, 110));
+      controller.enqueue(Buffer.from('final error ops@pri'));
+      controller.enqueue(Buffer.from('vate.example /keys/private-identity'));
+      controller.close();
+    },
+  });
+  const collected = collectSshStderr(endpoint, stream);
+  await collected.drained;
+  const result = collected.snapshot();
+  expect(result.stderrBytes).toBeGreaterThan(128 * 1024);
+  expect(result.stderrTruncated).toBe(true);
+  expect(Buffer.byteLength(result.stderrTail)).toBeLessThanOrEqual(SSH_DIAGNOSTIC_TAIL_BYTES);
+  expect(result.stderrTail).toEndWith('final error [private] [private]');
 });
