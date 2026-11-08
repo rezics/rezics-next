@@ -1,5 +1,4 @@
 import { t } from 'elysia';
-import { CoverSummaryValueSchema } from '../semantic/contract/index.ts';
 import { deadlineClient, accessCheck, withReadTransaction, readSubjectSummaryObservation } from './domain-ports.ts';
 import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
@@ -7,7 +6,7 @@ import { readPartition } from '../partition/partition.ts';
 import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { SessionComponent } from '../tokens/session.ts';
-import type { SubjectSummary } from '../semantic/contract/index.ts';
+import type { SubjectSummary } from '../semantic/summaries.ts';
 import { spaceReadEligibility } from './space-read.ts';
 import { realmReadEligibility } from './realm-read.ts';
 import type { PublicationDependencies, PublicationReadContext, PublicationVerdict } from './publication.ts';
@@ -48,7 +47,35 @@ const presentationCover = t.Union([
   t.Object(
     {
       state: t.Literal('available'),
-      value: CoverSummaryValueSchema,
+      value: t.Object(
+        {
+          media: id,
+          width: t.Integer({ minimum: 1 }),
+          height: t.Integer({ minimum: 1 }),
+          placeholder: t.Object(
+            { thumbhash: t.String({ maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) },
+            closed,
+          ),
+          variants: t.Array(
+            t.Object(
+              { format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) },
+              closed,
+            ),
+            { maxItems: 12 },
+          ),
+          focalPoint: t.Union([t.Object({ x: t.Number(), y: t.Number() }, closed), t.Null()]),
+          credit: t.Object(
+            {
+              rightsHolder: t.String({ maxLength: 1024 }),
+              via: t.Object({ name: t.String({ maxLength: 1024 }), url: t.String({ maxLength: 1024 }) }, closed),
+              license: t.String({ maxLength: 128 }),
+              obligations: t.Array(t.String({ maxLength: 8192 }), { maxItems: 2048 }),
+            },
+            closed,
+          ),
+        },
+        closed,
+      ),
     },
     closed,
   ),
