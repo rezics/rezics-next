@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, watch, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import type { WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
 import type { DirectoryLease } from './lease.ts';
@@ -370,7 +370,7 @@ test('host maintenance reaches a fixed cleanup and process neighbourhood across 
         'process-directory-entry': 4,
         'process-cwd-enumeration': 2,
         'candidate-path-stat': 4,
-        'permission-path-component': 24,
+        'permission-path-component': 2 * join(settings.worktreeRoot!, 'settled-00000').split(sep).filter(Boolean).length,
         'worktree-tree-expansion': 1,
         'worktree-tree-entry': 1,
       });

@@ -44,6 +44,52 @@ afterAll(() => {
   for (const directory of fixtureRoots) rmSync(directory, { recursive: true, force: true });
 });
 
+test('check-placement preserves Bun argv when its script delimiter is consumed or retained', () => {
+  const temporaryRoot = join(root, '.temp');
+  mkdirSync(temporaryRoot, { recursive: true });
+  const directory = mkdtempSync(join(temporaryRoot, 'check-placement-argv-'));
+  fixtureRoots.push(directory);
+  const probe = join(directory, 'argv-probe.ts');
+  writeFileSync(
+    probe,
+    `import { parseCheckPlacementArguments } from ${JSON.stringify(resolve(import.meta.dir, 'check-placement.ts'))};
+try {
+  console.log(JSON.stringify({ bunVersion: Bun.version, bunRevision: Bun.revision, ...parseCheckPlacementArguments(process.argv.slice(2)) }));
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 2;
+}
+`,
+  );
+  const run = (args: string[]) => spawnSync(process.execPath, [probe, ...args], { cwd: root, encoding: 'utf8' });
+  const runtime = { bunVersion: Bun.version, bunRevision: Bun.revision };
+  const command = ['bun', 'scripts/isolated.ts', 'bun', 'test', 'tests/own-drafts-visit.test.tsx'];
+
+  const consumed = run(['--', ...command]);
+  expect(consumed.status).toBe(0);
+  expect(JSON.parse(consumed.stdout)).toEqual({ ...runtime, returns: [], command });
+
+  const retained = run(['--', '--', ...command]);
+  expect(retained.status).toBe(0);
+  expect(JSON.parse(retained.stdout)).toEqual({ ...runtime, returns: [], command });
+
+  const withReturns = run(['--returns', '.temp/report', '--', 'bun', 'scripts/check.ts', '--skip-format']);
+  expect(withReturns.status).toBe(0);
+  expect(JSON.parse(withReturns.stdout)).toEqual({
+    ...runtime,
+    returns: ['.temp/report'],
+    command: ['bun', 'scripts/check.ts', '--skip-format'],
+  });
+
+  const unknownFlag = run(['--', '--unsupported', 'bun', 'test']);
+  expect(unknownFlag.status).toBe(2);
+  expect(unknownFlag.stderr).toContain('Usage: check-placement.ts');
+
+  const missingSeparator = run(['--returns', '.temp/report']);
+  expect(missingSeparator.status).toBe(2);
+  expect(missingSeparator.stderr).toContain('Usage: check-placement.ts');
+});
+
 function sha(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
 }

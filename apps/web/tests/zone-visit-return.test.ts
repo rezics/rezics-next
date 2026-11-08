@@ -1,11 +1,6 @@
 import { expect, test } from 'bun:test';
-import {
-  subjectVisitReturn,
-  withSubjectVisitReturn,
-  workFranchiseReturnHref,
-} from '../src/features/pages/subject-visit-navigation';
-import { gameClassificationReturnFragment } from '../src/features/catalogue/game-current-visit-descriptor';
-import { releaseReturnHref } from '../src/features/catalogue/release-fidelity/navigation';
+import { join } from 'node:path';
+import { subjectVisitReturn, withSubjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import { composedZoneMembersFake } from '../src/zones/static-fakes';
 import {
   parseZoneVisit,
@@ -51,50 +46,52 @@ test('canonical Subject readers keep a bounded same-tab Zone return', () => {
 });
 
 test('standalone Subject return helpers preserve Zone, franchise, credit, release and game fragments', () => {
-  const zone = `/en/zones/${zoneId}`;
-  expect(zoneVisitReturn(zone, 'en')).toBe(zone);
-  expect(subjectVisitReturn(zone, 'en')).toBe(zone);
+  const child = Bun.spawnSync(
+    [
+      process.execPath,
+      '-e',
+      `
+        import assert from 'node:assert/strict';
+        import { subjectVisitReturn, workFranchiseReturnHref, zoneVisitReturn } from './src/features/pages/subject-visit-navigation.ts';
+        import { gameClassificationReturnFragment } from './src/features/catalogue/game-current-visit-descriptor.ts';
+        import { releaseReturnHref } from './src/features/catalogue/release-fidelity/navigation.ts';
 
-  const relationBase = `/en/subjects/${subjectId}/book/relations?realm=${zoneId}&node=franchise&streamProperty=wdt%3AP144&streamDirection=forward&cursor=current`;
-  const franchise = workFranchiseReturnHref(relationBase, relationBase, 'en', {
-    stream: 'out:wdt:P144',
-    node: 'franchise',
-    statement: '01a17a3b-0884-721b-91ef-d7ffd7bb58e7',
-    holder: subjectId,
-    spoiler: 0,
-    focus: 'evidence',
-  });
-  expect(subjectVisitReturn(franchise, 'en')).toBe(franchise);
+        const zoneId = '0192f3a0-6c1e-7b2a-9d4e-000000000040';
+        const subjectId = '01a17a3b-0884-721b-91ef-d7ffd7bb58e4';
+        const statement = '01a17a3b-0884-721b-91ef-d7ffd7bb58e7';
+        const zone = '/en/zones/' + zoneId;
+        assert.equal(zoneVisitReturn(zone, 'en'), zone);
+        assert.equal(subjectVisitReturn(zone, 'en'), zone);
 
-  const credit = `/en/subjects/${subjectId}/book/works#person-credit?context=${zoneId}&definition=rezics%3Acredit`;
-  expect(subjectVisitReturn(credit, 'en')).toBe(credit);
+        const base = '/en/subjects/' + subjectId + '/book/relations?realm=' + zoneId + '&node=franchise&streamProperty=wdt%3AP144&streamDirection=forward&cursor=current';
+        const franchise = workFranchiseReturnHref(base, base, 'en', {
+          stream: 'out:wdt:P144', node: 'franchise', statement, holder: subjectId, spoiler: 0, focus: 'evidence',
+        });
+        assert.equal(subjectVisitReturn(franchise, 'en'), franchise);
 
-  const release = releaseReturnHref('Book', 'en', {
-    id: subjectId,
-    context: zoneId,
-    digest: `sha256:${'a'.repeat(64)}`,
-    revision: 1,
-    focus: 'work',
-  });
-  expect(release).toBeDefined();
-  expect(subjectVisitReturn(release, 'en')).toBe(release);
+        const credit = '/en/subjects/' + subjectId + '/book/works#person-credit?context=' + zoneId + '&definition=rezics%3Acredit';
+        assert.equal(subjectVisitReturn(credit, 'en'), credit);
 
-  const gameSource = `/en/subjects/${subjectId}/video-game?realm=${zoneId}`;
-  const gameFragment = gameClassificationReturnFragment({
-    source: gameSource,
-    holder: subjectId,
-    context: zoneId,
-    realm: zoneId,
-    type: 'vndb:game',
-    locale: 'en',
-    release: `sha256:${'b'.repeat(64)}`,
-    reader: null,
-    property: 'wdt:P123',
-    statement: '01a17a3b-0884-721b-91ef-d7ffd7bb58e7',
-    focus: 'keyboard',
-  });
-  expect(gameFragment).toBeDefined();
-  expect(subjectVisitReturn(`${gameSource}${gameFragment}`, 'en')).toBe(`${gameSource}${gameFragment}`);
+        const release = releaseReturnHref('Book', 'en', {
+          id: subjectId, context: zoneId, digest: 'sha256:' + 'a'.repeat(64), revision: 1, focus: 'work',
+        });
+        assert.ok(release);
+        assert.equal(subjectVisitReturn(release, 'en'), release);
+
+        const gameSource = '/en/subjects/' + subjectId + '/video-game?realm=' + zoneId;
+        const gameFragment = gameClassificationReturnFragment({
+          source: gameSource, holder: subjectId, context: zoneId, realm: zoneId, type: 'vndb:game', locale: 'en',
+          release: 'sha256:' + 'b'.repeat(64), reader: null, property: 'wdt:P123', statement, focus: 'keyboard',
+        });
+        assert.ok(gameFragment);
+        assert.equal(subjectVisitReturn(gameSource + gameFragment, 'en'), gameSource + gameFragment);
+        console.log('standalone-return-ok');
+      `,
+    ],
+    { cwd: join(import.meta.dir, '..'), stdout: 'pipe', stderr: 'pipe' },
+  );
+  if (child.exitCode !== 0) throw new Error(child.stderr.toString());
+  expect(child.stdout.toString().trim()).toBe('standalone-return-ok');
 });
 
 test('source replacement drops another visit continuation', () => {

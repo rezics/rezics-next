@@ -544,8 +544,15 @@ export class WorkerStore implements AttemptFence {
       })
       .immediate();
   }
+  /** Persist only actually visited owners when cleanup transport consumes the maintenance budget mid-page. */
+  advanceWorktreeMaintenance(candidate: WorktreeMaintenanceCandidate): void {
+    this.db.query('UPDATE worker_maintenance_progress SET worktree_ticket=? WHERE id=1').run(candidate.ticket);
+  }
   /** Select a bounded, durable round-robin page of finished-task cleanup candidates. */
-  worktreeMaintenanceCandidates(limit = MAINTENANCE_CANDIDATE_BATCH_SIZE): WorktreeMaintenanceCandidate[] {
+  worktreeMaintenanceCandidates(
+    limit = MAINTENANCE_CANDIDATE_BATCH_SIZE,
+    advance = true,
+  ): WorktreeMaintenanceCandidate[] {
     this.refreshSnapshot();
     return this.db
       .transaction(() => {
@@ -566,10 +573,8 @@ export class WorkerStore implements AttemptFence {
           this.db.query('UPDATE worker_maintenance_progress SET worktree_ticket=0 WHERE id=1').run();
           return [];
         }
-        if (rows.length)
-          this.db
-            .query('UPDATE worker_maintenance_progress SET worktree_ticket=? WHERE id=1')
-            .run(rows.at(-1)!.ticket);
+        if (rows.length && advance)
+          this.db.query('UPDATE worker_maintenance_progress SET worktree_ticket=? WHERE id=1').run(rows.at(-1)!.ticket);
         return rows.map((row) => ({
           ticket: row.ticket,
           kind: 'worktree' as const,

@@ -52,6 +52,7 @@ export async function runMaintenance(
 ): Promise<number> {
   const policy = runtime.settings?.policy ?? defaultPolicy;
   const budget = job === 'regenerate' ? policy.maintenance.regenerationBudgetMs : policy.maintenance.budgetMs;
+  const deadlineMs = Date.now() + budget;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new Error(`Maintenance budget exhausted (${budget}ms)`)), budget);
   const signal = controller.signal;
@@ -116,7 +117,10 @@ export async function runMaintenance(
               }
             }
             runtime.store.completeMaintenanceCandidates(completed);
-            await removeFinishedWorktree(runtime.settings, runtime.store, lifetimeRuntime);
+            await removeFinishedWorktree(runtime.settings, runtime.store, lifetimeRuntime, undefined, {
+              deadlineMs,
+              signal,
+            });
             break;
           case 'detect':
             await runtime.deliverReminders?.();

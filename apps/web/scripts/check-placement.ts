@@ -26,6 +26,32 @@ export class WebCheckFailure extends Error {
   }
 }
 
+const placementUsage = 'Usage: check-placement.ts [--returns <path>]... -- <command...>';
+
+/**
+ * Parse the script argv after Bun has handled its own options. Bun consumes the
+ * first `--` immediately after a script path, so the documented no-return form
+ * arrives as the command itself. When the caller preserves a second delimiter,
+ * it remains at argv[0]. Return options still require their explicit separator.
+ */
+export function parseCheckPlacementArguments(args: readonly string[]): { returns: string[]; command: string[] } {
+  const first = args[0];
+  if (first !== undefined && first !== '--' && first !== '--returns' && !first.startsWith('-'))
+    return { returns: [], command: [...args] };
+
+  const separator = args.indexOf('--');
+  if (separator < 0 || separator % 2 !== 0) throw new Error(placementUsage);
+  const returns: string[] = [];
+  for (let index = 0; index < separator; index += 2) {
+    if (args[index] !== '--returns' || !args[index + 1])
+      throw new Error('Expected --returns <workspace-relative-path>');
+    returns.push(args[index + 1]!);
+  }
+  const command = args.slice(separator + 1);
+  if (command.length === 0) throw new Error(placementUsage);
+  return { returns, command };
+}
+
 export function workspacePath(workspace: string, path: string): string {
   if (/[\0\r\n]/.test(path)) throw new Error('Web check unavailable: invalid workspace path');
   const inside = relative(resolve(workspace), resolve(workspace, path));
@@ -467,18 +493,7 @@ export async function placeWebCheck(
 
 if (import.meta.main) {
   try {
-    const args = process.argv.slice(2);
-    const separator = args.indexOf('--');
-    if (separator < 0 || separator % 2 !== 0)
-      throw new Error('Usage: check-placement.ts [--returns <path>]... -- <command...>');
-    const returns: string[] = [];
-    for (let i = 0; i < separator; i += 2) {
-      if (args[i] !== '--returns' || !args[i + 1]) throw new Error('Expected --returns <workspace-relative-path>');
-      returns.push(args[i + 1]!);
-    }
-    const command = args.slice(separator + 1);
-    if (separator < 0 || !command.length)
-      throw new Error('Usage: check-placement.ts [--returns <path>]... -- <command...>');
+    const { command, returns } = parseCheckPlacementArguments(process.argv.slice(2));
     const run = { root, cwd: process.cwd(), command, returns };
     const code = await routeWebCheck(run);
     process.exitCode = code ?? (await executeDriver({ command, cwd: run.cwd, env: process.env }));
