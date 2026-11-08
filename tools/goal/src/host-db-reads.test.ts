@@ -172,7 +172,7 @@ test('maintenance selection stays on fixed pages across settled task attempt and
     const native = observeSqliteWork(db, join(root, `maintenance-${tasks}`));
     store.resetDecodedRows();
     expect(store.bootstrapMaintenanceTasks(16)).toMatchObject({ examined: 16, complete: false });
-    expect(store.bootstrapMaintenanceProcesses(16)).toEqual({ examined: 0, complete: true });
+    expect(store.bootstrapMaintenanceProcesses(16)).toEqual({ examined: 16, complete: false });
     expect(store.worktreeMaintenanceCandidates(8)).toHaveLength(8);
     expect(store.reapMaintenanceCandidates(8)).toEqual([]);
     expect(store.decodedRows()).toEqual({ tasks: 8, attempts: 0 });

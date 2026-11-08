@@ -281,6 +281,9 @@ test('finished-worktree cleanup defers within a finite pass under sustained I/O 
     expect(existsSync(task.worktree)).toBe(true);
     expect(h.store.worktreeCleanup(task.id)).toBeUndefined();
 
+    expect(await removeFinishedWorktree(h.settings, h.store, fake())).toBeNull();
+    expect(existsSync(task.worktree)).toBe(true);
+
     expect(await removeFinishedWorktree(h.settings, h.store, fake())).toBe(task.id);
     expect(existsSync(task.worktree)).toBe(false);
   } finally {

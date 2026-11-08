@@ -493,7 +493,7 @@ export class WorkerStore implements AttemptFence {
           this.db
             .query(`INSERT INTO worker_maintenance_candidates(kind, task_id, attempt)
               SELECT 'worktree', id, 0 FROM worker_tasks WHERE sequence>? AND sequence<=? ORDER BY sequence
-              ON CONFLICT(kind, task_id, attempt) DO UPDATE SET ticket=excluded.ticket`)
+              ON CONFLICT(kind, task_id, attempt) DO NOTHING`)
             .run(progress.task_sequence, last);
         if (rows.length)
           this.db
@@ -978,12 +978,17 @@ export class WorkerStore implements AttemptFence {
       ...(hasMore && pageRows.length ? { nextAfter: pageRows[pageRows.length - 1]!.attempt } : {}),
     };
   }
-  /** Pending, running, waiting and exited attempts are the only attempts needed for host recovery. */
+  /** Current process-bearing attempts are bounded by the active-task index and one attempt-key lookup each. */
   activeAttempts(): Attempt[] {
     this.refreshSnapshot();
     return this.db
       .query(
-        "SELECT task_id, attempt, body FROM worker_attempts WHERE json_extract(body, '$.state') IN ('pending','running','waiting','exited') ORDER BY task_id, attempt",
+        `SELECT a.task_id, a.attempt, a.body
+         FROM worker_tasks AS t INDEXED BY worker_tasks_state
+         JOIN worker_attempts AS a ON a.task_id=t.id AND a.attempt=t.current_attempt
+         WHERE json_extract(t.body, '$.state') IN ('held','ready','running','landing','stopped')
+           AND json_extract(a.body, '$.state') IN ('pending','running','waiting','exited')
+         ORDER BY a.task_id, a.attempt`,
       )
       .all()
       .map((row) => {

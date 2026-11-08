@@ -12,6 +12,7 @@ import type { ProcessIdentity } from './process.ts';
 import { observeSqliteWork, type SqliteWork } from '../test-support/sqlite-work.ts';
 import { runMaintenance } from './maintenance.ts';
 import type { Runtime } from './config.ts';
+import { removeFinishedWorktree } from './worktree-lifetime.ts';
 import type { LifetimeRuntime, LifetimeWorkUnit } from './worktree-lifetime.ts';
 
 const deadDriver: ProcessIdentity = { pid: 2_147_483_647, start: 'dead', boot: 'dead', group: 2_147_483_647 };
@@ -99,7 +100,7 @@ function maintenanceFixture(taskCount: number, attemptCount = taskCount * 2, eve
           state: 'integrated',
           currentAttempt: 2,
           worktree: join(worktreeRoot, id),
-          brief: { after: [] },
+          brief: { after: [], markdown: '' },
           createdAt: '2000-01-01T00:00:00.000Z',
         }),
       );
@@ -178,7 +179,8 @@ test('command and host sweeps read and lease a constant live candidate set as se
               id,
               state,
               currentAttempt: 2,
-              brief: { after: [] },
+              worktree: join(fixture.path, 'worktrees', id),
+              brief: { after: [], markdown: '' },
               createdAt: '2000-01-01T00:00:00.000Z',
             }),
           );
@@ -204,7 +206,8 @@ test('command and host sweeps read and lease a constant live candidate set as se
             id,
             state: 'running',
             currentAttempt: 1,
-            brief: { after: [] },
+            worktree: join(fixture.path, 'worktrees', id),
+            brief: { after: [], markdown: '' },
             createdAt: '2000-01-01T00:00:00.000Z',
           }),
         );
@@ -366,7 +369,8 @@ test('host maintenance reaches a fixed cleanup and process neighbourhood across 
         'reap-worktree-existence': 1,
         'process-directory-entry': 4,
         'process-cwd-enumeration': 2,
-        'candidate-path-stat': 19,
+        'candidate-path-stat': 4,
+        'permission-path-component': 24,
         'worktree-tree-expansion': 1,
         'worktree-tree-entry': 1,
       });
@@ -454,8 +458,9 @@ test('unregistered directory recovery keeps its complete native trace fixed acro
       expect(work.some((row) => /worker_events/.test(row.sql))).toBe(false);
       expect(work.some((row) => /SELECT id, body FROM worker_tasks ORDER BY sequence/i.test(row.sql))).toBe(false);
       expect(units).toMatchObject({
-        'maintenance-backfill-task-row': 0,
         'worktree-root-entry': 2,
+        'worktree-root-stat': 2,
+        'candidate-path-stat': 5,
         'worktree-tree-expansion': 1,
         'worktree-tree-entry': 1,
         'process-cwd-enumeration': 2,
@@ -500,7 +505,13 @@ test('the next command settles an exited attempt that remains current and unsett
             taskRow.run(
               id,
               i + 10_000,
-              JSON.stringify({ id, state: 'integrated', currentAttempt: 2, brief: { after: [] } }),
+              JSON.stringify({
+                id,
+                state: 'integrated',
+                currentAttempt: 2,
+                worktree: join(h.tasks.settings.worktreeRoot, id),
+                brief: { after: [], markdown: '' },
+              }),
             );
             for (const attempt of [1, 2])
               attemptRow.run(id, attempt, JSON.stringify({ taskId: id, attempt, state: 'superseded' }));
