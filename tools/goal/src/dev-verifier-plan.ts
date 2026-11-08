@@ -383,6 +383,7 @@ function databaseRunnerCheck(
       workspace,
       'check',
       ...files.map((file) => file.slice(workspace.length + 1)),
+      ...(workspace === KERNEL_ROOT && (invocation.testFlags.length || invocation.programArgs.length) ? ['--'] : []),
       ...invocation.testFlags,
       ...(invocation.programArgs.length ? ['--', ...invocation.programArgs] : []),
     ],

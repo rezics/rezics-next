@@ -630,6 +630,7 @@ test('Kernel boot smoke uses its database runner with the original selection and
         'services/kernel',
         'check',
         'test/boot/kernel-boots.test.ts',
+        '--',
         '--test-name-pattern',
         'Kernel API',
       ],

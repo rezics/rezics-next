@@ -25,6 +25,7 @@ import {
   isolatedPostgresUnixSockets,
   invokeTypecheck,
   moduleExtensionPolicyFailure,
+  planCheck,
   reportCheckFailure,
   reportPostgresErrors,
   runKernelCheckStages,
@@ -40,6 +41,22 @@ function schemaFixture(): { root: string; kernel: string; dispose: () => void } 
   mkdirSync(resolve(kernel, 'db/access'), { recursive: true });
   return { root, kernel, dispose: () => rmSync(root, { recursive: true, force: true }) };
 }
+
+test('Kernel check forwards focused test options and program operands after the separator', () => {
+  const fixture = schemaFixture();
+  try {
+    mkdirSync(join(fixture.kernel, 'test'), { recursive: true });
+    writeFileSync(join(fixture.kernel, 'test/example.test.ts'), '');
+    const testArguments = ['-t', 'selected case', '--timeout', '12000', '--', 'fixture.test.ts'];
+    expect(planCheck(['test/example.test.ts', '--', ...testArguments], fixture.kernel, { env: {} }).plan).toEqual({
+      files: ['test/example.test.ts'],
+      tests: ['test/example.test.ts'],
+      testArguments,
+    });
+  } finally {
+    fixture.dispose();
+  }
+});
 
 test('A genuine schema mismatch retains expected and actual normalized dumps and an actionable bounded structural diff identifying the owning schema path and exact source, while still failing before any journey test; missing expected files remain failures', async () => {
   const fixture = schemaFixture();
