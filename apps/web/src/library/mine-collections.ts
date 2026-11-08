@@ -57,10 +57,11 @@ async function readPage(
   cursor?: string,
   previews = false,
 ): Promise<CollectionRead> {
-  const query: ReturnType<typeof libraryListQuery> & { curatorAccountId: string; preview?: 3 } = {
+  const query = {
     ...libraryListQuery(cursor, previews ? COLLECTION_PREVIEW_PAGE_LIMIT : LIBRARY_PAGE_LIMIT),
     curatorAccountId: accountId,
-    ...(previews ? { preview: 3 } : {}),
+    ownerManagement: true,
+    ...(previews ? { preview: 3 as const } : {}),
   };
   let result: Awaited<ReturnType<KernelClient['collections']['get']>>;
   try {

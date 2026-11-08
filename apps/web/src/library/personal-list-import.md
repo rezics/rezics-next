@@ -2,7 +2,7 @@
 
 Decision: bind the generated `KernelClient.libraryImports.vndb` methods from the mounted native route. Eden's
 `libraryImports` surface is a function, so Web reads `vndb` by property access rather than an object/`in` check. A row
-enters the apply selection only after explicit target and released Library-state review; confirmation applies only the
+enters the apply selection only after explicit target and independent state or score review; confirmation applies only the
 displayed admitted selection. Keep the visit unavailable if the generated methods are missing.
 
 Web owns a signed-in visit for a person's own VNDB XML export. Commerce owns private upload admission, matching,
@@ -16,6 +16,30 @@ value for a current own vote.
 
 Decision: display native `fields.score` with its exact raw spelling, retaining `fields.vote` compatibility; keep the
 installed generated request types as the boundary for independent state and score commands.
+
+Decision: replacement review retires the previous confirmation before question or provider admission, including a
+refusal. Native pages retaining that old review cannot restore its consent within the visit. Fresh admission must
+supply a new review; uncertain commands retry only the retained operands. MAL confirmation shows the reviewed
+question even if a later question point read differs. Bangumi current inspection always reads the exact reviewed
+Subject/question pair, independently of the acknowledged outcome.
+
+Installed provider operations remain the only score command paths:
+
+| Visit                         | Typed review and apply                                                   | Native producer          |
+| ----------------------------- | ------------------------------------------------------------------------ | ------------------------ |
+| VNDB (`personal-list-import`) | `vndb({uploadId}).$review` / `.$apply`, independent `scoreReviewId`      | `list-import-vndb.ts`    |
+| AniList                       | `anilist({importId}).$review` / `.$apply`, `confirmNativeVoteEffects`    | `list-import-anilist.ts` |
+| MAL                           | `mal({id}).review` / `.apply`, explicit `score` field                    | `list-import-mal.ts`     |
+| Bangumi                       | `bangumi({uploadId}).$review` / `.$apply`, score selection and `consent` | `list-import-bangumi.ts` |
+
+Each producer uses Content's `readVoteReview`, `preparePutVote`, `reconcilePutVote` and `putVoteOutcome` with its
+retained source admission. Supported same-home question and identity participants admit zero, replacement and clear;
+foreign homes can remain unavailable. VNDB, AniList and Bangumi read counted vote context through `readVoteReview`;
+MAL additionally returns its exact `readOwnVote` observation on page/apply. The existing focused
+`personal-list-import`, `personal-anilist-import`, `personal-mal-import` and `personal-bangumi-import` Web tests cover
+independent choices, original uncertain replay and private evidence. Replacement-refusal cases pin consent retirement;
+Bangumi inspection pins a later native zero without rewriting the acknowledged outcome. Native, browser and growth
+acceptance remain separate from these caller tests.
 
 Review inputs and selected apply commands are copied and frozen before sending, so a lost acknowledgement retries
 the original operands and key even if the form changes. A new review returns to review before confirmation, and an

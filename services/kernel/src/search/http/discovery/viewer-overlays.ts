@@ -2,7 +2,7 @@ import { memoizedValue } from '../../../memoized.ts';
 import type { DiscoveryPage } from '../../discovery.ts';
 import { t } from 'elysia';
 import { routeOf } from '../../../route/route.ts';
-import { viewerFactsResponseSchema } from '../../../library/viewer-facts.ts';
+import { viewerFactsResponseSchema } from '../../../library/index.ts';
 import { closed, unavailable } from './primitives.ts';
 import type { DiscoveryHttpPage } from './page.ts';
 function viewerFactsUnavailable() {

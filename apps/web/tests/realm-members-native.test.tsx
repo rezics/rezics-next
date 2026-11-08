@@ -1,11 +1,17 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { readNativeRealmMembers, validateRealmMembersRead } from '../src/community/members/native';
+import {
+  readNativeRealmMembers,
+  validateRealmMembersRead,
+  type NativeRealmMember,
+  type NativeRealmMembersPage,
+} from '../src/community/members/native';
+import { nativeRealmMembersSource } from '../src/community/members/native-source';
 
 const realmId = '00000000-0000-0000-0000-000000000010';
 const accountId = '00000000-0000-0000-0000-000000000020';
 const target = { realmId, viewerId: accountId, cursor: 'opaque frontier', accountId };
-const unavailable = { state: 'unavailable', reason: 'no_mounted_method' };
+const unavailable = { state: 'unavailable', reason: 'no_mounted_method' } as const;
 const row = {
   accountId,
   episode: 'opaque producer interval',
@@ -20,7 +26,7 @@ const row = {
     removeMember: unavailable,
     reviseRole: unavailable,
   },
-};
+} satisfies NativeRealmMember;
 const page = {
   realmId,
   realmLabel: 'Members Realm',
@@ -30,7 +36,7 @@ const page = {
   items: [],
   next: null,
   selected: row,
-};
+} satisfies NativeRealmMembersPage;
 
 test('exact selection and opaque frontier use one native GET with session credentials only', async () => {
   const requests: Request[] = [];
@@ -52,6 +58,51 @@ test('exact selection and opaque frontier use one native GET with session creden
     ['accountId', accountId],
   ]);
   expect(request.body).toBeNull();
+});
+
+test('installed GET maps 1/10/20 native rows and one exact selected episode without hydration', async () => {
+  for (const count of [1, 10, 20]) {
+    const items = Array.from({ length: count }, (_, index) => {
+      const id = `00000000-0000-0000-0000-${String(index + 100).padStart(12, '0')}`;
+      return {
+        ...row,
+        accountId: id,
+        membership: 'member' as const,
+        // The native schema admits disclosed handles as bounded text.
+        identity: { id, kind: 'actor' as const, state: 'active' as const, handle: 'Mixed.Name', displayName: null },
+      };
+    });
+    const selected = items.at(-1)!;
+    const requests: URL[] = [];
+    const next = ' opaque/+==? &字 ';
+    const client = createKernelClient('https://kernel.invalid', {
+      fetch: async (input, init) => {
+        const url = new URL(new Request(input, init).url);
+        requests.push(url);
+        return Response.json({ ...page, items, next, selected: url.searchParams.has('accountId') ? selected : null });
+      },
+    });
+    const source = nativeRealmMembersSource(accountId, (input) =>
+      readNativeRealmMembers(client, input, 'Bearer admitted'),
+    );
+    const read = await source.readPage({ realmId, cursor: null });
+    expect(read).toMatchObject({ kind: 'ready', page: { authority: page.viewer.authority, next } });
+    expect(read.kind === 'ready' && read.page.rows).toHaveLength(count);
+    expect([source.pageBound, requests.length]).toEqual([20, 1]);
+    expect([...requests[0]!.searchParams]).toEqual([]);
+    expect(
+      await source.readSelected({ realmId, accountId: selected.accountId, authority: page.viewer.authority }),
+    ).toMatchObject({
+      kind: 'ready',
+      identity: { accountId: selected.accountId, reference: 'Mixed.Name', label: selected.displayName },
+      membership: 'current',
+      membershipInterval: selected.episode,
+      membershipEpisode: selected.episode,
+      advice: { add: 'unavailable', ban: 'unavailable', unban: 'unavailable' },
+    });
+    expect(requests).toHaveLength(2);
+    expect([...requests[1]!.searchParams]).toEqual([['accountId', selected.accountId]]);
+  }
 });
 
 test('native preparation, denial, concealment and empty remain distinct', async () => {
@@ -77,7 +128,9 @@ test('malformed or mismatched native observations disclose no page', async () =>
     { ...page, viewer: { accountId: realmId, authority: 'another-viewer' } },
     { ...page, viewer: { accountId, authority: 'x'.repeat(65) } },
     { ...page, viewer: { accountId, authority: 'ok', private: 'extra' } },
-    { ...page, pageBound: 21 },
+    ...[1, 10, 21].map((pageBound) => ({ ...page, pageBound })),
+    { ...page, viewer: null },
+    { ...page, items: Array(2).fill({ ...row, membership: 'member' }) },
     {
       ...page,
       selected: { ...row, identity: { id: accountId, kind: 'actor', state: 'deleted', displayName: 'erased' } },
@@ -153,18 +206,39 @@ test('closed action advice admits only the selected Realm and mounted Accounts o
     actions: advice,
   };
   const client = createKernelClient('https://kernel.invalid', {
-    fetch: async () => Response.json({ ...page, selected }),
+    fetch: async (input, init) =>
+      Response.json({
+        ...page,
+        selected: new URL(new Request(input, init).url).searchParams.has('accountId') ? selected : null,
+      }),
   });
   expect(await readNativeRealmMembers(client, { ...target, cursor: undefined }, 'Bearer admitted')).toMatchObject({
     kind: 'ready',
     page: { selected: { actions: advice } },
   });
 
-  const malformed = { ...selected, actions: { ...advice, removeMember: advice.ban } };
-  const rejectingClient = createKernelClient('https://kernel.invalid', {
-    fetch: async () => Response.json({ ...page, selected: malformed }),
+  const source = nativeRealmMembersSource(accountId, (input) =>
+    readNativeRealmMembers(client, input, 'Bearer admitted'),
+  );
+  await source.readPage({ realmId, cursor: null });
+  expect(await source.readSelected({ realmId, accountId, authority: page.viewer.authority })).toMatchObject({
+    kind: 'ready',
+    authority: page.viewer.authority,
+    membership: 'none',
+    membershipInterval: null,
+    membershipEpisode: selected.episode,
+    advice: { add: 'available', ban: 'available', unban: 'available' },
   });
-  expect(await readNativeRealmMembers(rejectingClient, { ...target, cursor: undefined }, 'Bearer admitted')).toEqual({
-    kind: 'failed',
-  });
+
+  for (const actions of [
+    { ...advice, removeMember: advice.ban },
+    { ...advice, addMember: { ...advice.addMember, body: { accountId: realmId } } },
+  ]) {
+    const rejectingClient = createKernelClient('https://kernel.invalid', {
+      fetch: async () => Response.json({ ...page, selected: { ...selected, actions } }),
+    });
+    expect(await readNativeRealmMembers(rejectingClient, { ...target, cursor: undefined }, 'Bearer admitted')).toEqual({
+      kind: 'failed',
+    });
+  }
 });

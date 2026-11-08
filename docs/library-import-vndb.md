@@ -252,7 +252,7 @@ type ScoreApplyRow = Parameters<Service['apply']>[2][number];
 const scoreApplyRequest: { rows: ScoreApplyRow[] } = {
   rows: [{ ordinal: 0, scoreReviewId: '01900000-0000-7000-8000-000000000004' }],
 };
-// Until the native supported-home repair is delivered: {uploadId:UUID,outcomes:[{ordinal:0,scoreReviewId:UUID,status:"unavailable"}],stopped:null}
+// Supported same-home admission: {uploadId:UUID,outcomes:[{ordinal:0,scoreReviewId:UUID,status:"applied"}],stopped:null}
 // POST /v1/libraryImports/vndb/{uploadId}:apply
 // 200: {uploadId:UUID,outcomes:[{ordinal:0,reviewId:UUID,status:"applied"}],stopped:null}
 // action:"skip" => skipped; action:"retain" => unsupported, with evidence still readable.

@@ -161,7 +161,7 @@ function retryAfterMs(value: unknown): number {
 }
 
 function generatedClientDTO<Value>(value: unknown): Value {
-  // @rezics/client still generates curated-only Collection types; remove this cast when its dynamic DTO lands.
+  // Status handling above admits the successful member page from the native response union.
   return value as Value;
 }
 
@@ -376,7 +376,7 @@ export async function loadEditableCollectionPage(
   try {
     collectionResult = await client
       .collections({ collectionId: input.id })
-      .get({ query: libraryFullQuery(), ...headers });
+      .get({ query: { ...libraryFullQuery(), ...(input.editor ? { ownerManagement: true } : {}) }, ...headers });
   } catch (error) {
     if (error instanceof TypeError)
       throw new CollectionReadError({ status: 503, code: 'dependency_unavailable', retryAfter: '1' });
@@ -403,8 +403,7 @@ export async function loadEditableCollectionPage(
   )
     throw notFound();
   const collectionEnvelope = readLibraryResult(collectionResult);
-  // Keep the existing dynamic compatibility boundary; no new Source operation is called here.
-  const collection = generatedClientDTO<CuratedCollectionRead | DynamicCollectionRead>(collectionEnvelope.collection);
+  const collection: CuratedCollectionRead | DynamicCollectionRead = collectionEnvelope.collection;
   if (collection.id !== input.id) throw notFound();
   const nativeCollection = collectionEnvelope.collection;
   if ('builtin' in nativeCollection && nativeCollection.revision === 0) {
@@ -496,7 +495,7 @@ export async function loadEditableCollectionPage(
       ...(input.cursor ? { cursor: input.cursor } : {}),
       ...collectionPresentationOf(collectionEnvelope.collection),
       ...(collection.revision === undefined ? {} : { revision: collection.revision }),
-      ...(collection.curatorAccountId === undefined ? {} : { curatorAccountId: collection.curatorAccountId }),
+      ...(typeof collection.curatorAccountId === 'string' ? { curatorAccountId: collection.curatorAccountId } : {}),
       ...(viewer !== undefined && viewer === collection.curatorAccountId && 'visibility' in collection
         ? { visibility: collection.visibility }
         : {}),
@@ -569,7 +568,7 @@ export async function loadEditableCollectionPage(
       ...filterFields,
     };
   }
-  const curatedCollection = collection as CuratedCollectionRead;
+  const curatedCollection = collection;
   const memberStatus = resultStatus(membersResult);
   const memberState =
     memberStatus === 202

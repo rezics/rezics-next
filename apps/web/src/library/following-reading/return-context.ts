@@ -137,5 +137,5 @@ export function followingReturnTrigger(
 ): HTMLButtonElement | null {
   if (!root || !uuid.test(targetId)) return null;
   const row = root.querySelector(`[data-follow-target="${targetId}"]`);
-  return row?.querySelector<HTMLButtonElement>('button[aria-label^="Inspect "]') ?? null;
+  return row?.querySelector<HTMLButtonElement>('button[data-following-inspect]') ?? null;
 }

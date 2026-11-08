@@ -560,7 +560,31 @@ test('score set and clear require row consent, retry exact choices, and keep poi
   );
 });
 
-test('an acknowledged own-vote result is reused while the affected Entry is read once', async () => {
+test('refused replacement withdraws the old score consent even when a page retains its token', async () => {
+  const { port, applies } = recordingPort(1);
+  const journey = createBangumiJourney({ port, visit: visit() });
+  await journey.preview(envelope(1));
+  const original = await journey.review(0, subject, { action: 'set', units: 0 });
+  const retained = structuredClone(original.page);
+  const originalToken = original.meta[0]?.reviewToken;
+  journey.openConfirm();
+  journey.confirmScore(0, true);
+  journey.backToReview();
+  const review = port.review;
+  port.review = async () => ({ kind: 'conflict' });
+  await journey.review(0, subject, { action: 'clear' });
+  port.page = async () => ({ kind: 'page', page: pageOf(structuredClone(retained)) });
+  const refreshed = await journey.refresh();
+  expect(refreshed.meta[0]).toMatchObject({ reviewToken: null, scoreReview: null, scoreConsent: false });
+  expect(journey.openConfirm().stage).toBe('review');
+  expect(applies).toHaveLength(0);
+  port.review = review;
+  const replacement = await journey.review(0, subject, { action: 'clear' });
+  expect(replacement.meta[0]?.reviewToken).not.toBe(originalToken);
+  expect(replacement.meta[0]?.scoreConsent).toBe(false);
+});
+
+test('current inspection reads the exact reviewed vote again after an acknowledged apply', async () => {
   const base = recordingPort(1);
   const inspections: { subjectId: string; questionId: string | null }[] = [];
   const port: BangumiImportPort = {
@@ -590,7 +614,10 @@ test('an acknowledged own-vote result is reused while the affected Entry is read
     },
     async inspect(command) {
       inspections.push(command);
-      return { entry: { status: 'present', state: 'active', revision: 9 }, vote: null };
+      return {
+        entry: { status: 'present', state: 'active', revision: 9 },
+        vote: { status: 'current', vote: { state: 'set', units: 0, revision: 10, at: '2026-10-12T12:00:00Z' } },
+      };
     },
   };
   const journey = createBangumiJourney({ port, visit: visit() });
@@ -601,14 +628,15 @@ test('an acknowledged own-vote result is reused while the affected Entry is read
   const applied = await journey.confirm();
   expect(applied.outcomes[0]?.score?.status).toBe('applied');
   const inspected = await journey.inspectCurrent(0);
-  expect(inspections).toEqual([{ subjectId: subject, questionId: null }]);
+  expect(inspections).toEqual([{ subjectId: subject, questionId }]);
   expect(inspected.meta[0]?.entryReadback).toMatchObject({ status: 'present', revision: 9 });
   expect(inspected.meta[0]?.voteReadback).toMatchObject({
     status: 'current',
-    vote: { state: 'set', units: 8, revision: 9 },
+    vote: { state: 'set', units: 0, revision: 10 },
   });
   expect(inspected.cost.calls['entry-read']).toBe(1);
-  expect(inspected.cost.calls['vote-read']).toBe(0);
+  expect(inspected.cost.calls['vote-read']).toBe(1);
+  expect(inspected.outcomes[0]?.score?.vote?.units).toBe(8);
 });
 
 test('expired evidence retires score controls before a replacement upload', async () => {

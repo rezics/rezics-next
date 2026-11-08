@@ -13,7 +13,7 @@ import type { CollectionViewerActions } from './collection-records';
 export type DynamicBuiltinKind = 'everything' | 'state' | 'liked' | (string & {});
 export type DynamicCollectionRead = {
   id: string;
-  curatorAccountId?: string;
+  curatorAccountId?: string | null;
   membershipKind: 'dynamic';
   builtinKind?: DynamicBuiltinKind;
   revision?: number;
@@ -32,7 +32,7 @@ export type CuratedCollectionRead = {
   createdAt: string;
   updatedAt: string;
   revision: number;
-  curatorAccountId: string;
+  curatorAccountId: string | null;
   visibility: 'private' | 'public' | 'unlisted';
   curator?: { handle: string | null; displayName: string | null } | null;
 };

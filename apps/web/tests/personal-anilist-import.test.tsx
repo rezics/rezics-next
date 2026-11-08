@@ -975,3 +975,24 @@ test('question point reads and owner-page score readbacks are counted explicitly
     }),
   );
 });
+
+test('replacement question refusal retires prior vote consent before native review', async () => {
+  const { port, applies } = recordingPort(1);
+  const journey = createAniListJourney({ port, visit: visit() });
+  await journey.preview(envelope(1), 'POINT_10');
+  journey.choose(0, { scoreAction: 'vote', scoreUnits: 0 });
+  await journey.review(0, subject);
+  journey.openConfirm();
+  journey.confirmVoteEffect(0, true);
+  journey.backToReview();
+  const question = port.question;
+  port.question = async () => ({ kind: 'unavailable' });
+  const refused = await journey.review(0, subject);
+  expect(refused.meta[0]).toMatchObject({ reviewId: null, scoreReview: null, nativeVoteConsent: null });
+  expect(journey.openConfirm().stage).toBe('review');
+  await journey.confirm();
+  expect(applies).toHaveLength(0);
+  port.question = question;
+  await journey.review(0, subject);
+  expect(journey.openConfirm().meta[0]?.nativeVoteConsent).toBeNull();
+});
