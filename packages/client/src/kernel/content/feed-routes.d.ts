@@ -7052,7 +7052,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
     response: {
         readonly 200: import("typebox").TUnsafe<Readonly<{
             feedItems: readonly import("./feed-contract.ts").FeedItem[];
-            viewerPersonalActions?: unknown;
+            viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
             next: string | null;
             asOf: string;
             reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7189,7 +7189,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
     status: import("elysia").SelectiveStatus<{
         readonly 200: Readonly<{
             feedItems: readonly import("./feed-contract.ts").FeedItem[];
-            viewerPersonalActions?: unknown;
+            viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
             next: string | null;
             asOf: string;
             reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7280,7 +7280,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
     problem: import("elysia").SelectiveProblem<{
         readonly 200: Readonly<{
             feedItems: readonly import("./feed-contract.ts").FeedItem[];
-            viewerPersonalActions?: unknown;
+            viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
             next: string | null;
             asOf: string;
             reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7380,7 +7380,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         response: {
             readonly 200: import("typebox").TUnsafe<Readonly<{
                 feedItems: readonly import("./feed-contract.ts").FeedItem[];
-                viewerPersonalActions?: unknown;
+                viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
                 next: string | null;
                 asOf: string;
                 reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7556,7 +7556,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<Readonly<{
     feedItems: readonly import("./feed-contract.ts").FeedItem[];
-    viewerPersonalActions?: unknown;
+    viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
     next: string | null;
     asOf: string;
     reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7577,7 +7577,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
     response: {
         readonly 200: import("typebox").TUnsafe<Readonly<{
             feedItems: readonly import("./feed-contract.ts").FeedItem[];
-            viewerPersonalActions?: unknown;
+            viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
             next: string | null;
             asOf: string;
             reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7713,7 +7713,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         status: import("elysia").SelectiveStatus<{
             readonly 200: Readonly<{
                 feedItems: readonly import("./feed-contract.ts").FeedItem[];
-                viewerPersonalActions?: unknown;
+                viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
                 next: string | null;
                 asOf: string;
                 reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7804,7 +7804,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
         problem: import("elysia").SelectiveProblem<{
             readonly 200: Readonly<{
                 feedItems: readonly import("./feed-contract.ts").FeedItem[];
-                viewerPersonalActions?: unknown;
+                viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
                 next: string | null;
                 asOf: string;
                 reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;
@@ -7907,7 +7907,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             response: {
                 readonly 200: Readonly<{
                     feedItems: readonly import("./feed-contract.ts").FeedItem[];
-                    viewerPersonalActions?: unknown;
+                    viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
                     next: string | null;
                     asOf: string;
                     reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;

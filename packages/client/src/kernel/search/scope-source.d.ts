@@ -62,6 +62,10 @@ export type ScopePrepareOptions = Readonly<{
     readOnly?: boolean;
     /** Exact released projection type, when the source requires a selected catalogue profile. */
     type?: string;
+    /** Current Library Collection to seed through the verified reader before preparing its predicate. */
+    collectionId?: string;
+    /** Turn a change to a retained native source observation into a cursor restart. */
+    restartOnNativeChange?: boolean;
 }>;
 declare const preparedScope: unique symbol;
 /** Factory-local opaque state, never an Access or bearer allow claim. */

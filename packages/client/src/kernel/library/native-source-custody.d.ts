@@ -2,12 +2,13 @@ import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import { NativeCollectionWork } from './collection-native-work.ts';
-import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
+import type { WorkAllowance, WorkReceipt } from './contract/index.ts';
 import { nativeSourceCustodyFootprint } from './native-source-custody-bounds.ts';
 export { nativeSourceCustodyFootprint };
 export { declareNativeIdentitySourceBasisStatements } from './identity-native-planner-selected-pricing.ts';
-import type { NativeAccountSourceIdentity, NativeSourceIdentity } from './contract/source.ts';
-export type { NativeAccountSourceIdentity, NativeOutputActivation, NativePublicOutputIdentity, NativeSourceIdentity, } from './contract/source.ts';
+import type { NativeAccountSourceIdentity, NativeSourceIdentity } from './contract/index.ts';
+export type { NativeAccountSourceIdentity, NativeSourceIdentity } from './contract/index.ts';
+export type { NativeOutputActivation, NativePublicOutputIdentity } from './contract/native-public-output.ts';
 export type NativeSourceDriver = 'member' | 'entry' | 'entry_deleted' | 'label' | 'assignment' | 'session' | 'unit' | 'change' | 'copy' | 'output' | 'done';
 export type NativeSourceFrontier = Readonly<{
     captureId: string;

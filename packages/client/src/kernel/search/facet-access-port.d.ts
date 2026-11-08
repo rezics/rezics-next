@@ -14,6 +14,7 @@ export type FacetAccessClosedStatus = 'changed' | 'unready' | 'unavailable';
  */
 export declare const FACET_ACCESS_HTTP_CLOSED: Readonly<{
     readonly search_restart_required: 'changed';
+    readonly stale_cursor: 'changed';
     readonly not_found: 'unavailable';
     readonly semantic_not_ready: 'unready';
     readonly index_not_ready: 'unready';

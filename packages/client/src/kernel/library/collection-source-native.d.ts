@@ -5,7 +5,7 @@ import { type CommandTransaction, type AuthoritativeTime } from '../command/comm
 import type { Access, Actor } from '../request/access.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/index.ts';
 import { NativeCollectionWork } from './collection-native-work.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { NativeOrdinalKey } from './collection-source-order.ts';
@@ -126,8 +126,8 @@ export type NativeCollectionProbe = ProbeEvidence & {
     work: WorkReceipt;
 };
 import type { CollectionOutputPublication } from './collection-source-output.ts';
-export type { NativeCollectionOrdinalPageBound } from './contract/source.ts';
-import type { NativeCollectionOrdinalPageBound } from './contract/source.ts';
+export type { NativeCollectionOrdinalPageBound } from './contract/index.ts';
+import type { NativeCollectionOrdinalPageBound } from './contract/index.ts';
 /** The single native ordinal statement's literal and schema-width bounds. */
 export declare function nativeCollectionOrdinalPageBound(limit: number): NativeCollectionOrdinalPageBound;
 export declare const nativeCollectionPartitionMetadataSQL = "SELECT partition_no AS \"partitionNo\", write_state AS \"writeState\", epoch, position::text AS position FROM core.partition WHERE partition_no=$1";

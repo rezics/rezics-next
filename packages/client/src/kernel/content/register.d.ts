@@ -8,7 +8,7 @@ import type { WorkModule } from '../work/registry.ts';
 import type { MediaStorage } from './media-storage.ts';
 import type { MediaImportFetchConfig } from './media-import.ts';
 import { type ContentWorkConfig } from './work-config.ts';
-import type { ContentPool } from './contract/index.ts';
+import type { ContentPool, RealmSubjectIdentityMapping } from './contract/index.ts';
 /** Standalone fixture/caller Access with the shared role catalogue. Default
  * production registration uses WorkContext's fully mounted authorization instead.
  * Reads outside a command bind this kernel clock. */
@@ -35,9 +35,10 @@ export type ContentWorkAmbient = Readonly<{
     fetch: (request: Request) => Promise<Response>;
     now?: () => number;
     id?: () => string;
+    readIdentityMappings: (pool: Pool, originals: readonly string[]) => Promise<readonly RealmSubjectIdentityMapping[]>;
 }>;
 /** Content's declared effects. The worker register consumes this; tests may install the same list. */
-export declare function contentDeclaredEffects(pool: ContentPool, client: Parameters<typeof contentEffects>[1], access: Parameters<typeof contentNoticeEffects>[1]): readonly import("../events/effects.ts").Effect[];
+export declare function contentDeclaredEffects(pool: ContentPool, client: Parameters<typeof contentEffects>[1], access: Parameters<typeof contentNoticeEffects>[1], readIdentityMappings: ContentWorkAmbient['readIdentityMappings']): readonly import("../events/effects.ts").Effect[];
 /** Content's declared surfaces, read by the composition root. Events, operations and permissions are data;
  * the worker is a factory over explicit operands. HTTP composition extends this with `mount`. */
 export declare function contentDeclaration(): Readonly<{

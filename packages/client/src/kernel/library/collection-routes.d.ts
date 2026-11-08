@@ -8692,8 +8692,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                 response: {
                     200: {
                         collection: {
-                            presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
-                            presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
+                            presentationKind: string | null;
+                            presentationKindSource: 'mixed' | 'owner';
                             cover: import("./contract/capabilities.ts").LibraryCoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
@@ -8704,8 +8704,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             revision: number;
                             membershipKind: 'dynamic';
                         } | {
-                            presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
-                            presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
+                            presentationKind: string | null;
+                            presentationKindSource: 'mixed' | 'owner';
                             cover: import("./contract/capabilities.ts").LibraryCoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
@@ -8720,8 +8720,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             createdAt: string;
                             updatedAt: string;
                         } | {
-                            presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
-                            presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
+                            presentationKind: string | null;
+                            presentationKindSource: 'mixed' | 'owner';
                             cover: import("./contract/capabilities.ts").LibraryCoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
@@ -8733,8 +8733,8 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             membershipKind: 'dynamic';
                             coverMediaId: string | null;
                         } | {
-                            presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
-                            presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
+                            presentationKind: string | null;
+                            presentationKindSource: 'mixed' | 'owner';
                             cover: import("./contract/capabilities.ts").LibraryCoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;

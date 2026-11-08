@@ -47,8 +47,8 @@ export type CollectionResourceView = CollectionView | SavedDynamicCollectionView
 });
 /** Check the required wire fields without expanding the older curated caller guarantee. */
 export declare function collectionReadView(value: CollectionResourceView): {
-    presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
-    presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
+    presentationKind: string | null;
+    presentationKindSource: 'mixed' | 'owner';
     cover: import("./contract/capabilities.ts").LibraryCoverSummary | null;
     coverSource: 'owner' | 'member' | 'none' | 'pending';
     coverMediaId?: string | null;
@@ -85,8 +85,8 @@ export declare function collectionReadView(value: CollectionResourceView): {
     cover: null;
     coverSource: 'none';
 } | {
-    presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
-    presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
+    presentationKind: string | null;
+    presentationKindSource: 'mixed' | 'owner';
     cover: import("./contract/capabilities.ts").LibraryCoverSummary | null;
     coverSource: 'owner' | 'member' | 'none' | 'pending';
     coverMediaId?: string | null;
