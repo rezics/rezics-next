@@ -5,6 +5,7 @@ import { creatorPreviewGuard, useCreatorCurrentOrigin, useCreatorIntent } from '
 import { ContentItem } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
+import type { Locale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import {
   manageCreatorOffer,
@@ -440,6 +441,7 @@ export function CreatorOffersPage({
   onConfirm?: () => Promise<CreatorOffersPageData | null>;
   refreshing?: boolean;
 }) {
+  const messageOptions = { locale: locale as Locale };
   const memory = useCreatorIntent<Record<string, CreatorOffer>>(guard ?? creatorPreviewGuard, 'offer-rows');
   const [retained, setRetained] = useState(memory.value ?? {});
   function retain(offer: CreatorOffer) {
@@ -516,7 +518,7 @@ export function CreatorOffersPage({
                 href={restart ? creatorOffersHref(locale) : href}
                 className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
               >
-                {restart ? m.creator_offers_restart() : m.creator_offers_retry()}
+                {restart ? m.creator_offers_restart({}, messageOptions) : m.creator_offers_retry({}, messageOptions)}
               </a>
             )}
           </div>
@@ -635,13 +637,13 @@ export function CreatorOffersPage({
               managementAvailable={!!data}
               offerPageAvailable={offerPageAvailable}
             />
-            <nav aria-label={m.creator_offers_pagination()} className="flex flex-wrap gap-3">
+            <nav aria-label={m.creator_offers_pagination({}, messageOptions)} className="flex flex-wrap gap-3">
               {cursor && (
                 <a
                   href={creatorOffersHref(locale)}
                   className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
                 >
-                  {m.creator_offers_restart()}
+                  {m.creator_offers_restart({}, messageOptions)}
                 </a>
               )}
               {page.next && (
@@ -649,7 +651,7 @@ export function CreatorOffersPage({
                   href={creatorOffersHref(locale, page.next)}
                   className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
                 >
-                  {m.creator_offers_next()}
+                  {m.creator_offers_next({}, messageOptions)}
                 </a>
               )}
             </nav>

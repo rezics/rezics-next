@@ -222,3 +222,16 @@ export type SemanticRenderPort = {
     consumeGameClassificationReturn(storage: Pick<Storage, 'getItem' | 'removeItem'>, address: string): boolean;
   };
 };
+
+/** Only the application-owned navigation delegates needed by the pure Subject return grammar. */
+export type SubjectVisitNavigationPort = Pick<
+  SemanticRenderPort['navigation'],
+  | 'zoneVisitReturn'
+  | 'releaseVisitReturn'
+  | 'gameClassificationReturn'
+  | 'gameClassificationReturnLimit'
+  | 'workFranchiseFragment'
+  | 'workFranchiseReturn'
+  | 'creditReturn'
+  | 'mangaOccurrenceFromFragment'
+>;

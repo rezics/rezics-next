@@ -51,6 +51,10 @@ envelope; it does not reimplement parseText, and a malformed page is unavailable
 
 ## Filters and condition authoring
 
+Decision: `ConditionMetadata` remains a type-only released projection in `contracts/condition-metadata.ts`; runtime
+filter parsing and construction live in the Search application entry `condition-editor-model.ts`. Library readers
+that need the projection consume that application entry.
+
 Filters stays at the left of the composer's second row. `HeaderSearchFilterProvider` and
 `useRegisterHeaderSearchFilters` connect it to the current route's actual editor and active count. Search owns
 result filters; Collection's dialog remains a separate delivery slice. No new filter state or backend operation
