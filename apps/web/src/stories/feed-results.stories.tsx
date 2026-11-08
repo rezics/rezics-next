@@ -15,22 +15,45 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import type { MyRealmsPage } from '../community/space';
+import type { MyRealmsCurrentRow, MyRealmsNativePage } from '../community/my-realms-current/contract';
+import { formatMyRealmsCurrent } from '../community/my-realms-native';
+import recording from '../kernel/recorded/my-realms.json';
 
 type MyRealmSummary = MyRealmsPage['realms'][number];
+
+const recordedRealm = (() => {
+  const row = formatMyRealmsCurrent(recording as unknown as MyRealmsNativePage).realms[0];
+  if (!row) throw new Error('The My Realms recording must contain its current member.');
+  return row;
+})();
+
+function storyRealm(index: number, name: string, description: string): MyRealmsCurrentRow {
+  const realmId = `01a1a000-0000-7000-8000-00000000073${index + 1}`;
+  const path = (action: MyRealmsCurrentRow['current']['actions']['enter'], suffix: string) =>
+    action.state === 'available' ? { ...action, path: `/v1/realms/${realmId}${suffix}` } : action;
+  return {
+    ...recordedRealm,
+    realmId,
+    name,
+    current: {
+      ...recordedRealm.current,
+      description,
+      destination: { ...recordedRealm.current.destination, realmId },
+      actions: {
+        ...recordedRealm.current.actions,
+        enter: path(recordedRealm.current.actions.enter, ''),
+        manage: path(recordedRealm.current.actions.manage, '/settings'),
+        leave: path(recordedRealm.current.actions.leave, '/membership'),
+      },
+    },
+  };
+}
 
 const realmPage: MyRealmsPage = {
   signedIn: true,
   realms: [
-    {
-      realmId: '01a1a000-0000-7000-8000-000000000731',
-      name: 'Home Reading Room',
-      description: 'A small place for reading together.',
-    },
-    {
-      realmId: '01a1a000-0000-7000-8000-000000000732',
-      name: 'Evening Discussions',
-      description: 'Current conversations and shared notes.',
-    },
+    storyRealm(1, 'Home Reading Room', 'A small place for reading together.'),
+    storyRealm(2, 'Evening Discussions', 'Current conversations and shared notes.'),
   ],
   next: 'opaque-realms-cursor/%2B?x=1',
 };
@@ -57,8 +80,8 @@ function realmPresentation(realm: MyRealmSummary, locale: string) {
   return {
     title: realm.name,
     href: `/${locale}/realms/${encodeURIComponent(realm.realmId)}`,
-    preview: realm.description ? (
-      <p className="text-sm leading-relaxed text-muted-foreground">{realm.description}</p>
+    preview: realm.current.description ? (
+      <p className="text-sm leading-relaxed text-muted-foreground">{realm.current.description}</p>
     ) : undefined,
   };
 }

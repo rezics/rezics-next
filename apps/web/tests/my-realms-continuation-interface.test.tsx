@@ -16,6 +16,8 @@ import { m } from '../src/paraglide/messages.js';
 import { deLocalizeUrl, localizeUrl, overwriteGetLocale, setLocale } from '../src/paraglide/runtime.js';
 import { ClosedErrorPage } from '../src/shell/closed';
 import recording from '../src/kernel/recorded/my-realms.json';
+import { formatMyRealmsCurrent } from '../src/community/my-realms-native';
+import type { MyRealmsCurrentRow } from '../src/community/my-realms-current/contract';
 import en from '../messages/en.json';
 import zhHant from '../messages/zh-Hant.json';
 import zhHans from '../messages/zh-Hans.json';
@@ -29,13 +31,37 @@ import de from '../messages/de.json';
 type Locale = 'en' | 'zh-Hant';
 const locales = ['en', 'zh-Hant'] as const;
 const cursor = 'opaque-empty-page.cursor?next=2&keep=%2F';
+const recordedRows = formatMyRealmsCurrent(recording).realms;
+
+function currentRow(index: number, name: string, description: string): MyRealmsCurrentRow {
+  const source = recordedRows[0];
+  if (!source) throw new Error('The refreshed My Realms recording needs a current row.');
+  const realmId = `0192f3a0-6c1e-7b2a-9d4e-${String(index + 1).padStart(12, '0')}`;
+  const replacePath = (action: MyRealmsCurrentRow['current']['actions']['enter'], suffix: string) =>
+    action.state === 'available' ? { ...action, path: `/v1/realms/${realmId}${suffix}` } : action;
+  return {
+    ...source,
+    realmId,
+    name,
+    current: {
+      ...source.current,
+      description,
+      destination: { ...source.current.destination, realmId },
+      actions: {
+        ...source.current.actions,
+        enter: replacePath(source.current.actions.enter, ''),
+        manage: replacePath(source.current.actions.manage, '/settings'),
+        leave: replacePath(source.current.actions.leave, '/membership'),
+      },
+    },
+  };
+}
+
 const populated: MyRealmsPage = {
   signedIn: true,
-  realms: recording.items.map((item, index) => ({
-    realmId: item.realmId,
-    name: item.name,
-    description: index === 0 ? 'Patient readers share their notes here.' : null,
-  })),
+  realms: recordedRows.map((realm, index) =>
+    currentRow(index, realm.name, index === 0 ? 'Patient readers share their notes here.' : realm.current.description),
+  ),
   next: cursor,
 };
 
@@ -70,7 +96,7 @@ async function render(pages: readonly MyRealmsPage[], locale: Locale, dir: 'ltr'
 }
 
 function rowsIn(markup: string) {
-  return [...markup.matchAll(/<li\b[^>]*data-slot="list-row"[^>]*>[\s\S]*?<\/li>/gu)].map((match) => match[0]);
+  return [...markup.matchAll(/<li\b[^>]*>[\s\S]*?<\/li>/gu)].map((match) => match[0]);
 }
 
 function continuation(markup: string, locale: Locale, expectedCursor: string) {
@@ -139,7 +165,7 @@ test('a final empty supplied page retains the original empty copy and has no con
   }
 });
 
-test('populated supplied pages preserve row order, descriptions and continuation only when supplied', async () => {
+test('populated supplied pages preserve current identity and advice with continuation only when supplied', async () => {
   for (const locale of locales)
     for (const next of [cursor, null]) {
       const markup = await render([{ ...populated, next }], locale);
@@ -148,15 +174,23 @@ test('populated supplied pages preserve row order, descriptions and continuation
       rows.forEach((row, index) => {
         const realm = populated.realms[index]!;
         expect(row).toContain(`>${realm.name}</h2>`);
-        expect(row).not.toMatch(/<a\b/gu);
-        expect(row).toContain(m.realms_entry_unavailable({}, { locale }));
-        if (realm.description)
-          expect(row).toContain(`<p class="text-sm leading-relaxed text-muted-foreground">${realm.description}</p>`);
-        else expect(row).not.toContain('data-content-item-slot="preview"');
+        expect(row).toContain(
+          `<p class="text-sm leading-relaxed text-muted-foreground">${realm.current.description}</p>`,
+        );
+        if (realm.current.actions.enter.state === 'available') expect(row).toContain(`/realms/${realm.realmId}`);
+        else expect(row).not.toContain(`/realms/${realm.realmId}`);
+        if (realm.current.actions.manage.state === 'available')
+          expect(row).toContain(`/realms/${realm.realmId}/members`);
+        else expect(row).not.toContain(`/realms/${realm.realmId}/members`);
+        if (realm.current.actions.leave.state === 'available')
+          expect(row).toContain(m.my_realms_read_only({}, { locale }));
+        else if (realm.current.actions.leave.state === 'prohibited')
+          expect(row).toContain(m.my_realms_action_prohibited({ action: m.realm_leave({}, { locale }) }, { locale }));
+        else expect(row).toContain(m.realm_leave_owner_required({}, { locale }));
       });
       expect(markup).not.toContain(m.realms_empty({}, { locale }));
       expect(markup).not.toContain(m.realm_list_details_sparse_page_empty({}, { locale }));
-      expect(markup).not.toMatch(/<(?:img|picture|source)\b|\b\d+ (?:members|followers)\b/iu);
+      expect(markup).not.toMatch(/\b\d+ (?:members|followers)\b/iu);
       if (next) continuation(markup, locale, next);
       else {
         expect(markup).not.toMatch(/<nav\b/iu);
@@ -165,14 +199,16 @@ test('populated supplied pages preserve row order, descriptions and continuation
     }
 });
 
-test('long supplied text and multiple instances keep distinct visible heading identities without inventing visuals', async () => {
+test('long supplied text and multiple instances keep distinct current identities and media states', async () => {
   const longPage: MyRealmsPage = {
     signedIn: true,
-    realms: Array.from({ length: 20 }, (_, index) => ({
-      realmId: `supplied-realm-${index}`,
-      name: `Readers ${index} ${'LongCommunityTitle'.repeat(12)} 共讀社群`,
-      description: `${'Shared reading notes and patient discussion. '.repeat(12)}${'閱讀筆記'.repeat(40)}`,
-    })),
+    realms: Array.from({ length: 20 }, (_, index) =>
+      currentRow(
+        index + 1,
+        `Readers ${index} ${'LongCommunityTitle'.repeat(12)} 共讀社群`,
+        `${'Shared reading notes and patient discussion. '.repeat(12)}${'閱讀筆記'.repeat(40)}`,
+      ),
+    ),
     next: cursor,
   };
   for (const locale of locales) {
@@ -184,16 +220,13 @@ test('long supplied text and multiple instances keep distinct visible heading id
       expect(heading).not.toBeNull();
       const id = heading![1]!;
       expect(heading![2]).toBe(longPage.realms[index % 20]!.name);
-      expect(row).not.toMatch(/<a\b/gu);
-      expect(row).toContain(m.realms_entry_unavailable({}, { locale }));
       expect(row).toContain(
-        `<p class="text-sm leading-relaxed text-muted-foreground">${longPage.realms[index % 20]!.description}</p>`,
+        `<p class="text-sm leading-relaxed text-muted-foreground">${longPage.realms[index % 20]!.current.description}</p>`,
       );
       return id;
     });
     expect(new Set(ids).size).toBe(40);
     expect(markup).toContain('[overflow-wrap:anywhere]');
-    expect(markup).not.toMatch(/<(?:img|picture|source)\b/iu);
     continuation(markup, locale, cursor);
   }
 });

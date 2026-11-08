@@ -105,7 +105,7 @@ test('A native refused Realm leave preserves membership and gives current-author
   expect(commands).toHaveLength(3);
   member = 'none';
   expect((await refreshRealmMembership(read, 'none')).kind).toBe('settled');
-  expect(realmLeaveReadResolves(uncertain, (await read()).state)).toBe(true);
+  expect(realmLeaveReadResolves(uncertain, (await read()).state)).toBe(false);
   expect(commands).toHaveLength(3);
 });
 

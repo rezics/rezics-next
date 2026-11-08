@@ -87,6 +87,7 @@ export class RealmMembershipLifetimeStore {
   private readonly owners = new Map<string, Set<{ owner: CallerOwner; scope: CallerScope }>>();
   private readonly nativeCommands = new Map<string, RealmMembershipCommandAttempt>();
   private readonly acknowledgements = new WeakSet<RealmMembershipCommandAttempt>();
+  private readonly nativeOperationIds = new WeakMap<RealmMembershipCommandAttempt, string>();
   private readonly stopCache: () => void;
 
   readonly subscribe = (listener: () => void) => {
@@ -154,17 +155,24 @@ export class RealmMembershipLifetimeStore {
     }
   }
 
-  acknowledgeNativeCommand(attempt: RealmMembershipCommandAttempt): void {
-    if (this.nativeCommands.get(this.commandKey(attempt.realmId, attempt.actor)) === attempt)
+  acknowledgeNativeCommand(attempt: RealmMembershipCommandAttempt, workflowId?: string): void {
+    if (this.nativeCommands.get(this.commandKey(attempt.realmId, attempt.actor)) === attempt) {
       this.acknowledgements.add(attempt);
+      if (workflowId) this.nativeOperationIds.set(attempt, workflowId);
+    }
   }
 
   nativeCommandAcknowledged(attempt: RealmMembershipCommandAttempt): boolean {
     return this.acknowledgements.has(attempt);
   }
 
+  nativeCommandWorkflowId(attempt: RealmMembershipCommandAttempt): string | null {
+    return this.nativeOperationIds.get(attempt) ?? null;
+  }
+
   retireNativeCommandAcknowledgement(attempt: RealmMembershipCommandAttempt): void {
     this.acknowledgements.delete(attempt);
+    this.nativeOperationIds.delete(attempt);
   }
 
   addRead(read: ActiveRead): void {

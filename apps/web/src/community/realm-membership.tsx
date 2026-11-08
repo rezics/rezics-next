@@ -349,7 +349,7 @@ function NativeMembership({
       });
       if (!stillCurrent()) return;
       if (result.outcome === 'accepted') {
-        caller.store.acknowledgeNativeCommand(command);
+        caller.store.acknowledgeNativeCommand(command, result.workflowId);
         acknowledged.current = { command, caller, focus };
         if (spaceId) void client.invalidateQueries({ queryKey: ['follow-state', spaceId] });
         void client.invalidateQueries({ queryKey: ['my-realms'] });

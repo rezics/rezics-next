@@ -47,9 +47,9 @@ export function classifyRealmLeaveFailure(
     : { kind: 'uncertain', ownerReason: 'unavailable' };
 }
 
-/** Only a fresh membership + participation read may release a refused intent.
- * A still-member or denied read cannot settle an uncertain leave or release its key.
+/** A refused intent needs fresh native evidence; no standing read can prove an uncertain write's receipt.
+ * Exact replay, with the original key and credential, remains the recovery path for uncertainty.
  */
 export function realmLeaveReadResolves(recovery: RealmLeaveRecoveryState, state: MemberState): boolean {
-  return recovery.kind === 'uncertain' ? state === 'none' : state !== 'pending';
+  return recovery.kind === 'refused' && state !== 'pending';
 }
