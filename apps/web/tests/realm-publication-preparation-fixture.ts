@@ -19,8 +19,21 @@ export function preparationFixture(
     return {
       kind: 'ready',
       preparation: {
-        realm: { realmId, spaceId: realmId, contextId: realmId, title: 'Selected Realm', hostTitle: 'Selected host' },
-        subject: { originalId: subjectId, currentId: subjectId, presentation: structuredClone(presentation) },
+        realm: {
+          realmId,
+          spaceId: realmId,
+          contextId: realmId,
+          title: { state: 'available', value: 'Selected Realm' },
+          hostTitle: { state: 'available', value: 'Selected host' },
+        },
+        subject: {
+          originalId: subjectId,
+          currentId: subjectId,
+          presentation: {
+            original: structuredClone(presentation),
+            terminal: structuredClone(presentation),
+          },
+        },
         current: current === null ? null : { publicationId: current, verdict, decidedAt: '2026-11-04T00:00:00Z' },
         commands: {
           publish: command('publish'),
