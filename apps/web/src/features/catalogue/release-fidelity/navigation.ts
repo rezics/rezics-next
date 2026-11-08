@@ -1,5 +1,5 @@
 import { subjectHref } from '../../../subject/subject-href';
-import { candidateContext } from '../../pages/visit-host-port';
+import { candidateContext } from '../../pages/candidate-context';
 import { validatePageRealm } from '../../pages/view-cursor';
 import type { ReleaseOccurrence } from './reading/state';
 

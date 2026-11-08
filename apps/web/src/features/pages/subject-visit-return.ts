@@ -3,7 +3,18 @@ import { subjectHref } from '../../subject/subject-href';
 import { realmCatalogueReturnHref } from '../../search/realm-catalogue-handoff';
 import { isView } from '@rezics/composition';
 import { copiesSubjectId } from '../../library/copies-query';
-import { subjectRenderBinding } from './subject-render-binding';
+import { zoneVisitReturn as parseZoneVisitReturn } from '../../zones/visit';
+import { releaseVisitReturn as parseReleaseVisitReturn } from '../catalogue/release-fidelity/navigation';
+import { creditReturn as parseCreditReturn } from '../catalogue/credit-inspection/navigation';
+import {
+  workFranchiseFragment as makeWorkFranchiseFragment,
+  workFranchiseReturn as parseWorkFranchiseReturn,
+} from '../catalogue/work-franchise-reading/navigation';
+import { mangaOccurrenceFromFragment as parseMangaOccurrenceFromFragment } from '../catalogue/manga-reader/navigation';
+import {
+  gameClassificationReturn as parseGameClassificationReturn,
+  gameClassificationReturnLimit,
+} from '../catalogue/game-current-visit-descriptor';
 import type { WorkFranchiseReturn } from './semantic-render-port';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
@@ -271,7 +282,7 @@ export function workFranchiseReturnHref(
   const source = accepted ? new URL(accepted, base) : base;
   if (!subjectDestination.test(source.pathname) || source.pathname.split('/')[3] !== base.pathname.split('/')[3])
     return fallback;
-  source.hash = selection ? subjectRenderBinding().workFranchiseFragment(selection) : '#work-franchise';
+  source.hash = selection ? makeWorkFranchiseFragment(selection) : '#work-franchise';
   return subjectVisitReturn(`${source.pathname}${source.search}${source.hash}`, locale) ?? fallback;
 }
 
@@ -736,7 +747,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
   if (/[\\\u0000-\u001f\u007f]/u.test(value)) return;
   const realmReading = realmReadingReturn(value, locale);
   if (realmReading) return realmReading;
-  const zoneReading = subjectRenderBinding().zoneVisitReturn(value, locale);
+  const zoneReading = parseZoneVisitReturn(value, locale);
   if (zoneReading) return zoneReading;
   const catalogueReturn = realmCatalogueReturnHref(value, locale);
   if (catalogueReturn) return catalogueReturn;
@@ -892,7 +903,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const screenEntry = /^#screen-episode-entry-([0-9a-f-]{36})$/i.exec(url.hash);
     const recordingStatement = new RegExp(`^#recording-statement-${uuid}$`, 'i').test(url.hash);
     const personBiography = subject?.[2] === 'people' ? personBiographyReturn(url.hash) : undefined;
-    const gameReturn = subjectRenderBinding().gameClassificationReturn(url.hash);
+    const gameReturn = parseGameClassificationReturn(url.hash);
     const gameReturnAddress = `${url.pathname}${url.search}${url.hash}`;
     const screenReturn = screenCursor !== null || screenSelection !== null || screenEntry !== null;
     const literaryOverviewStream =
@@ -909,10 +920,10 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       (selectedContext !== null && (!subject || !new RegExp(`^${uuid}$`, 'i').test(selectedContext))) ||
       (personBiography !== undefined && selectedContext !== personBiography.context) ||
       (gameReturn !== undefined &&
-        (gameReturnAddress.length > subjectRenderBinding().gameClassificationReturnLimit ||
+        (gameReturnAddress.length > gameClassificationReturnLimit ||
           new TextEncoder().encode(gameReturnAddress).byteLength >
-            subjectRenderBinding().gameClassificationReturnLimit ||
-          encodeURIComponent(gameReturnAddress).length > subjectRenderBinding().gameClassificationReturnLimit ||
+            gameClassificationReturnLimit ||
+          encodeURIComponent(gameReturnAddress).length > gameClassificationReturnLimit ||
           !subject ||
           nested ||
           subject[2] !== undefined ||
@@ -968,7 +979,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     )
       return;
     const fragment = url.hash === '' ? '#connections' : url.hash;
-    const franchiseReturn = subjectRenderBinding().workFranchiseReturn(fragment);
+    const franchiseReturn = parseWorkFranchiseReturn(fragment);
     const finiteWorkRegion = Boolean(
       subject?.[2] &&
       subject[2] !== 'overview' &&
@@ -992,12 +1003,12 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     )
       return;
     if (
-      !(subject?.[2] === 'works' && subjectRenderBinding().creditReturn(fragment)) &&
+      !(subject?.[2] === 'works' && parseCreditReturn(fragment)) &&
       fragment !== '#literary-reader' &&
       !(
         subject &&
         !subject[2] &&
-        (fragment === '#work-franchise' || subjectRenderBinding().workFranchiseReturn(fragment))
+        (fragment === '#work-franchise' || parseWorkFranchiseReturn(fragment))
       ) &&
       !(subject?.[2] && (fragment === '#work-franchise' || franchiseReturn !== undefined) && finiteWorkRegion) &&
       !(subject && !subject[2] && organizationHistoryVisitReturn(fragment)) &&
@@ -1012,7 +1023,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       !(
         subject &&
         (!subject[2] || subject[2] === 'contents' || subject[2] === 'editions') &&
-        subjectRenderBinding().mangaOccurrenceFromFragment(fragment)
+        parseMangaOccurrenceFromFragment(fragment)
       ) &&
       !(subject && (fragment === '#work-tags' || workTagReturn(fragment))) &&
       !(subject?.[2] === 'people' && personBiography !== undefined) &&
@@ -1031,7 +1042,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
 
 /** A public return address may restore one admitted Subject or Collection view window. */
 export function subjectVisitReturn(value: unknown, locale?: string): string | undefined {
-  const release = subjectRenderBinding().releaseVisitReturn(value, locale);
+  const release = parseReleaseVisitReturn(value, locale);
   if (release) return release;
   return subjectVisitReturnAt(value, locale, false);
 }
@@ -1073,7 +1084,7 @@ export function connectionReturnHref(
 }
 
 export function zoneVisitReturn(value: unknown, locale?: string): string | undefined {
-  return subjectRenderBinding().zoneVisitReturn(value, locale);
+  return parseZoneVisitReturn(value, locale);
 }
 
 export function withSubjectVisitReturn(href: string, value: string, locale: string): string {

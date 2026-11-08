@@ -50,6 +50,7 @@ export type { DiscoveryFilterDocument } from '@rezics/filter';
 export type { SerializableContinuation, Source, SourcePage } from './discovery-source-contract.ts';
 export type { SubjectListingSource, SubjectSource } from './source.ts';
 export type { IndexedStatement } from './source.ts';
+export type { RelationFacetMatch } from './source.ts';
 export type { SearchPlan } from './query.ts';
 export type {
   PublicCanonicalCaptureInput,
