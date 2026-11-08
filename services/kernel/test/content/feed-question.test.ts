@@ -42,7 +42,7 @@ function reviewItem(threadId: string): FeedItem {
     source: 'discovery',
     key: { owner: 'content', kind: 'review', route: routeOf(threadId)!, id: threadId },
     occurredAt: null,
-    summary: { id: threadId, kind: 'review', title: 'A review', createdAt: '2026-01-01T00:00:00.000Z' },
+    summary: { id: threadId, kind: 'review', title: 'A review' },
     destination: { kind: 'thread', id: threadId, title: 'A review' },
   };
 }
@@ -53,7 +53,7 @@ function followingReviewItem(threadId: string): FeedItem {
     source: 'following',
     key: { owner: 'content', kind: 'thread', route: routeOf(threadId)!, id: threadId },
     occurredAt: '2026-01-01T00:00:00.000Z',
-    summary: { id: threadId, kind: 'review', title: 'A review' },
+    summary: { id: threadId, kind: 'review', title: 'A review', createdAt: '2026-01-01T00:00:00.000Z' },
     destination: { kind: 'thread', id: threadId, title: 'A review' },
   };
 }
