@@ -4,6 +4,7 @@ import type {
   LibrarySemanticObservationCapability,
   LibrarySemanticSummaryObservation,
 } from '../library/contract/semantic-observation.ts';
+import type { Pool, PoolClient } from 'pg';
 import {
   createNativeLibraryObservationAdapter,
   type SemanticObservationNativeAdapter,
@@ -17,26 +18,28 @@ export function createLibraryObservationApplication(
     canonical: {
       ...native.canonical,
       async readMappings(pool, originals) {
-        const value = await native.canonical.readMappings(pool, originals);
+        const value = await native.canonical.readMappings(pool as Pool, originals);
         return Object.freeze({ value, work: native.canonical.mappingWork(originals) });
       },
       async commitScopeCapture(client, input) {
-        await native.canonical.commitScopeCapture(client, input);
+        await native.canonical.commitScopeCapture(client as Pick<PoolClient, 'query'>, input);
         return Object.freeze({ value: undefined, work: native.canonical.scopeCommitWork(input) });
       },
     },
     follow: {
       ...native.follow,
       async readMapping(pool, original) {
-        const value = await native.follow.readMapping(pool, original);
+        const value = await native.follow.readMapping(pool as Pool, original);
         return Object.freeze({ value, work: native.follow.mappingWork([original]) });
       },
       async readMappings(pool, originals) {
-        const value = await native.follow.readMappings(pool, originals);
+        const value = await native.follow.readMappings(pool as Pool, originals);
         return Object.freeze({ value, work: native.follow.mappingWork(originals) });
       },
       async readSubjectReference(input) {
-        const value = await native.follow.readSubjectReference(input);
+        const value = await native.follow.readSubjectReference(
+          input as Parameters<typeof native.follow.readSubjectReference>[0],
+        );
         return Object.freeze({ value, work: native.follow.subjectReferenceWork(input.subjectId) });
       },
       async observeSubjects(input) {
@@ -57,11 +60,11 @@ export function createLibraryObservationApplication(
     shelf: {
       ...native.shelf,
       async readIdentityVersion(client, subjectId) {
-        const value = await native.shelf.readIdentityVersion(client, subjectId);
+        const value = await native.shelf.readIdentityVersion(client as Pick<PoolClient, 'query'>, subjectId);
         return Object.freeze({ value, work: native.shelf.identityVersionWork(subjectId) });
       },
       async readItemTypes(client, subjectIds, maxTypeBytes) {
-        const value = await native.shelf.readItemTypes(client, subjectIds);
+        const value = await native.shelf.readItemTypes(client as Pick<PoolClient, 'query'>, subjectIds);
         return Object.freeze({ value, work: native.shelf.itemTypesWork(subjectIds, maxTypeBytes) });
       },
     },

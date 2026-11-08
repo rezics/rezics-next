@@ -5,12 +5,13 @@ import { fetchGuideRelease } from '../catalogue/definition-guide';
 import { loadSubjectPage, subjectBody, type SubjectPageData } from './subject';
 import { isRecord } from './shared';
 import type { OverviewValue, Section } from './overview';
-import { creditVisit, type CreditVisit, characterWorkStream } from '../catalogue/character-reading-application';
+import { creditVisit, type CreditVisit } from '../catalogue/credit-inspection/model';
+import { characterWorkStream } from '../catalogue/character-reading-port';
+import { CONNECTION_LIMIT } from './subject-connections-contract';
 
 export const connectionGroups = ['relations', 'characters', 'credits'] as const;
 export type ConnectionGroup = (typeof connectionGroups)[number];
-export const CONNECTION_LIMIT = 12;
-export const CONNECTION_BYTES = 1_048_576;
+export { CONNECTION_LIMIT, CONNECTION_BYTES } from './subject-connections-contract';
 export type ConnectionStream = {
   key: string;
   property: string;

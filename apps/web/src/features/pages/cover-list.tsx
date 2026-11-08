@@ -1,12 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react';
-import {
-  creditDestinationHref,
-  CreditInspectionAction,
-  CreditVisitReturn,
-  CreditInspectionSession,
-  type CreditAssertion,
-  type CreditVisit,
-} from '../catalogue/character-reading-application';
+import { creditDestinationHref, type CreditAssertion } from '../catalogue/credit-inspection/destinations';
+import { CreditInspectionAction, CreditVisitReturn, type CreditVisit } from '../catalogue/credit-inspection/return';
+import { CreditInspectionSession } from '../catalogue/credit-inspection/session';
 import { withSubjectVisitReturn } from './subject-visit-navigation';
 import {
   fallbackListFactProperties,

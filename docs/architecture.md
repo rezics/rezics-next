@@ -147,6 +147,9 @@ graph loading. Reusable read adapters expose their defining leaves explicitly; b
 public session adapter. These entries add no dependency allowances. This import-only migration uses workspace typing
 as acceptance; product behavior and existing assertions remain unchanged.
 
+Decision: Boundary repairs reuse existing public entries, register narrow owner APIs where cross-module use is
+intentional, and extract shared values to leaf modules to break cycles. They preserve behavior and dependency allowances.
+
 **Enforcement.** One static architecture check (manifest validation plus a dependency-graph check) runs on every
 landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
 before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,

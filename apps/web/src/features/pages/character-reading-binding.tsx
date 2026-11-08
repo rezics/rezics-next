@@ -1,13 +1,13 @@
 import { useContext, useMemo, type ComponentType, type ReactNode } from 'react';
 import { OverviewContext } from './overview-context';
-import { holderItems } from './overview';
+import { holderItems } from './overview-holder-items';
 import { CoverList } from './cover-list';
-import { CandidateValue } from './data';
+import { CandidateValue } from './scalar-value';
 import { SpoilerGate } from './values';
 import { createConnectionWindow, connectionReturn } from './subject-connections-window';
 import { connectionReturnHref, withSubjectVisitReturn } from './subject-visit-navigation';
 import { relationTargetHref } from './edition-work';
-import { CONNECTION_LIMIT } from './subject-connections';
+import { CONNECTION_LIMIT } from './subject-connections-contract';
 import { subjectViewHref } from '../../subject/load-subject';
 import {
   CharacterReadingProvider,
@@ -23,7 +23,7 @@ import {
   type CharacterConnectionRead,
   type CharacterConnectionSection,
   type CharacterConnectionPageState,
-} from '../catalogue/character-reading-application';
+} from '../catalogue/character-reading-port';
 import type { Item, OverviewValue, RowValue } from './overview';
 import type { ConnectionAddress, ConnectionSection } from './subject-connections';
 import type { ConnectionRead as WindowRead } from './subject-connections-window';

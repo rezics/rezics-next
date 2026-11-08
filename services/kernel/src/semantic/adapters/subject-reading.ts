@@ -8,7 +8,7 @@ import { activeRelease, readRelease } from '../definition-release-read.ts';
 import { layeredRelease } from '../definition-release-read.ts';
 import type { Access } from '../../request/access.ts';
 import type { Actor } from '../../request/access.ts';
-import { readCurrentContentDocument, type CurrentContentDocumentRuntime } from '../../content/adapters/index.ts';
+import { readCurrentContentDocument, type CurrentContentDocumentRuntime } from '../../content/adapters/subject-document.ts';
 import { nativeContentLifecycle } from './content-lifecycle.ts';
 import { readCharacterPublicDocuments } from '../character-public-reading-documents.ts';
 import type { Item } from '../item.ts';

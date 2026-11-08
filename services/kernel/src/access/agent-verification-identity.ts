@@ -634,6 +634,7 @@ export async function verifyAccountIdentityTechnicalSource(
 }
 
 export {
+  readAccountIdentityTechnicalSource,
   readAccountIdentityReversalSettlement,
   verifyAccountIdentityReversalSettlement,
   type AccountIdentityReversalSettlement,

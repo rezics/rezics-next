@@ -24,7 +24,7 @@ import type {
   LockPublicOutputDisposition,
   LockedPublicOutputDisposition,
 } from '../library/contract/native-public-output.ts';
-import type { CollectionSourceRawKey } from '../library/contract/source.ts';
+import type { CollectionSourceRawKey } from '../library/contract/index.ts';
 type NativePublicOutputPort = NativePublicOutputApplication<CommandTransaction, Pool, AuthoritativeTime>;
 import type { PublicFilterSourceFactory } from './public-filter-source-contract.ts';
 import { createPublicFilterSourceBinding, type PublicFilterSourceDefinition } from './public-filter-source-binding.ts';
