@@ -8,16 +8,21 @@ Decision: capability rows record source-backed native coverage and its evidence 
 
 ### Post-seed API capture
 
-Decision: adopt the [capture research](../research/accounts-post-seed-api-capture-codex.md) as the acceptance contract
-for the original recovery, credential replacement and website refresh-family revocation API journeys. Reuse the
-original runner functions and assertions with three independent newly registered ordinary humans on one admitted,
-seeded runtime. Each case records its result independently and continues after a sibling failure. This isolated
-capture leaves the complete nineteen-journey census and browser evidence separate.
+Decision: API capture requires the admitted runtime and its bound credential paths; catalogue seed completion and
+result bytes are observations, never J03/J04/J10 prerequisites.
 
-The existing visual/seed runtime owner supplies the current slot, explicit Web/issuer/native/Kernel origins, full
-runtime revision, completed seed result and matching private key, binding and local recovery-delivery paths.
-Capture records the source revision, runtime revision and seed-result hash together. A failed startup or absent
-handoff establishes only an unmet prerequisite; it supplies no result for an unreached API phase.
+Adopt the [capture research](../research/accounts-post-seed-api-capture-codex.md) as the acceptance contract for
+the original recovery, credential replacement and website refresh-family revocation API journeys. Reuse the
+original runner functions and assertions with three independent newly registered ordinary humans on one admitted
+runtime. Each case records its result independently and continues after a sibling failure. This isolated capture
+leaves the complete nineteen-journey census and browser evidence separate.
+
+The existing visual runtime owner supplies the current slot/lease, explicit Web/issuer/native/Kernel origins, full
+runtime revision, and matching private key, binding and local recovery-delivery paths. Capture records the source
+revision, runtime revision, lease, origins and the seed completion/state values actually supplied. Catalogue seed
+state does not gate these independent account operations; capture does not read or require seed-result bytes and
+records no seed-result hash. A missing or invalid runtime handoff establishes only an unmet prerequisite; it
+supplies no result for an unreached API phase.
 
 | Original journey | Required reached phases and independent readback |
 | --- | --- |
