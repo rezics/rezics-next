@@ -17,6 +17,7 @@ import {
 import { readModerationAppealPage, type Appeal, type AppealPage, type AppealProvenance } from '../appeals-read';
 import { readModerationReports, type Report, type ResolvedReportTarget } from '../reports-read';
 import { historySource, readWorkbenchHistory, type HistoryRead, type HistorySource } from '../workbench-history/read';
+import { nativeModerationDirectory } from './native-directory';
 import {
   moderationDirectoryPage,
   nativeModerationDirectoryUnavailable,
@@ -223,7 +224,7 @@ export async function readWorkbench(
   }
   if (scope.kind === 'board' && search.history) {
     const history = source.history
-      ? await readWorkbenchHistory(source.history, search)
+      ? await readWorkbenchHistory(source.history, search, signal)
       : { state: 'unavailable' as const, entries: [], next: null };
     return { ...identity, ...idle, state: history.state, history };
   }
@@ -281,8 +282,8 @@ function nativeSource(
 ): WorkbenchNativeSource {
   const headers = auth(authorization, signal);
   return {
-    history: historySource(client, authorization),
-    directory: nativeModerationDirectoryUnavailable,
+    history: historySource(client, authorization, signal),
+    directory: nativeModerationDirectory(client, authorization, signal),
     async boardReports(boardId, cursor, selection) {
       const result = await client.boards({ id: boardId }).reports.get({
         ...headers,

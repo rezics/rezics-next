@@ -408,20 +408,22 @@ Decision: extend existing routes on small owner-backed seams; keep ten slices in
   native thread identity and reviewed-Subject context; an exact Space destination keeps native address/lifecycle
   meaning. A Realm-backed Space does not become a second Realm hit.
 - **Moderator workbench.** `/moderation/workbench` is the one signed-in navigation entry. Choose one currently
-  permitted Realm board from the paged membership Realm list and that Realm's board directory, or the Global
-  catalogue. Submitted reports, pending appeals and resolved cases are exclusive native queues with their own
-  cursor; a board moderator is not given catalogue authority. Rows carry a stable report or appeal ID into the
+  permitted Board or independent Global catalogue queue from the installed native current moderation directory.
+  Discovery uses native labels, supported queues, source and exclusive horizon, independently of membership.
+  Submitted reports, pending appeals and resolved cases are exclusive native queues with their own cursor; a board
+  moderator is not given catalogue authority. Rows carry a stable report or appeal ID into the
   existing review routes. Resolution forms stay on those pages. Catalogue has no appeal list. There is no
   aggregate case search or platform-wide adjudication. Exact appeal selection now has an independent consumer beside
   the captured pending page, with no row scan or target enrichment. Its presentation separates original decision
   evidence from the disclosed current destination, shows only allowlisted appellant display fields and keeps explicit
-  pending/resolved outcomes. The installed generated client still lacks composed inspection, so production exact selection remains the named
-  unavailable `native-appeal-inspect` seam. A local admission seam validates exact source provenance, current
-  actor/client/epoch and opaque native session header; the consumer preserves that token on the original frozen
-  resolution command. Generated request binding and mounted producer cases remain continuation work. See the [case and appeal guide](../../apps/web/src/moderation/workbench-case.md). Decision: board decision history is reachable only from a
-  selected board; the Global catalogue has no history queue. The Web entry stays explicitly unavailable until
-  Content delivers its private native history reader. It never
-  derives history from report or appeal scans.
+  pending/resolved outcomes. Installed composed appeal reads retain their independent exact source/provenance admission
+  and opaque native session token on the original frozen resolution command. See the
+  [case and appeal guide](../../apps/web/src/moderation/workbench-case.md). Decision: board decision history is reachable only from a
+  selected board; the Global catalogue has no history queue. The installed Board history operation reads one
+  native 20-row page and at most one permitted exact receipt under the same prepared credential, no-store transport
+  and abort lifetime. Independent directory, queue and history frontiers survive only deliberate current-reader return;
+  history never derives from report or appeal scans. The [directory owner](../../apps/web/src/moderation/workbench-queue/README.md)
+  records admission and fixture evidence limits.
 
 - **Affected-author decision receipt.** `/moderation/decisions/{id}` reads one composed private native response for
   the retained reason, decision time, deadline, current appeal result, closed appeal advice and optional current

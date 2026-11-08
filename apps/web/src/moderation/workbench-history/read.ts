@@ -2,24 +2,14 @@ import { SESSION_HEADER, type KernelClient } from '@rezics/client';
 import type { ModerationDecision } from '../decision-read';
 import type { WorkbenchSearch } from '../workbench-queue/scope';
 
-/** Minimal mounted-history consumer seam. Replace with the shared publisher's
- * public declaration when installed; no private producer types enter Web. */
+type NativePage = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['boards']>['moderation-history']['get']>>['data']
+>;
+/** Retain only the installed moderator list fields used by the bounded receiver. */
 export type HistoryEntry = Pick<
-  ModerationDecision,
-  'id' | 'targetId' | 'targetKind' | 'action' | 'statement' | 'decidedAt'
-> & {
-  history: {
-    reasonState: 'retained' | 'retired';
-    decider: 'withheld' | 'retired';
-    receipt: 'permitted' | 'unavailable';
-    target: 'unavailable';
-  };
-};
-type NativePage = {
-  entries: HistoryEntry[];
-  nextCursor: string | null;
-  viewer: { kind: 'board-moderator' };
-};
+  NativePage['entries'][number],
+  'id' | 'targetId' | 'targetKind' | 'action' | 'statement' | 'decidedAt' | 'history'
+>;
 type Result = { status: number; data?: unknown; error?: { value: unknown } | null; source?: string | null };
 export type HistorySource = {
   page: (boardId: string, query: { limit: number; targetKind: HistoryTargetKind; cursor?: string }) => Promise<Result>;
@@ -34,28 +24,23 @@ export type HistoryRead = {
   selected?: { state: 'ready'; decision: ModerationDecision } | { state: 'unavailable' };
 };
 
-type MountedHistoryClient = {
-  'moderation-history': {
-    get: (options: {
-      query: Parameters<HistorySource['page']>[1];
-      headers: { authorization: string };
-      fetch: { cache: 'no-store' };
-    }) => Promise<Result & { headers?: HeadersInit }>;
+/** Both installed operations share the prepared credential and request lifetime. */
+export function historySource(client: KernelClient, authorization: string, signal?: AbortSignal): HistorySource {
+  const options = {
+    headers: { authorization },
+    fetch: { cache: 'no-store' as const, ...(signal ? { signal } : {}) },
   };
-};
-
-/** Eden's runtime resolves this existing mounted path. This seam adds no method
- * to the public package and never treats an older unprojected response as ready. */
-export function historySource(client: KernelClient, authorization: string): HistorySource {
-  const options = { headers: { authorization }, fetch: { cache: 'no-store' as const } };
   return {
     async page(boardId, query) {
-      const board = client.boards({ id: boardId }) as unknown as MountedHistoryClient;
-      const result = await board['moderation-history'].get({ ...options, query });
+      signal?.throwIfAborted();
+      const result = await client.boards({ id: boardId })['moderation-history'].get({ ...options, query });
+      signal?.throwIfAborted();
       return { ...result, source: new Headers(result.headers).get(SESSION_HEADER) };
     },
     async exact(id) {
+      signal?.throwIfAborted();
       const result = await client['moderation-decisions']({ id }).get(options);
+      signal?.throwIfAborted();
       return { ...result, source: new Headers(result.headers).get(SESSION_HEADER) };
     },
   };
@@ -139,7 +124,12 @@ async function fingerprint(sources: string[]) {
 
 /** One raw native page and at most one exact selection. Never refill or accumulate
  * withheld rows, and never use a queue cursor or browser time as a history input. */
-export async function readWorkbenchHistory(source: HistorySource, search: WorkbenchSearch): Promise<HistoryRead> {
+export async function readWorkbenchHistory(
+  source: HistorySource,
+  search: WorkbenchSearch,
+  signal?: AbortSignal,
+): Promise<HistoryRead> {
+  signal?.throwIfAborted();
   const empty = { entries: [], next: null };
   if (!search.history || !search.board) return { ...empty, state: 'unavailable' };
   try {
@@ -148,6 +138,7 @@ export async function readWorkbenchHistory(source: HistorySource, search: Workbe
       targetKind: search.historyTargetKind ?? 'all',
       ...(search.historyCursor ? { cursor: search.historyCursor } : {}),
     });
+    signal?.throwIfAborted();
     if (result.error || result.status !== 200) return { ...empty, state: failure(result) };
     if (!result.source || !pageValue(result.data)) return { ...empty, state: 'unavailable' };
     const data = result.data;
@@ -158,6 +149,7 @@ export async function readWorkbenchHistory(source: HistorySource, search: Workbe
       selected = { state: 'unavailable' };
       if (row?.history.receipt === 'permitted') {
         const exact = await source.exact(row.id);
+        signal?.throwIfAborted();
         if (exact.error || exact.status !== 200) {
           if (failure(exact) === 'denied') return { ...empty, state: 'denied' };
         } else if (
@@ -172,14 +164,17 @@ export async function readWorkbenchHistory(source: HistorySource, search: Workbe
         }
       }
     }
+    const sourceFingerprint = await fingerprint(sources);
+    signal?.throwIfAborted();
     return {
       state: 'ready',
       entries: data.entries,
       next: data.nextCursor,
-      sourceFingerprint: await fingerprint(sources),
+      sourceFingerprint,
       ...(selected ? { selected } : {}),
     };
   } catch {
+    signal?.throwIfAborted();
     return { ...empty, state: 'unavailable' };
   }
 }

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createKernelClient } from '@rezics/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { WorkbenchPage } from '../moderation/workbench-queue/page';
 import { WorkbenchPreparing } from '../moderation/workbench-queue/view';
-import { prepareWorkbenchRead, readWorkbench, type WorkbenchRead } from '../moderation/workbench-queue/read';
+import { prepareWorkbenchRead, readWorkbenchPage, type WorkbenchRead } from '../moderation/workbench-queue/read';
 import { workbenchSearch, type WorkbenchSearch } from '../moderation/workbench-queue/scope';
 import type { ModerationDirectoryPage } from '../moderation/workbench-queue/directory';
 import { privateReaderFingerprint } from '../moderation/private-reader-origin';
@@ -17,7 +18,7 @@ import { queueViewports } from './patterns/board-report-queue/fixture';
 type Mode = 'ready' | 'empty' | 'preparing' | 'unavailable' | 'denied' | 'stale' | 'sparse' | 'loading' | 'closed';
 const longLabel = 'A board with a very long title that wraps without hiding its queue choices — '.repeat(5);
 
-/** The route's prepare/read/page composition with illustrative public source inputs. */
+/** The served prepare/read/page composition through installed client transport fixtures. */
 function DirectoryStory({ mode = 'ready', continuation = false }: { mode?: Mode; continuation?: boolean }) {
   const cache = useMemo(() => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -34,7 +35,7 @@ function DirectoryStory({ mode = 'ready', continuation = false }: { mode?: Mode;
   const [page, setPage] = useState<WorkbenchRead>();
   const [revision, retry] = useState(0);
   const read = useCallback(
-    async (input: WorkbenchSearch): Promise<WorkbenchRead> => {
+    async (input: WorkbenchSearch, signal?: AbortSignal): Promise<WorkbenchRead> => {
       const directory: ModerationDirectoryPage =
         mode === 'preparing' || mode === 'unavailable' || mode === 'denied' || mode === 'stale'
           ? { state: mode, items: [], next: null }
@@ -63,20 +64,26 @@ function DirectoryStory({ mode = 'ready', continuation = false }: { mode?: Mode;
                       },
                     ],
             };
-      const result = await readWorkbench(
-        {
-          directory: async () => directory,
-          boardReports: async () => ({ reports: [], next: null }),
-          boardAppeals: async () => ({ appeals: [], next: null }),
-          catalogueReports: async () => ({ reports: [], next: null }),
-        },
+      const native = createKernelClient('https://illustrative-kernel.invalid', {
+        fetch: (async (input, init) => {
+          const path = new URL(new Request(input, init).url).pathname;
+          if (path === '/v1/me/moderation-directory') return Response.json(directory);
+          if (path === '/v1/boards/direct-board/appeals') return Response.json({ appeals: [], next: null });
+          if (path === '/v1/boards/direct-board/reports' || path === '/v1/catalogue/reports')
+            return Response.json({ reports: [], next: null });
+          return Response.json({ code: 'not_found' }, { status: 404 });
+        }) as typeof fetch,
+      });
+      return readWorkbenchPage(
+        native,
         input,
+        'Bearer illustrative-story',
+        {
+          subject: 'directory-story-reader',
+          csrfFingerprint: await privateReaderFingerprint(null),
+        },
+        signal,
       );
-      return {
-        ...result,
-        generation: crypto.randomUUID(),
-        readerOrigin: { subject: 'directory-story-reader', csrfFingerprint: await privateReaderFingerprint(null) },
-      };
     },
     [mode],
   );
@@ -118,7 +125,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The workbench route consumer with supplied directory advice. Native projection, mounted producer and installed typing are pending; these stories make no native authority or execution claim.',
+          'The workbench route consumer uses the installed KernelClient directory binding and private reader preparation. Responses are illustrative transport fixtures, including native coverage and horizon states; they are not API recordings or native authority, growth or browser execution evidence.',
       },
     },
   },

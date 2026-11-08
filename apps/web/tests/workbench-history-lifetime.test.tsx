@@ -1,4 +1,5 @@
 import { afterAll, expect, mock, test } from 'bun:test';
+import { createKernelClient, SESSION_HEADER } from '@rezics/client';
 import { dirname } from 'node:path';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -26,87 +27,99 @@ const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { WorkbenchPage } = await import('../src/moderation/workbench-queue/page');
 const { WorkbenchView } = await import('../src/moderation/workbench-queue/view');
-const { prepareWorkbenchRead, readWorkbench } = await import('../src/moderation/workbench-queue/read');
+const { prepareWorkbenchRead, readWorkbenchPage } = await import('../src/moderation/workbench-queue/read');
 const { workbenchSearch } = await import('../src/moderation/workbench-queue/scope');
 const { privateReaderFingerprint } = await import('../src/moderation/private-reader-origin');
 const { m } = await import('../src/paraglide/messages.js');
-const search = workbenchSearch({ board: 'board-one', history: true, cursor: 'queue-original' });
+const search = workbenchSearch({
+  board: 'board-one',
+  history: true,
+  cursor: 'queue-original',
+  historyDecision: 'decision',
+});
 const session = { state: 'signed-in', subject: 'moderator-one', csrfToken: 'original-session' };
 const readerOrigin = { subject: session.subject, csrfFingerprint: await privateReaderFingerprint(session.csrfToken) };
-const source = {
-  history: {
-    page: async () => ({
-      status: 200,
-      source: 'native-source',
-      data: {
-        viewer: { kind: 'board-moderator' },
-        entries: [
-          {
-            id: 'decision',
-            targetId: 'original-target',
-            targetKind: 'post',
-            action: 'takedown',
-            decidedAt: '2026-11-04T00:00:00Z',
-            statement: 'Private retained history reason',
-            history: { reasonState: 'retained', decider: 'withheld', receipt: 'permitted', target: 'unavailable' },
-          },
-        ],
-        nextCursor: null,
-      },
-    }),
-    exact: async () => {
-      throw new Error('No selection');
-    },
-  },
-  boardReports: async () => {
-    throw new Error('No queue scan');
-  },
-  boardAppeals: async () => {
-    throw new Error('No queue scan');
-  },
-  catalogueReports: async () => {
-    throw new Error('No queue scan');
-  },
+const entry = {
+  id: 'decision',
+  targetId: 'original-target',
+  targetKind: 'post',
+  action: 'takedown',
+  decidedAt: '2026-11-04T00:00:00Z',
+  statement: 'Private retained history reason',
+  history: { reasonState: 'retained', decider: 'withheld', receipt: 'permitted', target: 'unavailable' },
 };
-const load = async () => ({ ...(await readWorkbench(source, search)), generation: crypto.randomUUID(), readerOrigin });
+const native = createKernelClient('https://kernel.invalid', {
+  fetch: (async (input, init) => {
+    const request = new Request(input, init);
+    expect(init?.cache).toBe('no-store');
+    expect(request.headers.get('authorization')).toBe('Bearer prepared');
+    const path = new URL(request.url).pathname;
+    const data =
+      path === '/v1/moderation-decisions/decision'
+        ? {
+            ...entry,
+            appeal: null,
+            appealDeadline: null,
+            viewer: {
+              affectedAuthor: false,
+              observedAt: entry.decidedAt,
+              appeal: { state: 'unavailable', reason: 'not_affected_author' },
+            },
+            targetContext: { state: 'concealed' },
+          }
+        : { viewer: { kind: 'board-moderator' }, entries: [entry], nextCursor: null };
+    expect(['/v1/boards/board-one/moderation-history', '/v1/moderation-decisions/decision']).toContain(path);
+    return Response.json(data, { headers: { [SESSION_HEADER]: 'native-source' } });
+  }) as typeof fetch,
+});
+const load = (input = search, signal?: AbortSignal) =>
+  readWorkbenchPage(native, input, 'Bearer prepared', readerOrigin, signal);
 
 test('the mounted history owner hides an unadmitted browser visit and retires all reasons and controls on session replacement', async () => {
-  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const host = window.document.createElement('div');
-  window.document.body.append(host);
-  const root = createRoot(host);
-  try {
-    const unknown = await prepareWorkbenchRead(cache, search, load, new AbortController().signal);
-    await act(async () =>
-      root.render(
-        <QueryClientProvider client={cache}>
-          <WorkbenchPage page={unknown} search={search} onSearch={() => {}} />
-        </QueryClientProvider>,
-      ),
-    );
-    expect(host.textContent).not.toContain('Private retained history reason');
-    await act(async () => {
-      cache.setQueryData(['session'], session);
-    });
-    expect(host.textContent).not.toContain('Private retained history reason');
-    const admitted = await prepareWorkbenchRead(cache, search, load, new AbortController().signal);
-    await act(async () =>
-      root.render(
-        <QueryClientProvider client={cache}>
-          <WorkbenchPage key="fresh" page={admitted} search={search} onSearch={() => {}} />
-        </QueryClientProvider>,
-      ),
-    );
-    expect(host.textContent).toContain('Private retained history reason');
-    await act(async () => {
-      cache.setQueryData(['session'], { ...session, csrfToken: 'replacement-session' });
-    });
-    expect(host.textContent).not.toContain('Private retained history reason');
-    expect(host.textContent).not.toContain(m.moderation_history_open_receipt());
-  } finally {
-    await act(async () => root.unmount());
-    host.remove();
-    cache.clear();
+  for (const replacement of ['credential', 'equal', 'ABA'] as const) {
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const host = window.document.createElement('div');
+    window.document.body.append(host);
+    const root = createRoot(host);
+    try {
+      const unknown = await prepareWorkbenchRead(cache, search, load, new AbortController().signal);
+      await act(async () =>
+        root.render(
+          <QueryClientProvider client={cache}>
+            <WorkbenchPage page={unknown} search={search} onSearch={() => {}} />
+          </QueryClientProvider>,
+        ),
+      );
+      expect(host.textContent).not.toContain('Private retained history reason');
+      await act(async () => {
+        cache.setQueryData(['session'], session);
+      });
+      expect(host.textContent).not.toContain('Private retained history reason');
+      const admitted = await prepareWorkbenchRead(cache, search, load, new AbortController().signal);
+      await act(async () =>
+        root.render(
+          <QueryClientProvider client={cache}>
+            <WorkbenchPage key="fresh" page={admitted} search={search} onSearch={() => {}} />
+          </QueryClientProvider>,
+        ),
+      );
+      expect(host.textContent).toContain('Private retained history reason');
+      expect(host.textContent).toContain(m.moderation_target_withheld());
+      await act(async () => {
+        if (replacement === 'ABA') cache.setQueryData(['session'], { ...session, subject: 'other' });
+        cache.setQueryData(
+          ['session'],
+          replacement === 'credential' ? { ...session, csrfToken: 'replacement-session' } : { ...session },
+        );
+      });
+      expect(host.textContent).not.toContain('Private retained history reason');
+      expect(host.textContent).not.toContain(m.moderation_history_open_receipt());
+      expect(host.textContent).not.toContain(m.moderation_target_withheld());
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+      cache.clear();
+    }
   }
 });
 
