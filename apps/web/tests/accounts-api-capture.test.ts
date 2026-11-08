@@ -138,53 +138,62 @@ test('API capture requires the registered native task attempt', () => {
   ).toBe(false);
 });
 
-test('capture admits the supplied runtime while seed is running and its result bytes are absent', async () => {
+test('capture admits the supplied runtime with running or failed seed and absent result bytes', async () => {
   const directory = resolve(import.meta.dir, '../../../.temp', `capture-seed-state-${crypto.randomUUID()}`);
   await mkdir(directory, { recursive: true });
   const seedResultPath = join(directory, 'not-created.json');
-  const handoff = parseCaptureHandoff({
-    slot: 'manual-page-review-lease-test',
-    runtimeRevision: 'a'.repeat(40),
-    seedCompleted: false,
-    seedState: 'running',
-    seedResultPath,
-    origins: {
-      web: 'http://127.0.0.1:41001',
-      issuer: 'http://127.0.0.1:41002',
-      native: 'http://127.0.0.1:41003',
-      kernel: 'http://127.0.0.1:41004',
-    },
-    keysPath: '/runtime/private-keys',
-    bindingsPath: '/runtime/private-bindings',
-    recoveryDirectory: '/runtime/private-recovery',
-  });
-  const called: string[] = [];
+  const handoff = (seedState: 'running' | 'failed') =>
+    parseCaptureHandoff({
+      slot: 'manual-page-review-lease-test',
+      runtimeRevision: 'a'.repeat(40),
+      runtimeService: 'rezics-page-review-test.service',
+      runtimeLeasePid: 12345,
+      runtimeStackPid: 12346,
+      seedCompleted: false,
+      seedState,
+      seedResultPath,
+      origins: {
+        web: 'http://127.0.0.1:41001',
+        issuer: 'http://127.0.0.1:41002',
+        native: 'http://127.0.0.1:41003',
+        kernel: 'http://127.0.0.1:41004',
+      },
+      keysPath: '/runtime/private-keys',
+      bindingsPath: '/runtime/private-bindings',
+      recoveryDirectory: '/runtime/private-recovery',
+    });
+  const expectedSnapshots = [['J03'], ['J03', 'J04'], ['J03', 'J04', 'J10']];
   const persisted: { identity: Record<string, unknown>; caseIds: string[] }[] = [];
   try {
     expect(await Bun.file(seedResultPath).exists()).toBe(false);
-    const result = await runApiCaptureOnHandoff(
-      handoff,
-      'b'.repeat(40),
-      {
-        J03: async () => void called.push('J03'),
-        J04: async () => void called.push('J04'),
-        J10: async () => void called.push('J10'),
-      },
-      async (identity, cases) => persisted.push({ identity, caseIds: cases.map((row) => row.id) }),
-    );
+    for (const state of ['running', 'failed'] as const) {
+      const called: string[] = [];
+      const result = await runApiCaptureOnHandoff(
+        handoff(state),
+        'b'.repeat(40),
+        {
+          J03: async () => void called.push('J03'),
+          J04: async () => void called.push('J04'),
+          J10: async () => void called.push('J10'),
+        },
+        async (identity, cases) => persisted.push({ identity, caseIds: cases.map((row) => row.id) }),
+      );
 
-    expect(called).toEqual([...API_CAPTURE_JOURNEYS]);
-    expect(result.cases.map((row) => row.result)).toEqual(['PASS', 'PASS', 'PASS']);
-    expect(result.identity).toMatchObject({
-      sourceRevision: 'b'.repeat(40),
-      runtimeRevision: 'a'.repeat(40),
-      slot: 'manual-page-review-lease-test',
-      lease: 'manual-page-review-lease-test',
-      seed: { completed: false, state: 'running' },
-    });
-    expect(JSON.stringify(result.identity)).not.toContain(seedResultPath);
-    expect(JSON.stringify(result.identity)).not.toContain('sha256');
-    expect(persisted.map((snapshot) => snapshot.caseIds)).toEqual([['J03'], ['J03', 'J04'], ['J03', 'J04', 'J10']]);
+      expect(called).toEqual([...API_CAPTURE_JOURNEYS]);
+      expect(result.cases.map((row) => row.result)).toEqual(['PASS', 'PASS', 'PASS']);
+      expect(result.identity).toMatchObject({
+        sourceRevision: 'b'.repeat(40),
+        runtimeRevision: 'a'.repeat(40),
+        slot: 'manual-page-review-lease-test',
+        runtimeService: 'rezics-page-review-test.service',
+        lease: { runtimeLeasePid: 12345, runtimeStackPid: 12346 },
+        seed: { completed: false, state },
+      });
+      expect(JSON.stringify(result.identity)).not.toContain(seedResultPath);
+      expect(JSON.stringify(result.identity)).not.toContain('sha256');
+      expect(await Bun.file(seedResultPath).exists()).toBe(false);
+    }
+    expect(persisted.map((snapshot) => snapshot.caseIds)).toEqual([...expectedSnapshots, ...expectedSnapshots]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

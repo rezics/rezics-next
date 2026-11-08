@@ -19,12 +19,12 @@ original runner functions and assertions with three independent newly registered
 runtime. Each case records its result independently and continues after a sibling failure. This isolated capture
 leaves the complete nineteen-journey census and browser evidence separate.
 
-The existing visual runtime owner supplies the current slot/lease, explicit Web/issuer/native/Kernel origins, full
-runtime revision, and matching private key, binding and local recovery-delivery paths. Capture records the source
-revision, runtime revision, lease, origins and the seed completion/state values actually supplied. Catalogue seed
-state does not gate these independent account operations; capture does not read or require seed-result bytes and
-records no seed-result hash. A missing or invalid runtime handoff establishes only an unmet prerequisite; it
-supplies no result for an unreached API phase.
+The existing visual runtime owner supplies the durable service and slot, lease/stack process identities, explicit
+Web/issuer/native/Kernel origins, full runtime revision, and matching private key, binding and local recovery-delivery
+paths. Capture records the source revision, runtime revision, service/slot, lease and stack process IDs, origins and
+the seed completion/state values actually supplied. Catalogue seed state does not gate these independent account
+operations; capture does not read or require seed-result bytes and records no seed-result hash. A missing or invalid
+runtime handoff establishes only an unmet prerequisite; it supplies no result for an unreached API phase.
 
 | Original journey | Required reached phases and independent readback |
 | --- | --- |

@@ -1213,6 +1213,9 @@ export async function collectApiCapture(
 export type CaptureHandoff = {
   slot: string;
   runtimeRevision: string;
+  runtimeService?: string;
+  runtimeLeasePid?: number;
+  runtimeStackPid?: number;
   seedCompleted?: boolean;
   seedState?: string;
   origins: Origins;
@@ -1231,6 +1234,13 @@ export function parseCaptureHandoff(value: unknown): CaptureHandoff {
     throw new Error('invalid capture seed observation');
   if (input.seedState !== undefined && typeof input.seedState !== 'string')
     throw new Error('invalid capture seed observation');
+  if (input.runtimeService !== undefined && (typeof input.runtimeService !== 'string' || !input.runtimeService))
+    throw new Error('invalid capture runtime service');
+  for (const name of ['runtimeLeasePid', 'runtimeStackPid'] as const) {
+    const pid = input[name];
+    if (pid !== undefined && (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid < 1))
+      throw new Error('invalid capture runtime process');
+  }
   if (!input.origins || typeof input.origins !== 'object' || Array.isArray(input.origins))
     throw new Error('invalid capture origins');
 
@@ -1260,6 +1270,9 @@ export function parseCaptureHandoff(value: unknown): CaptureHandoff {
   return {
     slot: input.slot,
     runtimeRevision: input.runtimeRevision,
+    ...(input.runtimeService === undefined ? {} : { runtimeService: input.runtimeService as string }),
+    ...(input.runtimeLeasePid === undefined ? {} : { runtimeLeasePid: input.runtimeLeasePid as number }),
+    ...(input.runtimeStackPid === undefined ? {} : { runtimeStackPid: input.runtimeStackPid as number }),
     ...(input.seedCompleted === undefined ? {} : { seedCompleted: input.seedCompleted }),
     ...(input.seedState === undefined ? {} : { seedState: input.seedState }),
     origins,
@@ -1280,7 +1293,11 @@ export async function runApiCaptureOnHandoff(
     observedAt: new Date().toISOString(),
     runtimeRevision: handoff.runtimeRevision,
     slot: handoff.slot,
-    lease: handoff.slot,
+    runtimeService: handoff.runtimeService ?? null,
+    lease: {
+      runtimeLeasePid: handoff.runtimeLeasePid ?? null,
+      runtimeStackPid: handoff.runtimeStackPid ?? null,
+    },
     origins: handoff.origins,
     seed: {
       completed: handoff.seedCompleted ?? null,
