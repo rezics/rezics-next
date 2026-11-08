@@ -1233,7 +1233,9 @@ supermanager for each breached threshold: efficiency below 40%, any queue older 
 `oldestQueueMs`, `landingP90Ms` and `attemptsPerIntegrated`; the defaults are `0.4`, `3600000`, `1800000` and `1.5`.
 Alarm summaries name the stage, measurement and up to three oldest waiting task IDs. Actionable alerts repeat after
 the configured interval (one hour by default). An unchanged global metric with no waiting tasks is sent once; a changed
-measurement, new waiting task set, or a recovered threshold that breaches again rearms its alarm. Actionable queue
+measurement, new waiting task set, or a recovered threshold that breaches again rearms its alarm.
+Clearing the waiting queue while the global measurement stays unchanged updates the remembered queue without
+another alarm; the same task entering a waiting queue again still rearms it. Actionable queue
 alarms keep their configured periodic escalation, and hourly flow reports continue to record the same metrics. Flow
 alarms, daily audit notices, check-result reuse alerts and shared environment incidents go to the configured
 supermanager; priority grants and scope decisions remain with the supermanager.
