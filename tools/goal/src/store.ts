@@ -6,6 +6,7 @@ import { briefProposalHash, sameBriefProposalText } from './durable-follow-up.ts
 import type { OwnerDecisionDelivery } from './owner-decisions.ts';
 import { CheckResults, checkResultsMigration } from './check-results.ts';
 import { groupMembers, runPidFilePresence, sameProcess } from './process.ts';
+import type { ProcessIdentity } from './process.ts';
 import { makeRecord, readMeasurement } from './records.ts';
 import { migrate } from './db.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -17,6 +18,8 @@ import type {
   DevVerifierFinding,
   DevVerifierRun,
   BriefProposalRecord,
+  MaintenanceBackfillProgress,
+  MaintenanceCandidateRef,
   IntegrationPlan,
   PendingBriefProposal,
   PoolReading,
@@ -26,6 +29,10 @@ import type {
   TaskState,
   TerminationIntent,
   WorktreeCleanupDisposition,
+  WorktreeMaintenanceCandidate,
+  ProcessMaintenanceCandidate,
+  StrayWorktreeCandidate,
+  WorktreeScanDirectory,
 } from './types.ts';
 import { recordFlow, ensureFlow, closePendingFlow } from './flow.ts';
 import type {
@@ -239,6 +246,108 @@ END;`,
     );
     CREATE INDEX worker_brief_proposals_task ON worker_brief_proposals(task_id, id);`,
   },
+  {
+    module: 'worker',
+    version: 14,
+    sql: `CREATE TABLE worker_maintenance_candidates (
+      ticket INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL CHECK(kind IN ('worktree','reap')),
+      task_id TEXT NOT NULL REFERENCES worker_tasks(id),
+      attempt INTEGER NOT NULL,
+      UNIQUE(kind, task_id, attempt)
+    );
+    CREATE INDEX worker_maintenance_candidates_page ON worker_maintenance_candidates(kind, ticket);
+    CREATE INDEX worker_maintenance_candidates_task ON worker_maintenance_candidates(task_id);
+    CREATE TABLE worker_maintenance_progress (
+      id INTEGER PRIMARY KEY CHECK(id=1),
+      task_sequence INTEGER NOT NULL DEFAULT 0,
+      tasks_complete INTEGER NOT NULL DEFAULT 0,
+      process_task_id TEXT NOT NULL DEFAULT '',
+      process_attempt INTEGER NOT NULL DEFAULT 0,
+      processes_complete INTEGER NOT NULL DEFAULT 0,
+      worktree_ticket INTEGER NOT NULL DEFAULT 0,
+      reap_ticket INTEGER NOT NULL DEFAULT 0,
+      stray_ticket INTEGER NOT NULL DEFAULT 0,
+      scan_watch_ticket INTEGER NOT NULL DEFAULT 0,
+      prune_generation INTEGER NOT NULL DEFAULT 0,
+      prune_completed INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE worker_maintenance_strays (
+      ticket INTEGER PRIMARY KEY AUTOINCREMENT,
+      path TEXT NOT NULL UNIQUE
+    );
+    CREATE INDEX worker_maintenance_strays_page ON worker_maintenance_strays(ticket);
+    CREATE TABLE worker_maintenance_scan_directories (
+      watch_ticket INTEGER PRIMARY KEY AUTOINCREMENT,
+      root TEXT NOT NULL,
+      path TEXT NOT NULL,
+      generation TEXT,
+      offset INTEGER NOT NULL DEFAULT 0,
+      complete INTEGER NOT NULL DEFAULT 0,
+      monitor INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(root, path)
+    );
+    CREATE INDEX worker_maintenance_scan_pending
+      ON worker_maintenance_scan_directories(complete, root, path);
+    CREATE INDEX worker_maintenance_scan_monitor
+      ON worker_maintenance_scan_directories(monitor, watch_ticket);
+    CREATE TABLE worker_maintenance_task_paths (
+      path TEXT NOT NULL,
+      task_id TEXT NOT NULL REFERENCES worker_tasks(id),
+      sequence INTEGER NOT NULL,
+      PRIMARY KEY(path, task_id)
+    );
+    CREATE INDEX worker_maintenance_task_paths_lookup
+      ON worker_maintenance_task_paths(path, sequence DESC);
+    CREATE INDEX worker_maintenance_task_paths_task ON worker_maintenance_task_paths(task_id);
+    INSERT INTO worker_maintenance_progress(id) VALUES (1);
+    CREATE TRIGGER worker_maintenance_task_path_insert AFTER INSERT ON worker_tasks BEGIN
+      INSERT OR REPLACE INTO worker_maintenance_task_paths(path, task_id, sequence)
+      SELECT json_extract(NEW.body, '$.worktree'), NEW.id, NEW.sequence
+      WHERE json_type(NEW.body, '$.worktree')='text';
+    END;
+    CREATE TRIGGER worker_maintenance_task_path_update AFTER UPDATE OF sequence, body ON worker_tasks BEGIN
+      DELETE FROM worker_maintenance_task_paths WHERE task_id=OLD.id;
+      INSERT OR REPLACE INTO worker_maintenance_task_paths(path, task_id, sequence)
+      SELECT json_extract(NEW.body, '$.worktree'), NEW.id, NEW.sequence
+      WHERE json_type(NEW.body, '$.worktree')='text';
+    END;
+    CREATE TRIGGER worker_maintenance_task_path_delete AFTER DELETE ON worker_tasks BEGIN
+      DELETE FROM worker_maintenance_task_paths WHERE task_id=OLD.id;
+    END;
+    CREATE TRIGGER worker_maintenance_task_insert AFTER INSERT ON worker_tasks BEGIN
+      INSERT INTO worker_maintenance_candidates(kind, task_id, attempt)
+      VALUES ('worktree', NEW.id, 0)
+      ON CONFLICT(kind, task_id, attempt) DO UPDATE SET ticket=excluded.ticket;
+    END;
+    CREATE TRIGGER worker_maintenance_task_update AFTER UPDATE OF sequence, current_attempt, body ON worker_tasks BEGIN
+      INSERT INTO worker_maintenance_candidates(kind, task_id, attempt)
+      VALUES ('worktree', NEW.id, 0)
+      ON CONFLICT(kind, task_id, attempt) DO UPDATE SET ticket=excluded.ticket;
+    END;
+    CREATE TRIGGER worker_maintenance_task_delete AFTER DELETE ON worker_tasks BEGIN
+      DELETE FROM worker_maintenance_candidates WHERE task_id=OLD.id;
+    END;
+    CREATE TRIGGER worker_maintenance_attempt_insert AFTER INSERT ON worker_attempts BEGIN
+      INSERT INTO worker_maintenance_candidates(kind, task_id, attempt)
+      SELECT 'reap', NEW.task_id, NEW.attempt
+      WHERE json_type(NEW.body, '$.process')='object'
+      ON CONFLICT(kind, task_id, attempt) DO UPDATE SET ticket=excluded.ticket;
+    END;
+    CREATE TRIGGER worker_maintenance_attempt_update AFTER UPDATE ON worker_attempts BEGIN
+      DELETE FROM worker_maintenance_candidates
+      WHERE kind='reap' AND task_id=NEW.task_id AND attempt=NEW.attempt
+        AND json_type(NEW.body, '$.process') IS NOT 'object';
+      INSERT INTO worker_maintenance_candidates(kind, task_id, attempt)
+      SELECT 'reap', NEW.task_id, NEW.attempt
+      WHERE json_type(NEW.body, '$.process')='object'
+      ON CONFLICT(kind, task_id, attempt) DO UPDATE SET ticket=excluded.ticket;
+    END;
+    CREATE TRIGGER worker_maintenance_attempt_delete AFTER DELETE ON worker_attempts BEGIN
+      DELETE FROM worker_maintenance_candidates
+      WHERE kind='reap' AND task_id=OLD.task_id AND attempt=OLD.attempt;
+    END;`,
+  },
   checkResultsMigration(),
   {
     module: 'dev-verifier',
@@ -266,6 +375,8 @@ const decode = <T>(row: unknown): T | undefined => (row ? (JSON.parse((row as Bo
 export type AttemptPage<T> = { items: T[]; hasMore: boolean; nextAfter?: number };
 export type AttemptPageOptions = { afterAttempt?: number; limit: number };
 export const MAX_ATTEMPT_PAGE_SIZE = defaultPolicy.history.attemptPageSize;
+export const MAINTENANCE_BOOTSTRAP_PAGE_SIZE = 32;
+export const MAINTENANCE_CANDIDATE_BATCH_SIZE = 16;
 
 function attemptPageOptions(
   taskId: string,
@@ -344,6 +455,15 @@ export class WorkerStore implements AttemptFence {
     this.decodedAttemptBytes += Buffer.byteLength((row as Body).body);
     return decode<Attempt>(row);
   }
+  private cachedTask(id: string, body: string): Task {
+    const cached = this.taskSnapshot.get(id);
+    if (cached) return structuredClone(cached);
+    this.decodedTaskRows++;
+    this.decodedTaskBytes += Buffer.byteLength(body);
+    const task = JSON.parse(body) as Task;
+    this.taskSnapshot.set(id, task);
+    return structuredClone(task);
+  }
   task(id: string): Task {
     this.refreshSnapshot();
     const cached = this.taskSnapshot.get(id);
@@ -356,6 +476,338 @@ export class WorkerStore implements AttemptFence {
   worktreeCleanup(taskId: string): WorktreeCleanupDisposition | undefined {
     const row = this.db.query('SELECT body FROM worker_worktree_cleanup WHERE task_id=?').get(taskId);
     return decode<WorktreeCleanupDisposition>(row);
+  }
+  /** Backfill task cleanup candidates in durable sequence pages; inserts and updates are also trigger-enqueued. */
+  bootstrapMaintenanceTasks(limit = MAINTENANCE_BOOTSTRAP_PAGE_SIZE): MaintenanceBackfillProgress {
+    return this.db
+      .transaction(() => {
+        const progress = this.db
+          .query('SELECT task_sequence, tasks_complete FROM worker_maintenance_progress WHERE id=1')
+          .get() as { task_sequence: number; tasks_complete: number };
+        if (progress.tasks_complete) return { examined: 0, complete: true };
+        const rows = this.db
+          .query('SELECT sequence FROM worker_tasks WHERE sequence>? ORDER BY sequence LIMIT ?')
+          .all(progress.task_sequence, limit) as { sequence: number }[];
+        const last = rows.at(-1)?.sequence ?? progress.task_sequence;
+        if (rows.length)
+          this.db
+            .query(`INSERT INTO worker_maintenance_candidates(kind, task_id, attempt)
+              SELECT 'worktree', id, 0 FROM worker_tasks WHERE sequence>? AND sequence<=? ORDER BY sequence
+              ON CONFLICT(kind, task_id, attempt) DO NOTHING`)
+            .run(progress.task_sequence, last);
+        if (rows.length)
+          this.db
+            .query(`INSERT OR REPLACE INTO worker_maintenance_task_paths(path, task_id, sequence)
+              SELECT json_extract(body, '$.worktree'), id, sequence FROM worker_tasks
+              WHERE sequence>? AND sequence<=? AND json_type(body, '$.worktree')='text'
+              ORDER BY sequence`)
+            .run(progress.task_sequence, last);
+        const complete = rows.length < limit;
+        this.db
+          .query('UPDATE worker_maintenance_progress SET task_sequence=?, tasks_complete=? WHERE id=1')
+          .run(last, Number(complete));
+        return { examined: rows.length, complete };
+      })
+      .immediate();
+  }
+  /** Backfill attempt identities in primary-key pages; trigger-enqueued writes cover concurrent changes. */
+  bootstrapMaintenanceProcesses(limit = MAINTENANCE_BOOTSTRAP_PAGE_SIZE): MaintenanceBackfillProgress {
+    return this.db
+      .transaction(() => {
+        const progress = this.db
+          .query('SELECT process_task_id, process_attempt, processes_complete FROM worker_maintenance_progress WHERE id=1')
+          .get() as { process_task_id: string; process_attempt: number; processes_complete: number };
+        if (progress.processes_complete) return { examined: 0, complete: true };
+        const rows = this.db
+          .query(`SELECT task_id, attempt, json_type(body, '$.process') AS process_type FROM worker_attempts
+            WHERE (task_id, attempt)>(?, ?)
+            ORDER BY task_id, attempt LIMIT ?`)
+          .all(progress.process_task_id, progress.process_attempt, limit) as {
+          task_id: string;
+          attempt: number;
+          process_type: string | null;
+        }[];
+        const last = rows.at(-1) ?? { task_id: progress.process_task_id, attempt: progress.process_attempt };
+        const candidates = rows.filter((row) => row.process_type === 'object');
+        if (candidates.length)
+          this.db
+            .query(`INSERT INTO worker_maintenance_candidates(kind, task_id, attempt) VALUES
+              ${candidates.map(() => "('reap', ?, ?)").join(', ')}
+              ON CONFLICT(kind, task_id, attempt) DO UPDATE SET ticket=excluded.ticket`)
+            .run(...candidates.flatMap((row) => [row.task_id, row.attempt]));
+        const complete = rows.length < limit;
+        this.db
+          .query(`UPDATE worker_maintenance_progress
+            SET process_task_id=?, process_attempt=?, processes_complete=? WHERE id=1`)
+          .run(last.task_id, last.attempt, Number(complete));
+        return { examined: rows.length, complete };
+      })
+      .immediate();
+  }
+  /** Select a bounded, durable round-robin page of finished-task cleanup candidates. */
+  worktreeMaintenanceCandidates(limit = MAINTENANCE_CANDIDATE_BATCH_SIZE): WorktreeMaintenanceCandidate[] {
+    this.refreshSnapshot();
+    return this.db
+      .transaction(() => {
+        let cursor = (
+          this.db.query('SELECT worktree_ticket FROM worker_maintenance_progress WHERE id=1').get() as {
+            worktree_ticket: number;
+          }
+        ).worktree_ticket;
+        const page = (after: number) =>
+          this.db
+            .query(`SELECT q.ticket, q.task_id, q.attempt, t.body
+              FROM worker_maintenance_candidates AS q JOIN worker_tasks AS t ON t.id=q.task_id
+              WHERE q.kind='worktree' AND q.ticket>?
+              ORDER BY q.ticket LIMIT ?`)
+            .all(after, limit) as { ticket: number; task_id: string; attempt: number; body: string }[];
+        let rows = page(cursor);
+        if (!rows.length && cursor !== 0) {
+          this.db.query('UPDATE worker_maintenance_progress SET worktree_ticket=0 WHERE id=1').run();
+          return [];
+        }
+        if (rows.length)
+          this.db
+            .query('UPDATE worker_maintenance_progress SET worktree_ticket=? WHERE id=1')
+            .run(rows.at(-1)!.ticket);
+        return rows.map((row) => ({
+          ticket: row.ticket,
+          kind: 'worktree' as const,
+          taskId: row.task_id,
+          attempt: row.attempt,
+          task: this.cachedTask(row.task_id, row.body),
+        }));
+      })
+      .immediate();
+  }
+  /** Select a bounded, durable round-robin page without decoding attempt history. */
+  reapMaintenanceCandidates(limit = MAINTENANCE_CANDIDATE_BATCH_SIZE): ProcessMaintenanceCandidate[] {
+    return this.db
+      .transaction(() => {
+        let cursor = (
+          this.db.query('SELECT reap_ticket FROM worker_maintenance_progress WHERE id=1').get() as {
+            reap_ticket: number;
+          }
+        ).reap_ticket;
+        const page = (after: number) =>
+          this.db
+            .query(`SELECT q.ticket, q.task_id, q.attempt,
+                json_extract(t.body, '$.worktree') AS worktree,
+                json_extract(a.body, '$.process.pid') AS pid,
+                json_extract(a.body, '$.process.start') AS start,
+                json_extract(a.body, '$.process.boot') AS boot,
+                json_extract(a.body, '$.process.group') AS process_group
+              FROM worker_maintenance_candidates AS q
+              JOIN worker_tasks AS t ON t.id=q.task_id
+              JOIN worker_attempts AS a ON a.task_id=q.task_id AND a.attempt=q.attempt
+              WHERE q.kind='reap' AND q.ticket>?
+              ORDER BY q.ticket LIMIT ?`)
+            .all(after, limit) as {
+            ticket: number;
+            task_id: string;
+            attempt: number;
+            worktree: string;
+            pid: number;
+            start: string;
+            boot: string;
+            process_group: number;
+          }[];
+        let rows = page(cursor);
+        if (!rows.length && cursor !== 0) {
+          cursor = 0;
+          this.db.query('UPDATE worker_maintenance_progress SET reap_ticket=0 WHERE id=1').run();
+          rows = page(cursor);
+        }
+        if (rows.length)
+          this.db.query('UPDATE worker_maintenance_progress SET reap_ticket=? WHERE id=1').run(rows.at(-1)!.ticket);
+        return rows.map((row) => ({
+          ticket: row.ticket,
+          kind: 'reap' as const,
+          taskId: row.task_id,
+          attempt: row.attempt,
+          worktree: row.worktree,
+          process: { pid: row.pid, start: row.start, boot: row.boot, group: row.process_group } satisfies ProcessIdentity,
+        }));
+      })
+      .immediate();
+  }
+  /** Delete only tickets observed by the caller so a concurrent writer cannot lose a new obligation. */
+  completeMaintenanceCandidates(candidates: readonly MaintenanceCandidateRef[]): void {
+    if (!candidates.length) return;
+    const terms = candidates.map(() => '(ticket=? AND kind=? AND task_id=? AND attempt=?)').join(' OR ');
+    const orderedBindings = candidates.flatMap(({ kind, taskId, attempt, ticket }) => [ticket, kind, taskId, attempt]);
+    this.db
+      .query(`DELETE FROM worker_maintenance_candidates WHERE ${terms}`)
+      .run(...orderedBindings);
+  }
+  /** A cheap existence check; it does not decode old blocked-worktree bodies. */
+  hasWorktreeCleanupDispositions(): boolean {
+    return Boolean(this.db.query('SELECT 1 FROM worker_worktree_cleanup LIMIT 1').get());
+  }
+  /** Return whether a root directory is still named by any task, without opening settled task bodies. */
+  hasTaskAtWorktree(path: string): boolean {
+    return Boolean(this.db.query('SELECT 1 FROM worker_maintenance_task_paths WHERE path=? LIMIT 1').get(path));
+  }
+  beginWorktreeCleanupScan(roots: readonly string[]): void {
+    if (!roots.length) return;
+    const values = roots.map(() => '(?, ?, NULL, 0, 0, 1)').join(', ');
+    const bindings = roots.flatMap((root) => [root, root]);
+    this.db
+      .query(`INSERT OR IGNORE INTO worker_maintenance_scan_directories(root, path, generation, offset, complete, monitor)
+        VALUES ${values}`)
+      .run(...bindings);
+  }
+  worktreeScanMonitors(limit = MAINTENANCE_CANDIDATE_BATCH_SIZE): WorktreeScanDirectory[] {
+    return this.db
+      .transaction(() => {
+        let cursor = (
+          this.db.query('SELECT scan_watch_ticket FROM worker_maintenance_progress WHERE id=1').get() as {
+            scan_watch_ticket: number;
+          }
+        ).scan_watch_ticket;
+        const page = (after: number) =>
+          this.db
+            .query(`SELECT watch_ticket, root, path, generation, offset, complete
+              FROM worker_maintenance_scan_directories
+              WHERE monitor=1 AND watch_ticket>? ORDER BY watch_ticket LIMIT ?`)
+            .all(after, limit) as {
+            watch_ticket: number;
+            root: string;
+            path: string;
+            generation: string | null;
+            offset: number;
+            complete: number;
+          }[];
+        let rows = page(cursor);
+        if (!rows.length && cursor !== 0) {
+          cursor = 0;
+          this.db.query('UPDATE worker_maintenance_progress SET scan_watch_ticket=0 WHERE id=1').run();
+          rows = page(cursor);
+        }
+        if (rows.length)
+          this.db
+            .query('UPDATE worker_maintenance_progress SET scan_watch_ticket=? WHERE id=1')
+            .run(rows.at(-1)!.watch_ticket);
+        return rows.map((row) => ({ ...row, complete: Boolean(row.complete) }));
+      })
+      .immediate();
+  }
+  worktreeScanComplete(): boolean {
+    return !this.db
+      .query('SELECT 1 FROM worker_maintenance_scan_directories WHERE complete=0 LIMIT 1')
+      .get();
+  }
+  nextWorktreeScanDirectory(): WorktreeScanDirectory | undefined {
+    const row = this.db
+      .query(`SELECT watch_ticket, root, path, generation, offset, complete FROM worker_maintenance_scan_directories
+        WHERE complete=0 ORDER BY root, path LIMIT 1`)
+      .get() as {
+      watch_ticket: number;
+      root: string;
+      path: string;
+      generation: string | null;
+      offset: number;
+      complete: number;
+    } | null;
+    return row ? { ...row, complete: Boolean(row.complete) } : undefined;
+  }
+  enqueueWorktreeScanDirectory(root: string, path: string): void {
+    this.db
+      .query(`INSERT OR IGNORE INTO worker_maintenance_scan_directories(root, path, generation, offset, complete, monitor)
+        VALUES (?, ?, NULL, 0, 0, 1)`)
+      .run(root, path);
+  }
+  removeWorktreeScanDirectory(root: string, path: string): void {
+    this.db.query('DELETE FROM worker_maintenance_scan_directories WHERE root=? AND path=? AND root<>path').run(root, path);
+  }
+  updateWorktreeScanDirectory(
+    root: string,
+    path: string,
+    generation: string | null,
+    offset: number,
+    complete: boolean,
+  ): void {
+    this.db
+      .query(`UPDATE worker_maintenance_scan_directories SET generation=?, offset=?, complete=?
+        WHERE root=? AND path=?`)
+      .run(generation, offset, Number(complete), root, path);
+  }
+  resetWorktreeScanRoot(root: string, generation: string | null): void {
+    this.db
+      .query(`UPDATE worker_maintenance_scan_directories SET generation=?, offset=0, complete=0
+        WHERE root=? AND path=?`)
+      .run(generation, root, root);
+  }
+  resetWorktreeScanDirectory(root: string, path: string, generation: string | null): void {
+    this.db
+      .query(`UPDATE worker_maintenance_scan_directories SET generation=?, offset=0, complete=0
+        WHERE root=? AND path=?`)
+      .run(generation, root, path);
+  }
+  enqueueStrayWorktree(path: string): void {
+    this.db
+      .query(`INSERT INTO worker_maintenance_strays(path) VALUES (?)
+        ON CONFLICT(path) DO UPDATE SET ticket=excluded.ticket`)
+      .run(path);
+  }
+  hasPendingStrayWorktrees(): boolean {
+    return Boolean(this.db.query('SELECT 1 FROM worker_maintenance_strays LIMIT 1').get());
+  }
+  strayWorktreeCandidates(limit = MAINTENANCE_CANDIDATE_BATCH_SIZE): StrayWorktreeCandidate[] {
+    return this.db
+      .transaction(() => {
+        let cursor = (
+          this.db.query('SELECT stray_ticket FROM worker_maintenance_progress WHERE id=1').get() as {
+            stray_ticket: number;
+          }
+        ).stray_ticket;
+        const page = (after: number) =>
+          this.db
+            .query(`SELECT ticket, path FROM worker_maintenance_strays WHERE ticket>? ORDER BY ticket LIMIT ?`)
+            .all(after, limit) as StrayWorktreeCandidate[];
+        let rows = page(cursor);
+        if (!rows.length && cursor !== 0) {
+          cursor = 0;
+          this.db.query('UPDATE worker_maintenance_progress SET stray_ticket=0 WHERE id=1').run();
+          rows = page(cursor);
+        }
+        if (rows.length)
+          this.db.query('UPDATE worker_maintenance_progress SET stray_ticket=? WHERE id=1').run(rows.at(-1)!.ticket);
+        return rows;
+      })
+      .immediate();
+  }
+  completeStrayWorktrees(candidates: readonly StrayWorktreeCandidate[]): void {
+    if (!candidates.length) return;
+    const terms = candidates.map(() => '(ticket=? AND path=?)').join(' OR ');
+    const bindings = candidates.flatMap(({ path, ticket }) => [ticket, path]);
+    this.db
+      .query(`DELETE FROM worker_maintenance_strays WHERE ${terms}`)
+      .run(...bindings);
+  }
+  maintenanceTasksBootstrapped(): boolean {
+    return Boolean(
+      (this.db.query('SELECT tasks_complete FROM worker_maintenance_progress WHERE id=1').get() as {
+        tasks_complete: number;
+      }).tasks_complete,
+    );
+  }
+  hasPendingWorktreeCandidates(): boolean {
+    return Boolean(this.db.query("SELECT 1 FROM worker_maintenance_candidates WHERE kind='worktree' LIMIT 1").get());
+  }
+  markWorktreePruneNeeded(): void {
+    this.db.query('UPDATE worker_maintenance_progress SET prune_generation=prune_generation+1 WHERE id=1').run();
+  }
+  worktreePruneProgress(): { generation: number; completed: number } {
+    const row = this.db
+      .query('SELECT prune_generation, prune_completed FROM worker_maintenance_progress WHERE id=1')
+      .get() as { prune_generation: number; prune_completed: number };
+    return { generation: row.prune_generation, completed: row.prune_completed };
+  }
+  completeWorktreePrune(generation: number): void {
+    this.db
+      .query('UPDATE worker_maintenance_progress SET prune_completed=? WHERE id=1 AND prune_generation=?')
+      .run(generation, generation);
   }
   /** Record a new filesystem generation once; repeated sweeps on the same generation stay suppressed. */
   recordWorktreeCleanup(disposition: WorktreeCleanupDisposition): boolean {
@@ -526,12 +978,17 @@ export class WorkerStore implements AttemptFence {
       ...(hasMore && pageRows.length ? { nextAfter: pageRows[pageRows.length - 1]!.attempt } : {}),
     };
   }
-  /** Pending, running, waiting and exited attempts are the only attempts needed for host recovery. */
+  /** Current process-bearing attempts are bounded by the active-task index and one attempt-key lookup each. */
   activeAttempts(): Attempt[] {
     this.refreshSnapshot();
     return this.db
       .query(
-        "SELECT task_id, attempt, body FROM worker_attempts WHERE json_extract(body, '$.state') IN ('pending','running','waiting','exited') ORDER BY task_id, attempt",
+        `SELECT a.task_id, a.attempt, a.body
+         FROM worker_tasks AS t INDEXED BY worker_tasks_state
+         JOIN worker_attempts AS a ON a.task_id=t.id AND a.attempt=t.current_attempt
+         WHERE json_extract(t.body, '$.state') IN ('held','ready','running','landing','stopped')
+           AND json_extract(a.body, '$.state') IN ('pending','running','waiting','exited')
+         ORDER BY a.task_id, a.attempt`,
       )
       .all()
       .map((row) => {

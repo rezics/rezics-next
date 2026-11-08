@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { defaultPolicy } from './policy.ts';
 export type ProcessIdentity = { pid: number; start: string; boot: string; group: number };
+export type ProcessEntryObserver = () => void;
 export type RunPidFilePresence = 'present' | 'absent' | 'unreadable';
 
 /** Presence of the launch PID file beside a run log; ENOENT is absence, any other stat failure is unreadable. */
@@ -143,10 +144,14 @@ export function sameProcess(identity: ProcessIdentity, procRoot = '/proc'): bool
   return matches(processIdentity(identity.pid, procRoot), identity);
 }
 /** A recorded process is live while its leader or a member of its detached group runs in the same incarnation. */
-export function identityLive(identity: ProcessIdentity, procRoot = '/proc'): boolean {
+export function identityLive(
+  identity: ProcessIdentity,
+  procRoot = '/proc',
+  observeEntry?: ProcessEntryObserver,
+): boolean {
   return (
     sameProcess(identity, procRoot) ||
-    groupMembers(identity.group, procRoot).some(
+    groupMembers(identity.group, procRoot, observeEntry).some(
       (member) => member.boot === identity.boot && BigInt(member.start) >= BigInt(identity.start),
     )
   );
@@ -181,11 +186,17 @@ export function hasLiveProcessUnder(directory: string, procRoot = '/proc'): bool
   return false;
 }
 /** Async, chunked counterpart for maintenance sweeps that must keep manager RPC and heartbeat turns responsive. */
-export async function hasLiveProcessUnderAsync(directory: string, procRoot = '/proc'): Promise<boolean | null> {
+export async function hasLiveProcessUnderAsync(
+  directory: string,
+  procRoot = '/proc',
+  observeEntry?: ProcessEntryObserver,
+): Promise<boolean | null> {
   const root = resolve(directory);
   let entries: string[];
   try {
-    entries = (await readdir(procRoot)).filter((name) => /^\d+$/.test(name));
+    const directoryEntries = await readdir(procRoot);
+    for (const _entry of directoryEntries) observeEntry?.();
+    entries = directoryEntries.filter((name) => /^\d+$/.test(name));
   } catch {
     return null;
   }
@@ -224,11 +235,19 @@ export async function hasLiveProcessUnderAsync(directory: string, procRoot = '/p
   }
   return unknown ? null : false;
 }
-export function groupMembers(group: number, procRoot = '/proc'): ProcessIdentity[] {
-  return readdirSync(procRoot)
-    .filter((name) => /^\d+$/.test(name))
-    .map((name) => inspectProcessIdentity(Number(name), procRoot))
-    .filter((p): p is ProcessIdentity => p !== null && p.group === group);
+export function groupMembers(
+  group: number,
+  procRoot = '/proc',
+  observeEntry?: ProcessEntryObserver,
+): ProcessIdentity[] {
+  const members: ProcessIdentity[] = [];
+  for (const name of readdirSync(procRoot)) {
+    observeEntry?.();
+    if (!/^\d+$/.test(name)) continue;
+    const identity = inspectProcessIdentity(Number(name), procRoot);
+    if (identity && identity.group === group) members.push(identity);
+  }
+  return members;
 }
 /** Signal zero inspects kernel group existence without delivering a signal to any member. */
 function processGroupIsAbsent(group: number): boolean {
@@ -257,8 +276,13 @@ export function isEmptyProcessGroupUnconfirmed(error: unknown, group: number): b
   return error instanceof Error && error.message === emptyGroupUnconfirmedMessage(group);
 }
 /** Zombies keep the group visible to signal zero after every live member has exited. */
-function incarnationHasZombies(identity: ProcessIdentity, procRoot = '/proc'): boolean {
+function incarnationHasZombies(
+  identity: ProcessIdentity,
+  procRoot = '/proc',
+  observeEntry?: ProcessEntryObserver,
+): boolean {
   for (const name of readdirSync(procRoot)) {
+    observeEntry?.();
     if (!/^\d+$/.test(name)) continue;
     let snapshot: ReturnType<typeof inspectProcessSnapshot>;
     try {
@@ -276,13 +300,13 @@ function incarnationHasZombies(identity: ProcessIdentity, procRoot = '/proc'): b
 }
 /** Verify custody before either signalling a group or declaring it terminal. */
 export const REUSED_PID_REFUSAL = 'process identity changed; refusing to signal reused PID';
-export function checkedProcessGroup(identity: ProcessIdentity): ProcessIdentity[] {
+export function checkedProcessGroup(identity: ProcessIdentity, observeEntry?: ProcessEntryObserver): ProcessIdentity[] {
   if (identity.group !== identity.pid || identity.group === inspectProcessIdentity(process.pid)?.group)
     throw new Error('worker must own a detached process group');
   // Dead leaders still carry a birth identity: a reused zombie must never authorize killing its children.
   const leader = inspectProcessSnapshot(identity.pid, '/proc');
   const current = leader?.identity ?? null;
-  const members = groupMembers(identity.group);
+  const members = groupMembers(identity.group, '/proc', observeEntry);
   if (current && !matches(current, identity)) {
     const reused = current.start !== identity.start || current.boot !== identity.boot;
     if (reused && !members.length && processGroupIsAbsent(identity.group)) return [];
@@ -291,7 +315,11 @@ export function checkedProcessGroup(identity: ProcessIdentity): ProcessIdentity[
   if (members.some((member) => member.boot !== identity.boot || BigInt(member.start) < BigInt(identity.start)))
     throw new Error('process group identity changed');
   if (!members.length && !processGroupIsAbsent(identity.group)) {
-    if ((leader?.dead && current && matches(current, identity)) || incarnationHasZombies(identity)) return [];
+    if (
+      (leader?.dead && current && matches(current, identity)) ||
+      incarnationHasZombies(identity, '/proc', observeEntry)
+    )
+      return [];
     throw new Error(emptyGroupUnconfirmedMessage(identity.group));
   }
   return members;
@@ -307,11 +335,12 @@ async function checkedProcessGroupAfterZombies(
   identity: ProcessIdentity,
   graceMs: number,
   policy: typeof defaultPolicy.process,
+  observeEntry?: ProcessEntryObserver,
 ): Promise<ProcessIdentity[]> {
   const deadline = Date.now() + Math.max(0, graceMs);
   for (;;) {
     try {
-      return checkedProcessGroup(identity);
+      return checkedProcessGroup(identity, observeEntry);
     } catch (error) {
       if (!noLiveMembersVisible(error)) throw error;
       const remaining = deadline - Date.now();
@@ -489,12 +518,13 @@ export async function terminateProcessGroup(
   identity: ProcessIdentity | null,
   graceMs: number,
   policy = defaultPolicy.process,
+  observeEntry?: ProcessEntryObserver,
 ): Promise<void> {
   if (!identity) return;
   // Signal zero answers for an absent group, zombies included, without scanning /proc. Maintenance reaps every recorded
   // attempt whose worktree is gone, and one /proc scan per attempt outgrew its 45-second budget on 2026-11-07.
   if (groupKnownAbsent(identity.group)) return;
-  const members = await checkedProcessGroupAfterZombies(identity, graceMs, policy);
+  const members = await checkedProcessGroupAfterZombies(identity, graceMs, policy, observeEntry);
   if (!members.length) return;
   for (const member of members) {
     await signalProcessIdentity(member, 'SIGTERM', policy);
@@ -511,7 +541,7 @@ export async function terminateProcessGroup(
   } finally {
     clearTimeout(timer);
   }
-  const remaining = await checkedProcessGroupAfterZombies(identity, graceMs, policy);
+  const remaining = await checkedProcessGroupAfterZombies(identity, graceMs, policy, observeEntry);
   for (const member of remaining) {
     if (member.boot !== identity.boot || BigInt(member.start) < BigInt(identity.start))
       throw new Error('process group identity changed');
@@ -519,7 +549,7 @@ export async function terminateProcessGroup(
   }
   await Promise.all(remaining.map((identity) => waitForProcess(identity, undefined, undefined, policy)));
   await gone;
-  if ((await checkedProcessGroupAfterZombies(identity, graceMs, policy)).length)
+  if ((await checkedProcessGroupAfterZombies(identity, graceMs, policy, observeEntry)).length)
     throw new Error('worker process group is still alive');
 }
 /**

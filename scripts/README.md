@@ -1087,6 +1087,13 @@ Increasing `slots` beyond slice capacity adds no usable capacity.
 Drain runs before reducing limits. Reprovision changed memory or CPU limits and update the matching JSON fields.
 To remove a host, delete its entry once its runs have drained. Do not stop other workers' checks.
 
+Compiler-input capture recognizes `bun run --cwd <workspace> typecheck` and fail-fast chains of those commands
+under `sh -c` or `bash -c` when the workspace manifests declare the supported owning scripts. The installed compiler's
+read-only config expansion supplies the program graph, including workspace dependencies, imports and owner-generator
+assets. Only unconsumed documents, tracked operational `.temp` artifacts and preparation-control files are omitted;
+imported fixtures, compiler configurations, SQL, source and installed dependency identities remain covered. Custom
+commands, undeclared generators and unknown content mappers retain the conservative inventory.
+
 The worker wrapper recognizes the fail-fast chain
 `bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck`
 under `sh -c` or `bash -c` with the installed owning scripts. It declares the existing `kernel-client-v1` output-tree

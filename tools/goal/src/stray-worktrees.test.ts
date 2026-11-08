@@ -2,14 +2,21 @@ import { spawn } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
+import { openDb } from './db.ts';
 import type { ManagerEvent } from './contracts.ts';
 import { WorkerJob } from './job.ts';
-import { harness } from './test-support.ts';
+import { harness, temporaryDirectory } from './test-support.ts';
+import { WorkerStore } from './store.ts';
 import { hasLiveProcessUnder } from './process.ts';
 import { git } from './tasks.ts';
 import { gitListsWorktree } from './task-workspace.ts';
 import { runWorkerCommand } from './worker-commands.ts';
-import { removeFinishedWorktree, strayWorktreeStatus, type LifetimeRuntime } from './worktree-lifetime.ts';
+import {
+  removeFinishedWorktree,
+  strayWorktreeStatus,
+  WORKTREE_SCAN_ENTRY_PAGE_SIZE,
+  type LifetimeRuntime,
+} from './worktree-lifetime.ts';
 
 function fake(overrides: Partial<LifetimeRuntime> = {}): LifetimeRuntime {
   return {
@@ -102,7 +109,8 @@ test('a sweep removes no-.git leftovers for finished, stopped and unknown tasks,
   });
   try {
     await waitUntil(() => child.pid !== undefined && hasLiveProcessUnder(occupied.worktree) === true);
-    await removeFinishedWorktree(h.settings, h.store, fake(), { strayKept: (path) => kept.push(path) });
+    for (let pass = 0; pass < 5; pass++)
+      await removeFinishedWorktree(h.settings, h.store, fake(), { strayKept: (path) => kept.push(path) });
     expect(existsSync(integrated.worktree)).toBe(false);
     expect(existsSync(stopped.worktree)).toBe(false);
     expect(existsSync(unknown)).toBe(false);
@@ -113,6 +121,66 @@ test('a sweep removes no-.git leftovers for finished, stopped and unknown tasks,
     child.kill();
     await new Promise<void>((resolve) => child.once('close', () => resolve()));
     h.dispose();
+  }
+}, 30_000);
+
+test('unknown root cleanup advances in bounded filesystem pages and resumes its cursor after store restart', async () => {
+  const directory = temporaryDirectory();
+  const mainCheckout = join(directory.path, 'main');
+  const stateDirectory = join(directory.path, 'state');
+  const worktreeRoot = join(directory.path, 'worktrees');
+  const procRoot = join(directory.path, 'proc');
+  mkdirSync(join(mainCheckout, '.temp/worktrees'), { recursive: true });
+  mkdirSync(stateDirectory, { recursive: true });
+  mkdirSync(worktreeRoot, { recursive: true });
+  mkdirSync(join(procRoot, '1'), { recursive: true });
+  mkdirSync(join(procRoot, 'sys'), { recursive: true });
+  const paths = Array.from({ length: 100 }, (_, index) => join(worktreeRoot, `unknown-${String(index).padStart(3, '0')}`));
+  for (const path of paths) {
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, 'payload'), 'unregistered owned remnant');
+  }
+  const settings = { stateDirectory, mainCheckout, worktreeRoot } as import('./types.ts').Settings;
+  const databasePath = join(stateDirectory, 'goal.sqlite');
+  let store = new WorkerStore(openDb(databasePath));
+  const initialRuntime: LifetimeRuntime = {
+    pressure: () => null,
+    sleep: async () => {},
+    command: () => {},
+    procRoot,
+    observe: () => {},
+  };
+  try {
+    const initial: Record<string, number> = {};
+    await removeFinishedWorktree(settings, store, {
+      ...initialRuntime,
+      observe: (unit) => {
+        initial[unit] = (initial[unit] ?? 0) + 1;
+      },
+    });
+    expect(initial['worktree-root-entry']).toBe(WORKTREE_SCAN_ENTRY_PAGE_SIZE);
+    expect(paths.every(existsSync)).toBe(true);
+
+    store.db.close();
+    store = new WorkerStore(openDb(databasePath));
+    let complete = false;
+    for (let pass = 0; pass < 30; pass++) {
+      const units: Record<string, number> = {};
+      await removeFinishedWorktree(settings, store, {
+        ...initialRuntime,
+        observe: (unit) => {
+          units[unit] = (units[unit] ?? 0) + 1;
+        },
+      });
+      expect(units['worktree-root-entry'] ?? 0).toBeLessThanOrEqual(WORKTREE_SCAN_ENTRY_PAGE_SIZE);
+      expect(units['worktree-tree-expansion'] ?? 0).toBeLessThanOrEqual(16);
+      complete = paths.every((path) => !existsSync(path)) && !store.hasPendingStrayWorktrees() && store.worktreeScanComplete();
+      if (complete) break;
+    }
+    expect(complete).toBe(true);
+  } finally {
+    store.db.close();
+    directory.close();
   }
 }, 30_000);
 

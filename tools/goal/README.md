@@ -1291,7 +1291,7 @@ these database operations, not every optional proof-reader, filesystem or proces
 | Operation / anchors                                                                                         | Derived examined work and expansion                                                                                                                                                                                                                                                                               | Exact owning check                                                                                                                                                                                              |
 | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `activeTasks` / five task-state ranges                                                                      | Five seeks plus A entries/bodies; sequence sorting at most A log A, decoding at most A bodies per snapshot.                                                                                                                                                                                                       | `host-db-reads.test.ts`: `host sweep decodes only active tasks and attempts from a large settled history`                                                                                                       |
-| `activeAttempts` / four attempt-state ranges                                                                | Four seeks plus B entries/bodies; key sorting at most B log B, decoding at most B bodies per snapshot.                                                                                                                                                                                                            | Same host-sweep check; `empty active sets stay bounded across settled histories and repeated sweeps`                                                                                                            |
+| `activeAttempts` / five active task-state ranges plus current-attempt primary keys                           | Five task-state seeks plus one current-attempt key probe per active task, then B process-bearing entries/bodies; key sorting at most B log B and decoding at most B bodies per snapshot. Settled task/attempt history is not revisited.                                                                              | Same host-sweep check; `empty active sets stay bounded across settled histories and repeated sweeps`                                                                                                            |
 | Per-attempt events / `(task_id, attempt, sequence)`                                                         | One full-prefix seek plus E events. The backlog latest-activity SQL walks the same prefix backwards with `LIMIT 1`, returning at most one event; neither visits unrelated task/attempt histories.                                                                                                                 | Host-sweep check executes `store.events` and the exact latest-activity SQL from `backlog.ts`; orphan growth check executes recovery's event read.                                                               |
 | Snapshot reuse / connection `data_version`, task id, attempt key                                            | One version read per access; cached keyed body reads avoid SQL body fetches, while active-list SQL still returns active bodies. External commits clear both caches; subsequent reads re-decode only selected bodies. Own writes invalidate through the existing store path.                                       | `host-db-reads.test.ts`: `repeated store reads reuse the decoded snapshot and external writes invalidate it`                                                                                                    |
 | Command/host orphan recovery / running or held task states, current-attempt primary key, per-attempt events | State seeks plus C task/attempt probes, then selected E events and at most one lease per surviving candidate per sweep. Reconciled terminal tasks leave this range; replay acquires no replacement lease and enqueues no duplicate landing. Other active task recovery remains proportional to its active ranges. | `orphan-sweep-growth.test.ts`: `command and host sweeps read and lease a constant live candidate set as settled history grows`; `the next command settles an exited attempt that remains current and unsettled` |
@@ -1310,24 +1310,52 @@ active-work axis and cannot be counted as unrelated settled history.
 
 `test-support/sqlite-work.ts` builds a fixture-only extension under `.temp` using `cc` and SQLite development headers.
 Through the hosting engine's extension API it reads [SQLite statement counters](https://sqlite.org/c3ref/stmt_status.html)
-on the actual Bun statements: native runs, VM instructions, full-table-scan steps and sorts. Each mapped read
-execution must run once, use 1–1000 VM instructions and zero full-table-scan steps at these fixed live sizes;
-active lists may sort their bounded result. Nonempty host and orphan candidate/event captures also compare exactly
-across scales. This fixture ceiling follows fixed state probes and at most five body/event expansions; it is not a
-production limit on active tasks or selected event history. VM instructions measure executed engine work, not
-examined index rows or physical B-tree page visits. Index-row counters are unavailable through this extension API
-and are reported as null, never replaced by decoded bytes, returned rows or EQP. Entire observed read traces,
-source revision, engine version/source and operation labels are printed as raw diagnostics; the orphan assertions select only the
-mapped candidate/event operations. Compiler/extension failures fail the group rather than skipping native evidence.
-The implementation follows [Bun's extension API](https://bun.com/docs/runtime/sqlite#loadextension) and
-[SQLite's extension contract](https://sqlite.org/loadext.html). Successful revision-bound acceptance remains the
-shared runner's responsibility; adding this mapping does not claim that acceptance has run.
+on actual Bun statements: native runs, VM instructions, full-table-scan steps and sorts. VM instructions measure
+executed engine work, not examined index rows or physical B-tree page visits. Index-row counters are unavailable
+through this extension API and are reported as null, never replaced by decoded bytes, returned rows or EQP. The
+fixture prints the source revision, SQLite engine version/source, operation labels and raw statement diagnostics;
+compiler or extension failures fail the group instead of skipping native evidence. The implementation follows
+[Bun's extension API](https://bun.com/docs/runtime/sqlite#loadextension) and
+[SQLite's extension contract](https://sqlite.org/loadext.html).
 
-The raw host-mode trace also exposes existing work outside the mapped candidate/event reads: a
-`SELECT id, body FROM worker_tasks ORDER BY sequence` scan and one `worker_worktree_cleanup` lookup per settled
-task. At 100/1000/5000 settled tasks that scan executes 513/5013/25013 VM instructions and 100/1000/5000 fullscan
-steps. This is an outstanding Delivery-owned host maintenance bound, not constant-work evidence for the complete
-host sweep; the two-file group retains those diagnostics without changing runtime reconciliation ownership.
+#### Cost: host reaping and finished-worktree cleanup
+
+For one `reap` maintenance pass, let T be task history, R attempt history, H event history, P the number of
+process-directory entries examined by one `/proc` enumeration, D the number of path components in an owned
+worktree path, F the depth of a recorded permission-failure path, and X the entries in an owned tree selected for
+deletion. The durable task and attempt
+backfills each examine at most 32 rows per pass using their primary-key sequence; the migration creates indexes
+only on new empty maintenance tables, so it does not build an index by scanning settled attempt history. Task
+selection admits at most 16 task bodies and process selection admits at most 16 recorded identities. Task
+inserts/updates and process-bearing attempt inserts/updates
+refresh their tickets transactionally, so late state changes cannot be lost behind a bootstrap cursor. Conditional
+ticket deletion cannot erase a newer writer's ticket; rotation continues past an unchanged blocked task or live
+process. Bootstrap work is O(T/32 + R/32) passes once; each attempt page admits only rows carrying a process
+identity to the reap queue, and H is not read.
+
+| Pass work / anchor | Derived bound | Measured units and native check |
+| --- | --- | --- |
+| Bootstrap / task sequence and attempt primary key | At most 32 task rows plus 32 attempt rows examined; only process-bearing attempts are admitted to the reap queue. Each path entry is backfilled once, with later changes trigger-enqueued. | `maintenance-backfill-task-row`, `maintenance-backfill-attempt-row`; `host-db-reads.test.ts` and `store.test.ts` restart/backfill cases. |
+| Candidate expansion / durable ticket pages | At most 16 task bodies and 16 process identities; each task checks at most two ownership chains of D components, plus a prior or newly recorded failure path of F components when applicable. At most one task worktree is physically unregistered per pass. | `candidate-path-stat`, `permission-path-component`; full trace in `orphan-sweep-growth.test.ts`. |
+| Unregistered-directory discovery / root and `modules` generation monitors | At most 16 monitor anchors and 64 directory entries per pass. Each discovered ordinary child uses one task-path index probe and `.git` path stat; a nested `modules` child becomes a separate durable scan cursor. The saved entry offset survives restart; reopening replays at most 64 entries per pass until the saved offset is reached. | `worktree-root-stat`, `worktree-root-entry`, `candidate-path-stat`; restart and 100-directory backlog in `stray-worktrees.test.ts`. |
+| Stray candidate expansion / durable ticket page | At most 16 candidates; each receives at most two path-identity checks and two process-cwd enumerations before deletion. A selected tree is expanded only when deletion is admitted; its filesystem work is proportional to X actual entries. | `process-cwd-enumeration`, `process-directory-entry`, `worktree-tree-expansion`, `worktree-tree-entry`; the three-scale stray trace in `orphan-sweep-growth.test.ts`. |
+| Process-group custody / selected process candidates | At most 16 candidates; while a worktree exists, its process ticket remains queued. After it disappears, existing identity/group checks enumerate actual P entries per check; the existing exit-poll retry policy bounds empty-group checks, and SIGTERM retains its one-second window before escalation. | `process-directory-entry`, `process-group-termination`; host trace in `orphan-sweep-growth.test.ts`. |
+| Retry and deferred cleanup | I/O pressure waits at most 30 one-second retries for the pass; unchanged permission failures retain their path-generation ticket and do not retry until remediation changes the generation. Git registration prune is coalesced after task tickets and dispositions drain. | Existing blocked-first, pressure, permission-remediation and late-settlement cases in `worktree-lifetime.test.ts`, `maintenance.test.ts` and `store.test.ts`. |
+
+The native maintenance fixtures independently scale T, R and H through 100, 1,000 and 5,000 while holding the
+eligible worktree/process neighbourhood fixed. They assert the complete executed SQLite trace, not only selected
+candidate reads: every statement runs once, uses at most 2,000 VM instructions, and has zero fullscan steps and
+zero sorts; the complete trace is identical at each scale. The cases include an eligible cleanup, an unregistered
+stray, a 5,000-ticket drain, repeated empty selection, restart, blocked-first independent progress, late process
+settlement, state change and permission remediation. Filesystem/process counters report actual entries examined,
+not the number returned by a short candidate query. The report leaves indexed row visits unavailable and names
+process enumeration P and tree expansion X as input-sized native axes; no fixed claim is made about host process
+count or the size of an owned tree. `worktree-tree-entry` counts the explicit asynchronous ownership walk;
+per-entry work performed internally by Git's worktree removal and Node's recursive removal APIs is unavailable
+through the exposed counters, so those native traversals are not claimed as measured. The earlier raw orphan-recovery check continues to compare its captured
+candidate/event query subset. The complete maintenance trace is captured and compared separately by the host
+maintenance tests. Revision-bound integrated acceptance is still the controller's responsibility and remains open
+until the landing runs it on the integrated source.
 
 | Environment variable      | Override                                                        |
 | ------------------------- | --------------------------------------------------------------- |

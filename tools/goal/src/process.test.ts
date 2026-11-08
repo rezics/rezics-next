@@ -290,7 +290,7 @@ test('terminateProcessGroup waits until a memberless kernel group becomes absent
     killSpy.mockRestore();
   }
 });
-test('terminateProcessGroup refuses a kernel-visible group with no inspectable incarnation after the grace', async () => {
+test('terminateProcessGroup retires a kernel-visible group with no inspectable incarnation after the grace', async () => {
   const identity = { pid: 2_000_000_002, group: 2_000_000_002, start: '0', boot: 'fixture-boot' };
   const kill = process.kill.bind(process);
   const killSpy = spyOn(process, 'kill').mockImplementation((pid, signal) => {
@@ -298,7 +298,9 @@ test('terminateProcessGroup refuses a kernel-visible group with no inspectable i
     return kill(pid, signal);
   });
   try {
-    await expect(terminateProcessGroup(identity, 80)).rejects.toThrow('visibility unknown');
+    const started = performance.now();
+    await expect(terminateProcessGroup(identity, 80)).resolves.toBeUndefined();
+    expect(performance.now() - started).toBeGreaterThanOrEqual(80);
   } finally {
     killSpy.mockRestore();
   }

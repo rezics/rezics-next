@@ -1,6 +1,11 @@
 import { expect, test } from 'bun:test';
-import { openDb } from './db.ts';
-import { WorkerStore } from './store.ts';
+import { openDb, migrate } from './db.ts';
+import {
+  MAINTENANCE_BOOTSTRAP_PAGE_SIZE,
+  WorkerStore,
+  workerMigrations,
+} from './store.ts';
+import { temporaryDirectory } from './test-support.ts';
 
 test('task history pages decode only selected rows and return a stable continuation', () => {
   const db = openDb(':memory:');
@@ -43,5 +48,88 @@ test('task history pages decode only selected rows and return a stable continuat
     expect(store.recordsPage('missing', { limit: 1 })).toEqual({ items: [], hasMore: false });
   } finally {
     db.close();
+  }
+});
+
+test('maintenance backfill resumes after restart and concurrent task writes keep their ticket', () => {
+  const directory = temporaryDirectory();
+  const path = `${directory.path}/goal.sqlite`;
+  let db = openDb(path);
+  let store: WorkerStore;
+  const count = MAINTENANCE_BOOTSTRAP_PAGE_SIZE * 2 + 5;
+  try {
+    migrate(db, workerMigrations.filter((migration) => !(migration.module === 'worker' && migration.version === 14)));
+    let insertTask = db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, 1, ?)');
+    let insertAttempt = db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)');
+    for (let sequence = 1; sequence <= count; sequence++) {
+      const id = `old-${String(sequence).padStart(3, '0')}`;
+      insertTask.run(
+        id,
+        sequence,
+        JSON.stringify({ id, state: 'integrated', worktree: `/missing/${id}`, currentAttempt: 1, brief: { after: [] } }),
+      );
+      insertAttempt.run(
+        id,
+        JSON.stringify({
+          taskId: id,
+          attempt: 1,
+          state: 'superseded',
+          process: sequence <= 10 ? { pid: sequence + 1000, start: `${sequence}`, boot: 'old', group: sequence + 1000 } : null,
+        }),
+      );
+    }
+
+    store = new WorkerStore(db);
+    insertTask = db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, 1, ?)');
+    insertAttempt = db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)');
+    expect(store.bootstrapMaintenanceTasks(16)).toEqual({ examined: 16, complete: false });
+    expect(store.bootstrapMaintenanceProcesses(8)).toEqual({ examined: 8, complete: false });
+
+    // Task and process changes after migration are queued atomically by SQLite triggers.
+    insertTask.run(
+      'late',
+      count + 1,
+      JSON.stringify({ id: 'late', state: 'running', worktree: '/missing/late', currentAttempt: 1, brief: { after: [] } }),
+    );
+    insertAttempt.run(
+      'late',
+      JSON.stringify({ taskId: 'late', attempt: 1, state: 'running', process: null }),
+    );
+    db.query('UPDATE worker_attempts SET body=? WHERE task_id=? AND attempt=1').run(
+      JSON.stringify({
+        taskId: 'late',
+        attempt: 1,
+        state: 'exited',
+        process: { pid: 4321, start: 'late-start', boot: 'late-boot', group: 4321 },
+      }),
+      'late',
+    );
+
+    const first = store.worktreeMaintenanceCandidates(1)[0]!;
+    db.query("UPDATE worker_tasks SET body=json_set(body, '$.state', 'running') WHERE id=?").run(first.taskId);
+    store.completeMaintenanceCandidates([first]);
+    db.close();
+
+    db = openDb(path);
+    store = new WorkerStore(db);
+    expect(store.bootstrapMaintenanceTasks(16)).toEqual({ examined: 16, complete: false });
+    let processPage = store.bootstrapMaintenanceProcesses(8);
+    expect(processPage).toEqual({ examined: 8, complete: false });
+    while (!processPage.complete) processPage = store.bootstrapMaintenanceProcesses(8);
+    expect(processPage).toEqual({ examined: 5, complete: true });
+    const refreshed = store.worktreeMaintenanceCandidates(count + 1).find((candidate) => candidate.taskId === first.taskId);
+    expect(refreshed?.task.state).toBe('running');
+    expect(refreshed?.ticket).toBeGreaterThan(first.ticket);
+
+    const lateProcess = store.reapMaintenanceCandidates(count + 1).find((candidate) => candidate.taskId === 'late');
+    expect(lateProcess?.process).toEqual({ pid: 4321, start: 'late-start', boot: 'late-boot', group: 4321 });
+    db.query('UPDATE worker_attempts SET body=? WHERE task_id=? AND attempt=1').run(
+      JSON.stringify({ taskId: 'late', attempt: 1, state: 'exited', process: null }),
+      'late',
+    );
+    expect(store.reapMaintenanceCandidates(count + 1).some((candidate) => candidate.taskId === 'late')).toBe(false);
+  } finally {
+    db.close();
+    directory.close();
   }
 });

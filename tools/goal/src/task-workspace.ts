@@ -416,7 +416,7 @@ export function makeOwnedTreeWritable(path: string): number {
 }
 
 /** Async cleanup walk for the manager host; keeps descriptor and inode checks while yielding between entries. */
-export async function makeOwnedTreeWritableAsync(path: string): Promise<number> {
+export async function makeOwnedTreeWritableAsync(path: string, observeEntry?: () => void): Promise<number> {
   const root = resolve(path);
   const rootIdentity = await lstatAsync(root);
   if (rootIdentity.isSymbolicLink() || !rootIdentity.isDirectory())
@@ -427,6 +427,7 @@ export async function makeOwnedTreeWritableAsync(path: string): Promise<number> 
     const stat = await fd.stat();
     if ((stat.mode & 0o700) !== 0o700) await fd.chmod((stat.mode & 0o7777) | 0o700);
     for (const name of await readdirAsync(descriptorPath(fd.fd))) {
+      observeEntry?.();
       if (++visited % OWNED_TREE_ASYNC_YIELD_ENTRIES === 0)
         await new Promise<void>((resolveYield) => setImmediate(resolveYield));
       const child = join(descriptorPath(fd.fd), name);
@@ -477,8 +478,8 @@ export function removeOwnedTree(path: string): number {
 }
 
 /** Async counterpart used by host cleanup so a large worktree cannot block manager RPC or heartbeat turns. */
-export async function removeOwnedTreeAsync(path: string): Promise<number> {
-  const bytes = await makeOwnedTreeWritableAsync(path);
+export async function removeOwnedTreeAsync(path: string, observeEntry?: () => void): Promise<number> {
+  const bytes = await makeOwnedTreeWritableAsync(path, observeEntry);
   await rmAsync(path, { recursive: true, force: true });
   try {
     await lstatAsync(path);
