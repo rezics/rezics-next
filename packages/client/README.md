@@ -56,7 +56,9 @@ Decision: `GET /v1/accounts/{accountId}/verification` (`account.read_verificatio
 `{ verificationRequest, viewerActions }`. e9314e51 publishes that generated closure; this Settings consumer
 decodes the extra JSON field strictly and does not hand-edit declarations or emit a second client.
 
-Decision: the preparation read uses a local `KernelClient` type seam over the generated publication path until its generated route declaration is installed; the DTO remains defined in `src/kernel/community/publication-preparation.ts`.
+Decision: `RealmPublicationPreparation` and `PublicationCommand` alias the generated preparation schema emitted
+from the Kernel owner. The installed `realms({realmId}).publications({subjectId}).preparation.get` method is present
+in the generated route tree, and Web derives its reader contract from that callable directly.
 
 Decision: client assertions follow [Content's authoring contract](../../services/kernel/src/content/README.md):
 post creation accepts protected visibility; revisions accept only published or draft visibility.

@@ -6,11 +6,20 @@ type PublicationPath = ReturnType<RealmPath['publications']>;
 type PreparationRead = Awaited<ReturnType<PublicationPath['preparation']['get']>>;
 
 const preparation: RealmPublicationPreparation = {
-  realm: { realmId: 'realm-1', spaceId: 'space-1', contextId: 'context-1', title: 'Realm', hostTitle: 'Space' },
+  realm: {
+    realmId: 'realm-1',
+    spaceId: 'space-1',
+    contextId: 'context-1',
+    title: { state: 'available', value: 'Realm' },
+    hostTitle: { state: 'available', value: 'Space' },
+  },
   subject: {
     originalId: 'subject-1',
     currentId: 'subject-2',
-    presentation: { label: { state: 'unavailable' }, cover: { state: 'unavailable' } },
+    presentation: {
+      original: { label: { state: 'unavailable' }, cover: { state: 'unavailable' } },
+      terminal: { label: { state: 'unavailable' }, cover: { state: 'unavailable' } },
+    },
   },
   current: { publicationId: 'publication-1', verdict: 'withdraw', decidedAt: '2026-11-04T00:00:00Z' },
   commands: {
