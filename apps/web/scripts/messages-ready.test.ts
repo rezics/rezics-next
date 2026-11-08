@@ -18,13 +18,14 @@ function makeApp(): { directory: string; cleanup: () => void; calls: string; out
   const output = join(directory, 'src/paraglide/messages.js');
   const calls = join(directory, 'generate-calls.log');
   mkdirSync(messages, { recursive: true });
-  writeFileSync(join(directory, 'package.json'), JSON.stringify({ scripts: { generate: 'bun generate.ts' } }));
+  mkdirSync(join(directory, 'scripts'), { recursive: true });
   writeFileSync(
-    join(directory, 'generate.ts'),
+    join(directory, 'scripts/generate.ts'),
     `import { appendFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';\n` +
       `import { join } from 'node:path';\n` +
       `const root = process.cwd();\n` +
       `appendFileSync(join(root, 'generate-calls.log'), 'generate\\n');\n` +
+      `writeFileSync(join(root, 'generate-executable'), process.execPath);\n` +
       `if ((await import('node:fs')).existsSync(join(root, 'fail-generation'))) process.exit(37);\n` +
       `mkdirSync(join(root, 'src/paraglide/messages'), { recursive: true });\n` +
       `writeFileSync(join(root, 'src/paraglide/messages.js'), 'export const m = { access_account() { return "Account"; } };\\n');\n` +
@@ -75,14 +76,16 @@ async function waitForFile(path: string): Promise<void> {
 
 test('missing Paraglide messages are generated once before bun test runs', async () => {
   const app = makeApp();
+  const missingBunPath = { ...process.env, PATH: '' };
   try {
     writeFileSync(join(app.messages, 'en.json'), '{}');
 
-    expect(await ensureMessagesReady(app.directory)).toBe(0);
+    expect(await ensureMessagesReady(app.directory, missingBunPath)).toBe(0);
     expect(existsSync(app.output)).toBe(true);
     expect(recordCalls(app.calls)).toEqual(['generate']);
+    expect(readFileSync(join(app.directory, 'generate-executable'), 'utf8')).toBe(process.execPath);
 
-    expect(await ensureMessagesReady(app.directory)).toBe(0);
+    expect(await ensureMessagesReady(app.directory, missingBunPath)).toBe(0);
     expect(recordCalls(app.calls)).toEqual(['generate']);
   } finally {
     app.cleanup();
@@ -159,7 +162,7 @@ test('canceling message preparation settles the generator process group before r
   let preparation: Promise<number> | undefined;
   try {
     writeFileSync(
-      join(app.directory, 'generate.ts'),
+      join(app.directory, 'scripts/generate.ts'),
       `import { spawn } from 'node:child_process';\n` +
         `import { writeFileSync } from 'node:fs';\n` +
         `const descendant = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'], { stdio: 'ignore' });\n` +
@@ -167,7 +170,7 @@ test('canceling message preparation settles the generator process group before r
         `process.on('SIGTERM', () => {});\n` +
         `setInterval(() => {}, 1000);\n`,
     );
-    preparation = ensureMessagesReady(app.directory, process.env, { signal: abort.signal });
+    preparation = ensureMessagesReady(app.directory, { ...process.env, PATH: '' }, { signal: abort.signal });
     await waitForFile(descendantPidFile);
     const descendantPid = Number(readFileSync(descendantPidFile, 'utf8'));
 

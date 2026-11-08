@@ -64,6 +64,20 @@ validated; matching strings or constructor identity alone never become registrat
 from the implemented `SubjectSourceKeyPages.read` native inventory. The admitted support bridge consumes the
 installed Source factory directly and does not consume the rebuild interface. Missing fixed-cut or foreign owner operations remain explicitly unavailable.
 
+Retained preparation advances up to 16 contiguous Account homes per call. Search passes the native producer its
+current remaining input allowance after reserving 128 inputs for capture handoff and persistence; Semantic further
+caps the batch by that allowance and a conservative estimate of 96 fixed inputs plus the compiler-key closure per
+home. It does not force an unaffordable home into the batch. The immutable definition and Search registration are
+read once per call. Retained cursor reads remain bounded per call rather than multiplying for every home.
+Every home still has its own Access enrollment receipt, independently verified baseline adoption, and Source cursor
+CAS. Access contention resumes the same bootstrap at its durable cursor. Failed or incomplete enrollment never
+advances a home as empty. Native accounting declares the exact number of dependency-key rows admitted by Access's
+array insert. Search charges preparation dependency/row points against those actual input keys before candidates
+exist, while preserving its global 1,000-key, 4 MiB, deadline and native-point limits. The retained-receipt fixture
+rotates `core.partition` and `access.live_copy_domain` together in one controlled owner-migration transaction and
+restores both before the distinct fence and content-mutation checks; epoch, fencing, and changed-source
+invalidation remain separate evidence.
+
 ### Admitted-job support bridge
 
 `identity-source-support.ts:createIdentitySourceSupportReader` consumes those exact definitions and existing
@@ -780,6 +794,22 @@ settlement, checking native owner, retained pin, baseline receipt and current or
 heads around the staged foreign work. A changed owner, security witness, tuple or incomplete seal remains
 unavailable. No native connection remains held across the foreign phases.
 
+Decision: new retained steps batch up to `min(input_limit,128)` contiguous empty Semantic homes, Account-key homes,
+or creation windows. A scan stops at the first raw Subject/Account key or the first home with a captured outbox
+interval; that item follows the existing owner advancement, projection or event path. The immutable step stores the
+ordered rows' digest and exact input limit, so replay recomputes the same owner/key/window prefix. Empty creation
+windows also store packed `(epoch,base,receipt)` tuples. Independent `verified_home` metadata indexes their range
+start; settlement resolves the acknowledged home from that retained range and re-reads its current window before
+and after Search settlement. The source receipt protocol remains 1: older steps without these optional fields keep
+their original one-home replay. Empty-home batching grants neither ownership nor completion; LOCAL/FOREIGN work,
+current ownership, the original cut and terminal proof remain independent obligations. Native SQL
+`jsonb_to_recordset` bindings pass arrays directly to Reylo: account enrollment, retained projection heads and
+coverage-pending subjects must remain JSON arrays at the database boundary; pre-stringifying turns them into JSON
+scalars during parameter encoding. Projection replay rows use the root bootstrap namespace while retaining the
+subject's global route, so replay must accept a subject from any home rather than require it to match partition 0.
+Preparation retries reuse the immutable definition already loaded from the retained cut, while reloading the cut row
+and revalidating the live Search registration and original account-home receipt before advancing.
+
 The original repair pages now retain independently verified prefix metadata in
 `semantic.public_filter_repair_step`. `readRepairStep` replays each actual native
 key, advancement, projection, Account tuple or creation-event successor before
@@ -791,8 +821,9 @@ Recovery can verify one older original
 page per funded repair invocation. The empty terminal successor binds this same
 prefix and its exact definition, queried observation, covered/start and execution;
 it does not call the served-population reader. This closes captured page replay,
-not current population eligibility. The same original pages now retain an indexed `verified_home` only
-when independent replay closes that exact captured window. The complete terminal retains an `ack_after`
+not current population eligibility. An independently replayed empty-window batch stores its first home in the
+indexed `verified_home`; its immutable step state retains the contiguous range. Individual bridge steps store their
+single closed home in the same index. The complete terminal retains an `ack_after`
 frontier; it advances one home only after the real registration-home ACK has committed and Source has
 adopted that native receipt. Crash recovery repeats that same home, never a newer baseline.
 

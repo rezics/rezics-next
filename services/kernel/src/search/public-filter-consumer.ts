@@ -57,6 +57,13 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+// Source receipts bind this request size. Keep it stable across Search replay,
+// with enough remaining input allowance for producer and independent replay reads.
+const PUBLIC_FILTER_REPAIR_INPUT_LIMIT = 64;
+const PUBLIC_FILTER_REPAIR_INPUT_RESERVE = 768;
+const PUBLIC_FILTER_PREPARATION_INPUT_LIMIT = 1000;
+const PUBLIC_FILTER_PREPARATION_INPUT_RESERVE = 128;
+
 function freeze<T>(value: T): T {
   if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
     for (const child of Object.values(value)) freeze(child);
@@ -812,6 +819,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   };
   function meter(context: PublicFilterConsumerContext, maintenance = false) {
     const cost: ConsumerMeter = emptyConsumerCost();
+    let preparationInputKeys = 0;
     const add = (next: PublicFilterCost) => {
       for (const key of Object.keys(cost) as (keyof ConsumerMeter)[]) {
         const value = Reflect.get(next, key) ?? 0;
@@ -822,7 +830,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const check = () => {
       if (!Number.isSafeInteger(context.deadline) || context.deadline <= Date.now())
         throw new ConsumerFailure('deadline');
-      const inputs = maintenance ? cost.inputKeys : cost.candidates;
+      const inputs = Math.max(maintenance ? cost.inputKeys : cost.candidates, preparationInputKeys);
       if (
         cost.inputKeys > 1000 ||
         cost.accessPoints + cost.dependencyPoints > 16 + 8 * Math.max(inputs, 1) ||
@@ -872,6 +880,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     });
     const take = <T extends { cost: PublicFilterCost }>(result: T): T => {
       add(result.cost);
+      check();
+      return result;
+    };
+    const takePreparation = <T extends { cost: PublicFilterCost }>(result: T): T => {
+      add(result.cost);
+      preparationInputKeys += result.cost.inputKeys;
       check();
       return result;
     };
@@ -953,7 +967,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         return typeof value === 'function' ? value.bind(db) : value;
       },
     });
-    return { cost, add, check, sql, unavailable, take, native, pool };
+    return { cost, add, check, sql, unavailable, take, takePreparation, native, pool };
   }
   type Meter = ReturnType<typeof meter>;
   type Page = {
@@ -1576,9 +1590,19 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       job: `${work.registration.partition}:bootstrap:${encodeURIComponent(work.bootstrap.id)}`,
     };
     if (recovery.status === 'pending') {
-      const native = await advanceNativePublicFilterPreparation(binding, { bootstrap: work.bootstrap.id }, context);
+      const native = await advanceNativePublicFilterPreparation(
+        binding,
+        {
+          bootstrap: work.bootstrap.id,
+          inputLimit: Math.max(
+            0,
+            PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
+          ),
+        },
+        context,
+      );
       if (native === null) return m.unavailable('source_pending');
-      const advanced = m.take(native);
+      const advanced = m.takePreparation(native);
       if (advanced.status !== 'begun' && advanced.status !== 'preparing') return m.unavailable('source_pending');
       if (!isDeepStrictEqual(retainedBootstrap(advanced.bootstrap), work.bootstrap))
         return m.unavailable('observation_lost');
@@ -1818,8 +1842,18 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         consumer: registered.consumer,
         snapshot,
       };
-      const native = await advanceNativePublicFilterPreparation(binding, preparation, context);
-      const begun = m.take(native ?? (await binding.begin(preparation, context)));
+      const native = await advanceNativePublicFilterPreparation(
+        binding,
+        {
+          ...preparation,
+          inputLimit: Math.max(
+            0,
+            PUBLIC_FILTER_PREPARATION_INPUT_LIMIT - m.cost.inputKeys - PUBLIC_FILTER_PREPARATION_INPUT_RESERVE,
+          ),
+        },
+        context,
+      );
+      const begun = m.takePreparation(native ?? (await binding.begin(preparation, context)));
       if (begun.status !== 'begun' && begun.status !== 'preparing') return m.unavailable('source_pending');
       if (
         !isDeepStrictEqual(begun.bootstrap.definition, resolved.definition) ||
@@ -2203,6 +2237,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           m.check();
         };
         if (!page) {
+          m.check();
+          if (1000 - m.cost.inputKeys < PUBLIC_FILTER_REPAIR_INPUT_RESERVE) return m.unavailable('source_pending');
           const sourcePage = m.take(
             await binding.repairPage(
               {
@@ -2210,7 +2246,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
                 queried: q,
                 execution: work.execution,
                 frontier: state.frontier,
-                inputLimit: Math.min(256, Math.max(1, 1000 - m.cost.inputKeys)),
+                inputLimit: PUBLIC_FILTER_REPAIR_INPUT_LIMIT,
               },
               context,
             ),
