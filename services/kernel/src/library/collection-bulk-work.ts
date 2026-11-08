@@ -11,6 +11,7 @@ import { readMembershipWorkConfig } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Access } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { enqueueAndDiscardHandle } from './collection-bulk-enqueue.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
@@ -481,14 +482,16 @@ export async function registerCollectionBulkWork(context: WorkContext) {
     ...COMMAND_STEP_RETRIES,
   });
   const enqueue = async (input: CollectionBulkInput & { segment: number }) =>
-    client.enqueue(
-      {
-        workflowName: COLLECTION_BULK_WORKFLOW,
-        workflowID: `library.collectionBulk:${input.operationId}:${input.segment}`,
-        workflowIDReusePolicy: 'return-existing',
-        queueName: 'workflows',
-      },
-      input,
+    enqueueAndDiscardHandle(() =>
+      client.enqueue(
+        {
+          workflowName: COLLECTION_BULK_WORKFLOW,
+          workflowID: `library.collectionBulk:${input.operationId}:${input.segment}`,
+          workflowIDReusePolicy: 'return-existing',
+          queueName: 'workflows',
+        },
+        input,
+      ),
     );
   const continuation = DBOS.registerStep(enqueue, { name: 'library.collectionBulk.continue', ...COMMAND_STEP_RETRIES });
   DBOS.registerWorkflow(
@@ -515,14 +518,16 @@ export async function registerCollectionBulkWork(context: WorkContext) {
   type Sweep = { root: string; route: number; segment: number };
   const continueSweep = DBOS.registerStep(
     async (input: Sweep) =>
-      client.enqueue(
-        {
-          workflowName: 'library.collectionBulkExpirySegment',
-          workflowID: `${input.root}:bulk-expiry:${input.segment}`,
-          workflowIDReusePolicy: 'return-existing',
-          queueName: 'maintenance',
-        },
-        input,
+      enqueueAndDiscardHandle(() =>
+        client.enqueue(
+          {
+            workflowName: 'library.collectionBulkExpirySegment',
+            workflowID: `${input.root}:bulk-expiry:${input.segment}`,
+            workflowIDReusePolicy: 'return-existing',
+            queueName: 'maintenance',
+          },
+          input,
+        ),
       ),
     { name: 'library.collectionBulk.expiryContinue', ...COMMAND_STEP_RETRIES },
   );
