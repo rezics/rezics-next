@@ -942,7 +942,11 @@ from each run's checkout.
 Set `REMOTE_CHECK_PRIORITY=landing` for a landing check to wait ahead of multi-slot and ordinary runs, while gates keep first priority.
 `.temp/goal/task-priority` is the control plane's per-worktree priority file (`critical` or `normal`), read at every worker check; the per-run record makes any other use visible.
 The `rsync` line also includes the bytes sent from rsync statistics, the uploaded file count and the transfer mode.
-If zstd is unavailable, the run reports that it uses rsync's default compression. Returned outputs add `rsync back`.
+Both workspace upload and returned outputs use zstd only when both rsync endpoints advertise support, otherwise
+rsync's default compression. Return capability detection shares the existing manifest probe; compression changes
+only wire encoding, with the same declared paths, exact-byte manifests, checksums and output-tree validation.
+Returned outputs add `rsync back`. An active transfer keeps its original options; same-run retries reuse completed
+files through rsync's existing delta behavior and never repeat the command.
 Slot wait measures admission after upload; Git snapshot staging is local publication; GitHub fetch is host snapshot
 preparation; `shared-store lock/fetch` includes lock wait and fetch/ref verification; `checkout` measures the per-run
 checkout after the store lock is released; the `rsync` line measures the file transfer. Overlay rsync after a successful

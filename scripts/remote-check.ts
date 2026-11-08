@@ -4446,6 +4446,13 @@ flock -u 9
 fi`;
 }
 
+/** Negotiate the same lossless compression for uploads and returned outputs. Legacy peers use rsync's default. */
+export function rsyncCompressionArguments(remoteZstd: boolean, localZstd: boolean): string[] {
+  return remoteZstd && localZstd
+    ? ['--compress', '--compress-choice=zstd', `--compress-level=${RSYNC_COMPRESS_LEVEL}`]
+    : ['--compress'];
+}
+
 function localRsyncSupportsZstd(): boolean {
   const result = Bun.spawnSync(['rsync', '--version'], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
   return result.exitCode === 0 && /zstd/i.test(result.stdout.toString());
@@ -6320,7 +6327,7 @@ export function returnsProbe(directory: string, paths: string[], inventory = fal
 ${paths.map((path) => `# PATH ${path}`).join('\n')}
 python3 - ${quote(directory)} ${quote(JSON.stringify(paths))} ${inventory ? '1' : '0'} <<'REMOTE_CHECK_RETURNS_PY'
 import json, os, stat, sys
-import base64, hashlib
+import base64, hashlib, subprocess
 
 root = os.path.abspath(sys.argv[1])
 paths = json.loads(sys.argv[2])
@@ -6421,6 +6428,12 @@ for path in paths:
 if inventory and not failed:
     manifest = json.dumps(sorted(entries.values(), key=lambda item: item['path']), separators=(',', ':'), ensure_ascii=False).encode()
     print('MANIFEST ' + base64.b64encode(manifest).decode())
+    try:
+        version = subprocess.run(['rsync', '--version'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5)
+        zstd = version.returncode == 0 and b'zstd' in version.stdout.lower()
+    except (OSError, subprocess.TimeoutExpired):
+        zstd = False
+    print('ZSTD ' + ('1' if zstd else '0'))
 REMOTE_CHECK_RETURNS_PY`;
 }
 
@@ -6448,6 +6461,7 @@ async function copyReturns(
   const missing: string[] = [];
   const seen = new Set<string>();
   let manifest: RemoteReturnedArtifact[] | undefined;
+  let remoteZstd = false;
   for (const line of output.split('\n')) {
     if (/^(UNSAFE |OVERSIZE |OVERSIZE_RETURN_SET$)/.test(line)) {
       throw new Error(`remote-check: refused returned output from ${host.name}: ${line}`);
@@ -6495,6 +6509,8 @@ async function copyReturns(
         assertReturnPath(item.path);
         return { path: item.path, size: item.size as number, sha256: item.sha256 as string, kind: item.kind };
       });
+    } else if (/^ZSTD [01]$/.test(line)) {
+      remoteZstd = line === 'ZSTD 1';
     } else if (line !== '') {
       throw new Error(`remote-check: invalid returns probe from ${host.name}`);
     }
@@ -6530,6 +6546,10 @@ async function copyReturns(
       if (info.isFile() && info.nlink !== 1) throw new Error('remote-check: hard-linked return destination');
     }
   }
+  const compression = rsyncCompressionArguments(remoteZstd, localRsyncSupportsZstd());
+  console.error(
+    `remote-check: returned outputs use ${compression.includes('--compress-choice=zstd') ? 'zstd' : 'default'} rsync compression on ${host.name}`,
+  );
   const started = performance.now();
   let synced = 0;
   let vanishedFiles = 0;
@@ -6540,6 +6560,7 @@ async function copyReturns(
       [
         'rsync',
         '-rpt',
+        ...compression,
         '--dirs',
         '--no-links',
         '--info=progress2',
@@ -6852,9 +6873,7 @@ async function uploadRun(
     const useZstd = base.zstd && localRsyncSupportsZstd();
     if (!useZstd) console.error(`remote-check: rsync zstd unavailable on ${host.name}; using default compression`);
     const rsyncStarted = performance.now();
-    const compression = useZstd
-      ? ['--compress', '--compress-choice=zstd', `--compress-level=${RSYNC_COMPRESS_LEVEL}`]
-      : ['--compress'];
+    const compression = rsyncCompressionArguments(useZstd, useZstd);
     const sync = Bun.spawn(
       [
         'rsync',
