@@ -7,7 +7,12 @@ import { openDb } from './db.ts';
 import { settle } from './settle.ts';
 import { recoverWorkerTyping } from './typing-recovery.ts';
 import { WorkerJob } from './job.ts';
-import { beginTypingInputReceipt, readTypingInputReceipt, captureTypingInputs } from './worker-check-typing-inputs.ts';
+import {
+  beginTypingInputReceipt,
+  readTypingInputReceipt,
+  captureTypingInputs,
+  typingInputCommand,
+} from './worker-check-typing-inputs.ts';
 import { readFileSync } from 'node:fs';
 import { WorkerStore } from './store.ts';
 import { brief, harness, temporaryDirectory } from './test-support.ts';
@@ -17,6 +22,8 @@ import type { WorkerTasks } from './tasks.ts';
 import {
   isTypingSettlementResult,
   isTypingEvidenceUnavailableResult,
+  TYPING_RECOVERY_ENV,
+  recordWorkerCheckTypingInputs,
   checkCommandIncludesTypecheck,
   admitWorkerCheckHostRun,
   readWorkerCheckHostStamp,
@@ -853,3 +860,189 @@ test('historical drift settlement recovers compiler evidence while genuine compi
   expect(isTypingSettlementResult(failed)).toBe(true);
   expect(isTypingEvidenceUnavailableResult(failed)).toBe(false);
 });
+
+test.each([0, 1])(
+  'authenticated exhausted-budget compiler recovery records work and settles its same attempt (compiler exit %s)',
+  async (compilerExit) => {
+    const h = harness();
+    const command = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'];
+    try {
+      const retained = await settleSuccessWithHostCheck(h, 'kernel typecheck completed', (budget, worktree) => {
+        mkdirSync(join(worktree, 'services/kernel/scripts'), { recursive: true });
+        writeFileSync(
+          join(worktree, 'services/kernel/package.json'),
+          JSON.stringify({ scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
+        );
+        writeFileSync(join(worktree, 'services/kernel/tsconfig.json'), '{"include":["scripts"]}');
+        writeFileSync(
+          join(worktree, 'services/kernel/scripts/typecheck.ts'),
+          compilerExit === 0
+            ? 'process.exit(0);'
+            : 'console.error("error TS2322: actual compiler error");process.exit(1);',
+        );
+        expect(admitWorkerCheckHostRun({ directory: budget, worktree, limit: 2 }).ok).toBe(true);
+        for (const stamp of ['1', '2']) {
+          const file = join(budget, stamp);
+          const record = JSON.parse(readFileSync(file, 'utf8'));
+          writeFileSync(
+            file,
+            JSON.stringify({
+              ...record,
+              exitCode: 0,
+              includedTypecheck: true,
+              typingRequest: {
+                physicalRunId: 'a1a1a1a1-1111-4111-8111-111111111111',
+                command,
+                capture: 'physical-command',
+                localPrepared: [],
+              },
+            }),
+          );
+        }
+      });
+      const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, retained.task.id, retained.ref.attempt);
+      const old = ['1', '2'].map((stamp) => readFileSync(join(budget, stamp), 'utf8'));
+      expect(admitWorkerCheckHostRun({ directory: budget, worktree: retained.task.worktree, limit: 2 }).ok).toBe(false);
+      h.settings.integration.operationsManager = 'operations';
+      h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY,state TEXT NOT NULL)');
+      h.store.db.query('INSERT INTO manager_sessions VALUES (?,?)').run(
+        'operations',
+        JSON.stringify({
+          id: 'operations',
+          kind: 'resident-supermanager',
+          provider: 'claude',
+          status: 'running',
+          threadId: 'operations-session',
+        }),
+      );
+      const output: string[] = [];
+      const recover = async () => {
+        output.length = 0;
+        expect(
+          await runWorkerCommand('typing-recover', [retained.task.id, '--expected-attempt', '1'], {
+            tasks: h.tasks,
+            landing: { enqueue: () => {} },
+            env: { CLAUDE_CODE_SESSION_ID: 'operations-session' },
+            print: (value) => output.push(value),
+          }),
+        ).toBe(0);
+        return JSON.parse(output[0]!);
+      };
+      h.store.db
+        .query('INSERT INTO manager_sessions VALUES (?,?)')
+        .run(
+          'foreign',
+          JSON.stringify({
+            id: 'foreign',
+            kind: 'resident-supermanager',
+            provider: 'claude',
+            status: 'running',
+            threadId: 'foreign-session',
+          }),
+        );
+      await expect(
+        runWorkerCommand('typing-recover', [retained.task.id, '--expected-attempt', '1'], {
+          tasks: h.tasks,
+          env: { CLAUDE_CODE_SESSION_ID: 'foreign-session' },
+        }),
+      ).rejects.toThrow('authenticated owning or operations');
+      const issued = await recover();
+      expect(issued.status).toBe('pending');
+      expect(issued.proof.env.GOAL_WORKER_CHECK_BUDGET).toBe('2');
+      expect(issued.proof.env[TYPING_RECOVERY_ENV]).toMatch(/^[0-9a-f-]{36}$/);
+      expect((await recover()).proof.env[TYPING_RECOVERY_ENV]).toBe(issued.proof.env[TYPING_RECOVERY_ENV]);
+      expect(workerCheckHostRunsUsed(budget)).toBe(2);
+      const env = issued.proof.env as NodeJS.ProcessEnv;
+      for (const wrong of [
+        ['bun', 'test', 'services/kernel/test/commerce/payment.test.ts'],
+        ['bun', 'apps/web/scripts/library-browser.ts'],
+        ['bun', 'custom-typecheck.ts'],
+        ['sh', '-c', 'bun run --cwd services/kernel typecheck; bun test'],
+      ])
+        expect(() => refuseExcessWorkerCheckHostRun({ ...env }, true, retained.task.worktree, wrong)).toThrow(
+          'does not match',
+        );
+      expect(() =>
+        refuseExcessWorkerCheckHostRun({ ...env, GOAL_TASK_ID: 'foreign' }, true, retained.task.worktree, command),
+      ).toThrow('does not match');
+      expect(() =>
+        refuseExcessWorkerCheckHostRun({ ...env, GOAL_ATTEMPT: '2' }, true, retained.task.worktree, command),
+      ).toThrow('does not match');
+      writeFileSync(join(retained.task.worktree, 'new-input.ts'), 'export const changed = true;');
+      expect(() => refuseExcessWorkerCheckHostRun({ ...env }, true, retained.task.worktree, command)).toThrow(
+        'inputs changed',
+      );
+      const renewed = await recover();
+      expect(renewed.proof.env[TYPING_RECOVERY_ENV]).not.toBe(env[TYPING_RECOVERY_ENV]);
+      // Return to the exact original compiler inputs before consuming its original finite grant.
+      const { unlinkSync } = await import('node:fs');
+      unlinkSync(join(retained.task.worktree, 'new-input.ts'));
+      expect(() =>
+        refuseExcessWorkerCheckHostRun({ ...renewed.proof.env }, true, retained.task.worktree, command),
+      ).toThrow('inputs changed');
+      const saved = { ...process.env };
+      let starts = 0;
+      let id = '';
+      try {
+        Object.assign(process.env, env);
+        const argv = issued.proof.commands[0].slice(4) as string[];
+        expect(argv).toEqual(command);
+        const launch: Parameters<typeof startWorkerCheck>[2] = (record, childEnv) => {
+          starts++;
+          recordWorkerCheckTypingInputs(childEnv, record.cwd, record.physicalRunId!, command);
+          const result = Bun.spawnSync([process.execPath, ...typingInputCommand(command).slice(1)], {
+            cwd: record.cwd,
+            env: {
+              ...childEnv,
+              REZICS_TYPING_INPUTS_PHYSICAL: record.physicalRunId,
+              REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(command)).toString('base64'),
+            },
+          });
+          expect(result.exitCode).toBe(compilerExit);
+          const log = join(h.settings.stateDirectory, 'recovery-compiler.log');
+          writeFileSync(log, new TextDecoder().decode(result.stderr));
+          settleWorkerCheckHostBudget(childEnv, result.exitCode, true, {
+            worktree: record.cwd,
+            physicalRunId: record.physicalRunId!,
+            argv: command,
+            log,
+          });
+          writeFileSync(
+            join(record.cwd, '.temp/goal/checks/results', record.id + '.json'),
+            JSON.stringify({ ...record, status: 'finished', exitCode: result.exitCode }),
+          );
+        };
+        id = startWorkerCheck(argv, retained.task.worktree, launch);
+        expect(startWorkerCheck(argv, retained.task.worktree, launch)).toBe(id);
+      } finally {
+        for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key];
+        Object.assign(process.env, saved);
+      }
+      expect(starts).toBe(1);
+      expect(workerCheckHostRunsUsed(budget)).toBe(3);
+      expect(readWorkerCheckHostStamp(budget, '3')).toMatchObject({
+        exitCode: compilerExit,
+        typingRecovery: { checkId: id },
+        typingInputs: { exitCode: compilerExit },
+      });
+      expect(['1', '2'].map((stamp) => readFileSync(join(budget, stamp), 'utf8'))).toEqual(old);
+      expect(admitWorkerCheckHostRun({ directory: budget, worktree: retained.task.worktree, limit: 2 }).ok).toBe(false);
+      const landings: unknown[] = [];
+      const result = await recoverWorkerTyping(h.tasks, { enqueue: (value) => landings.push(value) }, retained.ref, {
+        id: 'operations',
+        sessionId: 'operations-session',
+      });
+      expect(result.status).toBe(compilerExit === 0 ? 'landing' : 'typing-failure');
+      expect(landings).toHaveLength(compilerExit === 0 ? 1 : 0);
+      expect(h.store.task(retained.task.id).currentAttempt).toBe(1);
+      expect(h.store.attempt(retained.ref).typingEvidencePending).toBeUndefined();
+      expect(h.store.attempt(retained.ref).failureKind).toBe(compilerExit === 0 ? null : 'tool');
+      expect(() => refuseExcessWorkerCheckHostRun({ ...env }, true, retained.task.worktree, command)).toThrow(
+        'no longer pending',
+      );
+    } finally {
+      await h.disposeAsync();
+    }
+  },
+  15_000,
+);

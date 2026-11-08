@@ -2675,7 +2675,13 @@ A queued source retry for missing compiler evidence uses this same reconciliatio
 evidence suffices, the existing completed attempt lands. Otherwise the command returns `pending` with the exact
 worktree, ownership environment and smallest typing-only wrapper commands. Run those commands through the returned
 current control-plane wrapper, wait for their real results, then repeat `typing-recover`. Required money/native checks
-remain recorded and required; they are not substituted by this proof request. Real source typing failures remain source
+remain recorded and required; they are not substituted by this proof request. Authenticated recovery grants one
+compiler-only physical run per exact task, attempt, source commit, compiler-input identity and command. It keeps the
+original budget limit and stamps, records the additional work in the next numbered stamp, and reuses the same check
+identity on replay. The grant has no clock expiry: input drift requires fresh authenticated authority, and a changed
+current attempt or completed/cancelled recovery invalidates it. Workers cannot mint grants; unauthenticated controller
+reconciliation can describe pending proof but grants no additional admission. Cancelled tasks and attempts retain
+their existing exclusion from typing recovery. Real source typing failures remain source
 failures. Provider, model CLI and allowance failures keep their separate handling.
 
 Landing and promotion checks record only clean, successful runs. Each result is keyed by the normalized command, the

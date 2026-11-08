@@ -25,6 +25,15 @@ possible-witness hint or overflow marker alone is not complete coverage for exac
 complete access path or preparation. Search owns compilation, preparation and freshness; Commerce owns owner-local
 plans; Performance owns numeric budgets and native cost verification. No new engine, service or scheduler is needed.
 
+An owner session leaf is an existential query over the current viewer's admitted session facts, keyed by the exact
+accepted profile ID and lifecycle. Completed-session absence is the Boolean `NOT` of that same completed-session
+existence leaf over the already admitted eligible population. It is independent of entry state: clearing an entry
+does not remove completed history, a label or holding can support an eligible no-entry Subject, and another
+account's completion never changes the viewer's result. The shared three-valued result remains in force, so
+undisclosed or incomplete evidence under `NOT` is still unknown. Owner predicates are request-owned and only run
+where the current owner Source is admitted; public Catalogue, Zone and TypeList definitions retain public meaning
+and never persist a viewer's private predicate.
+
 ## Current disclosure and query privacy
 
 Everything disclosed must satisfy current native authority: membership, exclusion, order, fields, source metadata

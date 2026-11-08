@@ -1,9 +1,16 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { Database } from 'bun:sqlite';
+import { acquireDirectoryLeaseWaiting } from './lease.ts';
+import { writeAtomicJson } from '../../../scripts/check-custody.ts';
+import type { AuthenticatedManager } from './priority-authority.ts';
+import type { Task, Attempt } from './types.ts';
 import {
   captureTypingInputs,
+  isKnownTypingCompiler,
   readTypingInputReceipt,
   qualifyTypingInputs,
   type TypingInput,
@@ -67,6 +74,7 @@ export type WorkerCheckHostStampRecord = {
   };
   typingInputs?: TypingInputReceipt;
   typingInputsUnavailable?: string;
+  typingRecovery?: { token: string; checkId: string; physicalRunId: string };
 };
 
 /** Controller-owned stamp directory beside the attempt's check-wait file. */
@@ -169,14 +177,166 @@ function boundedLog(path: string | undefined): string {
   }
 }
 
+export const TYPING_RECOVERY_ENV = 'GOAL_WORKER_CHECK_TYPING_RECOVERY';
+type TypingRecoveryGrant = {
+  version: 1;
+  token: string;
+  taskId: string;
+  attempt: number;
+  worktree: string;
+  stateDirectory: string;
+  database: string;
+  command: string[];
+  identity: string;
+  actor: AuthenticatedManager;
+  checkId: string;
+  physicalRunId: string;
+  stamp?: string;
+};
+const recoveryPath = (directory: string, token: string) => {
+  if (!/^[0-9a-f-]{36}$/.test(token)) throw new Error('Invalid typing recovery token');
+  return join(directory, 'typing-recovery', `${token}.json`);
+};
+function recoveryIdentity(worktree: string, command: readonly string[]): string {
+  if (!isKnownTypingCompiler(worktree, command))
+    throw new Error('Typing recovery requires an installed owning compiler command');
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        head: git(worktree, ['rev-parse', 'HEAD']).trim(),
+        inputs: captureTypingInputs(worktree, command),
+      }),
+    )
+    .digest('hex');
+}
+
+/** Called only after typing-recover authenticates the owner/operations manager under the current task lease. */
+export function grantWorkerTypingRecovery(
+  input: Omit<TypingRecoveryGrant, 'version' | 'token' | 'identity' | 'checkId' | 'physicalRunId' | 'stamp'>,
+): TypingRecoveryGrant {
+  const directory = workerCheckBudgetDirectory(input.stateDirectory, input.taskId, input.attempt);
+  mkdirSync(directory, { recursive: true });
+  const lease = acquireDirectoryLeaseWaiting(join(directory, 'admission.lease'));
+  try {
+    const identity = recoveryIdentity(input.worktree, input.command);
+    const grants = join(directory, 'typing-recovery');
+    mkdirSync(grants, { recursive: true });
+    for (const file of readdirSync(grants)) {
+      if (!/^[0-9a-f-]{36}\.json$/.test(file)) continue;
+      const prior = JSON.parse(readFileSync(join(grants, file), 'utf8')) as TypingRecoveryGrant;
+      if (
+        prior.version === 1 &&
+        prior.taskId === input.taskId &&
+        prior.attempt === input.attempt &&
+        prior.worktree === input.worktree &&
+        prior.identity === identity &&
+        JSON.stringify(prior.command) === JSON.stringify(input.command)
+      )
+        return prior;
+    }
+    const grant: TypingRecoveryGrant = {
+      ...input,
+      version: 1,
+      token: randomUUID(),
+      identity,
+      checkId: randomUUID(),
+      physicalRunId: randomUUID(),
+    };
+    writeAtomicJson(recoveryPath(directory, grant.token), grant);
+    return grant;
+  } finally {
+    lease.release();
+  }
+}
+
+function admitTypingRecovery(input: WorkerCheckHostAdmit, directory: string): WorkerCheckHostAdmitResult {
+  const grant = JSON.parse(readFileSync(recoveryPath(directory, input.recovery!.token), 'utf8')) as TypingRecoveryGrant;
+  const request = input.recovery!;
+  if (
+    grant.version !== 1 ||
+    grant.token !== request.token ||
+    grant.taskId !== request.taskId ||
+    String(grant.attempt) !== request.attempt ||
+    resolve(input.worktree ?? '') !== grant.worktree ||
+    directory !== workerCheckBudgetDirectory(grant.stateDirectory, grant.taskId, grant.attempt) ||
+    JSON.stringify(input.command) !== JSON.stringify(grant.command)
+  )
+    throw new Error('Typing recovery authority does not match task, attempt, source or exact compiler command');
+  const taskLease = acquireDirectoryLeaseWaiting(join(grant.stateDirectory, 'leases', grant.taskId));
+  try {
+    const db = new Database(grant.database, { readonly: true, strict: true });
+    try {
+      const taskRow = db.query('SELECT body FROM worker_tasks WHERE id=?').get(grant.taskId) as { body: string } | null;
+      const attemptRow = db
+        .query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?')
+        .get(grant.taskId, grant.attempt) as { body: string } | null;
+      const task = taskRow && (JSON.parse(taskRow.body) as Task | null);
+      const attempt = attemptRow && (JSON.parse(attemptRow.body) as Attempt | null);
+      if (
+        !task ||
+        task.currentAttempt !== grant.attempt ||
+        task.worktree !== grant.worktree ||
+        task.state !== 'stopped' ||
+        task.brief.kind === 'verification' ||
+        !attempt ||
+        attempt.state !== 'exited' ||
+        (!attempt.typingEvidencePending && !isTypingEvidenceUnavailableResult(attempt.result))
+      )
+        throw new Error('Typing recovery authority is stale or source is no longer pending compiler evidence');
+    } finally {
+      db.close();
+    }
+    if (recoveryIdentity(grant.worktree, grant.command) !== grant.identity)
+      throw new Error('Typing recovery compiler inputs changed; obtain fresh authenticated authority');
+    const lease = acquireDirectoryLeaseWaiting(join(directory, 'admission.lease'));
+    try {
+      const current = JSON.parse(readFileSync(recoveryPath(directory, grant.token), 'utf8')) as TypingRecoveryGrant;
+      const used = workerCheckHostRunsUsed(directory);
+      const prior = stampNames(directory).find(
+        (stamp) => readWorkerCheckHostStamp(directory, stamp).typingRecovery?.token === grant.token,
+      );
+      if (current.stamp || prior)
+        return {
+          ok: true,
+          used,
+          stamp: current.stamp ?? prior!,
+          recovery: { checkId: grant.checkId, physicalRunId: grant.physicalRunId, replayed: true },
+        };
+      const stamp = nextWorkerCheckHostStamp(directory);
+      writeStamp(
+        directory,
+        stamp,
+        {
+          content: workerCheckHostContentTree(grant.worktree),
+          typingRecovery: { token: grant.token, checkId: grant.checkId, physicalRunId: grant.physicalRunId },
+        },
+        'wx',
+      );
+      writeAtomicJson(recoveryPath(directory, grant.token), { ...grant, stamp });
+      return {
+        ok: true,
+        used: used + 1,
+        stamp,
+        recovery: { checkId: grant.checkId, physicalRunId: grant.physicalRunId, replayed: false },
+      };
+    } finally {
+      lease.release();
+    }
+  } finally {
+    taskLease.release();
+  }
+}
+
 export type WorkerCheckHostAdmit = {
   directory?: string | undefined;
   limit?: string | number | null | undefined;
   worktree?: string | undefined;
+  command?: readonly string[] | undefined;
+  recovery?: { token: string; taskId: string | undefined; attempt: string | undefined } | undefined;
 };
 
 export type WorkerCheckHostAdmitResult =
-  | { ok: true; used: number; stamp: string }
+  | { ok: true; used: number; stamp: string; recovery?: { checkId: string; physicalRunId: string; replayed: boolean } }
   | { ok: true; used: 0 }
   | { ok: false; used: number; message: string };
 
@@ -208,25 +368,34 @@ function admitsFinalVerification(last: WorkerCheckHostStampRecord | undefined, w
  */
 export function admitWorkerCheckHostRun(input: WorkerCheckHostAdmit): WorkerCheckHostAdmitResult {
   const directory = input.directory?.trim();
-  if (!directory) return { ok: true, used: 0 };
+  if (!directory) {
+    if (input.recovery) throw new Error('Typing recovery requires its original controller budget');
+    return { ok: true, used: 0 };
+  }
+  if (input.recovery) return admitTypingRecovery(input, directory);
   const exempt = input.limit === 'off' || input.limit === null;
   mkdirSync(directory, { recursive: true });
-  for (;;) {
-    const used = workerCheckHostRunsUsed(directory);
-    const last = used > 0 ? lastStamp(directory) : undefined;
-    const final = !exempt && used >= WORKER_CHECK_HOST_RUN_LIMIT;
-    if (final && !admitsFinalVerification(last?.record, input.worktree)) return budgetRefused(last?.record, used);
-    const stamp = nextWorkerCheckHostStamp(directory);
-    const record: WorkerCheckHostStampRecord = {
-      ...(input.worktree ? { content: workerCheckHostContentTree(input.worktree) } : {}),
-      ...(final ? { final: true } : {}),
-    };
-    try {
-      writeStamp(directory, stamp, record, 'wx');
-      return { ok: true, used: used + 1, stamp };
-    } catch (error) {
-      if ((error as { code?: string }).code !== 'EEXIST') throw error;
+  const lease = acquireDirectoryLeaseWaiting(join(directory, 'admission.lease'));
+  try {
+    for (;;) {
+      const used = workerCheckHostRunsUsed(directory);
+      const last = used > 0 ? lastStamp(directory) : undefined;
+      const final = !exempt && used >= WORKER_CHECK_HOST_RUN_LIMIT;
+      if (final && !admitsFinalVerification(last?.record, input.worktree)) return budgetRefused(last?.record, used);
+      const stamp = nextWorkerCheckHostStamp(directory);
+      const record: WorkerCheckHostStampRecord = {
+        ...(input.worktree ? { content: workerCheckHostContentTree(input.worktree) } : {}),
+        ...(final ? { final: true } : {}),
+      };
+      try {
+        writeStamp(directory, stamp, record, 'wx');
+        return { ok: true, used: used + 1, stamp };
+      } catch (error) {
+        if ((error as { code?: string }).code !== 'EEXIST') throw error;
+      }
     }
+  } finally {
+    lease.release();
   }
 }
 
@@ -235,15 +404,20 @@ export function refuseExcessWorkerCheckHostRun(
   env: NodeJS.ProcessEnv,
   placesOnCheckHost: boolean,
   worktree?: string,
-): void {
-  if (!placesOnCheckHost) return;
+  command?: readonly string[],
+): WorkerCheckHostAdmitResult | undefined {
+  const token = env[TYPING_RECOVERY_ENV];
+  if (!placesOnCheckHost && !token) return;
   const admitted = admitWorkerCheckHostRun({
     directory: env.GOAL_WORKER_CHECK_BUDGET_DIR,
     limit: env.GOAL_WORKER_CHECK_BUDGET,
     worktree,
+    command,
+    ...(token ? { recovery: { token, taskId: env.GOAL_TASK_ID, attempt: env.GOAL_ATTEMPT } } : {}),
   });
   if (!admitted.ok) throw new Error(admitted.message);
   if ('stamp' in admitted) env.GOAL_WORKER_CHECK_BUDGET_STAMP = admitted.stamp;
+  return admitted;
 }
 
 export function workerCheckHostCommandReached(receipt: WorkerCheckHostCommandReceipt | null | undefined): boolean {

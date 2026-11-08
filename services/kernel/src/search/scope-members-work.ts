@@ -12,14 +12,14 @@ import type { NativeOrdinalKey } from '../library/contract/index.ts';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type { CollectionMemberAdmission, OwnerFilterFactLocator } from '../library/owner-filter.ts';
 import type { OwnerFilterCandidateClosure } from '../library/owner-filter-plan.ts';
-import factsQuery from '../library/owner-filter-native-closure-facts.sql';
-import fenceQuery from '../library/owner-filter-native-binding-fence.sql';
 import { readRelease } from '../semantic/definitions.ts';
 import {
   createIdentityScopedObservations,
   identityScopeAddress,
   leafProvider,
   readOwnerFilterCandidate,
+  readNativeOwnerFilterCandidateFacts,
+  readNativeOwnerFilterBindingFence,
 } from './native-bindings.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { CurrentOwnerFilterPlan } from './current-filter-plan.ts';
@@ -155,11 +155,11 @@ export async function readMembersSnapshot(
   };
   await revalidateMembersObservation(input, observation, work);
   const owner = await membersBounded(work, MEMBERS_SNAPSHOT_OWNER_FENCE_DIMENSIONS, () =>
-    fenceQuery.run(input.work.tx, { route: input.work.locator.route, account_id: input.work.locator.ownerAccountId }),
+    readNativeOwnerFilterBindingFence(input.work.tx, input.work.locator.route, input.work.locator.ownerAccountId),
   );
   // Native owner predicates need the writer's real fence, including when their answer is absence.
   if (!owner) throw new SearchOperationError('dependency_unavailable');
-  return { native, source, observation, ownerFence: owner.generation };
+  return { native, source, observation, ownerFence: owner };
 }
 
 export async function revalidateMembersObservation(
@@ -338,37 +338,17 @@ async function closure(
     if (original !== subject && (await membersTerminal(execution, original, work)) !== subject) throw unavailable();
     const limit = Math.min(remaining, work.available('candidateKeys'), work.available('witnessKeys'));
     if (limit < 1) return null;
-    const rows = await membersBounded(work, membersFactsDimensions(limit), () =>
-      factsQuery.run(execution.input.work.tx, {
+    const factLocators = await membersBounded(work, membersFactsDimensions(limit), () =>
+      readNativeOwnerFilterCandidateFacts(execution.input.work.tx, {
         route: execution.input.work.locator.route,
-        account_id: execution.input.work.locator.ownerAccountId,
-        subject_id: original,
+        accountId: execution.input.work.locator.ownerAccountId,
+        subjectId: original,
         limit,
       }),
     );
-    if (rows.length === limit || rows.some((row) => row.driver === 0)) return null;
+    if (factLocators === null) return null;
     const facts: OwnerFilterFactLocator[] = [];
-    for (const row of rows) {
-      let locator: OwnerFilterFactLocator;
-      switch (row.driver) {
-        case 1:
-          locator = { kind: 'entry', subjectId: original };
-          break;
-        case 2:
-          if (!row.labelId) return null;
-          locator = { kind: 'label', subjectId: original, labelId: row.labelId };
-          break;
-        case 3:
-          if (!row.factId || routeOf(row.factId) === null) return null;
-          locator = { kind: 'session', subjectId: original, sessionId: row.factId };
-          break;
-        case 4:
-          if (!row.factId || routeOf(row.factId) === null) return null;
-          locator = { kind: 'holding', subjectId: original, copyId: row.factId };
-          break;
-        default:
-          throw unavailable();
-      }
+    for (const locator of factLocators) {
       facts.push(locator);
       const wantsPin = execution.admission.plan!.leaves.some(
         (leaf) =>
@@ -386,7 +366,7 @@ async function closure(
         }
       }
     }
-    remaining -= facts.length;
+    remaining -= factLocators.length;
     originals.push({ subjectId: original, facts });
   }
   return { subjectId: subject, originals, releases, catalogue: new Map() };

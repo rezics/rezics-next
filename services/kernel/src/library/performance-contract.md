@@ -3,6 +3,28 @@
 This leaf owns Library operation bounds and caller custody. Operation-specific SQL and growth suites remain in
 [Library Cost](README.md#cost); the [Kernel contract](../../performance-contract.md) owns shared finite bounds.
 
+## Captured owner-query and bulk-selection work
+
+An owner query passes its captured `PreparedCollectionSource` to Search preparation. Native composition resolves that
+exact Source to its full scope identity on the caller's existing allowance, checks route, Collection and incarnation,
+charges the identity receipt before Search preparation, and returns the additive receipt for both observations. The
+owner application debits this combined receipt from the same `NativeCollectionWork` reservation before matching and
+final disclosure. An incarnation string alone is not a Search population identity. A catalogue-source owner filter
+remains unavailable unless the retained Search query that produced its public population is present and its exact
+admitted filter can be revalidated.
+
+Completed-session absence is Boolean `NOT` over the admitted current-owner completed-session leaf. Candidate support,
+complete canonical originals, every original/terminal disclosure, duplicate occurrences, final Source/query
+currentness and optional FULL facts remain within the existing owner-filter plan and finite allowance. Clearing an
+entry does not erase its retained session history; a no-entry subject remains eligible when another admitted fact
+supports membership. Unknown and withheld observations retain the existing unproved/unavailable outcome.
+
+Filtered bulk capture reads every admitted Collection Source page under canonical Filter and `id` order, compares
+the source descriptor before and after, hashes all raw occurrences before canonical Subject deduplication, then seals
+the exact selected targets. Confirmation, retry, cancellation and dependency revocation resolve only those manifest
+rows through existing native writers. The existing owner-filter growth and bulk-operation suites remain native
+receiving oracles; controller verification owns their execution and the composed browsing/growth checks.
+
 Layer ownership: `kernel-library-contract` (vocabulary and ports), `kernel-library-core` (pure arithmetic),
 `kernel-library-application` (use cases over ports), `kernel-library` adapters (native SQL and foreign
 Access/Search/Semantic/Content), and `composition/library.ts` (ordinary server/worker/`createKernelRuntimeDefaults`

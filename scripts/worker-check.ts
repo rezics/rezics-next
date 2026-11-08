@@ -54,6 +54,7 @@ import {
   checkCommandIncludesTypecheck,
   recordWorkerCheckTypingInputs,
   refuseExcessWorkerCheckHostRun,
+  TYPING_RECOVERY_ENV,
   refuseOrdinaryProductTestCheck,
   settleWorkerCheckHostBudget,
   workerCheckHostCommandReached,
@@ -1242,6 +1243,11 @@ export async function runWorkerCheck(
   const declaredReturns = validateArtifactDeclarations(returnPaths);
   returnPaths.splice(0, returnPaths.length, ...declaredReturns);
   const root = resolve(cwd);
+  if (process.env[TYPING_RECOVERY_ENV]) {
+    const admitted = refuseExcessWorkerCheckHostRun(process.env, false, root, argv);
+    if (!admitted?.ok || !('recovery' in admitted) || admitted.recovery?.physicalRunId !== physicalRunId)
+      throw new Error('worker-check: typing recovery physical run does not match its authority');
+  }
   const compilerOutputs = typingInvocation ? workerCheckCompilerOutputs(argv, root) : [];
   const clientPipeline = compilerOutputs.length > 0;
   for (const path of compilerOutputs) if (!returnPaths.includes(path)) returnPaths.push(path);
@@ -2424,16 +2430,36 @@ function wrapperExecutionArgv(argv: readonly string[]): string[] {
 }
 
 /** Start a detached check whose durable result can be retrieved by id after this process exits. */
-export function startWorkerCheck(argv: readonly string[], cwd = process.cwd()): string {
+export function startWorkerCheck(
+  argv: readonly string[],
+  cwd = process.cwd(),
+  launch: typeof launchDetachedRunner = launchDetachedRunner,
+): string {
   if (argv.length === 0) throw new Error('A check command is required');
   const root = resolve(cwd);
   const execution = wrapperExecutionArgv(argv);
   refuseOrdinaryProductTestCheck(process.env, execution, root);
-  refuseExcessWorkerCheckHostRun(process.env, workerCheckNeedsStack(execution, root), root);
+  const admission = refuseExcessWorkerCheckHostRun(
+    process.env,
+    workerCheckNeedsStack(execution, root),
+    root,
+    execution,
+  );
   const ownership = ownershipFromEnvironment(process.env);
   registryForStart(process.env, ownership);
-  const id = randomUUID();
-  const physicalRunId = randomUUID();
+  const recovery = admission?.ok && 'recovery' in admission ? admission.recovery : undefined;
+  const id = recovery?.checkId ?? randomUUID();
+  const physicalRunId = recovery?.physicalRunId ?? randomUUID();
+  if (recovery?.replayed) {
+    const prior = readRecord(root, id);
+    if (
+      prior.physicalRunId !== physicalRunId ||
+      !sameOwnership(prior.ownership, ownership) ||
+      JSON.stringify(prior.argv) !== JSON.stringify(argv)
+    )
+      throw new Error('worker-check: typing recovery record does not match its consumed authority');
+    return id;
+  }
   const file = logPath(root, id);
   const record: CheckRecord = {
     custodyVersion: CHECK_RECORD_CUSTODY_VERSION,
@@ -2447,7 +2473,7 @@ export function startWorkerCheck(argv: readonly string[], cwd = process.cwd()): 
   };
   writeRecord(record);
   try {
-    launchDetachedRunner(record, process.env);
+    launch(record, process.env);
   } catch (error) {
     try {
       const current = readRecord(root, id);

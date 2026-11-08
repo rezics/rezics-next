@@ -412,6 +412,43 @@ test('filtered review pages never narrow the captured set; exact start replay ke
     conflict: 1,
   });
   expect((await f.commands.readEntry(owner.actor, addedLater.subjectId)).state).toBe('planned');
+
+  const cancelled = await bulk.preview(
+    owner.actor,
+    {
+      action: 'set_status',
+      state: 'completed',
+      selection: { kind: 'query', sourceId: source.id, filter: '{"owner":{"state":"planned"}}', sort: 'id' },
+    },
+    key(),
+  );
+  expect(cancelled.value.operation.counts).toMatchObject({ selectedSubjects: 1, targets: 1, pending: 1 });
+  const afterCapture = await entry(owner.actor);
+  await collections.addMember(
+    owner.actor,
+    source.id,
+    { subjectId: afterCapture.subjectId, note: 'after captured cancel' },
+    key(),
+  );
+  await bulk.cancel(owner.actor, cancelled.value.operation.id, key());
+  await runCollectionBulkPage(
+    {
+      ...dependencies(),
+      readConsent: async () => ({
+        actorAccountId: owner.actor.accountId,
+        clientId: owner.actor.clientId,
+        scopes: owner.actor.scopes,
+      }),
+    },
+    { route: cancelled.value.operation.route, operationId: cancelled.value.operation.id },
+  );
+  expect(
+    (await bulk.outcomes(owner.actor, cancelled.value.operation.id, {})).outcomes.map((row) => [
+      row.subjectId,
+      row.state,
+    ]),
+  ).toEqual([[addedLater.subjectId, 'cancelled']]);
+  expect((await f.commands.readEntry(owner.actor, afterCapture.subjectId)).state).toBe('planned');
 });
 
 test('native add receipt replay survives partial cancellation; results stay private and expire', async () => {

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { checkGrowth, type GrowthDatabase, openGrowthDatabase } from '../support/growth.ts';
 import { createOwnerFilterFixture, type OwnerFilterFixture } from './support/owner-filter-fixture.ts';
 
-test('common owner-filter first and deep pages bound native history work at 64/512/4096 retained sessions', async () => {
+test('common owner-filter pages bound completed-session absence work at 64/512/4096 retained sessions', async () => {
   let database: GrowthDatabase | undefined;
   let fixture: OwnerFilterFixture | undefined;
   try {
@@ -19,11 +19,11 @@ test('common owner-filter first and deep pages bound native history work at 64/5
       and: [
         { type: { in: [f.type] } },
         f.leaves.presence,
-        { or: [f.leaves.state, f.leaves.label, f.leaves.session, f.leaves.qualifiedHolding] },
-        { not: f.leaves.state },
+        { or: [f.leaves.state, f.leaves.label, f.leaves.qualifiedHolding] },
+        { not: f.leaves.session },
       ],
     };
-    const expected = [f.subjects.labelOnly.id, f.subjects.sessionOnly.id, f.subjects.copyOnly.id].sort();
+    const expected = [f.subjects.entry.id, f.subjects.labelOnly.id, f.subjects.copyOnly.id].sort();
     const report = await checkGrowth(database, {
       name: 'Common owner predicate complete first/deep HTTP pages with retained history',
       scales: [64, 512, 4096],

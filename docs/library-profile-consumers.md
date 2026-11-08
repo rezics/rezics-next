@@ -25,6 +25,20 @@ session, holding, rating, entitlement, or import. A session does not create an e
 multiple holdings of one subject keep distinct identities. Labels may coexist with every exclusive state. Ratings
 remain on the rating capability.
 
+## Current-owner filter meaning
+
+The common Filter AST accepts the closed `owner.session` leaf with an exact accepted `profileId` and lifecycle.
+For viewer-self recipe discovery, completed-session absence is
+`NOT { owner: { session: { profileId, lifecycle: "completed" } } }` over the admitted eligible population. The
+current actor supplies the owner; filters cannot name another account. Entry state remains a separate fact, so
+clearing the cooked recipe's entry leaves its completed session intact. A supported label or holding can make a
+no-entry recipe eligible, while Bob's session cannot exclude Alice's recipe. Boolean `NOT` preserves the shared
+three-valued evidence rule: unknown or undisclosed session evidence is not absence.
+
+Private personalization belongs to the current request and an admitted owner Collection Source. It is never
+written into a public Collection rule, mounted Zone, or TypeList definition. Those public definitions continue to
+return their released public set for every viewer.
+
 ## Current storage inventory
 
 The consumer contract starts from the actual schema and commands in this checkout:

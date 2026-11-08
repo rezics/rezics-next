@@ -44,6 +44,46 @@ type NativeFactKey = { driver: number; factId: string; labelId: string | null };
 import { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './contract/index.ts';
 export { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './contract/index.ts';
 
+/** Read the same raw native fact directory used by ordinary owner closure evaluation.
+ * Search meters this query against its one admitted member-work reservation before calling the Library port.
+ * Returning null preserves unknown closure evidence; this reader never turns an incomplete window into absence.
+ */
+export async function readNativeOwnerFilterCandidateFacts(
+  client: Pick<import('pg').PoolClient, 'query'>,
+  input: Readonly<{ route: number; accountId: string; subjectId: string; limit: number }>,
+): Promise<readonly OwnerFilterFactLocator[] | null> {
+  const rows = await factsQuery.run(client, {
+    route: input.route,
+    account_id: input.accountId,
+    subject_id: input.subjectId,
+    limit: input.limit,
+  });
+  if (rows.length === input.limit || rows.some((row) => row.driver === 0)) return null;
+  const facts: OwnerFilterFactLocator[] = [];
+  for (const row of rows) {
+    switch (row.driver) {
+      case 1:
+        facts.push({ kind: 'entry', subjectId: input.subjectId });
+        break;
+      case 2:
+        if (!row.labelId) return null;
+        facts.push({ kind: 'label', subjectId: input.subjectId, labelId: row.labelId });
+        break;
+      case 3:
+        if (!row.factId || routeOf(row.factId) === null) return null;
+        facts.push({ kind: 'session', subjectId: input.subjectId, sessionId: row.factId });
+        break;
+      case 4:
+        if (!row.factId || routeOf(row.factId) === null) return null;
+        facts.push({ kind: 'holding', subjectId: input.subjectId, copyId: row.factId });
+        break;
+      default:
+        throw ownerFilterUnavailable();
+    }
+  }
+  return facts;
+}
+
 /** Evaluate the complete native closure on the caller's snapshot and ledger. */
 export async function evaluateNativeOwnerFilterCandidate(
   client: Pick<import('pg').PoolClient, 'query'>,

@@ -7,6 +7,7 @@ import type {
   CollectionSource,
   CollectionSourceObservation,
   NativeCollectionOrdinalPageBound,
+  NativeSourceIdentity,
   PreparedCollectionSource,
 } from './source.ts';
 import type { MembersWorkDefinition, PreparationLocator } from './preparation-work.ts';
@@ -124,7 +125,8 @@ export interface SearchPreparationCapability {
     deadline: number;
     filter: unknown;
     releaseDigest: string;
-    identity: unknown;
+    /** A native owner identity or the exact captured Library Source to resolve at composition. */
+    identity: NativeSourceIdentity | PreparedCollectionSource;
     allowance: WorkAllowance;
   }): Promise<PreparedSearchScope>;
   ownerFilterHasOwnerLeaf(filter: unknown): boolean;

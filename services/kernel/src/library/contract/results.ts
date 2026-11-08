@@ -7,29 +7,7 @@ import type { ProgressOperationApplication } from './progress-operations.ts';
 import type { MembershipPage, NestedAdmissionAccount, OccurrenceDraft } from './membership.ts';
 import type { CollectionSourceObservation, PreparedCollectionSource } from './source.ts';
 import type { WorkAllowance, WorkReceipt } from './work-dimensions.ts';
-
-export type OwnerQueryOpen = Readonly<{
-  source: PreparedCollectionSource;
-  observation: CollectionSourceObservation;
-  work: WorkReceipt;
-  close(): void;
-  originals(subjectId: string): Promise<readonly string[]>;
-  filter(filter: unknown, releaseDigest: string): Promise<Readonly<{ prepared: unknown; work: WorkReceipt }>>;
-}>;
-
-export type OwnerQueryInput = Readonly<{
-  actor: LibraryActor;
-  collectionId: string;
-  deadline: number;
-  work: {
-    remaining(): WorkAllowance;
-    native(receipt: WorkReceipt): void;
-    receipt(): WorkReceipt;
-    plan?: unknown;
-  };
-  logical?: boolean;
-  at?: unknown;
-}>;
+import type { OwnerQueryInput, OwnerQueryOpen } from './owner-query.ts';
 
 export type SourceCaptureResult = Readonly<{
   source: PreparedCollectionSource;
