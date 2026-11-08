@@ -157,6 +157,8 @@ test('missing completion is unavailable and invalid Auth never invokes the trust
 });
 
 test('cross-service failure retains committed witness and exact resume never mutates credentials or consumes proof again', async () => {
+  // Keep this targeted recovery selector independent of the preceding test's setup.
+  await start();
   failCompletion = true;
   expect(await projected(await complete())).toEqual([503, '{"error":"authentication_denied"}']);
   expect(current.fenced).toBe(true);
