@@ -9,7 +9,7 @@ export type WorkerAuthorization = Readonly<{
     readConsent: CurrentConsentReader;
 }>;
 export { readAuthConsentConfig };
-/** Trusted composition only: mounting the kernel creates no request or listener. */
+/** Trusted composition uses the complete mounted catalogue without compiling HTTP handlers. */
 export declare function createWorkerAuthorization(deps: Readonly<{
     pool: Pool;
     client: WorkClient;

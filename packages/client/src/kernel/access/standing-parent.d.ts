@@ -1,5 +1,5 @@
 import { type CommandAuthorization } from '../command/command.ts';
-import { type Access } from '../request/access.ts';
+import { type Access } from './check.ts';
 import { type GrantCommandContext } from './grant-command.ts';
 import type { ParentAnchor } from './parent-creation.ts';
 /** Narrow, one-time trusted setup. The owning module supplies the real parent

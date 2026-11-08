@@ -1,5 +1,5 @@
 import { type AuthoritativeTime, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
-import { type Access, type AccessClient, type AccessContext, type Actor, type Resource } from '../request/access.ts';
+import { type Access, type AccessClient, type AccessContext, type Actor, type Resource } from './check.ts';
 import { type ResourceCreationManifest } from './creation-manifest.ts';
 /** The owning module supplies this port in service code after binding the actual
  * parent storage/identity. validate reads only that parent anchor, and must check

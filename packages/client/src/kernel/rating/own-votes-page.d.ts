@@ -1,8 +1,8 @@
 import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool, PoolClient } from 'pg';
+import { type SubjectSummary } from './dependencies.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { type SubjectSummary } from '../semantic/summaries.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type RatingQuestionView } from './question-directory.ts';
 export declare const OWN_VOTES_PAGE_SIZE = 20;

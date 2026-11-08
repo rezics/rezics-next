@@ -2,8 +2,8 @@
  * Declarations constrain dispatch; they never fund a ledger or mint native authority.
  */
 import { type Bound } from '@rezics/bounds';
-import type { IdentityScopeWork } from '../semantic/identity-scope-types.ts';
-import type { WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
+import type { LibrarySemanticObservationCapability } from './contract/semantic-observation.ts';
 export { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
 export declare function CANONICAL_SOURCE_AXES(): readonly ["candidateKeys", "nativeRows", "identityMetadataRows", "emptySeeks", "nativePoints", "witnessKeys", "statements", "bytes", "engineRequests"];
 export declare const CANONICAL_SOURCE_ZONE_AGGREGATE = 256;
@@ -56,7 +56,6 @@ export declare const CANONICAL_SOURCE_SQL: Readonly<{
     retainedScopes: "SELECT source_fence FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 ORDER BY source_fence LIMIT 2";
     insertScope: "INSERT INTO library.canonical_source_scope(route,collection_id,source_fence,identity) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT DO NOTHING";
     updateScopeFrontier: "UPDATE library.canonical_source_scope SET frontier=$4::jsonb\n        WHERE route=$1 AND collection_id=$2 AND source_fence=$3 AND frontier IS NOT DISTINCT FROM $5::jsonb RETURNING collection_id";
-    commitScopeCapture: "UPDATE library.canonical_source_scope s\n        SET frontier=i.frontier,capture_id=i.capture_id,committed_revision=i.revision\n        FROM semantic.identity_scope_summary i\n        WHERE s.route=$1 AND s.collection_id=$2 AND s.source_fence=$3\n          AND i.partition_no=$6 AND i.source_key=$7 AND i.scope_id=$8\n          AND i.capture_id=$4 AND i.revision=$5 AND i.state='ready' AND i.active=0 AND i.scan_complete\n          AND i.source=jsonb_build_object('kind','library','identity',s.identity)\n          AND i.frontier->>'driver'='done' AND (i.frontier->>'captureId')::uuid=i.capture_id";
 }>;
 export declare function CANONICAL_SOURCE_STATEMENTS(): Readonly<{
     scope: Readonly<{
@@ -221,18 +220,9 @@ export declare function CANONICAL_SOURCE_STATEMENTS(): Readonly<{
         raw: boolean;
         bound: CanonicalSourceSqlBound;
     }>;
-    commitScopeCapture: Readonly<{
-        name: string;
-        sql: string;
-        requestBytes: number;
-        resultBytes: number;
-        rows: number;
-        raw: boolean;
-        bound: CanonicalSourceSqlBound;
-    }>;
 }>;
 export declare function canonicalSourceGroupStatement(limit: number): CanonicalSourceStatement;
-export declare function canonicalSourceMappingBound(originalCount: number): CanonicalSourceSqlBound;
+export declare function canonicalSourceMappingBound(originalCount: number, observations?: LibrarySemanticObservationCapability): CanonicalSourceSqlBound;
 export declare function canonicalSourceOwnerFactBound(limit: number): CanonicalSourceSqlBound;
 export declare function canonicalSourceRawWindowBound(limit: number): CanonicalSourceSqlBound;
 export declare function CANONICAL_SOURCE_RECEIVING_COST(): Readonly<{
@@ -244,7 +234,7 @@ export declare function CANONICAL_SOURCE_RECEIVING_COST(): Readonly<{
     group(limit: number): CanonicalSourceSqlBound;
     state: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
 }>;
-export declare function CANONICAL_SOURCE_TERMS(): Readonly<{
+export declare function CANONICAL_SOURCE_TERMS(observations?: LibrarySemanticObservationCapability): Readonly<{
     observation: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     begin: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     rawWindow: CanonicalSourceSqlBound;
@@ -256,10 +246,10 @@ export declare function CANONICAL_SOURCE_TERMS(): Readonly<{
     group: CanonicalSourceSqlBound;
     executionEnvelope: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
 }>;
-export declare function CANONICAL_SOURCE_REPAIR_STEP(): Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
+export declare function CANONICAL_SOURCE_REPAIR_STEP(observations?: LibrarySemanticObservationCapability): Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
 export declare function CANONICAL_SOURCE_PUBLICATION_STEP(): Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
 export declare function CANONICAL_SOURCE_COMPLETED_READBACK(): Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
-export declare function CANONICAL_SOURCE_DECLARATION(): Readonly<{
+export declare function CANONICAL_SOURCE_DECLARATION(observations?: LibrarySemanticObservationCapability): Readonly<{
     status: 'complete';
     axes: readonly ["candidateKeys", "nativeRows", "identityMetadataRows", "emptySeeks", "nativePoints", "witnessKeys", "statements", "bytes", "engineRequests"];
     limits: Readonly<{
@@ -434,15 +424,6 @@ export declare function CANONICAL_SOURCE_DECLARATION(): Readonly<{
             raw: boolean;
             bound: CanonicalSourceSqlBound;
         }>;
-        commitScopeCapture: Readonly<{
-            name: string;
-            sql: string;
-            requestBytes: number;
-            resultBytes: number;
-            rows: number;
-            raw: boolean;
-            bound: CanonicalSourceSqlBound;
-        }>;
     }>;
     terms: Readonly<{
         observation: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
@@ -480,8 +461,6 @@ export declare function canonicalSourceCallAllowance(bound?: Bound): Readonly<{
     bytes: number;
     identityMetadataRows: number;
 }>;
-export declare function identityScopeWorkBound(work: IdentityScopeWork): CanonicalSourceSqlBound;
-export declare function identityScopeWorkReceipt(work: IdentityScopeWork, reservationId: string): WorkReceipt;
 export declare function assertCanonicalSourceStatement(statement: CanonicalSourceStatement, values: readonly unknown[]): CanonicalSourceSqlBound;
 export declare function canonicalSourceRawSplit(keys: readonly CanonicalSourceRawKey[], canonicalSubjectId?: string | null): CanonicalSourceRawSplit;
 export declare function canonicalSourceRawTotal(split: CanonicalSourceRawSplit): number;

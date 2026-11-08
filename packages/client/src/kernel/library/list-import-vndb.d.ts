@@ -1,6 +1,6 @@
 import type { SessionComponent } from '../tokens/session.ts';
 import { type AuthoritativeTime, type CommandOutcome } from '../command/command.ts';
-import { type AccountActor, type Actor } from '../request/access.ts';
+import type { AccountActor, Actor } from '../request/access.ts';
 import { type RatingQuestion, type VoteReview, type PreparedPutVote } from '../rating/votes.ts';
 import { createEntryCommands } from './entries.ts';
 import { type ProgressAdoptionCheckpoint, type ProgressAdoptionInput, type ProgressAdoptionPlan } from './list-import-progress-adoption.ts';

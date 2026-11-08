@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
-import { type Actor } from '../request/access.ts';
+import type { Actor } from '../request/access.ts';
 export declare const MAX_REPORTED_YEAR_SUMMARY_BYTES = 16384;
 export type ReportedYearCounts = Readonly<{
     completedOccurrences: string;

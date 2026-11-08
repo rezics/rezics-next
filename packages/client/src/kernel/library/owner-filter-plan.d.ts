@@ -8,11 +8,13 @@ import type { IdentityScopeObservation } from '../semantic/identity-scope-types.
 import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
-import { type NativeOwnerFilterCeilings } from './owner-filter-native-binding.ts';
-import { type PrepareCollectionSource, type PreparedCollectionSource } from './collection-source.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import type { NativeOwnerFilterCeilings } from './owner-filter-native-binding.ts';
+import { type CollectionSourceObservation, type PrepareCollectionSource, type PreparedCollectionSource } from './collection-source.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import { type CollectionMemberAdmission, type CollectionMemberQuery, type OwnerFilterFactLocator } from './owner-filter.ts';
 import { type OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
+import type { MembersPreparation, PreparationDefinitionInput } from './members-preparation.ts';
+import type { NativeOwnerFilterCapability } from './contract/members-preparation.ts';
 type Dependencies = {
     pool: Pool;
     access: Access;
@@ -21,6 +23,7 @@ type Dependencies = {
     clock?: KernelClock;
     workClient?: () => Promise<WorkClient>;
 };
+export type OwnerFilterPlanDependencies = Dependencies;
 type Unavailable = Readonly<{
     status: 'unavailable';
 }>;
@@ -43,24 +46,48 @@ export type OwnerFilterReadBinding = Readonly<{
     }>;
     scope: IdentityScopeObservation;
 }>;
-/** Bind the current native Source and scoped capture at the caller's actual authoritative time.
- * Commands retain their executor time and partition; Search transfers its existing reservation and read time.
- */
-export declare function bindOwnerFilterRead(dependencies: Omit<Dependencies, 'tokens'>, actor: Actor, collectionId: string, admission: CollectionMemberAdmission, deadline: number, attempt?: CommandAttempt, pagePlan?: OrdinaryCollectionPagePlan, ceilings?: NativeOwnerFilterCeilings): Promise<Unavailable | Readonly<{
-    status: 'bound';
-    binding: OwnerFilterReadBinding;
-}>>;
-/** Complete native original/fact closure, independently of positive candidate enumeration.
- * Missing coverage never supplies private absence, even underneath a negative filter branch.
- */
-export declare function readOwnerFilterCandidateClosure(binding: OwnerFilterReadBinding, source: PreparedCollectionSource, subjectId: string, work: NativeCollectionWork, deferDisclosure?: boolean): Promise<Unavailable | Readonly<{
+export type OwnerFilterReservation = Readonly<{
+    reserve(dependencies: Readonly<{
+        pool: Pool;
+        access: Access;
+        workClient: WorkClient;
+    }>, actor: Actor, collectionId: string, definitions: readonly PreparationDefinitionInput[], options?: Parameters<MembersPreparation['reserve']>[3]): ReturnType<MembersPreparation['reserve']>;
+}>;
+export type OwnerFilterNativeOperations = NativeOwnerFilterCapability<Omit<Dependencies, 'tokens'>, Actor, CollectionMemberAdmission, OwnerFilterReadBinding, PreparedCollectionSource, NativeCollectionWork, OwnerFilterCandidateClosure, RelationFacetMatch, CommandAttempt, OrdinaryCollectionPagePlan, NativeOwnerFilterCeilings, CollectionSourceObservation, Pick<PoolClient, 'query'>, import('./owner-filter-native-binding.ts').NativeOwnerFilterBinding>;
+export type OwnerFilterPlan = Readonly<{
+    bindOwnerFilterRead(actor: Actor, collectionId: string, admission: CollectionMemberAdmission, deadline: number, attempt?: CommandAttempt, pagePlan?: OrdinaryCollectionPagePlan, ceilings?: NativeOwnerFilterCeilings): Promise<Unavailable | Readonly<{
+        status: 'bound';
+        binding: OwnerFilterReadBinding;
+    }>>;
+    readOwnerFilterCandidateClosure(binding: OwnerFilterReadBinding, source: PreparedCollectionSource, subjectId: string, work: NativeCollectionWork, deferDisclosure?: boolean): ReturnType<typeof readOwnerFilterCandidateClosureNative>;
+    readOwnerFilterCandidate(client: Pick<PoolClient, 'query'>, admission: CollectionMemberAdmission, closure: OwnerFilterCandidateClosure, work: NativeCollectionWork): ReturnType<typeof readOwnerFilterCandidateNative>;
+    readBoundOwnerFilterPage(admission: CollectionMemberAdmission, options: CollectionMemberQuery, binding: OwnerFilterReadBinding): Promise<{
+        members: {
+            kind: 'dynamic';
+            subjectId: string;
+        }[];
+        next: string | null;
+    } | {
+        preparing: true;
+    }>;
+    readOwnerFilterPage(actor: Actor, collectionId: string, options: CollectionMemberQuery, deadline: number): ReturnType<typeof readOwnerFilterPageNative>;
+}>;
+declare function readOwnerFilterCandidateClosureNative(native: OwnerFilterNativeOperations, binding: OwnerFilterReadBinding, source: PreparedCollectionSource, subjectId: string, work: NativeCollectionWork, deferDisclosure?: boolean): Promise<Readonly<{
+    status: 'unavailable';
+} | {
     status: 'complete';
-    closure: OwnerFilterCandidateClosure;
+    closure: Readonly<{
+        subjectId: string;
+        originals: readonly Readonly<{
+            subjectId: string;
+            facts: readonly OwnerFilterFactLocator[];
+        }>[];
+        releases: ReadonlyMap<string, Release>;
+        catalogue: ReadonlyMap<string, LeafEvidence>;
+    }>;
 }>>;
-/** All native points share the caller's snapshot and ledger. No Boolean branch skips authority or evidence. */
-export declare function readOwnerFilterCandidate(client: Pick<PoolClient, 'query'>, admission: CollectionMemberAdmission, closure: OwnerFilterCandidateClosure, work: NativeCollectionWork): Promise<RelationFacetMatch>;
-/** Full-page caller over the one Source and Search interpreter. An incomplete window is never a 200 page. */
-export declare function readBoundOwnerFilterPage(deps: Dependencies, admission: CollectionMemberAdmission, options: CollectionMemberQuery, binding: OwnerFilterReadBinding): Promise<{
+declare function readOwnerFilterCandidateNative(native: OwnerFilterNativeOperations, client: Pick<PoolClient, 'query'>, admission: CollectionMemberAdmission, closure: OwnerFilterCandidateClosure, work: NativeCollectionWork): Promise<RelationFacetMatch>;
+declare function readOwnerFilterPageNative(deps: Dependencies, native: OwnerFilterNativeOperations, reservation: OwnerFilterReservation, actor: Actor, collectionId: string, options: CollectionMemberQuery, deadline: number): Promise<{
     members: {
         kind: 'dynamic';
         subjectId: string;
@@ -69,7 +96,45 @@ export declare function readBoundOwnerFilterPage(deps: Dependencies, admission: 
 } | {
     preparing: true;
 }>;
-export declare function readOwnerFilterPage(deps: Dependencies, actor: Actor, collectionId: string, options: CollectionMemberQuery, deadline: number): Promise<{
+/** All operations in this plan share the supplied native implementation and reservation capability. */
+export declare function createOwnerFilterPlan(dependencies: Dependencies, native: OwnerFilterNativeOperations, reservation: OwnerFilterReservation): OwnerFilterPlan;
+/** Compatibility operations used by Search delegate to the application installed by Library composition. */
+export declare function bindOwnerFilterRead(dependencies: Omit<Dependencies, 'tokens'>, actor: Actor, collectionId: string, admission: CollectionMemberAdmission, deadline: number, attempt?: CommandAttempt, pagePlan?: OrdinaryCollectionPagePlan, ceilings?: NativeOwnerFilterCeilings): Promise<Readonly<{
+    status: 'unavailable';
+} | {
+    status: 'bound';
+    binding: Readonly<{
+        input: Extract<PrepareCollectionSource, {
+            actor: Actor;
+        }>;
+        scope: IdentityScopeObservation;
+    }>;
+}>>;
+export declare function readOwnerFilterCandidateClosure(binding: OwnerFilterReadBinding, source: PreparedCollectionSource, subjectId: string, work: NativeCollectionWork, deferDisclosure?: boolean): Promise<Readonly<{
+    status: 'unavailable';
+} | {
+    status: 'complete';
+    closure: Readonly<{
+        subjectId: string;
+        originals: readonly Readonly<{
+            subjectId: string;
+            facts: readonly OwnerFilterFactLocator[];
+        }>[];
+        releases: ReadonlyMap<string, Release>;
+        catalogue: ReadonlyMap<string, LeafEvidence>;
+    }>;
+}>>;
+export declare function readOwnerFilterCandidate(client: Pick<PoolClient, 'query'>, admission: CollectionMemberAdmission, closure: OwnerFilterCandidateClosure, work: NativeCollectionWork): Promise<RelationFacetMatch>;
+export declare function readBoundOwnerFilterPage(dependencies: Dependencies, admission: CollectionMemberAdmission, options: CollectionMemberQuery, binding: OwnerFilterReadBinding): Promise<{
+    members: {
+        kind: 'dynamic';
+        subjectId: string;
+    }[];
+    next: string | null;
+} | {
+    preparing: true;
+}>;
+export declare function readOwnerFilterPage(dependencies: Dependencies, actor: Actor, collectionId: string, options: CollectionMemberQuery, deadline: number): Promise<{
     members: {
         kind: 'dynamic';
         subjectId: string;

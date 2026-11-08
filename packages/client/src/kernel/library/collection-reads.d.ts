@@ -1,8 +1,8 @@
-import { type AccessWorkAccounting } from '../access/work.ts';
+import type { AccessWorkAccounting } from '../access/work.ts';
 import { type BuiltinCollectionView } from './builtin-runtime.ts';
 import { type AuthoritativeTime, type CommandAttempt } from '../command/command.ts';
-import { type ContributionAttribution } from '../access/public-identity.ts';
-import { type Actor } from '../request/access.ts';
+import type { ContributionAttribution } from '../access/public-identity.ts';
+import type { Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type CollectionPresentation } from './collection-presentation.ts';
 import { type CollectionMetadataHistoryDetail, type CollectionMetadataHistoryPage } from './collection-metadata-history.ts';
@@ -69,6 +69,7 @@ export declare function collectionReadView(value: CollectionResourceView): {
     membershipKind: 'dynamic';
     allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
 } | {
+    allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
     id: string;
     curatorAccountId: string;
     membershipKind: 'dynamic';
@@ -83,7 +84,6 @@ export declare function collectionReadView(value: CollectionResourceView): {
     presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
     cover: null;
     coverSource: 'none';
-    allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
 } | {
     presentationKind: import("./collection-kind.ts").CollectionKind['presentationKind'];
     presentationKindSource: import("./collection-kind.ts").CollectionKind['presentationKindSource'];
@@ -184,11 +184,11 @@ export declare function createCollectionReads(dependencies: PreviewPreparationDe
         members: MemberView[];
         next: string | null;
     }>;
-    readMembers: (viewer: Actor, collectionId: string, options?: CollectionMemberQuery, deadline?: number) => Promise<import("../search/service-saved-collection.ts").SavedCatalogueMembersPage | {
-        preparing: true;
-    } | {
+    readMembers: (viewer: Actor, collectionId: string, options?: CollectionMemberQuery, deadline?: number) => Promise<import("../search/service-contract.ts").SavedCatalogueMembersPage | {
         members: MemberView[];
         next: string | null;
+    } | {
+        preparing: true;
     }>;
     withViewerFacts: <T extends {
         members: readonly {

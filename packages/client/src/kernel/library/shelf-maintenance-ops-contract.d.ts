@@ -1,5 +1,8 @@
+import { type ShelfMaintenancePhase, type ShelfMaintenanceKind, type ShelfOwner, type ShelfMaintenanceCursor } from './contract/index.ts';
+export { type InitialShelfInputs, initialShelfReadiness, counterWriteMode, EMPTY_SHELF_GENERATION, SHELF_BACKFILL_PHASES, SHELF_COUNTER_PHASES, SHELF_PURGE_PHASES, type ShelfMaintenancePhase, type ShelfMaintenanceKind, type ShelfOwner, type ShelfMaintenanceCursor, } from './contract/index.ts';
 /** Native shelf maintenance contracts. Locators are never capabilities. */
 import type { Pool } from 'pg';
+import type { LibrarySemanticObservationCapability } from './contract/semantic-observation.ts';
 import type { KernelClock } from '../clock.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import type { CloudEvent } from '../events/log.ts';
@@ -8,27 +11,7 @@ import type { ShelfSourceStamp, ShelfTypeKeys } from './shelf-contract.ts';
 import type { ShelfTypeDigest } from './shelf-type-keys.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { TypePreparationDependencies, TypePreparationIdentity } from './type-preparation-contract.ts';
-export interface InitialShelfInputs {
-    readonly hasEntries: boolean;
-    readonly hasCollections: boolean;
-    readonly hasSessions: boolean;
-}
-/** Inputs are exact-owner EXISTS results obtained under account share and serialized gate initialization. */
-export declare function initialShelfReadiness(inputs: InitialShelfInputs): 'ready' | 'backfill';
-/** Incomplete history cannot support even a negative delta. This does not grant writer admission. */
-export declare function counterWriteMode(ready: boolean): 'active' | 'defer';
 export { SHELF_MAINTENANCE_LIMITS } from './shelf-maintenance-bounds.ts';
-export declare const EMPTY_SHELF_GENERATION = "00000000-0000-0000-0000-000000000000";
-export declare const SHELF_BACKFILL_PHASES: readonly ['drain', 'session-changes', 'sessions', 'head-inputs', 'heads', 'entries', 'types', 'count-entries', 'count-collections', 'validate', 'publish', 'retire-counts', 'retire-reservations', 'complete'];
-export declare const SHELF_COUNTER_PHASES: readonly ['drain', 'count-entries', 'count-collections', 'validate', 'publish', 'retire-counts', 'retire-reservations', 'complete'];
-export declare const SHELF_PURGE_PHASES: readonly ['cancel-work', 'bulk-evidence', 'reservations', 'type-sources', 'progress-changes', 'progress-units', 'sessions', 'heads', 'copies', 'entries', 'follows', 'collection-members', 'collections', 'published-logs', 'counts', 'type-nodes', 'type-roots', 'type-values', 'complete'];
-export type ShelfMaintenancePhase = (typeof SHELF_BACKFILL_PHASES)[number] | (typeof SHELF_PURGE_PHASES)[number];
-export type ShelfMaintenanceKind = 'backfill' | 'counters' | 'purge';
-export type ShelfOwner = Readonly<{
-    route: number;
-    accountId: string;
-}>;
-export type ShelfMaintenanceCursor = readonly (string | number | boolean | null)[];
 /** JSON locator only. Decimal epoch/sequence never cross Number; this object grants no authority. */
 export interface ShelfMaintenanceBinding extends ShelfOwner {
     readonly runId: string;
@@ -118,6 +101,7 @@ export interface ShelfMaintenanceOps {
 export interface ShelfMaintenanceDependencies {
     readonly pool: Pool;
     readonly access: Access;
+    readonly semanticObservations?: LibrarySemanticObservationCapability;
     readonly clock?: KernelClock;
     readonly client?: WorkClient | (() => Promise<WorkClient>);
     readonly shelfTypeDigest?: ShelfTypeDigest;

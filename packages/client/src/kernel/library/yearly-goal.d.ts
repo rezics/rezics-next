@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 export declare const YEARLY_COMPLETION_GOAL_METRIC: 'completed_consumption_occurrences';
 export declare const YEARLY_COMPLETION_GOAL_TARGET_MIN = 1;
 export declare const YEARLY_COMPLETION_GOAL_TARGET_MAX = 1000;

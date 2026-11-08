@@ -1,28 +1,11 @@
-import { type Release, type ReleaseViolation } from '@rezics/definitions';
+import { type Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
-import { type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { type CommandAuthorization } from '../command/command.ts';
 import type { AccessCheck, AccountActor } from '../request/access.ts';
-export declare const GLOBAL_CONTEXT = "00000000-0000-8000-8000-000000000000";
-export declare class DefinitionInputError extends Error {
-    readonly violations: ReleaseViolation[];
-    constructor(violations: ReleaseViolation[]);
-}
-export declare class DefinitionAccessDeniedError extends Error {
-}
-export declare class DefinitionNotFoundError extends Error {
-}
-export declare class StaleEditorialHeadError extends Error {
-}
-export declare function freeze(value: unknown): void;
-/** A cache hit reads the digest only. The cache stores validated, digest-checked bodies, and a release is immutable. */
-export declare function readRelease(pool: Pool | CommandTransaction, digest: string, options?: {
-    composed?: boolean;
-}): Promise<Release | null>;
-export declare function activeRelease(pool: Pool | CommandTransaction): Promise<{
-    digest: string;
-    head: number;
-    release: Release;
-} | null>;
+export { DefinitionInputError, DefinitionAccessDeniedError, DefinitionNotFoundError, StaleEditorialHeadError, } from './contract/definition-values.ts';
+export { freeze } from './core/freeze.ts';
+export { activeRelease, readRelease } from './definition-release-read.ts';
+export { GLOBAL_CONTEXT } from './contract/global-context.ts';
 export type WriteOptions = {
     actor: AccountActor;
     idempotencyKey: string;

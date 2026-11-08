@@ -1,5 +1,5 @@
 import type { AvatarSummary } from './contract/index.ts';
-import { type Access, type AccessContext, type AccountActor } from '../request/access.ts';
+import { type Access, type AccessContext, type AccountActor } from './check.ts';
 import { type AccountLink, type AccountPublicViews } from './account-data.ts';
 import { type AccessWork } from './work.ts';
 export declare const PROFILE_TEXT_MAX_LENGTH = 4096;

@@ -1,15 +1,16 @@
+export { readNativeCollectionMemberAdmission } from './owner-filter-admission.ts';
 import { type FilterDocument, type OwnerLeaf } from '@rezics/filter';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { type AuthoritativeTime, type CommandAttempt } from '../command/command.ts';
 import { type KernelClock } from '../clock.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import type { RelationFacetMatch } from '../search/source.ts';
 import { type CurrentNativeLeaf, type CurrentOwnerFilterPlan } from '../search/current-filter-plan.ts';
 import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { type PrepareCollectionSource } from './collection-source.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
-import type { AdmittedCollectionRule, CollectionRuleSource } from './collection-rules.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
+import type { AdmittedCollectionRule } from './collection-rules.ts';
 import { type LibraryProfilePin } from './profile.ts';
 type EntryOperand = Extract<OwnerLeaf['owner'], {
     state: unknown;
@@ -115,16 +116,6 @@ type Dependencies = {
     access: Access;
     clock?: KernelClock;
 };
-/** Exact native grammar/family admission, not a permission verdict or a serializable capability.
- * Consumers must repeat ordinary current authority and Source/identity fences at their actual T.
- */
-export declare function readNativeCollectionMemberAdmission(admission: CollectionMemberAdmission): Readonly<{
-    actor: Actor;
-    pool: Pool;
-    deadline: number;
-    retainedMeaning: boolean;
-    source: CollectionRuleSource;
-}> | undefined;
 type PrivateRead = {
     action: string;
     group: string;
@@ -143,8 +134,7 @@ export declare function admitSavedCollectionMemberQuery(deps: Dependencies, view
  * No private fact SQL, raw-window fallback, fabricated handle, readiness or additional allowance is supplied.
  */
 export declare function prepareCollectionMemberFilter(deps: Dependencies, options: CollectionMemberQuery, input: PrepareCollectionSource): Promise<{
-    admission: CollectionMemberAdmission;
     source: import("./collection-source.ts").PreparedCollectionSource;
-    work: import("./access-capabilities.ts").WorkReceipt;
+    work: import("./collection-source.ts").WorkReceipt;
+    admission: CollectionMemberAdmission;
 }>;
-export {};

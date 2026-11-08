@@ -1,6 +1,6 @@
 import { type createGrantCommands } from './grant-commands.ts';
 import type { Pool } from 'pg';
-import { type Access, type Actor } from '../request/access.ts';
+import { type Access, type Actor } from './check.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type PublicIdentity } from './account-data.ts';
 import { mountedExposureCatalogue } from './gates/visibility.ts';

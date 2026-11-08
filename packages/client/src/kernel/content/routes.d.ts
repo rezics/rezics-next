@@ -6453,6 +6453,57 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
 } & {
     v1: {
         definitions: {
+            get: {
+                body: unknown;
+                params: {};
+                query: unknown;
+                headers: unknown;
+                response: {
+                    200: {
+                        digest: string;
+                        head: number;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             active: {
                 get: {
                     body: unknown;
@@ -14449,7 +14500,27 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 };
                                 documentMedia: Readonly<{
                                     state: 'available' | 'unavailable' | 'overflow';
-                                    documents: readonly import("./reading-page-documents.ts").ReadingPageDocument[];
+                                    documents: readonly import("./contract/reading-page.ts").ReadingPageDocument<Readonly<{
+                                        id: string;
+                                        containerId: string;
+                                        digest: string;
+                                        width: number;
+                                        height: number;
+                                        variants: readonly {
+                                            format: 'avif' | 'webp';
+                                            width: number;
+                                            height: number;
+                                        }[];
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        } | null;
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: import("@rezics/definitions/media-import").MediaImportRequest['credit'] | null;
+                                    }>>[];
                                 }>;
                                 replies: {
                                     items: ({
@@ -14458,7 +14529,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                         route: number;
                                         parentId: string | null;
                                         removed: true;
-                                        availability: "withheld";
+                                        availability: "erased";
+                                        restorableUntil?: string;
                                         body: null;
                                         sha256: null;
                                     } | {
@@ -14467,8 +14539,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                         route: number;
                                         parentId: string | null;
                                         removed: true;
-                                        availability: "erased";
-                                        restorableUntil?: string;
+                                        availability: "withheld";
                                         body: null;
                                         sha256: null;
                                     } | (ItemView & {
@@ -16813,8 +16884,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         };
                         query: {
                             cursor?: string;
-                            limit?: string | number;
                             kind?: "discussion" | "review";
+                            limit?: string;
                         };
                         headers: unknown;
                         response: {
@@ -16927,7 +16998,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         };
                         query: {
                             cursor?: string;
-                            limit?: string | number;
+                            limit?: string;
                         };
                         headers: unknown;
                         response: {
@@ -17232,7 +17303,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             kind: "discussion" | "review";
                             board?: string;
                             cursor?: string;
-                            limit?: string | number;
+                            limit?: string;
                         };
                         headers: unknown;
                         response: {

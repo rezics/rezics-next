@@ -1,6 +1,6 @@
 import { type DocumentSnapshot } from '@rezics/document';
 import type { Pool } from 'pg';
-import { type Access } from '../request/access.ts';
+import type { Access } from '../request/access.ts';
 import { type ImportedFieldView } from './imported-fields.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
 /** `now` is the wall-clock budget source supplied by the composition; deadlines are compared against it. */

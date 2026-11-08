@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { type Access, type AccessRealmRoleReader, type Actor } from '../request/access.ts';
+import { type Access, type AccessRealmRoleReader, type Actor } from './check.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 export type AccountRealmsPage = {
     realms: {

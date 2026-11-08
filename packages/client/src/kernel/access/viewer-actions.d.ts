@@ -5,7 +5,7 @@ import { type Exposure } from './gates/declaration.ts';
 import { type AuthoritativeTime } from '../command/command.ts';
 import type { createApp } from '../http/app.ts';
 import { type MountedRoute } from '../http/request.ts';
-import { type Access, type AccessClient, type Actor, type AccountAuthorityKind } from '../request/access.ts';
+import { type Access, type AccessClient, type Actor, type AccountAuthorityKind } from './check.ts';
 /** Trusted owner read, shared with its ordinary resource reader. Absence and the
  * public floor are separate: a private resource may still have an explicit grant. */
 export type ViewerActionResource = Readonly<{
@@ -107,15 +107,15 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: import("../request/access.ts").AccountActor | {
+        readonly actor: import("./check.ts").AccountActor | {
             kind: 'anonymous';
         };
         readonly session: {
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("./index.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorize: (resource: import("./index.ts").Resource) => Promise<import("./index.ts").AccessCheck>;
+        readonly authorizeCommand: (resource: import("./index.ts").Resource, denied: () => Error) => Promise<import("./check.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -469,15 +469,15 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: import("../request/access.ts").AccountActor | {
+            readonly actor: import("./check.ts").AccountActor | {
                 kind: 'anonymous';
             };
             readonly session: {
                 readonly components: import("../tokens/session.ts").SessionComponent[];
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("./index.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorize: (resource: import("./index.ts").Resource) => Promise<import("./index.ts").AccessCheck>;
+            readonly authorizeCommand: (resource: import("./index.ts").Resource, denied: () => Error) => Promise<import("./check.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -500,15 +500,15 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: import("../request/access.ts").AccountActor | {
+    readonly actor: import("./check.ts").AccountActor | {
         kind: 'anonymous';
     };
     readonly session: {
         readonly components: import("../tokens/session.ts").SessionComponent[];
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("./index.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorize: (resource: import("./index.ts").Resource) => Promise<import("./index.ts").AccessCheck>;
+    readonly authorizeCommand: (resource: import("./index.ts").Resource, denied: () => Error) => Promise<import("./check.ts").AccessCommandAuthorization>;
 }) => Promise<{
     resources: ({
         type: string;

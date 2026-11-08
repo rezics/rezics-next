@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { type CommandOutcome } from '../command/command.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import type { TurnstileVerifier } from './turnstile.ts';
 import type { Anchored, BoardId, Page, PostId, ReportId, RequestContext, RevisionId, ThreadId } from './model.ts';
 export type ReportTarget = Readonly<{

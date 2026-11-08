@@ -9,7 +9,24 @@ import type { CommandBasis, CommandAuthorization, CommandReceipt, CommandResult,
 import type { mergeSubjects } from '../merges.ts';
 import type { verifyAccountAgent, unverifyAccountAgent } from '../account-agents.ts';
 import type { Release } from '@rezics/definitions';
-import type { ReviewedPersonExpectation } from '../reviewed-person-identity.ts';
+import { type IdentityTransformSource } from '../identity-core/index.ts';
+export type ReviewedPersonSource = {
+    source: 'bangumi' | 'vndb' | 'bangumi_cross_media' | 'vndb_cross_media';
+    externalId: string;
+};
+export type ReviewedPersonEndpoint = {
+    subject: string;
+    revision: number;
+    securityRevision: string;
+    source: ReviewedPersonSource['source'];
+    externalId: string;
+    claimTransactionId: string;
+    property: 'wdt:P6298' | 'wdt:P3180';
+    value: string;
+};
+export type ReviewedPersonExpectation = {
+    endpoints: [ReviewedPersonEndpoint, ReviewedPersonEndpoint];
+};
 export type MergeSubjects = typeof mergeSubjects;
 export type VerifyAccountAgent = typeof verifyAccountAgent;
 export type UnverifyAccountAgent = typeof unverifyAccountAgent;
@@ -71,6 +88,33 @@ export declare function commandAuthorityAt(authority: IdentityAdmissionAuthority
     clock?: () => Date;
     authorization?: CommandAuthorization;
 }>;
+export declare const identityJobPartition: (job: IdentityJobRef) => number;
+export declare function identityReceiptValue(receipt: IdentityReceipt): Readonly<{
+    kind: 'account-agent.verify';
+    account: string;
+    receipt: string;
+}> | Readonly<{
+    kind: 'account-agent.unverify';
+    account: string;
+    receipt: string;
+}> | {
+    kind: "subject.merge";
+    command: {
+        digest: string;
+        actorAccountId: string;
+        kind: string;
+        key: string;
+    };
+};
+export declare function identityReceiptKey(receipt: IdentityReceipt): string;
+export declare function identityEpochRemainderTerminal(intent: IdentityIntent, sources: readonly IdentityTransformSource[]): string | null;
+export declare function identityHomeAvailable(partition: number, after?: string): {
+    type: "com.rezics.semantic.identity-epoch.home-available.v1";
+    data: {
+        partition: number;
+        after: string;
+    };
+};
 export type IdentityEpochStore = Readonly<{
     /** Bootstrap topology home. Job control homes are encoded in native job IDs. */
     controlPartition: number;

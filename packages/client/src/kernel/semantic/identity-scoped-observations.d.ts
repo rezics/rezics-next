@@ -1,12 +1,14 @@
 import type { Pool } from 'pg';
 import type { WorkContext } from '../work/registry.ts';
-import { type CommandTransaction } from '../command/command.ts';
+import { type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
 import { type LibraryScopeEffectSeal } from '../library/identity-scope-effects.ts';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
+import type { NativePublicOutputApplication } from '../library/contract/native-public-output.ts';
 import type * as S from './identity-scope-types.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import type { IdentityPrearmTicketData } from './identity-epoch-prearm-contract.ts';
 import type { IdentitySourceConsumerContext, IdentitySourceScopeConsumerWork } from './identity-source-consumer-custody.ts';
+type NativePublicOutputPort = NativePublicOutputApplication<CommandTransaction, Pool, AuthoritativeTime>;
 /** Resolve the retained registration/capture using the existing Source frame.
  * The historical capture allowance is never consulted as a remaining balance.
  */
@@ -23,7 +25,7 @@ export declare function identityScopeAddress(key: S.IdentityScopeKey): {
     source: string;
     scope: string;
 };
-export declare function createIdentityScopedObservations(pool: Pool): S.IdentityScopedObservations;
+export declare function createIdentityScopedObservations(pool: Pool, suppliedNativePublicOutput?: NativePublicOutputPort): S.IdentityScopedObservations;
 export declare function nextIdentityScopeRepairHomes(pool: Pool): Promise<number[]>;
 export declare function nextIdentityScopeRepairTarget(pool: Pool, partition: number): Promise<S.IdentityScopeKey | null>;
 /** Retained fair repair shares the native maintenance queue; workflow arguments contain only a home. */
@@ -36,3 +38,4 @@ export declare function receiveScopePreparation(pool: Pool, ticket: IdentityPrea
  * The returned component is usable only within this transaction until commit.
  */
 export declare function retainIdentityScopeConsumerFence(tx: CommandTransaction, ticket: IdentityPrearmTicketData, seal: LibraryScopeEffectSeal): Promise<IdentityNativeReceipt | null>;
+export {};

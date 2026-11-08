@@ -1,4 +1,4 @@
-import { type SubjectSummary } from '../semantic/summaries.ts';
+import type { SubjectSummary } from '../semantic/summaries.ts';
 import type { PublicationDependencies, PublicationReadContext, PublicationVerdict } from './publication.ts';
 export declare const PublicationPreparationSchema: import("typebox").TObject<{
     realm: import("typebox").TObject<{

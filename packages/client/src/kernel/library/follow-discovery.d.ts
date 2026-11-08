@@ -1,6 +1,6 @@
 /** Private bounded follow preparation shared by Search and Space entry. The writer remains follows.ts. */
 import type { Pool } from 'pg';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 export type FollowDiscoveryTarget = Readonly<{
     targetId: string;

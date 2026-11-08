@@ -1,12 +1,12 @@
 import type { Pool } from 'pg';
-import type { ScopeWorkContext } from '../search/scope-work-context.ts';
+import type { ScopeWorkContext, NativeScopeWorkDefinition } from './adapters/preparation-work.ts';
 import type { Access } from '../request/access.ts';
 export { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
 import { type CanonicalBasis, type CanonicalRawKey } from './canonical-source-store.ts';
 import { type NativeCollectionMetadata } from './collection-source-native.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { WorkReceipt } from './contract/work-dimensions.ts';
-export type CollectionSourceWorkDefinition = Awaited<ReturnType<(typeof import('../search/scope-work-context.ts'))['readScopeWorkDefinition']>>;
+export type CollectionSourceWorkDefinition = NativeScopeWorkDefinition;
 export type CollectionSourceWorkState = Readonly<{
     metadata: NativeCollectionMetadata;
     basis: CanonicalBasis;

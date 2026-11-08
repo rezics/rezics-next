@@ -7,3 +7,4 @@ export { ADDITIONAL_ORIGINAL_TRANSFER_CONTROL, HISTORY_ORIGINAL_CONTROL, HISTORY
 export { authorizationAllows, decideResourceAuthorization } from './authorization-decision.ts';
 export { identityReceiptKey, identityRecoveryApplies, kindAudienceAccessWork, kindAudienceActorShape, kindAudienceOverhead, } from './kind-audience-work.ts';
 export type { KindAudienceFormulaShape } from './kind-audience-work.ts';
+export { admitCollectionListOutcome, collectionListPolicyFacts, collectionListPolicyRequest, collectionListRequiredResiduals, interpretCollectionListResidual, sumCollectionAuthorizationWork, } from './collection-policy.ts';

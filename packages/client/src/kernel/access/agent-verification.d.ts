@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { CommandOutcome } from '../command/command.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { type Access, type AccessContext, type Actor } from '../request/access.ts';
+import { type Access, type AccessContext, type Actor } from './check.ts';
 export type AccountVerificationLink = {
     label: string;
     url: string;

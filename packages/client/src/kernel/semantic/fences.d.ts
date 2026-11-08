@@ -1,6 +1,7 @@
 import type { Source } from '@rezics/definitions/bulk';
 import type { Pool, PoolClient } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
+import type { ContentQueryClient } from './contract/domain-ports.ts';
 import { type SourceFence, type SourceFenceTuple } from '../content/source-fences.ts';
 /** Account-agent provenance is a current native identity, not an imported source tuple. */
 export type AgentSelfSource = Readonly<{
@@ -26,6 +27,8 @@ export type SourceFencePlan = {
     done: Set<number>;
 };
 export declare function fenceKey(tuple: Pick<SourceFenceTuple, 'route' | 'source' | 'external_id' | 'field_group'>): string;
+/** Subject summary cover custody uses the exact same Content fence reader as other Semantic consumers. */
+export declare function readCurrentSourceFences(client: ContentQueryClient, tuples: readonly SourceFenceTuple[]): Promise<readonly SourceFence[]>;
 export declare function sourceTuple(routeKey: Uint8Array, source: Source): SourceFenceTuple;
 /** One read per tuple partition. Same-partition tuples are read inside a command; the rest are anchored first. */
 export declare function prepareFencePlan(routeKey: Uint8Array, commands: readonly {

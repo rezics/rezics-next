@@ -1,0 +1,23 @@
+export { nativeHashing } from './hashing.ts';
+export { nativeRouting } from './routing.ts';
+export { nativeFactStore } from './fact-store.ts';
+export { nativeContentLifecycle } from './content-lifecycle.ts';
+export { createNativeSubjectReadingPort, installNativeSubjectReadingApplication, nativeSubjectReadingApplication, } from './subject-reading.ts';
+export { importedTupleRouteOf } from './imported-route.ts';
+export { nativeRatingReview, ratingReviewOf, VoteReviewStaleError, VoteReviewUnavailableError, } from './rating-review.ts';
+export { createNativeSemanticDomain, type NativeSemanticDomain } from './native-domain.ts';
+export { registerSemanticDomain, registeredSemanticDomain, bindDefaultSemanticDomain, defaultSemanticDomain, resolvedSemanticDomain, } from './registry.ts';
+export { hashingOf, routingOf, contentLifecycleOf, bindOrdinaryContentLifecycle } from './ports.ts';
+export { createNativeRatingVoteSemantic } from './rating-votes.ts';
+export type { IdentityTerminalCommand } from './agent-identity-maintenance.ts';
+export { nativeContextAccess } from './context-access.ts';
+export { createSubjectScopeEvidence, type NativeScopeReader } from './scope-evidence.ts';
+import type { CopyWorkReaderPort, CopyWorkSearchEvidencePort } from '../copy-work-reader-port.ts';
+/** Bind Semantic's native read producers to the Search evidence shape without inward value imports. */
+export declare function createNativeSemanticCopyWorkReaderPort(searchEvidence: CopyWorkSearchEvidencePort): CopyWorkReaderPort;
+export { nativeReleasedDefinitions, type NativeReleasedDefinitions } from './released-definitions.ts';
+export { nativeCopyListContext, type NativeCopyListContext } from './copy-list-context.ts';
+export { createLibrarySubjectIdentityAdapter, observeLibrarySubjectSummaries, readLibraryIdentityMappings, } from './library-presentation.ts';
+export type { LibrarySubjectIdentityAdapter, LibrarySubjectReferenceResult } from './library-presentation.ts';
+export { createNativeLibraryObservationAdapter } from './library-observation.ts';
+export type { LibrarySubjectIdentityContext } from './library-presentation.ts';

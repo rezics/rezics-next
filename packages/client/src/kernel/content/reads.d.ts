@@ -3,9 +3,9 @@ import type { Pool } from 'pg';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { AccessContext } from '../request/access.ts';
 import type { ContentEditionSource } from './edition-model.ts';
-import { type DurableOperationAnchor, type InitiatorRestorer } from '../access/durable-initiator.ts';
+import type { DurableOperationAnchor, InitiatorRestorer } from '../access/content-adapter.ts';
 import { type Partition } from '../partition/partition.ts';
-import { type Access, type AccessClient, type Actor, type ReadDecisions, type Resource } from '../request/access.ts';
+import type { Access, AccessClient, Actor, ReadDecisions, Resource } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Anchored, AnchoredPosition, BoardId, BoardRecord as BoardView, ErasedPlaceholder, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ReviewVoteCitation, ThreadId, ThreadView as StoredThreadView, Visibility } from './model.ts';
 import { REACTION_KINDS } from './events.ts';
@@ -58,11 +58,24 @@ export type PostEntry = ItemView | (ErasedPlaceholder & {
 export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{
     firstPost: PostEntry;
 }>;
+/** Timing seam for composed tests. It runs after a read's initial Board and Access checks and before its final
+ * disclosure; it never changes what the read returns. Production leaves it absent. */
+export type DisclosureBarrier = (target: Readonly<{
+    threadId: string;
+    postId?: string;
+}>) => Promise<void>;
+/** Timing-only observation after page enrichment, with all source connections released. */
+export type PageDisclosureBarrier = (target: Readonly<{
+    boardId: string;
+    threadId?: string;
+}>) => Promise<void>;
 export type ContentReadDependencies = Readonly<{
     pool: Pool;
     access: Access;
     tokens: KeyRing;
     clock: () => Date;
+    disclosureBarrier?: DisclosureBarrier;
+    pageDisclosureBarrier?: PageDisclosureBarrier;
     /** Real wall time for realm read deadlines; absent callers keep the composition clock. */
     deadlineNow?: () => number;
 }>;
@@ -223,9 +236,11 @@ export declare function withReactionCounts<T extends {
 export declare function withReactionCountsAndCoverage<T extends {
     readonly id: string;
 }>(dependencies: ContentReadDependencies, targets: readonly T[], deadline: number): Promise<ReactionCountProjection<T>>;
+/** Keep the final disclosed source and the reaction fields read before that last check. */
+export declare function retainCurrentReactions<T extends object, E extends object>(current: T, enriched: E): T & E;
 /** Read at most five relayed subject totals per id with one statement per target partition. */
 export declare function readSubjectReactionCounts(dependencies: Pick<ContentReadDependencies, 'pool'>, subjectIds: readonly string[], deadline?: number): Promise<Map<string, SubjectReactionCounts>>;
-export declare function readThread(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext): Promise<Anchored<ThreadView | null>>;
+export declare function readThread(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext, retain?: RetainContentRead<ThreadView>): Promise<Anchored<ThreadView | null>>;
 /** Subject listings use the same final thread, post, board and Access checks as exact thread reads, then
  * confirm the current subject reference and board's current Global/Realm placement in that snapshot. */
 export declare function readSubjectThread(dependencies: ContentReadDependencies, threadId: ThreadId, subjectId: string, placeId: string, context: ReadContext): Promise<Anchored<ThreadView | null>>;
@@ -254,7 +269,8 @@ export declare function readPost(dependencies: ContentReadDependencies, threadId
  * requests revision bytes; account ownership does not replace container Access.
  */
 export declare function readOwnDraftMetadata(dependencies: ContentReadDependencies, threadId: string, postId: string, context: ReadContext, retain?: RetainContentRead<NativeDraftMetadata>): Promise<Anchored<NativeDraftMetadata | null>>;
-export declare function listThreadPosts(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext, cursor?: string, limit?: number): Promise<Page<PostEntry>>;
+/** `beforeFinal` receives the disclosed entries and runs once, before the thread's final disclosure. */
+export declare function listThreadPosts(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext, cursor?: string, limit?: number, beforeFinal?: (entries: readonly PostEntry[]) => Promise<void>): Promise<Page<PostEntry>>;
 export declare function listPostRevisions(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, cursor?: string, limit?: number): Promise<NativePostRevisionPage>;
 export declare function discloseThreads(dependencies: ContentReadDependencies, threadIds: readonly ThreadId[], context: ReadContext): Promise<readonly Anchored<ThreadView | null>[]>;
 /** Exact native rules reader. It shares the ordinary row, ancestry and Access

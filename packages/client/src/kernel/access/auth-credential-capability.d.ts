@@ -1,7 +1,7 @@
-import { type Account } from './account-data.ts';
+export { installCredentialFloorBridge, credentialFloorIdentityClaims, type CredentialFloorIdentity, } from './credential-floor-identity.ts';
 import type { AuthSessionPort, CredentialApprovalPorts, CredentialFloorAuthorizationInput, CredentialEffectBinding as OperatorCredentialBinding, CredentialFloorPurpose, CredentialEffectAuthorization, CredentialFloorBinding, CredentialEffectExpectation, CredentialFloorPort, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
-import type { Access, AccessContext, AccountActor, Resource } from '../request/access.ts';
+import type { Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type AuthAuthorizationReceipt } from './auth-bindings.ts';
 import type { createOperatorCommands } from './operator.ts';
@@ -100,15 +100,3 @@ export type CredentialCapability = Required<Pick<CredentialApprovalPorts<Credent
  */
 export declare function createCredentialCapability(config: CredentialCapabilityConfig): CredentialCapability;
 export type { PasskeyPurpose, CredentialFloorPurpose } from '@rezics/auth-contract';
-declare const floorIdentity: unique symbol;
-export type CredentialFloorIdentity = {
-    readonly [floorIdentity]: true;
-};
-/** Installed once by the ordinary Access factory; no actor JSON registration. */
-export declare function installCredentialFloorBridge(access: Access, bridge: (proof: CredentialFloorIdentity, resource: Resource, context: AccessContext) => Promise<boolean>): void;
-/** Opaque evidence exists only after exact native consumed-row verification. */
-export declare function credentialFloorIdentityClaims(proof: CredentialFloorIdentity, pool: Pool): {
-    actor: AccountActor;
-    account: Account;
-    pool: Pool;
-} | undefined;

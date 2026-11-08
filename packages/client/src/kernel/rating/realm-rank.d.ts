@@ -1,7 +1,6 @@
 import type { RatingCapabilityOptions } from './contract/capabilities.ts';
 import type { Pool } from 'pg';
-import { type Access, type Actor } from '../request/access.ts';
-import { type SubjectCanonicalPopulation, type SubjectCanonicalNameKey } from '../semantic/subject-source-key-pages.ts';
+import { type Access, type Actor, type SubjectCanonicalPopulation, type SubjectCanonicalNameKey } from './dependencies.ts';
 import { type KeyRing } from '../tokens/seal.ts';
 import { type RatingQuestionView } from './question-directory.ts';
 export type RealmRankRequest = Readonly<{

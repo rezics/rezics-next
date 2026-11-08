@@ -1,6 +1,8 @@
+export { nativeSourceFence } from './native-source-fence.ts';
 /** Derived native access paths. References and ready pointers never grant membership or Access. */
 import type { Pool } from 'pg';
 import type { ListingStamp } from './listing-freshness-contract.ts';
+import type { LibrarySemanticObservationCapability } from './contract/semantic-observation.ts';
 export { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
 /**
  * Reserved by the caller BEFORE dispatch; raw keys hard <=CANONICAL_SOURCE_RAW_KEY_LIMIT, shared Zone aggregate <=256 including final use.
@@ -75,6 +77,8 @@ export interface CanonicalSourceRef {
 export interface CanonicalCall extends CanonicalSourceRef {
     readonly deadline: number;
     readonly allowance: CanonicalAllowance;
+    /** The same installed Semantic owner capability is carried through nested reads. */
+    readonly semanticObservations?: LibrarySemanticObservationCapability;
 }
 export interface CanonicalBoundCall extends CanonicalCall {
     readonly basis: CanonicalBasis;
@@ -162,13 +166,11 @@ export type CanonicalPublication = CanonicalNotReady | {
 };
 import type { WorkContext } from '../work/registry.ts';
 import { type NativeSourceIdentity } from './native-source-custody.ts';
-import { type NativeCollectionMetadata } from './collection-source-native.ts';
 import type { WorkAllowance } from './contract/work-dimensions.ts';
 import { type CommandTransaction } from '../command/command.ts';
 export declare const CANONICAL_SOURCE_WORKFLOW = "library.canonicalSource";
 /** Bound once by the sole default Library WorkModule, using its real client and queues. */
 export declare function bindCanonicalSourceWork(context: WorkContext): void;
-export declare function nativeSourceFence(metadata: NativeCollectionMetadata): string;
 /** Original native command only. Uses its SAME pool/transaction and existing Source identity storage. */
 export declare function initializeCanonicalCollectionSource(tx: CommandTransaction, input: Readonly<{
     pool: Pool;

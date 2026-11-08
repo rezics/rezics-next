@@ -1,5 +1,8 @@
-/** Library-owned Collection list residual and authorization-preparation shapes. */
+/** Library-owned Collection list residual and authorization-preparation shapes.
+ * Access implements these; Library directory SQL binds only the admitted parameter map.
+ */
 import type { WorkDimensions } from './work-dimensions.ts';
+/** Closed list residual after Access specialization. Directory SQL interpolates none of this. */
 export type CollectionListFilter = Readonly<{
     status: 'ready';
     source: 'curator';
@@ -13,6 +16,7 @@ export type CollectionListFilter = Readonly<{
 }> | Readonly<{
     status: 'unavailable';
 }>;
+/** Nine-axis funded Access preparation bound, including the Access permission transaction. */
 export type CollectionAuthorizationPreparation = WorkDimensions & {
     readonly engineRequests: 0;
 };

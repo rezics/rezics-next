@@ -1,3 +1,4 @@
+export { typePreparationBinding } from './type-preparation-binding.ts';
 import type { TypePreparationBinding, TypePreparationOrigin, TypePreparationIdentity } from './type-preparation-schema.ts';
 export type { TypePreparationBinding, TypePreparationOrigin, TypePreparationIdentity, } from './type-preparation-schema.ts';
 /** Native preparation ports; final work registration composes the bounded continuation runner. */
@@ -15,7 +16,6 @@ export interface TypePreparationInput {
     readonly source: Readonly<ShelfSourceStamp>;
     readonly ownerEpoch: bigint;
 }
-export declare function typePreparationBinding(input: TypePreparationInput): TypePreparationBinding;
 /** Immutable native row header. Exact input text/bytes and their equality evidence stay native. */
 export interface TypePreparationEvidence {
     readonly preparationId: string;

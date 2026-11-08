@@ -23,42 +23,8 @@ type ReactionCountMap = {
 type ReactionCountsSlot = {
     readonly reactions?: ReactionCountMap;
 };
-/** Validate the published TypeBox shape without Elysia removing unknown input or response fields. */
-export declare function strictContentSchema<S extends TSchema>(schema: S, check?: (value: unknown) => readonly {
-    pointer: string;
-    code: string;
-}[]): {
-    '~standard': {
-        version: 1;
-        vendor: string;
-        types: {
-            input: Static<S>;
-            output: Static<S>;
-        } | undefined;
-        validate(value: unknown): {
-            value: Static<S>;
-            issues?: never;
-        } | {
-            value?: never;
-            issues: {
-                message: string;
-            }[];
-        };
-        jsonSchema: {
-            input: () => S;
-            output: () => S;
-        };
-    };
-};
-export declare const SourceFenceQuerySchema: import("typebox").TObject<{
-    source: import("typebox").TString;
-    externalId: import("typebox").TString;
-    fieldGroup: import("typebox").TUnion<[import("typebox").TLiteral<"facts">, import("typebox").TLiteral<"summary">, import("typebox").TLiteral<"cover">]>;
-}>;
-export declare const SourceFenceResponseSchema: import("typebox").TObject<{
-    fenced: import("typebox").TBoolean;
-    securityRevision: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-}>;
+export { strictContentSchema } from './schema-validation.ts';
+export { SourceFenceQuerySchema, SourceFenceResponseSchema } from './source-fence-schemas.ts';
 export declare const ContentIdSchema: import("typebox").TString;
 export declare const WatchManagementKindSchema: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
 export declare const WatchManagementAdviceSchema: import("typebox").TUnion<[import("typebox").TLiteral<"available">, import("typebox").TLiteral<"denied">]>;

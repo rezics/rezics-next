@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { type KernelClock } from '../clock.ts';
 import { type AuthoritativeTime } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { type WorkAllowance, type WorkDimensions, type WorkReceipt } from './contract/work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 import { type SearchPreparationCapability } from './contract/index.ts';
 import { CollectionWorkLedger, type OrdinaryCollectionPagePlan } from './core/index.ts';
 export type OwnerQueryDependencies = {

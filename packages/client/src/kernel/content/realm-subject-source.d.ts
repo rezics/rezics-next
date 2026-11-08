@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
-import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
+import type { NativeScopeReader } from '../semantic/adapters/index.ts';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
-import { ScopeWork } from '../search/scope-execution.ts';
+import type { ScopeWork } from '../search/adapters/index.ts';
 import { type RealmSubjectCandidate, type RealmSubjectCoverage } from './realm-subject-candidates.ts';
 export type { RealmSubjectCandidate, RealmSubjectCoverage } from './realm-subject-candidates.ts';
 export type RealmSubjectObservation = Readonly<{
@@ -17,7 +17,7 @@ export type RealmSubjectResolution = Readonly<{
 export type RealmSubjectMembership = 'discussed' | 'not_published' | 'withheld' | 'unknown';
 type Current = 'current' | 'changed' | 'concealed' | 'unavailable';
 type Context = Readonly<{
-    reader: LeafOptions;
+    reader: NativeScopeReader;
     work: ScopeWork;
 }>;
 /** Supplied by the separate current-disclosure owner. All methods use the caller root;
@@ -53,14 +53,14 @@ export interface RealmSubjectMaintenance {
     current(realm: string, coverage: RealmSubjectCoverage, token: string, context: Context): Promise<'current' | 'changed' | 'unavailable'>;
 }
 export interface RealmSubjectSource {
-    resolve(realm: string, reader: LeafOptions, work: ScopeWork): Promise<RealmSubjectResolution>;
-    current(observation: RealmSubjectObservation, reader: LeafOptions, work: ScopeWork): Promise<Current>;
-    prefix(observation: RealmSubjectObservation, after: string | null, limit: number, reader: LeafOptions, work: ScopeWork): Promise<Readonly<{
+    resolve(realm: string, reader: NativeScopeReader, work: ScopeWork): Promise<RealmSubjectResolution>;
+    current(observation: RealmSubjectObservation, reader: NativeScopeReader, work: ScopeWork): Promise<Current>;
+    prefix(observation: RealmSubjectObservation, after: string | null, limit: number, reader: NativeScopeReader, work: ScopeWork): Promise<Readonly<{
         subjects: readonly string[];
         after: string | null;
         exhausted: boolean;
     }>>;
-    match(observation: RealmSubjectObservation, subjects: readonly string[], reader: LeafOptions, work: ScopeWork): Promise<readonly RealmSubjectMembership[]>;
+    match(observation: RealmSubjectObservation, subjects: readonly string[], reader: NativeScopeReader, work: ScopeWork): Promise<readonly RealmSubjectMembership[]>;
 }
 /** No default evaluator, lifecycle stand-in or production registration. */
 export declare function createRealmSubjectSource(input: {

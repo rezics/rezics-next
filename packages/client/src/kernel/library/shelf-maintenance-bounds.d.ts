@@ -4,29 +4,9 @@ import type { Pool, PoolClient } from 'pg';
 import type { LegacyCommandOptions, PrincipalCommandOptions } from '../command/command.ts';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
 import type { PreparationSourceExecution } from './preparation-source.ts';
-export declare const SHELF_MAINTENANCE_LIMITS: Readonly<{
-    page: 100;
-    segment: 100;
-    commandDeadlineMs: 5000;
-    cursorScalars: 8;
-    cursorBytes: 2048;
-    workflowBytes: 4096;
-    edgeBytes: 256;
-    stagingBytes: 25600;
-}>;
-export declare const shelfCost: (part?: Partial<Bound>) => Bound;
-export interface ShelfMaintenanceStatementPlan {
-    readonly kind: 'shelf-maintenance.sql';
-    readonly sql: string;
-    readonly serializedBinds: string;
-    readonly logicalResultLimit: number;
-    readonly total: Bound;
-}
-/** Literal SQL and original operands, fixed before dispatch. No result/rowCount enters this calculation. */
-export declare function shelfMaintenanceStatementPlan(sql: string, values: readonly unknown[], valueBytes?: number): ShelfMaintenanceStatementPlan | undefined;
-/** Explicit nine/eight-axis boundary. Every declared body above issues SQL only, with no engine producer. */
-export declare function shelfMaintenanceWorkDimensions(bound: Bound): WorkDimensions;
-export declare function consumeShelfMaintenance<T>(operation: string, total: Bound, dispatch: () => Promise<T>): Promise<T>;
+import { shelfMaintenanceStatementPlan } from './shelf-maintenance-statement-bounds.ts';
+export { SHELF_MAINTENANCE_LIMITS, shelfCost, shelfMaintenanceStatementPlan, shelfMaintenanceWorkDimensions, type ShelfMaintenanceStatementPlan, } from './shelf-maintenance-statement-bounds.ts';
+export declare function consumeShelfMaintenance<T>(operation: string, total: Bound, dispatch: () => Promise<T>, actual?: (value: T) => Partial<WorkDimensions> | undefined): Promise<T>;
 /** Keep the live client/transaction and original binds; a copied plan supplies no new permission. */
 export declare function shelfMaintenanceQuery<Client, Input extends object, Result>(query: {
     sql: string;

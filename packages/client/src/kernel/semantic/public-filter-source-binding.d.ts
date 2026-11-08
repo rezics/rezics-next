@@ -1,10 +1,9 @@
-import { type AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import type { Pool } from 'pg';
-import type { Access } from '../request/access.ts';
-import type { NativePublicFilterRepairSettlement, CustodyDefinition } from '../search/public-filter-custody-contract.ts';
-import type { DiscoveryConsumerCaptureInput } from '../search/index.ts';
-import type { PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicCanonicalCaptureInput, PublicFilterConsumerUnavailable, PublicFilterQueriedObservation, PublicSuggestionCaptureInput } from '../search/public-filter-consumer-contract.ts';
+import type { Access } from '../access/index.ts';
+import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
+import type { DiscoveryConsumerCaptureInput, PublicCanonicalCaptureInput, PublicFilterConsumerCaptureInput, PublicSuggestionCaptureInput } from '../search/index.ts';
 import type { PublicFilterCost, PublicFilterDependencyKey, PublicFilterProjectionMeaning, PublicFilterSource, PublicFilterConsumer, PublicFilterProjectionObservation, PublicFilterProjectionPage, PublicFilterRepairLocator, PrivacyReductionStart, PrivacyReductionObservation, PrivacyReductionObservationRequest } from './public-filter-source-contract.ts';
+import type { NativeSourceBindingPorts, PublicFilterConsumerContext, PublicFilterConsumerUnavailable, PublicFilterQueriedObservation, SourceBindingCustodyDefinition, SourceBindingRepairSettlement, SourceBindingFailureReason } from './source-binding-port.ts';
 /** Agreed additive native binding handoff. The Source producer owns all implementation. */
 export type JoinedPopulationRequest = Readonly<{
     kind: 'queried';
@@ -22,13 +21,12 @@ export interface PublicFilterNativeSource extends PublicFilterSource {
         capture: PublicCanonicalCaptureInput;
     }>, context: PublicFilterConsumerContext): Promise<Readonly<{
         status: 'bound';
-        definition: CustodyDefinition<PublicCanonicalCaptureInput>;
+        definition: SourceBindingCustodyDefinition<PublicCanonicalCaptureInput>;
         cost: PublicFilterCost;
     }> | PublicFilterConsumerUnavailable>;
     readPrivacyReductionHeads(request: PrivacyReductionObservationRequest): Promise<PrivacyReductionObservation>;
     readPrivacyReductionHeads(request: JoinedPopulationRequest, context: PublicFilterConsumerContext): Promise<PrivacyReductionObservation>;
 }
-export type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
 export type NativePublicSource = Readonly<{
     id: string;
     partition: number;
@@ -47,7 +45,7 @@ export type PublicFilterSourceDefinition = Readonly<{
 }>;
 export type PublicFilterBindingFailure = Readonly<{
     status: 'unready' | 'unavailable';
-    reason: 'source_missing' | 'configuration_changed' | 'definition_missing' | 'observation_lost' | 'execution_missing' | 'binding_mismatch' | 'owner_unavailable' | 'identity_pending' | 'deadline';
+    reason: SourceBindingFailureReason;
     cost: PublicFilterCost;
 }>;
 export type PublicFilterSourceBinding = Readonly<{
@@ -236,12 +234,14 @@ export type NativePublicFilterPublicationCompletion = Readonly<{
         step: string;
         root: string;
     }>;
-    settlement: NativePublicFilterRepairSettlement;
+    settlement: SourceBindingRepairSettlement;
     cost: PublicFilterCost;
 }> | PublicFilterBindingFailure;
 /** Resolve the persisted original job/cut, then independently read its native completion.
  * Search calls this from its existing publication writer fence. The result grants no activation.
  */
+/** Public constructor resolves through the application installed by Semantic composition. */
+export declare function createPublicFilterSourceBinding(pool: Pool, routing: Uint8Array, access: Access): PublicFilterSourceBootstrapBinding;
 export declare function readNativePublicFilterPublicationCompletion(binding: PublicFilterSourceBinding, request: NativePublicFilterPublicationRequest, context: PublicFilterConsumerContext): Promise<NativePublicFilterPublicationCompletion>;
 /** Internal native preparation handoff; the bootstrap remains the original persisted Source cut. */
 type NativePreparationInput = Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] | Readonly<{
@@ -254,7 +254,7 @@ export type NativePublicFilterPreparation = PublicSourceBootstrapResult | Readon
 }>;
 export declare function joinNativePublicFilterRepair(binding: PublicFilterSourceBinding, request: Parameters<PublicFilterSourceBinding['join']>[0], context: PublicFilterConsumerContext): Promise<Readonly<{
     status: 'unready' | 'unavailable';
-    reason: 'source_missing' | 'configuration_changed' | 'definition_missing' | 'observation_lost' | 'execution_missing' | 'binding_mismatch' | 'owner_unavailable' | 'identity_pending' | 'deadline';
+    reason: SourceBindingFailureReason;
     cost: PublicFilterCost;
 }> | Readonly<{
     status: 'joined';
@@ -291,9 +291,10 @@ export declare class PublicFilterSourceDefinitionError extends Error {
 /** Load only an existing immutable read definition. The optional byte cap lets native callers
  * debit a fixed upper bound before the retained capture and dependency keys are read.
  */
-export declare function readPublicFilterSourceDefinition(id: string, db: Pool, routeDigest: string, maxBytes?: number): Promise<Readonly<{
+export declare function readNativePublicFilterSourceDefinition(id: string, db: Pool, routeDigest: string, search: NativeSourceBindingPorts['search'], maxBytes?: number): Promise<Readonly<{
     definition: PublicFilterSourceDefinition;
     bytes: number;
 }>>;
 /** Native Source-owned registration; the origin association only locates the constructor configuration. */
-export declare function createPublicFilterSourceBinding(pool: Pool, routing: Uint8Array, access: Access): PublicFilterSourceBootstrapBinding;
+export declare function createNativePublicFilterSourceBinding(pool: Pool, routing: Uint8Array, access: Access, ports: NativeSourceBindingPorts): PublicFilterSourceBootstrapBinding;
+export {};
