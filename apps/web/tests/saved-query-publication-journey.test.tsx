@@ -46,7 +46,10 @@ const sessionEnv: Partial<SessionEnv> = {
   WEBSITE_CLIENT_KEY: 'unused',
   SESSIONS: {
     idFromName: (id: string) => id,
-    get: () => ({ signedIn: async () => ({ signedIn: true, csrfToken }) }),
+    get: () => ({
+      signedIn: async () => ({ signedIn: true, csrfToken }),
+      credential: async () => ({ status: 'active', subject: 'owner', accessToken: 'owner-token', csrfToken }),
+    }),
   } as unknown as DurableObjectNamespace<SessionStore>,
 };
 
@@ -151,5 +154,41 @@ test('all launch locales name current results, previous membership and recovery'
       string
     >;
     for (const key of keys) expect(messages[key]?.trim().length).toBeGreaterThan(0);
+  }
+});
+
+test('generated owner directory retains a sparse frontier and retries the attempted bounded page', async () => {
+  const { loadMineCollectionsPage } = await import('../src/library/mine-collections');
+  const calls: URL[] = [];
+  let unavailable = false;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      calls.push(url);
+      expect(request.headers.get('authorization')).toBe('Bearer owner-token');
+      return unavailable
+        ? Response.json({ code: 'dependency_unavailable' }, { status: 503 })
+        : Response.json({ collections: [], next: 'sparse+/next==', ownerManagement: 'owner', ownerAccountId: 'owner' });
+    },
+  });
+  const address = { cursor: 'attempted+/frontier==', layout: 'previews' as const };
+  const read = () => loadMineCollectionsPage(client, write(), sessionEnv, address);
+  expect(await read()).toMatchObject({ state: 'loaded', collections: [], next: 'sparse+/next==' });
+  unavailable = true;
+  expect(await read()).toMatchObject({ state: 'unavailable', collections: [], next: null });
+  unavailable = false;
+  expect(await read()).toMatchObject({ state: 'loaded', next: 'sparse+/next==' });
+  expect(calls).toHaveLength(3);
+  for (const url of calls) {
+    expect(url.pathname).toBe('/v1/collections');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      view: 'FULL',
+      limit: '20',
+      curatorAccountId: 'owner',
+      ownerManagement: 'true',
+      preview: '3',
+      cursor: address.cursor,
+    });
   }
 });
