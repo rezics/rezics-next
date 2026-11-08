@@ -9,12 +9,14 @@ type Limits = { permits: number; reserved: number; queue: number };
 type Waiter = {
   lane: AdmissionLane;
   context: JobContext;
-  job: () => unknown | Promise<unknown>;
-  resolve: (value: unknown) => void;
+  resolve: (release: () => void) => void;
   reject: (reason: unknown) => void;
   timer: ReturnType<typeof setTimeout>;
   abort?: () => void;
 };
+
+/** Temporarily releases a permit during an explicit wait, then fairly reacquires it. */
+export type AdmissionYield = <T>(wait: () => Promise<T>) => Promise<T>;
 
 function overloaded(): ProblemError {
   return new ProblemError('overloaded', { headers: { 'retry-after': '1' } });
@@ -41,21 +43,72 @@ export class Admission {
     return this.queue.length;
   }
 
-  run<T>(lane: AdmissionLane, context: JobContext, job: () => T | Promise<T>): Promise<T> {
+  async run<T>(
+    lane: AdmissionLane,
+    context: JobContext,
+    job: (yieldPermit: AdmissionYield) => T | Promise<T>,
+  ): Promise<T> {
+    let release = await this.acquire(lane, context);
+    let active = true;
+    let finished = false;
+    const yieldPermit: AdmissionYield = async <Value>(wait: () => Promise<Value>) => {
+      if (finished || !active) throw new Error('Admission permit is no longer active');
+      active = false;
+      release();
+      let result: Value | undefined;
+      let failure: unknown;
+      let failed = false;
+      try {
+        result = await wait();
+      } catch (error) {
+        failure = error;
+        failed = true;
+      }
+      if (!context.signal?.aborted) {
+        try {
+          release = await this.acquire(lane, context);
+          active = true;
+        } catch (error) {
+          if (!failed) {
+            failure = error;
+            failed = true;
+          }
+        }
+      } else if (!failed) {
+        failure = abortReason(context.signal);
+        failed = true;
+      }
+      if (failed) throw failure;
+      return result as Value;
+    };
+    try {
+      return await job(yieldPermit);
+    } finally {
+      finished = true;
+      if (active) {
+        active = false;
+        release();
+      }
+    }
+  }
+
+  private acquire(lane: AdmissionLane, context: JobContext): Promise<() => void> {
     if (context.signal?.aborted) return Promise.reject(abortReason(context.signal));
     if (context.deadline <= Date.now()) return Promise.reject(overloaded());
 
     const hasEarlier = this.queue.some((waiter) => waiter.lane === lane);
-    if (!hasEarlier && this.active[lane] < this.capacity(lane)) return this.execute(lane, job);
+    if (!hasEarlier && this.active[lane] < this.capacity(lane)) {
+      this.active[lane]++;
+      return Promise.resolve(this.release(lane));
+    }
     if (this.queue.length >= this.limits.queue) return Promise.reject(overloaded());
 
-    return new Promise<T>((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const remaining = Math.max(0, context.deadline - Date.now());
       const waiter: Waiter = {
         lane,
         context,
-        job,
-        resolve: resolve as (value: unknown) => void,
+        resolve,
         reject,
         timer: setTimeout(() => this.remove(waiter, overloaded()), remaining),
       };
@@ -71,14 +124,14 @@ export class Admission {
     return lane === 'normal' ? this.limits.permits : this.limits.reserved;
   }
 
-  private execute<T>(lane: AdmissionLane, job: () => T | Promise<T>): Promise<T> {
-    this.active[lane]++;
-    return Promise.resolve()
-      .then(job)
-      .finally(() => {
-        this.active[lane]--;
-        this.drain();
-      });
+  private release(lane: AdmissionLane): () => void {
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.active[lane]--;
+      this.drain();
+    };
   }
 
   private clear(waiter: Waiter): void {
@@ -112,7 +165,8 @@ export class Admission {
         waiter.reject(overloaded());
         continue;
       }
-      this.execute(waiter.lane, waiter.job).then(waiter.resolve, waiter.reject);
+      this.active[waiter.lane]++;
+      waiter.resolve(this.release(waiter.lane));
     }
   }
 }
