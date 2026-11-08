@@ -1,29 +1,32 @@
 import { Type as t } from 'typebox';
-import { CoverCreditSchema, type CoverCredit } from '@rezics/definitions/media-import';
+import type { ContentCoverCredit } from './domain-ports.ts';
 
 const object = { additionalProperties: false } as const;
-export const CoverSummaryValueSchema = t.Object(
-  {
-    media: t.String({ format: 'uuid' }),
-    width: t.Integer({ minimum: 1 }),
-    height: t.Integer({ minimum: 1 }),
-    placeholder: t.Object(
-      { thumbhash: t.String({ maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) },
-      object,
-    ),
-    variants: t.Array(
-      t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) }, object),
-      { maxItems: 12 },
-    ),
-    focalPoint: t.Union([
-      t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, object),
-      t.Null(),
-    ]),
-    credit: CoverCreditSchema,
-  },
-  object,
-);
-export const CoverSummarySchema = t.Union([CoverSummaryValueSchema, t.Null()]);
+export const CoverSummarySchema = t.Union([
+  t.Object(
+    {
+      media: t.String({ format: 'uuid' }),
+      width: t.Integer({ minimum: 1 }),
+      height: t.Integer({ minimum: 1 }),
+      placeholder: t.Object({ thumbhash: t.String(), color: t.String() }, object),
+      variants: t.Array(
+        t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) }, object),
+      ),
+      focalPoint: t.Union([t.Object({ x: t.Number(), y: t.Number() }, object), t.Null()]),
+      credit: t.Object(
+        {
+          rightsHolder: t.String(),
+          via: t.Object({ name: t.String(), url: t.String() }, object),
+          license: t.String(),
+          obligations: t.Array(t.String()),
+        },
+        object,
+      ),
+    },
+    object,
+  ),
+  t.Null(),
+]);
 export const SubjectSummarySchema = t.Object(
   {
     id: t.String({ format: 'uuid' }),
@@ -42,7 +45,7 @@ export const RelatedSubjectSummarySchema = t.Object(
 );
 
 /** Disclosed display vocabulary shared by native producers and receiving transports. */
-export type { CoverCredit };
+export type CoverCredit = ContentCoverCredit;
 export type CoverSummary = {
   media: string;
   width: number;
@@ -50,7 +53,7 @@ export type CoverSummary = {
   placeholder: { thumbhash: string; color: string };
   variants: { format: 'avif' | 'webp'; width: number }[];
   focalPoint: { x: number; y: number } | null;
-  credit: CoverCredit;
+  credit: ContentCoverCredit;
 };
 export type SubjectSummary = {
   id: string;
