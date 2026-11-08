@@ -27,7 +27,9 @@ systemctl --user set-property --runtime rezics-workers.slice MemoryHigh=24G Memo
 systemctl set-property --runtime rezics-check.slice MemoryHigh=12G MemoryMax=16G MemorySwapMax=0
 ```
 
-Maintenance and regeneration receive their worker-slice membership on their next start, each bounded at 2 GiB.
+Maintenance receives its worker-slice membership on its next start with high 1 GiB/max 2 GiB; regeneration
+uses high 4 GiB/max 6 GiB because its observed peak was 4.43 GiB. Both are inside the 28 GiB aggregate, not extra
+budget. Active oneshots receive their per-unit caps without a forced restart; slice membership changes next start.
 The existing cache-maintenance service is bounded at 256 MiB but currently lives in `system.slice`; move it on
 its next safe start, without restarting any running check. Until then, allow that additional bounded 256 MiB
 outside the 44 GiB sum. No critical OS, display or network service is changed or restarted. No OOM killer is enabled.
@@ -44,7 +46,9 @@ Read-only inventory: worker slice was about 0.74 GiB with zero swap, high 16 GiB
 about 0.15 GiB with zero swap and max 40 GiB. Goal maintenance was inactive and regeneration failed/inactive,
 both under user `app.slice` with unlimited memory. Cache maintenance was about 22 MiB, max 256 MiB, under system
 `system.slice`. Goal host was about 3.34 GiB in user `app.slice`. Verify these observations again immediately before
-applying; they are not a promise about future peaks. No live values were changed while preparing this increment.
+applying; they are not a promise about future peaks. The original preparation changed no live values. Applied-state evidence and exact before-config backups live in
+the private host-budget delivery folder; verify the effective properties rather than assuming this initial snapshot
+is still current.
 
 ## Rollback
 
@@ -59,3 +63,20 @@ systemctl set-property --runtime rezics-check.slice MemoryHigh=infinity MemoryMa
 Restore previous `capacity.json` values from its operator backup. Removing service drop-ins restores their prior
 slice on the next start; do not relocate a running oneshot or restart a check to roll back. Re-read current usage
 and effective properties. The source change never writes `MemoryMax` or `MemorySwapMax` during worker launch.
+
+
+## Pending coverage completion
+
+The Goal host and verifier currently remain outside the 44 GiB split. This is partial containment only. The Goal
+host's observed peak was about 17.63 GiB, so that omission is substantial. The minimal completion is to give both
+services `Slice=rezics-workers.slice`, sharing the same 28 GiB user aggregate. Do not install that membership change
+blindly while Home or checks are active: first checkpoint the existing Home branch/uncommitted source and persisted
+thread/check identities through the existing owner workflow. Wait for a safe turn/check boundary, let the Goal host
+perform its supported graceful shutdown of its own provider processes, and confirm no owned helper remains in the
+old cgroup before a single controlled service restart. Then verify actual `ControlGroup` for host and verifier, not
+only their configured `Slice`. Existing worker scopes and system check runs must not be restarted. Keep the existing
+restart delay/limits; a failed start under the budget requires an operator decision, not a restart loop.
+
+Until that controlled move, the host remains at about 3.55 GiB current / 17.63 GiB peak outside the split. A possible
+interim cap must be based on this observed peak and reviewed separately; imposing 2 or 6 GiB on it would knowingly
+risk an immediate Home/control-plane failure. No interim Goal-host cap or restart is applied by this increment.
