@@ -48,6 +48,10 @@ export declare function createSearchScopeOrder(config: Readonly<{
     clock: KernelClock;
     library: SearchLibraryScopePort;
 }>): {
+    prepareCollection(collectionId: string, allowance: import("./scope-execution.ts").WorkAllowance): Promise<Readonly<{
+        collection: import("./library-scope-port.ts").SearchScopeCollection;
+        work: WorkReceipt;
+    }>>;
     prepare(order: import("./library-scope-port.ts").SearchScopeOrder, allowance: import("./scope-execution.ts").WorkAllowance): Promise<Readonly<{
         collection: import("./library-scope-port.ts").SearchScopeCollection;
         work: WorkReceipt;

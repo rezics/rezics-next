@@ -1,9 +1,9 @@
 import type { Actor } from '../request/access.ts';
-import { type FeedDependencies } from './adapters/feed-native.ts';
+import type { FeedDependencies } from './adapters/feed-capabilities.ts';
 import { type FeedPage, type FeedSelection } from './feed-contract.ts';
 import { FEED_ACCOUNT_BATCH_LIMIT, FEED_AUTHOR_KEYS_PER_CANDIDATE, FEED_CANDIDATE_LIMIT, FEED_CONTINUE_CANDIDATES, FEED_CONTINUE_WIDTH, FEED_DISCOVERY_CANDIDATES_PER_RESULT, FEED_DISCOVERY_FIXED_CANDIDATES, FEED_PAGE_LIMIT, FEED_SPACE_BOARD_KEYS_PER_CANDIDATE, FEED_SPACE_FIXED_KEYS } from './contract/index.ts';
 import { feedCandidateBound } from './core/index.ts';
-export type { FeedDependencies } from './adapters/feed-native.ts';
+export type { FeedDependencies } from './adapters/feed-capabilities.ts';
 export { FEED_ACCOUNT_BATCH_LIMIT, FEED_AUTHOR_KEYS_PER_CANDIDATE, FEED_CANDIDATE_LIMIT, FEED_CONTINUE_CANDIDATES, FEED_CONTINUE_WIDTH, FEED_DISCOVERY_CANDIDATES_PER_RESULT, FEED_DISCOVERY_FIXED_CANDIDATES, FEED_PAGE_LIMIT, FEED_SPACE_BOARD_KEYS_PER_CANDIDATE, FEED_SPACE_FIXED_KEYS, };
 export { feedCandidateBound };
 export type FeedReadQuery = {

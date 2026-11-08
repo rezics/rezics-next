@@ -91,7 +91,7 @@ export declare function FeedItemSchema(): import("typebox").TUnsafe<FeedItem>;
 export declare const FeedSourceStateSchema: import("typebox").TUnion<[import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"preparing">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_requested">]>;
 export declare function FeedPageSchema(): import("typebox").TUnsafe<Readonly<{
     feedItems: readonly FeedItem[];
-    viewerPersonalActions?: unknown;
+    viewerPersonalActions?: import("../library/viewer-personal-actions.ts").ViewerPersonalActionsPage;
     next: string | null;
     asOf: string;
     reactionsAsOf?: import("./contract/feed.ts").FeedReactionFreshness | null;

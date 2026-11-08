@@ -13,7 +13,12 @@ export type SourceCaptureResult = Readonly<{
     privateWorking: boolean;
 }>;
 export type MemberPreparationResult = Readonly<{
+    status: 'prepared';
     page: MembershipPage;
+    admission: NestedAdmissionAccount;
+    ownerFence: string | null;
+}> | Readonly<{
+    status: 'unprepared';
     admission: NestedAdmissionAccount;
     ownerFence: string | null;
 }>;

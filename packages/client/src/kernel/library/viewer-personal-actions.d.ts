@@ -1,36 +1,13 @@
 import type { Pool } from 'pg';
 import type { Access, Actor } from '../request/access.ts';
 import type { ViewerActionBindings, ViewerActionResources } from '../access/viewer-actions.ts';
-import { type ViewerFact, type ViewerFactInput, type ViewerFactsPage, type ViewerQuestion } from './viewer-facts.ts';
-export type ViewerPersonalActionInput = ViewerFactInput & Readonly<{
-    resourceType: string;
-}>;
+import type { ViewerPersonalActionInput, ViewerPersonalActionsPage } from './contract/index.ts';
+export type { ViewerPersonalAction, ViewerPersonalActionInput, ViewerPersonalActionState, ViewerPersonalActionsPage, ViewerPersonalFact, } from './contract/index.ts';
 export type ViewerPersonalActionRuntime = Readonly<{
     access: Access;
     resources: ViewerActionResources;
     bindings: ViewerActionBindings;
     clock: () => Date;
-}>;
-export type ViewerPersonalAction = Readonly<{
-    action: string;
-    operations: readonly string[];
-}>;
-export type ViewerPersonalActionState = Readonly<{
-    state: 'current';
-    allowed: readonly ViewerPersonalAction[];
-}> | Readonly<{
-    state: 'unavailable';
-    reason: 'admission' | 'currentness' | 'dependency';
-}>;
-export type ViewerPersonalFact = ViewerFact & Readonly<{
-    actions: ViewerPersonalActionState;
-}>;
-export type ViewerPersonalActionsPage = Readonly<{
-    state: 'current';
-    question: ViewerQuestion | null;
-    rows: readonly ViewerPersonalFact[];
-}> | Extract<ViewerFactsPage, {
-    state: 'unavailable';
 }>;
 export type ViewerPersonalActionsReader = (actor: Actor, rows: readonly ViewerPersonalActionInput[], questionId: string, deadline: number) => Promise<ViewerPersonalActionsPage>;
 export type ViewerPersonalActionsDependencies = Readonly<{

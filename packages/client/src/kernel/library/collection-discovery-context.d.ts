@@ -1,32 +1,9 @@
 import type { AccessClient } from '../request/access.ts';
 import type { SummaryReaderDependencies, SubjectSummary } from '../semantic/summaries.ts';
+import type { CollectionDiscoveryContext, CollectionCurator } from './contract/index.ts';
+export type { CollectionDiscoveryContext, CollectionCurator, CollectionPreview, CollectionPreviewMember, } from './contract/index.ts';
 export declare const COLLECTION_PREVIEW_SIZE = 3;
 export declare const COLLECTION_PREVIEW_EXAMINED: number;
-export type CollectionCurator = Readonly<{
-    state: 'available';
-    id: string;
-    label: string | null;
-    destination: string | null;
-}> | Readonly<{
-    state: 'unavailable';
-    reason: 'deidentified' | 'withheld' | 'native_projection';
-}>;
-export type CollectionPreviewMember = Readonly<{
-    id: string;
-    subject: Pick<SubjectSummary, 'id' | 'type' | 'types' | 'label'>;
-}>;
-export type CollectionPreview = Readonly<{
-    state: 'available';
-    members: readonly CollectionPreviewMember[];
-    partial: boolean;
-    truncated: boolean;
-}> | Readonly<{
-    state: 'empty' | 'withheld' | 'unavailable';
-}>;
-export type CollectionDiscoveryContext = Readonly<{
-    curator: CollectionCurator;
-    preview: CollectionPreview;
-}>;
 export type DiscoveryMemberKey = Readonly<{
     id: string;
     subjectId: string;

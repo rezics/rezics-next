@@ -1,67 +1,14 @@
 import type { Pool, PoolClient } from 'pg';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
+import type { ViewerFactInput, ViewerFactsPage, ViewerQuestion } from './contract/index.ts';
+export type { ViewerEntryFact, ViewerFact, ViewerFactInput, ViewerFactsPage, ViewerQuestion, ViewerVoteFact, } from './contract/index.ts';
 export { MAX_VIEWER_FACTS_ROWS, MAX_VIEWER_FACTS_INPUT_BYTES, MAX_VIEWER_FACTS_RESPONSE_BYTES, viewerFactsResponseSchema, } from './viewer-facts-schema.ts';
 export declare const VIEWER_FACTS_SCOPE = "library_entry:read";
 type Dependencies = {
     pool: Pool;
     access: Access;
 };
-export type ViewerFactInput = Readonly<{
-    rowKey: string;
-    subjectId: string;
-}>;
-export type ViewerQuestion = Readonly<{
-    id: string;
-    revision: number;
-    grain: string;
-    scale: Readonly<{
-        min: number;
-        max: number;
-        displayStep: number;
-    }>;
-    meaning: string;
-}>;
-export type ViewerEntryFact = Readonly<{
-    state: 'present';
-    incarnationId: string | null;
-    entryState: string | null;
-    revision: number;
-}> | Readonly<{
-    state: 'absent';
-}> | Readonly<{
-    state: 'unavailable';
-    reason: 'scope';
-}>;
-export type ViewerVoteFact = Readonly<{
-    state: 'present';
-    questionId: string;
-    questionRevision: number;
-    units: number;
-    revision: number;
-}> | Readonly<{
-    state: 'absent';
-    questionId: string;
-    questionRevision: number;
-}> | Readonly<{
-    state: 'unavailable';
-    reason: 'scope' | 'question';
-}>;
-export type ViewerFact = Readonly<{
-    rowKey: string;
-    subjectId: string;
-    entry: ViewerEntryFact;
-    vote: ViewerVoteFact;
-}>;
-export type ViewerFactsPage = Readonly<{
-    state: 'current';
-    question: ViewerQuestion | null;
-    rows: readonly ViewerFact[];
-}> | Readonly<{
-    state: 'unavailable';
-    reason: 'identity' | 'currentness' | 'response_limit';
-    retryable: boolean;
-}>;
 type MappingRecord = Readonly<{
     subjectId: string;
     mapping: IdentityMapping;
