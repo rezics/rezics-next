@@ -6,7 +6,8 @@ type MembersQuery = NonNullable<MembersOptions['query']>;
 type MembersResponse = NonNullable<Awaited<ReturnType<MembersGet>>['data']>;
 
 /** Browser operands add a session subject assertion, never credentials or authority. */
-export type RealmMembersReadInput = Parameters<KernelClient['realms']>[0] & MembersQuery & { viewerId: string };
+export type RealmMembersReadInput = Parameters<KernelClient['realms']>[0] &
+  MembersQuery & { realmId: MembersResponse['realmId']; viewerId: string };
 export type NativeRealmMember = NonNullable<MembersResponse['selected']>;
 export type NativeRealmMemberRow = MembersResponse['items'][number];
 export type NativeRealmMemberAction = NativeRealmMember['actions'][keyof NativeRealmMember['actions']];
@@ -201,7 +202,7 @@ export async function readNativeRealmMembers(
   }
   if (result.status === 401 || result.status === 403) return { kind: 'denied' };
   if (result.status === 404) return { kind: 'concealed' };
-  const error = record(result.error) && record(result.error.value) ? result.error.value : result.data;
+  const error: unknown = record(result.error) && record(result.error.value) ? result.error.value : result.data;
   if (result.status === 400 && record(error) && error.code === 'invalid_cursor') return { kind: 'expired' };
   if (result.status === 429 || result.status === 503) return { kind: 'unavailable' };
   if (result.status !== 200 || result.error || !page(result.data, input)) return { kind: 'failed' };
