@@ -13,6 +13,8 @@ type Limits = {
     reserved: number;
     queue: number;
 };
+/** Temporarily releases a permit during an explicit wait, then fairly reacquires it. */
+export type AdmissionYield = <T>(wait: () => Promise<T>) => Promise<T>;
 export declare class Admission {
     private readonly limits;
     private readonly active;
@@ -23,9 +25,10 @@ export declare class Admission {
         reserved: number;
     }>;
     get waiting(): number;
-    run<T>(lane: AdmissionLane, context: JobContext, job: () => T | Promise<T>): Promise<T>;
+    run<T>(lane: AdmissionLane, context: JobContext, job: (yieldPermit: AdmissionYield) => T | Promise<T>): Promise<T>;
+    private acquire;
     private capacity;
-    private execute;
+    private release;
     private clear;
     private remove;
     private drain;
