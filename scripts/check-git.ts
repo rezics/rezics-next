@@ -11,7 +11,6 @@ import {
   mkdirSync,
   mkdtempSync,
   openSync,
-  opendirSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -20,7 +19,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
-import { acquireDirectoryLeaseWaiting } from '../tools/goal/src/lease.ts';
+import { acquireDirectoryLease, acquireDirectoryLeaseWaiting } from '../tools/goal/src/lease.ts';
 
 const MANIFEST_FILE = 'manifest.json';
 const PACK_FILE = 'snapshot.pack';
@@ -219,6 +218,7 @@ type OwnedPublication = CheckGitPublication & {
       retryAt?: number;
       failure?: GitPushOutcome;
       firstFailure?: GitPushOutcome;
+      blocked?: { kind: 'replaced'; observedCommit: string; observedAt: number };
     };
   };
 };
@@ -234,14 +234,15 @@ type PublicationOptions = {
 function publicationRecord(workspace: string, ref: string): string {
   return join(resolve(workspace), '.temp/check-git-publications', `${ref.slice('refs/checks/'.length)}.json`);
 }
-function originIdentity(workspace: string): string | null {
+function originIdentity(workspace: string, timeoutMs = 2000): string | null {
+  if (timeoutMs <= 0) return null;
   try {
     const result = Bun.spawnSync(['git', 'remote', 'get-url', '--push', 'origin'], {
       cwd: workspace,
       env: environment(),
       stdout: 'pipe',
       stderr: 'ignore',
-      timeout: 2000,
+      timeout: Math.min(2000, timeoutMs),
     });
     return result.exitCode === 0 ? createHash('sha256').update(result.stdout.toString().trim()).digest('hex') : null;
   } catch {
@@ -304,10 +305,11 @@ export async function releaseCheckGit(
       record.remote.commit !== manifest.remote.commit ||
       !validObjectId(record.remote.commit, record.objectFormat) ||
       record.ownership.origin === null ||
-      record.ownership.origin !== originIdentity(workspace)
+      record.ownership.origin !== originIdentity(workspace, deadlineMs - Date.now())
     )
       return;
     if (record.ownership.state === 'retained' && !options.settled) return;
+    if (record.ownership.release?.blocked?.kind === 'replaced') return;
     record.ownership.state = 'releasable';
     record.ownership.release = {
       ...record.ownership.release,
@@ -316,9 +318,17 @@ export async function releaseCheckGit(
     };
     owned = { path, record };
     savePublication(path, record);
-    if (record.ownership.release.attempts > 1 && (await remoteRefAbsent(workspace, record.remote.ref, deadlineMs))) {
-      rmSync(path, { force: true });
-      return;
+    if (record.ownership.release.attempts > 1) {
+      const observed = await observeRemoteRef(workspace, record.remote.ref, deadlineMs);
+      if (observed === null) {
+        rmSync(path, { force: true });
+        return;
+      }
+      if (observed !== record.remote.commit) {
+        record.ownership.release.blocked = { kind: 'replaced', observedCommit: observed, observedAt: Date.now() };
+        savePublication(path, record);
+        return;
+      }
     }
     await pushCheckGit(
       workspace,
@@ -356,46 +366,73 @@ export async function releaseCheckGit(
   }
 }
 
-/** Retry exact releasable custody after backoff, within the existing 32-record/ten-second sweep budget. */
-export async function sweepCheckGit(workspace: string, now = Date.now()): Promise<void> {
-  const deadlineMs = Date.now() + 10_000;
+export type CheckGitSweepResult = { visited: number; remaining: boolean };
+/** A durable filename cursor rotates the bounded journal page across calls and process restarts. */
+export async function sweepCheckGit(
+  workspace: string,
+  now = Date.now(),
+  options: { deadlineMs?: number; limit?: number; signal?: AbortSignal } = {},
+): Promise<CheckGitSweepResult> {
+  const deadlineMs = Math.min(Date.now() + 10_000, options.deadlineMs ?? Infinity);
+  const directory = join(resolve(workspace), '.temp/check-git-publications');
+  const pattern = /^[a-zA-Z0-9-]+\.json$/;
+  const cursorPath = join(directory, '.sweep-cursor');
+  let visited = 0;
+  let lease: ReturnType<typeof acquireDirectoryLease> | undefined;
   try {
-    const directory = opendirSync(join(resolve(workspace), '.temp/check-git-publications'));
+    const info = lstatSync(directory);
+    if (!info.isDirectory() || info.isSymbolicLink()) return { visited, remaining: true };
+    lease = acquireDirectoryLease(join(directory, '.sweep.lease'));
+    const names = readdirSync(directory)
+      .filter((name) => pattern.test(name))
+      .sort();
+    let cursor = '';
     try {
-      for (let visited = 0; visited < 32 && Date.now() < deadlineMs; visited++) {
-        const entry = directory.readSync();
-        if (!entry) break;
-        if (!entry.isFile() || !/^[a-zA-Z0-9-]+\.json$/.test(entry.name)) continue;
-        const path = join(directory.path, entry.name);
-        try {
-          if (lstatSync(path).size > 16_384) continue;
-          const record = JSON.parse(readFileSync(path, 'utf8')) as OwnedPublication;
-          if (
-            !CHECK_REF.test(record.remote.ref) ||
-            basename(path) !== `${record.remote.ref.slice('refs/checks/'.length)}.json` ||
-            record.ownership.state !== 'releasable' ||
-            !Number.isFinite(record.ownership.createdAt) ||
-            !Number.isFinite(
-              record.ownership.release?.retryAt ?? record.ownership.createdAt + CHECK_GIT_RELEASE_RETRY_MS,
-            ) ||
-            (record.ownership.release?.retryAt ?? record.ownership.createdAt + CHECK_GIT_RELEASE_RETRY_MS) > now
-          )
-            continue;
-          // A slow retry may use the remaining existing sweep budget, never a fresh unbounded per-record timeout.
-          await releaseCheckGit(workspace, path, { deadlineMs });
-        } catch {
-          /* Unknown ownership never grants deletion authority. */
-        }
+      const info = lstatSync(cursorPath);
+      if (info.isFile() && !info.isSymbolicLink() && info.size <= 1024) {
+        const saved = readFileSync(cursorPath, 'utf8').trim();
+        if (pattern.test(saved)) cursor = saved;
       }
-    } finally {
-      directory.closeSync();
+    } catch {
+      /* Start the bounded page at its beginning. */
     }
-  } catch {
-    /* No journal, or unreadable ownership: leave remote refs alone. */
+    const ordered = [...names.filter((name) => name > cursor), ...names.filter((name) => name <= cursor)];
+    for (const name of ordered) {
+      if (visited >= Math.min(32, options.limit ?? 32) || Date.now() >= deadlineMs || options.signal?.aborted) break;
+      visited++;
+      // Advance before transport, including malformed/symlink entries, so one slow entry cannot starve later owners.
+      const pending = `${cursorPath}.${process.pid}.pending`;
+      writeFileSync(pending, name + '\n', { mode: 0o600 });
+      renameSync(pending, cursorPath);
+      const path = join(directory, name);
+      try {
+        const info = lstatSync(path);
+        if (!info.isFile() || info.isSymbolicLink() || info.size > 16_384) continue;
+        const record = JSON.parse(readFileSync(path, 'utf8')) as OwnedPublication;
+        const retryAt = record.ownership?.release?.retryAt ?? record.ownership?.createdAt + CHECK_GIT_RELEASE_RETRY_MS;
+        if (
+          !CHECK_REF.test(record.remote.ref) ||
+          name !== `${record.remote.ref.slice('refs/checks/'.length)}.json` ||
+          record.ownership?.state !== 'releasable' ||
+          record.ownership.release?.blocked?.kind === 'replaced' ||
+          !Number.isFinite(retryAt) ||
+          retryAt > now
+        )
+          continue;
+        await releaseCheckGit(workspace, path, { deadlineMs });
+      } catch {
+        /* Unknown custody remains present and cannot authorize removal. */
+      }
+    }
+    return { visited, remaining: readdirSync(directory).some((name) => pattern.test(name)) };
+  } catch (error) {
+    return { visited, remaining: (error as NodeJS.ErrnoException).code !== 'ENOENT' };
+  } finally {
+    lease?.release();
   }
 }
 
-async function remoteRefAbsent(workspace: string, ref: string, deadlineMs: number): Promise<boolean> {
+async function observeRemoteRef(workspace: string, ref: string, deadlineMs: number): Promise<string | null> {
   const result = await gitTransport(
     workspace,
     ['ls-remote', '--exit-code', '--refs', 'origin', ref],
@@ -404,11 +441,14 @@ async function remoteRefAbsent(workspace: string, ref: string, deadlineMs: numbe
     Date.now,
     [0, 2],
   );
-  if (result.code === 2 && result.stdout.trim() === '') return true;
+  if (result.code === 2 && result.stdout.trim() === '') return null;
   const rows = result.stdout.trim().split('\n');
   if (result.code !== 0 || rows.length !== 1 || rows[0]!.split(/\s+/)[1] !== ref)
     throw new Error('check-git: exact remote ref observation is unavailable');
-  return false;
+  const commit = rows[0]!.split(/\s+/)[0]!;
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(commit))
+    throw new Error('check-git: exact remote object identity is unavailable');
+  return commit;
 }
 
 async function pushCheckGit(
