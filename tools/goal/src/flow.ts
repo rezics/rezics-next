@@ -730,11 +730,10 @@ function waitingQueueFingerprint(queues: ReturnType<typeof flowReport>['queues']
   return hash.digest('hex');
 }
 
-function flowAlarmFingerprint(key: string, measurement: string, queueFingerprint: string): string {
+function flowAlarmMeasurementFingerprint(key: string, measurement: string): string {
   const hash = createHash('sha256');
-  for (const value of [key, measurement, queueFingerprint])
-    hash.update(`${value.length}:`).update(value).update('\0');
-  return `v1:${hash.digest('hex')}`;
+  for (const value of [key, measurement]) hash.update(`${value.length}:`).update(value).update('\0');
+  return `v2:${hash.digest('hex')}`;
 }
 
 export function checkFlowAlarms(
@@ -777,22 +776,27 @@ export function checkFlowAlarms(
       fingerprint: string | null;
       active: number;
     } | null;
-    const fingerprint = flowAlarmFingerprint(key, measurement, queueFingerprint);
+    const measurementFingerprint = flowAlarmMeasurementFingerprint(key, measurement);
+    const fingerprint = `${measurementFingerprint}:${queueFingerprint}`;
     const isRecent = old !== null && now.getTime() - Date.parse(old.sent_at) < policy.flow.alertEveryMs;
-    const legacyCooldown = isRecent && old?.fingerprint === null;
+    const legacyCooldown = isRecent && (old?.fingerprint === null || old?.fingerprint?.startsWith('v1:'));
     const globalMetric = !key.startsWith('queue-');
-    const changedGlobal =
-      globalMetric && old !== null && old.fingerprint !== null && old.fingerprint !== fingerprint;
+    const changedGlobal = globalMetric && old !== null && old.fingerprint !== null && old.fingerprint !== fingerprint;
     const recovered = old?.active === 0;
     const unchangedEmptyGlobal =
-      globalMetric && !hasWaitingTasks && old?.active === 1 && old.fingerprint === fingerprint;
-    if (unchangedEmptyGlobal) continue;
-    if (legacyCooldown) {
+      globalMetric &&
+      !hasWaitingTasks &&
+      old?.active === 1 &&
+      old.fingerprint?.startsWith(`${measurementFingerprint}:`);
+    if (unchangedEmptyGlobal) {
+      // Remember the drained queue so a task that starts waiting again can rearm the alarm.
+      if (old.fingerprint !== fingerprint)
+        db.query('UPDATE flow_alarm_sends SET fingerprint=? WHERE threshold=?').run(fingerprint, key);
+      continue;
+    }
+    if (legacyCooldown && !recovered) {
       // Seed the new bounded fingerprint without breaking a legacy row's existing cooldown.
-      db.query('UPDATE flow_alarm_sends SET fingerprint=COALESCE(fingerprint,?), active=1 WHERE threshold=?').run(
-        fingerprint,
-        key,
-      );
+      db.query('UPDATE flow_alarm_sends SET fingerprint=?, active=1 WHERE threshold=?').run(fingerprint, key);
       continue;
     }
     if (isRecent && !changedGlobal && !recovered) {
@@ -819,9 +823,11 @@ export function checkFlowAlarms(
       if (top.length >= exampleLimit) break;
     }
     inbox(`Flow alarm: stage ${stage}; measurement ${measurement}; top waiting tasks ${top.join(', ') || 'none'}`);
-    db.query(
-      'INSERT OR REPLACE INTO flow_alarm_sends(threshold,sent_at,fingerprint,active) VALUES (?,?,?,1)',
-    ).run(key, now.toISOString(), fingerprint);
+    db.query('INSERT OR REPLACE INTO flow_alarm_sends(threshold,sent_at,fingerprint,active) VALUES (?,?,?,1)').run(
+      key,
+      now.toISOString(),
+      fingerprint,
+    );
     sent.push(key);
   }
   return sent;
