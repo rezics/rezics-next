@@ -27,7 +27,7 @@ import {
   startPopulationProgress,
 } from './rating-population-progress';
 import { admitPopulationEnvelope } from './population-envelope-admission';
-import { browserObservation } from '../../session';
+import { browserObservation, browserSessionOwner, cachedBrowserSession } from '../../session';
 
 type Session = ReturnType<typeof useSession>;
 export type PopulationTransport = (input: PopulationInput, signal?: AbortSignal) => Promise<PopulationEnvelope>;
@@ -144,20 +144,30 @@ export function useRatingPopulations(
     observationStore.getSnapshot,
     observationStore.getServerSnapshot,
   );
+  const sessionOwnerStore = browserSessionOwner();
+  const sessionOwner = useSyncExternalStore(
+    sessionOwnerStore.subscribe,
+    sessionOwnerStore.getSnapshot,
+    sessionOwnerStore.getServerSnapshot,
+  );
   registry.rememberQuestion(input.subjectId, input.locale);
   useSyncExternalStore(registry.subscribe, registry.snapshot, registry.serverSnapshot);
-  const cached = client.getQueryData<Session>(['session']);
+  const cached = cachedBrowserSession(client);
+  const ownsSession = sessionOwner.client === null || sessionOwner.client === client;
   const reader =
-    cached?.state === 'signed-in' &&
+    ownsSession &&
+    cached.state === 'signed-in' &&
     observation.state === 'signed-in' &&
     observation.observation.subject === cached.subject
       ? (cached.subject ?? null)
       : null;
-  const anonymous = cached?.state === 'signed-out' && observation.state === 'signed-out';
+  const anonymous = ownsSession && cached.state === 'signed-out' && observation.state === 'signed-out';
   const enabled = input.enabled !== false && (anonymous || reader !== null);
   const signature = JSON.stringify([
     registry.id,
     registry.epoch,
+    sessionOwner.revision,
+    ownsSession,
     input.subjectId,
     input.question,
     input.questionIdentity,
@@ -184,9 +194,11 @@ export function useRatingPopulations(
       observation.state === 'signed-in' ? observation.observation.id : null,
     ]);
     const lease: PopulationLease = {
-      key: JSON.stringify([registry.id, ++serial, input.subjectId, input.question, reader]),
+      key: JSON.stringify([registry.id, sessionOwner.revision, ++serial, input.subjectId, input.question, reader]),
       isCurrent: () => {
+        const currentOwner = sessionOwnerStore.getSnapshot();
         const currentObservation = observationStore.getSnapshot();
+        const currentSession = cachedBrowserSession(client);
         const currentObservationIdentity = JSON.stringify([
           currentObservation.state,
           currentObservation.state === 'signed-in' ? currentObservation.observation.subject : null,
@@ -194,14 +206,15 @@ export function useRatingPopulations(
         ]);
         return (
           live &&
+          currentOwner === sessionOwner &&
+          (currentOwner.client === null || currentOwner.client === client) &&
           registry.epoch === epoch &&
           desired.current.signature === signature &&
           desired.current.read === read &&
           currentObservationIdentity === observationIdentity &&
           (anonymous
-            ? client.getQueryData<Session>(['session'])?.state === 'signed-out'
-            : client.getQueryData<Session>(['session'])?.state === 'signed-in' &&
-              client.getQueryData<Session>(['session'])?.subject === reader)
+            ? currentSession.state === 'signed-out'
+            : currentSession.state === 'signed-in' && currentSession.subject === reader)
         );
       },
       retire: () => {
@@ -222,6 +235,8 @@ export function useRatingPopulations(
     anonymous,
     observation,
     observationStore,
+    sessionOwner,
+    sessionOwnerStore,
     read,
     client,
     input.subjectId,

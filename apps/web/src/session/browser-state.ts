@@ -5,6 +5,8 @@ export {
   cachedBrowserSession,
   ownedSessionCsrfToken,
   sessionCsrfToken,
+  browserSessionOwner,
+  type BrowserSessionOwnerSnapshot,
 } from '../reader/lifetime/index';
 export {
   sessionQueryKey,

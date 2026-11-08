@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { browserObservation } from './observation';
+import { browserObservation, type BrowserCacheEvent } from './observation';
 import { normalizeSessionObservation, sessionQueryKey, unknownSession, type BrowserSession } from './contract';
 
 type ClientEntry = {
@@ -15,6 +15,35 @@ type ClientEntry = {
 // perform their own session read, but they never enter the list of browser token owners.
 const entries: ClientEntry[] = [];
 const owners: ClientEntry[] = [];
+
+export type BrowserSessionOwnerSnapshot = Readonly<{ client: QueryClient | null; revision: number }>;
+
+const serverOwnerSnapshot: BrowserSessionOwnerSnapshot = { client: null, revision: 0 };
+let ownerSnapshot = serverOwnerSnapshot;
+const ownerListeners = new Set<() => void>();
+
+function publishOwnerSnapshot(): void {
+  ownerSnapshot = { client: owners.at(-1)?.client ?? null, revision: ownerSnapshot.revision + 1 };
+  for (const listener of [...ownerListeners]) listener();
+}
+
+/** Identifies the active useSession cache without exposing its credentials or session payload. */
+export const browserSessionOwner = {
+  getSnapshot: (): BrowserSessionOwnerSnapshot => ownerSnapshot,
+  getServerSnapshot: (): BrowserSessionOwnerSnapshot => serverOwnerSnapshot,
+  subscribe(listener: () => void): () => void {
+    ownerListeners.add(listener);
+    return () => ownerListeners.delete(listener);
+  },
+};
+
+function sessionAuthorityEvent(event: BrowserCacheEvent) {
+  return (
+    event.type === 'added' ||
+    event.type === 'removed' ||
+    (event.type === 'updated' && ['success', 'error', 'invalidate', 'fetch', 'setState'].includes(event.action.type))
+  );
+}
 
 function entryFor(client: QueryClient): ClientEntry {
   let entry = entries.find((candidate) => candidate.client === client);
@@ -59,13 +88,16 @@ export function subscribeBrowserSession(
     entry.authoritativeReferences += 1;
     if (entry.authoritativeReferences === 1) {
       owners.push(entry);
+      publishOwnerSnapshot();
       const observation = browserObservation(client);
       const publish = () => {
         for (const subscriber of [...entry.listeners]) subscriber();
       };
       entry.unsubscribeCache = observation.subscribeCache((event) => {
-        if (event.query.queryKey.length === 1 && event.query.queryKey[0] === sessionQueryKey[0])
+        if (event.query.queryKey.length === 1 && event.query.queryKey[0] === sessionQueryKey[0]) {
+          if (owners.at(-1) === entry && sessionAuthorityEvent(event)) publishOwnerSnapshot();
           observation.publish(publish);
+        }
       });
     }
   }
@@ -83,7 +115,9 @@ export function subscribeBrowserSession(
       entry.authoritativeReferences -= 1;
       if (entry.authoritativeReferences === 0) {
         const ownerIndex = owners.indexOf(entry);
+        const wasCurrentOwner = ownerIndex !== -1 && ownerIndex === owners.length - 1;
         if (ownerIndex !== -1) owners.splice(ownerIndex, 1);
+        if (wasCurrentOwner) publishOwnerSnapshot();
         entry.unsubscribeCache?.();
         entry.unsubscribeCache = undefined;
       }

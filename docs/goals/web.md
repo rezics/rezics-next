@@ -967,8 +967,9 @@ Eight-locale copy and full-page phone390/desktop1280 stories cover selection, re
 source failure. Connected assertions cover native wire operands and refusal, independent recovery/public head,
 selection bounds, delayed work, equal-success and ABA replacement, QueryClient/visit/unmount and useful ordinary
 notifications. They are authored **UNRUN**; source presence and local typing are not whole-feature acceptance.
-Native/browser/growth/physical verification and integration proof remain deferred. Private first-render/SSR and
-unobserved cross-cache credential history remain unresolved, rather than proved by an in-memory fixture.
+Native/browser/growth/physical verification and integration proof remain deferred.
+
+Decision: Subject population admission keeps its per-client `browserObservation` and incarnation-bound visit lease, and captures the public session owner's monotonic active-QueryClient revision. Server rendering stays unknown until hydration; owner replacement retires the previous comparison even if the same reader later returns.
 
 Content retains questions, privacy/math, aggregates and native vote authority; Accounts/Auth retain session and
 Realm disclosure authority; Search retains public composition/canonical frame and its shared-file regions. The

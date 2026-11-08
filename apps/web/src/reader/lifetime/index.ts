@@ -11,6 +11,8 @@ export {
   sessionCsrfToken,
   subscribeBrowserSession,
   sessionStateSnapshot,
+  browserSessionOwner,
+  type BrowserSessionOwnerSnapshot,
 } from './session-cache';
 export {
   normalizeSessionObservation,

@@ -233,7 +233,7 @@ mock.module('../src/settings/preferences', () => ({
   }),
 }));
 
-const { createRoot } = await import('react-dom/client');
+const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider, dehydrate, useQuery } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
@@ -244,7 +244,7 @@ const { readSubjectRatingPopulations, validatePopulationInput } =
 const { subjectFrameQuery, subjectRelationsQuery, subjectRatingQuery } =
   await import('../src/features/pages/subject-queries');
 const { pageRelationProperties, subjectPageType } = await import('../src/features/pages/subject');
-const { sessionQuery } = await import('../src/session/query');
+const { sessionQuery, useSession } = await import('../src/session/query');
 const { subjectHead } = await import('../src/features/pages/subject-head');
 const { m } = await import('../src/paraglide/messages.js');
 const host = window.document.createElement('main') as unknown as HTMLElement;
@@ -290,7 +290,7 @@ function PopulationOwner({
   q?: typeof question;
   enabled?: boolean;
 }) {
-  const { data } = useQuery({ ...sessionQuery, enabled: false });
+  const data = useSession();
   useQuery({ ...subjectRatingQuery(id, 'en', 'question'), enabled: false });
   return (
     <SubjectRatingPopulations
@@ -534,6 +534,30 @@ test('question/Global distribution and imported source survive headline failure;
   expect(html).not.toContain('No ratings yet');
   expect(data.global.kind).toBe('failed');
   expect(data.statistics.kind).toBe('ready');
+});
+
+test('hydration waits for the browser observation before admitting its prepared reader', async () => {
+  const tree = (
+    <QueryClientProvider client={cache}>
+      <PopulationOwner />
+    </QueryClientProvider>
+  );
+  const markup = renderToStaticMarkup(tree);
+  expect(markup).toBe('');
+  expect(paths('/ratings/populations')).toHaveLength(0);
+  const hydrationHost = window.document.createElement('main');
+  window.document.body.append(hydrationHost);
+  hydrationHost.innerHTML = markup;
+  const hydrated = hydrateRoot(hydrationHost, tree);
+  try {
+    await act(async () => tick());
+    await until(() => hydrationHost.querySelectorAll('input[type="checkbox"]').length === 20);
+    expect(paths('/ratings/populations')).toHaveLength(1);
+    expect(paths('/ratings/populations')[0]!.headers.get('authorization')).toBe(`Bearer token-${preparedReader}`);
+  } finally {
+    await act(async () => hydrated.unmount());
+    hydrationHost.remove();
+  }
 });
 
 test('terminal empty ready population directory settles once without replacing its accepted observer', async () => {
@@ -949,6 +973,49 @@ test('independent QueryClients serialize private responses separately and requir
   expect(originalJson).toContain('reader-one');
   expect(JSON.stringify(second.state.data)).not.toContain('reader-one');
   expect(JSON.parse(JSON.stringify(dehydrate(extraCache)))).toMatchObject({ queries: expect.any(Array) });
+});
+
+test('a later session owner retires held comparisons across live QueryClients and cannot revive the earlier visit', async () => {
+  await paint();
+  await until(() => boxes().length === 20);
+  aggregateGate = deferred<Response>();
+  const delayedAggregate = aggregateGate;
+  await select(0);
+  await until(() => aggregateGate === undefined);
+
+  extraCache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  extraCache.setQueryDefaults(sessionQuery.queryKey, { gcTime: Infinity });
+  extraCache.setQueryData(sessionQuery.queryKey, session());
+  const otherHost = window.document.createElement('main');
+  window.document.body.append(otherHost);
+  const otherRoot = createRoot(otherHost);
+  try {
+    await act(async () => {
+      otherRoot.render(
+        <QueryClientProvider client={extraCache}>
+          <PopulationOwner />
+        </QueryClientProvider>,
+      );
+      await tick();
+    });
+    await until(() => otherHost.querySelectorAll('input[type="checkbox"]').length === 20);
+    expect(boxes()).toHaveLength(0);
+    delayedAggregate.resolve(
+      Response.json({
+        question: QUESTION,
+        subject: subjectId,
+        figures: [aggregateFigure(ids[0]!)],
+      }),
+    );
+    await act(tick);
+    expect(host.querySelectorAll('[data-slot="rating-comparison"]')).toHaveLength(0);
+  } finally {
+    await act(async () => otherRoot.unmount());
+    otherHost.remove();
+  }
+
+  await until(() => boxes().length === 20);
+  expect(boxes().every((box) => !box.checked)).toBe(true);
 });
 
 test('native selected zero, privacy suppression and updating preserve distinct visible meanings without stale scores', async () => {
