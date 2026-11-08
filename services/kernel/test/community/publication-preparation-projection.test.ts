@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { projectPublicationPresentations } from '../../src/community/publication-preparation.ts';
 import type { CoverCredit, SubjectSummary } from '../../src/semantic/contract/index.ts';
 
@@ -87,29 +87,44 @@ test('multibyte labels and complete cover credit survive, while an oversized obl
   const source = summary(originalId, label);
   source.cover = cover;
   const oversized = summary(terminalId, 'Terminal');
+  const oversizedObligation = 'complete obligation '.repeat(2048);
   oversized.cover = {
     ...cover,
     credit: {
       ...credit,
-      obligations: ['complete obligation '.repeat(2048)] as unknown as CoverCredit['obligations'],
+      obligations: [oversizedObligation] as unknown as CoverCredit['obligations'],
     },
   };
-  const projected = projectPublicationPresentations(
-    originalId,
-    terminalId,
-    new Map([
-      [originalId, source],
-      [terminalId, oversized],
-    ]),
-    new Map([
-      [originalId, 'available'],
-      [terminalId, 'available'],
-    ]),
+  let serializedOversizedObligation = false;
+  const stringify = JSON.stringify.bind(JSON);
+  const stringifySpy = spyOn(JSON, 'stringify').mockImplementation(
+    ((...args: Parameters<typeof JSON.stringify>) => {
+      if (args[0] === oversizedObligation) serializedOversizedObligation = true;
+      return stringify(...args);
+    }) as typeof JSON.stringify,
   );
+  let projected: ReturnType<typeof projectPublicationPresentations>;
+  try {
+    projected = projectPublicationPresentations(
+      originalId,
+      terminalId,
+      new Map([
+        [originalId, source],
+        [terminalId, oversized],
+      ]),
+      new Map([
+        [originalId, 'available'],
+        [terminalId, 'available'],
+      ]),
+    );
+  } finally {
+    stringifySpy.mockRestore();
+  }
 
   expect(projected.original.label).toEqual({ state: 'available', value: label, language: 'zh-Hant' });
   expect(projected.original.cover).toEqual({ state: 'available', value: cover });
   expect(projected.terminal.label).toEqual({ state: 'available', value: 'Terminal', language: 'zh-Hant' });
   expect(projected.terminal.cover).toEqual({ state: 'unavailable' });
+  expect(serializedOversizedObligation).toBe(false);
   expect(JSON.stringify(projected.terminal.cover)).not.toContain('complete obligation');
 });

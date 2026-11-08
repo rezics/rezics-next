@@ -236,7 +236,41 @@ function destination(href: string, subjectId: string, head: string | null) {
   };
 }
 
-const textEncoder = new TextEncoder();
+function jsonStringBytes(value: string, remaining: number): number | null {
+  let bytes = 2;
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (
+      code === 0x22 ||
+      code === 0x5c ||
+      code === 0x08 ||
+      code === 0x09 ||
+      code === 0x0a ||
+      code === 0x0c ||
+      code === 0x0d
+    ) {
+      bytes += 2;
+    } else if (code < 0x20) {
+      bytes += 6;
+    } else if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4;
+        index++;
+      } else bytes += 6;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      bytes += 6;
+    } else if (code <= 0x7f) {
+      bytes++;
+    } else if (code <= 0x7ff) {
+      bytes += 2;
+    } else {
+      bytes += 3;
+    }
+    if (bytes > remaining) return null;
+  }
+  return bytes <= remaining ? bytes : null;
+}
 
 /** Count JSON UTF-8 bytes incrementally and stop as soon as the supplied cap is crossed. */
 function boundedJsonBytes(value: unknown, limit: number): number | null {
@@ -245,12 +279,16 @@ function boundedJsonBytes(value: unknown, limit: number): number | null {
     bytes += amount;
     return bytes <= limit;
   };
-  const textBytes = (text: string) => textEncoder.encode(JSON.stringify(text)).byteLength;
   const visit = (current: unknown): boolean => {
     if (current === null) return add(4);
-    if (typeof current === 'string') return add(textBytes(current));
-    if (typeof current === 'number' || typeof current === 'boolean')
-      return add(textEncoder.encode(JSON.stringify(current)).byteLength);
+    if (typeof current === 'string') {
+      const length = jsonStringBytes(current, limit - bytes);
+      return length !== null && add(length);
+    }
+    if (typeof current === 'number' || typeof current === 'boolean') {
+      const text = JSON.stringify(current);
+      return text !== undefined && add(text.length);
+    }
     if (Array.isArray(current)) {
       if (!add(2)) return false;
       for (let index = 0; index < current.length; index++) {
@@ -264,7 +302,8 @@ function boundedJsonBytes(value: unknown, limit: number): number | null {
       let first = true;
       for (const [key, entry] of entries) {
         if (entry === undefined) continue;
-        if ((!first && !add(1)) || !add(textBytes(key)) || !add(1) || !visit(entry)) return false;
+        const keyBytes = jsonStringBytes(key, limit - bytes);
+        if ((!first && !add(1)) || keyBytes === null || !add(keyBytes) || !add(1) || !visit(entry)) return false;
         first = false;
       }
       return true;
