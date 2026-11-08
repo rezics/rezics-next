@@ -2025,9 +2025,10 @@ visible subjects without configured values retain `facts: {}`. BASIC remains unc
 
 The optional `viewerFacts` page is assembled afterward for the authenticated caller. Its `current` form preserves
 present zero, clear/absence, and row-level unavailable values. Its value-free page-level `unavailable` form reports
-`identity`, `currentness`, or `response_limit`. This overlay does not make public score ordering current: the default
-personal-score order still returns `503 dependency_unavailable` until Content supplies the whole-owner fence described
-in [personal-score shelf ordering](../../../../docs/library-personal-score-order.md).
+`identity`, `currentness`, or `response_limit`. This overlay remains separate from private score ordering. The default
+shelf reader supplies Content's same-RR owner identity/currentness binding for personal-score order. The order remains
+unavailable while its index is being prepared, identity repair is active, or voter standing is ineligible; otherwise
+the owner-selected order is executable as described in [personal-score shelf ordering](../../../../docs/library-personal-score-order.md).
 
 ## Sitemap feeds
 

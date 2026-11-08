@@ -4,7 +4,7 @@ import { createShelfPageReader } from '../../src/library/shelf-reader-page.ts';
 import { shelfScoreBinding, validShelfScoreKey } from '../../src/library/shelf-score.ts';
 import { shelfCursorBinding, type ShelfQuery, type ShelfSeek } from '../../src/library/shelf-contract.ts';
 import { shelfListQuerySchema } from '../../src/library/shelf-schemas.ts';
-import { readPersonalScoreQuestion } from '../../src/rating/personal-score.ts';
+import { readPersonalScoreCurrentness, readPersonalScoreQuestion } from '../../src/rating/personal-score.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../../src/tokens/list-cursor.ts';
@@ -85,11 +85,14 @@ test('native first, middle and final pages preserve ties, zero and unrated-last 
           });
         expect(await traverse({ ...query, direction, state, typeId })).toEqual(expected);
       }
-  // Installation does not manufacture Content's missing native identity authority.
+  // A caller without Content's currentness binding remains fail-closed.
   await expect(shelfScoreBinding(db.admin, route, owner)).rejects.toMatchObject({
     code: 'dependency_unavailable',
     binding: 'Content native owner-wide score identity fence is not installed',
   });
+  const installedBinding = await shelfScoreBinding(db.admin, route, owner, readPersonalScoreCurrentness);
+  expect(installedBinding.question.id).toBe(STANDARD_QUESTION_ID);
+  expect(installedBinding.binding.scoreIdentity).toContain(STANDARD_QUESTION_ID);
   const question = await readPersonalScoreQuestion(db.admin);
   expect(question).toMatchObject({ id: STANDARD_QUESTION_ID, minimumUnits: 0, maximumUnits: 20, stepUnits: 1 });
   expect(Value.Check(shelfListQuerySchema(), query)).toBe(false); // Internal typeId is not a wire predicate.

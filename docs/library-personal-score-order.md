@@ -1,7 +1,9 @@
 # Personal-score shelf ordering
 
-Decision: use an atomic Library index of Content's native standard-question counted vote, with explicit bounded
-installation and unavailable reads until Content supplies an owner-wide identity-currentness fence.
+Decision: personal-score ordering is an executable, owner-selected Library query over Content's native
+standard-question counted vote. The installed default shelf reader binds Content's `readPersonalScoreCurrentness`;
+the query is available after bounded index preparation while the owner identity and voter standing are current.
+Preparation, active identity repair and ineligible voter standing remain explicit unavailable outcomes.
 
 ## Native interface and current availability
 
@@ -97,9 +99,10 @@ checked by the existing readers and currentness producer; stored scores confer n
 Let K<=100, N be all Entries/index placements, V all native votes, S the owner's shelf and H all owner heads.
 A fixed-filter page makes one B-tree descent and reads <=K+1 index candidates, then <=K+1 exact Entry lookups and
 <=K active-session probes: logical work O(log N + K log N + K log sessions), with O(K) serialization for BASIC.
-The RR owner/current-generation, question, head and Content-currentness checks are additional authority work; the
-Content port's whole-caller bounds remain unavailable until its native producer lands. FULL additionally pays the
-existing bounded summary/disclosure calls. No cost claim omits that producer or treats its callback as free.
+The RR owner/current-generation, question, head and Content-currentness checks are additional authority work. The
+installed currentness reader observes one owner identity-work frame and one voter-standing row in the same RR
+snapshot; fixed-population native growth and physical-plan measurements remain the controller's separate gate. FULL
+additionally pays the existing bounded summary/disclosure calls. No cost claim treats the currentness read as free.
 
 Installation has ceil(S/100) nonempty pages plus at most one exhaustion page: each reads <=101 keys, performs <=100
 vote lookups O(log V) and index upserts (one PK and eight ordering indexes), and writes one checkpoint/receipt.
