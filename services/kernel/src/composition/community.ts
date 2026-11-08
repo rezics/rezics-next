@@ -11,7 +11,7 @@ export function startCommunityApplication(ambient: Partial<CommunityAmbient> = {
   return startNativeCommunityApplication(ambient);
 }
 
-/** Server and worker composition binds the native Community adapters before mounting the kernel. */
+/** Bind native Community preparation plus Semantic/Content summary ports before mounting the kernel. */
 export function composeCommunityApplication(ambient?: Partial<CommunityAmbient>): CommunityApplication {
   composeCommunityDomainPorts();
   return ensureCommunityApplication(ambient ?? {});

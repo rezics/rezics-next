@@ -81,7 +81,7 @@ const prepare: PublicationPrepare = async ({ realmId, subjectId }) => {
               rightsHolder: 'Fixture artist',
               via: { name: 'Fixture source', url: 'https://example.com/cover' },
               license: 'CC0-1.0',
-              obligations: ['Keep the image credit.'],
+              obligations: ['cc:Attribution'],
             },
           },
         }
@@ -101,10 +101,14 @@ const prepare: PublicationPrepare = async ({ realmId, subjectId }) => {
         realmId,
         spaceId: realmId,
         contextId: realmId,
-        title: realmRecording.realm.title,
-        hostTitle: realmRecording.realm.title,
+        title: { state: 'available', value: realmRecording.realm.title },
+        hostTitle: { state: 'available', value: realmRecording.realm.title },
       },
-      subject: { originalId: subjectId, currentId: subjectId, presentation },
+      subject: {
+        originalId: subjectId,
+        currentId: subjectId,
+        presentation: { original: presentation, terminal: structuredClone(presentation) },
+      },
       current: { publicationId: head, verdict: 'adopt', decidedAt: publicationsRecording.items[0]!.publishedAt },
       commands: { publish: command('publish'), withdraw: command('withdraw'), reject: command('reject') },
       viewer: { accountId: 'story-viewer', clientId: 'fixture', authnEpoch: 1 },
@@ -154,8 +158,14 @@ function Example({
       if (preparationFailure) return { kind: preparationFailure };
       const result = await prepare(input);
       if (result.kind === 'ready') {
-        if (labelState) result.preparation.subject.presentation.label = { state: labelState };
-        if (coverState) result.preparation.subject.presentation.cover = { state: coverState };
+        if (labelState) {
+          result.preparation.subject.presentation.original.label = { state: labelState };
+          result.preparation.subject.presentation.terminal.label = { state: labelState };
+        }
+        if (coverState) {
+          result.preparation.subject.presentation.original.cover = { state: coverState };
+          result.preparation.subject.presentation.terminal.cover = { state: coverState };
+        }
         result.preparation.current = current === null ? null : { ...result.preparation.current!, verdict: current };
         if (current === null) {
           const publish = result.preparation.commands.publish!;
@@ -364,7 +374,7 @@ export const CurrentAuthorityDenied: Story = {
 const prepareLong: PublicationPrepare = async (input) => {
   const result = await prepare(input);
   if (result.kind === 'ready')
-    result.preparation.subject.presentation.label = {
+    result.preparation.subject.presentation.original.label = {
       state: 'available',
       value: Array(12).fill(pickText(subjects[0]!.labels, getLocale()).text).join(' · '),
       language: getLocale(),
@@ -405,6 +415,7 @@ async function chooseLongSelection({ canvasElement }: { canvasElement: HTMLEleme
   await userEvent.type(view.getByRole('combobox', { name: m.realm_publication_choose() }), 'Kokoro');
   await userEvent.click(await within(document.body).findByRole('option'));
   const selected = view.getByRole('group', { name: m.realm_publication_selected() });
+  await expect(within(selected).getByText(m.realm_publication_original_subject())).toBeVisible();
   await expect(within(selected).getByRole('heading', { level: 4 })).toHaveTextContent(
     Array(12).fill(pickText(subjects[0]!.labels, getLocale()).text).join(' · '),
   );

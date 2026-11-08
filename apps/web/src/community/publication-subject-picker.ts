@@ -140,22 +140,19 @@ export function createPublicationDraft(
       update({ ...state, target: null, preparation: null, preparationState: result.kind });
       return;
     }
+    const original = result.preparation.subject.presentation.original;
     const display: PublicationTarget = {
       ...identity(target),
-      ...(result.preparation.subject.presentation.label.state === 'available'
+      ...(original.label.state === 'available'
         ? {
-            title: result.preparation.subject.presentation.label.value,
-            label: result.preparation.subject.presentation.label.value,
+            title: original.label.value,
+            label: original.label.value,
             labels: {
-              [result.preparation.subject.presentation.label.language]:
-                result.preparation.subject.presentation.label.value,
+              [original.label.language]: original.label.value,
             },
           }
         : {}),
-      cover:
-        result.preparation.subject.presentation.cover.state === 'available'
-          ? structuredClone(result.preparation.subject.presentation.cover.value)
-          : null,
+      cover: original.cover.state === 'available' ? structuredClone(original.cover.value) : null,
     };
     if (request) request.target = display;
     update({

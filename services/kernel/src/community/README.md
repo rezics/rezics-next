@@ -180,9 +180,9 @@ reauthorize and enforce their existing preconditions and exact replay rules. A c
 `recovery:{requestIdentity:"unknown",replay:"original-command"}` remains explicit even when the observed verdict
 matches a lost request. Preserve that request's original method, body, key and expected head for an explicit replay.
 
-Decision: publication preparation presents the current terminal Subject's selected language label and permitted cover; missing fields are empty, withheld fields concealed, and failed optional presentation reads unavailable.
+Decision: cap the serialized and retained selected publication review at 128 KiB UTF-8, project original and terminal Semantic summaries in one observation, and independently report an optional label or complete cover as unavailable when its full meaning cannot fit; never truncate attribution or legal text.
 
-The resource keeps the selected original Subject for the native publication slot and every command, and discloses its independently readable terminal reference separately. Its optional presentation uses the bounded Semantic summary observation and Content's source-backed cover descriptor; a hidden, rejected, erased or fenced cover never contributes its media identifier or rights metadata. This is not a Subject picker, history, public shelf or a complete rendered publisher interface.
+The resource keeps the selected original Subject for the native publication slot and every command, and discloses its independently readable terminal reference separately. It projects both selected identities from one bounded Semantic summary observation and returns independent label and cover outcomes for each. A hidden, rejected, erased or fenced cover never contributes its media identifier or rights metadata. Realm and host titles also use explicit available/unavailable outcomes. This is not a Subject picker, history, public shelf or a complete rendered publisher interface.
 
 Preparation releases the Realm snapshot before Semantic's reference owner runs. The latter independently checks at
 most the original and one terminal reference, then repeats those exact references with newly prepared Access
@@ -200,25 +200,32 @@ unchanged; terminal decisions remain absent there.
   statement_timeout, one native partition probe, authoritative read time, current Access verification, one exact
   preparation query and COMMIT (or ROLLBACK). Initial checks prepare `realm:publish` and `realm:read`; final checks
   repeat them and prepare `space:read`. Each original/terminal reference round prepares `subject:read` outside
-  checkout and uses Semantic's RR reference owner. The terminal Subject then receives one released Semantic summary
-  observation: active release, representative selection and summary reads by addressed home, Content cover metadata
-  reads by media home, and exact source-tuple fences in chunks of 100. A changed representative plan releases its
-  snapshot, prepares the newly selected key and retries under the same deadline; at most three summary snapshots run.
+  checkout and uses Semantic's RR reference owner. The unique original/terminal Subject keys receive one released
+  Semantic summary observation: active release, representative selection and summary reads by addressed home,
+  Content cover metadata reads by media home, and exact source-tuple fences in chunks of 100. A changed representative
+  plan releases its snapshot, prepares the newly selected key and retries under the same deadline; at most three
+  summary snapshots run.
   Final summary verification repeats Access preparation and checks actual partition epoch/position observations in a
   new RR snapshot. No receipt, mutation, publication writer, HTTP subrequest or list cursor is used.
 - **Bound:** Realm and publication SQL touch one Realm, its exact revision, one host, its exact revision and zero or
   one selected publication head. Reference reads probe at most two exact `(route,subject_id)` keys and their latest
-  redirect rows. The presentation observation admits one current terminal Subject, at most 64 requested/fallback
-  language keys plus its original language, at most 12 representative locators and one selected edition; the chosen
-  cover descriptor uses Content's existing import bounds (8 KiB credit, 12 variants) and exact source fence. Titles
-  admit 1024 Unicode characters each (at most4096 UTF-8 bytes before JSON escaping); labels admit 4096 characters and
-  media/credit fields retain their producer limits. Summary SQL may inspect current selected fact rows and each
-  metadata read batches by physical home; returned-row counts do not prove a physical scan bound. Access, Auth,
-  source-fence, transaction and serialized JSON costs remain charged to their owners and repeated final checks.
+  redirect rows. The presentation observation admits at most 64 requested/fallback language keys plus each unique
+  Subject's original language, at most 12 representative locators and one selected edition per unique key; each
+  complete cover summary uses Semantic's `CoverSummaryValueSchema` and Content's existing import contract. Each
+  available title or label admits at most 4096 characters and 25 KiB encoded JSON; each complete selected cover is
+  at most 12 KiB. The complete `{preparation}` response is capped at 128 KiB serialized UTF-8, including fixed
+  decision/command fields. If aggregate optional details exceed that cap, the producer marks whole optional label
+  or cover outcomes unavailable and preserves every remaining complete value. Summary SQL may inspect current
+  selected fact rows and each metadata read batches by physical home; returned-row counts do not prove a physical
+  scan bound. Access, Auth, source-fence, transaction and serialized JSON costs remain charged to their owners and
+  repeated final checks.
 - **Growth check:** `test/community/publication-preparation.test.ts` covers current label plus empty cover, optional
   presentation unavailability, source change during hydration, absent/adopted/terminal heads, exact replay after a
   discarded response, stale head, non-publisher management/membership, hidden/unknown Subjects and failed reference
-  dependencies. Controller acceptance still owns populated/concealed media cases, Realm/caller revocation, exact
+  dependencies. `test/community/publication-preparation-projection.test.ts` covers indexed unique-id projection at
+  1/10/20 supplied summaries, multibyte labels and complete credit, and whole-cover fallback. The installed receiver
+  covers the same supplied populations and response byte ceiling. Controller acceptance still owns
+  populated/concealed media cases, Realm/caller revocation, exact
   media-source replacement races, strict full-prefix plans and connected 256/1024/4096 growth. It must independently
   grow unrelated and selected source/identity/authority histories with fixed keys, homes and admitted byte caps, and
   capture physical rows, UTF-8/serialized bytes, transactions, preparations/evaluations, pools and registered runner
