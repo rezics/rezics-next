@@ -1718,7 +1718,8 @@ simultaneous failures retain both errors. Page-data failure notices and native r
 
 Decision: every two hours by default, the resident verifier refreshes a dedicated detached `dev` checkout against a
 persistent seeded local stack whose PostgreSQL and OpenSearch containers and volumes use the `rezics-pagecheck-`
-prefix. It runs `bun scripts/page-data-check.ts`, records each section's class and the run's per-class counts in
+prefix. Dependency reuse compares lockfiles, package manifests and their declared patch files at both revisions;
+patch-only changes refresh the pinned install before boot. It runs `bun scripts/page-data-check.ts`, records each section's class and the run's per-class counts in
 `flow_events`, and includes the section results by run in flow reports. A section moving from `DATA`, `EMPTY`,
 `UNAUTHORIZED` or `UNAVAILABLE` to `API`, `WEB` or `SEED` returns to the latest integrated task that changed one of
 its mapped files when its retained session can resume; otherwise one repair task is dispatched to that section's

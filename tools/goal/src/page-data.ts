@@ -1070,24 +1070,8 @@ function declaredDependencyPatchFiles(cwd: string, revision: string): string[] {
   });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(result.stderr?.trim() || 'Could not read page-data dependency patches');
-  const manifest = JSON.parse(result.stdout) as { patchedDependencies?: unknown };
-  if (manifest.patchedDependencies === undefined) return [];
-  if (
-    !manifest.patchedDependencies ||
-    typeof manifest.patchedDependencies !== 'object' ||
-    Array.isArray(manifest.patchedDependencies)
-  )
-    throw new Error('Root patchedDependencies must be an object');
-  return Object.values(manifest.patchedDependencies).map((path) => {
-    if (
-      typeof path !== 'string' ||
-      path.length === 0 ||
-      path.startsWith('/') ||
-      path.split('/').some((part) => part === '..')
-    )
-      throw new Error('Root patchedDependencies contains an invalid path');
-    return path;
-  });
+  const manifest = JSON.parse(result.stdout) as { patchedDependencies?: Record<string, string> };
+  return Object.values(manifest.patchedDependencies ?? {});
 }
 
 export function dependencyFilesChanged(cwd: string, oldHead: string | undefined, head: string): boolean {
