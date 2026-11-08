@@ -68,6 +68,7 @@ export type SubjectReadOptions = {
     prepareAuthorization?: () => Promise<AccessCheck>;
     prepareAuthorize?: (id: string) => Promise<AccessCheck>;
     readAs?: <T>(read: () => Promise<T>) => Promise<T>;
+    yieldAdmission?: <T>(wait: () => Promise<T>) => Promise<T>;
 };
 export type SubjectReadResult = {
     selectedSynopsis?: SelectedSynopsisResult;
@@ -88,7 +89,7 @@ export type SubjectReadingPageRequest = {
     context: string;
     languages: readonly string[];
     authorization: SubjectReadingAuthorizationPort<AccessCheck>;
-    runNative: <T>(read: () => Promise<T>) => Promise<T>;
+    runNative: <T>(read: (yieldAdmission?: <Value>(wait: () => Promise<Value>) => Promise<Value>) => Promise<T>) => Promise<T>;
     readAs: <T>(read: () => Promise<T>) => Promise<T>;
     seen: readonly SubjectComponent[];
     selectedSynopsis?: SelectedSynopsisInput;
