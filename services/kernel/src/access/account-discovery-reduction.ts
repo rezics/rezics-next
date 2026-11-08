@@ -283,7 +283,8 @@ export async function enrollAccountDiscoveryHome(
           ).rows[0];
           if (!generation) throw new CommandUnavailableError('fenced', input.partition);
           await client.query(
-            `INSERT INTO semantic.public_filter_key_enrollment
+            `/* semantic.native-keyed:${admitted.length}:${admitted.length} */
+             INSERT INTO semantic.public_filter_key_enrollment
              (partition_no,input_key,registration_partition,registration,bootstrap,enrollment_generation)
            SELECT $1,k,$2,$3,$4,$6::bigint FROM unnest($5::text[]) k
            ON CONFLICT DO NOTHING`,

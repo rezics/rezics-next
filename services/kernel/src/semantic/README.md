@@ -52,6 +52,18 @@ supplies Account repair/enrollment, authorization and deadline classification th
 runtime defaults compose this application before Search runtime factories are used. Existing pool, route key, Access,
 request deadline, transaction, reached-child work and publication writer ownership flow through unchanged.
 
+Decision: retained Source repair receipts batch up to `min(inputLimit, 128)` contiguous empty Semantic/Account homes
+and empty creation windows. Each immutable step stores the exact scanned-prefix digest; creation batches additionally
+retain compact per-home window tuples so settlement can revalidate the acknowledged home without replaying the whole
+batch. Search fixes repair `inputLimit` at 64 and reserves its existing meter for independent producer and replay
+reads. Initial retained preparation receives Search's live remaining input allowance after a 128-input reserve,
+then batches up to 16 contiguous Account homes using a conservative 96-fixed-input estimate plus compiler-key
+closure. It may return preparing without advancing a home when none fits. Every home is still enrolled, adopted,
+and cursor-advanced independently; contention resumes the original bootstrap without treating a home as empty.
+Retained preparation retries reuse the immutable definition already loaded from the retained cut and keep cursor
+reads bounded per call rather than multiplying them for every home. The first raw subject, Account or outbox event
+still becomes ordinary repair owner work, and terminal proof remains separate.
+
 The installed WorkModule journey streams actual authorization, registration, SDK launch and service phases before
 startup cleanup. A failure retains the first producer error alongside its last phase; readiness, native convergence
 and shutdown still require the original assertions and deadlines.
