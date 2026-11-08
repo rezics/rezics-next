@@ -13,6 +13,7 @@ export const FRESHNESS_POLL_MS = 100;
 const LINKS_CONSUMER = 'semantic_links';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+type YieldAdmission = <T>(wait: () => Promise<T>) => Promise<T>;
 
 function covers(
   row: { epoch: number | null; position: string | number | bigint } | null,
@@ -50,6 +51,7 @@ export async function linksCaughtUp(
   subject: string,
   deadline = deadlineFor(FRESHNESS_WAIT_MS),
   members: readonly string[] = [],
+  yieldAdmission?: YieldAdmission,
 ): Promise<boolean> {
   while (Date.now() < deadline) {
     const covered = await withConnection(pool, async (client) => {
@@ -84,7 +86,8 @@ export async function linksCaughtUp(
     const pendingMembers = covered && members.length ? await pendingMergeSources(pool, members) : [];
     if (covered && pendingMembers.length === 0) return true;
     if (deadline - Date.now() < FRESHNESS_POLL_MS) return false;
-    await sleep(FRESHNESS_POLL_MS);
+    // The database connection is released before this wait; yield the request's admission permit too.
+    await (yieldAdmission ? yieldAdmission(() => sleep(FRESHNESS_POLL_MS)) : sleep(FRESHNESS_POLL_MS));
   }
   return false;
 }
@@ -95,9 +98,10 @@ export function waitForSubjectLinks(
   subject: string,
   deadline: number,
   members: readonly string[] = [],
+  yieldAdmission?: YieldAdmission,
 ): Promise<boolean> {
   const started = Date.now();
   // Leave at least half of the remaining request budget for authorization and the read.
   const waitUntil = Math.min(started + FRESHNESS_WAIT_MS, started + (deadline - started) / 2);
-  return linksCaughtUp(pool, seen, subject, waitUntil, members);
+  return linksCaughtUp(pool, seen, subject, waitUntil, members, yieldAdmission);
 }

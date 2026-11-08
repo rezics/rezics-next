@@ -124,6 +124,7 @@ export type SubjectReadOptions = {
   prepareAuthorization?: () => Promise<AccessCheck>;
   prepareAuthorize?: (id: string) => Promise<AccessCheck>;
   readAs?: <T>(read: () => Promise<T>) => Promise<T>;
+  yieldAdmission?: <T>(wait: () => Promise<T>) => Promise<T>;
 };
 export type SubjectReadResult = {
   selectedSynopsis?: SelectedSynopsisResult;
@@ -144,7 +145,9 @@ export type SubjectReadingPageRequest = {
   context: string;
   languages: readonly string[];
   authorization: SubjectReadingAuthorizationPort<AccessCheck>;
-  runNative: <T>(read: () => Promise<T>) => Promise<T>;
+  runNative: <T>(
+    read: (yieldAdmission?: <Value>(wait: () => Promise<Value>) => Promise<Value>) => Promise<T>,
+  ) => Promise<T>;
   readAs: <T>(read: () => Promise<T>) => Promise<T>;
   seen: readonly SubjectComponent[];
   selectedSynopsis?: SelectedSynopsisInput;
@@ -882,7 +885,14 @@ async function readSubjectNative(
         };
       });
       if (!preflight) return null;
-      await waitForSubjectLinks(pool, [...(summaries.seen ?? []), preflight.component], subjectId, deadline);
+      await waitForSubjectLinks(
+        pool,
+        [...(summaries.seen ?? []), preflight.component],
+        subjectId,
+        deadline,
+        [],
+        summaries.yieldAdmission,
+      );
       await refreshStatementReaderAuthorization();
       let check = await prepare();
       let expectedRevision = preflight.revision;
@@ -1046,7 +1056,14 @@ async function readSubjectNative(
         expectedRevision = snapshot.revision;
         expectedSecurityRevision = snapshot.securityRevision;
         requireAccessDeadline(deadline);
-        await waitForSubjectLinks(pool, [...(summaries.seen ?? []), snapshot.component], subjectId, deadline);
+        await waitForSubjectLinks(
+          pool,
+          [...(summaries.seen ?? []), snapshot.component],
+          subjectId,
+          deadline,
+          [],
+          summaries.yieldAdmission,
+        );
         requireAccessDeadline(deadline);
         await refreshStatementReaderAuthorization();
         check = await prepare();
@@ -1337,7 +1354,7 @@ async function readSubjectPage(
   });
   const synopsisAnchors: SubjectComponent[] = [];
   const result = await input
-    .runNative(() =>
+    .runNative((yieldAdmission) =>
       application.readSubject(pool, input.subject, async () => false, input.context, routeKey, {
         languages: input.languages,
         ...(input.reviewIdentity ? { reviewIdentity: input.reviewIdentity } : {}),
@@ -1368,6 +1385,7 @@ async function readSubjectPage(
           : {}),
         authorize: authorizeSummary,
         seen: input.seen,
+        ...(yieldAdmission ? { yieldAdmission } : {}),
         deadline,
         prepareAuthorize: input.authorization.prepareDetail,
         readAs: input.readAs,

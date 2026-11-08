@@ -3,6 +3,7 @@ import { createPool } from '../src/database/pool.ts';
 import { Admission, ADMISSION_LIMITS } from '../src/http/admission.ts';
 import { createApp, REQUEST_DEADLINE_MS } from '../src/http/app.ts';
 import { ProblemError } from '../src/http/problem.ts';
+import { linksCaughtUp } from '../src/semantic/link-freshness.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -100,6 +101,30 @@ test('a failed job gives its permit back', async () => {
   const failure = new Error('job failed');
   expect(await admission.run('normal', later(), () => Promise.reject(failure)).catch((e) => e)).toBe(failure);
   expect(await admission.run('normal', later(), async () => 'next')).toBe('next');
+  expect(admission.running).toEqual({ normal: 0, reserved: 0 });
+});
+
+test('subject freshness polling yields its normal permit between database checks', async () => {
+  const admission = new Admission({ permits: 1, reserved: 1, queue: 2 });
+  const seen = [{ partition: 0, epoch: 2_147_483_647, position: 999_999_999_999_999_999n }];
+  const subject = '00000000-0000-7000-8000-000000000001';
+  let yielded = 0;
+  const caughtUp = await admission.run('normal', later(), async (yieldPermit) => {
+    expect(admission.running.normal).toBe(1);
+    const ready = await linksCaughtUp(pool, seen, subject, Date.now() + 1000, [], async (wait) => {
+      await yieldPermit(async () => {
+        expect(admission.running.normal).toBe(0);
+        await wait();
+        expect(admission.running.normal).toBe(0);
+        yielded += 1;
+      });
+      expect(admission.running.normal).toBe(1);
+    });
+    expect(admission.running.normal).toBe(1);
+    return ready;
+  });
+  expect(caughtUp).toBe(false);
+  expect(yielded).toBeGreaterThan(0);
   expect(admission.running).toEqual({ normal: 0, reserved: 0 });
 });
 
