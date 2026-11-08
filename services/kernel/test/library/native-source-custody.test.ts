@@ -518,6 +518,8 @@ async function explicitSource() {
     'collection:read',
     'collection:update',
     'library_entry:read',
+    'progress_session:read',
+    'copy:read',
   ]);
   expect((await native.send('steward', 'POST', '/v1/platform/exposure/personal_library:open')).status).toBe(200);
   const response = await native.send(owner.bearer, 'POST', '/v1/collections', {
