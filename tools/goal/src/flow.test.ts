@@ -703,6 +703,120 @@ test('flow alarm overrides cap examples and permit another alarm exactly at the 
   }
 });
 
+test('unchanged global alarms with no waiting tasks stay quiet after delivery, without changing the report metric', () => {
+  const db = openDb(':memory:');
+  const policy = readControlPolicy({ flow: { alertEveryMs: 25 } });
+  const now = Date.parse(date(0));
+  const report = flowReport([], [], now);
+  report.flowEfficiency = 0;
+  const sent: string[] = [];
+  const run = (offset: number) =>
+    checkFlowAlarms(db, report, (summary) => sent.push(summary), new Date(now + offset), undefined, policy);
+  try {
+    expect(() =>
+      checkFlowAlarms(
+        db,
+        report,
+        () => {
+          throw new Error('inbox unavailable');
+        },
+        new Date(now),
+        undefined,
+        policy,
+      ),
+    ).toThrow('inbox unavailable');
+    expect([run(0).length, run(25).length, run(1000).length]).toEqual([1, 0, 0]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toContain('flow efficiency 0.0%');
+    expect(report.flowEfficiency).toBe(0);
+  } finally {
+    db.close();
+  }
+});
+
+test('global alarms rearm on a changed measurement, new waiting task and recovery', () => {
+  const db = openDb(':memory:');
+  const policy = readControlPolicy({ flow: { alertEveryMs: 10_000 } });
+  const now = Date.parse(date(0));
+  const report = flowReport([], [], now);
+  report.flowEfficiency = 0.1;
+  const sent: string[] = [];
+  const run = (offset: number) =>
+    checkFlowAlarms(db, report, (summary) => sent.push(summary), new Date(now + offset), undefined, policy);
+  try {
+    expect(run(0)).toEqual(['flow-efficiency']);
+    report.flowEfficiency = 0.2;
+    expect(run(1)).toEqual(['flow-efficiency']);
+    report.queues[1] = { stage: 'check', length: 1, oldestAgeMs: 1, tasks: ['new-waiting-task'] };
+    expect(run(2)).toEqual(['flow-efficiency']);
+    expect(sent.at(-1)).toContain('new-waiting-task');
+
+    report.flowEfficiency = 0.5;
+    expect(run(3)).toEqual([]);
+    report.flowEfficiency = 0.2;
+    expect(run(4)).toEqual(['flow-efficiency']);
+    expect(sent).toHaveLength(4);
+  } finally {
+    db.close();
+  }
+});
+
+test('actionable queue alarms keep interval escalation when waiting-task details change', () => {
+  const db = openDb(':memory:');
+  const policy = readControlPolicy({ flow: { alertEveryMs: 25 } });
+  const now = Date.parse(date(0));
+  const report = flowReport([], [], now);
+  report.queues[1] = { stage: 'check', length: 1, oldestAgeMs: 60_000, tasks: ['first'] };
+  const sent: string[] = [];
+  const run = (offset: number) =>
+    checkFlowAlarms(
+      db,
+      report,
+      (summary) => sent.push(summary),
+      new Date(now + offset),
+      { efficiencyBelow: 0, oldestQueueMs: 0, landingP90Ms: 1_000_000, attemptsPerIntegrated: 10 },
+      policy,
+    );
+  try {
+    expect(run(0)).toEqual(['queue-check']);
+    report.queues[1] = { stage: 'check', length: 2, oldestAgeMs: 120_000, tasks: ['first', 'new'] };
+    expect(run(1)).toEqual([]);
+    expect(run(25)).toEqual(['queue-check']);
+    expect(sent).toHaveLength(2);
+  } finally {
+    db.close();
+  }
+});
+
+test('legacy flow-alarm rows keep their cooldown and remain readable by old queries', () => {
+  const db = openDb(':memory:');
+  const policy = readControlPolicy({ flow: { alertEveryMs: 25 } });
+  const now = Date.parse(date(0));
+  const report = flowReport([], [], now);
+  report.flowEfficiency = 0;
+  ensureFlow(db);
+  db.query('INSERT INTO flow_alarm_sends(threshold,sent_at) VALUES (?,?)').run(
+    'flow-efficiency',
+    new Date(now).toISOString(),
+  );
+  const oldReader = db.query('SELECT sent_at FROM flow_alarm_sends WHERE threshold=?').get('flow-efficiency') as {
+    sent_at: string;
+  };
+  try {
+    expect(oldReader.sent_at).toBe(new Date(now).toISOString());
+    const run = (offset: number) =>
+      checkFlowAlarms(db, report, () => {}, new Date(now + offset), undefined, policy);
+    expect(run(24)).toEqual([]);
+    expect(run(25)).toEqual([]);
+    expect(db.query('SELECT fingerprint, active FROM flow_alarm_sends WHERE threshold=?').get('flow-efficiency')).toMatchObject({
+      fingerprint: expect.any(String),
+      active: 1,
+    });
+  } finally {
+    db.close();
+  }
+});
+
 test('flow alarms use distinct examples from the breached queue and oldest distinct tasks for global alarms', () => {
   const db = openDb(':memory:');
   const policy = readControlPolicy({ flow: { waitingTaskExamples: 3 } });
