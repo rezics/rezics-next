@@ -1,5 +1,5 @@
 import type { Release } from '@rezics/definitions';
-import type { RelationFacetMatch } from '../search/source.ts';
+import type { RelationFacetMatch } from '../search/index.ts';
 import { type LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import type { PreparedCollectionSource } from './collection-source.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
