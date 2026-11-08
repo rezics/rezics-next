@@ -100,12 +100,7 @@ export type {
   SubjectReadingAuthorizationPort,
 } from './subject-reading.ts';
 
-export {
-  CoverSummaryValueSchema,
-  CoverSummarySchema,
-  SubjectSummarySchema,
-  RelatedSubjectSummarySchema,
-} from './summaries.ts';
+export { CoverSummarySchema, SubjectSummarySchema, RelatedSubjectSummarySchema } from './summaries.ts';
 export type {
   CoverCredit,
   CoverSummary,
