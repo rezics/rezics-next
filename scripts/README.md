@@ -704,8 +704,14 @@ remain separate questions for the existing compiler/health chain; this cohort su
    or failed manifest write. Ordinary terminal runs release only their exact candidate with a compare-and-delete lease;
    cleanup runs after result delivery and cannot change the result. Frozen runs retain their refs until the controller
    calls `releaseCheckGit(workspace, manifestOrJournalPath, { settled: true })` after settlement.
-   Decision: stale sweep visits at most 32 journal entries in ten seconds, deleting only explicitly releasable records
-   aged at least seven days with matching origin and candidate; active, retained, unknown and foreign refs stay intact.
+   Ref release keeps its two-second foreground bound. Explicit deadline cancellation records the absolute deadline,
+   elapsed time and actual Git exit/signal separately from genuine Git rejection; the owned transport group is stopped
+   and reaped. Deferred custody retains its first and latest failure and retries after 60 seconds through the existing
+   sweep, which visits at most 32 entries in one shared ten-second budget. A retry can use that remaining sweep budget;
+   it does not receive another unbounded timeout. Legacy explicitly releasable records use their creation time for
+   backoff. Origin and exact candidate leases remain required; an exact successful absence observation can reclaim a
+   lost-delete acknowledgement. Active, retained, unknown, replaced and foreign refs stay intact. Cleanup remains
+   independent of the delivered native check result.
    Uploads use zstd compression when both rsync endpoints support it, and checksum against the host's
    `/srv/rezics-check/bases/current` tree so unchanged files are copied on the host. A missing base means a full upload.
    After upload, a base older than 30 minutes is refreshed from the run tree and `current` switches atomically;
