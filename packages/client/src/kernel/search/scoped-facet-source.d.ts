@@ -1,11 +1,5 @@
-import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterCost } from '../semantic/index.ts';
 import type { PublicFilterConsumerContext } from './public-filter-consumer-contract.ts';
-import type { FacetDiscoveryScope } from './facet-discovery-contract.ts';
-import { ScopeWork } from './scope-execution.ts';
-import type { PreparedSearchScope } from './scope-source.ts';
-import type { createSearchScopeForService } from './service-scope.ts';
-import type { PreparedRealmScope } from './realm-scope.ts';
-type SearchResourceScope = FacetDiscoveryScope;
 /** Identity supplied by the scope admission owner. `source` names the actual native population,
  * `meaning` binds the admitted query, and the observations bind membership and current authorization.
  */
@@ -88,26 +82,3 @@ export declare function createScopedFacetSource(ports?: ScopedFacetPorts): {
     }>>;
     readPage(admission: ScopedFacetAdmission, after: string | null, inputLimit: number, context: PublicFilterConsumerContext): Promise<ScopedFacetPage>;
 };
-/** Adapt the installed service-bound Collection Scope to the facet owner's finite candidate and current-evaluation ports. */
-export declare function createServiceScopeFacetPorts(_resource: SearchResourceScope): ScopedFacetPorts;
-export declare function serviceScopeFacetIdentity(resource: SearchResourceScope, prepared: PreparedSearchScope, principal: string, meaning: unknown): ScopedFacetIdentity;
-export declare function serviceScopeFacetAdmission(input: Readonly<{
-    resource: SearchResourceScope;
-    scope: ReturnType<typeof createSearchScopeForService>;
-    prepared: PreparedSearchScope;
-    work: ScopeWork;
-    principal: string;
-    meaning: unknown;
-}>): ScopedFacetAdmission;
-/** Adapt Content Realm population and the shared current Realm/Subject evaluator to retained facets. */
-export declare function createServiceRealmScopeFacetPorts(): ScopedFacetPorts;
-export declare function serviceRealmScopeFacetAdmission(input: Readonly<{
-    resource: SearchResourceScope;
-    scope: ReturnType<typeof createSearchScopeForService>;
-    prepared: PreparedRealmScope;
-    realms: readonly string[];
-    work: ScopeWork;
-    principal: string;
-    meaning: unknown;
-}>): ScopedFacetAdmission;
-export {};

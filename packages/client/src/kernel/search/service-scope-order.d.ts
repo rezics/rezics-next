@@ -1,13 +1,10 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import { type CollectionSourceObservation, type CollectionAliasProgress, type PreparedCollectionSource } from '../library/collection-source.ts';
-import { type WorkAllowance, type WorkReceipt } from '../library/contract/work-dimensions.ts';
-import type { NativeOrdinalFrontier, NativeOrdinalKey, RawOrdinalCollectionPrefix } from '../library/collection-source-order.ts';
-import { type NativeSourceIdentity } from '../library/native-source-custody.ts';
+import type { WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
-import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
+import type { SearchLibraryScopePort } from './library-scope-port.ts';
 /** Fixed selected-work schedule for one raw ordinal continuation. This bounds work; it grants no dispatch authority. */
-export declare function SEARCH_SCOPE_ORDINAL_OPERATION(): Readonly<{
+export declare function SEARCH_SCOPE_ORDINAL_OPERATION(library: SearchLibraryScopePort): Readonly<{
     axes: readonly ["candidateKeys", "nativeRows", "identityMetadataRows", "emptySeeks", "nativePoints", "witnessKeys", "statements", "bytes", "engineRequests"];
     rawLimit: 1;
     schedule: Readonly<{
@@ -44,45 +41,27 @@ export declare function SEARCH_SCOPE_ORDINAL_OPERATION(): Readonly<{
     cost: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
     ceiling: Readonly<Record<"bytes" | "candidateKeys" | "emptySeeks" | "engineRequests" | "identityMetadataRows" | "nativePoints" | "nativeRows" | "statements" | "witnessKeys", number>>;
 }>;
-/** Internal Source locator, never an authority assertion or public Search sort. */
-export type SearchScopeOrder = Readonly<{
-    kind: 'id';
-    source?: NativeSourceIdentity;
-}> | Readonly<{
-    kind: 'ordinal';
-    source: NativeSourceIdentity;
-}>;
-export type SearchScopeOrdinalPrefix = Readonly<{
-    subjects: readonly Readonly<{
-        subject: string;
-        after: NativeOrdinalKey;
-    }>[];
-    frontier: NativeOrdinalFrontier;
-    exhausted: boolean;
-    observation: CollectionSourceObservation;
-    work: WorkReceipt;
-}>;
-export type SearchScopeCollection = Readonly<{
-    order: SearchScopeOrder;
-    source: PreparedCollectionSource;
-    observation: CollectionSourceObservation;
-}>;
-/** CLOSED adapter API. Native rows/frontiers/work keep their Library type home.
- * Raw ordinal exhaustion describes input only. Search preparation resolves identity,
- * current disclosure and DISTINCT before selecting an output page.
- */
+/** Bind the Search application orchestration to the supplied Library capability. */
 export declare function createSearchScopeOrder(config: Readonly<{
     pool: Pool;
     options: LeafOptions;
     clock: KernelClock;
+    library: SearchLibraryScopePort;
 }>): {
-    prepare(order: SearchScopeOrder, allowance: WorkAllowance): Promise<{
-        collection: SearchScopeCollection;
+    prepare(order: import("./library-scope-port.ts").SearchScopeOrder, allowance: import("./scope-execution.ts").WorkAllowance): Promise<Readonly<{
+        collection: import("./library-scope-port.ts").SearchScopeCollection;
         work: WorkReceipt;
-    }>;
-    rawOrdinal(collection: SearchScopeCollection, after: NativeOrdinalKey | null, limit: number, allowance: WorkAllowance): Promise<RawOrdinalCollectionPrefix>;
-    prefix(collection: SearchScopeCollection, afterSubjectId: string | null, allowance: WorkAllowance, candidateLimit?: number): Promise<import("../library/collection-source.ts").CanonicalCollectionPrefix>;
-    contains(collection: SearchScopeCollection, subjectId: string, allowance: WorkAllowance, progress?: CollectionAliasProgress): Promise<import("../library/collection-source.ts").CollectionSubjectMembership>;
+    }>>;
+    rawOrdinal(collection: import("./library-scope-port.ts").SearchScopeCollection, after: import("./library-scope-port.ts").NativeOrdinalKey | null, limit: number, allowance: import("./scope-execution.ts").WorkAllowance): Promise<Readonly<{
+        kind: 'raw_curated_ordinal_prefix';
+        rows: readonly import("../library/contract/source.ts").NativeOrdinalRow[];
+        frontier: import("./library-scope-port.ts").NativeOrdinalFrontier;
+        exhausted: boolean;
+        observation: import("../library/collection-source.ts").CollectionSourceObservation;
+        work: WorkReceipt;
+    }>>;
+    prefix(collection: import("./library-scope-port.ts").SearchScopeCollection, afterSubjectId: string | null, allowance: import("./scope-execution.ts").WorkAllowance, candidateLimit?: number): Promise<import("../library/collection-source.ts").CanonicalCollectionPrefix>;
+    contains(collection: import("./library-scope-port.ts").SearchScopeCollection, subjectId: string, allowance: import("./scope-execution.ts").WorkAllowance, progress?: import("./library-scope-port.ts").CollectionAliasProgress): Promise<import("../library/collection-source.ts").CollectionSubjectMembership>;
 };
-/** Full scoped observation comparison; a committed revision alone is not a Source identity. */
-export declare function sameScopeObservation(a: IdentityScopeObservation, b: IdentityScopeObservation): boolean;
+export { sameScopeObservation } from './scope-application.ts';
+export type { SearchScopeCollection, SearchScopeOrder, SearchScopeOrdinalPrefix } from './library-scope-port.ts';

@@ -9,8 +9,7 @@ export type MixedDiscoveryRequest = DiscoveryRequest & {
     };
     kindCountLeaf?: number;
 };
-/** Maximum engine rows admitted across one mixed Search page and its useful-page refills. */
-export declare function discoveryCandidateScanBound(limit: number): number;
+export { discoveryCandidateScanBound } from './service-request.ts';
 /** Same-credit qualifiers name released properties; item values are canonical UUIDs, like statement operands. */
 export declare function admitCreditQualifiers(value: unknown, release: FilterRelease): CreditQualifierOperand[];
 /** Copy bounded caller fields before the first await. Omitted keys stay omitted. */

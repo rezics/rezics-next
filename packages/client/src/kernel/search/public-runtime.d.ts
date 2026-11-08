@@ -3,7 +3,7 @@ import type { SearchHit } from './query.ts';
 import { type RetainedUsefulPage } from './useful-page.ts';
 import type { Pool } from 'pg';
 import type { DiscoveryRegistry } from './discovery.ts';
-import { type SearchGenerationPublication } from './generation-publication.ts';
+import type { SearchGenerationPublication } from './generation-publication.ts';
 import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import { type PublicSuggestionOperations } from './public-suggestion.ts';
@@ -11,6 +11,7 @@ import type { PublicFilterConsumerCapture, PublicFilterConsumerCaptureInput, Pub
 import type { OpenSearch } from './opensearch.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
+import type { FacetAccessObservationPort } from './facet-access-port.ts';
 import { type QueryPrivacyConsumer } from './query-privacy-consumer.ts';
 export type DefaultPublicFilterRuntimeConfig = Readonly<{
     pool: Pool;
@@ -20,6 +21,8 @@ export type DefaultPublicFilterRuntimeConfig = Readonly<{
     prefix: string;
     clock: KernelClock;
     creditSearch?: CreditSearchSource;
+    /** Composition-bound Access observation; omitted fixtures keep throwing through. */
+    facetAccess?: FacetAccessObservationPort;
 }>;
 export type BoundPublicRequest = Readonly<{
     operations: PublicFilterConsumerOperations;

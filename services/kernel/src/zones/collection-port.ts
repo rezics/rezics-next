@@ -1,6 +1,6 @@
 /** Zone-owned Collection work and mounted-read vocabulary. Library implements this at composition. */
 
-import type { TSchema } from 'typebox';
+import t, { type TSchema } from 'typebox';
 import type { Pool } from 'pg';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -91,8 +91,8 @@ export function unbindZoneCollectionPort(): void {
   bound = undefined;
 }
 
-export function zoneCollectionResourceSchema(): TSchema {
-  return requireZoneCollectionPort().resourceSchema();
+export function zoneCollectionResourceSchema() {
+  return t.Unsafe<ZoneCollectionPublicView>(requireZoneCollectionPort().resourceSchema());
 }
 
 export function zoneCollectionReads(dependencies: ZoneCollectionReadDependencies): ZoneCollectionReads {

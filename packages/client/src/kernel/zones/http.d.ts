@@ -6455,6 +6455,57 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
 } & {
     v1: {
         definitions: {
+            get: {
+                body: unknown;
+                params: {};
+                query: unknown;
+                headers: unknown;
+                response: {
+                    200: {
+                        digest: string;
+                        head: number;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             active: {
                 get: {
                     body: unknown;
@@ -7432,132 +7483,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         headers: unknown;
                         response: {
                             200: {
-                                collections: ({
-                                    id: string;
-                                    membershipKind: "curated";
-                                    curatorAccountId: string | null;
-                                    title: string;
-                                    description: string | null;
-                                    visibility: "private" | "public" | "unlisted";
-                                    allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
-                                    presentationKind: string | null;
-                                    presentationKindSource: "mixed" | "owner";
-                                    cover?: {
-                                        media: string;
-                                        width: number;
-                                        height: number;
-                                        placeholder: {
-                                            thumbhash: string;
-                                            color: string;
-                                        };
-                                        variants: {
-                                            format: "avif" | "webp";
-                                            width: number;
-                                        }[];
-                                        focalPoint: {
-                                            x: number;
-                                            y: number;
-                                        } | null;
-                                        credit: {
-                                            rightsHolder: string;
-                                            via: {
-                                                name: string;
-                                                url: string;
-                                            };
-                                            license: string;
-                                            obligations: string[];
-                                        };
-                                    } | null;
-                                    coverSource: "member" | "none" | "owner" | "pending";
-                                    coverMediaId?: string | null;
-                                    attribution?: {
-                                        id: string;
-                                        kind: "actor" | "organization";
-                                        displayName: string | null;
-                                    } | {
-                                        displayName: "Deleted account" | "Deleted organization";
-                                    } | null;
-                                    generation?: string;
-                                    subjectIds?: string[];
-                                    revision: number;
-                                    memberCount: number;
-                                    orderEpoch: number;
-                                    createdAt: string;
-                                    updatedAt: string;
-                                } | {
-                                    id: string;
-                                    curatorAccountId: string;
-                                    membershipKind: "dynamic";
-                                    builtinKind: "everything" | "liked" | "state";
-                                    builtin: {
-                                        kind: "everything";
-                                    } | {
-                                        kind: "liked";
-                                    } | {
-                                        kind: "state";
-                                        profileId: string;
-                                        stateSetId: string;
-                                        stateId: string;
-                                    };
-                                    builtinLabels?: Record<string, string>;
-                                    title: string | null;
-                                    description: string | null;
-                                    visibility: "private";
-                                    allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
-                                    revision: number;
-                                    presentationKind: string | null;
-                                    presentationKindSource: "mixed" | "owner";
-                                    cover: null;
-                                    coverSource: "none";
-                                } | {
-                                    id: string;
-                                    curatorAccountId: string | null;
-                                    title: string;
-                                    description: string | null;
-                                    visibility: "private" | "public" | "unlisted";
-                                    allowedVisibilityActions?: ("private" | "public" | "unlisted")[];
-                                    presentationKind: string | null;
-                                    presentationKindSource: "mixed" | "owner";
-                                    cover?: {
-                                        media: string;
-                                        width: number;
-                                        height: number;
-                                        placeholder: {
-                                            thumbhash: string;
-                                            color: string;
-                                        };
-                                        variants: {
-                                            format: "avif" | "webp";
-                                            width: number;
-                                        }[];
-                                        focalPoint: {
-                                            x: number;
-                                            y: number;
-                                        } | null;
-                                        credit: {
-                                            rightsHolder: string;
-                                            via: {
-                                                name: string;
-                                                url: string;
-                                            };
-                                            license: string;
-                                            obligations: string[];
-                                        };
-                                    } | null;
-                                    coverSource: "member" | "none" | "owner" | "pending";
-                                    coverMediaId?: string | null;
-                                    attribution?: {
-                                        id: string;
-                                        kind: "actor" | "organization";
-                                        displayName: string | null;
-                                    } | {
-                                        displayName: "Deleted account" | "Deleted organization";
-                                    } | null;
-                                    generation?: string;
-                                    subjectIds?: string[];
-                                    revision: number;
-                                    membershipKind: "dynamic";
-                                })[];
+                                collections: import("./collection-port.ts").ZoneCollectionPublicView[];
                                 next: string | null;
                             };
                             400: Response | {

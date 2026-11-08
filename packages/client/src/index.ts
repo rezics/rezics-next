@@ -44,6 +44,7 @@ export type {
   ZoneSubjectsClient,
   ZoneSubjectsQuery,
 } from './zones.ts';
+export type { ZoneCollectionPublicView } from './kernel/zones/index.ts';
 export {
   decodePreferenceAdvice,
   decodePreferencePage,
@@ -124,8 +125,6 @@ export type {
 
 type NativePostHistoryPage = Routes['posts'][':id']['revisions']['get']['response'][200]['page'];
 type Routes = KernelType['~Routes']['v1'];
-type ZoneCollectionPage = Routes['zones'][':id']['collections']['get']['response'][200];
-export type ZoneCollectionPublicView = ZoneCollectionPage['collections'][number];
 export type RealmClaimReviewOperation = Routes['realms'][':realmId']['claimRequests']['get'];
 export type RealmClaimReviewQuery = RealmClaimReviewOperation['query'];
 export type RatingQuestionDirectoryQuery = Routes['rating-questions']['get']['query'];
