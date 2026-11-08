@@ -13,6 +13,7 @@ import {
   type FeedItem,
   type FeedLaneCandidate,
   type FeedPage,
+  type FeedPosition,
   type FeedPublicSummary,
 } from '../../src/content/contract/index.ts';
 import { canonicalFeedObject, feedCandidateBound, mergeFeedLanes } from '../../src/content/core/index.ts';
@@ -72,6 +73,11 @@ function ports(overrides: Partial<FeedApplicationPorts> = {}): FeedApplicationPo
         throw new FeedRefusedError('not_found');
       },
       openPopulation: async () => undefined,
+    },
+    question: {
+      open: async () => {
+        throw new FeedRefusedError('dependency_unavailable');
+      },
     },
     finish: {
       beginConversation: async () => ({}),
@@ -272,6 +278,228 @@ test('sparse Continue resume skips the examined key and refuses a changed finger
       { route: () => 1 },
     ).list(actor, { stream: 'home', cursor: 'opaque' }, 1, ['en']),
   ).rejects.toMatchObject({ name: 'FeedRefusedError', code: 'stale_cursor' });
+});
+
+test('current question, kind and Space intersect the three bounded Home lanes and retain sparse frontiers', async () => {
+  const questionId = '00000000-0000-4000-8000-0000000000f1';
+  const spaceId = '00000000-0000-4000-8000-0000000000f2';
+  const [continueMatch, continueAbsent, followingMatch, followingAbsent, discoveryMatch, discoveryAbsent] = [
+    '00000000-0000-4000-8000-000000000051',
+    '00000000-0000-4000-8000-000000000052',
+    '00000000-0000-4000-8000-000000000053',
+    '00000000-0000-4000-8000-000000000054',
+    '00000000-0000-4000-8000-000000000055',
+    '00000000-0000-4000-8000-000000000056',
+  ];
+  const [continueNext, followingNext, discoveryNext] = [
+    '00000000-0000-4000-8000-000000000057',
+    '00000000-0000-4000-8000-000000000058',
+    '00000000-0000-4000-8000-000000000059',
+  ];
+  const admitted = new Set([continueMatch, followingMatch, discoveryMatch, continueNext, followingNext, discoveryNext]);
+  const seen: { discovery?: unknown; following?: unknown; continuation?: unknown } = {};
+  let encodedPosition: FeedPosition | undefined;
+  const defaults = ports();
+  const page = await createFeedApplication(
+    {
+      ...defaults,
+      question: {
+        open: async (_actor, id) => {
+          expect(id).toBe(questionId);
+          return {
+            id,
+            revision: 7,
+            qualify: async (candidates) =>
+              candidates.map(({ item }) =>
+                item?.destination.kind === 'subject' && admitted.has(item.destination.id) ? 'current' : 'absent',
+              ),
+            finish: async () => undefined,
+          };
+        },
+      },
+      cursor: {
+        fingerprint: (value) => JSON.stringify(value),
+        encode: async (_actor, _query, _languages, position) => {
+          encodedPosition = position;
+          return 'selected-question-next';
+        },
+        decode: async () => encodedPosition!,
+      },
+      space: {
+        open: async (_actor, id) => {
+          expect(id).toBe(spaceId);
+          return { spaceId, finish: async () => undefined };
+        },
+        openPopulation: async (_actor, selected) => ({ spaceId: selected.spaceId, finish: async () => undefined }),
+      },
+      continuation: {
+        page: async (_actor, query) => {
+          seen.continuation = query;
+          if (query.cursor) return { subjects: [continueRow(continueNext, '2026-01-01T00:00:03.000Z')], next: null };
+          return {
+            subjects: [
+              continueRow(continueMatch, '2026-01-01T00:00:02.000Z'),
+              continueRow(continueAbsent, '2026-01-01T00:00:01.000Z'),
+            ],
+            next: 'continue-next',
+          };
+        },
+      },
+      following: {
+        page: async (input) => {
+          seen.following = input;
+          if (input.cursor) return { candidates: [{ item: item('following', followingNext) }], next: false };
+          return {
+            candidates: [{ item: item('following', followingMatch) }, { item: item('following', followingAbsent) }],
+            next: 'following-next',
+          };
+        },
+      },
+      discovery: {
+        page: async (input) => {
+          seen.discovery = input;
+          if (input.cursor) return { candidates: [{ item: item('discovery', discoveryNext) }], next: false };
+          return {
+            candidates: [{ item: item('discovery', discoveryMatch) }, { item: item('discovery', discoveryAbsent) }],
+            next: 'discovery-next',
+          };
+        },
+      },
+    },
+    { route: () => 1 },
+  ).list(
+    {
+      kind: 'account',
+      accountId: '00000000-0000-4000-8000-000000000001',
+      scopes: ['follow:list', 'library_entry:list', 'progress_session:list'],
+    },
+    { stream: 'home', limit: 20, kind: 'schema:Book', spaceId, ratingQuestionId: questionId },
+    1,
+    ['en'],
+  );
+
+  expect(page.feedItems.map((row) => [row.source, row.key.id])).toEqual([
+    ['continue', continueMatch],
+    ['following', followingMatch],
+    ['discovery', discoveryMatch],
+  ]);
+  expect(page.sources).toEqual({ discovery: 'ready', following: 'ready', continue: 'ready' });
+  expect(page.next).toBe('selected-question-next');
+  expect(encodedPosition?.ratingQuestionRevision).toBe(7);
+  expect(seen.continuation).toMatchObject({ kind: 'schema:Book', spaceId });
+  expect(seen.following).toMatchObject({ kind: 'schema:Book', space: { spaceId } });
+  expect(seen.discovery).toMatchObject({ kind: 'schema:Book', spaceId });
+  expect(encodedPosition?.ratingQuestionRevision).toBe(7);
+
+  const nextPage = await createFeedApplication(
+    {
+      ...defaults,
+      question: {
+        open: async (_actor, id) => ({
+          id,
+          revision: 7,
+          qualify: async (candidates) =>
+            candidates.map(({ item }) =>
+              item?.destination.kind === 'subject' && admitted.has(item.destination.id) ? 'current' : 'absent',
+            ),
+          finish: async () => undefined,
+        }),
+      },
+      cursor: {
+        fingerprint: (value) => JSON.stringify(value),
+        encode: async () => 'selected-question-end',
+        decode: async () => encodedPosition!,
+      },
+      space: {
+        open: async () => ({ spaceId, finish: async () => undefined }),
+        openPopulation: async () => ({ spaceId, finish: async () => undefined }),
+      },
+      continuation: {
+        page: async (_actor, query) => {
+          expect(query.cursor).toBe('continue-next');
+          return { subjects: [continueRow(continueNext, '2026-01-01T00:00:03.000Z')], next: null };
+        },
+      },
+      following: {
+        page: async (input) => {
+          expect(input.cursor).toBe('following-next');
+          return { candidates: [{ item: item('following', followingNext) }], next: false };
+        },
+      },
+      discovery: {
+        page: async (input) => {
+          expect(input.cursor).toBe('discovery-next');
+          return { candidates: [{ item: item('discovery', discoveryNext) }], next: false };
+        },
+      },
+    },
+    { route: () => 1 },
+  ).list(
+    {
+      kind: 'account',
+      accountId: '00000000-0000-4000-8000-000000000001',
+      scopes: ['follow:list', 'library_entry:list', 'progress_session:list'],
+    },
+    {
+      stream: 'home',
+      limit: 20,
+      kind: 'schema:Book',
+      spaceId,
+      ratingQuestionId: questionId,
+      cursor: 'selected-question-next',
+    },
+    1,
+    ['en'],
+  );
+  expect(nextPage.feedItems.map((row) => row.key.id)).toEqual([continueNext, followingNext, discoveryNext]);
+  expect(nextPage.sources).toEqual({ discovery: 'ready', following: 'ready', continue: 'ready' });
+
+  let sourceReads = 0;
+  await expect(
+    createFeedApplication(
+      {
+        ...defaults,
+        question: {
+          open: async (_actor, id) => ({
+            id,
+            revision: 7,
+            qualify: async () => [],
+            finish: async () => undefined,
+          }),
+        },
+        cursor: {
+          fingerprint: (value) => JSON.stringify(value),
+          encode: async () => 'unused',
+          decode: async () => ({
+            boundary: '2026-01-01T00:00:00.000Z',
+            turn: 0,
+            discovery: null,
+            following: null,
+            continue: null,
+            resume: null,
+            ratingQuestionRevision: 6,
+          }),
+        },
+        discovery: {
+          page: async () => {
+            sourceReads++;
+            return { candidates: [], next: false };
+          },
+        },
+      },
+      { route: () => 1 },
+    ).list(
+      {
+        kind: 'account',
+        accountId: '00000000-0000-4000-8000-000000000001',
+        scopes: ['follow:list', 'library_entry:list', 'progress_session:list'],
+      },
+      { stream: 'home', cursor: 'old-question-cursor', ratingQuestionId: questionId },
+      1,
+      ['en'],
+    ),
+  ).rejects.toMatchObject({ name: 'FeedRefusedError', code: 'invalid_cursor' });
+  expect(sourceReads).toBe(0);
 });
 
 test('one renderer keeps page 20, candidate 160, Continue 6 and no all-candidate fallback', () => {

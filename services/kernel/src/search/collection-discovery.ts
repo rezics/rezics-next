@@ -9,11 +9,11 @@ import {
   type CollectionDiscoveryOperands,
   type CollectionDiscoveryPosition,
 } from '../library/collection-discovery-source.ts';
+import type { PublicCollectionDiscoverySummary } from '../library/contract/index.ts';
 import type {
   PublicCollectionDiscoveryDependencies,
   PublicCollectionDiscoveryContext,
   PublicCollectionDiscoveryResult,
-  PublicCollectionDiscoverySummary,
   PublicCollectionDiscoveryOperand,
 } from '../library/collection-discovery-summaries.ts';
 import { readPublicCollectionDiscoverySummaries } from './native-bindings.ts';

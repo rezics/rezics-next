@@ -121,7 +121,7 @@ test('exact question witnesses follow current published citations, disclosure an
     body: { body: fromPlainText('No published citation') },
   });
   expect(revised.response.status, revised.text).toBe(200);
-  expect(await qualify()).toEqual(['refused']);
+  expect(await qualify()).toEqual(['absent']);
   const recited = await f.call('POST', `/v1/posts/${thread.firstPost.id}/revisions`, {
     bearer: f.author.bearer,
     ifMatch: revised.value.post.revisionId,

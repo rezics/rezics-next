@@ -12,6 +12,7 @@ import {
   ContentNotFoundError,
   discloseThreads,
   readPost,
+  readCitationDisclosure,
   type ContentReadDependencies,
   type ThreadView,
 } from './reads.ts';
@@ -49,10 +50,10 @@ const selections = new WeakMap<
   }>
 >();
 
-/** An explicitly supplied native witness for a primary; never an enumeration
- * anchor or proof that a Subject with no supplied witness does not qualify. */
+/** One exact native primary/review pair. Callers own candidate enumeration and
+ * must never treat an omitted or refused pair as a negative membership result. */
 export type ReviewContextCandidate = Readonly<
-  { subjectId: string; threadId: string } & (
+  { subjectId: string; threadId: string; voteRevision?: number } & (
     | { kind: 'subject' }
     | { kind: 'thread' }
     | { kind: 'post'; postId: string }
@@ -125,7 +126,13 @@ async function readableSubject(deps: ReviewContextDependencies, id: string, cont
   });
 }
 
-function witness(thread: ThreadView | null | undefined, candidate: ReviewContextCandidate, question: string) {
+type ReviewThreadWitness = Readonly<{ state: 'current' | 'absent'; anchor: string }> | Readonly<{ state: 'refused' }>;
+
+function witness(
+  thread: ThreadView | null | undefined,
+  candidate: ReviewContextCandidate,
+  question: string,
+): ReviewThreadWitness {
   if (
     !thread ||
     thread.kind !== 'review' ||
@@ -134,20 +141,30 @@ function witness(thread: ThreadView | null | undefined, candidate: ReviewContext
     thread.subjectIds.length !== 1 ||
     thread.subjectIds[0] !== candidate.subjectId ||
     thread.firstPost.availability !== 'available' ||
-    !('voteCitation' in thread.firstPost) ||
-    thread.firstPost.voteCitation?.questionId !== question
+    !('voteCitation' in thread.firstPost)
   )
-    return null;
+    return { state: 'refused' };
+  const citation = thread.firstPost.voteCitation;
+  if (
+    readCitationDisclosure(thread) === 'withheld' ||
+    (candidate.voteRevision !== undefined && citation?.revision !== candidate.voteRevision)
+  )
+    return { state: 'refused' };
   // Native disclosure already checked board/place, Realm/ban, author and body.
   // Comparing these anchors refuses an opening/authority change during the read.
-  return JSON.stringify([
-    thread.id,
-    thread.boardId,
-    thread.securityRevision,
-    thread.firstPost.id,
-    thread.firstPost.revisionId,
-    thread.firstPost.securityRevision,
-  ]);
+  return {
+    state: citation?.questionId === question ? 'current' : 'absent',
+    anchor: JSON.stringify([
+      thread.id,
+      thread.boardId,
+      thread.securityRevision,
+      thread.firstPost.id,
+      thread.firstPost.revisionId,
+      thread.firstPost.securityRevision,
+      citation,
+      readCitationDisclosure(thread),
+    ]),
+  };
 }
 
 async function postWitness(
@@ -167,15 +184,14 @@ async function postWitness(
   }
 }
 
-/** Positive positional evidence only. Duplicates keep their positions while
- * sharing native reads. A refused pair supplies no witness ID, count or negative
- * membership claim. Votes and aggregates are deliberately never read here. */
+/** Exact positional witness results. A readable stable citation mismatch is absent;
+ * refused pairs supply no negative claim. Votes and aggregates are never read. */
 export async function qualifyReviewContextWitnesses(
   deps: ReviewContextDependencies,
   selection: RatingQuestionSelection,
   candidates: readonly ReviewContextCandidate[],
   context: ReadContext,
-): Promise<readonly ('current' | 'refused')[]> {
+): Promise<readonly ('current' | 'absent' | 'refused')[]> {
   if (candidates.length > REVIEW_CONTEXT_MAX_WITNESSES) throw new RangeError('At most 160 review witnesses');
   assertBinding(deps, selection, context);
   // Own the input across awaits; a caller cannot replace an admitted anchor.
@@ -217,11 +233,16 @@ export async function qualifyReviewContextWitnesses(
   await assertCurrentRatingQuestionSelection(deps, selection, context);
   return pairs.map((pair) => {
     const before = witness(threads.get(pair.threadId), pair, selection.question.id);
-    return subjects.get(pair.subjectId) &&
-      before !== null &&
-      before === witness(current.get(pair.threadId), pair, selection.question.id) &&
-      (pair.kind !== 'post' || posts.get(`${pair.threadId}:${pair.postId}`))
-      ? 'current'
-      : 'refused';
+    const after = witness(current.get(pair.threadId), pair, selection.question.id);
+    if (
+      !subjects.get(pair.subjectId) ||
+      before.state === 'refused' ||
+      after.state === 'refused' ||
+      before.anchor !== after.anchor
+    )
+      return 'refused';
+    if (before.state === 'absent') return 'absent';
+    if (pair.kind === 'post' && !posts.get(`${pair.threadId}:${pair.postId}`)) return 'refused';
+    return 'current';
   });
 }

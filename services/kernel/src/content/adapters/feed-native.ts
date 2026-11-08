@@ -6,6 +6,7 @@ import {
   discloseThreads,
   readBoard,
   readPost,
+  readCitationDisclosure,
   type PostEntry,
   type ThreadView,
 } from '../reads.ts';
@@ -24,6 +25,7 @@ import { projectFeedReactions } from '../feed-reactions.ts';
 import { prepareFeedReactionAdvice, type FeedReactionAdviceComposition } from '../feed-reaction-advice.ts';
 import { prepareFeedSubjectReactions } from '../feed-subject-reactions.ts';
 import { feedDiscoveryItem } from '../feed-discovery.ts';
+import { createFeedQuestionSession } from '../feed-question.ts';
 import { openFollowingSpace, type FollowingSpace } from '../feed-space.ts';
 import { openSpaceSubjectPopulation, type SpaceSubjectPopulation } from '../feed-subject-scope.ts';
 import type { FeedDependencies, FeedProducerCapabilities } from './feed-capabilities.ts';
@@ -35,6 +37,7 @@ import type {
   FeedContinuationPort,
   FeedDiscoveryPort,
   FeedItem,
+  FeedLaneCandidate,
   FeedLane,
   FeedPresentationPort,
   FeedPublicSummary,
@@ -76,6 +79,45 @@ function sourceState(error: unknown, suppliers: FeedProducerCapabilities): FeedS
 function refuse(code: FeedRefusalCode): never {
   if (code === 'authentication_required') throw new AuthenticationError(401, 'Bearer');
   throw new ProblemError(code);
+}
+
+function discoveryQuestionWitness(
+  hit: Parameters<typeof feedDiscoveryItem>[0],
+): Pick<FeedLaneCandidate, 'questionWitness' | 'questionWitnessState'> | Record<string, never> {
+  if (hit.summary.kind !== 'review') return {};
+  const context = hit.summary.value.searchContext;
+  if (!context || context.state !== 'available' || context.target.state !== 'available')
+    return { questionWitnessState: 'refused' };
+  return {
+    questionWitness: {
+      kind: 'thread',
+      subjectId: context.target.subject.id,
+      threadId: hit.key.id,
+      ...(context.citation.state === 'available' ? { voteRevision: context.citation.recorded.revision } : {}),
+    },
+  };
+}
+
+function followingQuestionWitness(
+  item: FeedItem,
+  thread: ThreadView | undefined,
+): Pick<FeedLaneCandidate, 'questionWitness' | 'questionWitnessState'> {
+  if (item.key.owner !== 'content') return { questionWitnessState: 'absent' };
+  if (!thread) throw new TypeError('Following content candidate lost its disclosed thread');
+  if (thread.kind !== 'review') return { questionWitnessState: 'absent' };
+  if (thread.subjectIds.length !== 1 || readCitationDisclosure(thread) === 'withheld')
+    return { questionWitnessState: 'refused' };
+  const opening = thread.firstPost;
+  const citation = 'voteCitation' in opening ? opening.voteCitation : null;
+  const witness = {
+    subjectId: thread.subjectIds[0]!,
+    threadId: thread.id,
+    ...(citation === null ? {} : { voteRevision: citation.revision }),
+  };
+  if (item.destination.kind === 'thread') return { questionWitness: { kind: 'thread', ...witness } };
+  if (item.destination.kind === 'post')
+    return { questionWitness: { kind: 'post', postId: item.destination.id, ...witness } };
+  return { questionWitnessState: 'refused' };
 }
 
 /** Request-scoped native producers for the Content feed application. */
@@ -248,7 +290,10 @@ export function createNativeFeedPorts(
             },
           );
           return {
-            candidates: page.hits.map((hit) => ({ item: feedDiscoveryItem(hit) as FeedItem })),
+            candidates: page.hits.map((hit) => ({
+              item: feedDiscoveryItem(hit) as FeedItem,
+              ...discoveryQuestionWitness(hit),
+            })),
             next: page.next ?? false,
             asOf: page.as_of,
           };
@@ -261,6 +306,11 @@ export function createNativeFeedPorts(
     publicSummary,
     presentation,
     ...(discovery === undefined ? {} : { discovery }),
+    question: {
+      open(actor, ratingQuestionId, deadline) {
+        return createFeedQuestionSession(content, asPlatformActor(actor, liveActor()), ratingQuestionId, deadline);
+      },
+    },
     following: {
       async page(input) {
         const actor = asPlatformActor(input.actor, liveActor());
@@ -325,7 +375,10 @@ export function createNativeFeedPorts(
               const author = authorId ? feedAuthor(accounts.get(authorId)) : undefined;
               if (author) item.summary = { ...item.summary, author };
             }
-            return candidate;
+            return {
+              ...candidate,
+              ...followingQuestionWitness(item, contextSources.get(item.id)?.thread),
+            };
           }),
         );
         return { candidates, next: page.next ?? false };

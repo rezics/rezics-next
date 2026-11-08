@@ -144,9 +144,11 @@ Resolution adds at most 32 native question authority/metadata reads; final asser
 Qualification retains Content's native disclosure cost in addition to Source work. No execution budget is
 inferred from the number of leaves or raw feed candidates. Compose the documented finite native producer
 bounds as constants with the retained Source bounds; no runtime price or prepaid funding protocol is needed.
-The question key is currently a standalone native bridge type, not a covered Source dependency. Default
-Source population, local baseline enrollment, reduction routing and all-lane feed binding remain necessary
-before public activation. No substitute Source or observation is introduced.
+The question key is currently a standalone native bridge type, not a covered Source dependency. Search request
+execution still requires its own covered Source population, local baseline enrollment and reduction routing.
+Home's selected-question filter is limited to its already admitted lane windows and does not install the Search
+predicate or claim population coverage. The Home cursor binds the current question revision and full viewer
+selection; no substitute Search Source or observation is introduced.
 
 The approved [public facet discovery contract](../../../../docs/search-facets.md) is the single owner of the
 count-free continuation wire, with types in `facet-discovery-contract.ts`. The public service consumes

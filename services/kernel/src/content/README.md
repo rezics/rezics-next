@@ -1960,24 +1960,48 @@ reads; a lost or revised question refuses with `invalid_cursor`.
 `qualifyReviewContextWitnesses` accepts at most 160 positional pairs of primary and review witness:
 `{kind:'subject'|'thread',subjectId,threadId}` or `{kind:'post',subjectId,threadId,postId}`.
 The exact Subject must be readable. Its review must be live and currently readable, with exactly that
-target and a readable current opening revision citing the selected question. A post additionally passes
-its own native thread/parent disclosure. Ordinary discussions cannot qualify. Native thread disclosure
-checks the independently anchored board, Realm, bans, author and document. Initial and final observations
-must retain the opening revision and security anchors. Private votes and aggregates never enter this read.
+target and a readable current opening revision. A stable readable citation naming the selection returns
+`current`; a stable readable opening with no citation or a different question returns `absent`. A hidden,
+unreadable or moving witness returns `refused`, which proves no negative membership. A post additionally
+passes its own native thread/parent disclosure. Ordinary discussions cannot qualify. Native thread
+disclosure checks the independently anchored board, Realm, bans, author and document. Initial and final
+observations must retain the opening revision, citation and security anchors. Private votes and aggregates
+never enter this read.
 
 Decision: witness inputs are positional exact primary/review pairs; deduplicated native reads preserve
-duplicate positions, and a refused pair establishes no existential negative or population coverage.
+duplicate positions. Only an exact readable stable mismatch is absent; a refused pair establishes no
+existential negative or population coverage.
 
-The reader uses only full-key native reads, never a subject-to-review scan or a history walk. The static
+The qualifier uses only full-key native reads and never walks history. For already-selected Home Subject
+candidates, `feed-question.ts` uses the existing `(gate_kind,gate_key,route,thread_id)` dependency index to
+read a bounded per-Subject prefix of review identities, then supplies only those exact IDs to the qualifier.
+The shared 160-witness budget leaves one candidate for each unique Subject after direct Review/Post anchors;
+each Subject gets an evenly divided prefix and one overflow key. A current match is sufficient for positive
+membership. An exhausted prefix without a match is absent; an unreadable pair or overflow is refused. The
+locator reads no citations, votes or aggregates and is not Source coverage. The static
 `REVIEW_CONTEXT_BOUNDS` composes two question reads, at most 320 thread disclosure candidates, 320 Subject
 checks and 320 post reads: at most 962 native read invocations per witness batch. Each post read retains
 the existing selected-post plus 32-parent bound, hence at most 10,560 chain rows across both observations,
 in addition to its native board/Realm/Access closure. These are additive producer bounds, not a runtime
 quote protocol or a claim that the feed's 160 raw candidate slots pay for disclosure.
 
+### Cost: selected-question Home admission
+
+- Touches: resolve one current question before source reads; for each existing mixed lane window, make one
+  indexed Subject-review prefix query before and after native qualification, then qualify at most 160 exact
+  direct or located witnesses. Recovery reopens and requalifies only the selected source window.
+- Bound: the original 160 mixed source-candidate ceiling is unchanged. With D direct Review/Post witnesses
+  and S distinct Subject candidates, each Subject prefix is at most `floor((160-D)/S)` identities plus one
+  overflow key; each of the two locator queries returns at most 320 rows. No citation, vote, aggregate,
+  population count or extra source/frontier page is read. Question metadata and disclosure reads retain the
+  limits above; unreadable anchors and changing prefixes keep their lane retryable.
+- Growth check: focused application and native witness journeys pin positive, absent, refused, historical
+  review/reply and sparse three-lane selection. The original native and physical-growth acceptance remains
+  with the receiving Goal; this source change does not claim measured database work.
+
 The Search request bridge retains the complete frozen Boolean tree and canonical question/revision keys.
-These native point witnesses do not supply a review locator, baseline, retained Source population,
-privacy-reduction routing or a feed selector. No incomplete witness page certifies nonmembership.
+These native point witnesses do not supply a baseline, retained Source population or privacy-reduction
+routing. No incomplete witness page certifies nonmembership.
 
 ## Conversation contribution source
 

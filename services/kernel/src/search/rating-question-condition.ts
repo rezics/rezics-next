@@ -93,7 +93,7 @@ export async function qualifyRatingQuestionConditionWitnesses(
   questionId: string,
   candidates: readonly ReviewContextCandidate[],
   context: ReadContext,
-): Promise<readonly ('current' | 'refused')[]> {
+): Promise<readonly ('current' | 'absent' | 'refused')[]> {
   const selection = bindingFor(deps, conditions, context).selections.get(questionId);
   if (!selection) throw new TypeError('Question is absent from the admitted request');
   return qualifyReviewContextWitnesses(deps, selection, candidates, context);
