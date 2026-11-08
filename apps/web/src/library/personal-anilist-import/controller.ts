@@ -489,6 +489,15 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     const replace = current?.replace ?? false;
     const applyStatus = current?.applyStatus ?? true;
     const scoreAction = skip ? 'keep' : (current?.scoreAction ?? 'keep');
+    if (current) {
+      current.reviewId = null;
+      current.scoreReview = null;
+      current.nativeVoteConsent = null;
+      current.reviewInvalidated = true;
+    }
+    const currentPageRow = page.find((item) => item.ordinal === ordinal);
+    if (currentPageRow) currentPageRow.review = null;
+    retain();
     let score:
       | Extract<NonNullable<Extract<AniListCommand, { kind: 'review' }>['score']>, { action: 'vote' | 'clear' }>
       | undefined;
@@ -530,14 +539,6 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
           ? { action: 'vote', questionId: latest.id, questionRevision: latest.revision, units: units! }
           : { action: 'clear', questionId: latest.id, questionRevision: latest.revision };
     }
-    if (current) {
-      current.reviewId = null;
-      current.scoreReview = null;
-      current.nativeVoteConsent = null;
-      current.reviewInvalidated = true;
-    }
-    const currentPageRow = page.find((item) => item.ordinal === ordinal);
-    if (currentPageRow) currentPageRow.review = null;
     const command: Extract<AniListCommand, { kind: 'review' }> = {
       kind: 'review',
       key: newCommandKey(),

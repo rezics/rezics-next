@@ -84,6 +84,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   const sender = { subject: visit.subject, csrfToken: visit.csrfToken };
   const cost = new BangumiCostLedger();
   const meta = new Map<number, BangumiRowMeta>();
+  const retiredReviews = new Map<number, string>();
   let stage: BangumiStage = 'upload';
   let busy = false;
   let notice: BangumiNotice = null;
@@ -175,6 +176,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     applying = 0;
     applied = 0;
     meta.clear();
+    retiredReviews.clear();
     stage = resetStage;
     notice = null;
     busy = false;
@@ -220,6 +222,21 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     return;
   }
 
+  function retireReview(ordinal: number): void {
+    const current = meta.get(ordinal);
+    const row = page.find((item) => item.ordinal === ordinal);
+    const token = current?.reviewToken ?? row?.review?.token;
+    if (token) retiredReviews.set(ordinal, token);
+    if (row) row.review = null;
+    if (current) {
+      current.reviewToken = null;
+      current.scoreReview = null;
+      current.scoreConsent = false;
+      current.entryReadback = null;
+      current.voteReadback = null;
+    }
+  }
+
   async function loadPage(id: string, cursor: number, retry = false): Promise<BangumiJourneySnapshot> {
     const command: Extract<BangumiCommand, { kind: 'page' }> = { kind: 'page', uploadId: id, after: cursor };
     const response = await run(command, () => port.page(command), retry);
@@ -232,7 +249,10 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     after = cursor;
     next = current.next;
     cancelled = current.cancelled;
-    for (const row of current.rows) meta.set(row.ordinal, metaFromRow(row, meta.get(row.ordinal)));
+    for (const row of current.rows) {
+      if (row.review?.token === retiredReviews.get(row.ordinal)) row.review = null;
+      meta.set(row.ordinal, metaFromRow(row, meta.get(row.ordinal)));
+    }
     cost.recordPage(current);
     stage = cancelled ? 'cancelled' : 'review';
     retain();
@@ -287,6 +307,8 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       ...(target ? { target } : {}),
       score: score ?? meta.get(ordinal)?.scoreReview?.native.selection ?? { action: 'preserve' },
     };
+    retireReview(ordinal);
+    retain();
     const response = await run(command, () => port.review(command));
     if (!response || response.kind !== 'reviewed' || !live()) return snapshot();
     cost.recordReview();
@@ -329,6 +351,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     const skip = choice.skip ?? current.choice.skip;
     const target = 'target' in choice ? (choice.target ?? null) : current.target;
     if (target !== current.target) {
+      retireReview(ordinal);
       current.target = target;
       current.match = null;
       current.proposedState = null;
@@ -617,12 +640,10 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     if (stage !== 'results' || busy || unknown || !live() || !row?.target || !acknowledged) return snapshot();
     const question = row.scoreReview?.native.question;
     const questionId = question ? question.id : null;
-    const suppliedVote =
-      outcome?.score?.status === 'applied' && outcome.score.action === 'set' ? outcome.score.vote : undefined;
-    const command = { subjectId: row.target, questionId: suppliedVote ? null : questionId };
+    const command = { subjectId: row.target, questionId };
     busy = true;
     cost.recordCall('entry-read');
-    if (questionId && !suppliedVote) cost.recordCall('vote-read');
+    if (questionId) cost.recordCall('vote-read');
     let result: Awaited<ReturnType<BangumiImportPort['inspect']>>;
     try {
       result = await port.inspect(command);
@@ -631,9 +652,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     }
     if (!live()) return snapshot();
     row.entryReadback = result.entry;
-    row.voteReadback = (suppliedVote
-      ? { status: 'current', vote: { state: 'set', ...suppliedVote } as const }
-      : result.vote) ?? {
+    row.voteReadback = result.vote ?? {
       status: 'unavailable',
       reason:
         row.scoreReview?.native.admission.status === 'unavailable'
