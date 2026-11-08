@@ -140,6 +140,13 @@ const journeyPersonas = new Set<string>();
 type Json = Record<string, unknown>;
 type Origins = { web: string; issuer: string; native: string; kernel: string };
 type Person = { handle: string; email: string; accountId: string };
+type CaptureUnknownKind = 'transport' | 'overload' | 'setup';
+class UnknownCaptureOutcome extends Error {
+  constructor(readonly kind: CaptureUnknownKind) {
+    super(`capture outcome unknown: ${kind}`);
+    this.name = 'UnknownCaptureOutcome';
+  }
+}
 type Session = { accountId: string; cookie: string; clientId: string; scopes: string[] };
 type WalkEvidence = {
   sourceRevision: string;
@@ -452,21 +459,36 @@ async function send(
 ): Promise<{ status: number; value: Json; cookie: string; raw: string; location: string | null }> {
   const encoded = init.encoded;
   const captureRequest = beginCaptureRequest(url, init);
-  const response = await fetch(url, {
-    method: init.method ?? (init.body === undefined && encoded === undefined ? 'GET' : 'POST'),
-    signal: AbortSignal.timeout(init.timeout ?? (init.method === 'GET' || init.body === undefined ? 30_000 : 8_000)),
-    redirect: 'manual',
-    headers: {
-      ...(init.origin ? { origin: init.origin } : {}),
-      ...(init.cookie ? { cookie: init.cookie } : {}),
-      ...(init.body === undefined && encoded === undefined ? {} : { 'content-type': 'application/json' }),
-      ...(encoded === undefined ? {} : { 'content-type': 'application/x-www-form-urlencoded' }),
-      ...init.headers,
-    },
-    ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
-    ...(encoded === undefined ? {} : { body: encoded }),
-  });
-  const raw = await response.text();
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: init.method ?? (init.body === undefined && encoded === undefined ? 'GET' : 'POST'),
+      signal: AbortSignal.timeout(init.timeout ?? (init.method === 'GET' || init.body === undefined ? 30_000 : 8_000)),
+      redirect: 'manual',
+      headers: {
+        ...(init.origin ? { origin: init.origin } : {}),
+        ...(init.cookie ? { cookie: init.cookie } : {}),
+        ...(init.body === undefined && encoded === undefined ? {} : { 'content-type': 'application/json' }),
+        ...(encoded === undefined ? {} : { 'content-type': 'application/x-www-form-urlencoded' }),
+        ...init.headers,
+      },
+      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+      ...(encoded === undefined ? {} : { body: encoded }),
+    });
+  } catch (error) {
+    if (!captureRequest) throw error;
+    markCaptureRequestUnknown(captureRequest, 'transport');
+    throw new UnknownCaptureOutcome('transport');
+  }
+  let raw: string;
+  try {
+    raw = await response.text();
+  } catch (error) {
+    if (!captureRequest) throw error;
+    Object.assign(captureRequest, { status: response.status });
+    markCaptureRequestUnknown(captureRequest, 'transport');
+    throw new UnknownCaptureOutcome('transport');
+  }
   let value: Json = {};
   if (raw) {
     try {
@@ -487,8 +509,10 @@ async function send(
 
 function requireStatus(result: { status: number; value: Json }, label: string, expected: number | number[]): Json {
   const allowed = Array.isArray(expected) ? expected : [expected];
-  if (!allowed.includes(result.status))
+  if (!allowed.includes(result.status)) {
+    throwIfUnknownResponse(result);
     throw new Error(`${label} returned HTTP ${result.status}: ${summarize(result.value)}`);
+  }
   return result.value;
 }
 
@@ -565,6 +589,7 @@ async function deliveredRecoveryToken(email: string): Promise<string> {
     }
     await Bun.sleep(100);
   }
+  if (activeCapture) throw captureUnknownOutcome('setup');
   throw new Error('recovery start acknowledged with no token; local walk stack has no supported recovery delivery');
 }
 
@@ -689,6 +714,7 @@ async function websiteToken(
   websiteKey: JWK,
   secret = password,
 ): Promise<{ session: Session; bearer: string; refresh: string; codePath: string }> {
+  capturePhase('website login');
   const session = await signIn(stack, person, 'login', [], secret);
   const verifier = randomBytes(48).toString('base64url');
   const state = randomBytes(24).toString('base64url');
@@ -706,11 +732,13 @@ async function websiteToken(
     code_challenge_method: 'S256',
     resource,
   }).toString();
+  capturePhase('website authorization');
   const authorization = await send(authorize.href, {
     headers: { cookie: session.cookie, origin: stack.issuer },
     timeout: 30_000,
   });
   if (![302, 303].includes(authorization.status)) {
+    throwIfUnknownResponse(authorization);
     const body = authorization.raw;
     throw new Error(`website authorize returned HTTP ${authorization.status}: ${body.slice(0, 240)}`);
   }
@@ -720,6 +748,7 @@ async function websiteToken(
   if (redirected.searchParams.get('state') !== state) throw new Error('website authorize returned a foreign state');
   const code = redirected.searchParams.get('code');
   if (!code) throw new Error(`website authorize omitted code (${redirected.pathname})`);
+  capturePhase('website code exchange');
   const token = await send(`${stack.native}/token`, {
     method: 'POST',
     headers: { origin: stack.issuer, 'content-type': 'application/x-www-form-urlencoded' },
@@ -736,6 +765,7 @@ async function websiteToken(
     timeout: 30_000,
   });
   const issued = token.value;
+  if (token.status !== 200) throwIfUnknownResponse(token);
   if (token.status !== 200 || typeof issued.access_token !== 'string')
     throw new Error(`website token returned HTTP ${token.status}: ${summarize(issued)}`);
   return {
@@ -792,6 +822,7 @@ async function credentialEffect(
       client: session.clientId,
       credentialKind: credential.kind,
     };
+  capturePhase('credential effect stage');
   const staged = await auth(
     stack,
     '/credential-effects/stage',
@@ -804,8 +835,10 @@ async function credentialEffect(
     30_000,
   );
   if (staged.status !== 200) return staged;
+  capturePhase('credential effect approval');
   const approval = await auth(stack, '/credential-effects/approve', session, staged.value, 30_000);
   if (approval.status !== 200) return approval;
+  capturePhase('credential effect application');
   return auth(
     stack,
     '/credential-effects/apply',
@@ -887,11 +920,13 @@ type CaptureId = (typeof API_CAPTURE_JOURNEYS)[number];
 type CaptureCase = {
   id: CaptureId;
   personaRole: 'newly registered ordinary human';
-  result: 'PASS' | 'FAIL' | 'unverified';
+  result: 'PASS' | 'FAIL' | 'unknown' | 'unverified';
   elapsedMs: number;
   operation: string;
   phase?: string;
   firstFailingOperation?: string;
+  unknownOperation?: string;
+  unknownKind?: CaptureUnknownKind;
   authority?: Json;
   phases: Json[];
 };
@@ -907,6 +942,7 @@ export function captureResponse(input: unknown): Json {
     'accountId',
     'account_id',
     'sessions',
+    'code',
     'token_type',
     'expires_in',
     'scope',
@@ -922,13 +958,141 @@ export function captureResponse(input: unknown): Json {
     'invalid_client',
     'invalid_grant',
     'access_denied',
+    'unsupported_grant_type',
+    'unsupported_response_type',
+    'invalid_scope',
     'temporarily_unavailable',
+    'server_error',
+    'authentication_required',
+    'overloaded',
+    'deadline_exceeded',
+    'transaction_retry_exhausted',
+    'partition_unavailable',
+    'dependency_unavailable',
+    'contention',
+    'unauthorized_client',
+    'step_up_required',
+    'account_suspended',
+    'stale_review',
   ];
+  const code = [value.code, value.error].find((candidate) => typeof candidate === 'string' && codes.includes(candidate));
   return {
     shape,
-    ...(typeof value.error === 'string' && codes.includes(value.error) ? { code: value.error } : {}),
+    ...(typeof code === 'string' ? { code } : {}),
     ...(['not_applied', 'applied'].includes(String(value.effect_status)) ? { effectStatus: value.effect_status } : {}),
   };
+}
+
+type CaptureHttpResult = { status: number; value: unknown };
+type AuthorityDenialSource = 'auth' | 'kernel';
+type AuthorityDenialClassification = 'qualified-denial' | 'unknown' | 'not-denial';
+
+function unknownHttpResponse(result: CaptureHttpResult): boolean {
+  const record = result.value && typeof result.value === 'object' && !Array.isArray(result.value) ? (result.value as Json) : {};
+  const codes = [record.code, record.error].filter((code): code is string => typeof code === 'string');
+  return (
+    result.status === 408 ||
+    result.status === 425 ||
+    result.status === 429 ||
+    result.status >= 500 ||
+    codes.some((code) =>
+      [
+        'overloaded',
+        'deadline_exceeded',
+        'transaction_retry_exhausted',
+        'partition_unavailable',
+        'contention',
+        'invalid_client',
+        'invalid_grant',
+        'unauthorized_client',
+        'invalid_request',
+        'unsupported_grant_type',
+        'unsupported_response_type',
+        'invalid_scope',
+        'access_denied',
+        'temporarily_unavailable',
+        'dependency_unavailable',
+      ].includes(code),
+    )
+  );
+}
+
+function unknownResponseKind(result: CaptureHttpResult): CaptureUnknownKind {
+  if (result.status === 408 || result.status === 425 || result.status === 429 || result.status >= 500) return 'overload';
+  const value = result.value && typeof result.value === 'object' && !Array.isArray(result.value) ? (result.value as Json) : {};
+  const codes = [value.code, value.error];
+  if (
+    codes.some((code) =>
+      [
+        'invalid_client',
+        'invalid_grant',
+        'unauthorized_client',
+        'invalid_request',
+        'unsupported_grant_type',
+        'unsupported_response_type',
+        'invalid_scope',
+        'access_denied',
+      ].includes(String(code)),
+    )
+  )
+    return 'setup';
+  return 'overload';
+}
+
+export function classifyAuthorityDenial(
+  source: AuthorityDenialSource,
+  result: CaptureHttpResult,
+): AuthorityDenialClassification {
+  if (unknownHttpResponse(result)) return 'unknown';
+  const value = result.value && typeof result.value === 'object' && !Array.isArray(result.value) ? (result.value as Json) : {};
+  if (source === 'auth')
+    return result.status === 401 && value.error === 'authentication_denied' && value.code === undefined
+      ? 'qualified-denial'
+      : 'not-denial';
+  return result.status === 401 && value.code === 'invalid_credentials' ? 'qualified-denial' : 'not-denial';
+}
+
+function markCaptureRequestUnknown(entry: Json, kind: CaptureUnknownKind) {
+  Object.assign(entry, { classification: 'unknown', unknownKind: kind, result: 'unknown' });
+}
+
+function captureUnknownOutcome(kind: CaptureUnknownKind): UnknownCaptureOutcome {
+  const capture = activeCapture;
+  if (capture) {
+    const last = capture.phases.at(-1);
+    if (last && last.operation === capture.operation) markCaptureRequestUnknown(last, kind);
+    else {
+      capture.phases.push({
+        phase: capture.phase ?? 'setup',
+        operation: capture.operation,
+        result: 'unknown',
+        classification: 'unknown',
+        unknownKind: kind,
+      });
+    }
+  }
+  return new UnknownCaptureOutcome(kind);
+}
+
+function throwIfUnknownResponse(result: CaptureHttpResult) {
+  if (activeCapture && unknownHttpResponse(result)) throw captureUnknownOutcome(unknownResponseKind(result));
+}
+
+export function assertAuthorityDenial(
+  source: AuthorityDenialSource,
+  result: CaptureHttpResult,
+  label: string,
+): void {
+  const classification = classifyAuthorityDenial(source, result);
+  if (classification === 'unknown') throw captureUnknownOutcome(unknownResponseKind(result));
+  if (classification === 'not-denial') throw new Error(`${label} did not return a qualifying authority denial`);
+  const phase = activeCapture?.phases.at(-1);
+  if (phase)
+    Object.assign(phase, {
+      authorityOutcome: 'denied',
+      authorityDenialSource: source,
+      authorityDenialCode: source === 'auth' ? 'authentication_denied' : 'invalid_credentials',
+    });
 }
 
 function beginCaptureRequest(url: string, init: Parameters<typeof send>[1]): Json | undefined {
@@ -970,6 +1134,7 @@ function endCaptureRequest(entry: Json | undefined, response: Response, value: J
     status: response.status,
     response: captureResponse(value),
     result: 'responded',
+    classification: unknownHttpResponse({ status: response.status, value }) ? 'unknown' : 'response',
     elapsedMs: Date.now() - Date.parse(String(entry.startedAt)),
     // Native Auth deliberately omits request context from its diagnostic stream.
     diagnostics: 'Auth/Access internal cause unavailable; no request-correlated diagnostic handoff',
@@ -978,6 +1143,10 @@ function endCaptureRequest(entry: Json | undefined, response: Response, value: J
 
 function capturePhase(phase: string) {
   if (activeCapture) activeCapture.phase = phase;
+}
+
+function captureAuthority(authority: Json) {
+  if (activeCapture) activeCapture.authority = { ...activeCapture.authority, ...authority };
 }
 
 function captureLocalDelivery() {
@@ -1004,12 +1173,33 @@ export async function collectApiCapture(
     activeCapture = current;
     try {
       await operations[id]();
-      current.result = 'PASS';
-    } catch {
-      current.result = 'FAIL';
-      current.firstFailingOperation = `${current.phase ?? 'setup'}: ${current.operation}`;
+      const unknownPhase = current.phases.filter((phase) => phase.classification === 'unknown').at(-1);
+      if (unknownPhase) {
+        current.result = 'unknown';
+        current.unknownOperation = `${String(unknownPhase.phase ?? 'setup')}: ${String(unknownPhase.operation)}`;
+        current.unknownKind = (unknownPhase.unknownKind as CaptureUnknownKind | undefined) ?? 'overload';
+      } else current.result = 'PASS';
+    } catch (error) {
       const last = current.phases.at(-1);
-      if (last && (last.result === 'dispatched' || last.result === 'waiting')) last.result = 'unavailable';
+      const unknownPhase = current.phases.filter((phase) => phase.classification === 'unknown').at(-1);
+      const observedUnknownKind = unknownPhase?.unknownKind as CaptureUnknownKind | undefined;
+      const unknownKind =
+        error instanceof UnknownCaptureOutcome ? error.kind : observedUnknownKind ?? (unknownPhase ? 'overload' : undefined);
+      if (unknownKind) {
+        current.unknownOperation = `${String(unknownPhase?.phase ?? current.phase ?? 'setup')}: ${String(unknownPhase?.operation ?? current.operation)}`;
+        current.unknownKind = unknownKind;
+        if (last && (last.result === 'dispatched' || last.result === 'waiting'))
+          Object.assign(last, { result: 'unknown', classification: 'unknown', unknownKind });
+        if (error instanceof UnknownCaptureOutcome) current.result = 'unknown';
+        else {
+          current.result = 'FAIL';
+          current.firstFailingOperation = `${current.phase ?? 'setup'}: ${current.operation}`;
+        }
+      } else {
+        current.result = 'FAIL';
+        current.firstFailingOperation = `${current.phase ?? 'setup'}: ${current.operation}`;
+        if (last && (last.result === 'dispatched' || last.result === 'waiting')) last.result = 'unavailable';
+      }
     } finally {
       current.elapsedMs = Date.now() - started;
       activeCapture = undefined;
@@ -1101,9 +1291,26 @@ export async function runApiCaptureOnHandoff(
   return { identity, cases };
 }
 
+export function hasNativeCaptureOwnership(environment: {
+  GOAL_TASK_ID?: string;
+  GOAL_ATTEMPT?: string;
+  GOAL_ACCEPTANCE_REQUIRES?: string;
+}): boolean {
+  const taskId = environment.GOAL_TASK_ID ?? '';
+  const attemptText = environment.GOAL_ATTEMPT ?? '';
+  const attempt = Number(attemptText);
+  const nativeRequired = (environment.GOAL_ACCEPTANCE_REQUIRES ?? '').split(',').map((item) => item.trim());
+  return (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(taskId) &&
+    /^[1-9][0-9]*$/.test(attemptText) &&
+    Number.isSafeInteger(attempt) &&
+    attempt > 0 &&
+    nativeRequired.includes('native')
+  );
+}
+
 async function captureOriginalAuthJourneys(): Promise<number> {
-  if (!process.env.GOAL_TASK_ID || !/native/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
-    throw new Error('API capture requires native acceptance');
+  if (!hasNativeCaptureOwnership(process.env)) throw new Error('API capture requires native task ownership');
   const directory = join(root, API_CAPTURE_DIRECTORY);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const sourceRevision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();
@@ -1154,18 +1361,46 @@ async function captureOriginalAuthJourneys(): Promise<number> {
   const runtime = handoff;
   const operations: Record<CaptureId, () => Promise<unknown>> = {
     J03: () => {
-      if (!runtime.recoveryDirectory) throw new Error('runtime recovery delivery path unavailable');
+      capturePhase('recovery delivery setup');
+      if (activeCapture) activeCapture.operation = 'recovery delivery path from runtime handoff';
+      if (!runtime.recoveryDirectory) throw captureUnknownOutcome('setup');
       process.env.REZICS_CAPTURE_RECOVERY_DIR = runtime.recoveryDirectory;
+      activeCapture?.phases.push({
+        phase: 'recovery delivery setup',
+        operation: 'recovery delivery path from runtime handoff',
+        result: 'ready',
+        classification: 'setup',
+      });
       return originalJ03(runtime.origins);
     },
     J04: () => originalJ04(runtime.origins),
     J10: async () => {
       // Missing website setup affects only revocation, never recovery or credential replacement.
-      if (activeCapture) activeCapture.operation = 'website private key/binding setup';
-      if (!runtime.keysPath || !runtime.bindingsPath) throw new Error('website credential paths unavailable');
-      const keys = JSON.parse(await readFile(runtime.keysPath, 'utf8')) as { website: JWK };
-      const bindings = await parseEnv(runtime.bindingsPath);
-      return originalJ10(runtime.origins, bindings, keys.website);
+      capturePhase('website credential setup');
+      if (activeCapture) activeCapture.operation = 'website private key/binding from runtime handoff';
+      let websiteKey: JWK;
+      let bindings: Record<string, string>;
+      try {
+        if (!runtime.keysPath || !runtime.bindingsPath) throw new Error('credential paths unavailable');
+        const keys = JSON.parse(await readFile(runtime.keysPath, 'utf8')) as { website?: unknown };
+        if (!keys.website || typeof keys.website !== 'object' || Array.isArray(keys.website))
+          throw new Error('website private key unavailable');
+        websiteKey = keys.website as JWK;
+        if (typeof websiteKey.kid !== 'string' || !websiteKey.kid || typeof websiteKey.d !== 'string' || !websiteKey.d)
+          throw new Error('website private key unavailable');
+        await importJWK(websiteKey, 'ES256');
+        bindings = await parseEnv(runtime.bindingsPath);
+      } catch {
+        throw captureUnknownOutcome('setup');
+      }
+      activeCapture?.phases.push({
+        phase: 'website credential setup',
+        operation: 'website private key/binding from runtime handoff',
+        result: 'ready',
+        classification: 'setup',
+        authority: { client: WEBSITE_CLIENT_ID, issuer: runtime.origins.issuer, resource: bindings.API_RESOURCE ?? WEBSITE_AUDIENCE },
+      });
+      return originalJ10(runtime.origins, bindings, websiteKey);
     },
   };
   const { cases } = await runApiCaptureOnHandoff(runtime, sourceRevision, operations, async (recordedIdentity, rows) => {
@@ -2140,6 +2375,7 @@ async function originalJ03(stack: Origins): Promise<string> {
   );
   requireStatus(completed, 'recovery complete', 200);
   capturePhase('old-password sign-in refusal');
+  captureAuthority({ credential: 'old password', credentialClient: 'login', credentialRelation: 'replaced by recovery' });
   const stale = await auth(
     stack,
     '/signin',
@@ -2148,15 +2384,22 @@ async function originalJ03(stack: Origins): Promise<string> {
     15_000,
   );
   if (stale.status === 200) throw new Error('old password still established a session');
+  assertAuthorityDenial('auth', stale, 'old-password sign-in refusal');
   capturePhase('new-password sign-in');
   await signIn(stack, person, 'login', [], nextPassword);
   capturePhase('old-session read refusal');
+  captureAuthority({
+    credential: 'original session cookie',
+    sessionRelation: 'established before recovery completion',
+    credentialClient: 'login',
+  });
   const staleCookie = await send(`${stack.native}/sessions`, {
     method: 'GET',
     cookie: oldSession.cookie,
     origin: stack.issuer,
   });
   if (staleCookie.status === 200) throw new Error('old session retained authority after recovery');
+  assertAuthorityDenial('auth', staleCookie, 'original-session read refusal');
   return 'old password and session refused';
 }
 
@@ -2171,8 +2414,12 @@ async function originalJ04(stack: Origins): Promise<string> {
     kind: 'password',
     password: nextPassword,
   });
-  if (changed.status !== 200) throw new Error(`credential effect HTTP ${changed.status}: ${summarize(changed.value)}`);
+  if (changed.status !== 200) {
+    throwIfUnknownResponse(changed);
+    throw new Error(`credential effect HTTP ${changed.status}: ${summarize(changed.value)}`);
+  }
   capturePhase('old-password sign-in refusal');
+  captureAuthority({ credential: 'old password', credentialClient: 'login', credentialRelation: 'replaced by effect' });
   const stale = await auth(
     stack,
     '/signin',
@@ -2181,15 +2428,21 @@ async function originalJ04(stack: Origins): Promise<string> {
     15_000,
   );
   if (stale.status === 200) throw new Error('old password still signed in after credential replace');
+  assertAuthorityDenial('auth', stale, 'old-password sign-in refusal');
   capturePhase('new-password sign-in');
   const fresh = await signIn(stack, person, 'login', [], nextPassword);
   capturePhase('current-session readback');
+  captureAuthority({ credential: 'replacement password', sessionRelation: 'current session after replacement' });
   const listed = await send(`${stack.native}/sessions`, {
     method: 'GET',
     cookie: fresh.cookie,
     origin: stack.issuer,
   });
   requireStatus(listed, 'security sessions', [200, 204]);
+  const sessions = listed.value.sessions;
+  if (!Array.isArray(sessions) || !sessions.some((entry) => entry && typeof entry === 'object' && (entry as Json).current === true))
+    throw new Error('replacement password session was absent from the independent current-session readback');
+  captureAuthority({ currentSessionReadback: 'replacement password sign-in listed as current' });
   return `password replaced HTTP ${changed.status}`;
 }
 
@@ -2198,11 +2451,22 @@ async function originalJ10(stack: Origins, bindings: Record<string, string>, web
   const person = await signup(stack, 'j10');
   capturePhase('website OAuth');
   const granted = await websiteToken(stack, person, bindings, websiteKey);
+  const resource = bindings.API_RESOURCE ?? WEBSITE_AUDIENCE;
+  captureAuthority({
+    subjectAccountId: granted.session.accountId,
+    sameSubject: granted.session.accountId === person.accountId,
+    client: WEBSITE_CLIENT_ID,
+    issuer: stack.issuer,
+    resource,
+    tokenKind: 'access_token',
+    bearerRelation: 'website bearer issued to this account',
+  });
   capturePhase('admitted Kernel bearer read');
   const before = await kernel(stack, 'GET', `/v1/accounts/${granted.session.accountId}/profile`, {
     bearer: granted.bearer,
   });
   requireStatus(before, 'consented profile', 200);
+  captureAuthority({ bearerAuthority: 'admitted before refresh-family revocation' });
   if (!granted.refresh) throw new Error('website token omitted refresh_token');
   capturePhase('website refresh-family revoke');
   const revoked = await send(`${stack.native}/revoke`, {
@@ -2218,12 +2482,16 @@ async function originalJ10(stack: Origins, bindings: Record<string, string>, web
     }).toString(),
     timeout: 30_000,
   });
-  if (revoked.status !== 200)
+  if (revoked.status !== 200) {
+    throwIfUnknownResponse(revoked);
     throw new Error(`website revoke returned HTTP ${revoked.status}: ${summarize(revoked.value)}`);
+  }
+  captureAuthority({ refreshFamilyRevocation: 'acknowledged', refreshTokenKind: 'refresh_token' });
   capturePhase('formerly admitted Kernel bearer denial');
   const after = await kernel(stack, 'GET', `/v1/accounts/${granted.session.accountId}/profile`, {
     bearer: granted.bearer,
   });
   if (after.status === 200) throw new Error('revoked website family still read the editable profile');
+  assertAuthorityDenial('kernel', after, 'formerly admitted Kernel bearer read');
   return `profile after revoke HTTP ${after.status}`;
 }
