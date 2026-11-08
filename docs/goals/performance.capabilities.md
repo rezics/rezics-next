@@ -219,7 +219,8 @@ omitted as preparing retires rather than looping as unsupported kinds.
 
 **Remaining evidence limits:** Native public cells at 64/512/4096 execute through that isolated Auth/Access/History
 composition and the installed released fixture. `quick-vegetarian-not-cooked` and `bulk-long-harem-light-novels`
-remain frozen on Commerce's unadopted completion/history and owner-query/libraryOperations contracts.
+use the adopted current-owner completed-session and captured Library owner-query/libraryOperations contracts;
+revision-qualified native, mounted/browser and security receiving remains open.
 Privacy-reduction served-share grows hidden unrelated subjects and checks a nondecreasing served share for the
 selected public job; it does not yet prove a production acknowledgement delay `τ`. Original/terminal alias uses
 native `POST /v1/subjects:merge`; if identity publication is still preparing, that cell reports the producer
