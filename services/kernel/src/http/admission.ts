@@ -64,9 +64,18 @@ export class Admission {
         failure = error;
         failed = true;
       }
+      if (finished) {
+        if (failed) throw failure;
+        throw new Error('Admission job finished during its yielded wait');
+      }
       if (!context.signal?.aborted) {
         try {
-          release = await this.acquire(lane, context);
+          const acquired = await this.acquire(lane, context);
+          if (finished) {
+            acquired();
+            throw new Error('Admission job finished before permit reacquisition');
+          }
+          release = acquired;
           active = true;
         } catch (error) {
           if (!failed) {
