@@ -123,6 +123,67 @@ test('candidate listing keeps the kernel status when the Treaty reply has no Res
   }
 });
 
+test('reviewed Subject reads resume one remaining typed overload wait inside the original deadline', async () => {
+  const waits: number[] = [];
+  let requests = 0;
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    sleep: async (ms) => {
+      waits.push(ms);
+    },
+    fetch: (async () => {
+      requests += 1;
+      if (requests <= 3)
+        return Response.json(
+          {
+            type: 'https://rezics.com/problems/overloaded',
+            status: 503,
+            code: 'overloaded',
+            retryable: true,
+            effect_status: 'not_applicable',
+            request_id: `kernel-${requests}`,
+          },
+          { status: 503, headers: { 'retry-after': '1' } },
+        );
+      return Response.json({ subject: { id: subjectId } });
+    }) as typeof fetch,
+  });
+
+  await expect(transport.readReviewedSubject(subjectId)).resolves.toMatchObject({ subject: { id: subjectId } });
+  expect(requests).toBe(4);
+  expect(waits).toHaveLength(3);
+  expect(waits.every((ms) => ms > 900 && ms <= 1000)).toBe(true);
+
+  let refusedRequests = 0;
+  const refused = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    maxWaitMs: 0,
+    fetch: (async () => {
+      refusedRequests += 1;
+      return Response.json(
+        {
+          type: 'https://rezics.com/problems/overloaded',
+          status: 503,
+          code: 'overloaded',
+          retryable: true,
+          effect_status: 'not_applicable',
+          request_id: 'kernel-refused',
+        },
+        { status: 503, headers: { 'retry-after': '1' } },
+      );
+    }) as typeof fetch,
+  });
+  await expect(refused.readReviewedSubject(subjectId)).rejects.toMatchObject({
+    status: 503,
+    code: 'overloaded',
+    phase: 'SubjectGET503',
+    correlationId: 'kernel-refused',
+  });
+  expect(refusedRequests).toBe(1);
+});
+
 test('fence retries HTTP 503 then returns current evidence', async () => {
   let requests = 0;
   const transport = createImportTransport({

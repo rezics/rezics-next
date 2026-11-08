@@ -345,6 +345,28 @@ function attachRequest(error: ImportTransportError, method?: string, path?: stri
     ...(error.path === undefined && path !== undefined ? { path } : {}),
   });
 }
+
+/** Reuse only an explicit, still-open Retry-After hint left by the bounded fetch layer. */
+function subjectReadOverloadResumeDelay(
+  error: unknown,
+  now: number,
+  maxWaitMs: number,
+  maxTotalWaitMs: number,
+): number | undefined {
+  if (
+    !(error instanceof ImportTransportError) ||
+    error.status !== 503 ||
+    error.code !== 'overloaded' ||
+    !error.retryable
+  )
+    return;
+  const retry = error.retry;
+  if (!retry || retry.stopped !== undefined || retry.notBefore === undefined || retry.deadline <= now) return;
+  const delay = Math.max(0, retry.notBefore - now);
+  if (delay > maxWaitMs || delay > maxTotalWaitMs || now + delay >= retry.deadline) return;
+  return delay;
+}
+
 function httpFailure(reply: ClientResponse, last?: { method: string; path: string }): ImportTransportError {
   // Only public problem identifiers are useful to callers. No remote diagnostic text is retained.
   const outer =
@@ -375,7 +397,15 @@ function httpFailure(reply: ClientResponse, last?: { method: string; path: strin
       // A generated response can omit or malformedly report its URL; keep the safe envelope partial.
     }
   }
-  const correlationId = reply.response ? (request?.correlationId ?? importCorrelationId(reply.response)) : undefined;
+  const correlationValue = reply.response
+    ? (request?.correlationId ?? importCorrelationId(reply.response) ?? field('request_id'))
+    : undefined;
+  const correlationId =
+    typeof correlationValue === 'string' &&
+    correlationValue.length <= 128 &&
+    /^[A-Za-z0-9._:-]+$/.test(correlationValue)
+      ? correlationValue
+      : undefined;
   return new ImportTransportError(
     reply.response?.status ?? (reply.status > 0 ? reply.status : undefined),
     safeType,
@@ -897,42 +927,75 @@ export function createImportTransport(options: ImportTransportOptions) {
   // These use the same verified credentials, bounded fetch, session and native errors as imports.
   async function readReviewedSubject(id: string, signal?: AbortSignal): Promise<ReviewedSubjectRead> {
     mediaId(id);
+    const deadline = now() + deadlineMs;
+    const controller = new AbortController();
+    const aborted = () => controller.abort(signal?.reason);
+    signal?.throwIfAborted();
+    signal?.addEventListener('abort', aborted, { once: true });
+    let clearDeadline: (() => void) | undefined;
+    const expire = () => controller.abort(new DOMException('Import Subject read deadline exceeded', 'TimeoutError'));
+    clearDeadline = options.schedule
+      ? options.schedule(expire, deadlineMs)
+      : (() => {
+          const timer = setTimeout(expire, deadlineMs);
+          return () => clearTimeout(timer);
+        })();
+    const readSignal = controller.signal;
     const visited = new Set<string>();
     let current = id;
-    while (!visited.has(current)) {
-      visited.add(current);
-      const reply = await client.subjects({ id: current }).get({
-        fetch: { ...(signal === undefined ? {} : { signal }), redirect: 'manual', cache: 'no-store' },
-      });
-      if (reply.status !== 308) {
-        try {
-          const result = await exchange(async () => reply, 200, signal);
-          const read = result.body as ReviewedSubjectRead;
-          ensure(read?.subject?.id === current);
-          return read;
-        } catch (error) {
-          if (error instanceof ImportTransportError && error.status === 503 && error.phase === undefined)
-            throw new ImportTransportError(
-              503,
-              error.type,
-              error.code,
-              error.retryable,
-              error.retry,
-              error.type === 'https://rezics.com/problems/semantic_not_ready' ? 'readiness' : 'SubjectGET503',
-              copiedDiagnostics(error),
-            );
-          throw error;
+    // The fetch layer already used its bounded attempts; consume at most one remaining overload hint here.
+    let resumedOverload = false;
+    try {
+      while (!visited.has(current)) {
+        visited.add(current);
+        let reply: ClientResponse;
+        while (true) {
+          try {
+            reply = await client.subjects({ id: current }).get({
+              fetch: { signal: readSignal, redirect: 'manual', cache: 'no-store' },
+            });
+            if (reply.status !== 308) {
+              const result = await exchange(async () => reply, 200, readSignal);
+              const read = result.body as ReviewedSubjectRead;
+              ensure(read?.subject?.id === current);
+              return read;
+            }
+            break;
+          } catch (error) {
+            const delay = resumedOverload
+              ? undefined
+              : subjectReadOverloadResumeDelay(error, now(), maxWaitMs, maxTotalWaitMs);
+            if (delay !== undefined && now() + delay < deadline) {
+              resumedOverload = true;
+              await wait(delay, readSignal, options.sleep);
+              continue;
+            }
+            if (error instanceof ImportTransportError && error.status === 503 && error.phase === undefined)
+              throw new ImportTransportError(
+                503,
+                error.type,
+                error.code,
+                error.retryable,
+                error.retry,
+                error.type === 'https://rezics.com/problems/semantic_not_ready' ? 'readiness' : 'SubjectGET503',
+                copiedDiagnostics(error),
+              );
+            throw error;
+          }
         }
+        const redirected = snapshot(reply.error?.value ?? reply.data, RESPONSE_BYTES) as {
+          redirect?: { from?: unknown; to?: unknown };
+        };
+        ensure(redirected.redirect?.from === current && typeof redirected.redirect.to === 'string');
+        const target = redirected.redirect!.to as string;
+        mediaId(target);
+        current = target;
       }
-      const redirected = snapshot(reply.error?.value ?? reply.data, RESPONSE_BYTES) as {
-        redirect?: { from?: unknown; to?: unknown };
-      };
-      ensure(redirected.redirect?.from === current && typeof redirected.redirect.to === 'string');
-      const target = redirected.redirect!.to as string;
-      mediaId(target);
-      current = target;
+      throw new TypeError('Cyclic reviewed subject redirect');
+    } finally {
+      clearDeadline?.();
+      signal?.removeEventListener('abort', aborted);
     }
-    throw new TypeError('Cyclic reviewed subject redirect');
   }
   async function readReviewedPersonIdentity(
     id: string,
