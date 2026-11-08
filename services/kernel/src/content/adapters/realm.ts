@@ -5,7 +5,7 @@ import { AccessUnavailableError } from '../../access/unavailable.ts';
 import type { NativeScopeReader } from '../../semantic/adapters/index.ts';
 import type { ScopeWork } from '../../search/adapters/index.ts';
 import { createContentRealmApplication } from '../application/index.ts';
-import type { RealmCommunityPorts, RealmSearchPorts } from '../contract/index.ts';
+import type { RealmCommunityPorts, RealmSearchPorts, RealmSubjectIdentityMapping } from '../contract/index.ts';
 import type { BoardRecord, ReadContext, AnchoredPosition } from '../model.ts';
 import { observeBoardRecentThreads, type ContentBoardDependencies } from '../boards.ts';
 import type { ThreadView } from '../reads.ts';
@@ -17,7 +17,8 @@ import {
   type CommunityComments,
 } from '../community-projection/index.ts';
 import { createRealmSubjectSource, type RealmSubjectSource } from '../realm-subject-source.ts';
-import { createRealmSubjectLifecycle } from '../realm-subject-lifecycle.ts';
+import { createRealmSubjectLifecycle, projectRealmSubjectIdentityMappings } from '../realm-subject-lifecycle.ts';
+import { readIdentityMappings as readSemanticIdentityMappings } from '../../semantic/identity-adapters/index.ts';
 import {
   createNativeRealmDisclosurePorts,
   realmSearchFailure,
@@ -35,6 +36,7 @@ type SearchPorts = RealmSearchPorts<
   RealmSubjectSource
 >;
 export type NativeRealmProducers = Pick<NativeRealmDisclosurePorts, 'parent' | 'subject'> & {
+  readIdentityMappings(pool: Pool, originals: readonly string[]): Promise<readonly RealmSubjectIdentityMapping[]>;
   withWork<T>(
     reader: Extract<NativeScopeReader, { actor: unknown }>,
     work: ScopeWork,
@@ -42,6 +44,14 @@ export type NativeRealmProducers = Pick<NativeRealmDisclosurePorts, 'parent' | '
     run: (context: RealmSubjectDisclosureContext) => Promise<T>,
   ): Promise<T>;
 };
+
+/** Content's Realm boundary preserves Semantic's identity meaning in a serializable worker contract. */
+export async function readRealmSubjectIdentityMappings(
+  pool: Pool,
+  originals: readonly string[],
+): Promise<readonly RealmSubjectIdentityMapping[]> {
+  return projectRealmSubjectIdentityMappings(await readSemanticIdentityMappings(pool, originals));
+}
 
 function nativeCommunity(): RealmCommunityPorts<
   ContentBoardDependencies,
@@ -79,7 +89,7 @@ export function createNativeContentRealmApplication(producers: NativeRealmProduc
       createHash('sha256').update(`${realm}:${signature}:${ordinal}`).digest('base64url'),
     failure: realmSearchFailure,
     source(pool, disclosure) {
-      const lifecycle = createRealmSubjectLifecycle({ pool });
+      const lifecycle = createRealmSubjectLifecycle({ pool, readIdentityMappings: producers.readIdentityMappings });
       return createRealmSubjectSource({ pool, disclosure, maintenance: lifecycle.maintenance });
     },
   };

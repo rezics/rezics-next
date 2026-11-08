@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { expect, mock, spyOn, test } from 'bun:test';
 import pg from 'pg';
 import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
@@ -6,7 +7,11 @@ import { ConfigError } from '../../src/commerce/config.ts';
 import { receiptKeysFor } from '../../src/command/receipt-key.ts';
 import { createContentWorkAccess, createContentWorkModule } from '../../src/content/register.ts';
 
-const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
+const registerContent = createContentWorkModule({
+  readIdentityMappings: readTestRealmSubjectIdentityMappings,
+  fetch: (request) => fetch(request),
+  now: () => Date.now(),
+});
 import * as feedWork from '../../src/content/feed-work.ts';
 import * as moderationDirectoryWork from '../../src/content/moderation-directory-work.ts';
 import * as reportLocatorWork from '../../src/content/report-locator-work.ts';

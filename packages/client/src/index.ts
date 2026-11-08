@@ -337,8 +337,8 @@ export type SourceStatisticClearResult = SubjectSourceStatisticsRoute[':source']
 export type SourceStatisticFigures = NonNullable<SourceStatistic['figures']>;
 
 type MountedFeedPage = Routes['feedItems']['get']['response'][200];
-// Content's portable feed contract leaves these owner-composed fields unknown. Reuse the emitted owner
-// contracts until the mounted response publishes them, then yield to the generated field declarations.
+// Content's portable feed contract can leave owner-composed fields unknown. Reuse their public owner
+// contracts only while the mounted response is unknown; concrete mounted declarations take precedence.
 type FeedOwnerSummary<Row> = Row extends { summary: infer Summary extends { card: unknown } }
   ? Omit<Row, 'summary'> & {
       summary: Omit<Summary, 'card'> & {
@@ -346,7 +346,7 @@ type FeedOwnerSummary<Row> = Row extends { summary: infer Summary extends { card
       };
     }
   : Row;
-/** Home and Following share native rows and the emitted contracts for their composed owner facts. */
+/** Home and Following share mounted feed rows and their owner-composed serializable facts. */
 export type FeedPage = Omit<MountedFeedPage, 'feedItems' | 'viewerPersonalActions'> &
   Readonly<{
     feedItems: readonly FeedOwnerSummary<MountedFeedPage['feedItems'][number]>[];
@@ -360,6 +360,7 @@ type InstalledFeedRoutes = Omit<Routes['feedItems'], 'get'> & {
     response: Omit<MountedFeedRead['response'], 200> & { 200: FeedPage };
   };
 };
+/** Home and Following share the installed feedItems response declaration. */
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedContentItem = Extract<FeedItem, { source: 'following'; key: { owner: 'content' } }>;
 

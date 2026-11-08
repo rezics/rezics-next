@@ -1,6 +1,7 @@
 import type { Actor } from '../request/access.ts';
 import { createFeedApplication } from './application/index.ts';
-import { createNativeFeedPorts, type FeedDependencies } from './adapters/feed-native.ts';
+import { createNativeFeedPorts } from './adapters/feed-native.ts';
+import type { FeedDependencies } from './adapters/feed-capabilities.ts';
 import { feedCapabilities } from './adapters/feed-bind.ts';
 import { feedRoute } from './feed-activity.ts';
 import { readFeedKind, type FeedPage, type FeedSelection } from './feed-contract.ts';
@@ -19,7 +20,7 @@ import {
 } from './contract/index.ts';
 import { feedCandidateBound } from './core/index.ts';
 
-export type { FeedDependencies } from './adapters/feed-native.ts';
+export type { FeedDependencies } from './adapters/feed-capabilities.ts';
 export {
   FEED_ACCOUNT_BATCH_LIMIT,
   FEED_AUTHOR_KEYS_PER_CANDIDATE,

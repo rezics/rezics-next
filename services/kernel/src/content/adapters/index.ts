@@ -21,7 +21,11 @@ export {
   type ReadingPageCapabilities,
 } from './reading-page-bind.ts';
 export { createNativeReadingPageCapabilities, type ContentReadingAccess } from './reading-page.ts';
-export { createNativeContentRealmApplication, type NativeRealmProducers } from './realm.ts';
+export {
+  createNativeContentRealmApplication,
+  readRealmSubjectIdentityMappings,
+  type NativeRealmProducers,
+} from './realm.ts';
 export { nativeRealmEvidenceHost } from './realm-disclosure.ts';
 export { bindContentRealmApplication, contentRealmApplication } from './realm-binding.ts';
 export {
@@ -31,6 +35,6 @@ export {
   unbindFeedCapabilities,
   type FeedProducerCapabilities,
 } from './feed-bind.ts';
-export { createNativeFeedPorts, type FeedDependencies } from './feed-native.ts';
-export type { FeedNativeSuppliers } from './feed-capabilities.ts';
+export type { FeedDependencies, FeedNativeSuppliers } from './feed-capabilities.ts';
+export type { FeedEnrichmentPorts } from '../feed-enrichment-ports.ts';
 export type { FeedActivityStore } from '../feed-activity.ts';

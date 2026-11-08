@@ -1,9 +1,18 @@
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { prepareFeedContentContext } from '../../src/content/feed-context.ts';
+import { readSubjectSummaries, readSubjectSummaryObservation } from '../../src/semantic/summaries.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
+import { readVisibleRatingQuestion, STANDARD_QUESTION_ID } from '../../src/rating/index.ts';
+import type { FeedEnrichmentPorts } from '../../src/content/feed-enrichment-ports.ts';
 import { createReviewLifecycleFixture, requestKey } from './review-native-lifecycle-fixture.ts';
+
+const enrichment: FeedEnrichmentPorts = {
+  readSubjectSummaries,
+  readSubjectSummaryObservation,
+  readVisibleRatingQuestion,
+  standardQuestionId: STANDARD_QUESTION_ID,
+};
 
 test('native Home context retains a review target, zero citation and only the immediate reply parent', async () => {
   const fixture = await createReviewLifecycleFixture();
@@ -66,6 +75,7 @@ test('native Home context retains a review target, zero citation and only the im
     const context = { actor: { kind: 'anonymous' as const }, deadline: Date.now() + 60_000 };
     const prepared = await prepareFeedContentContext(
       dependencies,
+      enrichment,
       [
         { key: 'review', threadId },
         { key: 'opening', threadId, postId: openingId },

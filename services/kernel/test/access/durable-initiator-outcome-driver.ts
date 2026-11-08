@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from '../content/realm-identity-reader.ts';
 import '../support/fixture-event-types.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -2515,6 +2516,7 @@ export async function runWorker() {
     }, configuration);
   }) as typeof DBOS.registerStep;
   const content = createContentWork({
+    readIdentityMappings: readTestRealmSubjectIdentityMappings,
     storage: new R2Storage({
       endpoint: 'http://127.0.0.1:1',
       bucket: 'unused',
@@ -2539,7 +2541,7 @@ export async function runWorker() {
         name: 'content',
         async register(context) {
           await content.register(context);
-          context.addEffects(contentEffects(context.pool, context.client));
+          context.addEffects(contentEffects(context.pool, context.client, readTestRealmSubjectIdentityMappings));
         },
       },
     ],

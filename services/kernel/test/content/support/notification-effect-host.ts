@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from '../realm-identity-reader.ts';
 import { randomUUID } from 'node:crypto';
 import type { KernelClock } from '../../../src/clock.ts';
 import { configureReceiptKeys, readReceiptKeyRing } from '../../../src/command/receipt-key.ts';
@@ -188,7 +189,10 @@ async function runWorker(): Promise<void> {
   const workClient = await createWorkClient(databaseUrl, pool);
   let effectTime = new Date();
   const access = createContentWorkAccess(() => new Date(effectTime), pool);
-  const effects = [...contentEffects(pool, workClient), ...contentNoticeEffects(pool, access)];
+  const effects = [
+    ...contentEffects(pool, workClient, readTestRealmSubjectIdentityMappings),
+    ...contentNoticeEffects(pool, access),
+  ];
   const registered = registerEffects(effects, pool);
   await launchWork({
     databaseUrl,

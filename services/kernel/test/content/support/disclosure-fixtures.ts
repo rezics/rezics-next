@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from '../realm-identity-reader.ts';
 import { createAuthConsentReader } from '../../../src/access/auth-consent.ts';
 import { systemClock } from '../../../src/clock.ts';
 import { R2Storage } from '../../../src/content/r2-storage.ts';
@@ -325,6 +326,7 @@ async function runDisclosureWorker(): Promise<void> {
             },
           };
           await createContentWork({
+            readIdentityMappings: readTestRealmSubjectIdentityMappings,
             storage,
             access: createContentWorkAccess(systemClock),
             readConsent: createAuthConsentReader({
@@ -338,7 +340,9 @@ async function runDisclosureWorker(): Promise<void> {
             registerErasureParticipant: process.env.CONTENT_TEST_DISABLE_ERASURE_PARTICIPANT !== 'true',
           }).register(testContext);
           const effectNames = new Set(['content_author_erasure', 'content_media_image']);
-          const effects = contentEffects(context.pool, context.client).filter((effect) => effectNames.has(effect.name));
+          const effects = contentEffects(context.pool, context.client, readTestRealmSubjectIdentityMappings).filter(
+            (effect) => effectNames.has(effect.name),
+          );
           if (effects.length !== effectNames.size) throw new Error('Required native content effects are missing');
           context.addEffects(effects);
         },

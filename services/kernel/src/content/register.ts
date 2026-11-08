@@ -28,7 +28,7 @@ import { registerReportLocatorWork } from './report-locator-work.ts';
 import { createConversationActivityEffect } from './conversation-activity.ts';
 import { FEED_OPERATION_DECLARATIONS } from './feed-operation-declarations.ts';
 import { contentViewerActionResources } from './viewer-actions.ts';
-import type { ContentPool } from './contract/index.ts';
+import type { ContentPool, RealmSubjectIdentityMapping } from './contract/index.ts';
 
 /** Standalone fixture/caller Access with the shared role catalogue. Default
  * production registration uses WorkContext's fully mounted authorization instead.
@@ -157,6 +157,7 @@ export type ContentWorkAmbient = Readonly<{
   fetch: (request: Request) => Promise<Response>;
   now?: () => number;
   id?: () => string;
+  readIdentityMappings: (pool: Pool, originals: readonly string[]) => Promise<readonly RealmSubjectIdentityMapping[]>;
 }>;
 
 /** Content's declared effects. The worker register consumes this; tests may install the same list. */
@@ -164,10 +165,11 @@ export function contentDeclaredEffects(
   pool: ContentPool,
   client: Parameters<typeof contentEffects>[1],
   access: Parameters<typeof contentNoticeEffects>[1],
+  readIdentityMappings: ContentWorkAmbient['readIdentityMappings'],
 ) {
   return Object.freeze([
     createConversationActivityEffect(pool as Parameters<typeof createConversationActivityEffect>[0]),
-    ...contentEffects(pool as Parameters<typeof contentEffects>[0], client),
+    ...contentEffects(pool as Parameters<typeof contentEffects>[0], client, readIdentityMappings),
     ...contentNoticeEffects(pool as Parameters<typeof contentNoticeEffects>[0], access),
   ]);
 }
@@ -203,6 +205,7 @@ export function createContentWorkModule(ambient: ContentWorkAmbient): WorkModule
         storage: dependencies.storage,
         access,
         readConsent,
+        readIdentityMappings: ambient.readIdentityMappings,
         routeKey: readMembershipRouteKey(context.env),
         fetchConfig: dependencies.fetchConfig,
         now,
@@ -210,7 +213,9 @@ export function createContentWorkModule(ambient: ContentWorkAmbient): WorkModule
       }).register(context);
       registerReportLocatorWork(context);
       registerModerationDirectoryWork(context);
-      context.addEffects([...contentDeclaredEffects(context.pool, context.client, access)]);
+      context.addEffects([
+        ...contentDeclaredEffects(context.pool, context.client, access, ambient.readIdentityMappings),
+      ]);
       await registerFeedWork(context);
     },
   };

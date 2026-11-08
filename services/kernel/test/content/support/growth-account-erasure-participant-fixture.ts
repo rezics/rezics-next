@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from '../realm-identity-reader.ts';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -413,6 +414,7 @@ async function worker() {
         name: 'content',
         async register(context) {
           await createContentWork({
+            readIdentityMappings: readTestRealmSubjectIdentityMappings,
             storage: countedStorage,
             access: createContentWorkAccess(() => now, db.pool),
             // Account cleanup is platform work. Fail if the selected participant
@@ -424,7 +426,7 @@ async function worker() {
             fetchConfig: { allowedHosts: [] },
             now: () => Date.now(),
           }).register(context);
-          context.addEffects(contentEffects(db.pool, client));
+          context.addEffects(contentEffects(db.pool, client, readTestRealmSubjectIdentityMappings));
         },
       },
     ],
