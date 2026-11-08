@@ -13,7 +13,7 @@ import {
   verifyDev,
   type TestFailureRepair,
 } from './dev-verifier.ts';
-import { placeInWorkspaceChecks, trackedFilesAt } from './dev-verifier-plan.ts';
+import { placeBootSmokeCheck, placeInWorkspaceChecks, trackedFilesAt } from './dev-verifier-plan.ts';
 import type { DevVerifierRun, Settings, Task } from './types.ts';
 
 const roots: string[] = [];
@@ -609,6 +609,34 @@ test('classification and workspace placement preserve the existing verifier chec
     closure: ['**'],
     cwd: 'services/kernel',
   });
+});
+
+test('Kernel boot smoke uses its database runner with the original selection and attribution', () => {
+  const file = 'services/kernel/test/boot/kernel-boots.test.ts';
+  const check = {
+    command: ['env', 'NO_COLOR=1', 'bun', 'test', file, '--test-name-pattern', 'Kernel API'],
+    closure: [file],
+    taskId: 'boot-owner',
+  };
+  const tracked = new Set([file, 'services/kernel/bunfig.toml', 'services/kernel/scripts/check.ts']);
+  expect(placeBootSmokeCheck(check, tracked)).toEqual([
+    {
+      command: [
+        'env',
+        'NO_COLOR=1',
+        'bun',
+        'run',
+        '--cwd',
+        'services/kernel',
+        'check',
+        'test/boot/kernel-boots.test.ts',
+        '--test-name-pattern',
+        'Kernel API',
+      ],
+      closure: [file],
+      taskId: 'boot-owner',
+    },
+  ]);
 });
 
 test('Auth erasure history uses its database runner while ordinary Auth unit selection stays direct Bun', async () => {

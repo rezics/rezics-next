@@ -3198,6 +3198,8 @@ Auth's scripts/check.ts owns files under services/auth/test/**/*.test.ts, which 
 database lanes. The verifier routes those files through bun run --cwd services/auth check, forwards Bun test flags,
 and splits mixed selections so Auth script unit tests keep their direct Bun lane. This matches the Auth runner's
 selected-file classification; changing cwd alone does not provide database placement.
+Kernel tests under services/kernel/test similarly use the existing Kernel check runner, which owns the SQL mapper's
+database context. Boot smoke retains its selected file and flags through that runner.
 
 Compiler, product runtime, setup, transport and resource cleanup causes remain separate findings over the original
 command evidence. Auth database-placement denial is setup evidence and never a product defect. Rsync byte totals are
