@@ -133,3 +133,35 @@ test('maintenance backfill resumes after restart and concurrent task writes keep
     directory.close();
   }
 });
+
+test('maintenance owner cursor persists only visited candidates when a bounded page stops early', () => {
+  const directory = temporaryDirectory();
+  const path = directory.path + '/goal.sqlite';
+  let db = openDb(path);
+  let store = new WorkerStore(db);
+  try {
+    for (let n = 1; n <= 3; n++)
+      db.query('INSERT INTO worker_tasks(id,sequence,current_attempt,body) VALUES(?,?,0,?)').run(
+        'owner-' + n,
+        n,
+        JSON.stringify({
+          id: 'owner-' + n,
+          state: 'integrated',
+          currentAttempt: 0,
+          worktree: '/fixture/' + n,
+          brief: { after: [] },
+        }),
+      );
+    const page = store.worktreeMaintenanceCandidates(3, false);
+    expect(page).toHaveLength(3);
+    store.advanceWorktreeMaintenance(page[0]!);
+    db.close();
+    db = openDb(path);
+    store = new WorkerStore(db);
+    const next = store.worktreeMaintenanceCandidates(3, false);
+    expect(next.map((candidate) => candidate.taskId)).toEqual(['owner-2', 'owner-3']);
+  } finally {
+    db.close();
+    directory.close();
+  }
+});

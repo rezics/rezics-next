@@ -13,6 +13,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
   writeSync,
 } from 'node:fs';
@@ -854,4 +855,39 @@ test('legacy explicitly releasable custody retries through the same paced sweep 
   await sweepCheckGit(source);
   expect(existsSync(journal)).toBe(false);
   expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/legacy-release')).toBe('');
+}, 5000);
+
+test('bounded Git journal cursor advances across more than 32 malformed and symlink entries without starving due custody', async () => {
+  const { root, source, origin } = publicationFixture('exit 0');
+  await stageCheckGit(source, join(root, 'fair'), { ref: 'refs/checks/zz-fair' });
+  const directory = join(source, '.temp/check-git-publications');
+  const path = join(directory, 'zz-fair.json');
+  const record = JSON.parse(readFileSync(path, 'utf8'));
+  record.ownership.state = 'releasable';
+  record.ownership.createdAt = 0;
+  writeFileSync(path, JSON.stringify(record));
+  for (let n = 0; n < 33; n++) writeFileSync(join(directory, String(n).padStart(4, '0') + '.json'), 'malformed');
+  const foreign = join(root, 'foreign.json');
+  writeFileSync(foreign, JSON.stringify(record));
+  symlinkSync(foreign, join(directory, 'foreign-link.json'));
+  const first = await sweepCheckGit(source);
+  expect(first).toEqual({ visited: 32, remaining: true });
+  expect(existsSync(path)).toBe(true);
+  const cursor = readFileSync(join(directory, '.sweep-cursor'), 'utf8');
+  const restarted = Bun.spawnSync(
+    [
+      process.execPath,
+      '--eval',
+      `import {sweepCheckGit} from ${JSON.stringify(join(import.meta.dir, 'check-git.ts'))}; console.log(JSON.stringify(await sweepCheckGit(${JSON.stringify(source)})));`,
+    ],
+    { cwd: source, stdout: 'pipe', stderr: 'pipe' },
+  );
+  expect(restarted.exitCode, restarted.stderr.toString()).toBe(0);
+  const second = JSON.parse(restarted.stdout.toString());
+  expect(second.visited).toBeLessThanOrEqual(32);
+  expect(existsSync(path)).toBe(false);
+  expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/zz-fair')).toBe('');
+  expect(readFileSync(join(directory, '.sweep-cursor'), 'utf8')).not.toBe(cursor);
+  expect(readFileSync(foreign, 'utf8')).toBe(JSON.stringify(record));
+  expect(second.remaining).toBe(true);
 }, 5000);

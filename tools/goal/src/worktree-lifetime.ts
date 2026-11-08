@@ -1,3 +1,4 @@
+import { sweepCheckGit } from '../../../scripts/check-git.ts';
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { opendir } from 'node:fs/promises';
@@ -30,6 +31,8 @@ export type LifetimeWorkUnit =
   | 'git-registration-prune'
   | 'maintenance-backfill-task-row';
 export type LifetimeRuntime = {
+  /** Eligibility clock only; process deadlines continue to use wall time. */
+  now?: () => number;
   pressure: () => number | null;
   sleep: (ms: number) => Promise<void>;
   command: (command: string, args: string[], cwd: string) => void | Promise<void>;
@@ -575,6 +578,7 @@ export async function removeFinishedWorktree(
   store: WorkerStore,
   io: LifetimeRuntime = runtime,
   reporter?: CleanupReporter | WorktreeCleanupHooks,
+  options: { deadlineMs?: number; signal?: AbortSignal } = {},
 ): Promise<string | null> {
   const hooks = resolveHooks(reporter);
   const lease = (() => {
@@ -593,12 +597,16 @@ export async function removeFinishedWorktree(
     // Existing history is backfilled once in sequence pages. Store triggers keep later state changes current.
     const taskBackfill = store.bootstrapMaintenanceTasks(MAINTENANCE_BOOTSTRAP_PAGE_SIZE);
     for (let index = 0; index < taskBackfill.examined; index++) io.observe?.('maintenance-backfill-task-row');
-    const candidates = store.worktreeMaintenanceCandidates(MAINTENANCE_CANDIDATE_BATCH_SIZE);
+    const candidates = store.worktreeMaintenanceCandidates(MAINTENANCE_CANDIDATE_BATCH_SIZE, false);
+    const gitDeadlineMs = Math.min(Date.now() + 10_000, options.deadlineMs ?? Infinity);
+    let gitWorkStarted = false;
     const roots = worktreeRoots(settings);
     const pressureWaits = { value: 0 };
     const completed: typeof candidates = [];
     let removedId: string | null = null;
     for (const candidate of candidates) {
+      if (options.signal?.aborted || (gitWorkStarted && Date.now() >= gitDeadlineMs)) break;
+      store.advanceWorktreeMaintenance(candidate);
       const task = candidate.task;
       let taskLease: DirectoryLease;
       try {
@@ -633,6 +641,16 @@ export async function removeFinishedWorktree(
           completed.push(candidate);
           continue;
         }
+
+        if (existsSync(join(current.worktree, '.temp/check-git-publications'))) {
+          gitWorkStarted = true;
+          const custody = await sweepCheckGit(current.worktree, (io.now ?? Date.now)(), {
+            deadlineMs: gitDeadlineMs,
+            ...(options.signal ? { signal: options.signal } : {}),
+          });
+          if (custody.remaining) continue;
+        }
+        if (options.signal?.aborted) break;
 
         const oldDisposition = store.worktreeCleanup(current.id);
         if (
@@ -806,6 +824,7 @@ export async function removeFinishedWorktree(
     }
 
     store.completeMaintenanceCandidates(completed);
+    if (options.signal?.aborted || Date.now() >= (options.deadlineMs ?? Infinity)) return removedId;
     let strayRemoved: string | null = null;
     if (candidates.length === 0 && store.maintenanceTasksBootstrapped()) {
       await scanWorktreeDirectoryPage(roots, store, io);
