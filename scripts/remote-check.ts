@@ -6643,8 +6643,6 @@ async function copyReturns(
     }
   }
   const treeReturn = hasOutputTreeReturn(paths) || candidates.length > 0;
-  if (terminal && terminal.exitCode !== 0 && treeReturn)
-    return { ...result, status: 'failed', failures: ['failed physical command cannot publish a tree'] };
   if (terminal && treeReturn) {
     const { currentCheckSourceManifest } = await import('./check-run.ts');
     if ((await currentCheckSourceManifest(options.workspace, paths)).sourceSha256 !== terminal.sourceSha256)

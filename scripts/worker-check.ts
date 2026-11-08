@@ -1708,8 +1708,10 @@ export async function runWorkerCheck(
       : undefined;
     const remoteCustody = readJsonFile<CheckRemoteRunCustody>(remoteRunCustodyPath(root, physicalRunId));
     if (artifactPrepared) {
+      let received = false;
       try {
         const restored = restoreArtifactReturns(root, artifactRelative, physicalRunId, logicalCheckId);
+        received = restored.rejected.length === 0 && restored.missing.length === 0;
         for (const item of restored.restored) {
           process.stderr.write(
             `worker-check: artifact returned physical=${physicalRunId} path=${JSON.stringify(item.path)} bytes=${item.size} sha256=${item.sha256}\n`,
@@ -1729,8 +1731,14 @@ export async function runWorkerCheck(
         );
       } finally {
         try {
-          cleanupArtifactRun(root, physicalRunId);
-          process.stderr.write(`worker-check: artifact staging cleaned physical=${physicalRunId}\n`);
+          if (received) {
+            cleanupArtifactRun(root, physicalRunId);
+            process.stderr.write(`worker-check: artifact staging cleaned physical=${physicalRunId}\n`);
+          } else {
+            process.stderr.write(
+              `worker-check: artifact staging retained physical=${physicalRunId} path=${artifactRelative}\n`,
+            );
+          }
         } catch (error) {
           process.stderr.write(`worker-check: artifact staging cleanup uncertain: ${String(error)}\n`);
         }
