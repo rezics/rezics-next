@@ -17,7 +17,7 @@ import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import viewerEntries from './viewer-facts-entries.sql';
-import type { ViewerFact, ViewerFactInput, ViewerFactsPage, ViewerQuestion } from './contract/index.ts';
+import type { ViewerFact, ViewerFactInput, ViewerFactsPage, ViewerQuestion, ViewerVoteFact } from './contract/index.ts';
 export type {
   ViewerEntryFact,
   ViewerFact,

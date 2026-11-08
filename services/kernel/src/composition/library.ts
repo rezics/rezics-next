@@ -40,6 +40,7 @@ import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
 import { createSearchScopeForService, type SearchService } from '../search/service-scope.ts';
 import { routeOf } from '../route/route.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import {
   createIdentityNativeApplication,
   createNativePublicOutputApplication,
@@ -307,21 +308,6 @@ export type LibraryComposeOptions = Readonly<{
   preparationWork?: import('../library/adapters/index.ts').NativePreparationWorkFactory;
 }>;
 
-function stubSource(): PreparedCollectionSource {
-  return {
-    [preparedSource]: true,
-    observation: {
-      collectionId: '',
-      route: 0,
-      incarnation: '',
-      revision: 0,
-      authority: { kind: 'curated' },
-      stamp: { partition: 0, epoch: 0, position: 0n },
-      basis: { digest: '', identity: { digest: '' }, query: null, profilePins: [], projection: null },
-    },
-  };
-}
-
 function nativeLibraryPresentation(semanticObservations: LibraryCapabilities['semanticObservations']) {
   return createNativeLibraryPresentation({
     semanticObservations,
@@ -392,23 +378,8 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
           ...(options.ordinaryPage !== undefined ? { ordinaryPage: options.ordinaryPage } : {}),
         })
       : {
-          async prepare(input) {
-            return {
-              source: stubSource(),
-              work: {
-                reservationId: input.allowance.reservationId,
-                used: {
-                  candidateKeys: 0,
-                  nativeRows: 0,
-                  identityMetadataRows: 0,
-                  emptySeeks: 0,
-                  nativePoints: 0,
-                  witnessKeys: 0,
-                  statements: 0,
-                  bytes: 0,
-                },
-              },
-            };
+          async prepare() {
+            throw new ProblemError('dependency_unavailable');
           },
         });
   const extras: { search?: unknown; access?: unknown; routeKey?: Uint8Array } = {};

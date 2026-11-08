@@ -63,7 +63,12 @@ async function ready(request: FacetDiscoveryRequest): Promise<FacetDiscovery200R
     const response = await fixture.request('alice', 'POST', '/v1/subjects:facets', request);
     if (response.status === 200) return response.body as FacetDiscovery200Response;
     expect(response.status, JSON.stringify(response.body)).toBe(503);
-    expect(['index_not_ready', 'semantic_not_ready']).toContain((response.body as { code?: string }).code);
+    if (response.status !== 503) throw new Error(`Unexpected facet preparation status: ${response.status}`);
+    const body = response.body;
+    if (typeof body !== 'object' || body === null || !('code' in body) || typeof body.code !== 'string')
+      throw new Error('Facet preparation response has no string code');
+    const code = body.code;
+    expect(['index_not_ready', 'semantic_not_ready']).toContain(code);
     expect(response.headers.get('retry-after')).toBeTruthy();
     if (Date.now() >= deadline)
       throw new Error(`Collection facet stayed in preparation: ${JSON.stringify(response.body)}`);

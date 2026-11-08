@@ -230,6 +230,9 @@ retain that instance through nested calls; `createOrderedCollectionSourceApplica
 `createMembersWorkDefinitionApplication` are the application facades. Fewest tests: Search's construction suite
 pins the installed binding; Library domain-composition keeps its fake-capability coverage.
 
+Decision: composition without both native Pool and Access returns `dependency_unavailable`; member preparation emits
+a page only with the producer's unchanged observation, so owner-fence admission remains unprepared.
+
 Captured Collection scopes resolve their native identity against the caller's allowance and combine that receipt
 with Search work. Source custody narrows each declared operation ceiling to the remaining original ledger after
 identity reads; it never reissues capacity or creates a child allocation.

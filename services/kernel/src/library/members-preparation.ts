@@ -1052,7 +1052,7 @@ export async function readPreparationOwnerFenceNative(
   const row = await ownerFence.run(tx, { route: locator.route, account_id: locator.ownerAccountId });
   if (!row) throw new ProblemError('dependency_unavailable');
   const resources = currentOperationalResources(tx);
-  await capabilities.memberPreparation.prepare({
+  const admission = await capabilities.memberPreparation.prepare({
     actor: {
       kind: 'account',
       accountId: locator.ownerAccountId,
@@ -1067,6 +1067,7 @@ export async function readPreparationOwnerFenceNative(
     filter: definition.filter,
     ownerFence: row.generation,
   });
+  if (admission.status !== 'unprepared') throw new ProblemError('dependency_unavailable');
   return row.generation;
 }
 

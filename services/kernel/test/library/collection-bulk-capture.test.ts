@@ -35,20 +35,21 @@ const descriptor = (revision = 7) => ({
   coverSource: 'none' as const,
 });
 type Reads = Parameters<typeof captureCollectionBulkSource>[0];
+type MemberQuery = NonNullable<Parameters<Reads['readMembers']>[2]>;
 
 function readsFor(
   rows: string[],
   options: {
     revision?: () => number;
     preparing?: boolean;
-    readQueries?: { sort?: string; cursor?: string; limit?: number }[];
+    readQueries?: MemberQuery[];
   } = {},
 ): Reads {
   return {
     async readCollection() {
       return descriptor(options.revision?.() ?? 7);
     },
-    async readMembers(_actor, _sourceId, query = {}) {
+    async readMembers(_actor, _sourceId, query: MemberQuery = {}) {
       options.readQueries?.push(query);
       if (options.preparing) return { preparing: true };
       const start = query.cursor == null ? 0 : Number(query.cursor);
@@ -64,7 +65,7 @@ function readsFor(
 
 test('captures every Members page, canonical filter and unique subject operand', async () => {
   const members = [...Array.from({ length: 203 }, (_, index) => subjectId(index + 1)), subjectId(1), subjectId(2)];
-  const readQueries: { sort?: string; cursor?: string; limit?: number }[] = [];
+  const readQueries: MemberQuery[] = [];
   const result = await captureCollectionBulkSource(
     readsFor(members, { readQueries }),
     actor,

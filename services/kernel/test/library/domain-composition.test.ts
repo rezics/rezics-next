@@ -7,12 +7,18 @@ import {
 } from '../../src/composition/library.ts';
 import { createLibraryApplications } from '../../src/library/application/index.ts';
 import type { LibraryCapabilities } from '../../src/library/contract/capabilities.ts';
+import { nativeSourceIdentity } from '../../src/library/canonical-source-store.ts';
+import type { NativeCollectionMetadata } from '../../src/library/collection-source-native.ts';
 import {
   emptyProgressOperationCatalog,
   EMPTY_COLLECTION_AUTHORIZATION_PREPARATION,
 } from '../../src/library/contract/index.ts';
 import type { LibraryActor } from '../../src/library/contract/actors.ts';
-import { preparedSource, type CollectionSourceObservation } from '../../src/library/contract/source.ts';
+import {
+  preparedSource,
+  type CollectionSourceObservation,
+  type NativeSourceIdentity,
+} from '../../src/library/contract/source.ts';
 import {
   CollectionWorkLedger,
   accountDimensions,
@@ -35,6 +41,8 @@ const accountId = '00000000-0000-7000-8000-000000000001';
 const collectionId = '00000000-0000-7000-8000-000000000002';
 const subjectId = '00000000-0000-7000-8000-000000000003';
 const publicationId = '00000000-0000-7000-8000-000000000004';
+const activeOutputGeneration = '00000000-0000-7000-8000-000000000006';
+const frozenOutputGeneration = '00000000-0000-7000-8000-000000000007';
 
 const actor: LibraryActor = {
   kind: 'account',
@@ -46,13 +54,73 @@ const actor: LibraryActor = {
 };
 
 function observation(authority: CollectionSourceObservation['authority']): CollectionSourceObservation {
+  const stamp = { partition: 1, epoch: 1, position: 1n } as const;
+  const incarnation = `${collectionId}:2026-11-08T00:00:00.000Z`;
+  const sourceGeneration = '1';
+  const sourceIdentity: NativeSourceIdentity =
+    authority.kind === 'curated' || authority.kind === 'private_builtin'
+      ? nativeSourceIdentity({
+          route: 1,
+          collectionId,
+          curatorAccountId: authority.kind === 'private_builtin' ? authority.curatorAccountId : accountId,
+          state: 'active',
+          visibility: 'private',
+          membershipKind: authority.kind === 'curated' ? 'curated' : 'dynamic',
+          revision: 1,
+          createdAt: '2026-11-08T00:00:00.000Z',
+          sourceGeneration,
+          builtinKind: null,
+          releaseDigest: null,
+          profileId: null,
+          stateSetId: null,
+          stateId: null,
+          ...(authority.kind === 'private_builtin' ? { ruleRevision: '1', ruleSource: 'owner', ruleReady: true } : {}),
+          incarnation,
+          stamp,
+          factFence: authority.kind === 'private_builtin' ? 'owner-fence-generation' : null,
+          authority: authority.kind,
+          outputGeneration: null,
+          outputPublication: null,
+        } satisfies NativeCollectionMetadata)
+      : authority.kind === 'activated_output'
+        ? {
+            route: 1,
+            collectionId,
+            accountId,
+            incarnation,
+            generation: sourceGeneration,
+            scope: 'active_explicit_output',
+            ownerEpoch: stamp.epoch,
+            receivingEpoch: String(stamp.epoch),
+            effectKey: publicationId,
+            outputGeneration: authority.generation,
+            publicationTransactionId: publicationId,
+            publicationPosition: '1',
+          }
+        : {
+            scope: 'public_output',
+            route: 1,
+            collectionId,
+            incarnation,
+            generation: sourceGeneration,
+            ownerEpoch: stamp.epoch,
+            receivingEpoch: '1',
+            effectKey: 'a'.repeat(64),
+            outputGeneration: authority.generation,
+            activation: {
+              transactionId: publicationId,
+              position: '1',
+              sourceGeneration,
+            },
+          };
   return {
     collectionId,
     route: 1,
-    incarnation: 'incarnation',
+    sourceIdentity,
+    incarnation,
     revision: 1,
     authority,
-    stamp: { partition: 1, epoch: 1, position: 1n },
+    stamp,
     basis: { digest: 'digest', identity: { digest: 'identity' }, query: null, profilePins: [], projection: null },
   };
 }
@@ -210,6 +278,49 @@ const locator = {
   publicationId,
 };
 
+test('native Source observations preserve the identity for each authority variant', () => {
+  const variants = [
+    observation({ kind: 'curated' }),
+    observation({ kind: 'private_builtin', curatorAccountId: accountId }),
+    observation({ kind: 'activated_output', generation: activeOutputGeneration }),
+    observation({ kind: 'frozen_output', generation: frozenOutputGeneration }),
+  ];
+  expect(variants.map(({ authority, sourceIdentity }) => [authority.kind, sourceIdentity.scope])).toEqual([
+    ['curated', 'curated'],
+    ['private_builtin', 'private_builtin'],
+    ['activated_output', 'active_explicit_output'],
+    ['frozen_output', 'public_output'],
+  ]);
+  expect(new Set(variants.map(({ sourceIdentity }) => JSON.stringify(sourceIdentity))).size).toBe(4);
+  expect(variants[2]!.sourceIdentity).toMatchObject({
+    route: 1,
+    collectionId,
+    accountId,
+    incarnation: `${collectionId}:2026-11-08T00:00:00.000Z`,
+    generation: '1',
+    ownerEpoch: 1,
+    receivingEpoch: '1',
+    outputGeneration: activeOutputGeneration,
+    publicationTransactionId: publicationId,
+    publicationPosition: '1',
+  });
+  expect(variants[3]!.sourceIdentity).toMatchObject({
+    scope: 'public_output',
+    route: 1,
+    collectionId,
+    incarnation: `${collectionId}:2026-11-08T00:00:00.000Z`,
+    generation: '1',
+    ownerEpoch: 1,
+    receivingEpoch: '1',
+    outputGeneration: frozenOutputGeneration,
+    activation: {
+      transactionId: publicationId,
+      position: '1',
+      sourceGeneration: '1',
+    },
+  });
+});
+
 test('Library applications run with fake capabilities through Source, members, publication and Entry/progress', async () => {
   const base = fakeCapabilities();
   const entryDeadline = Date.now() + 1_000;
@@ -245,7 +356,7 @@ test('Library applications run with fake capabilities through Source, members, p
   expect(captured.source[preparedSource]).toBe(true);
 
   const publicDomain = createLibraryApplications(
-    fakeCapabilities({ sourceAuthority: { kind: 'activated_output', generation: 'gen' } }),
+    fakeCapabilities({ sourceAuthority: { kind: 'activated_output', generation: activeOutputGeneration } }),
   );
   const activated = await publicDomain.sourceCapture.capture({
     actor,
@@ -279,8 +390,13 @@ test('Library applications run with fake capabilities through Source, members, p
     collectionId,
     deadline: Date.now() + 1_000,
     occurrences,
+    observation: captured.source.observation,
   });
+  expect(members.status).toBe('prepared');
+  if (members.status !== 'prepared') throw new Error('Observed Members preparation did not return a page.');
   expect(members.page.occurrences).toEqual(occurrences);
+  expect(members.page.observation).toBe(captured.source.observation);
+  expect(members.page.observation.sourceIdentity).toBe(captured.source.observation.sourceIdentity);
   expect(members.admission.complete).toBe(true);
   expect(members.admission.terms.map((term) => term.name)).toEqual([
     'source-prepare',
@@ -303,10 +419,12 @@ test('Library applications run with fake capabilities through Source, members, p
     actor,
     collectionId,
     deadline: Date.now() + 1_000,
-    occurrences,
+    occurrences: [],
     filter: { owner: true },
     ownerFence: accountId,
   });
+  expect(fenced.status).toBe('unprepared');
+  expect('page' in fenced).toBe(false);
   expect(fenced.ownerFence).toBe(accountId);
   expect(fenced.admission.terms.some((term) => term.name === 'owner-fence')).toBe(true);
 
@@ -321,7 +439,7 @@ test('Library applications run with fake capabilities through Source, members, p
   const publicOut = publicDomain.publicationAdmission.admit({
     locator,
     privateWorking: false,
-    observation: observation({ kind: 'activated_output', generation: 'gen' }),
+    observation: observation({ kind: 'activated_output', generation: activeOutputGeneration }),
     episodePresent: true,
   });
   expect(publicOut).toMatchObject({
@@ -334,7 +452,7 @@ test('Library applications run with fake capabilities through Source, members, p
   const mixed = domain.publicationAdmission.admit({
     locator,
     privateWorking: true,
-    observation: observation({ kind: 'activated_output', generation: 'gen' }),
+    observation: observation({ kind: 'activated_output', generation: activeOutputGeneration }),
     episodePresent: true,
   });
   expect(mixed).toMatchObject({ admitted: false, phase: 'unavailable' });
@@ -600,7 +718,7 @@ test('contract, core and application load without Access, Search, Semantic or Co
   const core = await import('../../src/library/core/index.ts');
   const application = await import('../../src/library/application/index.ts');
   expect(typeof contract.preparedSource).toBe('symbol');
-  expect(core.classifySourceOutput(observation({ kind: 'activated_output', generation: 'gen' }))).toBe(
+  expect(core.classifySourceOutput(observation({ kind: 'activated_output', generation: activeOutputGeneration }))).toBe(
     'activated_public',
   );
   const domain = application.createLibraryApplications(fakeCapabilities());
@@ -620,6 +738,15 @@ test('ordinary composeLibraryDomain installs native identity, authorization and 
   try {
     const domain = composeLibraryDomain();
     expect(peekLibraryDomain()).toBe(domain);
+    await expect(
+      domain.sourceCapture.capture({
+        actor,
+        collectionId,
+        deadline: Date.now() + 1_000,
+        at: { epoch: 1 },
+        allowance: workAllowance(8, 'missing-native-source'),
+      }),
+    ).rejects.toMatchObject({ code: 'dependency_unavailable' });
     const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(7)]]) };
     const nativeFailure = new Error('native Semantic checkout reached');
     const pool = {
@@ -675,7 +802,7 @@ test('ordinary composeLibraryDomain installs native identity, authorization and 
     ).toEqual({ admitted: true, reason: 'private_working' });
     expect(
       domain.contentPublication.admitActivatedOutput({
-        observation: observation({ kind: 'activated_output', generation: 'gen' }),
+        observation: observation({ kind: 'activated_output', generation: activeOutputGeneration }),
         privateWorking: true,
       }),
     ).toEqual({ admitted: false, reason: 'unavailable' });

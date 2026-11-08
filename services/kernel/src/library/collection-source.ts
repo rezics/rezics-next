@@ -623,7 +623,7 @@ function createCollectionSourceRuntime(
         const actor = 'actor' in input ? input.actor : undefined;
         const domain = peekLibraryDomain();
         if (domain && actor) {
-          await domain.memberPreparation.prepare({
+          const prepared = await domain.memberPreparation.prepare({
             actor: libraryActorOf(actor),
             collectionId: saved.metadata.collectionId,
             deadline: input.deadline,
@@ -635,6 +635,7 @@ function createCollectionSourceRuntime(
             })),
             observation: current?.observation ?? observation(saved.metadata, saved.basis),
           });
+          if (prepared.status !== 'prepared') throw new ProblemError('dependency_unavailable');
         }
         return {
           kind: 'raw_curated_ordinal_prefix',

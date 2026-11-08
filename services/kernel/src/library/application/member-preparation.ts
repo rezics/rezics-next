@@ -65,19 +65,14 @@ export function createMemberPreparationApplication(capabilities: {
           ? [admissionTerm('owner-fence', { nativeRows: 1, nativePoints: 1, statements: 1, emptySeeks: 1 })]
           : []),
       ]);
+      const ownerFence = input.ownerFence ?? null;
+      if (!input.observation) return { status: 'unprepared', admission, ownerFence };
       return {
+        status: 'prepared',
         page: {
           occurrences,
           exhausted: true,
-          observation: input.observation ?? {
-            collectionId: input.collectionId,
-            route: 0,
-            incarnation: '',
-            revision: 0,
-            authority: { kind: 'curated' },
-            stamp: { partition: 0, epoch: 0, position: 0n },
-            basis: { digest: '', identity: { digest: '' }, query: null, profilePins: [], projection: null },
-          },
+          observation: input.observation,
           work: {
             reservationId: 'member-preparation',
             used: {
@@ -93,7 +88,7 @@ export function createMemberPreparationApplication(capabilities: {
           },
         },
         admission,
-        ownerFence: input.ownerFence ?? null,
+        ownerFence,
       };
     },
   };
