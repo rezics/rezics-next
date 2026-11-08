@@ -41,6 +41,50 @@ export type SshControlHost = {
   readonly identity: string;
 };
 
+export const SSH_DIAGNOSTIC_TAIL_BYTES = 4096;
+
+/** Retain host aliases and SSH error text, never configured addresses, key paths or home-directory paths. */
+export function scrubSshDiagnostic(host: SshControlHost, text: string): string {
+  for (const secret of [host.address, host.address.split('@').at(-1)!, host.identity]
+    .filter((secret) => Boolean(secret) && secret !== host.name)
+    .sort((a, b) => b.length - a.length))
+    text = text.replaceAll(secret, '[private]');
+  return text
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[address]')
+    .replace(/(?<![a-z0-9])(?:[a-f0-9]{0,4}:){2,}[a-f0-9:.%]+/gi, '[address]')
+    .replace(/\/(?:home|Users|root)\/[^\s'"<>]+/g, '[private-path]')
+    .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '?');
+}
+
+/** Drain immediately and concurrently with stdout; only a bounded byte tail survives pipe backpressure. */
+export function collectSshStderr(host: SshControlHost, stream: ReadableStream<Uint8Array>) {
+  let tail = Buffer.alloc(0);
+  let bytes = 0;
+  const snapshot = () => ({
+    stderrBytes: bytes,
+    stderrTruncated: bytes > SSH_DIAGNOSTIC_TAIL_BYTES,
+    stderrTail: scrubSshDiagnostic(host, tail.toString('utf8')),
+  });
+  const drained = (async () => {
+    const reader = stream.getReader();
+    try {
+      for (;;) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        bytes += chunk.value.byteLength;
+        tail = Buffer.from(Buffer.concat([tail, Buffer.from(chunk.value)]).subarray(-SSH_DIAGNOSTIC_TAIL_BYTES));
+      }
+    } catch (error) {
+      tail = Buffer.from(scrubSshDiagnostic(host, `stderr read unavailable: ${String(error)}`)).subarray(
+        -SSH_DIAGNOSTIC_TAIL_BYTES,
+      );
+    } finally {
+      reader.releaseLock();
+    }
+  })();
+  return { snapshot, drained };
+}
+
 const HOST_NAME = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,63}$/;
 
 function quote(word: string): string {
