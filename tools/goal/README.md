@@ -70,11 +70,11 @@ Revocation prevents new urgent dispatches; existing tasks retain their lane acro
 Decision: backlog sweeps authenticate urgent dispatch as the confirmed Goal-directory owner; missing grants return
 the brief.
 
-`policy.capacity.urgentSlots` defaults to 2 and can also be overridden by `capacity.json`. These slots are outside
-`maxWorkers`; ordinary tasks never consume them. Urgent work still waits for `minAvailableMiB` of memory and for a
-reserved slot if all are occupied, independently of the ordinary queue. The reserved slot stays occupied while an
-urgent attempt runs or waits for a check, and frees when that attempt ends. Urgent admission enforces its slot and
-memory limits even without `capacity.json`; ordinary admission retains the existing opt-in behaviour.
+`policy.capacity.urgentSlots` defaults to 2 and can also be overridden by `capacity.json`. It is an urgent
+sublimit inside the shared `maxWorkers` cap. Both lanes and admitted-but-not-started tickets consume that cap;
+ordinary tasks never consume the urgent sublimit. Urgent work still waits for `minAvailableMiB` of memory.
+Only running sessions and pending launch reservations occupy slots; attempts parked for checks release them.
+Urgent admission enforces its limits even without `capacity.json`; ordinary admission retains its opt-in behaviour.
 `status`, `report`, `report --flow` and the hourly report mark urgent work and count its outcomes separately from
 ordinary throughput. Resource usage totals still include urgent work.
 
@@ -1247,10 +1247,13 @@ Decision: Daily audits use a half-open previous-UTC-day window for counts and co
 Decision: host-capacity tickets, waiters, memory/cap policy and `releaseWhenStarted` live in `launch-capacity.ts`.
 `launch.ts` re-exports that public admission entry. `WorkerTasks` and `WorkerJob` consume the capacity module; process
 identity, width snapshots and launch evidence stay with their current owners.
-Decision: existing capacity-wait, admission-reservation, urgent-dispatch and worker-prompt assertions stay;
-`launch-capacity.test.ts` pins public re-export identity, concurrent cap, queued progress after release, admitted-pending
-handoff and cancellation ticket cleanup at the original `launch.ts` entry.
-
+The existing admission lease also serializes both lanes' working-set reservations and pressure brake. A finite
+operator worker slice enables aggregate memory admission: product code starts reserve 2 GiB initially, control-plane
+and unknown starts 4 GiB. Existing worker scopes reserve at least 4 GiB or their measured peak, whichever is larger;
+support services' current memory and admitted reservations are included. The 12 GiB per-worker hard limit remains a
+burst safety ceiling, not an expected working set. Support growth can still compete within the hard aggregate.
+Linux memory-full PSI at 1% or I/O-full at 10% pauses new starts. Recovery requires 30 seconds continuously below
+0.2% and 2% respectively, sampled in the existing admission loop without another watcher or model turn.
 Decision: Host admission and width observations share the indexed, trigger-maintained `worker_current_attempts`
 projection; admission counts only each task's current attempt, while width retains its process-identity classification.
 

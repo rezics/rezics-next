@@ -3,8 +3,8 @@
 These reviewed drop-ins target the 62.6 GiB coordinator. They are not installed automatically on other hosts.
 The user and system managers have separate hierarchies: their similarly named `rezics.slice` units are not a
 common parent. The user worker branch gets 28 GiB and the system check branch gets 16 GiB, totaling 44 GiB.
-About 18.6 GiB remains for the OS, desktop, remote access and Goal control plane, rather than an assertion of
-strict hardware isolation. Goal Home and the existing Goal host remain in `app.slice` and are not restarted.
+About 18.6 GiB remains for the OS, desktop, remote access rather than an assertion of strict hardware isolation. Goal host and verifier must share the worker
+branch after a controlled, checkpointed restart; until then the coverage is partial.
 
 Install mappings after checking current usage and reviewing the code guard:
 
@@ -22,9 +22,9 @@ or above the proposed cap, or if swap is in use before setting its allowance to 
 destination file before copying. Run each manager's `daemon-reload`, then apply only these slice properties:
 
 ```sh
-systemctl --user set-property --runtime rezics-workers.slice MemoryHigh=24G MemoryMax=28G MemorySwapMax=0
+systemctl --user set-property rezics-workers.slice MemoryHigh=24G MemoryMax=28G MemorySwapMax=0
 # Run this system-manager command through the established authorized root channel.
-systemctl set-property --runtime rezics-check.slice MemoryHigh=12G MemoryMax=16G MemorySwapMax=0
+systemctl set-property rezics-check.slice MemoryHigh=12G MemoryMax=16G MemorySwapMax=0
 ```
 
 Maintenance receives its worker-slice membership on its next start with high 1 GiB/max 2 GiB; regeneration
@@ -35,10 +35,10 @@ its next safe start, without restarting any running check. Until then, allow tha
 outside the 44 GiB sum. No critical OS, display or network service is changed or restarted. No OOM killer is enabled.
 The worker launcher reads existing high/hard limits and preserves the operator high value, clamped to the hard max.
 
-Admission and pressure handling are a following increment. Until shared-lane admission is deployed, the existing
-capacity keys can conservatively limit each lane to two starts (`maxWorkers=2`, `urgentSlots=2`), with a 18 GiB
-available-memory floor (`minAvailableMiB=18432`). Changing admission does not stop existing workers. Do not describe
-this transitional lane split as an already deployed combined reservation guarantee.
+Both lanes now share the existing `maxWorkers` cap; `urgentSlots` is a sublimit. The operator can keep a modest
+count cap and 18 GiB available-memory floor (`minAvailableMiB=18432`) without introducing new configuration keys.
+Working-set reservations and sustained PSI recovery run inside existing admission polling. They pause new starts
+without stopping current workers. Per-worker hard ceilings remain safety limits, not initial reservations.
 
 ## Observed before application
 
@@ -52,12 +52,14 @@ is still current.
 
 ## Rollback
 
-Restore the saved drop-ins (or remove only the newly installed files) and reload the corresponding manager.
-Restore the previously observed runtime properties:
+Restore the saved drop-ins and persistent or runtime `systemd/*.control` property files (or remove only newly
+installed files), then reload the corresponding manager. Persistent `set-property` was used during application:
+restoring only `60-host-budget.conf` would leave higher-precedence property files in effect. The private application
+backup lists every affected file in `files.json` and exact before-properties in `before.json`. Restore those values:
 
 ```sh
-systemctl --user set-property --runtime rezics-workers.slice MemoryHigh=16G MemoryMax=46G MemorySwapMax=infinity
-systemctl set-property --runtime rezics-check.slice MemoryHigh=infinity MemoryMax=40G MemorySwapMax=2G
+systemctl --user set-property rezics-workers.slice MemoryHigh=16G MemoryMax=46G MemorySwapMax=infinity
+systemctl set-property rezics-check.slice MemoryHigh=infinity MemoryMax=40G MemorySwapMax=2G
 ```
 
 Restore previous `capacity.json` values from its operator backup. Removing service drop-ins restores their prior

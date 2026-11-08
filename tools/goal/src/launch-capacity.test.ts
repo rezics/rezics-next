@@ -134,3 +134,45 @@ test('a cancelled wait and an opt-out leave no owned tickets', async () => {
     directory.close();
   }
 });
+
+test('urgent and ordinary reservations share one count and working-set budget', async () => {
+  const directory = temporaryDirectory();
+  const store = { capacityAttemptsCount: () => 0, attempts: () => [], taskGoal: () => 'library' };
+  const releases: (() => void)[] = [];
+  const options = {
+    pollIntervalMs: 5,
+    availableMiB: () => Infinity,
+    pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+    workerHeadroomMiB: () => 4096,
+  };
+  try {
+    writeFileSync(
+      join(directory.path, 'capacity.json'),
+      JSON.stringify({ maxWorkers: 2, urgentSlots: 2, minAvailableMiB: 0 }),
+    );
+    releases.push(await awaitHostCapacity(store, directory.path, false, 'ordinary', 1, options));
+    releases.push(await awaitHostCapacity(store, directory.path, false, 'urgent', 1, { ...options, urgent: true }));
+    let admitted = false;
+    const third = awaitHostCapacity(store, directory.path, false, 'third', 1, { ...options, urgent: true }).then(
+      (release) => {
+        admitted = true;
+        return release;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(admitted).toBe(false);
+    // Raising the count alone cannot bypass reservations held in either lane.
+    writeFileSync(
+      join(directory.path, 'capacity.json'),
+      JSON.stringify({ maxWorkers: 3, urgentSlots: 3, minAvailableMiB: 0 }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(admitted).toBe(false);
+    releases[0]!();
+    releases.push(await third);
+    expect(admitted).toBe(true);
+  } finally {
+    releases.forEach((release) => release());
+    directory.close();
+  }
+});

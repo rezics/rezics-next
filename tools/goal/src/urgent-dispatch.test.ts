@@ -79,7 +79,7 @@ test('urgent flag and front matter require a live supermanager session or its re
   }
 });
 
-test('reserved slots bypass ordinary starts, honour memory, free slots of waiting tasks and release on exit', async () => {
+test('urgent sublimit shares the host cap, honours memory and frees parked sessions', async () => {
   const directory = temporaryDirectory(),
     db = openDb(':memory:'),
     store = new WorkerStore(db);
@@ -88,7 +88,7 @@ test('reserved slots bypass ordinary starts, honour memory, free slots of waitin
     const policy = { ...defaultPolicy.capacity, minAvailableMiB: 100, pollIntervalMs: 5 };
     expect(policy.urgentSlots).toBe(2);
     const capacity = join(directory.path, 'capacity.json');
-    writeFileSync(capacity, JSON.stringify({ maxWorkers: 1, minAvailableMiB: 100 }));
+    writeFileSync(capacity, JSON.stringify({ maxWorkers: 3, minAvailableMiB: 100 }));
     for (const [index, id] of ['ordinary', 'one', 'two'].entries()) {
       db.query('INSERT INTO worker_tasks VALUES (?,?,?,?)').run(
         id,
@@ -105,17 +105,13 @@ test('reserved slots bypass ordinary starts, honour memory, free slots of waitin
     let memory = 0,
       admitted = false;
     const options = { urgent: true, policy, availableMiB: () => memory };
-    const ordinary = awaitHostCapacity(store, directory.path, false, 'queued', 1, {
-      policy,
-      availableMiB: () => memory,
-    });
     const first = awaitHostCapacity(store, directory.path, false, 'one', 1, options).then((release) => {
       admitted = true;
       return release;
     });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(admitted).toBe(false);
-    expect(capacityWaiters(directory.path)).toEqual(new Set(['queued', 'one']));
+    expect(capacityWaiters(directory.path)).toEqual(new Set(['one']));
     memory = 100;
     releases.push(await first);
     releases.push(await awaitHostCapacity(store, directory.path, false, 'two', 1, options));
@@ -130,10 +126,15 @@ test('reserved slots bypass ordinary starts, honour memory, free slots of waitin
     expect(store.capacityAttemptsCount(true)).toBe(0);
     releases.push(await third);
     expect(thirdStarted).toBe(true);
+    const ordinary = awaitHostCapacity(store, directory.path, false, 'queued', 1, {
+      policy,
+      availableMiB: () => memory,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
     db.query("UPDATE worker_attempts SET body=? WHERE task_id='one'").run(JSON.stringify({ state: 'exited' }));
     expect(capacityWaiters(directory.path).has('queued')).toBe(true);
     db.query("UPDATE worker_attempts SET body=? WHERE task_id='ordinary'").run(JSON.stringify({ state: 'exited' }));
-    releases.push(await ordinary); // Urgent reservations never use the ordinary slot.
+    releases.push(await ordinary); // Urgent reservations also consume the combined host cap.
     releases.forEach((release) => release());
     expect(capacityAvailable(store, directory.path)).toBe(true);
     // Even hosts without the ordinary opt-in file enforce the urgent lane's defaults.
