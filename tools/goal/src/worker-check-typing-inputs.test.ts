@@ -455,3 +455,170 @@ test('legacy pipeline generation is missing proof, while unknown compilers and r
   expect(customReceipt.sourceStable).toBe(false);
   expect(qualifyTypingInputs(root, customReceipt)).toBe('source-changed');
 });
+
+function standardFixture() {
+  const root = fixture();
+  for (const workspace of ['services/kernel', 'services/auth', 'apps/web']) {
+    write(
+      root,
+      `${workspace}/package.json`,
+      JSON.stringify({
+        scripts: { typecheck: 'bun scripts/typecheck.ts' },
+        dependencies: { fixture: '1' },
+      }),
+    );
+    write(root, `${workspace}/node_modules/fixture/package.json`, '{"version":"1"}');
+    write(
+      root,
+      `${workspace}/tsconfig.json`,
+      `{
+      // The installed compiler expands this real mapper-bearing owner config without executing the mapper.
+      "extends":"../../tsconfig.base.json", "contentMappers":[{"package":"reylo","extensions":[".sql"]}],
+      "compilerOptions":{"resolveJsonModule":true}, "include":["src","scripts"]
+    }`,
+    );
+    write(root, `${workspace}/src/index.ts`, 'export const ready = true;');
+    write(root, `${workspace}/src/query.sql`, 'SELECT 1;');
+    write(root, `${workspace}/scripts/typecheck.ts`, 'export const compiler = true;');
+  }
+  write(root, 'tools/unrelated.ts', 'const glob = "**/*.md";');
+  for (const file of [
+    '.temp/continuation/owner.md',
+    '.temp/search-walk/persona.log',
+    '.temp/search-walk/census.json',
+  ]) {
+    write(root, file, file.endsWith('.json') ? '{"phase":"remote"}' : 'remote operational artifact');
+    execFileSync('git', ['add', '-f', file], { cwd: root });
+  }
+  return root;
+}
+
+test.each(['services/kernel', 'services/auth', 'apps/web', 'chain'])(
+  'standard %s typing ignores only unconsumed operational state and retains real inputs',
+  (workspace) => {
+    const root = standardFixture();
+    const command =
+      workspace === 'chain'
+        ? [
+            'sh',
+            '-c',
+            'bun run --cwd services/kernel typecheck && bun run --cwd services/auth typecheck && bun run --cwd apps/web typecheck',
+          ]
+        : ['bun', 'run', '--cwd', workspace, 'typecheck'];
+    for (const file of ['.preparation-started', '.remote-check-supervisor', 'preparation-install.json'])
+      write(root, file, 'remote identity');
+    const complete = beginTypingInputReceipt(
+      root,
+      {
+        ...environment,
+        REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(command)).toString('base64'),
+      },
+      command,
+    )!;
+    for (const file of ['.preparation-started', '.remote-check-supervisor', 'preparation-install.json'])
+      rmSync(join(root, file));
+    rmSync(join(root, '.temp/search-walk/persona.log'));
+    write(root, '.temp/search-walk/census.json', '{"phase":"controller"}');
+    write(root, '.temp/continuation/owner.md', 'controller operational artifact');
+    write(root, 'docs/ledger.md', 'unrelated decision');
+    complete(0);
+    const receipt = readTypingInputReceipt(root, physical, command)!;
+    expect(receipt.completed.profile).toBe('configured-typescript');
+    expect(receipt.sourceStable).toBe(true);
+    expect(typingInputsMatch(root, receipt)).toBe(true);
+    const owner = workspace === 'chain' ? 'services/kernel' : workspace;
+    for (const file of [
+      `${owner}/src/index.ts`,
+      `${owner}/src/query.sql`,
+      `${owner}/tsconfig.json`,
+      'bun.lock',
+      `${owner}/node_modules/fixture/package.json`,
+    ]) {
+      const prior = readFileSync(join(root, file), 'utf8');
+      write(root, file, prior + '\n ');
+      expect(typingInputsMatch(root, receipt), file).toBe(false);
+      write(root, file, prior);
+    }
+    expect(
+      qualifyTypingInputs(root, {
+        ...receipt,
+        completed: { ...receipt.completed, runtime: 'another compiler runtime' },
+      }),
+    ).toBe('evidence-unavailable');
+  },
+);
+
+test('standard owner graph retains imported operational fixtures and static generator assets', () => {
+  const root = standardFixture();
+  const command = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'];
+  write(
+    root,
+    'services/kernel/tsconfig.json',
+    JSON.stringify({
+      extends: '../../tsconfig.base.json',
+      compilerOptions: { resolveJsonModule: true, paths: { '@fixture/*': ['../../.temp/search-walk/*'] } },
+      include: ['src', 'scripts'],
+    }),
+  );
+  write(root, '.temp/search-walk/alias.json', '{"compiled":true}');
+  execFileSync('git', ['add', '-f', '.temp/search-walk/alias.json'], { cwd: root });
+  write(root, 'services/kernel/src/alias.ts', 'import state from "@fixture/alias.json"; export default state;');
+  write(
+    root,
+    'services/kernel/src/index.ts',
+    'import state from "../../../.temp/search-walk/census.json"; export default state;',
+  );
+  write(
+    root,
+    'services/kernel/scripts/typecheck.ts',
+    'import {readFileSync} from "node:fs"; readFileSync(".temp/search-walk/persona.log");',
+  );
+  const complete = beginTypingInputReceipt(
+    root,
+    { ...environment, REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(command)).toString('base64') },
+    command,
+  )!;
+  complete(0);
+  const receipt = readTypingInputReceipt(root, physical, command)!;
+  expect(receipt.completed.source.map((entry) => entry.path)).toEqual(
+    expect.arrayContaining(['.temp/search-walk/census.json', '.temp/search-walk/persona.log']),
+  );
+  for (const file of [
+    '.temp/search-walk/census.json',
+    '.temp/search-walk/persona.log',
+    '.temp/search-walk/alias.json',
+  ]) {
+    const before = readFileSync(join(root, file), 'utf8');
+    write(root, file, before + ' ');
+    expect(typingInputsMatch(root, receipt)).toBe(false);
+    write(root, file, before);
+  }
+});
+
+test('custom shells, undeclared generators and custom mappers retain conservative operational inputs', () => {
+  const root = standardFixture();
+  const standard = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'];
+  for (const command of [
+    ['sh', '-c', 'bun run --cwd services/kernel typecheck; bun run --cwd apps/web typecheck'],
+    ['sh', '-c', 'bun custom-generator.ts && bun run --cwd services/kernel typecheck'],
+    ['sh', '-c', 'bun scripts/typecheck.ts ; bun custom-generator.ts'],
+    [...standard, '--emit-client'],
+  ]) {
+    const inputs = captureTypingInputs(root, command);
+    expect(inputs.profile).toBe('conservative');
+    expect(inputs.source.some((entry) => entry.path === '.temp/search-walk/persona.log')).toBe(true);
+  }
+  write(root, 'services/kernel/package.json', '{"scripts":{"typecheck":"bun custom-generator.ts"}}');
+  expect(captureTypingInputs(root, standard).profile).toBe('conservative');
+  write(
+    root,
+    'services/kernel/package.json',
+    '{"scripts":{"typecheck":"bun scripts/typecheck.ts","generate":"bun undeclared-generator.ts"}}',
+  );
+  expect(captureTypingInputs(root, standard).profile).toBe('conservative');
+  write(root, 'services/kernel/package.json', '{"scripts":{"typecheck":"bun scripts/typecheck.ts"}}');
+  write(root, 'tsconfig.base.json', '{"contentMappers":[{"package":"custom","extensions":[".md"]}]}');
+  const unknownMapper = captureTypingInputs(root, standard);
+  expect(unknownMapper.profile).toBe('conservative');
+  expect(unknownMapper.source.some((entry) => entry.path === '.temp/search-walk/persona.log')).toBe(true);
+});

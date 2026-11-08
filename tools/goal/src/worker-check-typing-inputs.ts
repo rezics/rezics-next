@@ -99,46 +99,139 @@ export function kernelClientTypingPipeline(root: string, argv: readonly string[]
   }
 }
 
-/** Only these documented owning compiler commands permit a configured graph. A custom command keeps every file. */
-function knownCompiler(root: string, argv: readonly string[], files: readonly string[]): boolean {
-  if (!(argv[0] === 'bun' && argv[1] === 'scripts/typecheck.ts') && !kernelClientTypingPipeline(root, argv)) return false;
-  const known = new Set([
-    'bun check --no-script -p tsconfig.json',
-    'bun scripts/typecheck.ts',
-    'bun scripts/typecheck.ts --root',
-    'bun run generate && bun run generate:routes && bun check --no-script -p tsconfig.json',
-  ]);
-  for (const file of files.filter((file) => /^(apps|services|packages)\/[^/]+\/package.json$/.test(file))) {
-    const manifest = JSON.parse(readFileSync(join(root, file), 'utf8')) as { scripts?: Record<string, string> };
-    for (const name of ['typecheck', 'typecheck:root'])
-      if (manifest.scripts?.[name] && !known.has(manifest.scripts[name]!)) return false;
-    for (const name of ['generate', 'generate:routes']) {
-      const script = manifest.scripts?.[name];
-      if (
-        script &&
-        ![
-          'bun scripts/generate.ts',
-          'node .storybook/generate-routes.ts',
-          'vite build --config vite.config.ts --mode development --emptyOutDir false',
-        ].includes(script)
-      )
-        return false;
+const COMPILER_SCRIPTS = new Set([
+  'bun check --no-script -p tsconfig.json',
+  'bun scripts/typecheck.ts',
+  'bun scripts/typecheck.ts --root',
+  'bun run generate && bun run generate:routes && bun check --no-script -p tsconfig.json',
+]);
+const GENERATOR_SCRIPTS = new Set([
+  'bun scripts/generate.ts',
+  'node .storybook/generate-routes.ts',
+  'vite build --config vite.config.ts --mode development --emptyOutDir false',
+]);
+type CompilerGraph = { workspaces: Set<string>; executables: Set<string> };
+
+/** Recognize only the owning manifest scripts and fail-fast sequences of their standard argv. */
+function compilerGraph(root: string, argv: readonly string[], files: readonly string[]): CompilerGraph | undefined {
+  const manifests = new Map(
+    files
+      .filter((file) => /^(apps|services|packages)\/[^/]+\/package.json$/.test(file))
+      .map((file) => [
+        dirname(file),
+        JSON.parse(readFileSync(join(root, file), 'utf8')) as {
+          name?: string;
+          scripts?: Record<string, string>;
+          dependencies?: Record<string, string>;
+          devDependencies?: Record<string, string>;
+        },
+      ]),
+  );
+  const selected = new Set<string>();
+  let all = false;
+  if (kernelClientTypingPipeline(root, argv)) {
+    selected.add('services/kernel');
+    selected.add('packages/client');
+  } else {
+    const shell = argv.length === 3 && ['sh', 'bash'].includes(argv[0]!) && argv[1] === '-c';
+    const commands = shell
+      ? argv[2]!
+          .trim()
+          .split(/\s*&&\s*/)
+          .map((step) => step.trim().split(/\s+/))
+      : [argv];
+    for (const command of commands) {
+      if (command[0] === 'bun' && command[1] === 'scripts/typecheck.ts' && (!shell || command.length === 2)) {
+        // The root owner validates its own selection/config arguments before compilation.
+        all = true;
+      } else if (
+        command.length === 5 &&
+        command[0] === 'bun' &&
+        command[1] === 'run' &&
+        command[2] === '--cwd' &&
+        command[4] === 'typecheck' &&
+        manifests.has(command[3]!)
+      ) {
+        selected.add(command[3]!);
+      } else return undefined;
     }
   }
-  return files.some((file) => /(^|\/)tsconfig(?:\.[^/]+)?\.json$/.test(file));
+  if (all) for (const workspace of manifests.keys()) selected.add(workspace);
+  for (const workspace of selected) {
+    const scripts = manifests.get(workspace)?.scripts;
+    if (!scripts?.typecheck && !all) return undefined;
+    if (scripts?.typecheck && !COMPILER_SCRIPTS.has(scripts.typecheck)) return undefined;
+    if (scripts?.['typecheck:root'] && !COMPILER_SCRIPTS.has(scripts['typecheck:root'])) return undefined;
+    for (const name of ['generate', 'generate:routes'])
+      if (scripts?.[name] && !GENERATOR_SCRIPTS.has(scripts[name]!)) return undefined;
+  }
+  const workspaces = new Set(selected);
+  const byName = new Map(
+    [...manifests].filter(([, manifest]) => manifest.name).map(([workspace, manifest]) => [manifest.name!, workspace]),
+  );
+  for (const workspace of workspaces) {
+    const manifest = manifests.get(workspace);
+    for (const name of Object.keys({ ...manifest?.dependencies, ...manifest?.devDependencies })) {
+      const dependency = byName.get(name);
+      if (dependency) workspaces.add(dependency);
+    }
+  }
+  const executables = new Set<string>();
+  if (all) executables.add('scripts/typecheck.ts');
+  for (const workspace of selected) {
+    for (const name of ['typecheck', 'typecheck:root', 'generate', 'generate:routes']) {
+      const script = manifests.get(workspace)?.scripts?.[name];
+      for (const match of script?.matchAll(/(?:^|&&)\s*(?:bun|node)\s+([^\s]+\.[cm]?[jt]s)/g) ?? [])
+        executables.add(`${workspace}/${match[1]}`);
+    }
+  }
+  return { workspaces, executables };
 }
 
 /** Config parsing uses TypeScript's own include/extends semantics, including ignored generated root files. */
-function configuredInputs(root: string, files: readonly string[]): { paths: Set<string>; documents: Set<string> } {
+function configuredInputs(
+  root: string,
+  files: readonly string[],
+  graph: CompilerGraph,
+): { paths: Set<string>; documents: Set<string> } {
   const require = createRequire(join(root, 'package.json'));
   const executable = join(dirname(require.resolve('typescript/package.json')), 'bin/tsc');
+  const aliases: { pattern: string; targets: string[] }[] = [];
   const paths = new Set<string>();
   const documents = new Set<string>();
   const configs = files.filter(
-    (file) => file === 'tsconfig.json' || /^(?:apps|services|packages)\/[^/]+\/tsconfig(?:\.[^/]+)?\.json$/.test(file),
+    (file) =>
+      file === 'tsconfig.json' ||
+      (graph.workspaces.has(dirname(file)) && /^tsconfig(?:\.[^/]+)?\.json$/.test(file.split('/').at(-1)!)),
   );
   if (configs.length === 0) throw new Error('typing inputs: no owning compiler configurations');
+  const visited = new Set<string>();
+  const inspectConfig = (file: string): void => {
+    if (visited.has(file)) return;
+    visited.add(file);
+    const value = Bun.JSONC.parse(readFileSync(file, 'utf8')) as {
+      extends?: string | string[];
+      contentMappers?: { package?: string; extensions?: string[] }[];
+      compilerOptions?: { baseUrl?: string; paths?: Record<string, string[]> };
+    };
+    // The pinned compiler's --showConfig expands files but omits contentMappers. Validate their source declarations.
+    if (value.contentMappers?.some((mapper) => mapper.package !== 'reylo' || !same(mapper.extensions, ['.sql'])))
+      throw new Error('typing inputs: custom mapper');
+    const inside = localPath(root, file);
+    if (!inside) throw new Error('typing inputs: external compiler configuration');
+    paths.add(inside);
+    for (const [pattern, targets] of Object.entries(value.compilerOptions?.paths ?? {}))
+      aliases.push({
+        pattern,
+        targets: targets.map((target) => resolve(dirname(file), value.compilerOptions?.baseUrl ?? '.', target)),
+      });
+    for (const parent of typeof value.extends === 'string' ? [value.extends] : (value.extends ?? [])) {
+      const target = parent.startsWith('.') ? resolve(dirname(file), parent) : createRequire(file).resolve(parent);
+      inspectConfig(existsSync(target) ? target : `${target}.json`);
+    }
+  };
   for (const config of configs) {
+    inspectConfig(join(root, config));
     // Use the installed compiler's config expansion. Its synchronous JS API requires Node-only pipe internals;
     // --showConfig is read-only, needs no database and works under the repository's Bun runner.
     const run = spawnSync(executable, ['--showConfig', '-p', join(root, config)], {
@@ -149,10 +242,15 @@ function configuredInputs(root: string, files: readonly string[]): { paths: Set<
     if (run.status !== 0) throw new Error(`typing inputs: config unavailable: ${config}: ${run.stdout || run.stderr}`);
     const parsed = JSON.parse(run.stdout) as {
       files?: string[];
-      contentMappers?: { package?: string; extensions?: string[] }[];
+      compilerOptions?: { baseUrl?: string; paths?: Record<string, string[]> };
     };
-    if (parsed.contentMappers?.some((mapper) => mapper.package !== 'reylo' || !same(mapper.extensions, ['.sql'])))
-      throw new Error('typing inputs: custom mapper');
+    for (const [pattern, targets] of Object.entries(parsed.compilerOptions?.paths ?? {}))
+      aliases.push({
+        pattern,
+        targets: targets.map((target) =>
+          resolve(root, dirname(config), parsed.compilerOptions?.baseUrl ?? '.', target),
+        ),
+      });
     paths.add(config);
     for (const file of parsed.files ?? []) {
       const inside = localPath(root, resolve(root, dirname(config), file));
@@ -167,21 +265,41 @@ function configuredInputs(root: string, files: readonly string[]): { paths: Set<
     const name = document.split('/').at(-1)!;
     byName.set(name, [...(byName.get(name) ?? []), document]);
   }
-  // All non-document source stays in the inventory. Scan its asset references conservatively, including
-  // type-only imports, mapper literals and generator helpers; config includes also discover ignored declarations.
-  for (const file of files.filter((file) => /\.[cm]?[jt]sx?$/.test(file))) paths.add(file);
+  // Non-document files remain in source custody. Asset traversal follows the owning configured programs and
+  // executed compiler/generator modules; unrelated test fixtures and documentation-tool globs are not compiler inputs.
+  for (const executable of graph.executables) paths.add(executable);
+  const imports = new Map<string, string[]>();
   for (const file of paths) {
     if (!existsSync(join(root, file)) || !statSync(join(root, file)).isFile()) continue;
     const source = readFileSync(join(root, file), 'utf8');
-    for (const match of source.matchAll(/(?:from\s*|import\s*\(?|require\s*\(|reference\s+path=)["'](\.[^"']+)["']/g)) {
-      const target = resolve(root, dirname(file), match[1]!);
-      const resolved = [target, ...['.ts', '.tsx', '.d.ts', '/index.ts'].map((ext) => target + ext)].find(
-        (candidate) => existsSync(candidate) && statSync(candidate).isFile(),
-      );
-      const inside = resolved && localPath(root, resolved);
-      if (inside && !inside.split('/').includes('node_modules')) paths.add(inside);
+    for (const match of source.matchAll(/(?:from\s*|import\s*\(?|require\s*\(|reference\s+path=)["']([^"']+)["']/g)) {
+      const specifier = match[1]!;
+      const targets = specifier.startsWith('.') ? [resolve(root, dirname(file), specifier)] : [];
+      for (const alias of aliases) {
+        const [prefix, suffix] = alias.pattern.split('*');
+        const wildcard =
+          suffix !== undefined && specifier.startsWith(prefix!) && specifier.endsWith(suffix)
+            ? specifier.slice(prefix!.length, suffix ? -suffix.length : undefined)
+            : undefined;
+        if (alias.pattern === specifier || wildcard !== undefined)
+          targets.push(...alias.targets.map((target) => target.replace('*', wildcard ?? '')));
+      }
+      for (const target of targets) {
+        const resolved = [
+          target,
+          ...['.ts', '.tsx', '.d.ts', '/index.ts', '/index.tsx'].map((ext) => target + ext),
+          target.replace(/\.[cm]?js$/, '.ts'),
+        ].find((candidate) => existsSync(candidate) && statSync(candidate).isFile());
+        const inside = resolved && localPath(root, resolved);
+        if (inside && !inside.split('/').includes('node_modules')) {
+          paths.add(inside);
+          imports.set(file, [...(imports.get(file) ?? []), inside]);
+        }
+      }
     }
-    for (const match of source.matchAll(/['"`]([^'"`\r\n]*\.md)(?:\?[^'"`\r\n]*)?['"`]/g)) {
+    for (const match of source.matchAll(
+      /(?:from\s*|import\s*\(?|require\s*\(|reference\s+path=|import\.meta\.glob\s*\()\s*['"`]([^'"`\r\n]*\.md)(?:\?[^'"`\r\n]*)?['"`]/g,
+    )) {
       const literal = match[1]!;
       if (/[*?${}]/.test(literal)) {
         for (const document of candidates) documents.add(document);
@@ -190,19 +308,39 @@ function configuredInputs(root: string, files: readonly string[]): { paths: Set<
       }
     }
   }
+  // Known owner scripts can read static generator assets without importing them as TypeScript modules.
+  const executed = new Set(graph.executables);
+  for (const file of executed) {
+    for (const imported of imports.get(file) ?? []) executed.add(imported);
+    if (!existsSync(join(root, file)) || !statSync(join(root, file)).isFile()) continue;
+    const source = readFileSync(join(root, file), 'utf8');
+    for (const call of source.matchAll(
+      /(?:readFileSync|readFile|Bun\.file|readOutputTreeFile)\s*\(([^;\n]{0,1024})/g,
+    )) {
+      for (const match of call[1]!.matchAll(/['"`]([^'"`\r\n]+)['"`]/g)) {
+        const literal = match[1]!;
+        if (!literal.includes('.temp/') && !literal.endsWith('.md')) continue;
+        for (const target of [resolve(root, dirname(file), literal), resolve(root, literal)]) {
+          const inside = localPath(root, target);
+          if (inside && existsSync(target) && statSync(target).isFile()) paths.add(inside);
+        }
+      }
+    }
+  }
   for (const file of paths) if (file.endsWith('.md')) documents.add(file);
   return { paths, documents };
 }
 
-/** Full Git-visible unknown/custom inputs stay covered; only documents outside the configured compiler graph drop out. */
+/** Unknown/custom inputs retain full custody; known owners omit only unconsumed documents and operational artifacts. */
 export function captureTypingInputs(root: string, compilerCommand: readonly string[]): TypingInputs {
   root = resolve(root);
   const files = gitFiles(root);
   let profile: TypingInputs['profile'] = 'conservative';
   let configured = { paths: new Set<string>(), documents: new Set<string>() };
-  if (knownCompiler(root, compilerCommand, files)) {
+  const graph = compilerGraph(root, compilerCommand, files);
+  if (graph) {
     try {
-      configured = configuredInputs(root, files);
+      configured = configuredInputs(root, files, graph);
       profile = 'configured-typescript';
     } catch {
       // A fresh tree can lack generated configs before preparation. That cannot authorize an exclusion.
@@ -219,11 +357,18 @@ export function captureTypingInputs(root: string, compilerCommand: readonly stri
       !excluded.has(file) &&
       !file.startsWith(GENERATED_CLIENT) &&
       !(
-        pipeline &&
-        (['.preparation-started', '.remote-check-supervisor', '.temp/check-output-tree/kernel-client-v1.bin'].includes(
-          file,
-        ) ||
-          file.startsWith('packages/client/src/.kernel-output-tree/'))
+        profile === 'configured-typescript' &&
+        file.startsWith('.temp/') &&
+        !configured.paths.has(file) &&
+        !configured.documents.has(file)
+      ) &&
+      !(
+        (profile === 'configured-typescript' &&
+          !configured.paths.has(file) &&
+          ['.preparation-started', '.remote-check-supervisor', 'preparation-install.json'].includes(file)) ||
+        (pipeline &&
+          (file === '.temp/check-output-tree/kernel-client-v1.bin' ||
+            file.startsWith('packages/client/src/.kernel-output-tree/')))
       ),
   );
   const preparedFiles = new Set([
