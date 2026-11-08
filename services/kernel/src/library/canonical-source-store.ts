@@ -248,7 +248,7 @@ const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(valu
 /** Native identity allocation is shared by initial owner commands and the existing capture producer.
  * Allocation never certifies a capture, scoped observation, repair, exhaustion or output receipt.
  */
-function nativeSourceIdentity(metadata: NativeCollectionMetadata): NativeSourceIdentity {
+export function nativeSourceIdentity(metadata: NativeCollectionMetadata): NativeSourceIdentity {
   if (!metadata.curatorAccountId || (metadata.authority !== 'curated' && metadata.authority !== 'private_builtin'))
     throw new ProblemError('dependency_unavailable');
   return {

@@ -93,6 +93,26 @@ export function createSearchScopeOrderApplication(
   }
 
   return {
+    async prepareCollection(
+      collectionId: string,
+      allowance: WorkAllowance,
+    ): Promise<Readonly<{ collection: SearchScopeCollection; work: WorkReceipt }>> {
+      if (options.work) unready();
+      const result = await native.prepare({ ...context(), collectionId, allowance });
+      const identity = result.source.observation.sourceIdentity;
+      if (
+        identity.collectionId !== collectionId ||
+        identity.collectionId !== result.source.observation.collectionId ||
+        identity.route !== result.source.observation.route ||
+        identity.incarnation !== result.source.observation.incarnation
+      )
+        unready();
+      const order: SearchScopeOrder = { kind: 'id', source: identity };
+      return {
+        collection: { order, source: result.source, observation: result.source.observation },
+        work: result.work,
+      };
+    },
     async prepare(
       order: SearchScopeOrder,
       allowance: WorkAllowance,

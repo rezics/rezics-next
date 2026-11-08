@@ -153,6 +153,10 @@ export type ScopePrepareOptions = Readonly<{
   readOnly?: boolean;
   /** Exact released projection type, when the source requires a selected catalogue profile. */
   type?: string;
+  /** Current Library Collection to seed through the verified reader before preparing its predicate. */
+  collectionId?: string;
+  /** Turn a change to a retained native source observation into a cursor restart. */
+  restartOnNativeChange?: boolean;
 }>;
 
 const preparedScope: unique symbol = Symbol('prepared Search scope');
@@ -218,6 +222,7 @@ type ScopeState = {
   observation: IdentityScopeObservation;
   publicObservation: IdentityScopeObservation | null;
   collection: SearchScopeCollection | null;
+  restartOnNativeChange?: boolean;
   readOnly: boolean;
   ordered?: {
     definition: ScopeOrderedDefinition;
@@ -348,7 +353,10 @@ export function createSearchScopeSource({
     if (value.collection) {
       const refreshed = await order!.prepare(value.collection.order, work.remaining());
       work.native(refreshed.work);
-      if (!isDeepStrictEqual(refreshed.collection.observation, value.collection.observation)) unavailable();
+      if (!isDeepStrictEqual(refreshed.collection.observation, value.collection.observation)) {
+        if (value.restartOnNativeChange) throw new SearchOperationError('search_restart_required');
+        unavailable();
+      }
     }
     if (!value.basis.nativeOwner) {
       work.consume({ ...zeroScopeWork(), statements: 1, nativePoints: 1 });
@@ -887,6 +895,16 @@ export function createSearchScopeSource({
         options = { ...options, releaseDigest: workDefinition.releaseDigest, order: nativeOrder };
       }
       const work = new ScopeWork(options?.allowance ?? scopeAllowance(256, 'scope.prepare'));
+      let seededCollection: SearchScopeCollection | null = null;
+      if (options?.collectionId !== undefined) {
+        context();
+        if (!order) unavailable();
+        const seeded = await order.prepareCollection(options.collectionId, work.remaining());
+        work.native(seeded.work);
+        if (options.order !== undefined && !isDeepStrictEqual(options.order, seeded.collection.order)) unavailable();
+        seededCollection = seeded.collection;
+        options = { ...options, order: seeded.collection.order };
+      }
       function releaseWork() {
         work.consume({
           ...zeroScopeWork(),
@@ -971,7 +989,7 @@ export function createSearchScopeSource({
         indexed = { generation, index, uuid };
       }
       const sort: SearchScopeOrder = structuredClone(options?.order ?? { kind: 'id' });
-      let collection: SearchScopeCollection | null = null;
+      let collection: SearchScopeCollection | null = seededCollection;
       let profile: string;
       let definition: ScopeCaptureDefinition;
       let nativeBasis: unknown;
@@ -985,9 +1003,14 @@ export function createSearchScopeSource({
             }
           : undefined;
       if (sort.source) {
-        const prepared = await order!.prepare(sort, work.remaining());
-        work.native(prepared.work);
-        collection = prepared.collection;
+        if (seededCollection) {
+          if (!isDeepStrictEqual(seededCollection.order, sort)) unavailable();
+          collection = seededCollection;
+        } else {
+          const prepared = await order!.prepare(sort, work.remaining());
+          work.native(prepared.work);
+          collection = prepared.collection;
+        }
         profile = collection.observation.basis.digest;
         definition = {
           kind: 'library',
@@ -1195,6 +1218,7 @@ export function createSearchScopeSource({
         publicObservation,
         collection,
         readOnly: options?.readOnly === true,
+        ...(options?.restartOnNativeChange ? { restartOnNativeChange: true } : {}),
         ...(outputDefinition && orderedPublicDefinition
           ? {
               ordered: {

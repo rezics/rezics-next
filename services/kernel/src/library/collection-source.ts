@@ -109,6 +109,7 @@ import {
   readCanonicalSourceState,
   readCanonicalSourceGroup,
   seekCanonicalSourceGroup,
+  nativeSourceIdentity,
   type CanonicalAllowance,
   type CanonicalBasis,
   type CanonicalWork,
@@ -171,6 +172,7 @@ function observation(metadata: NativeCollectionMetadata, basis: CanonicalBasis):
   return {
     route: metadata.route,
     collectionId: metadata.collectionId,
+    sourceIdentity: nativeSourceIdentity(metadata),
     incarnation: metadata.incarnation,
     revision: metadata.revision,
     authority: basis.authority,

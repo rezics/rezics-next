@@ -342,6 +342,7 @@ export function CollectionFilters({
               {
                 resource: { kind: 'collection', id },
                 ...(type ? { type } : {}),
+                locale,
                 release: filterReleaseKey ?? 'unavailable',
                 ...(params.document ? { filter: params.document } : {}),
                 languages: requestLanguages(locale),

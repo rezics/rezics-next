@@ -8,9 +8,13 @@ import {
   scopedFacetIdentityKey,
   type ScopedFacetIdentity,
 } from '../../src/search/scoped-facet-source.ts';
-import { serviceRealmScopeFacetAdmission } from '../../src/search/scoped-facet-application.ts';
+import {
+  serviceRealmScopeFacetAdmission,
+  serviceScopeFacetIdentity,
+} from '../../src/search/scoped-facet-application.ts';
 import { ScopeWork, scopeAllowance, zeroScopeWork } from '../../src/search/scope-execution.ts';
 import type { PreparedRealmScope } from '../../src/search/realm-scope.ts';
+import type { PreparedSearchScope } from '../../src/search/scope-source.ts';
 
 const cost: PublicFilterCost = {
   inputKeys: 0,
@@ -156,6 +160,53 @@ test('a progressing native source must advance its finite frontier', async () =>
   const stalled = await source.readPage(admission, 'first', 1, context);
   expect(stalled.status).toBe('unready');
   expect('subjects' in stalled).toBe(false);
+});
+
+test('Collection facet identity binds the prepared native resource observation', () => {
+  const collectionId = '11111111-1111-4111-8111-111111111111';
+  const source = {
+    scope: 'curated' as const,
+    route: 0,
+    collectionId,
+    accountId: '22222222-2222-4222-8222-222222222222',
+    incarnation: 'incarnation',
+    generation: 'generation',
+    ownerEpoch: 4,
+    receivingEpoch: '4',
+    effectKey: 'effect',
+  };
+  const observation = {
+    collectionId,
+    route: 0,
+    sourceIdentity: source,
+    incarnation: source.incarnation,
+    revision: 7,
+    authority: { kind: 'curated' as const },
+    stamp: { partition: 0, epoch: 4, position: 9n },
+    basis: { digest: 'basis', identity: { digest: 'meaning' }, query: null, profilePins: [], projection: null },
+  };
+  const prepared = {
+    basis: {
+      release: 'release',
+      profile: 'profile',
+      canonical: 'population',
+      query: 'query',
+      nativeOwner: { source, observation },
+    },
+  } as unknown as PreparedSearchScope;
+  const identity = serviceScopeFacetIdentity({ kind: 'collection', id: collectionId }, prepared, 'reader', {
+    text: 'query',
+    filter: { type: { in: ['schema:Book'] } },
+  });
+  expect(identity.population).toHaveLength(64);
+  expect(() =>
+    serviceScopeFacetIdentity(
+      { kind: 'collection', id: '33333333-3333-4333-8333-333333333333' },
+      prepared,
+      'reader',
+      {},
+    ),
+  ).toThrow();
 });
 
 test('Realm facet frontiers scan bounded sparse prefixes and evaluate the same admitted population', async () => {
