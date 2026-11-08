@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { languageName } from '../../subject/language';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import type { CurrentCandidateAddress, CurrentCorrectionAddress } from './subject-changes-navigation';
 import type { TermField } from './subject-terms';
 import { m } from '../../paraglide/messages.js';
