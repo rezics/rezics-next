@@ -1043,17 +1043,14 @@ Their restore/moderation actions supply no authority to this reader; no legacy c
 
 ### Selected Realm publication review
 
-The existing curation caller now owns one explicit selected-work preparation, distinguishes absent/adopted/rejected/
-withdrawn decisions and confirms only its admitted native command advice. Conflict review is a read followed by a
-separate explicit decision; unknown retries retain the original sender, identity and operands. Preparation failure
-preserves the independent shelves. All launch locales carry the review states. The
+The installed curation caller owns one explicit selected-work preparation, distinguishes absent/adopted/rejected/
+withdrawn decisions and confirms only its admitted native command advice. It renders the original Subject separately
+from the disclosed terminal Subject using their independent Semantic label and cover outcomes. Conflict review is a
+read followed by a separate explicit decision; unknown retries retain the original sender, identity and operands.
+Preparation failure preserves the independent shelves. All launch locales carry the review states. The
 [publication lifetime guide](../../apps/web/src/community/realm-publication-lifetime.md) owns retirement and cost.
 
-Decision: keep mounted confirmation unavailable at the named generated-preparation seam until Content installs the
-actual client binding; never use shelf heads as preparation. The native source and OpenAPI route are integrated,
-but the installed client omits this method and the native presentation remains unavailable-only. Full optional
-presentation, selected detail-byte bounds, native growth, frozen acceptance and public delivery remain distinct
-continuations. Full Realm/Space page composition and its Board and membership consumers keep their existing owner.
+Decision: cap the serialized and retained selected publication review at 128 KiB UTF-8, project original and terminal Semantic summaries in one observation, and independently report an optional label or complete cover as unavailable when its full meaning cannot fit; never truncate attribution or legal text. The generated Client method owns the wire contract, the reader checks the same byte limit before retaining the response, and the current native Realm decision remains usable when optional presentation is unavailable. Native physical growth, frozen full acceptance and visual review remain with their existing owners. Full Realm/Space page composition and its Board and membership consumers keep their existing owner.
 
 ## Acceptance
 

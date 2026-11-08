@@ -283,8 +283,12 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
   const searchSubjects = useMemo(() => search ?? publicationSubjectSearch(locale), [search, locale]);
   const selected = control.target;
   const preparation = control.preparation;
-  const presentation = preparation?.subject.presentation;
-  const title = presentation?.label.state === 'available' ? presentation.label.value : m.realm_publication_selected();
+  const originalPresentation = preparation?.subject.presentation.original;
+  const terminalPresentation = preparation?.subject.presentation.terminal;
+  const title =
+    originalPresentation?.label.state === 'available'
+      ? originalPresentation.label.value
+      : m.realm_publication_selected();
   useEffect(() => {
     if (control.reviewAction) setOpen(true);
   }, [control.reviewAction, control.target?.id]);
@@ -388,12 +392,13 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                 role="group"
                 className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 py-3"
                 aria-label={m.realm_publication_selected()}
+                data-publication-subject="original"
               >
                 <div data-content-item-slot="visual">
-                  {presentation?.cover.state === 'available' ? (
+                  {originalPresentation?.cover.state === 'available' ? (
                     <Cover
-                      subject={{ id: preparation!.subject.currentId, title, types: [] }}
-                      cover={presentation.cover.value}
+                      subject={{ id: preparation!.subject.originalId, title, types: [] }}
+                      cover={originalPresentation.cover.value}
                       src={coverSrc}
                       size="xs"
                       decorative
@@ -401,35 +406,45 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                   ) : null}
                 </div>
                 <div ref={summary} className="min-w-0 flex-1 space-y-1">
+                  <p className="text-xs text-muted-foreground">{m.realm_publication_original_subject()}</p>
                   <ContentItemHeading
                     level={4}
                     tabIndex={-1}
                     className="text-[17px] leading-snug font-semibold sm:text-lg"
                   >
-                    <bdi lang={presentation?.label.state === 'available' ? presentation.label.language : undefined}>
+                    <bdi
+                      lang={
+                        originalPresentation?.label.state === 'available'
+                          ? originalPresentation.label.language
+                          : undefined
+                      }
+                    >
                       {title}
                     </bdi>
                   </ContentItemHeading>
-                  {presentation && presentation.label.state !== 'available' ? (
+                  {originalPresentation && originalPresentation.label.state !== 'available' ? (
                     <p
                       data-content-item-slot="metadata"
-                      data-publication-label={presentation.label.state}
+                      data-publication-label={originalPresentation.label.state}
                       className="text-sm text-muted-foreground"
                     >
-                      {presentation.label.state === 'empty'
+                      {originalPresentation.label.state === 'empty'
                         ? m.realm_publication_label_empty()
-                        : presentation.label.state === 'concealed'
+                        : originalPresentation.label.state === 'concealed'
                           ? m.realm_publication_label_concealed()
                           : m.realm_publication_label_unavailable()}
                     </p>
                   ) : null}
-                  {presentation?.cover.state === 'available' ? (
-                    <FeedCardImageCredit cover={presentation.cover.value} locale={locale} />
-                  ) : presentation ? (
-                    <p data-publication-cover={presentation.cover.state} className="text-sm text-muted-foreground">
-                      {presentation.cover.state === 'empty'
+                  {originalPresentation?.cover.state === 'available' ? (
+                    <FeedCardImageCredit cover={originalPresentation.cover.value} locale={locale} />
+                  ) : originalPresentation ? (
+                    <p
+                      data-publication-cover={originalPresentation.cover.state}
+                      className="text-sm text-muted-foreground"
+                    >
+                      {originalPresentation.cover.state === 'empty'
                         ? m.realm_publication_cover_empty()
-                        : presentation.cover.state === 'concealed'
+                        : originalPresentation.cover.state === 'concealed'
                           ? m.realm_publication_cover_concealed()
                           : m.realm_publication_cover_unavailable()}
                     </p>
@@ -483,8 +498,14 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
               <div className="min-w-0 space-y-2" aria-label={m.realm_publication_read()}>
                 <p>
                   {m.realm_publication_prepared_realm({
-                    realm: preparation.realm.title,
-                    host: preparation.realm.hostTitle,
+                    realm:
+                      preparation.realm.title.state === 'available'
+                        ? preparation.realm.title.value
+                        : m.realm_publication_title_unavailable(),
+                    host:
+                      preparation.realm.hostTitle.state === 'available'
+                        ? preparation.realm.hostTitle.value
+                        : m.realm_publication_title_unavailable(),
                   })}
                 </p>
                 <p className="text-sm">
@@ -508,6 +529,62 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                       {m.realm_publication_decided_at({ at: preparation.current.decidedAt })}
                     </time>
                   </p>
+                ) : null}
+                {preparation.subject.currentId !== preparation.subject.originalId ? (
+                  <section
+                    className="min-w-0 space-y-2 border-s border-border ps-3"
+                    aria-label={m.realm_publication_terminal_subject()}
+                    data-publication-subject="terminal"
+                  >
+                    <h4 className="font-semibold">{m.realm_publication_terminal_subject()}</h4>
+                    <p className="text-sm">{preparation.subject.currentId}</p>
+                    {terminalPresentation?.label.state === 'available' ? (
+                      <p>
+                        <bdi lang={terminalPresentation.label.language}>{terminalPresentation.label.value}</bdi>
+                      </p>
+                    ) : terminalPresentation ? (
+                      <p
+                        data-publication-label={terminalPresentation.label.state}
+                        className="text-sm text-muted-foreground"
+                      >
+                        {terminalPresentation.label.state === 'empty'
+                          ? m.realm_publication_label_empty()
+                          : terminalPresentation.label.state === 'concealed'
+                            ? m.realm_publication_label_concealed()
+                            : m.realm_publication_label_unavailable()}
+                      </p>
+                    ) : null}
+                    {terminalPresentation?.cover.state === 'available' ? (
+                      <div className="flex min-w-0 items-start gap-3">
+                        <Cover
+                          subject={{
+                            id: preparation.subject.currentId,
+                            title:
+                              terminalPresentation.label.state === 'available'
+                                ? terminalPresentation.label.value
+                                : m.realm_publication_selected(),
+                            types: [],
+                          }}
+                          cover={terminalPresentation.cover.value}
+                          src={coverSrc}
+                          size="xs"
+                          decorative
+                        />
+                        <FeedCardImageCredit cover={terminalPresentation.cover.value} locale={locale} />
+                      </div>
+                    ) : terminalPresentation ? (
+                      <p
+                        data-publication-cover={terminalPresentation.cover.state}
+                        className="text-sm text-muted-foreground"
+                      >
+                        {terminalPresentation.cover.state === 'empty'
+                          ? m.realm_publication_cover_empty()
+                          : terminalPresentation.cover.state === 'concealed'
+                            ? m.realm_publication_cover_concealed()
+                            : m.realm_publication_cover_unavailable()}
+                      </p>
+                    ) : null}
+                  </section>
                 ) : null}
               </div>
             ) : null}
