@@ -142,6 +142,16 @@ which can continue on a healthy configured host. Neither these diagnostics nor t
 establish a native command result or remote physical cleanup. EOF alone does not identify a network or shell cause;
 that diagnosis requires the retained boundary evidence from the next already-required admitted check.
 
+A stopped stale run can outlive its transient systemd scope. `systemctl stop` returns exit 5 for an unloaded unit;
+that remote command exit must not be diagnosed as an SSH network failure. Existing exact-birth supervisor
+terminality remains required: a started run with missing supervisor custody is retained, without deletion or a
+cleanup claim. Unit absence is only a component observation. After that ownership check, owned-unit cleanup observes
+`LoadState` and `ActiveState`: `not-found` plus `inactive` is already absent. Loaded owned units are stopped and
+re-observed; query failures, unsuccessful stops with an active unit, or unknown states retain cleanup uncertainty
+and their diagnostics. Only the `rezics-check-*.scope`/`.slice` namespace is eligible. Marker descriptor probes scope
+their stderr redirection so a failed later command cannot become silent. These changes establish admission health,
+not a native product result or cleanup proof for a different original invocation.
+
 Throwaway Kernel/compiler PostgreSQL uses `--rm` plus exact owner and create-nonce labels. A timed-out removal is a
 request, not observed absence: ordinary cleanup retries a bounded number of times and verifies the container and its
 nonce-labelled volume are absent. A failed Docker listing or inspect stays an unsettled cleanup result with its actual

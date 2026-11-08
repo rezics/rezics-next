@@ -1573,7 +1573,24 @@ function slotScriptEnvironment(testRoot: string, tasksCurrent = 0): Record<strin
   mkdirSync(bin, { recursive: true });
   writeFileSync(
     join(bin, 'systemctl'),
-    '#!/bin/sh\ncase "$1" in show) printf "%s\\n" "${TASKS_CURRENT:-0}" ;; is-active) [ "${TASKS_CURRENT:-0}" -gt 0 ] ;; list-units|stop) ;; *) exit 1 ;; esac\n',
+    `#!/bin/sh
+case "$1" in
+ show)
+   case "$*" in
+     *LoadState*)
+       if [ "\${CLEANUP_QUERY_FAIL:-0}" = 1 ]; then echo 'injected system bus unavailable' >&2; exit 1; fi
+       printf 'LoadState=%s\\nActiveState=%s\\n' "\${CLEANUP_LOAD_STATE:-not-found}" "\${CLEANUP_ACTIVE_STATE:-inactive}" ;;
+     *) printf '%s\\n' "\${TASKS_CURRENT:-0}" ;;
+   esac ;;
+ is-active) [ "\${TASKS_CURRENT:-0}" -gt 0 ] ;;
+ list-units) ;;
+ stop)
+   if [ -n "\${STOP_LOG:-}" ]; then printf '%s\\n' "$*" >> "$STOP_LOG"; fi
+   if [ "\${CLEANUP_LOAD_STATE:-not-found}" = not-found ]; then exit 5; fi
+   if [ "\${CLEANUP_STOP_FAIL:-0}" != 0 ]; then echo 'injected owned unit stop failure' >&2; exit "$CLEANUP_STOP_FAIL"; fi ;;
+ *) exit 1 ;;
+esac
+`,
   );
   writeFileSync(join(bin, 'docker'), '#!/bin/sh\nexit 0\n');
   chmodSync(join(bin, 'systemctl'), 0o755);
@@ -3269,7 +3286,7 @@ test('remote admission stops stale liveness slices but preserves fresh runs and 
   const admission = events().find((event) => event.kind === 'slot')!.script as string;
   expect(admission).toContain('age="$((now - touched))"');
   expect(admission).toContain('[ "$age" -gt 600 ]');
-  expect(admission).toContain('systemctl stop "$run_slice"');
+  expect(admission).toContain('stop_owned_check_unit "$run_slice"');
   expect(admission).toContain('remote-check: stopped stale run');
   expect(admission).toContain('if [ -e "$run_directory/command-started" ]; then');
   expect(admission).toContain('preserving started run $run_id for stale-run cleanup');
@@ -9638,3 +9655,137 @@ test('explicit slot capacity-busy remains a wait on its selected host instead of
       .map((event) => event.address),
   ).toEqual(['ops@b.test']);
 }, 15_000);
+
+function staleSlotFixture(label: string) {
+  const directory = mkdtempSync(join(root, label));
+  const host = join(directory, 'host');
+  const run = join(host, 'runs', 'closed-stale-run');
+  mkdirSync(run, { recursive: true });
+  writeFileSync(join(run, '.alive'), '');
+  utimesSync(join(run, '.alive'), new Date(Date.now() - 700_000), new Date(Date.now() - 700_000));
+  writeFileSync(join(run, 'command-started'), '');
+  writeFileSync(
+    join(run, '.remote-check-supervisor'),
+    JSON.stringify({ pid: 2147483647, started: '1', group: 2147483647 }),
+  );
+  writeFileSync(join(run, 'exit-status'), '0');
+  const environment = slotScriptEnvironment(directory);
+  return { directory, host, run, environment };
+}
+
+test('actual slot shell admits after a stale completed run whose missing scope returns systemctl exit5', async () => {
+  const { directory, host, run, environment } = staleSlotFixture('slot-missing-scope-');
+  const original = spawnSync(
+    '/bin/sh',
+    ['-c', 'set -e; systemctl stop rezics-check-closed-stale-run.scope >/dev/null 2>&1'],
+    { env: environment, encoding: 'utf8' },
+  );
+  expect(original.status).toBe(5);
+  expect(original.stderr).toBe('');
+  const stopLog = join(directory, 'stop.log');
+  environment.STOP_LOG = stopLog;
+  const holder = Bun.spawn(['/bin/sh', '-c', slotScriptFor(host, 2)], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: environment,
+  });
+  const stderr = new Response(holder.stderr).text();
+  try {
+    await waitForSlotToken(holder, 1);
+    await holder.stdin.end();
+    expect(await holder.exited).toBe(0);
+    expect(await stderr).not.toContain('unit observation failed');
+    expect(existsSync(stopLog)).toBe(false);
+    expect(readFileSync(join(run, 'exit-status'), 'utf8')).toBe('0');
+  } finally {
+    holder.kill();
+    await holder.exited;
+  }
+});
+
+test.each(['query', 'stop', 'unknown'] as const)(
+  'actual stale-run %s failure remains diagnostic and never supplies slot admission or cleanup proof',
+  async (failure) => {
+    const { host, run, environment } = staleSlotFixture('slot-real-cleanup-failure-');
+    if (failure === 'query') environment.CLEANUP_QUERY_FAIL = '1';
+    else if (failure === 'unknown') {
+      environment.CLEANUP_LOAD_STATE = 'bad-setting';
+      environment.CLEANUP_ACTIVE_STATE = 'inactive';
+    } else {
+      environment.CLEANUP_LOAD_STATE = 'loaded';
+      environment.CLEANUP_ACTIVE_STATE = 'active';
+      environment.CLEANUP_STOP_FAIL = '5';
+    }
+    const result = Bun.spawnSync(['/bin/sh', '-c', slotScriptFor(host, 2)], {
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: environment,
+      timeout: 5000,
+    });
+    expect(result.exitCode).toBe(failure === 'stop' ? 5 : 1);
+    expect(result.stdout.toString()).not.toContain('SLOTS');
+    expect(result.stderr.toString()).toContain(
+      failure === 'query'
+        ? 'injected system bus unavailable'
+        : failure === 'unknown'
+          ? 'unknown owned unit state'
+          : 'injected owned unit stop failure',
+    );
+    expect(existsSync(run)).toBe(true);
+    expect(readFileSync(join(run, 'exit-status'), 'utf8')).toBe('0');
+  },
+);
+
+test('real marker descriptor inspection restores stderr instead of silencing the remainder of slot admission', async () => {
+  const { host, environment } = staleSlotFixture('slot-stderr-restoration-');
+  mkdirSync(join(host, 'slots'), { recursive: true });
+  writeFileSync(join(host, 'slots', 'gate-wait.lock'), 'stale marker');
+  const script = slotScriptFor(host, 2).replace(
+    'echo "SLOTS 1"',
+    'printf "SLOT_STDERR_STILL_LIVE\\n" >&2; echo "SLOTS 1"',
+  );
+  const holder = Bun.spawn(['/bin/sh', '-c', script], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: environment,
+  });
+  const stderr = new Response(holder.stderr).text();
+  try {
+    await waitForSlotToken(holder, 1);
+    await holder.stdin.end();
+    expect(await holder.exited).toBe(0);
+    expect(await stderr).toContain('SLOT_STDERR_STILL_LIVE');
+  } finally {
+    holder.kill();
+    await holder.exited;
+  }
+});
+
+test('missing unit alone never retires a started stale run with unavailable supervisor custody', async () => {
+  const { directory, host, run, environment } = staleSlotFixture('slot-unknown-supervisor-');
+  rmSync(join(run, '.remote-check-supervisor'));
+  const stopLog = join(directory, 'stop.log');
+  environment.STOP_LOG = stopLog;
+  const holder = Bun.spawn(['/bin/sh', '-c', slotScriptFor(host, 2)], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: environment,
+  });
+  const stderr = new Response(holder.stderr).text();
+  try {
+    await waitForSlotToken(holder, 1);
+    await holder.stdin.end();
+    expect(await holder.exited).toBe(0);
+    expect(await stderr).toContain('supervisor custody unavailable');
+    expect(readFileSync(join(run, 'exit-status'), 'utf8')).toBe('0');
+    expect(existsSync(run)).toBe(true);
+    expect(existsSync(stopLog)).toBe(false);
+  } finally {
+    holder.kill();
+    await holder.exited;
+  }
+});

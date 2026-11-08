@@ -1001,6 +1001,7 @@ export async function readPreparationSource(tx: OperationalTransaction, locator:
   const source: CollectionSourceObservation = {
     route: locator.route,
     collectionId: locator.collectionId,
+    sourceIdentity: identity,
     incarnation: row.incarnation,
     revision: row.revision,
     authority: { kind: 'curated' },
