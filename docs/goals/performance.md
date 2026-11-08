@@ -73,6 +73,13 @@ Composed native identity owns the worker pool and max-one relay sharing that yie
 terminal-closure growth binds a non-owner home role with leakproof indexable RLS after BEGIN. Preparing jobs own the
 prepare reservation.
 
+Decision: Native Source custody charges descendants against the supplied caller ledger, retaining the original
+Pool and deadline, actual SQL and bind bytes, failed dispatches, and distinct COMMIT/ROLLBACK reservations.
+Public-output capture composes those descendant receipts with its own SQL footprint. Publication and preparation
+observations carry their already verified native identity as `CollectionSourceObservation.sourceIdentity`, reusing
+the existing current-owner reads without extra queries. Original native plan, growth and lifecycle acceptance remain
+open independently of this identity projection.
+
 ## Acceptance
 
 The [capability acceptance](performance.capabilities.md) owns user cases and frozen scenarios. Use the

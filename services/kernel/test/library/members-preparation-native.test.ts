@@ -1,6 +1,6 @@
 import { runOperationalTransaction } from '../../src/command/operational.ts';
 import { partitionOf } from '../../src/route/route.ts';
-import { readPreparedMembers } from '../../src/library/members-preparation.ts';
+import { readPreparationSource, readPreparedMembers } from '../../src/library/members-preparation.ts';
 import { testTokens, testRouteKey } from '../support/test-kernel.ts';
 import { capture } from '../support/growth.ts';
 import { startErasureWorker } from './support/erasure-worker.ts';
@@ -127,6 +127,22 @@ test('Real authenticated members preparation reserves exact episodes once, admit
   try {
     await native.workClient.retrieveWorkflow(first.intent!.workflowId).getResult({ pollingIntervalMs: 10 });
     const deadline = Date.now() + 60_000;
+    const observedSource = await runOperationalTransaction(
+      native.db.pool,
+      {
+        mode: 'work-step',
+        partition: partitionOf(locator.route),
+        kind: 'library.membersPreparation.source',
+        accounts: [locator.ownerAccountId],
+        workClient: native.workClient,
+        deadline,
+      },
+      (tx) => readPreparationSource(tx, locator),
+    );
+    expect(observedSource).not.toBeNull();
+    if (!observedSource || observedSource.scope.key.source.kind !== 'library')
+      throw new Error('Expected the exact current preparation Source identity');
+    expect(observedSource.source.sourceIdentity).toEqual(observedSource.scope.key.source.identity);
     while (Date.now() < deadline) {
       const response = await native.send(f.owner, 'GET', path);
       expect(response.headers.get('cache-control')).toBe('private, no-store');

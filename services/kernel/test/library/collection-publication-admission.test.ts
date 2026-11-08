@@ -79,6 +79,7 @@ test('publication admission binds a real live episode to its complete current pr
         expect(definition.locator).toEqual(locator);
         expect(definition.input.kind).toBe('private_working_source');
         expect(isDeepStrictEqual(definition.input.identity, definition.sourceIdentity)).toBe(true);
+        expect(definition.observation.sourceIdentity).toEqual(definition.sourceIdentity);
         expect(definition.target).toMatchObject({ kind: 'collection_output', collectionId: collection.id });
         expect(definition.definition).toMatchObject({
           filter: { owner: { presence: true } },

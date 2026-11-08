@@ -298,6 +298,7 @@ export async function readCollectionPublicationNativeSource(
   const observation: CollectionSourceObservation = {
     route: metadata.route,
     collectionId: metadata.collectionId,
+    sourceIdentity: identity,
     incarnation: metadata.incarnation,
     revision: metadata.revision,
     authority,
