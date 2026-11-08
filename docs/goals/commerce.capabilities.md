@@ -548,14 +548,14 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Surface cells:**
 
-| Cell                           | Applicability and scenario/binding                                                                                                                                                       |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Catalogue direct/prepared      | Public diet/time predicate only. The catalogue consumer has no admitted owner Source, so it cannot evaluate private completion facts. Alice and anonymous retain the same public set.     |
-| Public curated Collection      | Admitted viewer-self owner query over the existing public Collection Source; the stored public Source and its public member set do not change.                                            |
-| Everything WITHOUT state       | Admitted viewer-self owner query over Alice's live support union, including supported no-entry recipes.                                                                                  |
-| Own-state Collection/predicate | Admitted viewer-self owner query intersected with Alice's selected-state population; NOTstate and session absence remain separately observable.                                          |
-| Mounted Zone                   | Public diet/time predicate only; mounted sources and stored scope retain public meaning. Private personalization is not written into the Zone.                                            |
-| TypeList                       | Public diet/time predicate only; the released vertical definition remains shared and contains no viewer's session history.                                                               |
+| Cell                           | Applicability and scenario/binding                                                                                                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Catalogue direct/prepared      | Public diet/time predicate only. The catalogue consumer has no admitted owner Source, so it cannot evaluate private completion facts. Alice and anonymous retain the same public set. |
+| Public curated Collection      | Admitted viewer-self owner query over the existing public Collection Source; the stored public Source and its public member set do not change.                                        |
+| Everything WITHOUT state       | Admitted viewer-self owner query over Alice's live support union, including supported no-entry recipes.                                                                               |
+| Own-state Collection/predicate | Admitted viewer-self owner query intersected with Alice's selected-state population; NOTstate and session absence remain separately observable.                                       |
+| Mounted Zone                   | Public diet/time predicate only; mounted sources and stored scope retain public meaning. Private personalization is not written into the Zone.                                        |
+| TypeList                       | Public diet/time predicate only; the released vertical definition remains shared and contains no viewer's session history.                                                            |
 
 **Frozen scenarios:** [library-profiles outcomes](../../specs/library-profiles-outcomes.test.ts): `exclusive state does not create or couple independent labels sessions holdings or ratings`.
 
@@ -646,14 +646,14 @@ and dependency revocation settle only that manifest through existing native writ
 
 **Surface cells:**
 
-| Cell                           | Applicability and scenario/binding                                                                                                                    |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| catalogue                      | Not a bulk source; selection requires an admitted Collection `sourceId`, not a public Catalogue query.                                              |
-| public curated                 | Filtered reads capture the exact curated Collection members and preserve duplicate occurrence rows in the selection digest.                           |
-| Everything WITHOUT state       | Filtered reads capture the admitted live support union, including eligible no-entry subjects, without inferring an Entry state.                       |
-| own-state Collection/predicate | Filtered reads intersect current state membership with the admitted query before the manifest is sealed.                                              |
-| mounted Zone                   | Read-only public mounted definitions are not bulk selection sources.                                                                                  |
-| TypeList                       | Read-only public vertical definitions are not bulk selection sources.                                                                                 |
+| Cell                           | Applicability and scenario/binding                                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| catalogue                      | Not a bulk source; selection requires an admitted Collection `sourceId`, not a public Catalogue query.                          |
+| public curated                 | Filtered reads capture the exact curated Collection members and preserve duplicate occurrence rows in the selection digest.     |
+| Everything WITHOUT state       | Filtered reads capture the admitted live support union, including eligible no-entry subjects, without inferring an Entry state. |
+| own-state Collection/predicate | Filtered reads intersect current state membership with the admitted query before the manifest is sealed.                        |
+| mounted Zone                   | Read-only public mounted definitions are not bulk selection sources.                                                            |
+| TypeList                       | Read-only public vertical definitions are not bulk selection sources.                                                           |
 
 **Frozen scenarios:** [library-bulk outcomes](../../specs/library-bulk-outcomes.test.ts): `query selection exceeds one hundred and seals before status writes shrink its filter`; `state edits before discovery match live predicates while post-seal edits conflict`; `one target denial records partial completion and continues other authorized targets`; `cancellation reconciles an in-flight commit and never compensates over later edits`; `crashes before target commit after commit and before or after acknowledgement never duplicate effects`; `enqueue success never reports mutation success and unavailable receipt evidence remains reconciling`.
 

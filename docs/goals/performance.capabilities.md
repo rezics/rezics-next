@@ -128,15 +128,15 @@ leaf under Boolean `NOT`; it is request-owned over admitted Library Sources. Cle
 session history, R-edge remains eligible through supported no-entry facts, and Bob's completion of R-other-cooked
 does not affect Alice. Public catalogue, mounted Zone and TypeList definitions keep their public meaning.
 
-| Surface cell                     | Scope and reason                                                                                                                                                                                                                |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Catalogue: direct catalogue      | Public book/recipe predicates use native Search. Owner history has no admitted Catalogue Source here, so private predicates are not exposed.                                                                                          |
-| Catalogue: prepared public plans | Expensive public predicates finish preparation and yield the same useful public sets; preparation resume remains covered.                                                                                                                |
-| Curated Collection               | Canonical browsing of `C-public` intersects its population; Alice may add the admitted owner predicate per request without changing the stored public Source or duplicate notes.                                                       |
-| Everything without state         | Alice's request-owned owner query runs over her support union, including label/holding-supported no-entry subjects.                                                                                                                         |
-| Own state                        | Intersect Alice's accepted state population with the same owner query; Bob's facts do not affect the result, and state inequality remains separately tested.                                                                                 |
-| Mounted Zone                     | `Z-public` unions overlapping public mounts/scopes; stored reads do not inspect Alice's history. One composed page remains 16 reads and 128 total slots.                                                                                 |
-| TypeList                         | Released Book and Recipe definitions remain public and shared; viewer history is not written into either installed TypeList.                                                                                                                |
+| Surface cell                     | Scope and reason                                                                                                                                                                 |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Catalogue: direct catalogue      | Public book/recipe predicates use native Search. Owner history has no admitted Catalogue Source here, so private predicates are not exposed.                                     |
+| Catalogue: prepared public plans | Expensive public predicates finish preparation and yield the same useful public sets; preparation resume remains covered.                                                        |
+| Curated Collection               | Canonical browsing of `C-public` intersects its population; Alice may add the admitted owner predicate per request without changing the stored public Source or duplicate notes. |
+| Everything without state         | Alice's request-owned owner query runs over her support union, including label/holding-supported no-entry subjects.                                                              |
+| Own state                        | Intersect Alice's accepted state population with the same owner query; Bob's facts do not affect the result, and state inequality remains separately tested.                     |
+| Mounted Zone                     | `Z-public` unions overlapping public mounts/scopes; stored reads do not inspect Alice's history. One composed page remains 16 reads and 128 total slots.                         |
+| TypeList                         | Released Book and Recipe definitions remain public and shared; viewer history is not written into either installed TypeList.                                                     |
 
 The checked-in catalogue release `packages/definitions/release/rezics.json` includes Book and Recipe types and the
 `schema:wordCount` and `schema:suitableForDiet` properties. It does not embed the configured Zone documents.
