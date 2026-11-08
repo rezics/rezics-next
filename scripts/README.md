@@ -706,11 +706,16 @@ remain separate questions for the existing compiler/health chain; this cohort su
    calls `releaseCheckGit(workspace, manifestOrJournalPath, { settled: true })` after settlement.
    Ref release keeps its two-second foreground bound. Explicit deadline cancellation records the absolute deadline,
    elapsed time and actual Git exit/signal separately from genuine Git rejection; the owned transport group is stopped
-   and reaped. Deferred custody retains its first and latest failure and retries after 60 seconds through the existing
-   sweep, which visits at most 32 entries in one shared ten-second budget. A retry can use that remaining sweep budget;
+   and reaped. Deferred custody retains its first and latest failure and becomes eligible after 60 seconds; eligibility
+   is not a scheduled retry. The existing minute maintenance reap visits indexed completed owners before worktree
+   removal, including cancelled owners, so another check is unnecessary. Remaining custody keeps that owner queued
+   and its workspace intact. Each sweep rotates a durable filename cursor across at most 32 journal reads in one
+   shared ten-second budget; malformed and symlink entries grant no authority and do not starve later entries.
+   A retry can use that remaining sweep budget;
    it does not receive another unbounded timeout. Legacy explicitly releasable records use their creation time for
    backoff. Origin and exact candidate leases remain required; an exact successful absence observation can reclaim a
-   lost-delete acknowledgement. Active, retained, unknown, replaced and foreign refs stay intact. Cleanup remains
+   lost-delete acknowledgement. A proven different remote commit records blocked/replaced custody and stops delete
+   RPCs without claiming cleanup. Active, retained, unknown, replaced and foreign refs stay intact. Cleanup remains
    independent of the delivered native check result.
    Uploads use zstd compression when both rsync endpoints support it, and checksum against the host's
    `/srv/rezics-check/bases/current` tree so unchanged files are copied on the host. A missing base means a full upload.

@@ -3264,7 +3264,14 @@ Decision: `manager-host.ts` owns the socket server, registry, shutdown and sched
 An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
 
 The maintenance timer starts a bounded oneshot every minute. `goal maintenance reap` reaps recorded worker groups
-whose worktree has been deleted, checking process birth identity. `goal maintenance alarm` evaluates product-output
+whose worktree has been deleted, checking process birth identity. Before removing an indexed completed owner's
+worktree, reap revisits its deferred Git publication journals within the same maintenance budget. Integrated, merged
+and cancelled owners need no later check to trigger this work. A 60-second retry timestamp only makes a journal
+eligible; the existing minute timer and durable owner queue supply the trigger. Pending, retained, unknown or proven
+replaced custody keeps the owner queued and the workspace intact. Owner progress advances only through actually
+visited candidates, and the journal's durable filename cursor prevents a short budget or more than 32 entries from
+starving later custody. A replaced ref retains its original exact origin/ref/commit record and stops delete RPCs.
+Native check outcomes remain independent. `goal maintenance alarm` evaluates product-output
 and flow alarms and sends the completed UTC hour's report through its durable scheduled claim. `goal maintenance
 detect` runs stall and shared-incident detection. `goal maintenance regenerate` regenerates dev derived files at
 most hourly using its own timer, process and lease and the existing detached-worktree and compare-and-swap implementation.
