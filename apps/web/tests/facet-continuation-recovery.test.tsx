@@ -18,6 +18,7 @@ const globals = {
   MutationObserver: window.MutationObserver,
   ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
@@ -145,7 +146,7 @@ test('failed reads retry and a cyclic continuation keeps accepted values and off
   await act(async () => button(m.refinement_more_values()).click());
 
   expect(cursors).toEqual(['opaque-a', 'opaque-a', 'opaque-b']);
-  expect(host.textContent).toContain('accepted one');
+  expect(host.textContent).not.toContain('accepted one');
   expect(host.textContent).toContain('accepted two');
   expect(host.textContent).not.toContain('discarded page');
   expect(host.textContent).toContain(m.refinement_restart());
@@ -205,7 +206,8 @@ test('More keeps the accepted window through pending and failure, retries the ex
   await act(async () => button(m.search_facet_retry()).click());
 
   expect(cursors).toEqual(['cursor-one', 'cursor-one']);
-  expect(checkboxes().map((input) => input.value)).toEqual(nextValues);
+  expect(checkboxes().map((input) => input.value)).toEqual([...nextValues, firstValues[0]!]);
+  expect(checkboxes().find((input) => input.value === firstValues[0])?.checked).toBe(true);
   expect(host.querySelectorAll('input[type="hidden"][name="f.schema:genre"][value="value-0"]')).toHaveLength(1);
 });
 

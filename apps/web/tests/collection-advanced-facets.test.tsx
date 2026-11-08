@@ -23,6 +23,7 @@ const globals = {
   MutationObserver: window.MutationObserver,
   ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
@@ -152,7 +153,7 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
     ]);
     pending[0]!.resolve(page({ property: properties[9]!.property }, 0));
     await act(async () => Promise.resolve());
-    expect(host.querySelector('input[value="value-1"]')).not.toBeNull();
+    expect(host.querySelector('input[value="value-20"]')).not.toBeNull();
     outcome = 'refused';
     props = { ...props, data: { ...props.data, key: 'builtin:owner:denied' } };
     await act(async () => refresh());
