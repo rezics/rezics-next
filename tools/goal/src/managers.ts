@@ -47,7 +47,7 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   kind?: 'managed';
   threadId: string | null;
   activeTurnId: string | null;
-  /** The managed turn ended without pending inbox work; native Goal remains active until new work arrives. */
+  /** This controller parked native Goal autonomy after a completed turn; only an admitted inbox wake resumes it. */
   waitingForInbox?: boolean;
   status: 'starting' | 'running' | 'paused' | 'complete' | 'renewal-failed';
   startedAt: number;
@@ -85,6 +85,8 @@ export type CompletionEvidence = { passed: boolean; evidencePath: string; summar
 export type ManagerServices = {
   policy?: ControlPolicy;
   connect?: (pool: CodexPool, onStart?: (identity: ProcessIdentity) => void) => Promise<AppServer>;
+  /** Read-only admission against the current retained pool allowance before an inbox wake starts a model turn. */
+  canStartTurn?: (spec: Pick<ManagerSpec, 'engine' | 'pool' | 'effort'>) => boolean;
   windows: ManagerWindows;
   checkCompletion(goal: string): Promise<CompletionEvidence>;
   /** The CLI prefix includes its runtime composition module, if any. */
@@ -373,11 +375,16 @@ export class ManagerSessions {
     if (state.threadId && params?.threadId && state.threadId !== params.threadId) return;
     if (method === 'turn/started') {
       this.turnStarted(state, params.turn.id);
-      if (state.status !== 'running') await this.pauseRemote(state);
+      if (state.status !== 'running' || state.waitingForInbox) await this.pauseRemote(state);
     } else if (method === 'turn/completed') {
       completedCurrentTurn = this.turnEnded(state, params.turn.id);
     } else if (method === 'thread/goal/updated') {
       state.goalState = params.goal;
+      if (
+        state.waitingForInbox &&
+        ['blocked', 'budgetLimited', 'usageLimited', 'complete'].includes(params.goal.status)
+      )
+        state.waitingForInbox = false;
     } else if (method === 'thread/goal/cleared') {
       state.goalState = null;
     } else if (method === 'thread/tokenUsage/updated') state.usage = params.tokenUsage;
@@ -387,11 +394,26 @@ export class ManagerSessions {
     } else return;
     this.save(state);
     if (state.status === 'running') {
+      if (method === 'thread/goal/updated' && state.waitingForInbox && state.goalState?.status === 'active') {
+        // An idle Goal should stay parked. This catches provider or external reactivation before another
+        // goal-generated continuation can replace the event-driven wait.
+        await this.pauseRemote(state);
+        return;
+      }
       if (method === 'thread/goal/updated' && (await this.handleGoalUpdate(state))) return;
       if (await this.checkLimits(state)) return;
       if (state.goalState?.status === 'complete') await this.completeInternal(state.id);
+      if (
+        state.status === 'running' &&
+        method === 'thread/goal/updated' &&
+        state.goalState?.status === 'active' &&
+        this.inbox.notifications(id).length > 0
+      ) {
+        await this.dispatch(id);
+        return;
+      }
     }
-    if (completedCurrentTurn) this.markWaitingForInbox(id);
+    if (completedCurrentTurn) await this.markWaitingForInbox(id);
   }
   /** Event-driven managers sleep only by ending the turn: a `clock.sleep` loop re-reads the whole context each call. */
   private countSleep(state: ManagedManagerState): void {
@@ -923,17 +945,41 @@ export class ManagerSessions {
       await this.failRenewal(id, error, attempts);
     }
   }
-  private markWaitingForInbox(id: string): void {
+  private async markWaitingForInbox(id: string): Promise<void> {
     const state = this.get(id);
     assertManagedManager(state);
     if (
       state.status !== 'running' ||
       state.engine !== 'codex' ||
       !state.threadId ||
-      this.inbox.notifications(id).length > 0
+      (state.activeTurnId !== null && !state.waitingForInbox)
     )
       return;
+
+    const wasWaitingForInbox = state.waitingForInbox === true;
+    // Persist the idle intent before consulting or pausing the provider. If this process exits
+    // between these operations, host recovery can park this same thread before resuming it.
     state.waitingForInbox = true;
+    this.save(state);
+    const client = await this.transport.client(state.pool);
+    const goal = await this.transport.getGoal(client, state.threadId);
+    state.goalState = goal;
+    if (goal?.status === 'active') {
+      await this.pauseRemote(state);
+      return;
+    }
+    if (goal?.status === 'paused') {
+      if (!wasWaitingForInbox) state.waitingForInbox = false;
+      this.save(state);
+      return;
+    }
+    if (!goal) {
+      if (!wasWaitingForInbox) state.waitingForInbox = false;
+      this.save(state);
+      return;
+    }
+    // A user or guard status is not the controller's idle park and must not be reactivated on inbox wake.
+    state.waitingForInbox = false;
     this.save(state);
   }
   private async pauseRemote(state: ManagerState): Promise<void> {
@@ -949,6 +995,7 @@ export class ManagerSessions {
     const state = this.get(id);
     assertManagedManager(state);
     state.status = 'paused';
+    state.waitingForInbox = false;
     this.save(state);
     clearTimeout(this.timers.get(id));
     try {
@@ -974,17 +1021,37 @@ export class ManagerSessions {
     if (state.status !== 'running') return;
     if (state.engine === 'claude') return await this.reviveClaude(state);
     const events = this.inbox.notifications(id);
-    // An empty inbox wake is bookkeeping only; keep the active native Goal untouched.
+    // An empty inbox wake is bookkeeping only; a parked native Goal stays paused.
     if (events.length === 0) return;
-    const waitingForInbox = state.waitingForInbox === true;
-    if (waitingForInbox) {
+    if (state.waitingForInbox) {
+      // Reconcile the persisted native Goal before an inbox event may reactivate it.
+      await this.markWaitingForInbox(id);
+      state = this.get(id);
+      assertManagedManager(state);
+    }
+    const idleWake = state.waitingForInbox === true;
+    if (
+      (idleWake || state.activeTurnId === null) &&
+      this.services.canStartTurn &&
+      !this.services.canStartTurn(state)
+    )
+      return;
+    const client = await this.transport.client(state.pool);
+    state.goalState = await this.transport.getGoal(client, state.threadId!);
+    if (idleWake) {
+      if (state.goalState?.status === 'paused')
+        state.goalState = await this.transport.setGoalStatus(client, state.threadId!, 'active');
+      if (state.goalState?.status !== 'active') {
+        this.save(state);
+        return;
+      }
       state.waitingForInbox = false;
       this.save(state);
-    }
-    const client = await this.transport.client(state.pool);
-    if (state.goalState?.status === 'paused') {
-      state.goalState = await this.transport.setGoalStatus(client, state.threadId!, 'active');
+    } else if (state.goalState?.status !== 'active' && state.goalState?.status !== 'blocked') {
+      // A running manager can still receive an admitted manual turn while its native Goal is blocked.
+      // Keep that native state intact; only a real inbox event may take the existing explicit turn path.
       this.save(state);
+      return;
     }
     let prefix = this.consumeGoalReadings(state);
     for (const event of events) {
@@ -1215,12 +1282,37 @@ export class ManagerSessions {
             return;
           }
           if (current.engine === 'codex' && current.threadId) {
-            const client = await this.transport.client(current.pool);
-            const resume = this.transport.resumeThread(client, current, current.threadId);
-            reportProgress();
-            const resumed = await resume;
-            current.activeTurnId = resumed.activeTurnId;
-            current.goalState = await this.transport.getGoal(client, current.threadId);
+            const parkedIdle =
+              current.status === 'running' &&
+              (current.waitingForInbox || (current.activeTurnId === null && current.turns > 0));
+            if (parkedIdle) {
+              // Resolve the native Goal before resuming its thread. A completed idle turn must stay parked
+              // across host recovery; resuming the thread could rearm provider autonomy.
+              await this.markWaitingForInbox(current.id);
+              current = this.get(current.id);
+              assertManagedManager(current);
+            } else if (
+              current.goalState?.status !== 'paused' &&
+              current.goalState?.status !== 'blocked' &&
+              current.goalState?.status !== 'budgetLimited' &&
+              current.goalState?.status !== 'usageLimited' &&
+              current.goalState?.status !== 'complete'
+            ) {
+              const client = await this.transport.client(current.pool);
+              const resumed = await this.transport.resumeThread(client, current, current.threadId);
+              reportProgress();
+              current.activeTurnId = resumed.activeTurnId;
+              current.goalState = await this.transport.getGoal(client, current.threadId);
+              if (
+                current.status === 'running' &&
+                current.activeTurnId === null &&
+                current.turns > 0
+              ) {
+                await this.markWaitingForInbox(current.id);
+                current = this.get(current.id);
+                assertManagedManager(current);
+              }
+            }
           }
           reportProgress();
           if (current.status === 'starting') {
@@ -1229,13 +1321,14 @@ export class ManagerSessions {
             await this.pauseRemote(current);
             return;
           }
-          if (current.engine === 'codex' && (current.waitingForInbox || current.activeTurnId === null)) {
-            this.markWaitingForInbox(current.id);
-            current = this.get(current.id);
-            assertManagedManager(current);
-          }
           this.save(current);
-          if (current.engine === 'codex' && current.threadId) {
+          if (
+            current.engine === 'codex' &&
+            current.threadId &&
+            current.status === 'running' &&
+            current.goalState?.status === 'active' &&
+            !current.waitingForInbox
+          ) {
             const client = await this.transport.client(current.pool);
             await this.services.windows.unregister(current.id);
             await this.transport.registerCodexViewer(current, current.threadId, client);
