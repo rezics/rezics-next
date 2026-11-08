@@ -1,6 +1,19 @@
 /** Library-owned discovery producer entry. Search adapts these ports without taking Collection authority. */
 export type { FollowDiscovery } from './follow-discovery.ts';
-export type { ViewerFactsPage } from './viewer-facts.ts';
+export {
+  prepareViewerFacts,
+  readViewerFacts,
+  readViewerFactsPage,
+  viewerFactsCurrent,
+  viewerFactsResponseSchema,
+} from './viewer-facts.ts';
+export type {
+  PreparedViewerFacts,
+  ViewerFact,
+  ViewerFactInput,
+  ViewerFactsPage,
+  ViewerQuestion,
+} from './viewer-facts.ts';
 export { publicCollectionDiscoverySource } from './collection-discovery-source.ts';
 export type {
   CollectionDiscoveryCensus,
