@@ -1,6 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { acquireDirectoryLease } from './lease.ts';
@@ -30,7 +29,9 @@ function git(cwd: string, ...args: string[]): string {
 }
 
 function repo(): string {
-  const root = mkdtempSync(join(tmpdir(), 'goal-dev-verifier-round-'));
+  const temporaryRoot = join(import.meta.dir, '../../../.temp');
+  mkdirSync(temporaryRoot, { recursive: true });
+  const root = mkdtempSync(join(temporaryRoot, 'goal-dev-verifier-round-'));
   roots.push(root);
   git(root, 'init', '-b', 'main');
   git(root, 'config', 'user.email', 'test@example.invalid');
@@ -192,7 +193,15 @@ test('the first round runs boot smoke then the full suite, batches current-head 
   ctx.settings.verifierChecks = [
     {
       paths: ['services/kernel/**'],
-      command: ['bun', 'test', 'services/kernel/test/a.test.ts', 'services/kernel/test/b.test.ts'],
+      command: [
+        'bun',
+        'test',
+        'scripts/docs-check.test.ts',
+        'tools/goal/src/dev-verifier-diagnostics.test.ts',
+        'tools/goal/src/store.test.ts',
+        'services/kernel/test/a.test.ts',
+        'services/kernel/test/b.test.ts',
+      ],
     },
     { paths: ['services/kernel/**'], command: ['unknown-check'] },
     { paths: ['services/kernel/**'], command: ['duplicate-a-check'] },
@@ -211,15 +220,35 @@ test('the first round runs boot smoke then the full suite, batches current-head 
       if (command.includes('duplicate-a-check'))
         return {
           passed: false,
-          output: 'AssertionError: expected an additional value\nat services/kernel/test/a.test.ts:30',
+          output:
+            'services/kernel/test/a.test.ts:\n(fail) duplicate result [0.2ms]\n' +
+            'AssertionError: expected an additional value\nExpected: another value\nReceived: false',
           timedOut: false,
         };
       if (command.includes('services/kernel/test/a.test.ts'))
         return {
           passed: false,
-          output:
-            'AssertionError: expected one\nat services/kernel/test/a.test.ts:10\n' +
-            'AssertionError: expected two\nat services/kernel/test/b.test.ts:20',
+          output: [
+            'scripts/docs-check.test.ts:',
+            '(pass) docs rules [2.1ms]',
+            '15 pass',
+            'tools/goal/src/dev-verifier-diagnostics.test.ts:',
+            '(pass) diagnostic cases [1.8ms]',
+            '3 pass',
+            'tools/goal/src/store.test.ts:',
+            '(pass) store lifecycle [0.9ms]',
+            '1 pass',
+            'services/kernel/test/a.test.ts:',
+            '(fail) first assertion [1.1ms]',
+            'AssertionError: expected one',
+            'Expected: first value',
+            'Received: false',
+            'services/kernel/test/b.test.ts:',
+            '(fail) second assertion [1.3ms]',
+            'AssertionError: expected two',
+            'Expected: second value',
+            'Received: false',
+          ].join('\n'),
           timedOut: false,
         };
       return { passed: true, output: '', timedOut: false };
@@ -264,6 +293,10 @@ test('the first round runs boot smoke then the full suite, batches current-head 
   expect(repairs[0]!.failures.flatMap((failure) => failure.assertions)).toContain('AssertionError: expected one');
   expect(repairs[0]!.failures.find((failure) => failure.test?.endsWith('a.test.ts'))!.assertions).toContain(
     'AssertionError: expected an additional value',
+  );
+  expect([...ctx.findings.values()].some((finding) => finding.test?.includes('docs-check'))).toBe(false);
+  expect(repairs[0]!.failures.find((failure) => failure.test?.endsWith('a.test.ts'))!.assertions).not.toContain(
+    'AssertionError: expected two',
   );
   expect(ctx.runs.size).toBeGreaterThan(4);
 
@@ -578,6 +611,90 @@ test('classification and workspace placement preserve the existing verifier chec
   });
 });
 
+test('Auth erasure history uses its database runner while ordinary Auth unit selection stays direct Bun', async () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev');
+  commit(root, 'services/auth/bunfig.toml', '[test]\n', 'Auth workspace');
+  commit(
+    root,
+    'services/auth/test/erasure-history.test.ts',
+    'test("erasure history", () => {});\n',
+    'Auth database test',
+  );
+  commit(root, 'services/auth/test/helper.spec.ts', 'test("Auth helper spec", () => {});\n', 'Auth spec test');
+  commit(root, 'services/auth/scripts/typecheck.test.ts', 'test("Auth script unit", () => {});\n', 'Auth script test');
+  const target = commit(root, 'services/auth/src/change.ts', 'export const changed = true;\n', 'Auth landing');
+  git(root, 'branch', '-f', 'dev', target);
+  expect(
+    placeInWorkspaceChecks(
+      { command: ['bun', 'test'], closure: ['services/auth/**'] },
+      trackedFilesAt(root, target),
+      root,
+    ),
+  ).toEqual([
+    {
+      command: ['env', 'bun', 'run', '--cwd', 'services/auth', 'check', 'test/erasure-history.test.ts'],
+      closure: ['services/auth/**'],
+    },
+  ]);
+  const ctx = setup(root, [landedTask(base, target, 'auth-owner', ['services/auth/**'])]);
+  ctx.settings.verifierChecks = [
+    {
+      paths: ['services/auth/**'],
+      command: [
+        'bun',
+        'test',
+        'services/auth/test/erasure-history.test.ts',
+        'services/auth/scripts/typecheck.test.ts',
+        'services/auth/test/helper.spec.ts',
+        '--test-name-pattern',
+        'erasure history',
+        '--timeout',
+        '12000',
+        '--',
+        'fixture.test.ts',
+      ],
+    },
+  ];
+  const commands: string[][] = [];
+  await verifyDev({
+    ...ctx.options,
+    runGate: async (command) => {
+      commands.push([...command]);
+      return { passed: true, output: '', timedOut: false };
+    },
+  });
+
+  expect(commands).toContainEqual([
+    'env',
+    'bun',
+    'run',
+    '--cwd',
+    'services/auth',
+    'check',
+    'test/erasure-history.test.ts',
+    '--test-name-pattern',
+    'erasure history',
+    '--timeout',
+    '12000',
+    '--',
+    'fixture.test.ts',
+  ]);
+  expect(commands).toContainEqual([
+    'env',
+    'bun',
+    'test',
+    '--test-name-pattern',
+    'erasure history',
+    '--timeout',
+    '12000',
+    'scripts/typecheck.test.ts',
+    'test/helper.spec.ts',
+    '--',
+    'fixture.test.ts',
+  ]);
+});
+
 test('Web verifier selections reach check.ts one file at a time with the captured candidate and original selectors', async () => {
   const root = repo();
   const base = git(root, 'rev-parse', 'dev');
@@ -657,7 +774,10 @@ test('Web verifier selections reach check.ts one file at a time with the capture
       if (command.includes('tests/browser/server-regression.test.ts'))
         return {
           passed: false,
-          output: 'AssertionError: expected the current server response\nat tests/browser/server-regression.test.ts:18',
+          output:
+            'tests/browser/server-regression.test.ts:\n(fail) current server response [1.0ms]\n' +
+            'AssertionError: expected the current server response\n' +
+            'at tests/browser/server-regression.test.ts:18',
           timedOut: false,
         };
       return { passed: true, output: '', timedOut: false };
@@ -728,7 +848,8 @@ test('Web failure attribution keeps the selected file before trailing program ar
       return {
         passed: false,
         timedOut: false,
-        output: 'AssertionError: selected child failed\nat tests/unrelated.test.ts:18',
+        output:
+          '(fail) selected child failed [1.0ms]\nAssertionError: selected child failed\nat tests/unrelated.test.ts:18',
       };
     },
   });
@@ -738,6 +859,43 @@ test('Web failure attribution keeps the selected file before trailing program ar
     'fixture.test.ts',
   ]);
   expect([...ctx.findings.values()].map((finding) => finding.test)).toEqual([file]);
+});
+
+test('precommand remote browser slot failure stays transport custody with no product repair', async () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev');
+  commit(root, 'apps/web/bunfig.toml', '[test]\n', 'Web test config');
+  const file = 'apps/web/tests/browser/slot-take.test.ts';
+  const target = commit(root, file, 'test("browser", () => {});\n', 'Web browser test');
+  git(root, 'branch', '-f', 'dev', target);
+  const owner = landedTask(base, target, 'web-owner', ['apps/web/**']);
+  const ctx = setup(root, [owner]);
+  ctx.settings.verifierChecks = [{ paths: ['apps/web/**'], command: ['bun', 'test', file] }];
+  const repairs: TestFailureRepair[] = [];
+  const remote = 'remote-check: connection to b failed during slot take before a result';
+  await verifyDev({
+    ...ctx.options,
+    runGate: async (command) =>
+      command.includes('scripts/check.ts')
+        ? { passed: false, output: remote, timedOut: false }
+        : { passed: true, output: '', timedOut: false },
+    dispatchTestRepair: (repair) => repairs.push(repair),
+  });
+
+  expect(ctx.store.devVerifierLatestRound()!.round).toMatchObject({ failed: 0, unknown: 1 });
+  expect(repairs).toHaveLength(0);
+  expect([...ctx.findings.values()]).toHaveLength(1);
+  expect([...ctx.findings.values()][0]).toMatchObject({
+    test: undefined,
+    cause: 'transport',
+    result: 'infrastructure',
+    status: 'unknown',
+    head: {
+      commit: target,
+      output: expect.stringContaining(remote),
+      command: expect.arrayContaining(['tests/browser/slot-take.test.ts']),
+    },
+  });
 });
 
 test('deadline cancellation records the first cause and carries each unstarted Web file selection', async () => {

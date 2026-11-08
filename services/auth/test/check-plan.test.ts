@@ -44,6 +44,30 @@ test('file arguments select only named files and the test files among them', () 
   });
 });
 
+test('focused Bun filters stay test arguments while mixed file selections remain file-owned', () => {
+  withModule((directory) => {
+    expect(
+      checkPlan(
+        [
+          'test/b.test.ts',
+          'src/a.ts',
+          '--test-name-pattern',
+          'selected case',
+          '--timeout',
+          '12000',
+          '--',
+          'fixture.test.ts',
+        ],
+        directory,
+      ),
+    ).toEqual({
+      files: ['src/a.ts', 'test/b.test.ts'],
+      tests: ['test/b.test.ts'],
+      testArguments: ['--test-name-pattern', 'selected case', '--timeout', '12000', '--', 'fixture.test.ts'],
+    });
+  });
+});
+
 test('paths escaping the module, missing files and directories are refused', () => {
   withModule((directory, outside) => {
     for (const argument of ['../outside.ts', outside, 'src/missing.ts', 'src']) {

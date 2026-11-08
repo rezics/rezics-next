@@ -17,7 +17,47 @@ import {
   withCompilerSchema,
 } from './database.ts';
 
-type CheckPlan = { files: string[] | null; tests: string[] };
+type CheckPlan = { files: string[] | null; tests: string[]; testArguments?: string[] };
+
+const bunFlagsWithValue = new Set([
+  '--timeout',
+  '--preload',
+  '--rerun-each',
+  '--retry',
+  '--coverage-reporter',
+  '--coverage-dir',
+  '--test-name-pattern',
+  '--reporter',
+  '--reporter-outfile',
+  '--max-concurrency',
+  '--path-ignore-patterns',
+  '--changed',
+  '--seed',
+  '--shard',
+  '--timings',
+  '--parallel-delay',
+  '--parallel',
+  '-t',
+]);
+
+function checkArguments(args: readonly string[]): { paths: string[]; testArguments: string[] } {
+  const paths: string[] = [];
+  const testArguments: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index]!;
+    if (argument === '--') {
+      testArguments.push(argument, ...args.slice(index + 1));
+      break;
+    }
+    if (argument.startsWith('-')) {
+      testArguments.push(argument);
+      if (bunFlagsWithValue.has(argument) && index + 1 < args.length) testArguments.push(args[++index]!);
+      continue;
+    }
+    paths.push(argument);
+  }
+  return { paths, testArguments };
+}
 
 function moduleTests(moduleDirectory: string): string[] {
   return Array.from(new Bun.Glob('test/**/*.test.ts').scanSync({ cwd: moduleDirectory })).sort();
@@ -32,6 +72,8 @@ export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
   const root = resolve(moduleDirectory);
   const allTests = moduleTests(root);
   if (args.length === 0) return { files: null, tests: allTests };
+  const { paths: selections, testArguments } = checkArguments(args);
+  if (!selections.length) return { files: null, tests: allTests, ...(testArguments.length ? { testArguments } : {}) };
 
   let rootRealPath: string | null;
   try {
@@ -40,7 +82,7 @@ export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
     rootRealPath = null;
   }
   const files = new Set<string>();
-  for (const argument of args) {
+  for (const argument of selections) {
     const normalized = resolve(root, argument.startsWith('./') ? argument.slice(2) : argument);
     if (!rootRealPath || !pathIsWithin(root, normalized)) {
       throw new Error(`Check path must name an existing file inside ${moduleDirectory}: ${argument}`);
@@ -59,7 +101,11 @@ export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
 
   const sortedFiles = Array.from(files).sort();
   const testFiles = new Set(allTests);
-  return { files: sortedFiles, tests: sortedFiles.filter((file) => testFiles.has(file)) };
+  return {
+    files: sortedFiles,
+    tests: sortedFiles.filter((file) => testFiles.has(file)),
+    ...(testArguments.length ? { testArguments } : {}),
+  };
 }
 
 if (import.meta.main) {
@@ -119,6 +165,7 @@ if (import.meta.main) {
           service: 'auth',
           directory,
           files: plan.tests,
+          ...(plan.testArguments ? { testArguments: plan.testArguments } : {}),
           partial: plan.files !== null,
           createDatabase: (name) => psql(`CREATE DATABASE ${name} TEMPLATE ${TEMPLATE_DATABASE}`),
           dropDatabase: (name) => psql(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`),

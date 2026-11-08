@@ -298,7 +298,7 @@ export type PriorityGrant = {
 };
 export type IntegrationPlan = { taskId: string; attempt: number; base: string; commit: string; commits: string[] };
 export type DevVerifierResult = 'pass' | 'fail' | 'infrastructure';
-export type DevVerifierCause = 'compiler' | 'product-runtime' | 'transport' | 'cleanup';
+export type DevVerifierCause = 'compiler' | 'product-runtime' | 'setup' | 'transport' | 'cleanup';
 export type DevVerifierCommand = { argv: string[]; cwd?: string };
 export type DevVerifierDiagnosticLocation = {
   file: string;

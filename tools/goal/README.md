@@ -3164,15 +3164,29 @@ head. Findings and round summaries use the bounded dev_verifier_findings and dev
 
 ### Verifier diagnostics and owner routing
 
-Verifier evidence keeps executable argv and cwd as command metadata. Only named test operands from argv, test-runner
-output or a single-file check closure become test findings; environment assignments and command text never become a
-test filename. TypeScript paths and line locations are parsed before normalization, using the active compiler
-workspace from command output and the check's real workspace cwd.
+Verifier evidence keeps executable argv and cwd as command metadata. A file becomes a test outcome only from an
+observed reporter result: per-file Bun sections, explicit PASS/FAIL file lines, or the Auth check runner's complete
+failed-file list. File headers retain pass outcomes; each failed file receives assertions from its own reporter block.
+Operands, wrapper selection and stack paths alone are not failed tests. A wrapper-selected single file can resolve a
+reporter event only when the child reports an outcome. Unhandled errors, unresolved paths, incomplete Auth lists,
+truncated output and failures without a file-local reporter result stay visible for triage.
 
-Compiler, product runtime, transport and resource cleanup causes remain separate findings over the original command
-evidence. Rsync byte totals are transport telemetry; Expected/Received assertion lines remain product evidence. Cleanup
-or transport diagnostics do not replace a compiler result, and a current-head finding retains the original captured
-revision, argv, cwd and raw output.
+Auth's scripts/check.ts owns files under services/auth/test/**/*.test.ts, which its checkPlan runs in isolated
+database lanes. The verifier routes those files through bun run --cwd services/auth check, forwards Bun test flags,
+and splits mixed selections so Auth script unit tests keep their direct Bun lane. This matches the Auth runner's
+selected-file classification; changing cwd alone does not provide database placement.
+
+Compiler, product runtime, setup, transport and resource cleanup causes remain separate findings over the original
+command evidence. Auth database-placement denial is setup evidence and never a product defect. Rsync byte totals are
+transport telemetry; a remote slot-take disconnect before a child result is transport custody with unknown physical
+terminality. Expected/Received assertion lines remain product evidence. Cleanup or transport diagnostics do not replace
+a compiler or file-local test result, and each finding retains the captured revision, executable argv, cwd, original
+log path and raw command output. Repair briefs include only the failed file's assertion block.
+
+Decision: reporter outcomes, rather than selected operands or stack references, establish file-local test results;
+passing sections remain passing, failed sections route only their own assertions, and ambiguous or setup-only evidence
+stays out of product repair routing. Auth database tests use Auth's check runner with their original selection flags,
+while ordinary Auth script tests remain direct Bun tests.
 
 Automatic compiler routing requires a concrete repository source operand that is unchanged between the captured
 revision and current dev and matches an active owner's declared paths. The check task id can only break a tie between
