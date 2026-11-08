@@ -44,7 +44,7 @@ import {
   type PersonReviewPair,
   type ReviewedPersonPublication,
 } from './showcase-person-identity.ts';
-import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
+import { createAccountTokenProvider, SHOWCASE_IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { createSeedDenialDiagnostics } from './showcase-denial-diagnostics.ts';
 import {
   CrossMediaGraph,
@@ -3570,11 +3570,7 @@ export async function runCrossMediaSeedCli(
     account: values.get('--account')!,
     client: values.get('--client')!,
     authOrigin: auth,
-    scopes: [
-      ...VNDB_IMPORTER_SCOPES,
-      'subject:read',
-      ...(showcasePath ? (['context:accept', 'context:adopt', 'subject:merge'] as const) : []),
-    ],
+    scopes: showcasePath ? [...SHOWCASE_IMPORTER_SCOPES] : [...VNDB_IMPORTER_SCOPES, 'subject:read'],
   });
   const resultPath = resolve(values.get('--result')!);
   const statePath = resolve(values.get('--state')!);

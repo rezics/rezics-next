@@ -8,7 +8,7 @@ import { securityScopeLimit } from '@rezics/auth-contract';
 import { migrate } from './database.ts';
 import { mountedWebsiteConfiguration } from './website-composition.ts';
 import { websiteWorkerScopes } from '../../../apps/web/scripts/website-configuration.ts';
-import { createAccountTokenProvider } from '../../importer/src/credentials.ts';
+import { createAccountTokenProvider, SHOWCASE_IMPORTER_SCOPES } from '../../importer/src/credentials.ts';
 import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
 import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
 import { developmentPersonalListScopes } from '../../importer/src/showcase-personal-list.ts';
@@ -217,18 +217,7 @@ export async function developmentWebsiteConfiguration(env?: Record<string, strin
   });
 }
 
-export const importerScopes = [
-  'subject:create',
-  'subject:batch_write',
-  'statement:propose',
-  'source_fence:read',
-  'media:import_from_url',
-  'media:read_reservation',
-  'source_statistic:write',
-  'subject:read',
-  'context:accept',
-  'context:adopt',
-];
+export const importerScopes = [...SHOWCASE_IMPORTER_SCOPES];
 export const localClientIds = {
   importer: 'rezics-dev-importer',
   showcase: 'rezics-dev-showcase',

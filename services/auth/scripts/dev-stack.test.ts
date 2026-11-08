@@ -9,12 +9,17 @@ import {
   type DevelopmentKeys,
   developmentMediaBindings,
   origins,
+  importerScopes,
   readLocalDeveloperAccountId,
   reusableCompletedExpiredPersonaId,
   root,
 } from './dev-stack.ts';
 import { StackFixtureLifetime } from './dev-stack-lifetime.ts';
 import { websiteRequestedScopes } from '../../../apps/web/src/session/website-scopes.ts';
+
+test('the local importer can request subject merging required by showcase seeding', () => {
+  expect(importerScopes).toContain('subject:merge');
+});
 
 test('only a matching completed and expired local developer registration can be reused', () => {
   const accountId = '00000000-0000-7000-8000-000000000099';
@@ -30,7 +35,9 @@ test('only a matching completed and expired local developer registration can be 
   expect(reusableCompletedExpiredPersonaId(expired, '00000000-0000-7000-8000-000000000098', now)).toBeUndefined();
   expect(reusableCompletedExpiredPersonaId({ ...expired, handle: 'other' }, accountId, now)).toBeUndefined();
   expect(reusableCompletedExpiredPersonaId({ ...expired, completed_at: null }, accountId, now)).toBeUndefined();
-  expect(reusableCompletedExpiredPersonaId({ ...expired, expires_at: new Date(now + 1) }, accountId, now)).toBeUndefined();
+  expect(
+    reusableCompletedExpiredPersonaId({ ...expired, expires_at: new Date(now + 1) }, accountId, now),
+  ).toBeUndefined();
 });
 
 test('the local persona account comes from the persisted seed file without runtime account injection', async () => {
