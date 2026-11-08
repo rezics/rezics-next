@@ -451,8 +451,9 @@ test('Auth setup denial and precommand remote slot failure remain custody eviden
     },
   ]);
   expect(truncatedCounts).toMatchObject({ failed: 0, unknown: 1, repairs: [] });
-  expect([...truncatedFixture.findings.values()][0]).toMatchObject({
-    test: undefined,
+  const truncatedFinding = [...truncatedFixture.findings.values()][0]!;
+  expect(truncatedFinding.test).toBeUndefined();
+  expect(truncatedFinding).toMatchObject({
     diagnostic: { message: expect.stringContaining('Truncated output') },
     result: 'infrastructure',
     status: 'unknown',
