@@ -32,6 +32,7 @@ export type TypingInputReceipt = {
   completed: TypingInputs;
   sourceStable: boolean;
   exitCode: number;
+  outputs?: ['kernel-client-v1'];
 };
 export const typingInputsReceiptPath = (physical: string): string => `.temp/goal/checks/typing-inputs/${physical}.json`;
 const GENERATED_CLIENT = 'packages/client/src/kernel/';
@@ -77,9 +78,30 @@ function input(root: string, file: string): TypingInput {
   }
 }
 
+/** The installed producer/consumer owners, in fail-fast order; arbitrary shell/custom compilers stay conservative. */
+export function kernelClientTypingPipeline(root: string, argv: readonly string[]): boolean {
+  if (argv.length !== 3 || !['sh', 'bash'].includes(argv[0]!) || argv[1] !== '-c') return false;
+  const steps = argv[2]!.trim().split(/\s*&&\s*/);
+  if (
+    steps.length !== 2 ||
+    steps[0]!.trim().replace(/\s+/g, ' ') !== 'bun run --cwd services/kernel typecheck --emit-client' ||
+    steps[1]!.trim().replace(/\s+/g, ' ') !== 'bun run --cwd packages/client typecheck'
+  )
+    return false;
+  try {
+    const manifest = (path: string) => JSON.parse(readFileSync(join(root, path, 'package.json'), 'utf8'));
+    return (
+      manifest('services/kernel').scripts?.typecheck === 'bun scripts/typecheck.ts' &&
+      manifest('packages/client').scripts?.typecheck === 'bun check --no-script -p tsconfig.json'
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Only these documented owning compiler commands permit a configured graph. A custom command keeps every file. */
 function knownCompiler(root: string, argv: readonly string[], files: readonly string[]): boolean {
-  if (!(argv[0] === 'bun' && argv[1] === 'scripts/typecheck.ts')) return false;
+  if (!(argv[0] === 'bun' && argv[1] === 'scripts/typecheck.ts') && !kernelClientTypingPipeline(root, argv)) return false;
   const known = new Set([
     'bun check --no-script -p tsconfig.json',
     'bun scripts/typecheck.ts',
@@ -108,7 +130,7 @@ function knownCompiler(root: string, argv: readonly string[], files: readonly st
 
 /** Config parsing uses TypeScript's own include/extends semantics, including ignored generated root files. */
 function configuredInputs(root: string, files: readonly string[]): { paths: Set<string>; documents: Set<string> } {
-  const require = createRequire(import.meta.url);
+  const require = createRequire(join(root, 'package.json'));
   const executable = join(dirname(require.resolve('typescript/package.json')), 'bin/tsc');
   const paths = new Set<string>();
   const documents = new Set<string>();
@@ -191,7 +213,19 @@ export function captureTypingInputs(root: string, compilerCommand: readonly stri
       ? files.filter((file) => file.endsWith('.md') && !configured.paths.has(file) && !configured.documents.has(file))
       : [];
   const excluded = new Set(excludedDocuments);
-  const sourceFiles = files.filter((file) => !excluded.has(file) && !file.startsWith(GENERATED_CLIENT));
+  const pipeline = kernelClientTypingPipeline(root, compilerCommand);
+  const sourceFiles = files.filter(
+    (file) =>
+      !excluded.has(file) &&
+      !file.startsWith(GENERATED_CLIENT) &&
+      !(
+        pipeline &&
+        (['.preparation-started', '.remote-check-supervisor', '.temp/check-output-tree/kernel-client-v1.bin'].includes(
+          file,
+        ) ||
+          file.startsWith('packages/client/src/.kernel-output-tree/'))
+      ),
+  );
   const preparedFiles = new Set([
     ...files.filter((file) => file.startsWith(GENERATED_CLIENT)),
     ...[...configured.paths].filter((file) => !files.includes(file)),
@@ -217,7 +251,7 @@ export function captureTypingInputs(root: string, compilerCommand: readonly stri
   };
 }
 
-function stableSource(started: TypingInputs, completed: TypingInputs): boolean {
+function stableSource(started: TypingInputs, completed: TypingInputs, outputs: readonly string[] = []): boolean {
   // Preparation can make a config graph available. Compare every admitted source using the completed exclusion set;
   // a source added or changed during compilation still prevents a pass, including an imported former document.
   const excluded = new Set(completed.excludedDocuments);
@@ -227,8 +261,16 @@ function stableSource(started: TypingInputs, completed: TypingInputs): boolean {
       completed.source,
     ) &&
     same(
-      started.prepared.filter((entry) => !producedDuringPreparation(entry.path)),
-      completed.prepared.filter((entry) => !producedDuringPreparation(entry.path)),
+      started.prepared.filter(
+        (entry) =>
+          !producedDuringPreparation(entry.path) &&
+          !(outputs.includes('kernel-client-v1') && entry.path.startsWith(GENERATED_CLIENT)),
+      ),
+      completed.prepared.filter(
+        (entry) =>
+          !producedDuringPreparation(entry.path) &&
+          !(outputs.includes('kernel-client-v1') && entry.path.startsWith(GENERATED_CLIENT)),
+      ),
     )
   );
 }
@@ -275,6 +317,9 @@ export function beginTypingInputReceipt(
   const command: unknown = JSON.parse(Buffer.from(request, 'base64').toString('utf8'));
   if (!Array.isArray(command) || command.some((argument) => typeof argument !== 'string'))
     throw new Error('typing inputs: malformed invocation');
+  const outputs: ['kernel-client-v1'] | undefined = kernelClientTypingPipeline(root, compilerCommand)
+    ? ['kernel-client-v1']
+    : undefined;
   const started = captureTypingInputs(root, compilerCommand);
   return (exitCode) => {
     const completed = captureTypingInputs(root, compilerCommand);
@@ -285,7 +330,8 @@ export function beginTypingInputReceipt(
       compilerCommand,
       started,
       completed,
-      sourceStable: stableSource(started, completed),
+      sourceStable: stableSource(started, completed, outputs),
+      ...(outputs ? { outputs } : {}),
       exitCode,
     };
     const file = join(root, typingInputsReceiptPath(physical));
@@ -343,10 +389,56 @@ export function readTypingInputReceipt(
     typeof value.sourceStable !== 'boolean' ||
     !validSnapshot(value.started) ||
     !validSnapshot(value.completed) ||
-    value.sourceStable !== stableSource(value.started, value.completed)
+    (value.outputs !== undefined &&
+      (!same(value.outputs, ['kernel-client-v1']) || !kernelClientTypingPipeline(root, value.compilerCommand))) ||
+    value.sourceStable !== stableSource(value.started, value.completed, value.outputs)
   )
     throw new Error('typing inputs: receipt binding or inventory is invalid');
   return value;
+}
+
+export type TypingInputQualification = 'matched' | 'source-changed' | 'prepared-changed' | 'evidence-unavailable';
+
+/** Qualify producer outputs through the existing atomic tree publication; unavailable transport is not a source error. */
+export function qualifyTypingInputs(
+  root: string,
+  receipt: TypingInputReceipt,
+  localPrepared: readonly TypingInput[] = [],
+): TypingInputQualification {
+  const pipeline = kernelClientTypingPipeline(root, receipt.compilerCommand);
+  if (!receipt.sourceStable) {
+    // Earlier capture knew the exact pipeline but did not declare generation. Never reinterpret it as a pass.
+    if (pipeline && stableSource(receipt.started, receipt.completed, ['kernel-client-v1']))
+      return 'evidence-unavailable';
+    return 'source-changed';
+  }
+  if (receipt.exitCode !== 0) return 'source-changed';
+  const current = captureTypingInputs(root, receipt.compilerCommand);
+  if (current.runtime !== receipt.completed.runtime) return 'evidence-unavailable';
+  if (!same(current.source, receipt.completed.source)) return 'source-changed';
+  if (receipt.outputs?.includes('kernel-client-v1')) {
+    try {
+      const require = createRequire(import.meta.url);
+      const owner =
+        require('../../../scripts/check-output-tree.ts') as typeof import('../../../scripts/check-output-tree.ts');
+      owner.verifyPublishedOutputTree(root, readFileSync(join(root, owner.KERNEL_CLIENT_OUTPUT.transport)));
+    } catch {
+      return 'evidence-unavailable';
+    }
+    const generated = (entries: readonly TypingInput[]) =>
+      entries.filter((entry) => entry.path.startsWith(GENERATED_CLIENT));
+    if (!same(generated(current.prepared), generated(receipt.completed.prepared))) return 'evidence-unavailable';
+  }
+  const baseline = new Map(localPrepared.map((entry) => [entry.path, entry.digest]));
+  const compiled = new Map(receipt.completed.prepared.map((entry) => [entry.path, entry.digest]));
+  for (const entry of current.prepared) {
+    if (compiled.get(entry.path) === entry.digest || baseline.get(entry.path) === entry.digest) continue;
+    return 'prepared-changed';
+  }
+  for (const entry of localPrepared)
+    if (!current.prepared.some((current) => current.path === entry.path) && entry.digest !== 'missing')
+      return 'prepared-changed';
+  return 'matched';
 }
 
 export function typingInputsMatch(
@@ -354,18 +446,5 @@ export function typingInputsMatch(
   receipt: TypingInputReceipt,
   localPrepared: readonly TypingInput[] = [],
 ): boolean {
-  if (!receipt.sourceStable || receipt.exitCode !== 0) return false;
-  const current = captureTypingInputs(root, receipt.compilerCommand);
-  if (current.runtime !== receipt.completed.runtime || !same(current.source, receipt.completed.source)) return false;
-  const baseline = new Map(localPrepared.map((entry) => [entry.path, entry.digest]));
-  const compiled = new Map(receipt.completed.prepared.map((entry) => [entry.path, entry.digest]));
-  // Remote-only derived inputs are recorded in the compiler receipt. Local generated inputs must remain at the
-  // compiled value or their unchanged pre-run value; a return can legitimately replace a pre-run declaration.
-  for (const entry of current.prepared) {
-    if (compiled.get(entry.path) === entry.digest || baseline.get(entry.path) === entry.digest) continue;
-    return false;
-  }
-  for (const entry of localPrepared)
-    if (!current.prepared.some((current) => current.path === entry.path) && entry.digest !== 'missing') return false;
-  return true;
+  return qualifyTypingInputs(root, receipt, localPrepared) === 'matched';
 }

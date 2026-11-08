@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import {
   captureTypingInputs,
   readTypingInputReceipt,
-  typingInputsMatch,
+  qualifyTypingInputs,
   type TypingInput,
   type TypingInputReceipt,
 } from './worker-check-typing-inputs.ts';
@@ -351,19 +351,19 @@ const TYPING_SETTLEMENT_FAILED = 'Last check-host run failed its typecheck.';
 const TYPING_SETTLEMENT_CHANGED = 'Worktree content changed after the last check-host typecheck.';
 const TYPING_SETTLEMENT_UNAVAILABLE = 'Compiler input closure is unavailable for the last check-host typecheck.';
 
-/** A typing settlement is the attempt's own failure, never a shared environment fault. */
+/** Controller typing settlements do not establish a shared tool incident. */
 export function isTypingSettlementResult(result: string | null | undefined): boolean {
-  return Boolean(result?.startsWith(TYPING_SETTLEMENT_FAILED) || result?.startsWith(TYPING_SETTLEMENT_CHANGED));
+  return Boolean(result?.startsWith(TYPING_SETTLEMENT_FAILED) || isTypingEvidenceUnavailableResult(result));
 }
 
 /** Historical controller output has this exact prefix; provider/CLI failures never enter this recovery path. */
 export function isTypingEvidenceUnavailableResult(result: string | null | undefined): boolean {
-  return result?.startsWith(TYPING_SETTLEMENT_UNAVAILABLE) === true;
+  return Boolean(result?.startsWith(TYPING_SETTLEMENT_UNAVAILABLE) || result?.startsWith(TYPING_SETTLEMENT_CHANGED));
 }
 
 /**
- * Product outcomes land when they type-check. A success report after a failed last host typecheck, or after the
- * worktree changed since that typecheck, is recorded as a typing failure so the attempt is retried instead of landing.
+ * A recorded compiler failure requires source repair. Missing or drifted compiler evidence retains the completed
+ * source pending typing-only proof, without authorizing landing or a source-writing retry.
  * Failing tests alone keep today's handling. Exempt briefs skip this guard.
  */
 export function workerCheckHostTypingSettlement(input: {
@@ -412,20 +412,18 @@ export function workerCheckHostTypingSettlement(input: {
       (!source.typingRequest ||
         JSON.stringify(captureTypingInputs(input.worktree, ['bun', 'scripts/typecheck.ts']).prepared) ===
           JSON.stringify(source.typingRequest.localPrepared));
-    const unavailable = Boolean(source.typingRequest && !receipt && !legacyCompatible);
-    const changed = receipt
-      ? !typingInputsMatch(input.worktree, receipt, source.typingRequest?.localPrepared)
-      : !fullTreeMatches;
+    const qualification = receipt
+      ? qualifyTypingInputs(input.worktree, receipt, source.typingRequest?.localPrepared)
+      : undefined;
+    const unavailable =
+      qualification === 'evidence-unavailable' || Boolean(source.typingRequest && !receipt && !legacyCompatible);
+    const changed = receipt ? qualification !== 'matched' : !fullTreeMatches;
     if (!failed && (legacyCompatible || (!changed && !unavailable))) return { ok: true };
-    const kind =
-      failed || (!source.typingRequest && changed) || (receipt !== undefined && changed)
-        ? 'typing-failure'
-        : 'evidence-unavailable';
-    const reason = failed
-      ? TYPING_SETTLEMENT_FAILED
-      : kind === 'evidence-unavailable'
-        ? TYPING_SETTLEMENT_UNAVAILABLE
-        : TYPING_SETTLEMENT_CHANGED;
+    const kind = failed ? 'typing-failure' : 'evidence-unavailable';
+    const reason = failed ? TYPING_SETTLEMENT_FAILED : TYPING_SETTLEMENT_UNAVAILABLE;
+    if (!failed && changed && receipt && !unavailableReason) {
+      unavailableReason = `Retained compiler evidence does not match current inputs (${qualification}); typing-only proof is required.`;
+    }
     return {
       ok: false,
       kind,
