@@ -1,21 +1,40 @@
 {
-  "status": 200,
   "items": [
     {
-      "realmId": "01a1a000-0000-7000-8000-000000000002",
-      "name": "The Quiet Novel Club",
-      "role": "member"
-    },
-    {
-      "realmId": "01a1a000-0000-7000-8000-000000000051",
-      "name": "Night Shift Translators",
-      "role": "member"
-    },
-    {
-      "realmId": "01a1a000-0000-7000-8000-000000000052",
-      "name": "Hearth and Skillet",
-      "role": "member"
+      "realmId": "01a1b8b8-36d8-763b-897a-3304344f480d",
+      "name": "Little Prince Readers",
+      "role": "member",
+      "current": {
+        "description": "Readers of one short book.",
+        "avatar": { "state": "none", "value": null },
+        "banner": { "state": "none", "value": null },
+        "destination": { "kind": "realm", "realmId": "01a1b8b8-36d8-763b-897a-3304344f480d" },
+        "spaceId": "01a1b8b8-36ba-72b4-a3ce-330402b84a66",
+        "viewer": {
+          "readability": "allowed",
+          "membership": {
+            "state": "member",
+            "since": "2026-11-08T01:13:02.932Z",
+            "reservationId": "01a1b8b8-3734-72fb-becc-ca7f0d2e1932",
+            "transactionId": "01a1b8b8-3734-72fc-af8e-d37fad50b6fa"
+          },
+          "participation": "allowed"
+        },
+        "actions": {
+          "state": "current",
+          "enter": {
+            "state": "available",
+            "method": "GET",
+            "path": "/v1/realms/01a1b8b8-36d8-763b-897a-3304344f480d",
+            "body": null,
+            "expectedStatus": 200
+          },
+          "manage": { "state": "prohibited", "reason": "not_authorized" },
+          "leave": { "state": "unavailable", "reason": "last_explicit_holder" }
+        }
+      }
     }
   ],
-  "next": null
+  "next": null,
+  "status": 200
 }

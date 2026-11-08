@@ -29,10 +29,13 @@ const search = workbenchSearch({
 
 test('native history transports independent operands and reads one exact receipt without queue scans', async () => {
   const requests: Request[] = [];
+  const controller = new AbortController();
   const client = createKernelClient('https://kernel.invalid', {
     fetch: (async (input, init) => {
       const request = new Request(input, init);
       requests.push(request);
+      expect(init?.cache).toBe('no-store');
+      expect(init?.signal).toBe(controller.signal);
       const data =
         requests.length === 1
           ? page
@@ -50,7 +53,11 @@ test('native history transports independent operands and reads one exact receipt
       return Response.json(data, { headers: { [SESSION_HEADER]: 'native-source' } });
     }) as typeof fetch,
   });
-  const result = await readWorkbenchHistory(historySource(client, 'Bearer original'), search);
+  const result = await readWorkbenchHistory(
+    historySource(client, 'Bearer original', controller.signal),
+    search,
+    controller.signal,
+  );
   expect(result.state).toBe('ready');
   expect(result.selected?.state).toBe('ready');
   expect(requests).toHaveLength(2);
@@ -158,4 +165,32 @@ test('a native continuation outside the browser address bound cannot silently be
     search,
   );
   expect(result).toMatchObject({ state: 'unavailable', entries: [], next: null });
+});
+
+test('abort after native page or exact dispatch discards late results without reading a successor receipt', async () => {
+  for (const phase of ['page', 'exact'] as const) {
+    const controller = new AbortController();
+    let reads = 0;
+    const client = createKernelClient('https://kernel.invalid', {
+      fetch: (async (_input, init) => {
+        expect(init?.signal).toBe(controller.signal);
+        reads++;
+        if (phase === 'page' || reads === 2) controller.abort();
+        return Response.json(
+          reads === 1
+            ? page
+            : {
+                ...entry,
+                viewer: { affectedAuthor: false, observedAt: entry.decidedAt, appeal: {} },
+                targetContext: { state: 'concealed' },
+              },
+          { headers: { [SESSION_HEADER]: 'late-source' } },
+        );
+      }) as typeof fetch,
+    });
+    await expect(
+      readWorkbenchHistory(historySource(client, 'Bearer original', controller.signal), search, controller.signal),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(reads).toBe(phase === 'page' ? 1 : 2);
+  }
 });

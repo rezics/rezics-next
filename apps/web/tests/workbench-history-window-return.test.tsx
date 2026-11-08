@@ -1,6 +1,7 @@
 import { afterAll, expect, mock, test } from 'bun:test';
+import { createKernelClient, SESSION_HEADER } from '@rezics/client';
 import { dirname } from 'node:path';
-import type { WorkbenchRead, WorkbenchNativeSource } from '../src/moderation/workbench-queue/read';
+import type { WorkbenchRead } from '../src/moderation/workbench-queue/read';
 import type { HistoryEntry } from '../src/moderation/workbench-history/read';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { Window } = await import(
@@ -30,7 +31,7 @@ const { createRootRoute, createRoute, createRouter, createMemoryHistory, RouterP
   await import('@tanstack/react-router');
 const { WorkbenchRoutePage } = await import('../src/routes/moderation/workbench');
 const { createWorkbenchLoader } = await import('../src/moderation/workbench-queue/route-loader');
-const { readWorkbench, workbenchSearch } = await import('../src/moderation/workbench-queue/read');
+const { readWorkbenchPage, workbenchSearch } = await import('../src/moderation/workbench-queue/read');
 const { privateReaderFingerprint } = await import('../src/moderation/private-reader-origin');
 const { WorkbenchHistoryWindows } = await import('../src/moderation/workbench-history/window-history');
 const { m } = await import('../src/paraglide/messages.js');
@@ -54,65 +55,58 @@ test('the production route rereads three native windows, retries Previous, close
   let failExact = true;
   let exactReads = 0;
   let queueReads = 0;
-  const source: WorkbenchNativeSource = {
-    history: {
-      page: async (_board, query) => {
-        reads.push(query.cursor);
-        expect(query.limit).toBe(20);
-        if (failPrevious && query.cursor === 'history-2') {
+  const native = createKernelClient('https://kernel.invalid', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      expect(request.headers.get('authorization')).toBe('Bearer prepared');
+      expect(init?.cache).toBe('no-store');
+      const response = (data: unknown, status = 200) =>
+        Response.json(data, { status, headers: { [SESSION_HEADER]: 'native-session' } });
+      if (url.pathname === '/v1/boards/board-one/moderation-history') {
+        const cursor = url.searchParams.get('cursor') ?? undefined;
+        reads.push(cursor);
+        expect(url.searchParams.get('limit')).toBe('20');
+        expect(url.searchParams.get('targetKind')).toBe('all');
+        expect(url.searchParams.has('historyDecision')).toBe(false);
+        if (failPrevious && cursor === 'history-2') {
           failPrevious = false;
-          return { status: 503 };
+          return response({ code: 'dependency_unavailable' }, 503);
         }
-        return {
-          status: 200,
-          source: 'native-session',
-          data: {
-            viewer: { kind: 'board-moderator' },
-            entries: query.cursor === 'history-2' ? [entry] : [],
-            nextCursor: query.cursor === 'history-3' ? null : query.cursor === 'history-2' ? 'history-3' : 'history-2',
-          },
-        };
-      },
-      exact: async (id) => {
-        expect(id).toBe(entry.id);
+        return response({
+          viewer: { kind: 'board-moderator' },
+          entries: cursor === 'history-2' ? [entry] : [],
+          nextCursor: cursor === 'history-3' ? null : cursor === 'history-2' ? 'history-3' : 'history-2',
+        });
+      }
+      if (url.pathname === `/v1/moderation-decisions/${entry.id}`) {
         exactReads++;
         return failExact
-          ? { status: 503 }
-          : {
-              status: 200,
-              source: 'native-session',
-              data: {
-                ...entry,
-                appeal: null,
-                appealDeadline: null,
-                viewer: {
-                  affectedAuthor: false,
-                  observedAt: entry.decidedAt,
-                  appeal: { state: 'unavailable', reason: 'not_affected_author' },
-                },
-                targetContext: { state: 'concealed' },
+          ? response({ code: 'dependency_unavailable' }, 503)
+          : response({
+              ...entry,
+              appeal: null,
+              appealDeadline: null,
+              viewer: {
+                affectedAuthor: false,
+                observedAt: entry.decidedAt,
+                appeal: { state: 'unavailable', reason: 'not_affected_author' },
               },
-            };
-      },
-    },
-    boardReports: async (_board, cursor) => {
+              targetContext: { state: 'concealed' },
+            });
+      }
+      expect(url.pathname).toBe('/v1/boards/board-one/reports');
+      expect(url.searchParams.get('targetKind')).toBe('post');
+      expect(url.searchParams.get('order')).toBe('oldest');
+      const cursor = url.searchParams.get('cursor');
       queueReads++;
       expect(['queue-original', 'queue-next']).toContain(cursor);
-      return { reports: [], next: cursor === 'queue-original' ? 'queue-next' : null };
-    },
-    boardAppeals: async () => {
-      throw new Error('unexpected appeals');
-    },
-    catalogueReports: async () => {
-      throw new Error('unexpected catalogue');
-    },
-  };
-  const loader = createWorkbenchLoader(async (search) => ({
-    ...(await readWorkbench(source, search)),
-    generation: crypto.randomUUID(),
-    locale: 'en',
-    readerOrigin,
-  }));
+      return response({ reports: [], next: cursor === 'queue-original' ? 'queue-next' : null });
+    }) as typeof fetch,
+  });
+  const loader = createWorkbenchLoader((search, signal) =>
+    readWorkbenchPage(native, search, 'Bearer prepared', readerOrigin, signal),
+  );
   const rootRoute = createRootRoute();
   const route = createRoute({
     getParentRoute: () => rootRoute,

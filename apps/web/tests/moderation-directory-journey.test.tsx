@@ -1,6 +1,7 @@
 import { afterAll, expect, mock, test } from 'bun:test';
+import { createKernelClient, SESSION_HEADER } from '@rezics/client';
 import { dirname } from 'node:path';
-import type { WorkbenchReader, WorkbenchNativeSource } from '../src/moderation/workbench-queue/read';
+import type { WorkbenchReader } from '../src/moderation/workbench-queue/read';
 import type { ModerationDirectoryPage } from '../src/moderation/workbench-queue/directory';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { Window } = await import(
@@ -29,7 +30,7 @@ const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, R
 const { Route } = await import('../src/routes/moderation/workbench');
 const { Route: CaseRoute } = await import('../src/routes/moderation/cases.$id');
 const { createWorkbenchLoader } = await import('../src/moderation/workbench-queue/route-loader');
-const { readWorkbench } = await import('../src/moderation/workbench-queue/read');
+const { readWorkbenchPage } = await import('../src/moderation/workbench-queue/read');
 const { privateReaderFingerprint } = await import('../src/moderation/private-reader-origin');
 const { prepareModerationReportRead, reportReadKey } = await import('../src/moderation/reports-read');
 const { workbenchCaseInput } = await import('../src/moderation/workbench-case/read-model');
@@ -80,32 +81,62 @@ test('served discovery selects a direct Board or independent Global queue, inspe
     resolvedAt: null,
   };
   const calls: string[] = [];
-  const source: WorkbenchNativeSource = {
-    directory: async (input) => {
-      calls.push(`directory:${input.cursor}:${input.realmId}`);
-      return directory;
-    },
-    realms: async () => {
-      throw new Error('Membership cannot create a queue');
-    },
-    boards: async () => {
-      throw new Error('Board inventory cannot create a queue');
-    },
-    boardReports: async (id, cursor) => {
-      calls.push(`board:${id}:${cursor}`);
-      return { reports: [report], next: 'queue-next' };
-    },
-    boardAppeals: async () => ({ appeals: [], next: null }),
-    catalogueReports: async (_, selection) => {
-      calls.push(`catalogue:${selection.status}`);
-      return { reports: [], next: null };
-    },
-  };
-  const read: WorkbenchReader = async (search, signal) => ({
-    ...(await readWorkbench(source, search, signal)),
-    generation: crypto.randomUUID(),
-    readerOrigin,
+  let directoryAvailable = true;
+  const native = createKernelClient('https://kernel.invalid', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      expect(request.headers.get('authorization')).toBe('Bearer prepared');
+      expect(init?.cache).toBe('no-store');
+      const response = (data: unknown) =>
+        Response.json(data, { headers: { [SESSION_HEADER]: 'native-history-source' } });
+      const decision = {
+        id: 'decision-receipt',
+        targetId: 'retained-post',
+        targetKind: 'post',
+        action: 'takedown',
+        statement: 'Retained native decision',
+        decidedAt: '2026-11-01T00:00:00Z',
+        appeal: null,
+        appealDeadline: null,
+        history: { reasonState: 'retained', decider: 'withheld', receipt: 'permitted', target: 'unavailable' },
+      };
+      if (url.pathname === '/v1/moderation-decisions/decision-receipt') {
+        calls.push('decision:decision-receipt');
+        expect(url.search).toBe('');
+        return response({
+          ...decision,
+          viewer: {
+            affectedAuthor: false,
+            observedAt: decision.decidedAt,
+            appeal: { state: 'unavailable', reason: 'not_affected_author' },
+          },
+          targetContext: { state: 'concealed' },
+        });
+      }
+      expect(url.searchParams.get('limit')).toBe('20');
+      if (url.pathname === '/v1/boards/direct-board/moderation-history') {
+        calls.push('history:direct-board');
+        expect(Object.fromEntries(url.searchParams)).toEqual({ limit: '20', targetKind: 'all' });
+        return response({ entries: [decision], nextCursor: null, viewer: { kind: 'board-moderator' } });
+      }
+      if (url.pathname === '/v1/me/moderation-directory') {
+        expect([...url.searchParams.keys()].sort()).toEqual(['cursor', 'limit', 'realmId']);
+        calls.push(`directory:${url.searchParams.get('cursor')}:${url.searchParams.get('realmId')}`);
+        return Response.json(directoryAvailable ? directory : { state: 'unavailable', items: [], next: null });
+      }
+      const board = /^\/v1\/boards\/([^/]+)\/reports$/.exec(url.pathname);
+      if (board) {
+        calls.push(`board:${board[1]}:${url.searchParams.get('cursor') ?? undefined}`);
+        return Response.json({ reports: [report], next: 'queue-next' });
+      }
+      expect(url.pathname).toBe('/v1/catalogue/reports');
+      calls.push(`catalogue:${url.searchParams.get('status')}`);
+      return Response.json({ reports: [], next: null });
+    }) as typeof fetch,
   });
+  const read: WorkbenchReader = (search, signal) =>
+    readWorkbenchPage(native, search, 'Bearer prepared', readerOrigin, signal);
   const parent = createRootRouteWithContext<{ queryClient: typeof client }>()({ component: Outlet });
   const route = Route.update({
     path: '/moderation/workbench',
@@ -199,6 +230,16 @@ test('served discovery selects a direct Board or independent Global queue, inspe
     });
     await act(() => button(m.threads_next_page()).click());
     const queueLocation = canonical(router.state.location.href);
+    await act(() => button(m.moderation_workbench_history()).click());
+    expect(calls.at(-1)).toBe('history:direct-board');
+    await act(() => button(m.moderation_history_open_receipt()).click());
+    expect(calls.at(-1)).toBe('decision:decision-receipt');
+    expect(host.textContent).toContain('Retained native decision');
+    expect(host.textContent).toContain(m.moderation_target_withheld());
+    await act(() => button(m.moderation_history_close_receipt()).click());
+    await act(() => button(m.moderation_workbench_history_return()).click());
+    expect(canonical(router.state.location.href)).toBe(queueLocation);
+    expect(router.state.location.search.historyDecision).toBeUndefined();
     await follow(host.querySelector<HTMLAnchorElement>('a[href*="/moderation/cases/"]')!);
     expect(inspected).toEqual(['exact-report']);
     expect(host.querySelector('article')).not.toBeNull();
@@ -234,7 +275,7 @@ test('served discovery selects a direct Board or independent Global queue, inspe
       await router.load();
     });
     expect(host.textContent).toContain('Direct Board');
-    delete source.directory;
+    directoryAvailable = false;
     await act(() => router.invalidate({ sync: true }));
     expect(host.textContent).toContain(m.moderation_directory_continuation_failed());
     expect(host.querySelector('[data-moderation-scope]')).toBeNull();

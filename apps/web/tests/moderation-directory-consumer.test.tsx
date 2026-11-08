@@ -1,4 +1,5 @@
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
 import { dirname } from 'node:path';
 import type { WorkbenchNativeSource } from '../src/moderation/workbench-queue/read';
 import type { ModerationDirectoryPage } from '../src/moderation/workbench-queue/directory';
@@ -24,7 +25,8 @@ for (const [key, value] of Object.entries(globals))
 const { act } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { readWorkbench, prepareWorkbenchRead } = await import('../src/moderation/workbench-queue/read');
+const { readWorkbench, readWorkbenchPage, prepareWorkbenchRead } =
+  await import('../src/moderation/workbench-queue/read');
 const { WorkbenchPage } = await import('../src/moderation/workbench-queue/page');
 const { privateReaderFingerprint } = await import('../src/moderation/private-reader-origin');
 const { sessionQuery } = await import('../src/session/query');
@@ -78,7 +80,18 @@ function source(page: ModerationDirectoryPage): WorkbenchNativeSource {
   };
 }
 async function mount(page: ModerationDirectoryPage, onSearch = (_: unknown) => {}, retry = () => {}) {
-  const read = await readWorkbench(source(page), search);
+  const native = createKernelClient('https://kernel.invalid', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      expect(request.url).toBe('https://kernel.invalid/v1/me/moderation-directory?limit=20');
+      expect(init?.cache).toBe('no-store');
+      return Response.json(page);
+    }) as typeof fetch,
+  });
+  const read = await readWorkbenchPage(native, search, 'Bearer prepared', {
+    subject: 'moderator',
+    csrfFingerprint: await privateReaderFingerprint(null),
+  });
   const host = document.createElement('main');
   document.body.replaceChildren(host);
   root = createRoot(host);
@@ -151,6 +164,11 @@ test('consumer bounds reject oversized, duplicate and unsupported advice and dro
     { ...page, next: 'x'.repeat(4097) },
   ])
     expect(moderationDirectoryPage(invalid).state).toBe('unavailable');
+  const now = Date.now();
+  expect(moderationDirectoryPage({ ...page, validUntil: new Date(now).toISOString() }, now).state).toBe('stale');
+  expect(moderationDirectoryPage({ ...page, validUntil: new Date(now + 180001).toISOString() }, now).state).toBe(
+    'unavailable',
+  );
   const result = moderationDirectoryPage({ ...page, reporter: 'private', count: 99 });
   expect(result).not.toHaveProperty('reporter');
   expect(result).not.toHaveProperty('count');
@@ -209,4 +227,28 @@ test('private continuation recovery keeps the frontier, restores keyboard focus 
   await act(() => root!.unmount());
   root = undefined;
   cache.clear();
+});
+
+test('installed directory failures preserve native denial and stale-cursor distinctions', async () => {
+  for (const [status, code, state] of [
+    [400, 'invalid_cursor', 'stale'],
+    [409, 'stale_cursor', 'stale'],
+    [401, 'unauthorized', 'denied'],
+    [404, 'not_found', 'denied'],
+    [503, 'dependency_unavailable', 'unavailable'],
+  ] as const) {
+    const native = createKernelClient('https://kernel.invalid', {
+      fetch: (async () => Response.json({ code }, { status })) as typeof fetch,
+    });
+    const result = await readWorkbenchPage(
+      native,
+      workbenchSearch({ directoryCursor: 'captured' }),
+      'Bearer prepared',
+      {
+        subject: 'moderator',
+        csrfFingerprint: await privateReaderFingerprint(null),
+      },
+    );
+    expect(result.directory).toEqual({ state, items: [], next: null });
+  }
 });

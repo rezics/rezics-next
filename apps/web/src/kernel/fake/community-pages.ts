@@ -79,15 +79,6 @@ export const routes: FakeRoute[] = [
   },
   {
     method: 'GET',
-    path: '/v1/me/realms',
-    story: ({ recordings }) => {
-      const read = recordings['my-realms'];
-      if (!read || !Array.isArray(read.items)) return;
-      return read;
-    },
-  },
-  {
-    method: 'GET',
     path: `/v1/realms/${realmId}/boards`,
     story: ({ recordings }) => {
       // Failure injection only: a native-shaped 503 must surface as an error, never as an empty board list.

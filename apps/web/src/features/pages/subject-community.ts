@@ -385,7 +385,7 @@ export async function readSubjectCommunity(
           query: {
             place: requestedPlace,
             kind,
-            limit,
+            limit: String(limit),
             ...(board === undefined ? {} : { board }),
             ...(cursor !== undefined ? { cursor } : {}),
           },

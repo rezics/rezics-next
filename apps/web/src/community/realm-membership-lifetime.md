@@ -22,6 +22,11 @@ invalidations all stop when that caller retires. An obsolete leave command with 
 an obsolete accepted response cannot start a refresh cycle, and an obsolete failure cannot be described as refusal or
 success. Retirement cannot establish whether the remote command was applied.
 
+An accepted leave may use the current member/participation reader to display the latest standing while it remains
+pending; no workflow-status endpoint is available or used. A later standing of `none` does not prove that an uncertain
+original write succeeded and does not release its key. Only an accepted command followed by the existing current
+standing settlement can complete the accepted UI; uncertain retry reuses the same command, key and credential.
+
 An accepted current command keeps the existing four-read settlement cycle at delays 0, 500, 1500 and 3000 ms. An
 authority transition retires that cycle without restarting it. A fresh standing read is required before current
 controls or Board admission are exposed again. None of these reads changes Space following.

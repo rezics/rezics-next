@@ -1,26 +1,11 @@
+import type { KernelClient } from '@rezics/client';
 import type { WorkbenchQueueKind } from './scope';
 
-/** Local public consumer contract, pending the native producer and shared publication.
- * A candidate, membership or readable board must never be converted into this advice.
- */
-export type ModerationDirectoryItem = {
-  scope: { kind: 'board'; id: string } | { kind: 'catalogue' };
-  label: string;
-  parent: { id: string; label: string } | null;
-  queues: WorkbenchQueueKind[];
-  viewer: { open: 'permitted' | 'denied' | 'unavailable' };
-};
-export type ModerationDirectoryPage =
-  | {
-      state: 'ready';
-      items: ModerationDirectoryItem[];
-      next: string | null;
-      /** Opaque final native observation, independent of the browser reader origin. */
-      source: string;
-      /** Exclusive authority/coverage horizon supplied by the native producer. */
-      validUntil: string;
-    }
-  | { state: 'preparing' | 'unavailable' | 'denied' | 'stale'; items: []; next: null };
+/** Installed response vocabulary; memberships and readable Boards supply no open advice. */
+export type ModerationDirectoryPage = NonNullable<
+  Awaited<ReturnType<KernelClient['me']['moderation-directory']['get']>>['data']
+>;
+export type ModerationDirectoryItem = Extract<ModerationDirectoryPage, { state: 'ready' }>['items'][number];
 
 export type ModerationDirectoryInput = { cursor?: string; realmId?: string; limit: 20 };
 export type ModerationDirectorySource = (
@@ -28,7 +13,7 @@ export type ModerationDirectorySource = (
   signal?: AbortSignal,
 ) => Promise<ModerationDirectoryPage>;
 
-/** No installed public producer binding yet. Never substitute Account memberships or a board inventory. */
+/** An explicitly unbound supplied source stays unavailable; production uses the installed native adapter. */
 export const nativeModerationDirectoryUnavailable: ModerationDirectorySource = async () => ({
   state: 'unavailable',
   items: [],
@@ -68,13 +53,10 @@ function item(value: unknown): ModerationDirectoryItem | null {
         ? { id: value.parent.id, label: value.parent.label }
         : undefined;
   if (parent === undefined || (scope.kind === 'catalogue' && parent !== null)) return null;
-  return {
-    scope,
-    label: value.label,
-    parent,
-    queues: [...value.queues],
-    viewer: { open: value.viewer.open as ModerationDirectoryItem['viewer']['open'] },
-  };
+  const viewer = { open: value.viewer.open as ModerationDirectoryItem['viewer']['open'] };
+  return scope.kind === 'catalogue'
+    ? { scope, label: value.label, parent: null, queues: [...value.queues] as ('reports' | 'resolved')[], viewer }
+    : { scope, label: value.label, parent, queues: [...value.queues] as WorkbenchQueueKind[], viewer };
 }
 
 /** Bound retained browser data and copy only the public fields. These are consumer limits,
