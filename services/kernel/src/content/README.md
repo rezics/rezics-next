@@ -4517,7 +4517,7 @@ declaration, cast or generator.
 
 ## Current Home personal Library composition
 
-Decision: Content composition installs existing Semantic summary/observation readers, visible Rating questions, the standard vote ID and the required Semantic-backed Realm identity reader; Client's FeedPage/FeedItem aliases prefer concrete mounted fields and use public Search/Library fallbacks only while Content emits unknown, and all Home handlers consume those aliases.
+Decision: Content composition installs existing Semantic summary/observation readers, visible Rating questions, the standard vote ID and the required Semantic-backed Realm identity reader; Client's FeedPage/FeedItem aliases prefer concrete mounted fields and use the Library Collection card only for an unknown nested Search card (plus Library viewer actions only for an unknown page field), and all Home handlers consume those aliases.
 
 [Current Home personal facts](../../../../docs/feeds.md#current-home-personal-facts) owns the
 response and full per-page cost. `feed-viewer.ts` calls the installed native personal-actions
