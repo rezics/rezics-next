@@ -7,13 +7,15 @@ import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
-import { savedQueryRuleReturn } from '../../library/saved-query-results';
+import { savedQueryRuleReturn, savedQueryRuleReturnLimit } from '../../library/saved-query-results';
 
 // Non-nested file routing keeps the private definition out of the public Collection reader's loader/cache.
 export const Route = createFileRoute('/collections/$id_/rule')({
   beforeLoad: requireSignedIn,
   validateSearch: (search: Record<string, unknown>) => ({
-    ...(typeof search.returnTo === 'string' && search.returnTo.length <= 16_384 ? { returnTo: search.returnTo } : {}),
+    ...(typeof search.returnTo === 'string' && search.returnTo.length <= savedQueryRuleReturnLimit(getLocale())
+      ? { returnTo: search.returnTo }
+      : {}),
   }),
   loader: ({ params }) => readCollectionRule({ data: params.id }),
   head: ({ match }) =>

@@ -122,6 +122,9 @@ test('the current dynamic reader preserves header revision and original IDs; sel
   const page = await loadEditableCollectionPage(client, request, sessionEnv, { id: input.collectionId, editor: true });
   const preview = await loadCollectionPublication(request, { id: input.collectionId }, async () => page);
   expect(preview.viewer).toEqual({ subject: 'owner', csrfToken: null });
+  const header = requests.find((request) => new URL(request.url).pathname === `/v1/collections/${input.collectionId}`)!;
+  expect(new URL(header.url).searchParams.get('ownerManagement')).toBe('true');
+  expect(new URL(header.url).searchParams.get('view')).toBe('FULL');
   expect(preview.source.state).toBe('ready');
   const source = publicationSource(page, 'owner');
   expect(source.state).toBe('ready');
