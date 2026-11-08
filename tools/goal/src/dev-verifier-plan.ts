@@ -41,6 +41,7 @@ function bunWorkspace(path: string, tracked: ReadonlySet<string>): string | unde
 }
 
 const WEB_ROOT = 'apps/web';
+const AUTH_ROOT = 'services/auth';
 const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/iu;
 const HOST_TEST_FILE = /\.host\.test\.[cm]?[jt]sx?$/iu;
 const webLaneEnvironment = new Set([
@@ -50,6 +51,7 @@ const webLaneEnvironment = new Set([
 ]);
 const bunTestFlagsWithValue = new Set([
   '--timeout',
+  '--preload',
   '--rerun-each',
   '--retry',
   '--coverage-reporter',
@@ -269,6 +271,16 @@ function preparePlacement(check: DevVerifierCheck, tracked: ReadonlySet<string>,
   if (!invocation) return { check: placeNonWebInWorkspace(check, tracked, prefix, checkout) };
   const currentCwd = workspaceCwd(check, prefix, checkout, invocation.commandCwd);
   const repoSelectors = invocation.selectors.map((selector) => repositoryPath(selector, currentCwd, checkout));
+  const inAuthWorkspace = currentCwd === AUTH_ROOT || currentCwd.startsWith(AUTH_ROOT + '/');
+  const authOnlyClosure =
+    check.closure.length > 0 && check.closure.every((path) => path === AUTH_ROOT || path.startsWith(AUTH_ROOT + '/'));
+  if (!repoSelectors.length && (inAuthWorkspace || authOnlyClosure)) {
+    const authScope = inAuthWorkspace ? [AUTH_ROOT + '/**'] : check.closure;
+    const files = [...tracked].filter((path) => isAuthLaneTest(path) && matchesPath(path, authScope));
+    return { check: authRunnerCheck(check, invocation, files) };
+  }
+  if (repoSelectors.length && repoSelectors.every(isAuthLaneTest))
+    return { check: authRunnerCheck(check, invocation, [...new Set(repoSelectors)]) };
   const selectedWorkspace = new Set(repoSelectors.map((path) => bunWorkspace(path, tracked)));
   const hasWebSelector = repoSelectors.some(isWebWorkspacePath);
   const allSelectorsAreWeb = repoSelectors.every(isWebWorkspacePath);
@@ -349,6 +361,65 @@ function placeNonWebInWorkspace(
   return { ...check, cwd: workspace, command };
 }
 
+function isAuthLaneTest(path: string): boolean {
+  return path.startsWith(AUTH_ROOT + '/test/') && /\.test\.ts$/.test(path);
+}
+
+function authRunnerCheck(
+  check: DevVerifierCheck,
+  invocation: BunTestInvocation,
+  files: readonly string[],
+): DevVerifierCheck {
+  const { cwd: _cwd, ...base } = check;
+  return {
+    ...base,
+    command: [
+      ...routedEnvironmentPrefix(invocation.prefix.prefix),
+      'bun',
+      'run',
+      '--cwd',
+      AUTH_ROOT,
+      'check',
+      ...files.map((file) => file.slice(AUTH_ROOT.length + 1)),
+      ...invocation.testFlags,
+      ...(invocation.programArgs.length ? ['--', ...invocation.programArgs] : []),
+    ],
+  };
+}
+
+function directWorkspaceChecks(
+  check: DevVerifierCheck,
+  invocation: BunTestInvocation,
+  paths: readonly string[],
+  tracked: ReadonlySet<string>,
+  checkout?: string,
+): DevVerifierCheck[] {
+  const grouped = new Map<string, string[]>();
+  for (const path of paths) {
+    const workspace = bunWorkspace(path, tracked) ?? '';
+    grouped.set(workspace, [...(grouped.get(workspace) ?? []), path]);
+  }
+  const checks: DevVerifierCheck[] = [];
+  for (const [workspace, files] of grouped) {
+    const { cwd: _cwd, ...base } = check;
+    const localFiles = files.map((file) => (workspace ? file.slice(workspace.length + 1) : file));
+    const subset: DevVerifierCheck = {
+      ...base,
+      ...(workspace ? { cwd: workspace } : {}),
+      command: [
+        ...routedEnvironmentPrefix(invocation.prefix.prefix),
+        'bun',
+        'test',
+        ...invocation.testFlags,
+        ...localFiles,
+        ...(invocation.programArgs.length ? ['--', ...invocation.programArgs] : []),
+      ],
+    };
+    checks.push(...splitWebPlacement(preparePlacement(subset, tracked, checkout)));
+  }
+  return checks;
+}
+
 function splitWebPlacement(placement: Placement): DevVerifierCheck[] {
   if (!placement.webEntries?.length) return [placement.check];
   return placement.webEntries.map(({ prefix }) => ({
@@ -372,6 +443,20 @@ export function placeInWorkspaceChecks(
   tracked: ReadonlySet<string>,
   checkout?: string,
 ): DevVerifierCheck[] {
+  const prefix = commandPrefix(check.command);
+  const invocation = bunTestInvocation(check.command, prefix);
+  if (invocation) {
+    const currentCwd = workspaceCwd(check, prefix, checkout, invocation.commandCwd);
+    const repoSelectors = [
+      ...new Set(invocation.selectors.map((selector) => repositoryPath(selector, currentCwd, checkout))),
+    ];
+    const authFiles = repoSelectors.filter(isAuthLaneTest);
+    if (authFiles.length) {
+      const authCheck = authRunnerCheck(check, invocation, authFiles);
+      const otherFiles = repoSelectors.filter((path) => !isAuthLaneTest(path));
+      return [authCheck, ...directWorkspaceChecks(check, invocation, otherFiles, tracked, checkout)];
+    }
+  }
   return splitWebPlacement(preparePlacement(check, tracked, checkout));
 }
 

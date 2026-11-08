@@ -60,6 +60,7 @@ type EraseState =
   | { state: 'review' | 'sending' | 'uncertain'; intent: EraseIntent }
   | { state: 'refused'; reason: string };
 type CommandFeedback = {
+  intentId: number;
   action: 'save' | 'publish' | 'erase';
   postId: string;
   state: 'acknowledged' | 'reading' | 'readback';
@@ -147,30 +148,41 @@ function OwnDraftCommandFeedback({
 export function OwnDraftsPage({
   identity,
   active,
+  visitCurrent,
   reader,
   localWritingReader,
   commands,
 }: {
   identity: OwnDraftIdentity;
   active: boolean;
+  visitCurrent?: () => boolean;
   reader: OwnDraftReader;
   localWritingReader?: OwnDraftLocalWritingReader;
   commands?: OwnDraftCommands;
 }) {
-  const binding = useRef({ reader, localWritingReader, commands, active, generation: 0 });
+  const binding = useRef({ reader, localWritingReader, commands, active, visitCurrent, generation: 0 });
   if (
     binding.current.reader !== reader ||
     binding.current.localWritingReader !== localWritingReader ||
     binding.current.commands !== commands ||
-    binding.current.active !== active
+    binding.current.active !== active ||
+    binding.current.visitCurrent !== visitCurrent
   )
-    binding.current = { reader, localWritingReader, commands, active, generation: binding.current.generation + 1 };
+    binding.current = {
+      reader,
+      localWritingReader,
+      commands,
+      active,
+      visitCurrent,
+      generation: binding.current.generation + 1,
+    };
   const boundaryKey = JSON.stringify([ownDraftIdentityKey(identity), binding.current.generation]);
   return (
     <AuthoringDepartureBoundary key={boundaryKey}>
       <BoundOwnDraftsPage
         identity={identity}
         active={active}
+        {...(visitCurrent ? { visitCurrent } : {})}
         reader={reader}
         {...(localWritingReader ? { localWritingReader } : {})}
         {...(commands ? { commands } : {})}
@@ -182,12 +194,14 @@ export function OwnDraftsPage({
 function BoundOwnDraftsPage({
   identity,
   active,
+  visitCurrent,
   reader,
   localWritingReader,
   commands,
 }: {
   identity: OwnDraftIdentity;
   active: boolean;
+  visitCurrent?: () => boolean;
   reader: OwnDraftReader;
   localWritingReader?: OwnDraftLocalWritingReader;
   commands?: OwnDraftCommands;
@@ -223,16 +237,20 @@ function BoundOwnDraftsPage({
   const [eraseState, setEraseState] = useState<EraseState | null>(null);
   const [commandFeedback, setCommandFeedback] = useState<CommandFeedback | null>(null);
   const erasePending = useRef(false);
-  const page = active ? pageState : null;
-  const selection = active && page && selectionState?.identityKey === identityKey ? selectionState : null;
-  const admission = useRef({ active, reader, localWritingReader, commands });
-  admission.current = { active, reader, localWritingReader, commands };
+  const page = active && (visitCurrent?.() ?? true) ? pageState : null;
+  const selection =
+    active && (visitCurrent?.() ?? true) && page && selectionState?.identityKey === identityKey ? selectionState : null;
+  const admission = useRef({ active, reader, localWritingReader, commands, visitCurrent });
+  admission.current = { active, reader, localWritingReader, commands, visitCurrent };
   const retired = useRef(false);
+  const commandFeedbackSequence = useRef(0);
+  const readbackSequence = useRef(0);
   // Command authority follows the private reader boundary, never its inventory cursor.
   const commandCurrent = () =>
     !retired.current &&
     identityRef.current === identityKey &&
     admission.current.active &&
+    (admission.current.visitCurrent?.() ?? true) &&
     admission.current.reader === reader &&
     admission.current.localWritingReader === localWritingReader &&
     admission.current.commands === commands;
@@ -324,8 +342,13 @@ function BoundOwnDraftsPage({
       if (!admitsReader()) return;
       let result: Awaited<ReturnType<OwnDraftReader['list']>>;
       try {
+        const authnEpoch = nativeEpoch.current.value ?? identity.authnEpoch;
         result = await reader.list(
-          { accountId: identity.accountId, ...(operation.target === null ? {} : { cursor: operation.target }) },
+          {
+            accountId: identity.accountId,
+            ...(authnEpoch === null ? {} : { authnEpoch }),
+            ...(operation.target === null ? {} : { cursor: operation.target }),
+          },
           controller.signal,
         );
       } catch {
@@ -338,9 +361,12 @@ function BoundOwnDraftsPage({
         fail(result);
         return;
       }
+      const expectedEpoch = nativeEpoch.current.value ?? identity.authnEpoch;
       if (
         result.viewer.accountId !== identity.accountId ||
-        (identity.authnEpoch !== 0 && result.viewer.authnEpoch !== identity.authnEpoch) ||
+        !Number.isSafeInteger(result.viewer.authnEpoch) ||
+        result.viewer.authnEpoch <= 0 ||
+        (expectedEpoch !== null && result.viewer.authnEpoch !== expectedEpoch) ||
         (nativeEpoch.current.value !== null && result.viewer.authnEpoch !== nativeEpoch.current.value)
       ) {
         retireCommands();
@@ -397,6 +423,7 @@ function BoundOwnDraftsPage({
       selectionController.current?.abort();
       localWritingController.current?.abort();
       commandController.current?.abort();
+      readbackSequence.current++;
       eraseController.current?.abort();
       erasePending.current = false;
       selectionGeneration.current++;
@@ -410,6 +437,7 @@ function BoundOwnDraftsPage({
     selectionController.current?.abort();
     localWritingController.current?.abort();
     commandController.current?.abort();
+    readbackSequence.current++;
     eraseController.current?.abort();
     erasePending.current = false;
     selectionGeneration.current++;
@@ -485,6 +513,7 @@ function BoundOwnDraftsPage({
     selectionController.current?.abort();
     localWritingController.current?.abort();
     commandController.current?.abort();
+    readbackSequence.current++;
     eraseController.current?.abort();
     erasePending.current = false;
     setEraseState(null);
@@ -495,6 +524,7 @@ function BoundOwnDraftsPage({
     clearResolvedErase();
     if (commandFeedback?.action !== 'erase') {
       commandController.current?.abort();
+      readbackSequence.current++;
       setCommandFeedback(null);
     }
   };
@@ -524,7 +554,8 @@ function BoundOwnDraftsPage({
     setLocalWritingState(null);
     setEditingSource(null);
     leaveCommandPresentation();
-    void readSelectedOwnDraft(reader, identity, entry, controller.signal)
+    const authnEpoch = nativeEpoch.current.value ?? identity.authnEpoch;
+    void readSelectedOwnDraft(reader, { ...identity, authnEpoch }, entry, controller.signal, current)
       .then((result) => {
         if (
           controller.signal.aborted ||
@@ -610,12 +641,17 @@ function BoundOwnDraftsPage({
     if (!admittedOwnDraftAction(readySelection.entry, identity.accountId, 'edit')) return;
     if (source === 'browser' && (localWritingState?.state !== 'ready' || localWritingState.writing.state !== 'unsent'))
       return;
+    commandController.current?.abort();
+    readbackSequence.current++;
+    setCommandFeedback(null);
     setEditingSource(source);
   };
 
   const acknowledged = (action: 'save' | 'publish') => {
     const entry = readySelection?.entry;
     if (!entry || !current()) return;
+    commandController.current?.abort();
+    readbackSequence.current++;
     selectionController.current?.abort();
     localWritingController.current?.abort();
     selectionGeneration.current++;
@@ -624,7 +660,12 @@ function BoundOwnDraftsPage({
     setLocalWritingState(null);
     setEraseState(null);
     if (!operationRef.current) unavailableCurrentPage();
-    setCommandFeedback({ action, postId: entry.id, state: 'acknowledged' });
+    setCommandFeedback({
+      intentId: ++commandFeedbackSequence.current,
+      action,
+      postId: entry.id,
+      state: 'acknowledged',
+    });
   };
 
   const checkCurrent = () => {
@@ -632,20 +673,32 @@ function BoundOwnDraftsPage({
     commandController.current?.abort();
     const controller = new AbortController();
     commandController.current = controller;
-    const { postId } = commandFeedback;
+    const { postId, intentId } = commandFeedback;
+    const readbackId = ++readbackSequence.current;
     setCommandFeedback({ ...commandFeedback, state: 'reading' });
     void commands
       .readback(postId, controller.signal)
       .then((readback) => {
-        if (controller.signal.aborted || !commandCurrent() || identityRef.current !== identityKey) return;
+        if (
+          controller.signal.aborted ||
+          !commandCurrent() ||
+          identityRef.current !== identityKey ||
+          readbackSequence.current !== readbackId
+        )
+          return;
         setCommandFeedback((previous) =>
-          previous?.postId === postId ? { ...previous, state: 'readback', readback } : previous,
+          previous?.intentId === intentId ? { ...previous, state: 'readback', readback } : previous,
         );
       })
       .catch(() => {
-        if (!controller.signal.aborted && commandCurrent() && identityRef.current === identityKey)
+        if (
+          !controller.signal.aborted &&
+          commandCurrent() &&
+          identityRef.current === identityKey &&
+          readbackSequence.current === readbackId
+        )
           setCommandFeedback((previous) =>
-            previous?.postId === postId ? { ...previous, state: 'readback', readback: 'unavailable' } : previous,
+            previous?.intentId === intentId ? { ...previous, state: 'readback', readback: 'unavailable' } : previous,
           );
       });
   };
@@ -661,6 +714,7 @@ function BoundOwnDraftsPage({
     )
       return;
     commandController.current?.abort();
+    readbackSequence.current++;
     setCommandFeedback(null);
     setEraseState({
       state: 'review',
@@ -716,7 +770,14 @@ function BoundOwnDraftsPage({
           setEditingSource(null);
           setEraseState(null);
           if (!operationRef.current) unavailableCurrentPage();
-          setCommandFeedback({ action: 'erase', postId: intent.postId, state: 'acknowledged' });
+          commandController.current?.abort();
+          readbackSequence.current++;
+          setCommandFeedback({
+            intentId: ++commandFeedbackSequence.current,
+            action: 'erase',
+            postId: intent.postId,
+            state: 'acknowledged',
+          });
         } else if (result.reason === 'unavailable') {
           setEraseState({ state: 'uncertain', intent });
         } else {
@@ -785,7 +846,7 @@ function BoundOwnDraftsPage({
       />
     ) : null;
 
-  if (!active) {
+  if (!active || !current()) {
     return (
       <main className="mx-auto w-full max-w-4xl space-y-5 px-4 py-6">
         <h1 ref={inventoryHeading} tabIndex={-1} className="text-2xl font-semibold">

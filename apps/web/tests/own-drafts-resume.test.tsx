@@ -40,7 +40,7 @@ test('explicit selection reads one exact current draft; stale or concealed revis
   await reader.list({ accountId }, new AbortController().signal);
   expect(calls).toHaveLength(0);
   const chosen = await readSelectedOwnDraft(reader, identity, entry, new AbortController().signal);
-  expect(calls).toEqual([{ accountId, id: postId, threadId }]);
+  expect(calls).toEqual([{ accountId, authnEpoch: 2, id: postId, threadId }]);
   expect(typeof chosen).not.toBe('string');
   stale = true;
   expect(await readSelectedOwnDraft(reader, identity, entry, new AbortController().signal)).toBe('stale');

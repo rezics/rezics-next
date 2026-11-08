@@ -17,6 +17,12 @@ function requiredId(value: unknown): string {
   return value;
 }
 
+function requiredAuthnEpoch(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0)
+    throw new Error('Invalid own-draft authentication epoch');
+  return value;
+}
+
 function publishInput(value: unknown) {
   if (!value || typeof value !== 'object' || !('body' in value) || !checkDocument(value.body))
     throw new Error('Invalid own-draft publication');
@@ -65,7 +71,11 @@ function pageInput(value: OwnDraftPageRequest): OwnDraftPageRequest {
   const accountId = requiredId(value.accountId);
   if (value.cursor !== undefined && (typeof value.cursor !== 'string' || !value.cursor || value.cursor.length > 32768))
     throw new Error('Invalid own-draft cursor');
-  return { accountId, ...(value.cursor === undefined ? {} : { cursor: value.cursor }) };
+  return {
+    accountId,
+    ...(value.authnEpoch === undefined ? {} : { authnEpoch: requiredAuthnEpoch(value.authnEpoch) }),
+    ...(value.cursor === undefined ? {} : { cursor: value.cursor }),
+  };
 }
 
 export const listOwnDraftPage = createServerFn({ method: 'GET' })
@@ -80,6 +90,7 @@ export const listOwnDraftPage = createServerFn({ method: 'GET' })
 export const resumeOwnDraftPost = createServerFn({ method: 'GET' })
   .validator((value: OwnDraftSelectionRequest) => ({
     accountId: requiredId(value.accountId),
+    ...(value.authnEpoch === undefined ? {} : { authnEpoch: requiredAuthnEpoch(value.authnEpoch) }),
     id: requiredId(value.id),
     threadId: requiredId(value.threadId),
   }))

@@ -68,6 +68,7 @@ type StoryArgs = {
     | 'denied'
     | 'conflict'
     | 'uncertain'
+    | 'read-only'
     | 'erase-review'
     | 'long';
 };
@@ -176,8 +177,11 @@ function OwnDraftStory(args: StoryArgs) {
     address: '/drafts',
   };
   const reader = useMemo(() => readerFor(args.scenario, args.locale), [args.locale, args.scenario]);
-  const commands = useMemo(() => commandsFor(args.scenario), [args.scenario]);
-  return <OwnDraftsPage identity={identity} active reader={reader} commands={commands} />;
+  const commands = useMemo(
+    () => (args.scenario === 'read-only' ? undefined : commandsFor(args.scenario)),
+    [args.scenario],
+  );
+  return <OwnDraftsPage identity={identity} active reader={reader} {...(commands ? { commands } : {})} />;
 }
 
 const meta = {
@@ -212,6 +216,19 @@ export const PreparingWithRows: Story = { args: { scenario: 'preparing' } };
 export const SparseContinuation: Story = { args: { scenario: 'sparse' } };
 export const SelectedUnavailable: Story = { args: { scenario: 'concealed' } };
 export const Denied: Story = { args: { scenario: 'denied' } };
+export const ReadOnlyWithoutCsrf: Story = {
+  args: { scenario: 'read-only' },
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    await userEvent.click(
+      (await view.findAllByRole('button', { name: m.own_drafts_inspect({}, { locale: args.locale }) }))[0]!,
+    );
+    await expect(view.findByRole('article')).resolves.toBeVisible();
+    await expect(
+      view.queryByRole('button', { name: m.own_drafts_use_server({}, { locale: args.locale }) }),
+    ).not.toBeInTheDocument();
+  },
+};
 export const LongGerman: Story = { args: { locale: 'de', scenario: 'ready' } };
 export const LongEnglish: Story = { args: { locale: 'en', scenario: 'long' } };
 export const LongGermanLocalized: Story = { args: { locale: 'de', scenario: 'long' } };

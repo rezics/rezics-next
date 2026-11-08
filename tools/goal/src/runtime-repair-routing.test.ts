@@ -41,6 +41,9 @@ test('runtime repair callback dispatches one urgent task with all failing files 
           assertions: ['AssertionError: library filter failed'],
           error: 'AssertionError: library filter failed',
           owner,
+          command: { argv: ['env', 'bun', 'test', 'tests/library.test.ts'], cwd: 'apps/web' },
+          sourceRevision: 'captured-web-head',
+          evidenceLogPath: '.temp/goal/web-library-check.log',
         },
         {
           test: 'services/kernel/test/session.test.ts',
@@ -62,6 +65,9 @@ test('runtime repair callback dispatches one urgent task with all failing files 
     expect(created.brief.markdown).toContain('services/kernel/test/session.test.ts');
     expect(created.brief.markdown).toContain('AssertionError: library filter failed');
     expect(created.brief.markdown).toContain('AssertionError: session state mismatch');
+    expect(created.brief.markdown).toContain('captured-web-head');
+    expect(created.brief.markdown).toContain('.temp/goal/web-library-check.log');
+    expect(created.brief.markdown).toContain('"tests/library.test.ts"');
     expect(inbox.read(owner.brief.manager).map(({ event }) => event)).toContainEqual(
       expect.objectContaining({
         managerId: owner.brief.manager,
@@ -71,6 +77,24 @@ test('runtime repair callback dispatches one urgent task with all failing files 
         summary: expect.stringContaining('apps/web/tests/library.test.ts'),
       }),
     );
+
+    routing.dispatchTestFailureRepair({
+      ...repair,
+      commit: 'repeated-head',
+      existingTaskId: created.id,
+      failures: repair.failures.map((failure) => ({
+        ...failure,
+        assertions: [...failure.assertions, 'Repeated verifier assertion'],
+      })),
+    });
+    expect(dispatches).toHaveLength(1);
+    expect(
+      h.store
+        .tasks()
+        .filter((task) => task.brief.markdown.includes('Test failure repair batch for goal'))
+        .map((task) => task.id),
+    ).toEqual([created.id]);
+    expect(h.store.task(created.id).brief.markdown).toContain('Repeated verifier assertion');
   } finally {
     h.dispose();
   }
@@ -124,7 +148,9 @@ test('compiler diagnostics notify the concrete source owner without dispatching 
               resolved: true,
             },
           },
-          command: { argv: ['env', 'TYPECHECK_CHANGED=services/auth/scripts/dev-stack.ts', 'bun', 'scripts/typecheck.ts'] },
+          command: {
+            argv: ['env', 'TYPECHECK_CHANGED=services/auth/scripts/dev-stack.ts', 'bun', 'scripts/typecheck.ts'],
+          },
           sourceRevision: 'captured-revision',
           evidenceLogPath: '.temp/goal/dev-verify-original.log',
         },

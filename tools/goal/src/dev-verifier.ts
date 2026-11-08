@@ -24,11 +24,12 @@ import {
   runChecksAtHead,
   type CheckRun,
 } from './dev-verifier-comparison.ts';
-import { classifyRun, stableAssertions, verifierCauses } from './dev-verifier-classification.ts';
+import { classifyRun, fileFailureAssertions, truncatedOutput, verifierCauses } from './dev-verifier-classification.ts';
 import {
   commandMetadata,
-  extractNamedTestFiles,
+  extractTestFileOutcomes,
   extractVerifierDiagnostics,
+  isAuthDatabasePlacementFailure,
   type DiagnosticWorkspaceContext,
 } from './dev-verifier-diagnostics.ts';
 import { installDependenciesCached } from './dev-verifier-execution.ts';
@@ -99,12 +100,16 @@ export type TestFailureRepair = {
 };
 
 function failureEvidence(failure: TestFailure): TestFailureEvidence[] {
-  return failure.evidence ?? [{
-    ...(failure.command ? { command: failure.command } : {}),
-    ...(failure.sourceRevision ? { sourceRevision: failure.sourceRevision } : {}),
-    ...(failure.evidenceLogPath ? { evidenceLogPath: failure.evidenceLogPath } : {}),
-    output: failure.error,
-  }];
+  return (
+    failure.evidence ?? [
+      {
+        ...(failure.command ? { command: failure.command } : {}),
+        ...(failure.sourceRevision ? { sourceRevision: failure.sourceRevision } : {}),
+        ...(failure.evidenceLogPath ? { evidenceLogPath: failure.evidenceLogPath } : {}),
+        output: failure.error,
+      },
+    ]
+  );
 }
 
 function mergeRepeatedNamedTestFailures(failures: readonly TestFailure[]): TestFailure[] {
@@ -192,7 +197,14 @@ function advanceVerified(settings: Settings, target: string): void {
 
 function matchingPathSpecificity(file: string, paths: readonly string[], options: DevVerifierOptions): number {
   const matching = paths.filter((path) => matches(file, [path], options.settings.policy?.brief));
-  const score = (path: string) => path.replaceAll('*', '').replaceAll('?', '').replaceAll('{', '').replaceAll('}', '').replaceAll('[', '').replaceAll(']', '').length;
+  const score = (path: string) =>
+    path
+      .replaceAll('*', '')
+      .replaceAll('?', '')
+      .replaceAll('{', '')
+      .replaceAll('}', '')
+      .replaceAll('[', '')
+      .replaceAll(']', '').length;
   return matching.length ? Math.max(...matching.map(score)) : -1;
 }
 
@@ -242,7 +254,9 @@ function sourceUnchangedAtCurrentRevision(
   if (source.status === null) return undefined;
   if (source.status !== 0) return false;
   if (capturedRevision === currentRevision) return true;
-  const diff = spawnSync('git', ['diff', '--quiet', `${capturedRevision}..${currentRevision}`, '--', file], { cwd: checkout });
+  const diff = spawnSync('git', ['diff', '--quiet', `${capturedRevision}..${currentRevision}`, '--', file], {
+    cwd: checkout,
+  });
   if (diff.error) throw diff.error;
   if (diff.status === null) return undefined;
   if (diff.status === 0) return true;
@@ -308,7 +322,11 @@ function reconcileSourceOwner(
       currentRevision,
       reason: `Concrete failed source ${file} matches multiple owners: ${chosen.ambiguous.map(({ id }) => id).join(', ')}.`,
     };
-  return { state: 'unresolved', currentRevision, reason: `No established owner declares concrete failed source ${file}.` };
+  return {
+    state: 'unresolved',
+    currentRevision,
+    reason: `No established owner declares concrete failed source ${file}.`,
+  };
 }
 
 function ownerForTest(
@@ -330,25 +348,56 @@ export function testFailureRepairBrief(repair: TestFailureRepair, policy = defau
         ? '- Test file: ' + tick + failure.test + tick
         : failure.command || failure.test
           ? '- Command: ' + tick + (failure.command ? JSON.stringify(failure.command.argv) : failure.test) + tick
-        : '- ' + (failure.cause ?? 'Verifier') + ' diagnostic: ' + (failure.diagnostic?.message ?? 'unresolved failure');
+          : '- ' +
+            (failure.cause ?? 'Verifier') +
+            ' diagnostic: ' +
+            (failure.diagnostic?.message ?? 'unresolved failure');
       const sources = failureEvidence(failure);
       const provenance = [
-        ...sources.map((source, index) => [
-          sources.length > 1 ? '  Evidence ' + (index + 1) + ':' : '',
-          source.sourceRevision ? '  Source revision: ' + tick + source.sourceRevision + tick : '',
-          source.command
-            ? '  Command: ' + tick + JSON.stringify(source.command.argv) + tick + ' (cwd ' + tick + (source.command.cwd ?? '.') + tick + ')'
-            : '',
-          source.evidenceLogPath ? '  Original result: ' + tick + source.evidenceLogPath + tick : '',
-        ].filter(Boolean).join('\n')),
+        ...sources.map((source, index) =>
+          [
+            sources.length > 1 ? '  Evidence ' + (index + 1) + ':' : '',
+            source.sourceRevision ? '  Source revision: ' + tick + source.sourceRevision + tick : '',
+            source.command
+              ? '  Command: ' +
+                tick +
+                JSON.stringify(source.command.argv) +
+                tick +
+                ' (cwd ' +
+                tick +
+                (source.command.cwd ?? '.') +
+                tick +
+                ')'
+              : '',
+            source.evidenceLogPath ? '  Original result: ' + tick + source.evidenceLogPath + tick : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        ),
         failure.diagnostic?.location
-          ? '  Location: ' + tick + failure.diagnostic.location.file + ':' + (failure.diagnostic.location.line ?? '?') + ':' + (failure.diagnostic.location.column ?? '?') + tick
+          ? '  Location: ' +
+            tick +
+            failure.diagnostic.location.file +
+            ':' +
+            (failure.diagnostic.location.line ?? '?') +
+            ':' +
+            (failure.diagnostic.location.column ?? '?') +
+            tick
           : '',
-      ].filter(Boolean).join('\n');
-      const output = sources.map(({ output: evidenceOutput }, index) =>
-        (sources.length > 1 ? `  Evidence ${index + 1}:\n` : '') +
-        evidenceOutput.slice(-policy.diagnosticCharacters).split('\n').map((line) => '  ' + line).join('\n'),
-      ).join('\n\n');
+      ]
+        .filter(Boolean)
+        .join('\n');
+      const output = sources
+        .map(
+          ({ output: evidenceOutput }, index) =>
+            (sources.length > 1 ? `  Evidence ${index + 1}:\n` : '') +
+            evidenceOutput
+              .slice(-policy.diagnosticCharacters)
+              .split('\n')
+              .map((line) => '  ' + line)
+              .join('\n'),
+        )
+        .join('\n\n');
       return (
         subject +
         (provenance ? '\n' + provenance : '') +
@@ -412,9 +461,14 @@ function dispatchTestRepairs(options: DevVerifierOptions, failures: readonly Tes
   for (const [key, items] of groups) {
     const [goal, manager, cause] = key.split('\0') as [string, string, DevVerifierCause | 'product-runtime'];
     const owner = items[0]!.owner;
-    const paths = cause === 'compiler'
-      ? [...new Set(items.flatMap(({ diagnostic }) => diagnostic?.location?.file ? [diagnostic.location.file] : []))]
-      : [...new Set(items.flatMap(({ test }) => test && TEST_FILE.test(test) ? [test] : []))];
+    const paths =
+      cause === 'compiler'
+        ? [
+            ...new Set(
+              items.flatMap(({ diagnostic }) => (diagnostic?.location?.file ? [diagnostic.location.file] : [])),
+            ),
+          ]
+        : [...new Set(items.flatMap(({ test }) => (test && TEST_FILE.test(test) ? [test] : [])))];
     const existing = cause === 'compiler' ? undefined : openTestRepair(options.store, goal);
     try {
       options.dispatchTestRepair({
@@ -498,9 +552,9 @@ export function recordVerifierResults(
     const diagnostics = extractVerifierDiagnostics(evidence, workspace);
     const compilerDiagnostics = diagnostics.filter(({ cause }) => cause === 'compiler');
     const independentDiagnostics = diagnostics.filter(({ cause }) => cause !== 'compiler');
-    const testNames = extractNamedTestFiles(check, evidence, workspace);
-    const assertions = stableAssertions(evidence.output, options.settings.policy?.verifier);
+    const testAttribution = extractTestFileOutcomes(check, evidence, workspace);
     const causes = verifierCauses(evidence, options.settings.policy?.verifier);
+    const setupFailure = independentDiagnostics.some(({ cause }) => cause === 'setup');
 
     for (const diagnostic of compilerDiagnostics) {
       const ownerResult = reconcileDiagnosticOwner(options, check, diagnostic, target, currentRevision);
@@ -544,39 +598,23 @@ export function recordVerifierResults(
       );
     }
 
-    if (assertions.length && testNames.length) {
-      for (const test of testNames) {
-        const ownerResult = ownerForTest(options, check, test, target, currentRevision);
-        const owner = ownerResult.state === 'owned' ? ownerResult.owner : undefined;
-        saveFinding(
-          options.store,
-          makeFinding(
-            check,
-            base,
-            target,
-            test,
-            assertions.join('\n'),
-            owner ? 'new' : 'unknown',
-            evidence,
-            `${ownerResult.reason} ${findingProvenance(check, target)}`,
-            'fail',
-            'product-runtime',
-          ),
-          options.settings.policy?.verifier,
-        );
-        if (owner) repairs.push({
-          test,
-          assertions,
-          error: evidence.output,
-          owner,
-          cause: 'product-runtime',
-          command,
-          sourceRevision: target,
-          evidenceLogPath: evidence.logPath,
-        });
-      }
-    } else if (assertions.length) {
-      const diagnostic: DevVerifierDiagnostic = { cause: 'product-runtime', message: assertions.join('\n') };
+    const attributionDiagnostics: DevVerifierDiagnostic[] = [
+      ...(truncatedOutput(evidence.output)
+        ? [{ cause: 'product-runtime' as const, message: 'Truncated output prevents complete file-local attribution.' }]
+        : []),
+      ...(testAttribution.ambiguous
+        ? [
+            {
+              cause: 'product-runtime' as const,
+              message: 'Failure output has no reporter-confirmed file-local attribution.',
+            },
+          ]
+        : []),
+      ...(testAttribution.unhandled
+        ? [{ cause: 'product-runtime' as const, message: 'The test runner reported an unhandled error between tests.' }]
+        : []),
+    ];
+    for (const diagnostic of attributionDiagnostics) {
       saveDiagnosticFinding(
         options,
         check,
@@ -585,12 +623,103 @@ export function recordVerifierResults(
         diagnostic,
         'unknown',
         evidence,
-        'A product failure has no concrete named test operand; automatic implementation routing was withheld.',
-        'fail',
+        'Reporter evidence could not be assigned to a test file. ' + findingProvenance(check, target),
+        outcome,
       );
     }
 
-    if (!compilerDiagnostics.length && !independentDiagnostics.length && !assertions.length) {
+    const fileFailures = testAttribution.outcomes.filter((item) => item.result === 'fail');
+    let routedFileFailure = false;
+    if (!truncatedOutput(evidence.output)) {
+      for (const fileResult of fileFailures) {
+        const failureOutputs = fileResult.failureOutputs.filter((output) => !isAuthDatabasePlacementFailure(output));
+        const fileAssertions = [
+          ...new Set(
+            failureOutputs.flatMap((output) => fileFailureAssertions(output, options.settings.policy?.verifier)),
+          ),
+        ];
+        if (setupFailure && fileAssertions.length === 0) continue;
+        const fileOutput = failureOutputs.join('\n') || fileResult.output;
+        if (!fileResult.resolved || !fileAssertions.length) {
+          const diagnostic: DevVerifierDiagnostic = {
+            cause: 'product-runtime',
+            message:
+              fileAssertions.join('\n') || 'The reporter marked this file failed without stable assertion detail.',
+            location: { file: fileResult.file, resolved: fileResult.resolved },
+          };
+          saveDiagnosticFinding(
+            options,
+            check,
+            base,
+            target,
+            diagnostic,
+            'unknown',
+            evidence,
+            'A reporter outcome was observed but its file or assertion evidence is unresolved. ' +
+              findingProvenance(check, target),
+            outcome,
+          );
+          routedFileFailure = true;
+          continue;
+        }
+        if (failureOutputs.length === 0) continue;
+        routedFileFailure = true;
+        const ownerResult = ownerForTest(options, check, fileResult.file, target, currentRevision);
+        const owner = ownerResult.state === 'owned' ? ownerResult.owner : undefined;
+        saveFinding(
+          options.store,
+          makeFinding(
+            check,
+            base,
+            target,
+            fileResult.file,
+            fileAssertions.join('\n'),
+            owner ? 'new' : 'unknown',
+            evidence,
+            ownerResult.reason + ' ' + findingProvenance(check, target),
+            'fail',
+            'product-runtime',
+          ),
+          options.settings.policy?.verifier,
+        );
+        if (owner)
+          repairs.push({
+            test: fileResult.file,
+            assertions: fileAssertions,
+            error: fileOutput,
+            owner,
+            cause: 'product-runtime',
+            command,
+            sourceRevision: target,
+            evidenceLogPath: evidence.logPath,
+          });
+      }
+    }
+    const unattributedAssertions = fileFailureAssertions(evidence.output, options.settings.policy?.verifier);
+    if (!routedFileFailure && unattributedAssertions.length && !truncatedOutput(evidence.output)) {
+      const diagnostic: DevVerifierDiagnostic = {
+        cause: 'product-runtime',
+        message: unattributedAssertions.join('\n'),
+      };
+      saveDiagnosticFinding(
+        options,
+        check,
+        base,
+        target,
+        diagnostic,
+        'unknown',
+        evidence,
+        'The command contains failure text without a reporter-confirmed failed file; automatic implementation routing was withheld.',
+        outcome,
+      );
+    }
+
+    if (
+      !compilerDiagnostics.length &&
+      !independentDiagnostics.length &&
+      !attributionDiagnostics.length &&
+      !unattributedAssertions.length
+    ) {
       const cause = causes[0];
       saveFinding(
         options.store,

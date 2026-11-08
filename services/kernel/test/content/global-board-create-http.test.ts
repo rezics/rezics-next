@@ -266,29 +266,55 @@ test.serial(
   'a governance account creates published and protected Global boards over HTTP and authors post reviews and discussions on them',
   async () => {
     const conceptRoute = routeOf(conceptId)!;
+    const scales = [1, 64, 512] as const;
+    const measuredGlobalPopulations: number[] = [];
+    const measuredSubjectPopulations: number[] = [];
+    const countGlobalBoards = async (database: GrowthDatabase) =>
+      Number((await database.admin.query('SELECT count(*) AS n FROM content.board WHERE realm_id IS NULL')).rows[0]!.n);
+    const countSelectedSubjectBoards = async (database: GrowthDatabase) =>
+      Number(
+        (
+          await database.admin.query(
+            'SELECT count(*) AS n FROM content.board WHERE route = $1 AND subject_id = $2 AND realm_id IS NULL',
+            [conceptRoute, conceptId],
+          )
+        ).rows[0]!.n,
+      );
     const report = await checkGrowth(db, {
       name: 'Global board creation',
-      scales: [1, 8, 64],
+      scales,
       repetitions: 1,
       warmups: 1,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
       async grow(database, scale) {
-        const count = Number(
-          (
-            await database.admin.query(
-              'SELECT count(*) AS n FROM content.board WHERE route = $1 AND subject_id = $2 AND realm_id IS NULL',
-              [conceptRoute, conceptId],
-            )
-          ).rows[0]!.n,
-        );
-        const ids = Array.from({ length: Math.max(0, scale - count) }, () => newId(conceptRoute));
-        if (ids.length === 0) return;
+        // The real HTTP warmup creates one Global Board before the single measured create.
+        const targetPopulation = scale - 1;
+        const currentPopulation = await countGlobalBoards(database);
+        expect(currentPopulation).toBeLessThanOrEqual(targetPopulation);
+        const missing = targetPopulation - currentPopulation;
+        if (missing === 0) return;
+        const boardIds = Array.from({ length: missing }, () => newId(conceptRoute));
+        const subjectIds = Array.from({ length: missing }, () => newId(conceptRoute));
         await database.admin.query(
           `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-           SELECT $1,id,$2,'Unrelated Global board','published',1,id FROM unnest($3::uuid[]) AS id`,
-          [conceptRoute, conceptId, ids],
+           SELECT $1,seeded.board_id,seeded.subject_id,'Unrelated Global board','published',1,seeded.board_id
+           FROM unnest($2::uuid[],$3::uuid[]) AS seeded(board_id,subject_id)`,
+          [conceptRoute, boardIds, subjectIds],
         );
+        expect(await countGlobalBoards(database)).toBe(targetPopulation);
+      },
+      async warmup(_database, scale) {
+        const result = await createBoard('discussion');
+        expect(result.response.status).toBe(201);
+
+        // This readback is outside the measured operation and proves its actual starting population.
+        const globalPopulation = await countGlobalBoards(db);
+        const subjectPopulation = await countSelectedSubjectBoards(db);
+        expect(globalPopulation).toBe(scale);
+        expect(subjectPopulation).toBe(1 + measuredSubjectPopulations.length * 2);
+        measuredGlobalPopulations.push(globalPopulation);
+        measuredSubjectPopulations.push(subjectPopulation);
       },
       async operation() {
         const result = await createBoard('discussion');
@@ -296,9 +322,12 @@ test.serial(
         return result;
       },
     });
-    expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
+    expect(measuredGlobalPopulations).toEqual([...scales]);
+    expect(measuredSubjectPopulations).toEqual([1, 3, 5]);
+    expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
     for (const { cost } of report.samples) {
       expect(cost.rows).toBeGreaterThan(0);
+      expect(cost.blocks).toBeGreaterThan(0);
       expect(cost.statements).toBeGreaterThan(0);
       expect(cost.controlStatements).toBeGreaterThan(0);
       expect(cost.requestBytes).toBeGreaterThan(0);
