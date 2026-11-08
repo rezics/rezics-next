@@ -1,4 +1,9 @@
-import type { NativeRealmMember, NativeRealmMembersRead, RealmMembersReadInput } from './native';
+import type {
+  NativeRealmMember,
+  NativeRealmMemberAction,
+  NativeRealmMembersRead,
+  RealmMembersReadInput,
+} from './native';
 import type { MemberPageRead, MemberSelectionRead, RealmMembersSource } from './source';
 
 type NativeReader = (input: RealmMembersReadInput) => Promise<NativeRealmMembersRead>;
@@ -48,7 +53,7 @@ function selectedIdentity(member: NativeRealmMember) {
   };
 }
 
-function availability(action: NativeRealmMember['actions']['addMember']): 'available' | 'unavailable' | 'unknown' {
+function availability(action: NativeRealmMemberAction): 'available' | 'unavailable' | 'unknown' {
   if (action.state === 'available') return 'available';
   if (action.state === 'uncertain') return 'unknown';
   return 'unavailable';
@@ -64,11 +69,7 @@ export function nativeRealmMembersSource(
 
   async function request(input: Omit<RealmMembersReadInput, 'viewerId'>): Promise<NativeRealmMembersRead> {
     if (typeof viewerId !== 'string' || !idPattern.test(viewerId)) return { kind: 'unavailable' };
-    try {
-      return await reader({ ...input, viewerId });
-    } catch {
-      return { kind: 'failed' };
-    }
+    return reader({ ...input, viewerId });
   }
 
   return {

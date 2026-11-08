@@ -25,11 +25,13 @@ The installed [native producer](../../../../../services/kernel/src/community/REA
 `GET /v1/realms/:realmId/members` (`realm.members`, public operation exposure, private `realm:manage` admission), with
 optional exact `accountId` inspection. Its installed schema caps pages at 20 rows, names at 4,096 UTF-16 units, cursors
 at 4,096 characters and serialized responses at 600,000 UTF-8 bytes. It publishes add/ban/unban advice and explicitly
-unavailable remove/role variants; it publishes no media grants. Its rows and selected observations now expose the producer-owned opaque `episode` binding; a leave/rejoin changes it. Ready pages also carry the current Realm label, producer page bound and viewer-scoped authority token. Shared generated declaration installation remains publisher-owned. A server source or a local factory does not establish an installed generated
-consumer. The production route wires a session-scoped source; the unavailable adapter remains only as the default
-composition fixture. These consumer types remain illustrative
-composition types, not a proposed wire schema. `pageBound` must come from that installed producer when bound;
-fixtures use 20 only to exercise bounded composition.
+unavailable remove/role variants; it publishes no media grants. Its rows and selected observations expose the
+producer-owned opaque `episode` binding; a leave/rejoin changes it. Ready pages also carry the current Realm label,
+producer page bound and viewer-scoped authority token. The installed generated `members.get` supplies the receiver
+request, response, row, selection and action types; production calls that operation directly. The production route
+wires a session-scoped source; the unavailable adapter remains only as the default composition fixture. The source
+types remain consumer composition types, separate from the installed wire response. `pageBound` must come from that
+installed producer when bound; fixtures use 20 only to exercise bounded composition.
 Cursor bytes pass through unchanged. Selected inspection never moves the page cursor. An empty page with `next`
 retains More. A failed page retries the exact original address. Denial is distinct from empty or unavailable.
 
@@ -92,8 +94,7 @@ identity, advice or producer currentness retires the review before it can write.
   predecessor coordinates, one current coordinate and one staged target. Each retained cursor is at most 4,096
   code units under native admission. Prior pages and identities are not retained. The selected observation may stay in component memory
   during an explicit same-address status read so accepted work remains pending after a failed read; it is never shown
-  as a fallback identity. No guessed wire string, cursor or media caps; publication must provide them before
-  production binding. Concealed rows carry no identity. The consumer rejects duplicate accounts,
+  as a fallback identity. Wire string and cursor caps come from the installed schema; media remains unavailable without published grants. Concealed rows carry no identity. The consumer rejects duplicate accounts,
   mismatched Realm/selection/currentness and rows beyond the supplied producer bound.
 - Growth check: supplied 1/10/20-row tests pin finite consumer requests and replacement. Content retains native
   256/1024/4096 membership/history/partition growth. These fixtures cannot establish producer bounds or native cost.
@@ -110,18 +111,23 @@ No legacy code was ported.
 
 Connected stories exercise ready, long/private names, sparse, denied, selected unavailable, pending membership,
 revocation, and add rejection, uncertainty and accepted-pending through the existing membership command owner with
-deterministic response fixtures. The mounted production source is connected; generated declarations, native execution
+deterministic response fixtures. The mounted production source and generated receiver are connected; native execution
 and phone390/desktop1280 light/dark keyboard review across all eight locales remain integration-owned. Existing
 Storybook capture ownership remains unchanged. Consumer fixtures do not establish native 256/1024/4096 growth.
 
 ## Native read transport
 
+Decision: call installed `members.get` directly and derive its query, response, row, selected observation and action
+advice types from the operation. HTTP admission retains exact Realm/viewer identity, Account-scoped episodes and
+mounted action operands; source projection never invents authority or optional method availability. Native execution,
+browser review and growth evidence remain with the original member journey.
+
 `native.ts` reads real mounted data and validates the producer-owned viewer authority and selected action advice. The
 source copies viewer authority and producer page bound without synthesizing either.
 `request.ts` resolves the admitted browser session and checks its subject before calling the native GET; `transport.ts`
-keeps this explicit read private and outside route loaders. The seam is source integration, not installed generated
-typing or native execution. No new membership or ban writer is introduced. Preparation stays separate from a ready
-empty roster.
+keeps this explicit read private and outside route loaders. The receiver uses the installed generated GET; source and
+typing evidence do not establish native execution. No new membership or ban writer is introduced. Preparation stays
+separate from a ready empty roster.
 
 Cost: native read transport
 

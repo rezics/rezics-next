@@ -462,24 +462,21 @@ account inspection. The [members owner](../../apps/web/src/community/members/REA
 opaque continuation, exact failed-address retry, concealed/denied/failed states, selected advice, and consumer cost.
 Pending membership does not certify participation. Selected add uses the existing membership command owner, and the
 default Realm ban Panel retains ban/unban execution; both retain their own uncertain retry and native readback
-semantics. The production roster source remains unavailable until its generated GET, exact interval proof and native
-lifetime publication are installed.
+semantics. The production route uses its session-scoped source and the installed generated `members.get` operation.
 
-Decision: retain an unavailable production source until the installed roster has generated GET declarations and exposes
-an exact membership interval for selection; account ID and member state cannot substitute for that interval.
-The installed native GET currently checks intervals internally but exposes none, and its generated client still lacks
-the GET. Browser retirement now follows successful session incarnations and current incarnation-keyed exposure changes,
+Decision: derive roster query, response, row, selected episode and action types from the installed GET, preserving
+HTTP response validation and the exact Account-scoped episode as selection authority. The source copies producer
+viewer authority, page bound and opaque continuation; it does not synthesize authority or optional method availability.
+Browser retirement follows successful session incarnations and current incarnation-keyed exposure changes,
 including cache errors and batched away/back transitions, without fetching authority or retaining private query snapshots.
-Producer lifetime observations now have an optional composition seam that retires page, selection and deferred focus
-without fetching; it remains unbound until Content publishes native disclosure/currentness ownership and exact intervals.
-Management discovery consumes existing exact-Realm `realm.update` or appearance `canManage` observations independently
-of ban advice. Effect replay preserves the original producer observation across subscription cleanup and reconnection.
-The consumer composes current selected ban/unban advice and membership addition through those command owners, with
-explicit review, immutable retry, and selected readback. The default production visit is still unavailable because
-the generated GET, exact membership interval and native lifetime notification contract are unpublished. Add stories
-use the real command owner with deterministic response fixtures; consumer fixtures establish neither native completion nor
-producer growth. Full mounted native action acceptance and eight-locale phone/desktop light/dark visual review remain
-integration-owned.
+Producer lifetime observations have an optional composition seam that retires page, selection and deferred focus
+without fetching. Management discovery consumes existing exact-Realm `realm.update` or appearance `canManage`
+observations independently of ban advice. Effect replay preserves the original producer observation across subscription
+cleanup and reconnection. The consumer composes selected ban/unban advice and membership addition through those
+command owners, with explicit review, immutable retry and selected readback. Add stories use the real command owner
+with deterministic response fixtures. Generated receiver binding and Web typing do not establish native completion
+or producer growth. Full mounted native action acceptance and eight-locale phone/desktop light/dark visual review
+remain with the original member journey and integration verification.
 
 ### Current Realm ban identity and inspection boundary
 

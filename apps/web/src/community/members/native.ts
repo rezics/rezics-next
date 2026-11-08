@@ -1,52 +1,21 @@
 import type { KernelClient } from '@rezics/client';
 
-/** Minimal public wire seam for community/routes.ts, pending the shared declaration publication. */
-export type RealmMembersReadInput = {
-  realmId: string;
-  viewerId: string;
-  cursor?: string | undefined;
-  accountId?: string | undefined;
-};
-type Identity = { id: string; kind: 'actor' | 'organization' } & (
-  | { state: 'deleted' }
-  | { state: 'active'; handle: string | null; displayName: string | null }
-);
-type Action =
-  | {
-      state: 'available';
-      method: 'POST' | 'PUT' | 'DELETE';
-      path: string;
-      body: { accountId: string } | { reason: string } | null;
-      expectedStatus: 202 | 200 | 204;
-      outcome: string;
-    }
-  | { state: 'prohibited'; reason: string }
-  | { state: 'uncertain'; reason: 'authority_unavailable' | 'identity_unavailable' }
-  | { state: 'unavailable'; reason: 'no_mounted_method' };
-export type NativeRealmMember = {
-  accountId: string;
-  episode: string;
-  membership: 'member' | 'none';
-  identity: Identity | null;
-  displayName: string;
-  banState: 'banned' | 'clear' | 'unknown';
-  actions: Record<'addMember' | 'ban' | 'unban' | 'removeMember' | 'reviseRole', Action>;
-};
-type NativeRealmMembersPageBase = {
-  realmId: string;
-  realmLabel: string;
-  pageBound: number;
-  next: string | null;
-};
-export type NativeRealmMembersPage = NativeRealmMembersPageBase &
+type MembersGet = ReturnType<KernelClient['realms']>['members']['get'];
+type MembersOptions = NonNullable<Parameters<MembersGet>[0]>;
+type MembersQuery = NonNullable<MembersOptions['query']>;
+type MembersResponse = NonNullable<Awaited<ReturnType<MembersGet>>['data']>;
+
+/** Browser operands add a session subject assertion, never credentials or authority. */
+export type RealmMembersReadInput = Parameters<KernelClient['realms']>[0] & MembersQuery & { viewerId: string };
+export type NativeRealmMember = NonNullable<MembersResponse['selected']>;
+export type NativeRealmMemberRow = MembersResponse['items'][number];
+export type NativeRealmMemberAction = NativeRealmMember['actions'][keyof NativeRealmMember['actions']];
+
+/** Correlations admitted at the HTTP boundary, refining the installed response without replacing it. */
+export type NativeRealmMembersPage = MembersResponse &
   (
     | { state: 'preparing'; viewer: null; items: []; selected: null }
-    | {
-        state: 'ready';
-        viewer: { accountId: string; authority: string };
-        items: NativeRealmMember[];
-        selected: NativeRealmMember | null;
-      }
+    | { state: 'ready'; viewer: NonNullable<MembersResponse['viewer']> }
   );
 export type NativeRealmMembersRead =
   | { kind: 'ready'; page: NativeRealmMembersPage }
@@ -85,11 +54,10 @@ function identity(value: unknown, accountId: string): boolean {
     : value.state === 'active' &&
         keys(value, ['id', 'kind', 'state', 'handle', 'displayName']) &&
         nullableText(value.handle, 64) &&
-        (value.handle === null || /^[a-z0-9][a-z0-9_-]{0,63}$/.test(String(value.handle))) &&
         nullableText(value.displayName, 4096);
 }
 
-const prohibitedReasons = [
+const prohibitedReasons: Extract<NativeRealmMemberAction, { state: 'prohibited' }>['reason'][] = [
   'already_member',
   'already_banned',
   'not_banned',
@@ -98,10 +66,15 @@ const prohibitedReasons = [
   'deleted_account',
   'identity_unavailable',
 ];
-function action(value: unknown, operation: string, realmId: string, accountId: string): boolean {
+function action(
+  value: unknown,
+  operation: keyof NativeRealmMember['actions'],
+  realmId: string,
+  accountId: string,
+): value is NativeRealmMemberAction {
   if (!record(value)) return false;
   if (value.state === 'prohibited')
-    return keys(value, ['state', 'reason']) && prohibitedReasons.includes(String(value.reason));
+    return keys(value, ['state', 'reason']) && prohibitedReasons.some((reason) => reason === value.reason);
   if (value.state === 'uncertain')
     return (
       keys(value, ['state', 'reason']) &&
@@ -143,6 +116,14 @@ function action(value: unknown, operation: string, realmId: string, accountId: s
     );
   return false;
 }
+const actionNames = [
+  'addMember',
+  'ban',
+  'unban',
+  'removeMember',
+  'reviseRole',
+] as const satisfies readonly (keyof NativeRealmMember['actions'])[];
+
 function member(value: unknown, realmId: string): value is NativeRealmMember {
   if (
     !record(value) ||
@@ -159,8 +140,8 @@ function member(value: unknown, realmId: string): value is NativeRealmMember {
   )
     return false;
   return (
-    keys(value.actions, ['addMember', 'ban', 'unban', 'removeMember', 'reviseRole']) &&
-    ['addMember', 'ban', 'unban', 'removeMember', 'reviseRole'].every((name) =>
+    keys(value.actions, [...actionNames]) &&
+    actionNames.every((name) =>
       action((value.actions as Record<string, unknown>)[name], name, realmId, value.accountId as string),
     )
   );
@@ -172,9 +153,7 @@ function page(value: unknown, input: RealmMembersReadInput): value is NativeReal
     value.realmId !== input.realmId ||
     !text(value.realmLabel, 4096) ||
     !value.realmLabel ||
-    !Number.isSafeInteger(value.pageBound) ||
-    (value.pageBound as number) < 1 ||
-    (value.pageBound as number) > 20 ||
+    value.pageBound !== (20 satisfies MembersResponse['pageBound']) ||
     !['ready', 'preparing'].includes(String(value.state)) ||
     !Array.isArray(value.items) ||
     value.items.length > (value.pageBound as number) ||
@@ -200,38 +179,32 @@ function page(value: unknown, input: RealmMembersReadInput): value is NativeReal
   );
 }
 
-type NativeGet = (options: {
-  query: { cursor?: string; accountId?: string };
-  headers: { authorization: string };
-  fetch: { cache: 'no-store' };
-}) => Promise<{ status: number; data?: unknown; error?: unknown }>;
-
-/** One bounded GET, including exact selection. No client hydration, refill, or identity fallback. */
+/** One installed bounded GET, including exact selection. No hydration, refill, or identity fallback. */
 export async function readNativeRealmMembers(
   client: KernelClient,
   input: RealmMembersReadInput,
   authorization: string,
 ): Promise<NativeRealmMembersRead> {
-  const members = client.realms({ realmId: input.realmId }).members as unknown as { get?: NativeGet };
-  if (typeof members.get !== 'function') return { kind: 'unavailable' };
+  const query: MembersQuery = {
+    ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+    ...(input.accountId === undefined ? {} : { accountId: input.accountId }),
+  };
+  let result: Awaited<ReturnType<MembersGet>>;
   try {
-    const result = await members.get({
-      query: {
-        ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
-        ...(input.accountId === undefined ? {} : { accountId: input.accountId }),
-      },
+    result = await client.realms({ realmId: input.realmId }).members.get({
+      query,
       headers: { authorization },
       fetch: { cache: 'no-store' },
     });
-    if (result.status === 401 || result.status === 403) return { kind: 'denied' };
-    if (result.status === 404) return { kind: 'concealed' };
-    const error = record(result.error) && record(result.error.value) ? result.error.value : result.data;
-    if (result.status === 400 && record(error) && error.code === 'invalid_cursor') return { kind: 'expired' };
-    if (result.status === 429 || result.status === 503) return { kind: 'unavailable' };
-    if (result.status !== 200 || result.error || !page(result.data, input)) return { kind: 'failed' };
-    if (new TextEncoder().encode(JSON.stringify(result.data)).byteLength > 600_000) return { kind: 'failed' };
-    return result.data.state === 'preparing' ? { kind: 'preparing' } : { kind: 'ready', page: result.data };
   } catch {
     return { kind: 'failed' };
   }
+  if (result.status === 401 || result.status === 403) return { kind: 'denied' };
+  if (result.status === 404) return { kind: 'concealed' };
+  const error = record(result.error) && record(result.error.value) ? result.error.value : result.data;
+  if (result.status === 400 && record(error) && error.code === 'invalid_cursor') return { kind: 'expired' };
+  if (result.status === 429 || result.status === 503) return { kind: 'unavailable' };
+  if (result.status !== 200 || result.error || !page(result.data, input)) return { kind: 'failed' };
+  if (new TextEncoder().encode(JSON.stringify(result.data)).byteLength > 600_000) return { kind: 'failed' };
+  return result.data.state === 'preparing' ? { kind: 'preparing' } : { kind: 'ready', page: result.data };
 }
