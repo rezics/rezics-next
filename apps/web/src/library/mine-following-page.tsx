@@ -796,6 +796,7 @@ function MineFollowingPageState({
                       />
                     </span>
                     <Button
+                      data-following-inspect=""
                       className="min-h-11"
                       variant="outline"
                       disabled={!!status}

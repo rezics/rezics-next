@@ -369,16 +369,17 @@ Decision: extend existing routes on small owner-backed seams; keep ten slices in
   is a later extension.
 - **Following target reading.** One bounded twenty-row native page retains supplied order and exact follow identity.
   Inspect a supplied Subject or Collection without extra reads, open its localized reader and return to current follow
-  controls. Deliberate inspection of one community uses the existing typed Space point read for its current title,
-  summary, address and admitted nullable Realm identity. An address routes to `/spaces/{address}`; otherwise an
-  admitted Realm routes to `/realms/{realmId}`. Missing identity, pending or refused reads and no destination remain
+  controls. FULL Space rows supply the Community producer's admitted destination and actions. Deliberate inspection
+  uses one typed Space point read for current title, summary and confirmation of those supplied operands; it cannot
+  create a destination. A supplied address routes to `/spaces/{address}`; a supplied Realm routes to
+  `/realms/{realmId}`. Missing identity, pending or refused reads and no destination remain
   distinct from empty Following and never change the follow. Current-origin/session/exposure boundaries retire
   selected responses, destinations, clipboard feedback and focus on replacement. Existing follow controls retain
-  removal, uncertain review, refresh and cursor recovery. Commerce's one-page admitted destination/action projection
-  is still missing; summary Space IDs are never used as Realm IDs or addresses. Native access cost stays producer-owned.
+  removal, uncertain review, refresh and cursor recovery. Summary Space IDs are never used as Realm IDs or addresses.
+  Supplied Realm membership actions navigate to the existing Realm command owner. Native access cost stays producer-owned.
   Decision: preserve native row order and request twenty rows, replacing the base's type grouping and hundred-row read.
   Decision: after browser return, keep target inspection and links suspended until a fresh page observation arrives.
-  Destination actions remain explicitly unavailable until the installed generated follow row supplies admitted operands;
+  Destination actions remain explicitly unavailable when the installed generated follow row supplies no admitted operands;
   Collection exposure withdrawal retires inspection and old links independently of uncertain follow commands.
   Details: [Following reading](../../apps/web/src/library/following-reading/README.md).
 - **Collection discovery.** Home consumes disclosed Collection summaries through the existing ContentItem adapter

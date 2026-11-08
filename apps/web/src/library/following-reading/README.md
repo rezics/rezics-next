@@ -34,7 +34,8 @@ the browser keeps the requested cursor address. Ordinary left-click on a supplie
 and target on this Following history entry (`followingReturn` in `history.state`) for the current session; modified
 clicks leave no private frontier. Page hide retires inspection, and a restored browser document
 requests a current page reread before a new inspection, then focuses the original row when that frontier still
-matches. Until a fresh page arrives, inspection and target links stay
+matches. Return focus locates the inspection control by its stable row marker, independently of its translated
+accessible name. Until a fresh page arrives, inspection and target links stay
 suspended, with a readable updating state; the current trigger remains focusable. Retry focuses the inspection heading
 before replacing its button with the preparing state. Collection exposure withdrawal also retires existing inspection
 and retained link callbacks without replacing the follow command owner. Destination admission remains authoritative, so denied or
@@ -55,7 +56,12 @@ follow removal uses its existing writer, independently.
 Native work includes the page producer's [`fullView`](../../../../../services/kernel/src/library/views.ts)
 summary expansion and the Community reader's nested access/admission, not just the HTTP request count; those budgets
 remain with their native owners. Connected stories distinguish selected-read success, denial, retirement, unavailability
-and no destination; their successful inspection does not claim a delivered one-page destination/action projection.
+and no destination; inspection alone does not prove native admission or lifecycle acceptance.
+
+Decision: retain the installed FULL producer, count relay/default-worker composition and mounted Following receiver;
+use a stable inspection marker for translated browser-return focus. Existing page, command and lifecycle assertions
+remain unchanged; `following-reading-return.test.tsx` adds the localized fresh-page return regression. Native, browser,
+growth and promoted-revision acceptance remain separate from worker workspace typing.
 
 ## Admission and command custody
 

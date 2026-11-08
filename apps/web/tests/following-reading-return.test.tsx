@@ -1,6 +1,28 @@
 import { expect, test } from 'bun:test';
 import { deferred, follow, mountFollowing, page, realmId, spaceId } from './helpers/following-reading';
 import { m } from '../src/paraglide/messages.js';
+import { followingReturnFrontier, followingReturnLocationState } from '../src/library/following-reading/return-context';
+
+test('a fresh translated page restores the returned target by identity rather than English control text', async () => {
+  const h = await mountFollowing(page(follow('subject')));
+  const { setLocale } = await import('../src/paraglide/runtime.js');
+  try {
+    const frontier = followingReturnFrontier('ja', 'owner', null, 'all', spaceId)!;
+    await h.settle(() => {
+      setLocale('ja', { reload: false });
+      h.window.history.replaceState(followingReturnLocationState(frontier), '', '/ja/library/following');
+    });
+    await h.replace(page(follow('subject')));
+    const trigger = h.host.querySelector<HTMLButtonElement>('button[data-following-inspect]')!;
+    expect(trigger.getAttribute('aria-label')).toBe('subject title の詳細');
+    expect(h.window.document.activeElement).toBe(trigger);
+    expect(h.window.history.state.followingReturn).toBeUndefined();
+    expect(h.host.querySelector('[role="dialog"]')).toBeNull();
+  } finally {
+    setLocale('en', { reload: false });
+    await h.dispose();
+  }
+});
 
 test('keyboard close restores only the current trigger; ordinary links keep the localized destination and native continuation', async () => {
   const h = await mountFollowing({ ...page(follow('subject')), next: 'opaque/page+' });
