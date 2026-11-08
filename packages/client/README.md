@@ -81,3 +81,7 @@ Consumers retain the native HTTP 202 Location bound to the returned operation id
 Decision: exact post point responses publish `ContributedPostEntry` and the Accounts contribution attribution types
 through the official Kernel declaration emitter. The public response may omit `authorId` for explicit deletion;
 native Content authorization types retain their required author. A null attribution carries no deletion assertion.
+
+Decision: the public feed client composes the emitted Library `PublicCollectionDiscoverySummary` and
+`ViewerPersonalActionsPage` types into Content's portable `unknown` fields. These are type-only owner aliases,
+not parallel DTOs or transport methods, and yield to concrete mounted fields when declaration emission supplies them.

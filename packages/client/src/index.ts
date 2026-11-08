@@ -19,6 +19,8 @@ import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/reques
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
 import type { ZoneSubjectListRoutes } from './kernel/zones/subjects.ts';
+import type { PublicCollectionDiscoverySummary } from './kernel/library/index.ts';
+import type { ViewerPersonalActionsPage } from './kernel/library/viewer-personal-actions.ts';
 
 export type {
   ContributionAttribution,
@@ -218,10 +220,11 @@ type ClientApp = Elysia<
   DefaultMetadata,
   {
     [Prefix in keyof KernelType['~Routes']]: Prefix extends 'v1'
-      ? Omit<Routes, 'subjects' | 'zones' | 'definitions'> & {
+      ? Omit<Routes, 'subjects' | 'zones' | 'definitions' | 'feedItems'> & {
           subjects: SubjectRoutes;
           zones: InstalledZoneRoutes;
           definitions: InstalledDefinitionRoutes;
+          feedItems: InstalledFeedRoutes;
         }
       : KernelType['~Routes'][Prefix];
   }
@@ -333,8 +336,30 @@ export type SourceStatisticClearInput = SubjectSourceStatisticsRoute[':source'][
 export type SourceStatisticClearResult = SubjectSourceStatisticsRoute[':source']['$clear']['post']['response'][204];
 export type SourceStatisticFigures = NonNullable<SourceStatistic['figures']>;
 
-/** Home and Following share the installed feedItems response declaration. */
-export type FeedPage = Routes['feedItems']['get']['response'][200];
+type MountedFeedPage = Routes['feedItems']['get']['response'][200];
+// Content's portable feed contract leaves these owner-composed fields unknown. Reuse the emitted owner
+// contracts until the mounted response publishes them, then yield to the generated field declarations.
+type FeedOwnerSummary<Row> = Row extends { summary: infer Summary extends { card: unknown } }
+  ? Omit<Row, 'summary'> & {
+      summary: Omit<Summary, 'card'> & {
+        card: unknown extends Summary['card'] ? PublicCollectionDiscoverySummary : Summary['card'];
+      };
+    }
+  : Row;
+/** Home and Following share native rows and the emitted contracts for their composed owner facts. */
+export type FeedPage = Omit<MountedFeedPage, 'feedItems' | 'viewerPersonalActions'> &
+  Readonly<{
+    feedItems: readonly FeedOwnerSummary<MountedFeedPage['feedItems'][number]>[];
+    viewerPersonalActions?: unknown extends MountedFeedPage['viewerPersonalActions']
+      ? ViewerPersonalActionsPage
+      : MountedFeedPage['viewerPersonalActions'];
+  }>;
+type MountedFeedRead = Routes['feedItems']['get'];
+type InstalledFeedRoutes = Omit<Routes['feedItems'], 'get'> & {
+  get: Omit<MountedFeedRead, 'response'> & {
+    response: Omit<MountedFeedRead['response'], 200> & { 200: FeedPage };
+  };
+};
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedContentItem = Extract<FeedItem, { source: 'following'; key: { owner: 'content' } }>;
 
