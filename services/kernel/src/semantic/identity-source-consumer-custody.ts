@@ -44,7 +44,6 @@ import {
   lookupIdentityBinding,
   readAccountIdentityUndo,
 } from './identity-adapters/identity-epoch-binding.ts';
-import { identityEpochStore } from './identity-adapters/index.ts';
 import { identityJobPartition, identityReceiptKey } from './identity-adapters/identity-epoch-contract.ts';
 import { IdentityEpochStoreError } from './contract/identity-errors.ts';
 import { serializeIdentityValue } from './identity-core/index.ts';
@@ -1044,7 +1043,7 @@ async function published(
             IDENTITY_EPOCH_JOB_READ_DECLARATION(),
             'identity-source-published-native-job-and-participant-declarations-missing',
           );
-          const saved = await identityEpochStore().readJob(tx, reference.job);
+          const saved = await identitySourceConsumerRuntime().identityEpochStore().readJob(tx, reference.job);
           return saved &&
             saved.state === 'published' &&
             json(saved.receipt) === json(reference.receipt) &&
@@ -1053,7 +1052,7 @@ async function published(
             : null;
         })
       : runCommand(pool, { partition: home, deadline }, async (tx) => {
-          const saved = await identityEpochStore().readJob(tx, reference.job);
+          const saved = await identitySourceConsumerRuntime().identityEpochStore().readJob(tx, reference.job);
           const native = (
             await tx.query<{ scope_digest: string }>(job.sql, [
               home,
@@ -1124,7 +1123,7 @@ async function published(
             return ack && json(ack.progress) === json(progress) ? progress : null;
           })
         ).value
-      : await identityEpochStore().reconcileStepReceipt(pool, progress.receipt);
+      : await identitySourceConsumerRuntime().identityEpochStore().reconcileStepReceipt(pool, progress.receipt);
     if (!reconciled || reconciled.state !== 'complete' || json(reconciled) !== json(progress)) return false;
   }
   return (await read()).value?.state === 'published';

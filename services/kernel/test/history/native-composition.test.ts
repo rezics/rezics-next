@@ -22,10 +22,12 @@ import {
 } from '../../src/history/adapters/work.ts';
 import { ratingIdentityProducer, unavailableRatingIdentityProducer } from '../../src/rating/segment-identity-guard.ts';
 import { identitySourceConsumerRuntime } from '../../src/semantic/identity-source-consumer-ports.ts';
+import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
 
 test('ordinary native composition binds the production adapters themselves', () => {
   installNativeHistoryPreload();
   expect(identitySourceConsumerRuntime().originalSourceDeclaration().engineRequests).toBe(0);
+  expect(identitySourceConsumerRuntime().identityEpochStore()).toBe(identityEpochStore());
   expect(ratingIdentityProducer()).not.toBe(unavailableRatingIdentityProducer);
   const installed = historyComposition();
   const composed = nativeHistoryComposition();

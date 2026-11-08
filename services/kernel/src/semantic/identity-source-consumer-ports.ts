@@ -6,7 +6,12 @@ import type {
   AccountIdentityReversalSettlement,
   AccountIdentitySource,
 } from '../access/agent-verification-identity.ts';
-import type { IdentityIntent, IdentityNativeReceipt, IdentityReceipt } from './identity-epoch-contract.ts';
+import type {
+  IdentityEpochStore,
+  IdentityIntent,
+  IdentityNativeReceipt,
+  IdentityReceipt,
+} from './identity-epoch-contract.ts';
 import type {
   IdentitySourceConsumerContext,
   IdentitySourceConsumerReference,
@@ -28,6 +33,7 @@ type AccountReceipt = Exclude<IdentityReceipt, { kind: 'subject.merge' }>;
 
 /** Composition installs the Access, Library and binding bodies. Source never value-imports those owners. */
 export type IdentitySourceConsumerRuntime = Readonly<{
+  identityEpochStore(): IdentityEpochStore;
   readAccountIdentitySource(
     tx: CommandTransaction,
     receipt: AccountReceipt,

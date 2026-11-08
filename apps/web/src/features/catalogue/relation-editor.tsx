@@ -14,7 +14,7 @@ import { Field, FieldLabel, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { EntityPicker, type EntityPickerSubject, type EntityPickerSearch } from '@rezics/ui/entity-picker';
-import { CandidateValue } from '../pages/data';
+import { CandidateValue } from '../pages/scalar-value';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { DefinitionGuideLink } from './definition-guide-view';
