@@ -2,9 +2,15 @@ export type { IdentityEpoch, IdentityJobRef, IdentityIntent, IdentityStepName, I
 import type { IdentityJobRef, IdentityIntent, IdentityStepReceipt, IdentityChange, IdentityStepProgress, IdentityEpochState, IdentityMapping, IdentityEffect } from '../identity-core/index.ts';
 /** Native identity storage and fixed participant protocol. Mapping conveys no permission. */
 import type { Pool } from 'pg';
-import type { IdentityReceiptBinding } from './identity-epoch-binding.ts';
 import type { IdentityEpochParticipantPorts } from '../contract/identity-epoch-ports.ts';
-export type { IdentityReceiptBinding } from './identity-epoch-binding.ts';
+/** Native receipt locator established by a released verified read. */
+export type IdentityReceiptBinding = Readonly<{
+    partition: number;
+    generation: string;
+    transactionId: string;
+    jobHome: number;
+    job: IdentityJobRef;
+}>;
 import type { CommandBasis, CommandAuthorization, CommandReceipt, CommandResult, CommandTransaction } from '../../command/command.ts';
 import type { mergeSubjects } from '../merges.ts';
 import type { verifyAccountAgent, unverifyAccountAgent } from '../account-agents.ts';

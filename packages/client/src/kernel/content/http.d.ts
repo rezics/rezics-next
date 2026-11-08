@@ -14534,8 +14534,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                             route: number;
                                             parentId: string | null;
                                             removed: true;
-                                            availability: "erased";
-                                            restorableUntil?: string;
+                                            availability: "withheld";
                                             body: null;
                                             sha256: null;
                                         } | {
@@ -14544,7 +14543,8 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                             route: number;
                                             parentId: string | null;
                                             removed: true;
-                                            availability: "withheld";
+                                            availability: "erased";
+                                            restorableUntil?: string;
                                             body: null;
                                             sha256: null;
                                         } | (import("./reads.ts").ItemView & {

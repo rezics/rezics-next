@@ -1,5 +1,5 @@
 import type { Release } from '@rezics/definitions';
-import { type CurrentContentDocumentRuntime } from '../content/adapters/index.ts';
+import { type CurrentContentDocumentRuntime } from '../content/adapters/subject-document.ts';
 import { type PublicDocumentView } from '../content/document-public.ts';
 import type { Actor } from '../request/access.ts';
 import type { Item } from './item.ts';

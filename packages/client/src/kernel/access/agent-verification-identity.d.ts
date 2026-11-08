@@ -1,3 +1,5 @@
+import { readAccountIdentityTechnicalSource } from './agent-verification-identity-retention.ts';
+export { readAccountIdentityTechnicalSource };
 import type { IdentitySourceConsumerReference } from '../semantic/identity-source-consumer-custody.ts';
 import type { Pool } from 'pg';
 import { type CommandTransaction } from '../command/command.ts';

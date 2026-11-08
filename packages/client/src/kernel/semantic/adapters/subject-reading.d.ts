@@ -3,7 +3,7 @@ import type { Release } from '@rezics/definitions';
 import type { ContentCoverRef } from '../contract/domain-ports.ts';
 import type { SubjectReadingNativePort, SubjectReadingFence, SubjectReadingFenceTuple } from '../contract/index.ts';
 import type { ContextRecord } from '../context.ts';
-import { readCurrentContentDocument } from '../../content/adapters/index.ts';
+import { readCurrentContentDocument } from '../../content/adapters/subject-document.ts';
 import { readCharacterPublicDocuments } from '../character-public-reading-documents.ts';
 import { type SubjectReadingRuntime } from '../subject-reading-application.ts';
 import type { SubjectReadingApplication } from '../subject-reading-application.ts';

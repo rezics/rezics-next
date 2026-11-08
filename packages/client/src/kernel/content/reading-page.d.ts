@@ -491,8 +491,7 @@ export declare function readContentReadingPage(dependencies: ReadingPageDependen
                 route: number;
                 parentId: string | null;
                 removed: true;
-                availability: "erased";
-                restorableUntil?: string;
+                availability: "withheld";
                 body: null;
                 sha256: null;
             } | {
@@ -501,7 +500,8 @@ export declare function readContentReadingPage(dependencies: ReadingPageDependen
                 route: number;
                 parentId: string | null;
                 removed: true;
-                availability: "withheld";
+                availability: "erased";
+                restorableUntil?: string;
                 body: null;
                 sha256: null;
             } | (import("./reads.ts").ItemView & {

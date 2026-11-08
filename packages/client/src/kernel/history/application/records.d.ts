@@ -1,0 +1,25 @@
+import { type HistoryComposition } from '../contract/index.ts';
+/** Command declarations, record sources, gates, record purge and durable work locators. Each facade delegates to the installed native composition; adapters implement them. */
+export declare const declareCommandHistory: HistoryComposition['declareCommandHistory'];
+export declare const bindCommandHistoryEvidence: HistoryComposition['bindCommandHistoryEvidence'];
+export declare const commandHistoryIdentityAccounts: HistoryComposition['commandHistoryIdentityAccounts'];
+export declare const validateCommandHistory: HistoryComposition['validateCommandHistory'];
+export declare const validateCommandHistoryScope: HistoryComposition['validateCommandHistoryScope'];
+export declare const recordCommandHistory: HistoryComposition['recordCommandHistory'];
+export declare const releaseCommandHistory: HistoryComposition['releaseCommandHistory'];
+export declare const beginRecordHistorySerialization: HistoryComposition['beginRecordHistorySerialization'];
+export declare const commandRecordSources: HistoryComposition['commandRecordSources'];
+export declare const declareCommandRecordSources: HistoryComposition['declareCommandRecordSources'];
+export declare const declareCommandRecordSourceSet: HistoryComposition['declareCommandRecordSourceSet'];
+export declare const finalizeCommandRecordSources: HistoryComposition['finalizeCommandRecordSources'];
+export declare const releaseCommandRecordSources: HistoryComposition['releaseCommandRecordSources'];
+export declare const recordRecordHistoryCopy: HistoryComposition['recordRecordHistoryCopy'];
+export declare const hasCommandRecordSourceSet: HistoryComposition['hasCommandRecordSourceSet'];
+export declare const finalizeCommandRecordSourceSet: HistoryComposition['finalizeCommandRecordSourceSet'];
+export declare const releaseCommandRecordSourceSet: HistoryComposition['releaseCommandRecordSourceSet'];
+export declare const recordCommandRecordSourceSetCopy: HistoryComposition['recordCommandRecordSourceSetCopy'];
+export declare const guardHistoryAccounts: HistoryComposition['guardHistoryAccounts'];
+export declare const prepareRecordHistoryPurge: HistoryComposition['prepareRecordHistoryPurge'];
+export declare const minimizeRecordHistoryPurge: HistoryComposition['minimizeRecordHistoryPurge'];
+export declare const recordDurableWorkLocator: HistoryComposition['recordDurableWorkLocator'];
+export declare const commandHistoryKind: HistoryComposition['commandHistoryKind'];
