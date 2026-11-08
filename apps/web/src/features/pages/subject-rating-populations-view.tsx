@@ -144,7 +144,7 @@ export function useRatingPopulations(
     observationStore.getSnapshot,
     observationStore.getServerSnapshot,
   );
-  const sessionOwnerStore = browserSessionOwner();
+  const sessionOwnerStore = browserSessionOwner;
   const sessionOwner = useSyncExternalStore(
     sessionOwnerStore.subscribe,
     sessionOwnerStore.getSnapshot,
