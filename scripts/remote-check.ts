@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { checkHostPressureProgram } from './check-host-pressure.ts';
 // Runs a command against a copy of a workspace on a development check host, so the check's containers and test lanes
 // run inside an admitted, resource-bounded check run, including loopback placement.
 // Runs share the host package cache through hardlinks. An in-place write into an installed package fails the run and
@@ -773,10 +774,15 @@ export const HARD_RUN_LIFETIME_MS = 2 * 60 * 60 * 1000;
 const DEFAULT_MAX_MS = HARD_RUN_LIFETIME_MS;
 const FALLBACK_ESTIMATE_MS = 40 * 60 * 1000;
 export const RUN_LIFETIME_FAILURE_MARKER = 'remote-check: infrastructure failure: remote run timed out ';
+export const RUN_PRESSURE_FAILURE_MARKER = 'remote-check: infrastructure failure: host pressure interrupted owned run ';
+export function runLifetimeFailureMarker(receipt: RunLifetimeFailure): string {
+  return receipt.phase === 'host-pressure' ? RUN_PRESSURE_FAILURE_MARKER : RUN_LIFETIME_FAILURE_MARKER;
+}
 export type RunLifetimeFailure = {
   schema: 1;
   status: 'infrastructure-failure';
-  phase: 'run-lifetime';
+  phase: 'run-lifetime' | 'host-pressure';
+  pressure?: { memoryFull: number; ioFull: number; sustainedMs: number };
   host: string;
   run: string;
   limitMs: number;
@@ -786,14 +792,26 @@ export type RunLifetimeFailure = {
 
 export function parseRunLifetimeFailure(output: string): RunLifetimeFailure | null {
   for (const line of output.split(/\r?\n/).reverse()) {
-    const start = line.indexOf(RUN_LIFETIME_FAILURE_MARKER);
+    const marker = line.includes(RUN_PRESSURE_FAILURE_MARKER)
+      ? RUN_PRESSURE_FAILURE_MARKER
+      : RUN_LIFETIME_FAILURE_MARKER;
+    const start = line.indexOf(marker);
     if (start < 0) continue;
     try {
-      const value = JSON.parse(line.slice(start + RUN_LIFETIME_FAILURE_MARKER.length));
+      const value = JSON.parse(line.slice(start + marker.length));
       if (
         value.schema === 1 &&
         value.status === 'infrastructure-failure' &&
-        value.phase === 'run-lifetime' &&
+        (value.phase === 'run-lifetime' ||
+          (value.phase === 'host-pressure' &&
+            value.limitMs === 15_000 &&
+            Number.isFinite(value.pressure?.memoryFull) &&
+            value.pressure.memoryFull >= 0 &&
+            Number.isFinite(value.pressure?.ioFull) &&
+            value.pressure.ioFull >= 0 &&
+            (value.pressure.memoryFull >= 5 || value.pressure.ioFull >= 25) &&
+            Number.isSafeInteger(value.pressure?.sustainedMs) &&
+            value.pressure.sustainedMs >= value.limitMs)) &&
         typeof value.host === 'string' &&
         typeof value.run === 'string' &&
         typeof value.command === 'string' &&
@@ -803,7 +821,7 @@ export function parseRunLifetimeFailure(output: string): RunLifetimeFailure | nu
         value.limitMs > 0 &&
         value.limitMs <= HARD_RUN_LIFETIME_MS &&
         Number.isSafeInteger(value.elapsedMs) &&
-        value.elapsedMs >= value.limitMs
+        value.elapsedMs >= (value.phase === 'host-pressure' ? 0 : value.limitMs)
       )
         return value;
     } catch {
@@ -1621,6 +1639,16 @@ if [ -e "$express_lock" ]; then
   exec 9<&-
 fi
 memory_max_bytes=$(awk -v memory_gib="${host.memoryMaxGiB}" 'BEGIN { printf "%.0f", memory_gib * 1073741824 }')
+# Operator limits can be lower than retained host configuration. Reservations use the effective slice maximum.
+slice_cgroup=$(systemctl show --property=ControlGroup --value rezics-check.slice 2>/dev/null || true)
+case "$slice_cgroup" in
+  /*)
+    effective_max=$(cat "/sys/fs/cgroup$slice_cgroup/memory.max" 2>/dev/null || true)
+    case "$effective_max" in ''|*[!0-9]*) ;; *)
+      if [ "$effective_max" -gt 0 ] && [ "$effective_max" -lt "$memory_max_bytes" ]; then memory_max_bytes=$effective_max; fi ;;
+    esac ;;
+esac
+if ! python3 -c ${quote(checkHostPressureProgram + '\nimport sys\nraise SystemExit(75 if update_host_pressure(sys.argv[1])[0] else 0)')} ${ROOT}/slots; then exit ${SLOT_BUSY}; fi
 if [ "$((memory_reserved + ${count} * ${memoryReservationBytes}))" -gt "$memory_max_bytes" ]; then exit ${SLOT_BUSY}; fi
 live_run_slots=0
 for run in ${ROOT}/runs/*; do
@@ -1973,6 +2001,7 @@ stop_owned_check_unit "$run_slice" || exit $?
 /** Executed by the host Python 3 prerequisite, before selecting or downloading pinned Bun. */
 export const dependencyPreparationProgram = String.raw`# Linux check-host dependency preparation. The supervising process is a subreaper in the run's systemd scope.
 SUPERVISOR_SCHEMA = ${REMOTE_CHECK_SUPERVISOR_MARKER_SCHEMA_JSON}
+${checkHostPressureProgram}
 import contextlib
 import ctypes
 import errno
@@ -3429,6 +3458,9 @@ def lifetime():
         resources.sample('preparation', True)
     except Exception:
         pass
+    ordinary_pressure = len(sys.argv) > 8 and sys.argv[8] in ['ordinary', 'multi-slot']
+    next_pressure = 0
+    pressure_evidence = None
     reason = None
     stopped_at = None
     root_code = None
@@ -3471,14 +3503,23 @@ def lifetime():
                     packages = current
                 if now >= preparation_deadline:
                     reason = 'install/preparation'
+        if code is None and reason is None and not (root / '.command-result').exists() and now >= next_pressure:
+            next_pressure = now + 2
+            try:
+                _, shed, pressure_evidence = update_host_pressure(root.parent.parent / 'slots', ordinary_pressure)
+                if shed and child.poll() is None and not (root / '.command-result').exists():
+                    reason = 'host-pressure'
+            except (OSError, ValueError, TypeError):
+                pass  # A failed observation never signals another run or invents a product result.
         if reason is not None and stopped_at is None:
             diagnostics = preparation_diagnostics(root)
             stopped_at = now
             cleanup_deadline = now + 8
-            if reason == 'run-lifetime':
+            if reason in ['run-lifetime', 'host-pressure']:
                 receipt = {'schema': 1, 'status': 'infrastructure-failure', 'phase': reason, 'host': host,
-                           'run': run, 'limitMs': limit_ms,
-                           'elapsedMs': max(limit_ms, round((now - started) * 1000)), 'command': command[:256]}
+                           'run': run, 'limitMs': 15000 if reason == 'host-pressure' else limit_ms,
+                           'elapsedMs': round((now - started) * 1000), 'command': command[:256]}
+                if reason == 'host-pressure': receipt['pressure'] = pressure_evidence
                 contents = json.dumps(receipt, sort_keys=True)
                 # Let a reconnected caller recover the deadline cause even while this supervisor reaps the run.
                 durable(root / 'run-lifetime-status.json', contents)
@@ -3535,18 +3576,20 @@ def lifetime():
     elif reason:
         elapsed = round((time.monotonic() - started) * 1000)
         receipt = {'schema': 1, 'status': 'infrastructure-failure', 'phase': reason, 'host': host, 'run': run,
-                   'limitMs': limit_ms, 'elapsedMs': elapsed, 'command': command[:256]}
-        result_code = 124 if reason == 'run-lifetime' else 128 + interrupted[0] if interrupted else 70
+                   'limitMs': 15000 if reason == 'host-pressure' else limit_ms, 'elapsedMs': elapsed, 'command': command[:256]}
+        if reason == 'host-pressure': receipt['pressure'] = pressure_evidence
+        result_code = 124 if reason in ['run-lifetime', 'host-pressure'] else 128 + interrupted[0] if interrupted else 70
         if reason == 'install/preparation':
             receipt.update({'reason': 'absolute preparation deadline exceeded', 'activePackages': packages,
                             'packageClassification': 'active' if packages else 'unknown',
                             'logTail': preparation_log_tail(root),
                             **(diagnostics or preparation_diagnostics(root))})
-        name = 'run-lifetime-status.json' if reason == 'run-lifetime' else 'preparation-status.json'
+        name = 'run-lifetime-status.json' if reason in ['run-lifetime', 'host-pressure'] else 'preparation-status.json'
         contents = json.dumps(receipt, sort_keys=True)
         durable(root / name, contents)
         durable(root.parent.parent / 'receipts' / run / name, contents)
         emit_nonblocking(('remote-check: infrastructure failure: remote run timed out ' if reason == 'run-lifetime'
+                          else 'remote-check: infrastructure failure: host pressure interrupted owned run ' if reason == 'host-pressure'
                           else 'remote-check: infrastructure failure ') + contents)
     else:
         result_code = root_code
@@ -4261,7 +4304,7 @@ exec systemd-run --scope --quiet --collect $expand_environment $slice_properties
   return `# REMOTE_CHECK_RUN_LIFETIME_MS ${lifetimeMs}
 mkdir -p ${quote(wrapperDirectory)} || exit 70
 printf '%s' ${quote(Buffer.from(dependencyPreparationProgram).toString('base64'))} | base64 -d > ${quote(`${wrapperDirectory}/prepare.py`)} || exit 70
-exec python3 ${quote(`${wrapperDirectory}/prepare.py`)} lifetime ${lifetimeMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} ${quote(identity)} ${preparationTimeoutMs} 3<<'${delimiter}'
+exec python3 ${quote(`${wrapperDirectory}/prepare.py`)} lifetime ${lifetimeMs} ${quote(hostName)} ${quote(id)} ${quote(directory)} ${quote(identity)} ${preparationTimeoutMs} ${quote(priorityClass)} 3<<'${delimiter}'
 ${script}
 ${delimiter}`;
 }
@@ -4637,6 +4680,7 @@ type RankedHost = {
   freeSlots: number;
   slotLimit: number;
   memoryHeadroom: number;
+  memoryMaximum: number;
   memoryReclaimable: number;
   memoryReserved: number;
   gateWaiting: boolean;
@@ -4675,7 +4719,7 @@ function rankHost(
   const isOldestLandingWaiter =
     hasLandingWaiter && landingWaiterId !== undefined && probe.landingWaitingId === landingWaiterId;
   const resourceSlots = probeCapacity(capacity);
-  const memoryMaximum = host.memoryMaxGiB * 2 ** 30;
+  const memoryMaximum = Math.min(host.memoryMaxGiB * 2 ** 30, probe.memoryMaximum ?? Infinity);
   const landingAgeMs =
     probe.landingWaitingStarted === null
       ? Number.POSITIVE_INFINITY
@@ -4740,6 +4784,7 @@ function rankHost(
     freeSlots,
     slotLimit,
     memoryHeadroom: probe.memoryHeadroom,
+    memoryMaximum,
     memoryReclaimable: probe.memoryReclaimable,
     memoryReserved: probe.memoryReserved,
     gateWaiting: probe.gateWaiting,
@@ -5622,8 +5667,8 @@ async function acquire(
     const state = waitingHosts.length
       ? waitingHosts
           .map(
-            ({ host, freeSlots, slotLimit, memoryReserved, memoryReclaimable, diskFree }) =>
-              `${host.name} ${freeSlots}/${slotLimit} free, disk ${diskFree} bytes free, memory ${memoryReserved / 2 ** 30} GiB reserved + ${(slots * memoryReservationBytes) / 2 ** 30} GiB requested of ${host.memoryMaxGiB} GiB, ${memoryReclaimable / 2 ** 30} GiB reclaimable file cache`,
+            ({ host, freeSlots, slotLimit, memoryReserved, memoryMaximum, memoryReclaimable, diskFree }) =>
+              `${host.name} ${freeSlots}/${slotLimit} free, disk ${diskFree} bytes free, memory ${memoryReserved / 2 ** 30} GiB reserved + ${(slots * memoryReservationBytes) / 2 ** 30} GiB requested of ${memoryMaximum / 2 ** 30} GiB, ${memoryReclaimable / 2 ** 30} GiB reclaimable file cache`,
           )
           .join(', ')
       : 'no responding hosts';
@@ -6956,7 +7001,7 @@ if [ -r "$file" ]; then printf '%s' ${quote(RUN_LIFETIME_FAILURE_MARKER)}; head 
     mkdirSync(path, { recursive: true });
     writeFileSync(join(path, 'run-lifetime-status.json'), JSON.stringify(receipt) + '\n');
     // This recovery path is independent of the command's possibly blocked/lost output stream and returns copy.
-    console.error(RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt));
+    console.error(runLifetimeFailureMarker(receipt) + JSON.stringify(receipt));
     return receipt;
   }
   return null;
@@ -7508,7 +7553,7 @@ async function runLeased(
       returnManifest = { schema: 1, status: 'failed', entries: [], missing: [], failures: [reason] };
       if (native.exitCode !== 0) {
         const cause = native.lifetimeFailure
-          ? 'recorded run-lifetime infrastructure failure'
+          ? 'recorded remote lifecycle infrastructure interruption'
           : `native command exit ${native.exitCode}`;
         console.error(`remote-check: returns failed after ${cause}: ${reason}`);
       } else {
