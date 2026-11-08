@@ -7,6 +7,7 @@ import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { PersonalLibraryPage } = await import('../src/library/entries-page');
+const { LibraryApplicationBoundary } = await import('../src/session/library-application');
 
 const labels = [
   ['en', 'Labels'],
@@ -32,7 +33,11 @@ test('the Personal Library navigation renders with its real localized labels mes
   const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/en/library'] }) });
   await router.load();
   const markup = renderToStaticMarkup(
-    createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
+    createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      createElement(LibraryApplicationBoundary, null, createElement(RouterProvider, { router })),
+    ),
   );
 
   expect(markup).toContain('<h1');

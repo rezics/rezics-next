@@ -14,6 +14,9 @@ Accounts owns Access, scopes, account lifecycle and website scope alignment; Con
 publication sources; Kernel owns shared execution, receipts and durable work. No Library or Web layer duplicates
 these authorities.
 
+Decision: Personal Library page smoke fixtures mount the installed application boundary inside their QueryClient
+provider, preserving the real reading capabilities and localized navigation assertions.
+
 Specialized behavior lives with its owner: [profiles](library-profile-consumers.md), [labels](library-labels.md),
 [pins](library-pins.md), [Continue](library-continue.md), [private follow counts](private-follow-counts.md),
 [dynamic Collections](dynamic-collections.md), [owner queries](library-owner-queries.md), [filtered lists](filtered-lists.md),
