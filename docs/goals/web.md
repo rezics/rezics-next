@@ -542,10 +542,10 @@ uncertain write. Exact replay keeps its original operation key and credential. S
 advice are read from the same admitted page.
 
 The [caller lifetime guide](../../apps/web/src/community/my-realms-lifetime.md#expanded-entry-and-selected-leave-admission)
-owns expanded-response activation and selected-leave admission: original-operation readback and exact retry,
+owns expanded-response activation and selected-leave admission: accepted-operation current-standing readback and exact retry,
 Account-scoped opaque episodes, independent advice, and retirement of selected reviews and late effects. These
-rules apply when both the generated operation and recording are mounted; the existing unavailable-entry receiver
-remains the integration seam until then.
+rules apply to the installed generated operation and its refreshed recording. Ordinary native/browser/root and growth
+acceptance remain with the receiving Goal.
 
 #### Current native cost
 

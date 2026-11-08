@@ -5,7 +5,10 @@ import { act, createElement, StrictMode } from 'react';
 import { renderToString } from 'react-dom/server';
 import type { Root } from 'react-dom/client';
 import type { QueryClient } from '@tanstack/react-query';
-import type { MyRealmsPage } from '../src/community/space';
+import type { MembershipResult, MyRealmsPage } from '../src/community/space';
+import type { MyRealmsNativeItem } from '../src/community/my-realms-current/contract';
+import { formatMyRealmsCurrent } from '../src/community/my-realms-native';
+import recording from '../src/kernel/recorded/my-realms.json';
 import * as start from '../.storybook/react-start';
 
 const { Window } = await import(
@@ -31,8 +34,19 @@ for (const [key, value] of Object.entries(globals))
 
 type ReadInput = { cursor?: string };
 type Deferred<T> = { promise: Promise<T>; resolve(value: T): void; reject(error: Error): void };
+type MembershipCommandInput = {
+  data: { realmId: string; action: 'join' | 'leave'; idempotencyKey: string };
+  headers: { 'X-CSRF-Token': string };
+};
 const readCalls: ReadInput[] = [];
+const standingReads: string[] = [];
+const membershipCommands: MembershipCommandInput[] = [];
 let readPage: (input: ReadInput) => Promise<MyRealmsPage> = async () => page('Current account realm');
+let standingState: 'member' | 'none' | 'pending' | 'banned' = 'member';
+let sendMembership: (input: MembershipCommandInput) => Promise<MembershipResult> = async () => ({
+  outcome: 'accepted',
+  workflowId: 'my-realms-workflow',
+});
 let mockReaderSession: { state: string; subject: string | null; csrfToken: string | null } = {
   state: 'signed-in',
   subject: 'realm-owner',
@@ -49,7 +63,7 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-function page(name: string, next: string | null = null): MyRealmsPage {
+function page(name: string, next: string | null = null, leaveAvailable = false): MyRealmsPage {
   const readerOrigin =
     mockReaderSession.state === 'signed-in' && mockReaderSession.subject
       ? {
@@ -62,10 +76,43 @@ function page(name: string, next: string | null = null): MyRealmsPage {
       : { kind: 'anonymous' as const };
   return {
     signedIn: true,
-    realms: [{ realmId: '0192f3a0-6c1e-7b2a-9d4e-000000000201', name, description: `Private description for ${name}` }],
+    realms: [currentRow(name, leaveAvailable)],
     next,
     readerOrigin,
   };
+}
+
+function currentRow(name: string, leaveAvailable = false) {
+  const source = recording.items[0];
+  if (!source) throw new Error('The refreshed My Realms recording needs a current row.');
+  const realmId = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
+  const item: MyRealmsNativeItem = {
+    ...source,
+    realmId,
+    name,
+    current: {
+      ...source.current,
+      description: `Private description for ${name}`,
+      destination: { ...source.current.destination, realmId },
+      actions: {
+        state: 'current',
+        enter: { state: 'prohibited', reason: 'not_authorized' },
+        manage: { state: 'prohibited', reason: 'not_authorized' },
+        leave: leaveAvailable
+          ? {
+              state: 'available',
+              method: 'DELETE',
+              path: `/v1/realms/${realmId}/membership`,
+              body: null,
+              expectedStatus: 202,
+            }
+          : { state: 'unavailable', reason: 'last_explicit_holder' },
+      },
+    },
+  };
+  const [row] = formatMyRealmsCurrent({ items: [item], next: null }).realms;
+  if (!row) throw new Error('Expected the current My Realms row.');
+  return row;
 }
 
 mock.module('@tanstack/react-start', () => start);
@@ -79,6 +126,16 @@ mock.module('../src/community/space-actions', () => ({
   readMyRealmsPage: ({ data }: { data: ReadInput }) => {
     readCalls.push(data);
     return readPage(data);
+  },
+  changeRealmMembership: (input: MembershipCommandInput) => {
+    membershipCommands.push(input);
+    return sendMembership(input);
+  },
+}));
+mock.module('../src/community/realm-membership-actions', () => ({
+  readRealmMembership: ({ data }: { data: { realmId: string } }) => {
+    standingReads.push(data.realmId);
+    return { state: standingState, idempotencyKey: `standing-${standingReads.length}` };
   },
 }));
 
@@ -222,10 +279,31 @@ function visiblePrivateNames(surface: Surface) {
   return surface.host.textContent ?? '';
 }
 
+async function untilMounted(predicate: () => boolean, label: string) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await settle();
+  }
+  throw new Error(`Timed out waiting for ${label}`);
+}
+
+async function clickButton(surface: Surface, label: string) {
+  const button = [...surface.host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (item) => item.textContent === label,
+  );
+  if (!button) throw new Error(`Missing button: ${label}`);
+  await act(async () => button.click());
+}
+
 function resetReader(
   implementation: (input: ReadInput) => Promise<MyRealmsPage> = async () => page('Current account realm'),
 ) {
   readCalls.length = 0;
+  standingReads.length = 0;
+  membershipCommands.length = 0;
+  standingState = 'member';
+  sendMembership = async () => ({ outcome: 'accepted', workflowId: 'my-realms-workflow' });
   hydrationErrors.length = 0;
   readPage = implementation;
 }
@@ -257,8 +335,124 @@ test('the actual signed-in route hydrates its one read through the current query
     expect(hydrationErrors).toEqual([]);
     expect(visiblePrivateNames(surface)).toContain('SSR member realm');
     expect(readCalls).toHaveLength(1);
+    expect(visiblePrivateNames(surface)).toContain(m.my_realms_action_prohibited({ action: m.my_realms_open() }));
+    expect(visiblePrivateNames(surface)).toContain(m.my_realms_action_prohibited({ action: m.my_realms_manage() }));
+    expect(visiblePrivateNames(surface)).toContain(m.realm_leave_owner_required());
+    expect(standingReads).toEqual([]);
+    expect([...surface.host.querySelectorAll('button')].some((button) => button.textContent === m.realm_leave())).toBe(
+      false,
+    );
   } finally {
     await surface.dispose();
+  }
+});
+
+test('one selected leave requires review, cancels cleanly, and retries an uncertain write with its exact identity', async () => {
+  resetReader(async () => page('Selected current member', null, true));
+  let commandIndex = 0;
+  sendMembership = async () => {
+    if (commandIndex++ === 0) throw new Error('Response was lost after submission');
+    return { outcome: 'accepted', workflowId: 'my-realms-workflow' };
+  };
+  const surface = await createSurface();
+  try {
+    await surface.load();
+    await surface.mount();
+    expect(standingReads).toEqual([]); // No membership read per listed row or on initial render.
+
+    await clickButton(surface, m.realm_leave());
+    expect(surface.host.querySelector('[data-slot="my-realms-leave-review"]')?.getAttribute('data-phase')).toBe(
+      'review',
+    );
+    await clickButton(surface, m.action_cancel());
+    expect(surface.host.querySelector('[data-slot="my-realms-leave-review"]')).toBeNull();
+    expect(membershipCommands).toEqual([]);
+    expect(standingReads).toEqual([]);
+
+    await clickButton(surface, m.realm_leave());
+    await clickButton(surface, m.my_realms_leave_confirm_button());
+    await untilMounted(
+      () => membershipCommands.length === 1 && surface.host.querySelector('[data-phase="uncertain"]') !== null,
+      'uncertain selected leave',
+    );
+    expect(standingReads).toEqual([]); // A read cannot settle an uncertain write.
+    const original = membershipCommands[0];
+    expect(surface.host.querySelector('[data-phase="uncertain"]')).not.toBeNull();
+    await clickButton(surface, m.realm_leave_retry_same());
+    await untilMounted(
+      () => membershipCommands.length === 2 && surface.host.querySelector('[data-phase="pending"]') !== null,
+      'accepted exact replay',
+    );
+    const command = membershipCommands[0];
+    expect(command?.data).toMatchObject({
+      realmId: '0192f3a0-6c1e-7b2a-9d4e-000000000201',
+      action: 'leave',
+    });
+    expect(command?.data.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(membershipCommands[1]?.data.idempotencyKey).toBe(original?.data.idempotencyKey);
+    expect(membershipCommands[1]?.headers['X-CSRF-Token']).toBe(original?.headers['X-CSRF-Token']);
+    expect(command?.headers['X-CSRF-Token']).toBe('csrf-original');
+    expect(surface.host.querySelector('[data-slot="my-realms-leave-review"]')?.getAttribute('data-workflow-id')).toBe(
+      'my-realms-workflow',
+    );
+    await untilMounted(
+      () => standingReads.length >= 4 && visiblePrivateNames(surface).includes(m.realm_members_current()),
+      'current membership standing after acceptance',
+    );
+    expect(surface.host.querySelector('[data-phase="pending"]')).not.toBeNull();
+    expect(visiblePrivateNames(surface)).toContain(m.realm_members_current());
+
+    await clickButton(surface, m.realm_membership_retry());
+    await untilMounted(
+      () => standingReads.length >= 8 && visiblePrivateNames(surface).includes(m.realm_members_current()),
+      'explicit current-standing refresh',
+    );
+    expect(standingReads).toHaveLength(8);
+    expect(surface.host.querySelector('[data-phase="pending"]')).not.toBeNull();
+    expect(membershipCommands).toHaveLength(2); // Refresh never retries the command.
+  } finally {
+    await surface.dispose();
+  }
+});
+
+test('a native last-owner refusal names the owner rule and does not start a standing read', async () => {
+  resetReader(async () => page('Last explicit owner', null, true));
+  sendMembership = async () => ({ outcome: 'refused', effect: 'not-applied', ownerReason: 'last-owner' });
+  const surface = await createSurface();
+  try {
+    await surface.load();
+    await surface.mount();
+    await clickButton(surface, m.realm_leave());
+    await clickButton(surface, m.my_realms_leave_confirm_button());
+    await untilMounted(() => surface.host.querySelector('[data-phase="refused"]') !== null, 'native owner refusal');
+    expect(visiblePrivateNames(surface)).toContain(m.realm_leave_owner_required());
+    expect(standingReads).toEqual([]);
+    expect(membershipCommands).toHaveLength(1);
+  } finally {
+    await surface.dispose();
+  }
+});
+
+test('a selected review retires on Account or CSRF replacement before the command can run', async () => {
+  for (const replacement of [signedIn('replacement-account', 'csrf-next'), signedIn('realm-owner', 'csrf-next')]) {
+    resetReader(async () => page('Selected member', null, true));
+    const surface = await createSurface();
+    try {
+      await surface.load();
+      await surface.mount();
+      await clickButton(surface, m.realm_leave());
+      expect(surface.host.querySelector('[data-phase="review"]')).not.toBeNull();
+
+      await surface.setSession(replacement);
+      await untilMounted(
+        () => surface.host.querySelector('[data-slot="my-realms-leave-review"]') === null,
+        'retired selection after session replacement',
+      );
+      expect(membershipCommands).toEqual([]);
+      expect(standingReads).toEqual([]);
+    } finally {
+      await surface.dispose();
+    }
   }
 });
 
