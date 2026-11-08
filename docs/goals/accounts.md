@@ -51,6 +51,8 @@ contracts and production-default test composition.
 
 Use the [accounts capability acceptance manifest](accounts.capabilities.md) to map every scoped capability to its
 personas, released fixtures, surface evidence, frozen scenarios and native acceptance command.
+The [post-seed API capture](accounts.capabilities.md#post-seed-api-capture) defines the independent original recovery,
+credential replacement and website revocation evidence; the original browser journeys remain required.
 
 Use the [permission outcomes](../../specs/permission-outcomes.test.ts),
 [account workflow outcomes](../../specs/native-account-workflow-outcomes.test.ts),
