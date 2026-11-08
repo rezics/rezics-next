@@ -19,7 +19,7 @@ import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/reques
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
 import type { ZoneSubjectListRoutes } from './kernel/zones/subjects.ts';
-import type { PublicCollectionDiscoverySummary } from './kernel/library/index.ts';
+import type { PublicCollectionDiscoverySummary as LibraryCollectionDiscoveryCard } from './kernel/library/index.ts';
 import type { ViewerPersonalActionsPage } from './kernel/library/viewer-personal-actions.ts';
 
 export type {
@@ -342,7 +342,7 @@ type MountedFeedPage = Routes['feedItems']['get']['response'][200];
 type FeedOwnerSummary<Row> = Row extends { summary: infer Summary extends { card: unknown } }
   ? Omit<Row, 'summary'> & {
       summary: Omit<Summary, 'card'> & {
-        card: unknown extends Summary['card'] ? PublicCollectionDiscoverySummary : Summary['card'];
+        card: unknown extends Summary['card'] ? LibraryCollectionDiscoveryCard : Summary['card'];
       };
     }
   : Row;

@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { Pool } from 'pg';
-import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { bootstrapLocalShowcaseBoardCreation, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createNativeContentSystem, nativeGrantor, type NativeContentSystem } from './support/native-system.ts';
+import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
 
 export type ReviewLifecyclePerson = Readonly<{ accountId: string; bearer: string }>;
 export type ReviewLifecycleResponse = Readonly<{
@@ -74,7 +74,10 @@ export async function createReviewLifecycleFixture(): Promise<ReviewLifecycleFix
       scopes: system.auth.ordinaryScopes,
     });
     const governance = { accountId: governanceId, bearer: governanceCredential.bearer };
-    const author = { accountId: system.actors.author.actor.accountId, bearer: system.actors.author.bearer };
+    // Global Board creation is a local showcase capability. Install it through
+    // its native fixture helper for the governance persona instead of asking
+    // ordinary HTTP grant admission to delegate an unheld action.
+    const author = governance;
     const other = { accountId: system.actors.other.actor.accountId, bearer: system.actors.other.bearer };
 
     const call: ReviewLifecycleFixture['call'] = async (method, path, options = {}) => {
@@ -102,15 +105,7 @@ export async function createReviewLifecycleFixture(): Promise<ReviewLifecycleFix
     };
 
     await checked('POST', '/v1/platform/exposure/personal_library:open', { bearer: governance.bearer }, 200);
-    await checked('POST', '/v1/grants', {
-      bearer: nativeGrantor(system).bearer,
-      body: {
-        resource: PLATFORM_RESOURCE,
-        subject: { kind: 'account', id: author.accountId },
-        actions: ['board:create'],
-        valid: '(,)',
-      },
-    });
+    await bootstrapLocalShowcaseBoardCreation(system.database.pool, governance.accountId);
 
     const subject = async (label: string, bearer = author.bearer): Promise<string> => {
       const result = await checked('POST', '/v1/subjects', {

@@ -84,6 +84,7 @@ Decision: exact post point responses publish `ContributedPostEntry` and the Acco
 through the official Kernel declaration emitter. The public response may omit `authorId` for explicit deletion;
 native Content authorization types retain their required author. A null attribution carries no deletion assertion.
 
-Decision: the public feed client composes the emitted Library `PublicCollectionDiscoverySummary` and
-`ViewerPersonalActionsPage` types into Content's portable `unknown` fields. These are type-only owner aliases,
-not parallel DTOs or transport methods, and yield to concrete mounted fields when declaration emission supplies them.
+Decision: the public feed client keeps Search's `id`/`title`/`description` Collection summary and fills only an
+unknown nested `card` with Library's `PublicCollectionDiscoverySummary` card type. It fills an unknown
+`viewerPersonalActions` field with Library's `ViewerPersonalActionsPage`. Concrete mounted Content declarations
+take precedence in both cases; these are type-only owner aliases, not parallel DTOs or transport methods.
