@@ -5,7 +5,6 @@ import { assertSubjectPageReadActive } from './subject-page-read-lifetime';
 import type { SubjectPageData } from './subject';
 import { showcaseWorkKind } from './showcase-work/model';
 type Subject = SubjectRead['subject'];
-import { installSubjectRenderBinding } from './subject-render-binding';
 import type {
   GameGroups,
   AlbumCurrentVisitReturnProps,
@@ -27,7 +26,6 @@ let renderPort: SemanticRenderPort | undefined;
 /** Install the concrete catalogue binding once at the Web composition root. */
 export function installSemanticRenderPort(port: SemanticRenderPort): void {
   renderPort = port;
-  installSubjectRenderBinding(port.navigation);
 }
 
 export function semanticRenderPort(): SemanticRenderPort {
