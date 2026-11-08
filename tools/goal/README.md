@@ -1231,9 +1231,12 @@ The manager host evaluates absolute flow targets each hour and sends one `enviro
 supermanager for each breached threshold: efficiency below 40%, any queue older than 60 minutes, landing p90 above
 30 minutes, or more than 1.5 attempts per integrated task. `flow` in local settings can override `efficiencyBelow`,
 `oldestQueueMs`, `landingP90Ms` and `attemptsPerIntegrated`; the defaults are `0.4`, `3600000`, `1800000` and `1.5`.
-Alarm summaries name the stage, measurement and up to three oldest waiting task IDs. A threshold can alert again after
-one hour. Flow alarms, daily audit notices, check-result reuse alerts and shared environment incidents go to the
-configured supermanager; priority grants and scope decisions remain with the supermanager.
+Alarm summaries name the stage, measurement and up to three oldest waiting task IDs. Actionable alerts repeat after
+the configured interval (one hour by default). An unchanged global metric with no waiting tasks is sent once; a changed
+measurement, new waiting task set, or a recovered threshold that breaches again rearms its alarm. Actionable queue
+alarms keep their configured periodic escalation, and hourly flow reports continue to record the same metrics. Flow
+alarms, daily audit notices, check-result reuse alerts and shared environment incidents go to the configured
+supermanager; priority grants and scope decisions remain with the supermanager.
 
 Once per UTC day the manager host dispatches the research brief at
 [`templates/daily-step-audit.md`](templates/daily-step-audit.md), unless a daily audit task is already open. It
