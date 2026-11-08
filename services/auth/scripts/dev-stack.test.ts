@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { withThrowawayDatabase } from '../../kernel/scripts/derived.ts';
 import {
@@ -7,10 +9,43 @@ import {
   type DevelopmentKeys,
   developmentMediaBindings,
   origins,
+  readLocalDeveloperAccountId,
+  reusableCompletedExpiredPersonaId,
   root,
 } from './dev-stack.ts';
 import { StackFixtureLifetime } from './dev-stack-lifetime.ts';
 import { websiteRequestedScopes } from '../../../apps/web/src/session/website-scopes.ts';
+
+test('only a matching completed and expired local developer registration can be reused', () => {
+  const accountId = '00000000-0000-7000-8000-000000000099';
+  const now = Date.parse('2026-11-09T00:00:00.000Z');
+  const expired = {
+    account_id: accountId,
+    handle: 'developer',
+    completed_at: new Date(now - 60_000),
+    expired_at: null,
+    expires_at: new Date(now - 1),
+  };
+  expect(reusableCompletedExpiredPersonaId(expired, accountId, now)).toBe(accountId);
+  expect(reusableCompletedExpiredPersonaId(expired, '00000000-0000-7000-8000-000000000098', now)).toBeUndefined();
+  expect(reusableCompletedExpiredPersonaId({ ...expired, handle: 'other' }, accountId, now)).toBeUndefined();
+  expect(reusableCompletedExpiredPersonaId({ ...expired, completed_at: null }, accountId, now)).toBeUndefined();
+  expect(reusableCompletedExpiredPersonaId({ ...expired, expires_at: new Date(now + 1) }, accountId, now)).toBeUndefined();
+});
+
+test('the local persona account comes from the persisted seed file without runtime account injection', async () => {
+  const temporaryRoot = join(root, '.temp');
+  mkdirSync(temporaryRoot, { recursive: true });
+  const directory = mkdtempSync(join(temporaryRoot, 'local-persona-seed-'));
+  const accountId = '00000000-0000-7000-8000-000000000099';
+  try {
+    writeFileSync(join(directory, 'seed.env'), `REZICS_DEV_PERSONA_ACCOUNT=${accountId}\n`, { mode: 0o600 });
+    expect(await readLocalDeveloperAccountId(directory)).toBe(accountId);
+    expect(await readLocalDeveloperAccountId(join(directory, 'missing'))).toBeUndefined();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test('local setup and launch carry the complete real mounted host scope composition', async () => {
   const website = await withThrowawayDatabase(

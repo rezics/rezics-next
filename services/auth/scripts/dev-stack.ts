@@ -8,6 +8,7 @@ import { securityScopeLimit } from '@rezics/auth-contract';
 import { migrate } from './database.ts';
 import { mountedWebsiteConfiguration } from './website-composition.ts';
 import { websiteWorkerScopes } from '../../../apps/web/scripts/website-configuration.ts';
+import { createAccountTokenProvider } from '../../importer/src/credentials.ts';
 import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
 import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
 import { developmentPersonalListScopes } from '../../importer/src/showcase-personal-list.ts';
@@ -283,6 +284,45 @@ export type DevelopmentKeys = {
 
 export function developmentRegistrationPassword(keys: DevelopmentKeys): string {
   return keys.bootstrapPassword ?? keys.password;
+}
+
+export function reusableCompletedExpiredPersonaId(
+  row:
+    | {
+        account_id: string;
+        handle: string;
+        completed_at: Date | null;
+        expired_at: Date | null;
+        expires_at: Date;
+      }
+    | undefined,
+  seededAccountId: string | undefined,
+  now = Date.now(),
+): string | undefined {
+  if (
+    !seededAccountId ||
+    !row ||
+    row.account_id !== seededAccountId ||
+    row.handle !== 'developer' ||
+    row.completed_at === null ||
+    (row.expired_at === null && row.expires_at.getTime() > now)
+  )
+    return undefined;
+  return row.account_id;
+}
+
+export async function readLocalDeveloperAccountId(directory = state): Promise<string | undefined> {
+  let contents: string;
+  try {
+    contents = await readFile(resolve(directory, 'seed.env'), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+  const prefix = 'REZICS_DEV_PERSONA_ACCOUNT=';
+  const line = contents.split(/\r?\n/).find((value) => value.startsWith(prefix));
+  const accountId = line?.slice(prefix.length).trim();
+  return accountId || undefined;
 }
 
 async function privateKey(): Promise<JWK> {
@@ -753,70 +793,72 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
     await import('../../kernel/src/access/bootstrap-governance.ts');
   const { accessCommandAuthorization } = await import('../../kernel/src/request/access.ts');
   const { createExposureCommands } = await import('../../kernel/src/access/gates/catalogue.ts');
-  const person = await host.workflows.register({
-    key: 'local-developer',
-    handle: 'developer',
-    email: 'developer@rezics.test',
-    password: developmentRegistrationPassword(keys),
-  });
-  await bootstrapGovernance(kernelPool, person.accountId);
-  await bootstrapLocalShowcaseBoardCreation(kernelPool, person.accountId);
-  const signIn = () =>
-    host.handler(
-      new Request(`${origins.issuer}/signin`, {
-        method: 'POST',
-        headers: { origin: origins.issuer, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          email: 'developer@rezics.test',
-          password: keys.password,
-          client_id: personaClient,
-          scope: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
+  const seededAccountId = await readLocalDeveloperAccountId(directory);
+  const registration = seededAccountId
+    ? (
+        await composition.database.query<{
+          account_id: string;
+          handle: string;
+          completed_at: Date | null;
+          expired_at: Date | null;
+          expires_at: Date;
+        }>(
+          `SELECT account_id,handle,completed_at,expired_at,expires_at
+           FROM auth_registration_stage WHERE request_key=$1`,
+          ['local-developer'],
+        )
+      ).rows[0]
+    : undefined;
+  const reusableAccountId = reusableCompletedExpiredPersonaId(registration, seededAccountId);
+  const context = { pool: kernelPool, deadline: Date.now() + 30_000 };
+  let person: { accountId: string };
+  let actor: Awaited<ReturnType<typeof access.authenticate>>;
+  const bootstrap = async (accountId: string) => {
+    await bootstrapGovernance(kernelPool, accountId);
+    await bootstrapLocalShowcaseBoardCreation(kernelPool, accountId);
+  };
+  if (reusableAccountId) {
+    // A completed local registration may outlive its staging TTL. Reuse only the exact
+    // seeded account after its existing importer key proves the live identity to Access.
+    person = { accountId: reusableAccountId };
+    const tokenProvider = await createAccountTokenProvider({
+      accountKeyPath: resolve(directory, 'importer.jwk'),
+      account: reusableAccountId,
+      client: personaClient,
+      authOrigin: origins.issuer,
+      issuerOrigin: origins.issuer,
+      scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
+      fetch: (input, init) => host.handler(new Request(input, init)),
+    });
+    const bearer = await tokenProvider(true);
+    actor = await access.authenticate(bearer, context);
+    if (actor.kind !== 'account' || actor.accountId !== reusableAccountId)
+      throw new Error('Existing local developer key did not authenticate its completed persona');
+    await bootstrap(person.accountId);
+  } else {
+    person = await host.workflows.register({
+      key: 'local-developer',
+      handle: 'developer',
+      email: 'developer@rezics.test',
+      password: developmentRegistrationPassword(keys),
+    });
+    await bootstrap(person.accountId);
+    const signIn = () =>
+      host.handler(
+        new Request(`${origins.issuer}/signin`, {
+          method: 'POST',
+          headers: { origin: origins.issuer, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            email: 'developer@rezics.test',
+            password: keys.password,
+            client_id: personaClient,
+            scope: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
+          }),
         }),
-      }),
-    );
-  let signin = await signIn();
-  if (!signin.ok) throw new Error(`Local persona sign-in failed: ${signin.status} ${await signin.text()}`);
-  let headers = new Headers({
-    origin: origins.issuer,
-    'content-type': 'application/json',
-    cookie: signin.headers
-      .getSetCookie()
-      .map((cookie) => cookie.split(';')[0])
-      .join('; '),
-  });
-  // Install the importer's public key through the ordinary fresh-human credential protocol.
-  const key = `local-importer:${keys.importer.kid}`;
-  if (
-    !(
-      await composition.database.query('SELECT 1 FROM auth_public_key WHERE account_id=$1 AND kid=$2', [
-        person.accountId,
-        keys.importer.kid,
-      ])
-    ).rowCount
-  ) {
-    const stage = await host.service.internal.stageCredentialEffect({
-      key,
-      subjectAccountId: person.accountId,
-      headers,
-      credential: { kind: 'key', kid: keys.importer.kid!, publicJwk: publicKey(keys.importer) },
-    });
-    const approved = await host.service.internal.approveCredentialEffect({
-      key,
-      subjectAccountId: person.accountId,
-      headers,
-      effectRef: stage.effectRef,
-    });
-    await host.service.internal.applyCredentialEffect({
-      key,
-      subjectAccountId: person.accountId,
-      headers,
-      effectRef: stage.effectRef,
-      authorization: approved.reference,
-    });
-    // Credential installation raises the epoch; acquire a current session before issuing API credentials.
-    signin = await signIn();
-    if (!signin.ok) throw new Error(`Local persona sign-in failed: ${signin.status}`);
-    headers = new Headers({
+      );
+    let signin = await signIn();
+    if (!signin.ok) throw new Error(`Local persona sign-in failed: ${signin.status} ${await signin.text()}`);
+    let headers = new Headers({
       origin: origins.issuer,
       'content-type': 'application/json',
       cookie: signin.headers
@@ -824,13 +866,54 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
         .map((cookie) => cookie.split(';')[0])
         .join('; '),
     });
+    // Install the importer's public key through the ordinary fresh-human credential protocol.
+    const key = `local-importer:${keys.importer.kid}`;
+    if (
+      !(
+        await composition.database.query('SELECT 1 FROM auth_public_key WHERE account_id=$1 AND kid=$2', [
+          person.accountId,
+          keys.importer.kid,
+        ])
+      ).rowCount
+    ) {
+      const stage = await host.service.internal.stageCredentialEffect({
+        key,
+        subjectAccountId: person.accountId,
+        headers,
+        credential: { kind: 'key', kid: keys.importer.kid!, publicJwk: publicKey(keys.importer) },
+      });
+      const approved = await host.service.internal.approveCredentialEffect({
+        key,
+        subjectAccountId: person.accountId,
+        headers,
+        effectRef: stage.effectRef,
+      });
+      await host.service.internal.applyCredentialEffect({
+        key,
+        subjectAccountId: person.accountId,
+        headers,
+        effectRef: stage.effectRef,
+        authorization: approved.reference,
+      });
+      // Credential installation raises the epoch; acquire a current session before issuing API credentials.
+      signin = await signIn();
+      if (!signin.ok) throw new Error(`Local persona sign-in failed: ${signin.status}`);
+      headers = new Headers({
+        origin: origins.issuer,
+        'content-type': 'application/json',
+        cookie: signin.headers
+          .getSetCookie()
+          .map((cookie) => cookie.split(';')[0])
+          .join('; '),
+      });
+    }
+    const token = await host.handler(new Request(`${origins.issuer}/token`, { method: 'POST', headers, body: '{}' }));
+    if (!token.ok) throw new Error(`Local persona token failed: ${token.status}`);
+    const bearer = ((await token.json()) as { access_token: string }).access_token;
+    actor = await access.authenticate(bearer, context);
   }
-  const token = await host.handler(new Request(`${origins.issuer}/token`, { method: 'POST', headers, body: '{}' }));
-  if (!token.ok) throw new Error(`Local persona token failed: ${token.status}`);
-  const bearer = ((await token.json()) as { access_token: string }).access_token;
-  const context = { pool: kernelPool, deadline: Date.now() + 30_000 };
-  const actor = await access.authenticate(bearer, context);
-  if (actor.kind !== 'account') throw new Error('Local persona is not an account');
+  if (actor.kind !== 'account' || actor.accountId !== person.accountId)
+    throw new Error('Local persona authentication did not match its account');
   const exposure = createExposureCommands({ pool: kernelPool, clock: () => new Date() });
   await openLocalShowcase(kernel.routes, async (input) => {
     const authorization = await accessCommandAuthorization(
