@@ -32,12 +32,14 @@ import {
   deepFilter,
   deepSubjectNames,
   emptyFilter,
+  emptyOwnerFilter,
   isCanonicalSurface,
   jobFilter,
   jobSubjectNames,
   jobType,
   personasFor,
   type DiscoverySurface,
+  type QueryableJob,
   type PublicJob,
   type PublicPersona,
 } from './composed-discovery-matrix.ts';
@@ -391,23 +393,29 @@ async function configuredPages(
   throw new Error('Configured list did not exhaust');
 }
 
-function collectionId(world: ComposedDiscoveryWorld, job: PublicJob, surface: DiscoverySurface): string {
+function collectionId(world: ComposedDiscoveryWorld, job: QueryableJob, surface: DiscoverySurface): string {
   if (surface === 'curated-collection') return world.publicCollection.source.id;
-  if (surface === 'everything-without-state') return world.everythingId;
+  if (surface === 'everything-without-state')
+    return jobType(job) === 'schema:Book' ? world.everythingId : world.everythingRecipeId;
   if (surface === 'own-state') return world.ownStateIds[jobType(job)];
   throw new Error(`${surface} is not a Collection consumer`);
 }
 
 export function expectedIds(
   world: ComposedDiscoveryWorld,
-  job: PublicJob,
+  job: QueryableJob,
   surface: DiscoverySurface,
-  kind: 'job' | 'deep' | 'empty' = 'job',
+  kind: 'job' | 'deep' | 'empty' | 'owner-empty' = 'job',
 ): string[] {
-  if (kind === 'empty') return [];
-  const names = kind === 'deep' ? deepSubjectNames(job) : jobSubjectNames(job);
+  if (kind === 'empty' || kind === 'owner-empty') return [];
+  const names =
+    job === 'quick-vegetarian-not-cooked' && surface === 'own-state'
+      ? ['R-quick', 'R-other-cooked']
+      : kind === 'deep'
+        ? deepSubjectNames(job)
+        : jobSubjectNames(job);
   const ids = names.map((name) =>
-    job === 'long-harem-light-novels'
+    job === 'long-harem-light-novels' || job === 'bulk-long-harem-light-novels'
       ? world.books.subjects[name as keyof typeof world.books.subjects].id
       : world.recipes.subjects[name as keyof typeof world.recipes.subjects].id,
   );
@@ -417,20 +425,22 @@ export function expectedIds(
 
 export async function surfacePages(
   world: ComposedDiscoveryWorld,
-  job: PublicJob,
+  job: QueryableJob,
   surface: DiscoverySurface,
   persona: PublicPersona,
-  kind: 'job' | 'deep' | 'empty' = 'job',
+  kind: 'job' | 'deep' | 'empty' | 'owner-empty' = 'job',
 ): Promise<{ ids: string[]; pages: number }> {
   const filter =
-    kind === 'empty'
-      ? emptyFilter(job, world.classification.harem.id)
-      : kind === 'deep'
-        ? deepFilter(job, world.filters)
-        : jobFilter(job, world.filters);
+    kind === 'owner-empty'
+      ? emptyOwnerFilter(job, world.filters)
+      : kind === 'empty'
+        ? emptyFilter(job, world.classification.harem.id)
+        : kind === 'deep'
+          ? deepFilter(job, world.filters)
+          : jobFilter(job, world.filters);
   const expected = expectedIds(world, job, surface, kind);
   if (surface === 'catalogue-direct' || surface === 'catalogue-prepared') {
-    if (surface === 'catalogue-prepared' && kind !== 'empty') {
+    if (surface === 'catalogue-prepared' && kind !== 'empty' && kind !== 'owner-empty') {
       const evidence = await nativePlan(world, filter, 'prepared');
       expectPageBudget(evidence, PAGE_SLOTS, REQUESTED_SIZE);
       expect(evidence.ids.length).toBeGreaterThan(0);
@@ -440,11 +450,14 @@ export async function surfacePages(
   }
   if (surface === 'curated-collection' || surface === 'everything-without-state' || surface === 'own-state')
     return collectionPages(world, persona, collectionId(world, job, surface), filter, expected);
-  const emptyNode = job === 'long-harem-light-novels' ? 'recipe-harem' : 'empty-words';
+  if (job === 'quick-vegetarian-not-cooked')
+    throw new Error(`The viewer-self owner predicate is not admitted by public ${surface} definitions`);
+  const publicJob: PublicJob = job === 'bulk-long-harem-light-novels' ? 'long-harem-light-novels' : job;
+  const emptyNode = publicJob === 'long-harem-light-novels' ? 'recipe-harem' : 'empty-words';
   const useComposedEmpty = kind === 'empty';
-  const document = useComposedEmpty ? world.documents.composed : world.documents[job];
+  const document = useComposedEmpty ? world.documents.composed : world.documents[publicJob];
   const node = useComposedEmpty ? emptyNode : 'works';
-  const zoneId = useComposedEmpty ? world.zones.composed : world.zones[job];
+  const zoneId = useComposedEmpty ? world.zones.composed : world.zones[publicJob];
   const selected = useComposedEmpty ? [] : expectedIds(world, job, 'catalogue-direct', 'job');
   if (surface === 'mounted-zone') {
     return configuredPages(
@@ -480,7 +493,7 @@ export async function surfacePages(
       true,
     );
   }
-  const route = world.typelistRoutes[job];
+  const route = world.typelistRoutes[publicJob];
   return configuredPages(
     world,
     persona,
@@ -490,7 +503,7 @@ export async function surfacePages(
         languages: ['en'],
         ...(cursor ? { continuation: { node: 'works', cursor } } : {}),
       }),
-    world.documents[job],
+    world.documents[publicJob],
     'works',
     selected,
     false,

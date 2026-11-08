@@ -6,6 +6,8 @@ duplicate its permission formula. [Commerce](../commerce/README.md#receipt-aware
 owns payment refresh composition. The metadata-only helper below is implemented in this core; Commerce refresh
 admission remains an adopted contract with implementation and native schedule gaps.
 
+Decision: `timing.ts` is the public defining entry for request-local command timing snapshots. Semantic bulk-write HTTP consumes the snapshot for diagnostics; observation does not change command execution, phase accounting or retry policy.
+
 ## Existing execution and receipts
 
 ### Shared-history erasure

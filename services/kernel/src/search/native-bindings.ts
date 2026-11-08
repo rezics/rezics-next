@@ -44,6 +44,8 @@ export let readNativePublicFilterPublicationCompletion: SearchNativePorts['readN
 export let readNativePublicFilterRepairStart: SearchNativePorts['readNativePublicFilterRepairStart'];
 export let readOwnerFilterCandidate: SearchNativePorts['readOwnerFilterCandidate'];
 export let readOwnerFilterCandidateClosure: SearchNativePorts['readOwnerFilterCandidateClosure'];
+export let readNativeOwnerFilterCandidateFacts: SearchNativePorts['readNativeOwnerFilterCandidateFacts'];
+export let readNativeOwnerFilterBindingFence: SearchNativePorts['readNativeOwnerFilterBindingFence'];
 export let readPublicCollectionDiscoverySummaries: SearchNativePorts['readPublicCollectionDiscoverySummaries'];
 export let readPublicFilterSourceDefinition: SearchNativePorts['readPublicFilterSourceDefinition'];
 export let readRelease: SearchNativePorts['readRelease'];
@@ -107,6 +109,8 @@ export function bindSearchNativePorts(port: SearchNativePorts): SearchNativePort
   readNativePublicFilterRepairStart = port.readNativePublicFilterRepairStart;
   readOwnerFilterCandidate = port.readOwnerFilterCandidate;
   readOwnerFilterCandidateClosure = port.readOwnerFilterCandidateClosure;
+  readNativeOwnerFilterCandidateFacts = port.readNativeOwnerFilterCandidateFacts;
+  readNativeOwnerFilterBindingFence = port.readNativeOwnerFilterBindingFence;
   readPublicCollectionDiscoverySummaries = port.readPublicCollectionDiscoverySummaries;
   readPublicFilterSourceDefinition = port.readPublicFilterSourceDefinition;
   readRelease = port.readRelease;

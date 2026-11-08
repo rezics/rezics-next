@@ -21,6 +21,7 @@ export { createContentPublicationAdapter, type ContentPublicationAdapterPorts } 
 export { createNativePublicOutputAdapter, type NativePublicOutputAdapterPorts } from './native-public-output.ts';
 export { observeNativePublicCollectionOutput } from '../collection-source-native.ts';
 export { createNativeSourceCaptureAdapter } from './native-source.ts';
+export { readNativeCollectionScopeIdentity } from '../collection-source-native.ts';
 export {
   createScopedSearchLibraryOperations,
   type ScopedSearchLibraryOperations,

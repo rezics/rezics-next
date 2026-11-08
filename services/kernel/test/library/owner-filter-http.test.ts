@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { createOwnerFilterFixture, ownerStatus } from './support/owner-filter-fixture.ts';
+import { discoveryKey } from '../support/released-discovery.ts';
+import { createOwnerFilterFixture, ownerRecord, ownerStatus } from './support/owner-filter-fixture.ts';
 
 test('common members execute all five owner leaves and refuse catalogue composition without query acknowledgement', async () => {
   const f = await createOwnerFilterFixture();
@@ -29,6 +30,38 @@ test('common members execute all five owner leaves and refuse catalogue composit
     expect(await f.members({ not: q.session })).toContain(s.noEntry.id);
     expect(await f.members(q.label, 'bob')).toEqual([]);
     expect(await f.members(q.presence, 'bob')).toEqual([s.noEntry.id]);
+  } finally {
+    await f.close();
+  }
+}, 180_000);
+
+test('NOT completed-session is current-owner history and stays distinct from entry state after clear', async () => {
+  const f = await createOwnerFilterFixture();
+  try {
+    const { sessionOnly } = f.subjects;
+    const created = await f.native.request(
+      'alice',
+      'PUT',
+      `/v1/libraryEntries/${sessionOnly.id}`,
+      { state: f.state.id },
+      discoveryKey(),
+    );
+    ownerStatus(created, 201);
+    const entry = created.body.libraryEntry;
+    ownerRecord(entry);
+    const removed = await f.native.request(
+      'alice',
+      'DELETE',
+      `/v1/libraryEntries/${sessionOnly.id}?revision=${String(entry.revision)}`,
+      undefined,
+      discoveryKey(),
+    );
+    ownerStatus(removed, 204);
+
+    expect(await f.members(f.leaves.session)).toContain(sessionOnly.id);
+    expect(await f.members({ not: f.leaves.session })).not.toContain(sessionOnly.id);
+    expect(await f.members(f.leaves.state)).not.toContain(sessionOnly.id);
+    expect(await f.members({ not: f.leaves.state })).toContain(sessionOnly.id);
   } finally {
     await f.close();
   }

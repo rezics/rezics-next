@@ -127,11 +127,10 @@ export type {
   EntryProgressAdmission,
   LibraryDomain,
   MemberPreparationResult,
-  OwnerQueryInput,
-  OwnerQueryOpen,
   PublicationAdmissionResult,
   SourceCaptureResult,
 } from './results.ts';
+export type { OwnerQueryFilter, OwnerQueryInput, OwnerQueryOpen } from './owner-query.ts';
 
 export {
   FollowCountUnavailableError,

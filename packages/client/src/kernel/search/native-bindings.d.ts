@@ -41,6 +41,8 @@ export declare let readNativePublicFilterPublicationCompletion: SearchNativePort
 export declare let readNativePublicFilterRepairStart: SearchNativePorts['readNativePublicFilterRepairStart'];
 export declare let readOwnerFilterCandidate: SearchNativePorts['readOwnerFilterCandidate'];
 export declare let readOwnerFilterCandidateClosure: SearchNativePorts['readOwnerFilterCandidateClosure'];
+export declare let readNativeOwnerFilterCandidateFacts: SearchNativePorts['readNativeOwnerFilterCandidateFacts'];
+export declare let readNativeOwnerFilterBindingFence: SearchNativePorts['readNativeOwnerFilterBindingFence'];
 export declare let readPublicCollectionDiscoverySummaries: SearchNativePorts['readPublicCollectionDiscoverySummaries'];
 export declare let readPublicFilterSourceDefinition: SearchNativePorts['readPublicFilterSourceDefinition'];
 export declare let readRelease: SearchNativePorts['readRelease'];

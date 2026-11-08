@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
 import { CommandUnavailableError } from '../../src/command/command.ts';
-import { withCommandTiming } from '../../src/command/timing.ts';
+import { countContentionRetry, withCommandTiming } from '../../src/command/timing.ts';
 import { PROBLEM_TYPE_BASE } from '../../src/http/problem.ts';
 import {
   asUniqueContention,
@@ -32,9 +32,10 @@ test('bulk propose maps exhausted contention to a complete RFC9457 problem', asy
   const lines: unknown[][] = [];
   const spy = spyOn(console, 'error').mockImplementation((...args: unknown[]) => void lines.push(args));
   try {
-    const result = await withCommandTiming(() =>
-      bulkWriteCommandProblem(error, { requestId, commandIndex: 4, op: 'propose' }),
-    );
+    const result = await withCommandTiming(() => {
+      countContentionRetry();
+      return bulkWriteCommandProblem(error, { requestId, commandIndex: 4, op: 'propose' });
+    });
     expect(result.status).toBe(503);
     expect(result.problem).toMatchObject({
       type: `${PROBLEM_TYPE_BASE}transaction_retry_exhausted`,
@@ -44,6 +45,7 @@ test('bulk propose maps exhausted contention to a complete RFC9457 problem', asy
       operation: 'statement:propose',
       partition: 12,
       phase: 'before_command',
+      contention_retries: 1,
     });
     expect(JSON.stringify(result.problem)).not.toContain('password');
     expect(JSON.stringify(result.problem)).not.toContain('BEGIN');
@@ -58,6 +60,7 @@ test('bulk propose maps exhausted contention to a complete RFC9457 problem', asy
       operation: 'statement:propose',
       partition: 12,
       dominant_phase: 'before_command',
+      contention_retries: 1,
     });
   } finally {
     spy.mockRestore();

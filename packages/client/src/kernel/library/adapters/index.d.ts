@@ -10,6 +10,7 @@ export { createContentPublicationAdapter, type ContentPublicationAdapterPorts } 
 export { createNativePublicOutputAdapter, type NativePublicOutputAdapterPorts } from './native-public-output.ts';
 export { observeNativePublicCollectionOutput } from '../collection-source-native.ts';
 export { createNativeSourceCaptureAdapter } from './native-source.ts';
+export { readNativeCollectionScopeIdentity } from '../collection-source-native.ts';
 export { createScopedSearchLibraryOperations, type ScopedSearchLibraryOperations, type ScopedCollectionSourceDeps, type CollectionSourceWorkState, type CollectionSourceRawKey, } from './scoped-source.ts';
 export { createCollectionSource } from '../collection-source.ts';
 export { nativeCollectionOrdinalPageBound } from '../collection-source-native.ts';

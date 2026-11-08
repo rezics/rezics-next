@@ -1,6 +1,6 @@
 /** Library-owned ports. Foreign Access, Search, Semantic and Content implement these; Library never imports them. */
 import type { LibraryActor, LibraryAccountActor } from './actors.ts';
-import type { CanonicalCollectionCandidate, CanonicalSourceReceivingCost, CollectionSource, CollectionSourceObservation, NativeCollectionOrdinalPageBound, PreparedCollectionSource } from './source.ts';
+import type { CanonicalCollectionCandidate, CanonicalSourceReceivingCost, CollectionSource, CollectionSourceObservation, NativeCollectionOrdinalPageBound, NativeSourceIdentity, PreparedCollectionSource } from './source.ts';
 import type { MembersWorkDefinition, PreparationLocator } from './preparation-work.ts';
 import type { NestedAdmissionAccount } from './membership.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './work-dimensions.ts';
@@ -123,7 +123,8 @@ export interface SearchPreparationCapability {
         deadline: number;
         filter: unknown;
         releaseDigest: string;
-        identity: unknown;
+        /** A native owner identity or the exact captured Library Source to resolve at composition. */
+        identity: NativeSourceIdentity | PreparedCollectionSource;
         allowance: WorkAllowance;
     }): Promise<PreparedSearchScope>;
     ownerFilterHasOwnerLeaf(filter: unknown): boolean;

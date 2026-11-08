@@ -192,6 +192,18 @@ test('owner parsing rejects unknown selectors, malformed operands and non-native
   ).toBeTruthy();
 });
 
+test('current-owner completed-session absence uses NOT over the same admitted completed-session leaf', () => {
+  const absence: FilterDocument = {
+    and: [
+      { owner: { presence: true } },
+      { not: { owner: { session: { profileId: 'recipe.v2', lifecycle: 'completed' } } } },
+    ],
+  };
+  expect(parseFilter(absence)).toEqual(absence);
+  expect(admit(absence)).toEqual(absence);
+  refuses(() => admitFilter(parseFilter(absence), release), '/and/1/not/owner', 'unsupported', 'unsupported_query');
+});
+
 test('owner fields and arrays never execute accessors or use inherited required values or holes', () => {
   let calls = 0;
   const getter = {

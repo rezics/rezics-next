@@ -673,6 +673,7 @@
         "services/kernel/src/library/owner-filter.ts",
         "services/kernel/src/library/owner-filter-plan.ts",
         "services/kernel/src/library/owner-filter-native-binding.ts",
+        "services/kernel/src/library/owner-filter-native-closure.ts",
         "services/kernel/src/library/native-source-custody.ts",
         "services/kernel/src/library/collection-kind-work-admission.ts",
         "services/kernel/src/library/collection-publication-work-admission.ts",
@@ -1022,6 +1023,7 @@
         "services/kernel/src/command/read-receipt.sql",
         "services/kernel/src/command/work-context.ts",
         "services/kernel/src/command/index.ts",
+        "services/kernel/src/command/timing.ts",
         "services/kernel/src/partition/read.sql",
         "services/kernel/src/http/problem.ts",
         "services/kernel/src/http/request.ts"
