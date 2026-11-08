@@ -7,6 +7,7 @@ import {
   createScopedFacetApplication,
   createServiceScopeFacetPorts,
 } from '../../src/search/scoped-facet-application.ts';
+import { FACET_ACCESS_HTTP_CLOSED } from '../../src/search/facet-access-port.ts';
 import { ScopeWork, scopeAllowance, zeroScopeWork } from '../../src/search/scope-execution.ts';
 import type { PublicFilterConsumerContext } from '../../src/search/public-filter-consumer-contract.ts';
 
@@ -18,6 +19,33 @@ const identity = {
 };
 const context = {} as PublicFilterConsumerContext;
 const resource = { kind: 'collection' as const, id: '11111111-1111-4111-8111-111111111111' };
+const sourceIdentity = {
+  scope: 'curated' as const,
+  route: 0,
+  collectionId: resource.id,
+  accountId: '22222222-2222-4222-8222-222222222222',
+  incarnation: 'incarnation',
+  generation: 'generation',
+  ownerEpoch: 1,
+  receivingEpoch: '1',
+  effectKey: 'source-effect',
+};
+const sourceObservation = {
+  collectionId: resource.id,
+  route: 0,
+  sourceIdentity,
+  incarnation: sourceIdentity.incarnation,
+  revision: 1,
+  authority: { kind: 'curated' as const },
+  stamp: { partition: 0, epoch: 1, position: 1n },
+  basis: {
+    digest: 'basis',
+    identity: { digest: 'identity' },
+    query: null,
+    profilePins: [],
+    projection: null,
+  },
+};
 
 function throwingScope(error: unknown) {
   return {
@@ -38,7 +66,13 @@ function requestFor(error: unknown) {
   return {
     scope: throwingScope(error),
     prepared: {
-      basis: { canonical: 'canon', profile: 'profile', release: 'release', query: 'query', index: 'idx' },
+      basis: {
+        canonical: 'canon',
+        profile: 'profile',
+        release: 'release',
+        query: 'query',
+        nativeOwner: { source: sourceIdentity, observation: sourceObservation },
+      },
     },
     work,
     identity,
@@ -50,9 +84,40 @@ function requestFor(error: unknown) {
 test('Search vocabulary maps Access unavailable and listed HTTP codes to native closed statuses', () => {
   expect(classifyFacetAccessFailure({ name: 'AccessUnavailableError' })).toBe('unready');
   expect(classifyFacetAccessFailure({ code: 'search_restart_required' })).toBe('changed');
+  expect(FACET_ACCESS_HTTP_CLOSED.stale_cursor).toBe('changed');
   expect(classifyFacetAccessFailure({ code: 'not_found' })).toBe('unavailable');
   expect(classifyFacetAccessFailure({ code: 'index_not_ready' })).toBe('unready');
   expect(classifyFacetAccessFailure({ code: 'invalid_request' })).toBeUndefined();
+});
+
+test('Collection candidate windows pass the admitted finite limit to native scope preparation', async () => {
+  const work = new ScopeWork(scopeAllowance(100, 'facet-window'));
+  let candidateLimit: number | undefined;
+  const receipt = { reservationId: 'facet-window', used: zeroScopeWork() };
+  const base = requestFor(new Error('unused'));
+  const request = {
+    ...base,
+    scope: {
+      async sourcePrefix(_prepared: unknown, input: { candidateLimit: number }) {
+        candidateLimit = input.candidateLimit;
+        return {
+          candidates: [],
+          coveredThrough: 'end',
+          exhausted: true,
+          basis: base.prepared.basis,
+          work: receipt,
+        };
+      },
+      work() {
+        return receipt;
+      },
+    },
+    work,
+  };
+  const ports = createServiceScopeFacetPorts(resource, passthroughFacetAccessObservation);
+  const result = await ports.readCandidates(request, null, 37, context);
+  expect(result.status).toBe('complete');
+  expect(candidateLimit).toBe(37);
 });
 
 test('composition maps Access unavailable onto an unready Collection observation', async () => {

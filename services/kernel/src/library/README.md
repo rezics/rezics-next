@@ -230,6 +230,10 @@ retain that instance through nested calls; `createOrderedCollectionSourceApplica
 `createMembersWorkDefinitionApplication` are the application facades. Fewest tests: Search's construction suite
 pins the installed binding; Library domain-composition keeps its fake-capability coverage.
 
+Captured Collection scopes resolve their native identity against the caller's allowance and combine that receipt
+with Search work. Source custody narrows each declared operation ceiling to the remaining original ledger after
+identity reads; it never reissues capacity or creates a child allocation.
+
 [Collection mutations](collection-mutation.md) owns mutation layers, effects and focused tests.
 
 Fewest tests: one `domain-composition.test.ts` suite covering fake-capability applications plus Source, member,
@@ -998,6 +1002,12 @@ live maintenance frame and carry its opaque prepaid context through all pages. O
 separate from identity hold release. Library receives that live frame as an injected `LibrarySourceFrame` accessor
 (`libraryWork(pool, token, deadline)`) in `createLibraryIdentityEpochReceiver` and `createLibraryIdentityNativePlanner`;
 the participant never imports the frame module, so the adapter index keeps only type re-exports and adds no value cycle.
+
+Decision: custody dispatch uses the live caller remainder for each exact SQL reservation. Its closed statement
+multiplicities and literal maxima enforce the operation ceiling, and the transaction holds COMMIT and ROLLBACK before
+checkout. The static composed operation bound remains the caller-facing cost declaration while the same caller frame
+admits literal dispatch and terminal holds. Explicit-output custody fixtures grant all three ordinary
+owner-family reads required by OWNER presence filters: `library_entry:read`, `progress_session:read` and `copy:read`.
 
 Stage order inside one frame call (`stepLibraryIdentityEpochWithSource`): native receiving effects, then source
 scopes, then one follow page, then one canonical store call, then handoff and closure reporting. A follow

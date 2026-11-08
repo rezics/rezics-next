@@ -37,7 +37,7 @@ binds the Realm references, committed predicate, release, principal and authoriz
 unready native source work returns `503 index_not_ready`; it never falls through to Global values. The unscoped route
 keeps its existing wire, eight-distinct-property limit, sizes 1 through 20, count-free values and native value order.
 
-Decision: Realm and Collection facets use the additive scoped reference and the same committed Search condition tree through shared `ScopedFacetAdmission`; current native membership and the complete query predicate must agree before values are released.
+Decision: Realm and Collection facets use the additive scoped reference and the same committed Search condition tree through shared `ScopedFacetAdmission`; current native membership and the complete query predicate must agree before values are released. Collection admission resolves the current Library Source with the verified reader, seeds its exact native observation once into normal Scope preparation, and retains that observation through candidate prefixes, predicate evaluation and disclosure. Preparation and membership receipts consume one finite Scope work ledger, with native candidate windows capped at 100. Web maps its optional type selector into an AND filter, checks the submitted release against current Definitions, and calls the installed generated `subjects.$facets.post` operation with scope, filter and languages; cancellation and native Retry-After readiness stay in Web's existing receiver lifecycle. OpenAPI and generated client request types already publish this operation.
 
 The successful `200` envelope is:
 

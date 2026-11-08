@@ -618,7 +618,9 @@ async function startDriver(
           : { route: routeOf(resourceId), id: resourceId };
       if (resource.route === null) throw new Error(`Cannot grant an unroutable resource: ${resourceId}`);
       const held = bearerScopes(grantor.bearer);
-      const missing = ['access:grant', ...actions].filter((action) => !held.includes(action));
+      const holds = (action: string) =>
+        held.includes(action) || (action.startsWith('gate:') && action !== 'gate:any' && held.includes('gate:any'));
+      const missing = ['access:grant', ...actions].filter((action) => !holds(action));
       if (missing.length)
         throw new Error(`Grant administration failed: 403: governor token missing scopes ${missing.join(', ')}`);
       const response = await send(

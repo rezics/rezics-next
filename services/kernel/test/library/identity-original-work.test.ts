@@ -211,6 +211,29 @@ test('native custody statements share one closed nine-axis operation plan and re
   expect(branchUse.statement(nativeSourceCustodyQueries().start)).toBe(true);
   expect(branchUse.statement(nativeSourceCustodyQueries().read)).toBe(false);
 
+  const queries = nativeSourceCustodyQueries();
+  const reachedPage = createNativeSourceCustodyOperationUse('capturePage');
+  expect(reachedPage.checkout()).toBe(true);
+  for (const statement of [
+    { sql: 'BEGIN', params: [] },
+    queries.partition,
+    queries.account,
+    queries.source,
+    queries.ensure,
+    queries.fences,
+    queries.start,
+    query,
+    queries.advance,
+    { sql: 'COMMIT', params: [] },
+  ])
+    expect(reachedPage.statement(statement)).toBe(true);
+  expect(reachedPage.statement(queries.raw.entry)).toBe(false);
+
+  const rollbackPage = createNativeSourceCustodyOperationUse('capturePage');
+  expect(rollbackPage.checkout()).toBe(true);
+  expect(rollbackPage.statement({ sql: 'BEGIN', params: [] })).toBe(true);
+  expect(rollbackPage.statement({ sql: 'ROLLBACK', params: [] })).toBe(true);
+
   for (const operation of Object.keys(NATIVE_SOURCE_CUSTODY_OPERATION_PLAN().operations) as Array<
     keyof ReturnType<typeof NATIVE_SOURCE_CUSTODY_OPERATION_PLAN>['operations']
   >) {

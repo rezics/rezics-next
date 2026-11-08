@@ -93,7 +93,11 @@ test('scoped admission forwards every condition reference and rejects before pro
 });
 
 test('admitted scoped facets remain preparing until scoped native operations exist', async () => {
-  const { provider, capture, page, admit, scope } = fixture();
+  const { provider, capture, page, admit: baseAdmit, scope } = fixture();
+  const admit = mock(async (request: { scope: unknown }) => {
+    expect(request.scope).toEqual({ kind: 'collection', id: collectionId });
+    return baseAdmit();
+  });
 
   await expect(
     readScopedFacetDiscovery(

@@ -106,6 +106,8 @@ export type CollectionSourceStamp = Readonly<{
 export interface CollectionSourceObservation {
   readonly collectionId: string;
   readonly route: number;
+  /** Exact native source identity used to prepare and revalidate this observation. */
+  readonly sourceIdentity: NativeSourceIdentity;
   /** Actual owner incarnation reference, not a newly invented revision counter. */
   readonly incarnation: string;
   readonly revision: number;

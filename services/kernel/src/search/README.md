@@ -50,6 +50,10 @@ and `withRealmDisclosureWork`, the native Access-to-Search bridge. It keeps rese
 bounds, caller deadline and root unchanged. Content consumes a port; its native sparse cursor and allowance stay
 with their original owners.
 
+Decision: scoped Search consumes Collection Source and public-output types from Library's declared contracts and
+native operations from its adapter entry; composition binds the installed producers without changing ordered pages,
+authorization or nested work budgets.
+
 Decision: construct one complete native disclosure application and pass it through both ordinary Subject and mixed
 Search. `disclosure-application.ts` sequences owner admission, nested context hydration, exact owner revalidation,
 concept preparation and final CURRENT disclosure through explicit capabilities. `discovery-hydration.ts` binds registry
@@ -190,6 +194,14 @@ observation port (`facet-access-port.ts`). `createScopedFacetApplication` owns C
 admission; composition `search-access.ts` maps `AccessUnavailableError` and public `ProblemError` codes onto the
 existing native closed statuses (`unready`, `changed`, `unavailable`). Default public runtime and `createSearchService`
 bind that adapter. `scoped-facet-source.ts` no longer imports Access or HTTP problem types.
+
+Collection facets seed the exact native Collection Source observation through the installed Library capability with
+the verified reader before normal Scope preparation. The same committed text/filter predicate is prepared against
+that release and evaluated for every current member candidate; the retained source observation is rechecked before
+and after each candidate and membership read. Collection preparation and later membership work share the request's
+finite `ScopeWork` ledger. Each native candidate prefix is capped by the requested useful-page window and the
+Library Source ceiling of 100 keys. A changed Collection observation retires continuation with
+`search_restart_required`, allowing the corrected first traversal to resume.
 
 ## Trending searches
 

@@ -16,6 +16,7 @@ export type FacetAccessClosedStatus = 'changed' | 'unready' | 'unavailable';
  */
 export const FACET_ACCESS_HTTP_CLOSED = Object.freeze({
   search_restart_required: 'changed',
+  stale_cursor: 'changed',
   not_found: 'unavailable',
   semantic_not_ready: 'unready',
   index_not_ready: 'unready',

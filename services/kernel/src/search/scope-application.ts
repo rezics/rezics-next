@@ -2,15 +2,16 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type {
   CollectionAliasProgress,
   CollectionSourceContext,
   CollectionSourceObservation,
-} from '../library/contract/source.ts';
-import type { NativeOrdinalKey } from '../library/contract/ordering.ts';
+  LibraryActor,
+  NativeOrdinalKey,
+  WorkAllowance,
+  WorkReceipt,
+} from '../library/contract/index.ts';
 import type { Access } from '../request/access.ts';
-import type { LibraryActor } from '../library/contract/actors.ts';
 import type { ScopeWorkContext } from '../library/adapters/index.ts';
 import { SearchOperationError } from './operation-outcomes.ts';
 import type {
@@ -93,6 +94,26 @@ export function createSearchScopeOrderApplication(
   }
 
   return {
+    async prepareCollection(
+      collectionId: string,
+      allowance: WorkAllowance,
+    ): Promise<Readonly<{ collection: SearchScopeCollection; work: WorkReceipt }>> {
+      if (options.work) unready();
+      const result = await native.prepare({ ...context(), collectionId, allowance });
+      const identity = result.source.observation.sourceIdentity;
+      if (
+        identity.collectionId !== collectionId ||
+        identity.collectionId !== result.source.observation.collectionId ||
+        identity.route !== result.source.observation.route ||
+        identity.incarnation !== result.source.observation.incarnation
+      )
+        unready();
+      const order: SearchScopeOrder = { kind: 'id', source: identity };
+      return {
+        collection: { order, source: result.source, observation: result.source.observation },
+        work: result.work,
+      };
+    },
     async prepare(
       order: SearchScopeOrder,
       allowance: WorkAllowance,

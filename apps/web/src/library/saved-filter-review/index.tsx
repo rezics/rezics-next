@@ -206,6 +206,7 @@ export function SavedFilterReviewPanel({
           {
             resource: { kind: 'collection', id: page.id },
             type,
+            locale,
             release: page.current.digest,
             languages: requestLanguages(locale),
           },

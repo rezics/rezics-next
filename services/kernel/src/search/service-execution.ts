@@ -1649,6 +1649,8 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           const prepared = await sourceRequest(() =>
             scope.prepare(catalogue, {
               releaseDigest: kindDigest(current),
+              collectionId: scopedRequest.scope.id,
+              restartOnNativeChange: true,
               allowance: scopeWork.remaining(),
             }),
           );

@@ -11,6 +11,7 @@ import { ScopeWork, zeroScopeWork } from './scope-work.ts';
 import type { ScopeEvaluationProgress, PreparedSearchScope } from './scope-source.ts';
 import type { createSearchScopeForService } from './service-scope.ts';
 import type { PreparedRealmScope } from './realm-scope.ts';
+import { SearchOperationError } from './operation-outcomes.ts';
 import {
   bindScopedFacetPorts,
   createScopedFacetSource,
@@ -156,10 +157,22 @@ function evaluationReservation(work: ScopeWork, subjects: readonly string[]) {
 
 /** Adapt the installed service-bound Collection Scope to the facet owner's finite candidate and current-evaluation ports. */
 export function createServiceScopeFacetPorts(
-  _resource: SearchResourceScope,
+  resource: SearchResourceScope,
   access?: FacetAccessObservationPort,
 ): ScopedFacetPorts {
   const observation = resolveFacetAccessObservation(access);
+
+  function resourceMatches(request: ServiceScopeFacetRequest): boolean {
+    if (resource.kind !== 'collection') return false;
+    const owner = request.prepared.basis.nativeOwner;
+    return Boolean(
+      owner &&
+      owner.source.collectionId.toLowerCase() === resource.id.toLowerCase() &&
+      owner.observation.collectionId.toLowerCase() === resource.id.toLowerCase() &&
+      owner.source.route === owner.observation.route &&
+      owner.source.incarnation === owner.observation.incarnation,
+    );
+  }
 
   async function evaluate(request: ServiceScopeFacetRequest, subjects: readonly string[], resume = true) {
     let progress = resume ? request.progress : null;
@@ -197,6 +210,7 @@ export function createServiceScopeFacetPorts(
   return {
     async observe(opaque, _context) {
       const request = opaque as ServiceScopeFacetRequest;
+      if (!resourceMatches(request)) return { status: 'unready', cost: workCost(request) };
       const ran = await observation.runCurrentReader(async () => {
         const result = await evaluate(request, [], false);
         return Boolean(result && result.basis.canonical === request.prepared.basis.canonical);
@@ -207,6 +221,7 @@ export function createServiceScopeFacetPorts(
     },
     async readCandidates(opaque, after, inputLimit, _context) {
       const request = opaque as ServiceScopeFacetRequest;
+      if (!resourceMatches(request)) return { status: 'unready', cost: workCost(request) };
       if (request.pendingPage?.after === after && request.pendingPage.inputLimit === inputLimit)
         return { ...request.pendingPage.page, cost: emptyCost() };
       const ran = await observation.runCurrentReader(async () => {
@@ -222,6 +237,7 @@ export function createServiceScopeFacetPorts(
         const page = await request.scope.sourcePrefix(request.prepared, {
           afterSubjectId: after,
           allowance,
+          candidateLimit: inputLimit,
         });
         request.work.native(page.work);
         if (page.basis.canonical !== request.prepared.basis.canonical) return { status: 'changed' as const };
@@ -243,6 +259,7 @@ export function createServiceScopeFacetPorts(
     },
     async readMembership(opaque, subjects, _context) {
       const request = opaque as ServiceScopeFacetRequest;
+      if (!resourceMatches(request)) return { status: 'unready', cost: workCost(request) };
       const ran = await observation.runCurrentReader(async () => {
         const result = await evaluate(request, subjects);
         if (!result) return { status: 'unready' as const };
@@ -271,12 +288,32 @@ export function serviceScopeFacetIdentity(
   principal: string,
   meaning: unknown,
 ): ScopedFacetIdentity {
+  if (resource.kind !== 'collection') throw new SearchOperationError('dependency_unavailable');
+  const ownerBasis = prepared.basis.nativeOwner;
+  if (
+    !ownerBasis ||
+    ownerBasis.source.collectionId.toLowerCase() !== resource.id.toLowerCase() ||
+    ownerBasis.observation.collectionId.toLowerCase() !== resource.id.toLowerCase() ||
+    ownerBasis.source.route !== ownerBasis.observation.route ||
+    ownerBasis.source.incarnation !== ownerBasis.observation.incarnation
+  )
+    throw new SearchOperationError('dependency_unavailable');
+  const nativeOwner = {
+    source: ownerBasis.source,
+    observation: {
+      ...ownerBasis.observation,
+      stamp: {
+        ...ownerBasis.observation.stamp,
+        position: ownerBasis.observation.stamp.position.toString(),
+      },
+    },
+  };
   return {
     source: hash({ resource, profile: prepared.basis.profile }),
     meaning: hash({ release: prepared.basis.release, meaning }),
     population: hash({
       canonical: prepared.basis.canonical,
-      source: prepared.basis.nativeOwner ?? prepared.basis.index,
+      source: nativeOwner,
     }),
     authorization: hash({ principal, basis: prepared.basis.query }),
   };
