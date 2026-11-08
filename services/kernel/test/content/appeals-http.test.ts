@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { normalizeDocument } from '@rezics/document';
 import { randomUUID } from 'node:crypto';
@@ -157,7 +158,7 @@ describe('minimal appeals through HTTP and committed effects', () => {
     return { thread: independentThread, id, decision };
   }
   async function deliver() {
-    const effects = contentEffects(db.pool, {} as WorkClient);
+    const effects = contentEffects(db.pool, {} as WorkClient, readTestRealmSubjectIdentityMappings);
     const { rows } = await db.admin.query(
       "SELECT * FROM core.outbox WHERE type LIKE 'com.rezics.content.moderation.%' ORDER BY partition_no,position,event_seq",
     );

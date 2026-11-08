@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
@@ -89,7 +90,10 @@ async function subject() {
   return id;
 }
 async function deliver(name: string, id: string) {
-  const effects = [...contentEffects(db.pool, {} as WorkClient), createReportLocatorEffect(db.pool)];
+  const effects = [
+    ...contentEffects(db.pool, {} as WorkClient, readTestRealmSubjectIdentityMappings),
+    createReportLocatorEffect(db.pool),
+  ];
   const effect = effects.find((candidate) => candidate.name === name)!;
   const { rows } = await db.admin.query(
     `SELECT * FROM core.outbox WHERE subject=$1 OR data->>'targetId'=$1 OR data->>'reportId'=$1

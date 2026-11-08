@@ -1,5 +1,9 @@
-import { expect, test } from 'bun:test';
+import { expect, expectTypeOf, test } from 'bun:test';
 import { createFeedApplication } from '../../src/content/application/index.ts';
+import type { PublicCollectionDiscoverySummary as CollectionCard } from '../../src/library/index.ts';
+import type { ViewerPersonalActionsPage } from '../../src/library/index.ts';
+import type { PublicCollectionDiscoverySummary as CollectionSummary } from '../../src/search/index.ts';
+import { Value } from 'typebox/value';
 import {
   FEED_CANDIDATE_LIMIT,
   FeedBoundExceededError,
@@ -8,9 +12,19 @@ import {
   type FeedContinuationSubject,
   type FeedItem,
   type FeedLaneCandidate,
+  type FeedPage,
   type FeedPublicSummary,
 } from '../../src/content/contract/index.ts';
 import { canonicalFeedObject, feedCandidateBound, mergeFeedLanes } from '../../src/content/core/index.ts';
+import { FeedPageSchema } from '../../src/content/feed-contract.ts';
+
+type CollectionFeedItem = Extract<FeedItem, { key: { owner: 'commerce'; kind: 'collection' } }>;
+expectTypeOf<CollectionFeedItem['summary']['card']>().toEqualTypeOf<CollectionCard>();
+expectTypeOf<CollectionFeedItem['summary']>().toEqualTypeOf<CollectionSummary>();
+expectTypeOf<FeedPage['viewerPersonalActions']>().toEqualTypeOf<ViewerPersonalActionsPage | undefined>();
+expectTypeOf<
+  Awaited<ReturnType<FeedApplicationPorts['finish']['personalActions']>>['viewerPersonalActions']
+>().toEqualTypeOf<ViewerPersonalActionsPage | undefined>();
 
 const summary = (id: string, type = 'schema:Book'): FeedPublicSummary => ({
   id,
@@ -92,7 +106,71 @@ test('missing continuation, discovery and following producers stay unavailable r
   );
   expect(page.feedItems).toEqual([]);
   expect(page.sources).toEqual({ discovery: 'unavailable', following: 'unavailable', continue: 'unavailable' });
+  expect(page.viewerPersonalActions).toBeUndefined();
   expect(page.next).toBeNull();
+});
+
+test('current Collection cards and viewer actions keep their installed types and serialize through the FeedPage schema', async () => {
+  const id = '00000000-0000-4000-8000-000000000001';
+  const card: CollectionCard = {
+    kind: 'collection',
+    id,
+    destination: `/collections/${id}`,
+    title: 'A public collection',
+    description: null,
+    visibility: 'public',
+    revision: 1,
+    sourceGeneration: '1',
+    presentationKind: null,
+    presentationKindSource: 'mixed',
+    cover: null,
+    coverSource: 'none',
+    curator: { state: 'unavailable', reason: 'withheld' },
+    preview: { state: 'empty' },
+    membershipKind: 'curated',
+    memberCount: 0,
+    orderEpoch: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+  const summary: CollectionSummary = { id, title: card.title, description: null, card };
+  const collection: CollectionFeedItem = {
+    id: `discovery:${id}`,
+    source: 'discovery',
+    key: { owner: 'commerce', kind: 'collection', route: 1, id },
+    occurredAt: null,
+    summary,
+    destination: { kind: 'collection', id, title: card.title },
+  };
+  const viewerPersonalActions: ViewerPersonalActionsPage = { state: 'current', question: null, rows: [] };
+  const defaults = ports();
+  const page = await createFeedApplication(
+    {
+      ...defaults,
+      discovery: {
+        page: async () => ({ candidates: [{ item: collection }], next: false, asOf: '2026-01-01T00:00:00.000Z' }),
+      },
+      finish: {
+        ...defaults.finish,
+        personalActions: async (items) => ({ items, viewerPersonalActions }),
+      },
+    },
+    { route: () => 1 },
+  ).list(
+    {
+      kind: 'account',
+      accountId: '00000000-0000-4000-8000-000000000002',
+      scopes: ['follow:list', 'library_entry:list', 'progress_session:list'],
+    },
+    { stream: 'home', limit: 20 },
+    Date.now() + 30_000,
+    ['en'],
+  );
+
+  expect(page.feedItems).toEqual([collection]);
+  expect(page.viewerPersonalActions).toEqual(viewerPersonalActions);
+  expect(Value.Check(FeedPageSchema(), page)).toBe(true);
+  expect(JSON.parse(JSON.stringify(page))).toEqual(page);
 });
 
 test('exact kind conjunction drops other kinds without refill and keeps Continue examined positions', async () => {

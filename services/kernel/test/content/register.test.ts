@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import pg from 'pg';
@@ -10,7 +11,11 @@ import {
   createContentWorkModule,
 } from '../../src/content/register.ts';
 
-const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
+const registerContent = createContentWorkModule({
+  readIdentityMappings: readTestRealmSubjectIdentityMappings,
+  fetch: (request) => fetch(request),
+  now: () => Date.now(),
+});
 import { CONTENT_WORKFLOWS } from '../../src/content/work-contract.ts';
 import {
   CONTENT_BOARD_RANK_SCHEDULE,

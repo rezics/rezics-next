@@ -22,6 +22,7 @@ import { ratingNativeWorkModule } from '../rating/module.ts';
 import { workflowRetentionWorkModule } from '../work/retention.ts';
 import { importsWorkModule } from '../imports/erasure.ts';
 import { composeContentApplication } from './content.ts';
+import { readRealmSubjectIdentityMappings } from '../content/adapters/index.ts';
 import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
 import type { SearchNativePorts } from '../search/composition.ts';
 
@@ -62,7 +63,7 @@ function accountsWorkModule(community: CommunityDeclaration): WorkModule {
   };
 }
 
-function contentWorkAmbient(supplied?: ContentWorkAmbient): ContentWorkAmbient {
+function contentWorkAmbient(supplied?: Partial<ContentWorkAmbient>): ContentWorkAmbient {
   return {
     fetch: (request) => {
       const fetch = supplied?.fetch ?? composeContentApplication().ambient.fetch;
@@ -76,6 +77,7 @@ function contentWorkAmbient(supplied?: ContentWorkAmbient): ContentWorkAmbient {
       const id = supplied?.id ?? composeContentApplication().ambient.id;
       return id();
     },
+    readIdentityMappings: supplied?.readIdentityMappings ?? readRealmSubjectIdentityMappings,
   };
 }
 
@@ -88,7 +90,7 @@ export function createKernelWorkModules(
   composeDiscovery: Parameters<typeof createSearchWorkModule>[0],
   composeRuntimeDefaults: Parameters<typeof createSearchWorkModule>[1],
   composeSemantic: SemanticDomainComposer,
-  ambient?: ContentWorkAmbient,
+  ambient?: Partial<ContentWorkAmbient>,
   composeCreditSearch?: Parameters<typeof createSearchWorkModule>[2],
   communityAmbient: CommunityAmbient = systemCommunityAmbient,
   suppliedSearchNativePorts?: SearchNativePortsComposer,

@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
@@ -264,6 +265,7 @@ beforeAll(async () => {
     name: 'content',
     async register(workContext) {
       await createContentWork({
+        readIdentityMappings: readTestRealmSubjectIdentityMappings,
         storage,
         access: createContentWorkAccess(workContext.clock),
         readConsent: async ({ actorAccountId, clientId }) => ({
@@ -276,7 +278,9 @@ beforeAll(async () => {
         now: () => Date.now(),
         collectionPartitions: [workPartition],
       }).register(workContext);
-      workContext.addEffects(contentEffects(workContext.pool, workContext.client));
+      workContext.addEffects(
+        contentEffects(workContext.pool, workContext.client, readTestRealmSubjectIdentityMappings),
+      );
     },
   };
   workRuntime = await composeWork([module], {
@@ -285,7 +289,7 @@ beforeAll(async () => {
     pool: contentPool,
     client: workClient,
   });
-  effects = contentEffects(contentPool, workClient);
+  effects = contentEffects(contentPool, workClient, readTestRealmSubjectIdentityMappings);
   operationClient = createContentOperationClient({ pool: contentPool, client: workClient, clock: () => new Date() });
   await workRuntime.launch();
 }, 120_000);

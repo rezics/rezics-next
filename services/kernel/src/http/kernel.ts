@@ -2,6 +2,7 @@ import { initializeEventTypes } from '../events/catalogue.ts';
 import {
   ensureContentApplication,
   createNativeContentRealmApplication,
+  readRealmSubjectIdentityMappings,
   nativeRealmEvidenceHost,
   bindContentRealmApplication,
 } from '../content/adapters/index.ts';
@@ -446,6 +447,7 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
       {
         parent: createRealmScopeEvidence(nativeRealmEvidenceHost).observe,
         subject: createSubjectScopeEvidence(nativeRealmEvidenceHost).observe,
+        readIdentityMappings: readRealmSubjectIdentityMappings,
         withWork: (reader, work, maximum, run) => withRealmDisclosureWork(reader, work, maximum, run),
       },
       contentRuntime.ambient.now,

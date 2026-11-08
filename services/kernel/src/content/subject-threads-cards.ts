@@ -4,6 +4,7 @@ import { ProblemError } from '../http/problem-error.ts';
 import type { ConversationActivitySelection } from './conversation-activity.ts';
 import type { FeedAuthor } from './feed-contract.ts';
 import { prepareFeedContentContext } from './feed-context.ts';
+import { feedCapabilities } from './adapters/feed-bind.ts';
 import type { AnchoredPosition, FeedParentContext, FeedReviewContext, ReadContext } from './model.ts';
 import { readDocumentMediaPresentations, type DocumentImagePresentation } from './media-presentation.ts';
 import type { MediaDependencies } from './media.ts';
@@ -271,12 +272,21 @@ export async function projectSubjectThreadCards(
   const references = selected.map((thread) => cardReference(thread, subjectId));
   const cards = await createContentReadingCardBatch(dependencies, references, context.actor, context.deadline);
   const initialActivity = activitySnapshot.selected;
-  const content = await prepareFeedContentContext(dependencies, selected.map(contentReference), context, [], {
-    observeThreads: (threadIds, current) =>
-      Promise.all(
-        threadIds.map(async (threadId) => await readSubjectThread(dependencies, threadId, subjectId, placeId, current)),
-      ),
-  });
+  const content = await prepareFeedContentContext(
+    dependencies,
+    feedCapabilities().enrichment,
+    selected.map(contentReference),
+    context,
+    [],
+    {
+      observeThreads: (threadIds, current) =>
+        Promise.all(
+          threadIds.map(
+            async (threadId) => await readSubjectThread(dependencies, threadId, subjectId, placeId, current),
+          ),
+        ),
+    },
+  );
 
   const cardResult = await cards.finish();
   const contentResult = await content.finish();

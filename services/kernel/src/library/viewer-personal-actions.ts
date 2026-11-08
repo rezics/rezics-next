@@ -6,21 +6,29 @@ import { readViewerActions } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { routeOf } from '../route/route.ts';
+import type {
+  ViewerFact,
+  ViewerFactsPage,
+  ViewerPersonalAction,
+  ViewerPersonalActionInput,
+  ViewerPersonalActionState,
+  ViewerPersonalActionsPage,
+  ViewerPersonalFact,
+  ViewerQuestion,
+} from './contract/index.ts';
+export type {
+  ViewerPersonalAction,
+  ViewerPersonalActionInput,
+  ViewerPersonalActionState,
+  ViewerPersonalActionsPage,
+  ViewerPersonalFact,
+} from './contract/index.ts';
 import {
   MAX_VIEWER_FACTS_INPUT_BYTES,
   MAX_VIEWER_FACTS_RESPONSE_BYTES,
   MAX_VIEWER_FACTS_ROWS,
 } from './viewer-facts-schema.ts';
-import {
-  prepareViewerFacts,
-  readViewerFacts,
-  viewerFactsCurrent,
-  type PreparedViewerFacts,
-  type ViewerFact,
-  type ViewerFactInput,
-  type ViewerFactsPage,
-  type ViewerQuestion,
-} from './viewer-facts.ts';
+import { prepareViewerFacts, readViewerFacts, viewerFactsCurrent, type PreparedViewerFacts } from './viewer-facts.ts';
 
 const SUBJECT_TYPE = /^[A-Za-z][A-Za-z0-9_.-]*(?::[A-Za-z][A-Za-z0-9_.-]*)?$/;
 const SEMANTIC_SUBJECT_RESOURCE_TYPE = 'semantic.subject';
@@ -33,25 +41,12 @@ const PERSONAL_ACTIONS = new Set([
 ]);
 const MANUAL_SCORE_OPERATIONS = new Set(['rating.vote_put', 'rating.vote_delete']);
 
-export type ViewerPersonalActionInput = ViewerFactInput & Readonly<{ resourceType: string }>;
 export type ViewerPersonalActionRuntime = Readonly<{
   access: Access;
   resources: ViewerActionResources;
   bindings: ViewerActionBindings;
   clock: () => Date;
 }>;
-export type ViewerPersonalAction = Readonly<{
-  action: string;
-  operations: readonly string[];
-}>;
-export type ViewerPersonalActionState =
-  | Readonly<{ state: 'current'; allowed: readonly ViewerPersonalAction[] }>
-  | Readonly<{ state: 'unavailable'; reason: 'admission' | 'currentness' | 'dependency' }>;
-export type ViewerPersonalFact = ViewerFact & Readonly<{ actions: ViewerPersonalActionState }>;
-export type ViewerPersonalActionsPage =
-  | Readonly<{ state: 'current'; question: ViewerQuestion | null; rows: readonly ViewerPersonalFact[] }>
-  | Extract<ViewerFactsPage, { state: 'unavailable' }>;
-
 export type ViewerPersonalActionsReader = (
   actor: Actor,
   rows: readonly ViewerPersonalActionInput[],

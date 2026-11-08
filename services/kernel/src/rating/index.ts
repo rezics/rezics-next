@@ -16,3 +16,6 @@ export {
 
 export { bindRatingVoteSemantic, ratingVoteSemantic } from './adapters/vote-semantic.ts';
 export type { RatingVoteSemantic } from './adapters/vote-semantic.ts';
+/** Installed native question reader and standard vote question for composed consumers. */
+export { readVisibleRatingQuestion } from './question-directory.ts';
+export { STANDARD_QUESTION_ID } from './standard-question.ts';

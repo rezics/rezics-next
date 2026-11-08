@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
@@ -20,7 +21,11 @@ import {
   createContentWorkModule,
 } from '../../src/content/register.ts';
 
-const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
+const registerContent = createContentWorkModule({
+  readIdentityMappings: readTestRealmSubjectIdentityMappings,
+  fetch: (request) => fetch(request),
+  now: () => Date.now(),
+});
 import { contentEffects } from '../../src/content/relays.ts';
 import { readMembershipRouteKey } from '../../src/access/membership-work-config.ts';
 import {
@@ -63,6 +68,7 @@ function contentWithStepRetryDelay(stepRetryDelaySeconds: number): WorkModule {
     async register(context) {
       const dependencies = contentWorkDependencies(context.env, fetch);
       await createContentWork({
+        readIdentityMappings: readTestRealmSubjectIdentityMappings,
         storage: dependencies.storage,
         access: createContentWorkAccess(context.clock),
         readConsent: dependencies.readConsent,
@@ -72,7 +78,7 @@ function contentWithStepRetryDelay(stepRetryDelaySeconds: number): WorkModule {
         collectionPartitions: [partition],
         stepRetryDelaySeconds,
       }).register(context);
-      context.addEffects(contentEffects(context.pool, context.client));
+      context.addEffects(contentEffects(context.pool, context.client, readTestRealmSubjectIdentityMappings));
     },
   };
 }

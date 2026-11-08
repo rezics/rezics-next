@@ -12,6 +12,7 @@ import { createBoardEffect } from './board-projection.ts';
 import { bindAuthorErasureWorkflow } from './erasure-workflow-identity.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { SEMANTIC_EVENTS, SUBJECT_MERGED } from '../semantic/events.ts';
+import type { RealmSubjectIdentityMapping } from './contract/index.ts';
 import { createModerationDecisionEffect } from './moderation-decisions.ts';
 import { createReportOutcomeEffect } from './report-outcomes.ts';
 import { createReportEffect } from './report-effect.ts';
@@ -187,9 +188,14 @@ function enqueueSubjectReactionMergeEffect(pool: Pool, client: WorkClient): Effe
 
 /** Add once through WorkContext.addEffects before the sole worker is launched.
  * This static list owns no runner, workflow registration or checkpoint. */
-export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
+export function contentEffects(
+  pool: Pool,
+  client: WorkClient,
+  readIdentityMappings: (pool: Pool, originals: readonly string[]) => Promise<readonly RealmSubjectIdentityMapping[]>,
+): Effect[] {
   const realmSubject = createRealmSubjectLifecycle({
     pool,
+    readIdentityMappings,
     enqueueIdentity: async (work) => {
       await client.enqueue(
         {

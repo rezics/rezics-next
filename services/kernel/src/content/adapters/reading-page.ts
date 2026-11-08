@@ -9,6 +9,7 @@ import type { ReadingPageOptional, ReadingPageMentionIdentity, ReadingPageCitati
 import type { AnchoredPosition } from '../model.ts';
 import type { ConversationActivitySelection } from '../conversation-activity.ts';
 import { prepareFeedContentContext } from '../feed-context.ts';
+import { feedCapabilities } from './feed-bind.ts';
 import { readDocumentMediaPresentations } from '../media-presentation.ts';
 import { readCitationDisclosure, type PostEntry } from '../reads.ts';
 import type { ReadingPageCapabilities } from './reading-page-bind.ts';
@@ -61,6 +62,7 @@ export function createNativeReadingPageCapabilities(access: ContentReadingAccess
             access.observe(async () => {
               const prepared = await prepareFeedContentContext(
                 dependencies,
+                feedCapabilities().enrichment,
                 [{ key: thread.id, threadId: thread.id, initialThread: thread }],
                 context,
                 [],

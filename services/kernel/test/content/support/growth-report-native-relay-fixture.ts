@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from '../realm-identity-reader.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -5,7 +6,11 @@ import { createKernel } from '../../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createContentWorkModule } from '../../../src/content/register.ts';
 
-const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
+const registerContent = createContentWorkModule({
+  readIdentityMappings: readTestRealmSubjectIdentityMappings,
+  fetch: (request) => fetch(request),
+  now: () => Date.now(),
+});
 import { effectsRelay, effectWorkflowId, type Effect } from '../../../src/events/effects.ts';
 import { readBatch, type CloudEvent, type Envelope } from '../../../src/events/log.ts';
 import { startRelays } from '../../../src/events/relays.ts';

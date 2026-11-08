@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { normalizeDocument } from '@rezics/document';
 import { randomUUID } from 'node:crypto';
@@ -139,7 +140,9 @@ describe('report outcomes through HTTP and committed effects', () => {
     return result.body.reportId as string;
   }
   async function deliver(name: string, id: string) {
-    const effect = contentEffects(db.pool, {} as WorkClient).find((effect) => effect.name === name);
+    const effect = contentEffects(db.pool, {} as WorkClient, readTestRealmSubjectIdentityMappings).find(
+      (effect) => effect.name === name,
+    );
     expect(effect).toBeDefined();
     const { rows } = await db.admin.query(
       "SELECT * FROM core.outbox WHERE data->>'targetId'=$1 OR data->>'reportId'=$1 ORDER BY position,event_seq",
@@ -292,7 +295,7 @@ describe('report outcomes through HTTP and committed effects', () => {
     ).toBe(200);
     const taken = await call('POST', `/v1/boards/${target.id}:takeDown`, reason, undefined, fixture.principal);
     expect(taken.response.status).toBe(200);
-    const effect = contentEffects(db.pool, {} as WorkClient).find(
+    const effect = contentEffects(db.pool, {} as WorkClient, readTestRealmSubjectIdentityMappings).find(
       (effect) => effect.name === 'content_report_outcome',
     )!;
     const {
