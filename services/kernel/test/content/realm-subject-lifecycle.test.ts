@@ -11,8 +11,10 @@ import { createRealmParticipationCheck } from '../../src/community/participation
 import { createRealmSubjectCensus } from '../../src/content/realm-subject-census.ts';
 import {
   createRealmSubjectLifecycle,
+  projectRealmSubjectIdentityMappings,
   REALM_SUBJECT_LIFECYCLE_EFFECT,
 } from '../../src/content/realm-subject-lifecycle.ts';
+import { readIdentityMappings as readSemanticIdentityMappings } from '../../src/semantic/identity-adapters/index.ts';
 import { contentEffects } from '../../src/content/relays.ts';
 import { runCommand, type CommandEvent } from '../../src/command/command.ts';
 import { takedown } from '../../src/content/moderation.ts';
@@ -193,7 +195,11 @@ test.serial(
       }
       expect(await replacementCandidate()).toMatchObject({ active: true, revision_id: revised.revisionId });
 
-      const lifecycle = createRealmSubjectLifecycle({ pool: world.db.pool });
+      const lifecycle = createRealmSubjectLifecycle({
+        pool: world.db.pool,
+        readIdentityMappings: async (pool, originals) =>
+          projectRealmSubjectIdentityMappings(await readSemanticIdentityMappings(pool, originals)),
+      });
       await lifecycle.effect.run(toCloudEvent(openingEvent));
       await lifecycle.effect.run(toCloudEvent(revisionEvent));
       expect(await replacementCandidate()).toMatchObject({ active: true, revision_id: revised.revisionId });

@@ -17,7 +17,7 @@ import {
   type CommunityComments,
 } from '../community-projection/index.ts';
 import { createRealmSubjectSource, type RealmSubjectSource } from '../realm-subject-source.ts';
-import { createRealmSubjectLifecycle } from '../realm-subject-lifecycle.ts';
+import { createRealmSubjectLifecycle, type RealmSubjectIdentityMapping } from '../realm-subject-lifecycle.ts';
 import {
   createNativeRealmDisclosurePorts,
   realmSearchFailure,
@@ -35,6 +35,7 @@ type SearchPorts = RealmSearchPorts<
   RealmSubjectSource
 >;
 export type NativeRealmProducers = Pick<NativeRealmDisclosurePorts, 'parent' | 'subject'> & {
+  readIdentityMappings(pool: Pool, originals: readonly string[]): Promise<readonly RealmSubjectIdentityMapping[]>;
   withWork<T>(
     reader: Extract<NativeScopeReader, { actor: unknown }>,
     work: ScopeWork,
@@ -79,7 +80,7 @@ export function createNativeContentRealmApplication(producers: NativeRealmProduc
       createHash('sha256').update(`${realm}:${signature}:${ordinal}`).digest('base64url'),
     failure: realmSearchFailure,
     source(pool, disclosure) {
-      const lifecycle = createRealmSubjectLifecycle({ pool });
+      const lifecycle = createRealmSubjectLifecycle({ pool, readIdentityMappings: producers.readIdentityMappings });
       return createRealmSubjectSource({ pool, disclosure, maintenance: lifecycle.maintenance });
     },
   };

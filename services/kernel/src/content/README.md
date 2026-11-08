@@ -691,7 +691,7 @@ readiness remains authoritative; installation, an empty page or a preparing cens
 
 ### Cost: selected Home review and reply context
 
-`prepareFeedContentContext(dependencies, references, context, languages?, options?)` returns a one-use composition with
+`prepareFeedContentContext(dependencies, enrichment, references, context, languages?, options?)` returns a one-use composition with
 `finish(): Promise<{contexts: ReadonlyMap<string, FeedContentContextValue>, anchors: readonly AnchoredPosition[]}>`.
 Each selected reference carries an exact thread key and may carry one post key and already disclosed initial values.
 The public context preserves current permitted review-target and question summaries, the exact recorded vote units and
@@ -4508,13 +4508,20 @@ declaration, cast or generator.
 
 ## Current Home personal Library composition
 
+Decision: Content composition installs the existing Semantic summary readers, visible Rating question reader, standard vote question ID and Realm identity reader; the acyclic feed carries Search's public Collection summary and Library's viewer-action page through the generated client and Home handlers.
+
 [Current Home personal facts](../../../../docs/feeds.md#current-home-personal-facts) owns the
 response and full per-page cost. `feed-viewer.ts` calls the installed native personal-actions
 reader once per authenticated Home page and retains raw duplicate occurrence keys. Final
 Home source loads use the original cursor operands and repeat actual content/Subject and
-Space/Realm/publication disclosure; no private overlay can admit its own source. The mounted
-schema extends Library's native facts schema and flows through the existing generated FeedPage
-root export at the complete-input publication stage. Web retains its receiver and writers.
+Space/Realm/publication disclosure; no private overlay can admit its own source. Required
+Content-owned enrichment ports keep Semantic summary observation, visible Rating questions and
+the standard vote question installed once. Realm lifecycle receives the Semantic identity
+mapping through its composition adapter, retaining the original pool and lifecycle deadlines.
+The mounted `FeedPage` schema uses the public Search Collection summary (including Library's
+closed card) and Library's current viewer-action schema and page type; the official client
+publisher carries those exact types to all Home ServerFns. Web keeps deriving its page from the
+installed client response rather than introducing another DTO.
 
 ## Exact post contribution attribution
 

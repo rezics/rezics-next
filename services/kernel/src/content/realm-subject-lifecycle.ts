@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { Value } from 'typebox/value';
-import { readIdentityMappings } from '../semantic/identity-adapters/index.ts';
+import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
 import { SEMANTIC_EVENTS, SUBJECT_MERGED, SUBJECT_REVISED } from '../semantic/events.ts';
 import { COMMUNITY_EVENTS } from '../community/events.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -85,6 +85,18 @@ export type RealmSubjectIdentityWork = Readonly<{
   position: string;
   eventId: string;
 }>;
+export type RealmSubjectIdentityMapping = Readonly<{ terminal: string | null; identityEpoch: string | null }>;
+
+/** Keep Semantic's identity interpretation at the installed owner boundary. */
+export function projectRealmSubjectIdentityMappings(
+  mappings: readonly IdentityMapping[],
+): readonly RealmSubjectIdentityMapping[] {
+  return mappings.map((mapping) =>
+    mapping.state === 'mapped'
+      ? { terminal: mapping.terminal, identityEpoch: mapping.epoch.toString() }
+      : { terminal: null, identityEpoch: null },
+  );
+}
 export type RealmSubjectIdentityPage = Readonly<{
   state: 'done' | 'more' | 'unknown';
   after: Readonly<{ route: number; realm: string; thread: string }> | null;
@@ -378,6 +390,7 @@ export function realmSubjectIdentityWorkflowId(
 /** Bounded live producer, captured-cut runner and current ancestor observation adapter. */
 export function createRealmSubjectLifecycle(input: {
   pool: Pool;
+  readIdentityMappings: (pool: Pool, originals: readonly string[]) => Promise<readonly RealmSubjectIdentityMapping[]>;
   enqueueIdentity?: (work: RealmSubjectIdentityWork) => Promise<void>;
 }) {
   const { pool } = input;
@@ -445,11 +458,9 @@ export function createRealmSubjectLifecycle(input: {
     await candidates.initialize(native.realm, deadline);
     if (!(await candidates.fence(native.realm, thread, source, deadline))) return;
     for (const part of chunks(originals, 100)) {
-      const mappings = await readIdentityMappings(pool, part);
+      const mappings = await input.readIdentityMappings(pool, part);
       for (const [index, original] of part.entries()) {
-        const mapping = mappings[index];
-        const terminal = mapping?.state === 'mapped' ? mapping.terminal : null;
-        const identityEpoch = mapping?.state === 'mapped' ? mapping.epoch.toString() : null;
+        const { terminal, identityEpoch } = mappings[index]!;
         const candidate: RealmSubjectCandidate = {
           realm: native.realm,
           original,
@@ -506,9 +517,7 @@ export function createRealmSubjectLifecycle(input: {
       );
       return { state: 'done', after: null };
     }
-    const mapping = (await readIdentityMappings(pool, [work.original]))[0];
-    const terminal = mapping?.state === 'mapped' ? mapping.terminal : null;
-    const identityEpoch = mapping?.state === 'mapped' ? mapping.epoch.toString() : null;
+    const { terminal, identityEpoch } = (await input.readIdentityMappings(pool, [work.original]))[0]!;
     for (const row of rows.rows) {
       const threadRoute = realmSubjectRoute(row.thread);
       const version = await realmSubjectHome(pool, threadRoute, deadline, false, async (_client, current) => current);

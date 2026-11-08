@@ -12,6 +12,7 @@ import { createBoardEffect } from './board-projection.ts';
 import { bindAuthorErasureWorkflow } from './erasure-workflow-identity.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { SEMANTIC_EVENTS, SUBJECT_MERGED } from '../semantic/events.ts';
+import { readIdentityMappings as readSemanticIdentityMappings } from '../semantic/identity-adapters/index.ts';
 import { createModerationDecisionEffect } from './moderation-decisions.ts';
 import { createReportOutcomeEffect } from './report-outcomes.ts';
 import { createReportEffect } from './report-effect.ts';
@@ -22,6 +23,7 @@ import { createBoardWatchNoticeEffect } from './board-watch-notices.ts';
 import readOutboxEvent from './read-outbox-event-index.sql';
 import {
   createRealmSubjectLifecycle,
+  projectRealmSubjectIdentityMappings,
   REALM_SUBJECT_IDENTITY_WORKFLOW,
   realmSubjectIdentityWorkflowId,
 } from './realm-subject-lifecycle.ts';
@@ -190,6 +192,8 @@ function enqueueSubjectReactionMergeEffect(pool: Pool, client: WorkClient): Effe
 export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
   const realmSubject = createRealmSubjectLifecycle({
     pool,
+    readIdentityMappings: async (nativePool, originals) =>
+      projectRealmSubjectIdentityMappings(await readSemanticIdentityMappings(nativePool, originals)),
     enqueueIdentity: async (work) => {
       await client.enqueue(
         {

@@ -12,6 +12,7 @@ import {
   nativeContextAccess,
   createSubjectScopeEvidence,
 } from '../semantic/adapters/index.ts';
+import { readIdentityMappings as readSemanticIdentityMappings } from '../semantic/identity-adapters/index.ts';
 import { bindContextAccess } from '../semantic/context-access-port.ts';
 import { createZoneResourceAccess } from '../zones/adapters/index.ts';
 import {
@@ -20,6 +21,7 @@ import {
   createZoneResourceApplication,
 } from '../zones/resource-application.ts';
 import { withRealmDisclosureWork } from '../search/adapters/index.ts';
+import { projectRealmSubjectIdentityMappings } from '../content/realm-subject-lifecycle.ts';
 import { contentHttpDeclaration, mountContentHttp, type ContentHttpRoutes } from '../content/http.ts';
 import { createOperationCatalogue } from '@rezics/operations';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
@@ -446,6 +448,8 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
       {
         parent: createRealmScopeEvidence(nativeRealmEvidenceHost).observe,
         subject: createSubjectScopeEvidence(nativeRealmEvidenceHost).observe,
+        readIdentityMappings: async (pool, originals) =>
+          projectRealmSubjectIdentityMappings(await readSemanticIdentityMappings(pool, originals)),
         withWork: (reader, work, maximum, run) => withRealmDisclosureWork(reader, work, maximum, run),
       },
       contentRuntime.ambient.now,

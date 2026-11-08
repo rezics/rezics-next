@@ -28,13 +28,41 @@ import { createNativeAccessReadingPorts } from '../access/adapters/reading.ts';
 import { createRealmScopeEvidence } from '../community/adapters/index.ts';
 import { createSubjectScopeEvidence } from '../semantic/adapters/index.ts';
 import { withRealmDisclosureWork } from '../search/adapters/index.ts';
+import { prepareFeedContentContext } from '../content/feed-context.ts';
+import { composeFeedViewerPersonalActions } from '../content/feed-viewer.ts';
+import { readSubjectSummaries, readSubjectSummaryObservation } from '../semantic/summaries.ts';
+import { readVisibleRatingQuestion, STANDARD_QUESTION_ID } from '../rating/index.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/index.ts';
+import { projectRealmSubjectIdentityMappings } from '../content/realm-subject-lifecycle.ts';
+import type { FeedEnrichmentPorts } from '../content/feed-enrichment-ports.ts';
 import type { ContentAmbient, ContentApplication } from '../content/contract/index.ts';
 
 /** This process root chooses each foreign supplier. No supplier performs I/O at installation. */
 export function composeContentFeed(): FeedProducerCapabilities {
   const installed = tryFeedCapabilities();
   if (installed) return installed;
+  const enrichment: FeedEnrichmentPorts = {
+    readSubjectSummaries,
+    readSubjectSummaryObservation,
+    readVisibleRatingQuestion,
+    standardQuestionId: STANDARD_QUESTION_ID,
+  };
   return bindFeedCapabilities({
+    enrichment,
+    prepareContentContext(dependencies, references, context, languages, options) {
+      return prepareFeedContentContext(dependencies, enrichment, references, context, languages, options);
+    },
+    composeViewerPersonalActions(dependencies, actor, items, deadline, languages, finalAdmission) {
+      return composeFeedViewerPersonalActions(
+        dependencies,
+        enrichment,
+        actor,
+        items,
+        deadline,
+        languages,
+        finalAdmission,
+      );
+    },
     create(deps, activityStore) {
       const continuation = createContinuePageAdapter(deps);
       const publicSummary = createPublicSummaryAdapter(deps);
@@ -89,6 +117,8 @@ export function composeContentApplication(ambient?: Partial<ContentAmbient>): Co
       {
         parent: parent.observe,
         subject: subject.observe,
+        readIdentityMappings: async (pool, originals) =>
+          projectRealmSubjectIdentityMappings(await readIdentityMappings(pool, originals)),
         withWork(reader, work, maximum, run) {
           // Content refuses actorless readers before asking Search for a native ledger.
           return withRealmDisclosureWork(reader, work, maximum, run);

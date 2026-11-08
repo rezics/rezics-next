@@ -2,8 +2,18 @@ import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { prepareFeedContentContext } from '../../src/content/feed-context.ts';
 import { discloseThreads } from '../../src/content/reads.ts';
+import { readSubjectSummaries, readSubjectSummaryObservation } from '../../src/semantic/summaries.ts';
+import { readVisibleRatingQuestion, STANDARD_QUESTION_ID } from '../../src/rating/index.ts';
+import type { FeedEnrichmentPorts } from '../../src/content/feed-enrichment-ports.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { createReviewLifecycleFixture } from './review-native-lifecycle-fixture.ts';
+
+const enrichment: FeedEnrichmentPorts = {
+  readSubjectSummaries,
+  readSubjectSummaryObservation,
+  readVisibleRatingQuestion,
+  standardQuestionId: STANDARD_QUESTION_ID,
+};
 
 test('native context rejects mismatched observations and retires a removed or hidden immediate parent', async () => {
   const f = await createReviewLifecycleFixture();
@@ -42,7 +52,7 @@ test('native context rejects mismatched observations and retires a removed or hi
     const postId = await reply('Surviving child', parentId);
     // Distinct activities can share both a selected post and its author/parent keys.
     const references = ['one', 'two'].map((key) => ({ key, threadId, postId }));
-    const prepare = () => prepareFeedContentContext(dependencies, references, context, ['en']);
+    const prepare = () => prepareFeedContentContext(dependencies, enrichment, references, context, ['en']);
     const initial = await (await prepare()).finish();
     expect(initial.contexts.get('one')?.parentContext).toMatchObject({
       kind: 'reply',
@@ -67,6 +77,7 @@ test('native context rejects mismatched observations and retires a removed or hi
     await expect(
       prepareFeedContentContext(
         dependencies,
+        enrichment,
         [
           { ...references[0]!, initialThread: thread!, initialPost: post! },
           { ...references[1]!, initialPost: { ...post!, parentId: null } },
@@ -74,7 +85,7 @@ test('native context rejects mismatched observations and retires a removed or hi
         context,
       ),
     ).rejects.toThrow('conflicting post observations');
-    const mismatched = await prepareFeedContentContext(dependencies, references, context, [], {
+    const mismatched = await prepareFeedContentContext(dependencies, enrichment, references, context, [], {
       observeThreads: async (ids, current) =>
         (await discloseThreads(dependencies, ids, current)).map((row) => ({
           ...row,
@@ -98,6 +109,7 @@ test('native context rejects mismatched observations and retires a removed or hi
     const hiddenChild = await reply('Child of hidden parent', hiddenParent);
     const beforeHide = await prepareFeedContentContext(
       dependencies,
+      enrichment,
       [{ key: 'hidden', threadId, postId: hiddenChild }],
       context,
     );
@@ -121,7 +133,7 @@ test('native context rejects mismatched observations and retires a removed or hi
     expect(concealed.post).toBeNull();
     expect(concealed.postAuthor).toBeUndefined();
     expect(concealed.parentContext).toBeUndefined();
-    const empty = await (await prepareFeedContentContext(dependencies, [], context)).finish();
+    const empty = await (await prepareFeedContentContext(dependencies, enrichment, [], context)).finish();
     expect(empty.contexts.size).toBe(0);
     expect(empty.anchors).toEqual([]);
   } finally {

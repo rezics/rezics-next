@@ -6,12 +6,22 @@ import type { WorkClient } from '../../work/client.ts';
 import type { AccountDiscoverySummary, DiscoverySearch } from '../../search/index.ts';
 import type { SearchService } from '../../search/service-scope.ts';
 import type { CollectionResourceView, ViewerPersonalActionsReader } from '../../library/adapters/index.ts';
+import type { ViewerPersonalActionsPage } from '../../library/index.ts';
 import type { ReadingPageViewerActionRuntime } from '../reading-page.ts';
 import type { FeedActivityStore, FeedActivityTarget } from '../feed-activity.ts';
+import type {
+  FeedContentContextComposition,
+  FeedContentContextDependencies,
+  FeedContentContextOptions,
+  FeedContentContextReference,
+} from '../feed-context.ts';
+import type { FeedEnrichmentPorts } from '../feed-enrichment-ports.ts';
+import type { ReadContext } from '../model.ts';
 import type {
   FeedContinuationPage,
   FeedContinuationQuery,
   FeedContinuationSubject,
+  FeedItem,
   FeedPublicSummary,
 } from '../contract/index.ts';
 
@@ -74,8 +84,28 @@ export type FeedNativeSuppliers = Readonly<{
   ): Promise<void>;
 }>;
 
+export type FeedContentContextComposer = (
+  dependencies: FeedContentContextDependencies,
+  references: readonly FeedContentContextReference[],
+  context: ReadContext,
+  languages: readonly string[],
+  options?: FeedContentContextOptions,
+) => Promise<FeedContentContextComposition>;
+
+export type FeedViewerPersonalActionsComposer = (
+  dependencies: Pick<FeedDependencies, 'pool' | 'routeKey' | 'access' | 'viewerPersonalActions'>,
+  actor: Actor,
+  items: readonly FeedItem[],
+  deadline: number,
+  languages: readonly string[],
+  finalAdmission: () => Promise<readonly FeedItem[]>,
+) => Promise<ViewerPersonalActionsPage>;
+
 /** Composition supplies one factory; a native reader retains its own producer instances. */
 export type FeedProducerCapabilities = Readonly<{
+  enrichment: FeedEnrichmentPorts;
+  prepareContentContext: FeedContentContextComposer;
+  composeViewerPersonalActions: FeedViewerPersonalActionsComposer;
   create(deps: FeedDependencies, activityStore: FeedActivityStore): FeedNativeSuppliers;
   isDeadline(error: unknown): boolean;
   isAdmissionFailure(error: unknown): boolean;

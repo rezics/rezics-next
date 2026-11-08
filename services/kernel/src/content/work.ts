@@ -45,6 +45,7 @@ import { createAccountUploadIndexEffect } from './account-erasure-uploads.ts';
 import { registerAccountErasureWork } from './account-erasure.ts';
 import { createSubjectThreadEffect } from './subject-thread-index.ts';
 import { processSubjectReactionMergePage, runSubjectReactionMerge } from './subject-reaction-merge.ts';
+import { readIdentityMappings as readSemanticIdentityMappings } from '../semantic/identity-adapters/index.ts';
 import { deleteExpiredNoticesPage, NOTICE_PAGE_SIZE, NOTICE_RETENTION_MS } from './notices.ts';
 import {
   BOARD_SLOW_RECOVERY_PAGE_SIZE,
@@ -54,6 +55,7 @@ import {
 } from './board-slow.ts';
 import {
   createRealmSubjectLifecycle,
+  projectRealmSubjectIdentityMappings,
   REALM_SUBJECT_CENSUS_PAGE,
   REALM_SUBJECT_CENSUS_SCHEDULE,
   REALM_SUBJECT_CENSUS_WORKFLOW,
@@ -162,7 +164,11 @@ async function registerWork(
   if (!now) throw new Error('Content worker now is not supplied');
   registerReviewDiscoveryWork(context);
   registerReviewCensusWork(context, options.access, partitions);
-  const realmSubject = createRealmSubjectLifecycle({ pool: context.pool });
+  const realmSubject = createRealmSubjectLifecycle({
+    pool: context.pool,
+    readIdentityMappings: async (pool, originals) =>
+      projectRealmSubjectIdentityMappings(await readSemanticIdentityMappings(pool, originals)),
+  });
   if (options.registerErasureParticipant !== false) registerAccountErasureWork(context, storage, options.routeKey);
   const retry = contentStepRetryOptions(options.stepRetryDelaySeconds);
   const repairDrafts = DBOS.registerStep(() => repairOwnDraftPage(context.pool), {

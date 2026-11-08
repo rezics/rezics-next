@@ -8,7 +8,17 @@ import type {
   ViewerPersonalActionsReader,
   ViewerPersonalActionsPage,
 } from '../../src/library/viewer-personal-actions.ts';
+import { readSubjectSummaryObservation, readSubjectSummaries } from '../../src/semantic/summaries.ts';
+import { readVisibleRatingQuestion, STANDARD_QUESTION_ID } from '../../src/rating/index.ts';
+import type { FeedEnrichmentPorts } from '../../src/content/feed-enrichment-ports.ts';
 import { routeOf } from '../../src/route/route.ts';
+
+const enrichment: FeedEnrichmentPorts = {
+  readSubjectSummaries,
+  readSubjectSummaryObservation,
+  readVisibleRatingQuestion,
+  standardQuestionId: STANDARD_QUESTION_ID,
+};
 
 const work = (id: string, rowKey: string): FeedItem => ({
   id: rowKey,
@@ -21,7 +31,6 @@ const work = (id: string, rowKey: string): FeedItem => ({
 
 test('Home keeps native private states, duplicate occurrence keys and independent delayed page cohorts', async () => {
   const { readViewerPersonalActionsPage } = await import('../../src/library/viewer-personal-actions.ts');
-  const { STANDARD_QUESTION_ID } = await import('../../src/rating/votes.ts');
   const f = await createReviewLifecycleFixture();
   try {
     const actor = f.system.actors.author.actor;
@@ -71,6 +80,7 @@ test('Home keeps native private states, duplicate occurrence keys and independen
             return result;
           },
         },
+        enrichment,
         actor,
         [first, second],
         Date.now() + 120_000,
@@ -119,6 +129,7 @@ test('Home keeps native private states, duplicate occurrence keys and independen
             ...args,
           ),
       },
+      enrichment,
       actor,
       [first],
       Date.now() + 120_000,
@@ -131,6 +142,7 @@ test('Home keeps native private states, duplicate occurrence keys and independen
     expect(
       await composeFeedViewerPersonalActions(
         { ...deps, viewerPersonalActions: async () => refused },
+        enrichment,
         actor,
         [first],
         Date.now() + 120_000,
@@ -149,6 +161,7 @@ test('Home keeps native private states, duplicate occurrence keys and independen
             return refused;
           },
         },
+        enrichment,
         actor,
         occurrences,
         Date.now() + 120_000,
