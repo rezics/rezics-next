@@ -59,7 +59,13 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
   expect(beyondWindow.selected[properties[9]!.property]).toEqual(['00000000-0000-4000-8000-000000000009']);
   expect(filter).toEqual({ statement: { property: properties[0]!.property, in: kept } });
   const admitted: FilterDocument = filter;
-  const common = { type: 'fixture:Book', release: 'release-7', filter: admitted, languages: ['zh-Hant', 'en'] };
+  const common = {
+    type: 'fixture:Book',
+    locale: 'en',
+    release: 'release-7',
+    filter: admitted,
+    languages: ['zh-Hant', 'en'],
+  };
   const reads: CollectionFacetRequest[] = [];
   const pending: { resolve: (state: FacetState) => void }[] = [];
   let outcome: 'ready' | 'refused' | 'unavailable' = 'ready';
