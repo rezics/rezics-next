@@ -16,7 +16,7 @@ import { fencedIds, fenceKey, type CandidateSource } from './fences.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { partitionReadClient, partitionReadClients } from '../database/read-snapshot.ts';
+import { partitionReadClient, partitionReadClients } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartitions, readPartition } from '../partition/partition.ts';
 import {

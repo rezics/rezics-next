@@ -1,5 +1,9 @@
 export type Count = { value: number; relation: 'exact' | 'lower_bound' };
 
+export function hasMore(count: Count | undefined, returned: number): boolean {
+  return count !== undefined && (count.relation === 'lower_bound' || count.value > returned);
+}
+
 export function countFromLinks(
   count: { value: number; exact: boolean } | undefined,
   _returned: number,

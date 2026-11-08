@@ -423,7 +423,10 @@
         "services/kernel/src/content/schema-validation.ts",
         "services/kernel/src/content/source-fence-schemas.ts",
         "services/kernel/src/content/realm-subject-source.ts",
-        "services/kernel/src/content/review-discovery-changes.ts"
+        "services/kernel/src/content/review-discovery-changes.ts",
+        "services/kernel/src/content/adapters/subject-document.ts",
+        "services/kernel/src/content/read-cover-reference.sql",
+        "services/kernel/src/content/read-source-fences.sql"
       ],
       "allowedDependencies": [
         "definitions",
@@ -877,7 +880,8 @@
         "services/kernel/src/semantic/search-relations.ts",
         "services/kernel/src/semantic/account-erasure-source.ts",
         "services/kernel/src/semantic/scope-leaf-evidence.ts",
-        "services/kernel/src/semantic/library-observation.ts"
+        "services/kernel/src/semantic/library-observation.ts",
+        "services/kernel/src/semantic/identity-public-output-capture.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -1026,7 +1030,9 @@
         "services/kernel/src/command/timing.ts",
         "services/kernel/src/partition/read.sql",
         "services/kernel/src/http/problem.ts",
-        "services/kernel/src/http/request.ts"
+        "services/kernel/src/http/request.ts",
+        "services/kernel/src/tokens/session.ts",
+        "services/kernel/src/partition/read-batch.sql"
       ],
       "allowedDependencies": [
         "auth-contract",
@@ -1436,7 +1442,8 @@
         "apps/web/src/features/pages/producer-history-reading/admission.tsx",
         "apps/web/src/features/pages/view-cursor.ts",
         "apps/web/src/search/search-window/focus.ts",
-        "apps/web/src/features/pages/home-feed-questions.ts"
+        "apps/web/src/features/pages/home-feed-questions.ts",
+        "apps/web/src/features/pages/source-concept-reading/works-route.ts"
       ],
       "allowedDependencies": [
         "client",
@@ -1616,6 +1623,7 @@
         "apps/web/src/community/realm-catalogue-entry.ts",
         "apps/web/src/community/realm-reading-return.ts",
         "apps/web/src/media/cover-src.ts",
+        "apps/web/src/media/summary.ts",
         "apps/web/src/media/content-failure.ts",
         "apps/web/src/threads/byline-time.ts",
         "apps/web/src/threads/community-entry.ts",
@@ -1701,7 +1709,7 @@
         "apps/web/src/features/catalogue/screen-reading-port.ts",
         "apps/web/src/features/catalogue/screen-reading-application.tsx",
         "apps/web/src/features/catalogue/page-render-binding.tsx",
-        "apps/web/src/features/catalogue/character-reading-port.ts",
+        "apps/web/src/features/catalogue/character-reading-port.tsx",
         "apps/web/src/features/catalogue/character-reading-application.tsx",
         "apps/web/src/features/catalogue/source-concept-explorer/public-visit.ts",
         "apps/web/src/features/catalogue/producer-history/visit.ts",
@@ -1745,7 +1753,12 @@
         "apps/web/src/features/catalogue/person-reader/contract.ts",
         "apps/web/src/features/catalogue/people-facts/visit.tsx",
         "apps/web/src/features/catalogue/source-concept-explorer/index.ts",
-        "apps/web/src/features/catalogue/concept-works/contract.ts"
+        "apps/web/src/features/catalogue/concept-works/contract.ts",
+        "apps/web/src/features/catalogue/credit-inspection/model.ts",
+        "apps/web/src/features/catalogue/credit-inspection/destinations.ts",
+        "apps/web/src/features/catalogue/credit-inspection/return.tsx",
+        "apps/web/src/features/catalogue/credit-inspection/session.tsx",
+        "apps/web/src/features/catalogue/character-public-reading/view.tsx"
       ],
       "allowedDependencies": [
         "client",

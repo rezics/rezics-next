@@ -10,7 +10,7 @@ import type { RelationTransport } from '../../../subject/relation-candidates';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { RelationEditor } from '../relation-editor';
 import type { DetailRead } from '../subject-changes';
-import { ChangeExplanation } from '../subject-changes-page';
+import { ChangeExplanation } from '../subject-changes-explanation';
 import {
   creditCorrection,
   creditRelated,

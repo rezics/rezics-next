@@ -6,9 +6,12 @@
  * not allocate work or confer authority.
  */
 
-import type { Pool, PoolClient } from 'pg';
 import type { NativeSourceIdentity } from './source.ts';
 import type { WorkAllowance, WorkDimensions } from './work-dimensions.ts';
+
+/** Native storage handles are opaque to Library's contract. Semantic owns their pg interpretation. */
+export type LibrarySemanticDatabase = object;
+export type LibrarySemanticQueryClient = object;
 
 export type LibrarySemanticMapping =
   | Readonly<{ state: 'mapped'; original: string; terminal: string; epoch: bigint }>
@@ -34,7 +37,7 @@ export type LibrarySemanticScopeResult = Readonly<{
 }>;
 
 export type LibrarySemanticSummaryContext = Readonly<{
-  pool: Pool;
+  pool: LibrarySemanticDatabase;
   routeKey: Uint8Array;
   access: unknown;
   actor: unknown;
@@ -90,13 +93,13 @@ export interface LibrarySemanticObservationCapability {
       }>,
     ): WorkDimensions;
     readMappings(
-      pool: Pool,
+      pool: LibrarySemanticDatabase,
       originals: readonly string[],
     ): Promise<LibrarySemanticObservationResult<readonly LibrarySemanticMapping[]>>;
-    registerScope(pool: Pool, input: LibrarySemanticScopeRegistration): Promise<LibrarySemanticScopeResult>;
-    revalidateScope(pool: Pool, input: LibrarySemanticScopeRevalidation): Promise<LibrarySemanticScopeResult>;
+    registerScope(pool: LibrarySemanticDatabase, input: LibrarySemanticScopeRegistration): Promise<LibrarySemanticScopeResult>;
+    revalidateScope(pool: LibrarySemanticDatabase, input: LibrarySemanticScopeRevalidation): Promise<LibrarySemanticScopeResult>;
     commitScopeCapture(
-      client: Pick<PoolClient, 'query'>,
+      client: LibrarySemanticQueryClient,
       input: Readonly<{
         route: number;
         collectionId: string;
@@ -110,16 +113,16 @@ export interface LibrarySemanticObservationCapability {
     subjectReferenceWork(subjectId: string): WorkDimensions;
     subjectSummaryWork(subjectIds: readonly string[]): WorkDimensions;
     subjectSummaryCurrentWork(subjectIds: readonly string[]): WorkDimensions;
-    readMapping(pool: Pool, original: string): Promise<LibrarySemanticObservationResult<LibrarySemanticMapping>>;
+    readMapping(pool: LibrarySemanticDatabase, original: string): Promise<LibrarySemanticObservationResult<LibrarySemanticMapping>>;
     readMappings(
-      pool: Pool,
+      pool: LibrarySemanticDatabase,
       originals: readonly string[],
     ): Promise<LibrarySemanticObservationResult<readonly LibrarySemanticMapping[]>>;
     readSubjectReference(
       input: Readonly<{
-        pool: Pool;
+        pool: LibrarySemanticDatabase;
         subjectId: string;
-        check(client: Pick<PoolClient, 'query'>): Promise<boolean>;
+        check(client: LibrarySemanticQueryClient): Promise<boolean>;
       }>,
     ): Promise<
       LibrarySemanticObservationResult<
@@ -137,7 +140,7 @@ export interface LibrarySemanticObservationCapability {
     identityVersionWork(subjectId: string): WorkDimensions;
     itemTypesWork(subjectIds: readonly string[], maxTypeBytes?: number): WorkDimensions;
     readIdentityVersion(
-      client: Pick<PoolClient, 'query'>,
+      client: LibrarySemanticQueryClient,
       subjectId: string,
     ): Promise<
       LibrarySemanticObservationResult<Readonly<{
@@ -147,7 +150,7 @@ export interface LibrarySemanticObservationCapability {
       }> | null>
     >;
     readItemTypes(
-      client: Pick<PoolClient, 'query'>,
+      client: LibrarySemanticQueryClient,
       subjectIds: readonly string[],
       maxTypeBytes?: number,
     ): Promise<LibrarySemanticObservationResult<ReadonlyMap<string, string>>>;

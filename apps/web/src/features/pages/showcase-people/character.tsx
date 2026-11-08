@@ -16,9 +16,9 @@ import { useSubjectCommunityReading } from '../subject-community-lifetime';
 import { PlainLink } from '../shared';
 import { PeopleFacts } from '../../catalogue/people-facts/visit';
 import { SuppliedNames } from './names';
-import { CharacterPublicReading, type CharacterAssociations } from '../../catalogue/character-reading-application';
+import { CharacterPublicReading, type CharacterAssociations } from '../../catalogue/character-public-reading/view';
 import { CharacterReadingBinding } from '../character-reading-binding';
-import { OverviewContext } from '../overview';
+import { OverviewContext } from '../overview-context';
 
 /** Public composition of supplied character facts. Appearances remain in the producer's bounded reader. */
 export function CharacterReader(input: ProfileReading & { associations?: CharacterAssociations }) {

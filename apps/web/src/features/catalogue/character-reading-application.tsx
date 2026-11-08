@@ -1,14 +1,12 @@
-import { type ReactNode } from 'react';
 import {
-  CharacterReadingSlotsContext,
   useCharacterReadingSlots,
-  type CharacterReadingSlots,
   type CharacterConnectionRead,
   type CharacterConnectionWindow,
 } from './character-reading-port';
 
 export {
   CHARACTER_WORK_PAGE_LIMIT,
+  CharacterReadingProvider,
   CharacterReadingSlotsContext,
   characterWorkStream,
   characterWorkRows,
@@ -70,11 +68,6 @@ export { creditDestinationHref } from './credit-inspection/destinations';
 export { CreditInspectionAction, CreditVisitReturn, type CreditReturnItem } from './credit-inspection/return';
 export { CreditInspectionSession } from './credit-inspection/session';
 export { CreditInspection } from './credit-inspection/view';
-
-/** Outer page composition installs native page/read/navigation adapters once per visit. */
-export function CharacterReadingProvider({ slots, children }: { slots: CharacterReadingSlots; children: ReactNode }) {
-  return <CharacterReadingSlotsContext.Provider value={slots}>{children}</CharacterReadingSlotsContext.Provider>;
-}
 
 export function useCharacterReadSlot() {
   return useCharacterReadingSlots().read;

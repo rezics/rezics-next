@@ -4,6 +4,7 @@ import {
   verifyTechnicalSource,
   readAccountIdentityTechnicalSource,
 } from './agent-verification-identity-retention.ts';
+export { readAccountIdentityTechnicalSource };
 import type { IdentitySourceConsumerReference } from '../semantic/identity-source-consumer-custody.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 /** Access-owned source history. These helpers are internal to the native identity bridge. */

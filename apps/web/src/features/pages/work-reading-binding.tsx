@@ -7,7 +7,7 @@ import {
 } from '../catalogue/work-reading-port';
 import { GameOverview as GameReaderOverview } from '../catalogue/game-reader/entry';
 import { MangaReaderEntry as MangaReaderMount } from '../catalogue/manga-reader/entry';
-import { CandidateValue } from './data';
+import { CandidateValue } from './scalar-value';
 import type { PageLink } from './shared';
 
 function PageWorkValue({ snak, related, locale, link }: WorkReadingValueProps) {

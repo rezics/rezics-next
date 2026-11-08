@@ -14,12 +14,14 @@ import {
   verifyLibraryScopeEffectsSeal,
 } from '../library/identity-scope-effects.ts';
 import { IDENTITY_SOURCE_BINDING_CONSUMER_DECLARATION } from '../semantic/identity-adapters/identity-epoch-binding.ts';
+import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { bindIdentitySourceConsumerRuntime } from '../semantic/identity-source-consumer-ports.ts';
 
 /** Bind Access reader/reversal, Library hold/page/seal and Semantic binding declarations to Source. */
 export function installIdentitySourceConsumerRuntime(): void {
   bindIdentitySourceConsumerRuntime(
     Object.freeze({
+      identityEpochStore,
       readAccountIdentitySource,
       originalSourceDeclaration: ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION,
       reversalSettlementDeclaration: ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION,

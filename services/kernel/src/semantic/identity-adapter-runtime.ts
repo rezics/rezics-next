@@ -11,9 +11,9 @@ import {
   assertAccountIdentitySource,
   loadAccountIdentitySource,
   readAccountIdentitySource,
+  readAccountIdentityTechnicalSource,
   verifyAccountIdentityReversalSettlement,
 } from '../access/agent-verification-identity.ts';
-import { readAccountIdentityTechnicalSource } from '../access/agent-verification-identity-retention.ts';
 import {
   AccessUnavailableError,
   classifyUnavailability as classifyAccessUnavailability,
