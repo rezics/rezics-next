@@ -7,11 +7,11 @@ import { isRecord } from './shared';
 import type { OverviewValue, Section } from './overview';
 import { creditVisit, type CreditVisit } from '../catalogue/credit-inspection/model';
 import { characterWorkStream } from '../catalogue/character-reading-port';
-import { CONNECTION_LIMIT } from './subject-connections-contract';
+import { CONNECTION_BYTES, CONNECTION_LIMIT } from './subject-connections-contract';
 
 export const connectionGroups = ['relations', 'characters', 'credits'] as const;
 export type ConnectionGroup = (typeof connectionGroups)[number];
-export { CONNECTION_LIMIT, CONNECTION_BYTES } from './subject-connections-contract';
+export { CONNECTION_LIMIT, CONNECTION_BYTES };
 export type ConnectionStream = {
   key: string;
   property: string;

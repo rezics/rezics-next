@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { creditDestinationHref, type CreditAssertion } from '../catalogue/credit-inspection/destinations';
-import { CreditInspectionAction, CreditVisitReturn, type CreditVisit } from '../catalogue/credit-inspection/return';
+import { creditDestinationHref } from '../catalogue/credit-inspection/destinations';
+import { CreditInspectionAction, CreditVisitReturn } from '../catalogue/credit-inspection/return';
+import type { CreditAssertion, CreditVisit } from '../catalogue/credit-inspection/model';
 import { CreditInspectionSession } from '../catalogue/credit-inspection/session';
 import { withSubjectVisitReturn } from './subject-visit-navigation';
 import {

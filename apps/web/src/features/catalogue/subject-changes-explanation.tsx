@@ -40,7 +40,7 @@ function CurrentReviewLink({
   pageHref?: string | undefined;
   address: CurrentCandidateAddress;
   revision: number;
-  onReviewCandidate?: (address: CurrentCandidateAddress, href: string, revision: number) => boolean;
+  onReviewCandidate?: ((address: CurrentCandidateAddress, href: string, revision: number) => boolean) | undefined;
 }) {
   const href = currentReviewHref(pageHref, address);
   if (!href || !onReviewCandidate) return null;
@@ -99,7 +99,7 @@ function CurrentCorrectionAction({
   locale: string;
   pageHref?: string | undefined;
   currentOperations?: CurrentOperationsRead | undefined;
-  onCorrectCurrent?: (address: CurrentCorrectionAddress, href: string, revision: number) => boolean;
+  onCorrectCurrent?: ((address: CurrentCorrectionAddress, href: string, revision: number) => boolean) | undefined;
 }) {
   const o = { locale: locale as never };
   if (!currentOperations || currentOperations.state === 'unavailable')
@@ -138,9 +138,9 @@ export function ChangeExplanation({
   revision: number;
   locale: string;
   pageHref?: string | undefined;
-  onReviewCandidate?: (address: CurrentCandidateAddress, href: string, revision: number) => boolean;
+  onReviewCandidate?: ((address: CurrentCandidateAddress, href: string, revision: number) => boolean) | undefined;
   currentOperations?: CurrentOperationsRead | undefined;
-  onCorrectCurrent?: (address: CurrentCorrectionAddress, href: string, revision: number) => boolean;
+  onCorrectCurrent?: ((address: CurrentCorrectionAddress, href: string, revision: number) => boolean) | undefined;
 }) {
   const o = { locale: locale as never };
   const summary = detail.summary;
