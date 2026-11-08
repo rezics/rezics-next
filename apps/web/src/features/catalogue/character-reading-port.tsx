@@ -296,6 +296,11 @@ export type CharacterReadingSlots = {
 
 export const CharacterReadingSlotsContext = createContext<CharacterReadingSlots | null>(null);
 
+/** Outer page composition installs native page/read/navigation adapters once per visit. */
+export function CharacterReadingProvider({ slots, children }: { slots: CharacterReadingSlots; children: ReactNode }) {
+  return <CharacterReadingSlotsContext.Provider value={slots}>{children}</CharacterReadingSlotsContext.Provider>;
+}
+
 export function useCharacterReadingSlots(): CharacterReadingSlots {
   const slots = useContext(CharacterReadingSlotsContext);
   if (!slots) throw new Error('Character reading slots are not installed');

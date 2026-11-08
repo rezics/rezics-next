@@ -5,7 +5,7 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { CandidateValue } from '../pages/data';
+import { CandidateValue } from '../pages/scalar-value';
 import { subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import { StatementConsentNavigation } from './statement-consent-navigation';

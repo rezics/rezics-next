@@ -123,8 +123,12 @@ import { serializeIdentityValue } from '../identity-core/index.ts';
 function json() {
   return memoizedValue(json, () => serializeIdentityValue);
 }
-const receiptValue = identityReceiptValue;
-const receiptKey = identityReceiptKey;
+function receiptValue(receipt: IdentityReceipt) {
+  return identityReceiptValue(receipt);
+}
+function receiptKey(receipt: IdentityReceipt) {
+  return identityReceiptKey(receipt);
+}
 function decodeReceipt(value: ReturnType<typeof identityReceiptValue> | { kind: 'erased' }): IdentityJob['receipt'] {
   return value.kind === 'subject.merge'
     ? { ...value, command: { ...value.command, digest: Buffer.from(value.command.digest, 'base64') } }

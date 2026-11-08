@@ -38,12 +38,13 @@ import type { Related, Subject, Summary as SubjectCover } from '../../subject/ty
 import { subjectViewHref } from '../../subject/subject-href';
 import type { AccountProfile } from './account-profile-reading';
 import { CoverList } from './cover-list';
-import { creditAssertion, creditVisit, type CreditAssertion } from '../catalogue/character-reading-application';
+import { creditAssertion, creditVisit, type CreditAssertion } from '../catalogue/credit-inspection/model';
 import { listView, readerViewLabel } from './views';
 import { RelationStream } from './relation-stream';
 import { qualifiedNotes, type QualifiedNote } from './qualified-relations';
 import { relationPreviewCount } from './subject-relations-preview';
 import { relationItemRows } from './relation-item-identity';
+import { holderItems } from './overview-holder-items';
 import { workCastAdmitted, WORK_VOICE_PROPERTY } from '../catalogue/work-cast/model';
 import { WorkCastWindow } from '../catalogue/work-cast/view';
 import { collectionListValue } from './collection-list-value';
@@ -71,7 +72,7 @@ import {
   SubjectReadingState,
   type SubjectTextRetryToken,
 } from '../../subject/reading-state';
-import { countFromLinks, formatCount, sumCounts, type Count } from '../count';
+import { countFromLinks, formatCount, hasMore, sumCounts, type Count } from '../count';
 import { SignInPrompt } from '../../threads/write-prompts';
 import { useSession } from '../../session/query';
 import { subjectHref } from '../../subject/subject-href';
@@ -219,10 +220,6 @@ export type Item = {
   /** Private Home controls are an in-memory projection and never part of a public relation identity. */
   supportSlot?: ReactNode;
 };
-function hasMore(count: Count | undefined, returned: number): boolean {
-  return count !== undefined && (count.relation === 'lower_bound' || count.value > returned);
-}
-
 function subjectRead(section: Section | undefined): SubjectRead | undefined {
   if (!section?.ok || section.read.kind !== 'subject') return;
   const { body } = section;
@@ -313,56 +310,7 @@ function linkItems(
   return holderItems(section.body, limit, value?.locale, value?.reader.spoilerLevel);
 }
 
-/** The holders in the body of a `links` read, with its exact or "at least" count. */
-export function holderItems(
-  body: Record<string, unknown>,
-  limit: number,
-  locale = 'en',
-  readerLevel = 0,
-): { items: Item[]; count?: Count; more: boolean } | undefined {
-  const rows = relationItemRows(body.links, 'links');
-  if (!rows) return;
-  const links = rows.slice(0, limit);
-  const count = isRecord(body.count) ? body.count : undefined;
-  const items = links.flatMap((link): Item[] =>
-    typeof link.subject === 'string' && link.summary !== null
-      ? [
-          {
-            id: link.subject,
-            label: { text: typeof link.label === 'string' ? link.label : '', lang: undefined },
-            ...(isRecord(link.summary) ? { summary: link.summary as unknown as SubjectSummary } : {}),
-            ...(typeof link.type === 'string' ? { type: link.type } : {}),
-            ...(typeof link.property === 'string' ? { property: link.property } : {}),
-            ...(typeof link.date === 'string' ? { date: link.date } : {}),
-            statement:
-              typeof link.statement === 'string'
-                ? link.statement
-                : isRecord(link.assertion) && typeof link.assertion.id === 'string'
-                  ? link.assertion.id
-                  : undefined,
-            notes: [],
-            credit: creditAssertion(link),
-            ...(isRecord(link.assertion) && Array.isArray(link.assertion.qualifiers)
-              ? { qualified: qualifiedNotes(link.assertion as unknown as Stmt, link.related, locale) }
-              : {}),
-            gated:
-              isRecord(link.assertion) && Array.isArray(link.assertion.qualifiers)
-                ? spoilerLevel(link.assertion as unknown as Stmt) > readerLevel
-                : false,
-          },
-        ]
-      : [],
-  );
-  const total = countFromLinks(
-    typeof count?.value === 'number' ? { value: count.value, exact: count.exact === true } : undefined,
-    rows.length,
-  );
-  return {
-    items,
-    ...(total ? { count: total } : {}),
-    more: hasMore(total, items.length) || body.next != null || rows.length > items.length,
-  };
-}
+export { holderItems } from './overview-holder-items';
 
 /** What a qualifier shows in the reading view: an item as its label, text as itself; anything else stays out. */
 function noteOf(qualifier: Stmt['qualifiers'][number], related: Related, locale: string): string | null {

@@ -1,4 +1,4 @@
-import type { ReleaseViolation } from '@rezics/definitions';
+import type { ReleaseViolation } from '@rezics/definitions/contract';
 
 /** Definition publication and extension commands share the same error identities. */
 export class DefinitionInputError extends Error {

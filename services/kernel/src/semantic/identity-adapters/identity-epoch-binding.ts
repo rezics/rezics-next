@@ -32,6 +32,7 @@ import {
   type IdentityIntent,
   type IdentityJobRef,
   type IdentityReceipt,
+  type IdentityReceiptBinding,
 } from './identity-epoch-contract.ts';
 import selectClaim from '../identity-epoch-binding-select.sql';
 import insertClaim from '../identity-epoch-binding-insert.sql';
@@ -52,14 +53,7 @@ import type {
   IdentitySourceConsumerContext,
 } from '../identity-source-consumer-custody.ts';
 
-/** A serializable locator is custody data. Only a released verified read mints an in-process proof. */
-export type IdentityReceiptBinding = Readonly<{
-  partition: number;
-  generation: string;
-  transactionId: string;
-  jobHome: number;
-  job: IdentityJobRef;
-}>;
+export type { IdentityReceiptBinding } from './identity-epoch-contract.ts';
 export type IdentityAdmissionSource = Readonly<{
   input_original: string;
   source_route: number;

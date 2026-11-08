@@ -147,6 +147,10 @@ graph loading. Reusable read adapters expose their defining leaves explicitly; b
 public session adapter. These entries add no dependency allowances. This import-only migration uses workspace typing
 as acceptance; product behavior and existing assertions remain unchanged.
 
+Decision: Boundary repairs reuse existing public entries and extract shared CandidateValue and change explanation leaves;
+Semantic Source receives its identity store through the existing composition port. Native Character bindings keep concrete
+page adapters at composition, while transaction, actor, deadline, work and dependency allowances stay unchanged.
+
 **Enforcement.** One static architecture check (manifest validation plus a dependency-graph check) runs on every
 landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
 before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,

@@ -2,7 +2,7 @@ import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import type { Access, AccessCheck, Actor } from '../request/access.ts';
 import type { SessionComponent } from '../tokens/session.ts';
-import type { SourceFenceTuple } from '../content/source-fences.ts';
+import type { SourceFenceTuple } from '../content/index.ts';
 import type { CopyWorkDisclosureObservation, CopyWorkDisclosureState } from './copy-work-disclosure-contract.ts';
 import type { IdentityMapping } from './identity-epoch-contract.ts';
 import type { SubjectSummary, SubjectSummaryObservation, SummaryDependencies } from './summaries.ts';

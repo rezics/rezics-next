@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { ConfigError } from '../commerce/config.ts';
+export { partitionReadClient, partitionReadClientObservation, partitionReadClients } from './read-snapshot.ts';
 
 export const KERNEL_POOL_MAX = 10;
 const DEFAULT_ACQUIRE_TIMEOUT_MILLIS = 200;
