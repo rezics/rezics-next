@@ -714,6 +714,66 @@ test('idle Goals stay parked; a concurrent inbox wake is retained through pool r
   }
 });
 
+test('a blocked running Goal accepts one admitted inbox turn without reactivation', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    const threadId = manager.threadId!;
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
+    await s.client.request('thread/goal/set', { threadId, status: 'blocked' });
+    await s.managers.flush();
+    expect(s.managers.get(manager.id)).toMatchObject({
+      status: 'running',
+      threadId,
+      activeTurnId: null,
+      goalState: { status: 'blocked', objective: s.spec.objective, tokenBudget: s.spec.budget },
+    });
+
+    s.setTurnAllowed(false);
+    s.inbox.deliver({ managerId: manager.id, kind: 'decision', summary: 'Review the blocked Goal and choose the next action' });
+    await s.managers.wake(manager.id);
+    await s.managers.flush();
+    expect(s.inbox.notifications(manager.id)).toHaveLength(1);
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(1);
+
+    s.setTurnAllowed(true);
+    await s.managers.recover();
+    await s.managers.flush();
+    expect(s.managers.get(manager.id)).toMatchObject({
+      status: 'running',
+      threadId,
+      activeTurnId: 'turn-2',
+      waitingForInbox: false,
+      turns: 2,
+      goalState: { status: 'blocked', objective: s.spec.objective, tokenBudget: s.spec.budget },
+    });
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
+    expect(s.requests().filter((r) => r.method === 'turn/steer')).toHaveLength(0);
+    expect(s.inbox.notifications(manager.id)).toHaveLength(0);
+    expect(
+      s
+        .requests()
+        .filter((request) => request.method === 'thread/goal/set')
+        .map((request) => request.params.status),
+    ).toEqual(['active', 'paused', 'blocked']);
+    expect(
+      s.requests().filter((request) => request.method === 'turn/start').at(-1)?.params.input[0]?.text,
+    ).toBe('Review the blocked Goal and choose the next action');
+
+    await s.notify({ method: 'turn/completed', params: { threadId, turn: { id: 'turn-2', status: 'completed' } } });
+    const startsAfterCompletion = s.requests().filter((r) => r.method === 'turn/start').length;
+    await s.managers.recover();
+    await s.managers.flush();
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(startsAfterCompletion);
+    expect(s.managers.get(manager.id)).toMatchObject({ status: 'running', activeTurnId: null, goalState: { status: 'blocked' } });
+  } finally {
+    await s.close();
+  }
+});
+
 test('Inbox decisions wake the existing thread once before and after host recovery, preserving Goal objective, budget, usage and worker sessions.', async () => {
   const s = await setup();
   let recovered: ManagerSessions | undefined;

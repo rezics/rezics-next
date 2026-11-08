@@ -1047,7 +1047,9 @@ export class ManagerSessions {
       }
       state.waitingForInbox = false;
       this.save(state);
-    } else if (state.goalState?.status !== 'active') {
+    } else if (state.goalState?.status !== 'active' && state.goalState?.status !== 'blocked') {
+      // A running manager can still receive an admitted manual turn while its native Goal is blocked.
+      // Keep that native state intact; only a real inbox event may take the existing explicit turn path.
       this.save(state);
       return;
     }
