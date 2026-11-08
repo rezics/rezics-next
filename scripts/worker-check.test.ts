@@ -819,7 +819,7 @@ function workerFixture(): {
   const localMarker = join(root, 'local-marker');
   writeFileSync(
     join(scripts, 'remote-check.ts'),
-    `import { appendFileSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+    `import { appendFileSync, cpSync, existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { requestExecutionCancellation } from ${JSON.stringify(join(repository, 'scripts/remote-check.ts'))};
 appendFileSync(process.env.WORKER_REMOTE_EVENTS!, 'remote\\n');
@@ -872,9 +872,10 @@ if (mode === 'artifact') {
   const separator = launcherArgs.lastIndexOf('--');
   if (separator < 0) process.exit(92);
   const physicalRunId = process.env.REZICS_CHECK_PHYSICAL_RUN_ID!;
-  const relativeStage = process.env.REZICS_CHECK_ARTIFACTS_DIR!;
+  const relativeStage = process.env.REZICS_CHECK_ARTIFACTS_DIR ?? launcherArgs.find(value => value.startsWith('REZICS_CHECK_ARTIFACTS_DIR='))?.slice('REZICS_CHECK_ARTIFACTS_DIR='.length);
   const remoteRoot = process.env.WORKER_ARTIFACT_REMOTE_BASE! + '/run-' + physicalRunId;
   mkdirSync(remoteRoot, { recursive: true });
+  symlinkSync(${JSON.stringify(join(repository, 'scripts'))}, remoteRoot + '/scripts', 'dir');
   const artifactModule = await import(${JSON.stringify(join(repository, 'scripts/check-artifacts.ts'))});
   artifactModule.prepareArtifactRun(remoteRoot, physicalRunId);
   const command = Bun.spawn(launcherArgs.slice(separator + 1), {
@@ -3579,5 +3580,61 @@ test('fixed lifecycle argv preserves its original binding and cannot start throu
     expect(existsSync(join(root, '.temp/goal/checks/lifecycle'))).toBe(false);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a failed wrapper retains rejected producer bytes and manifest when the publication receipt is missing', async () => {
+  const fixture = workerFixture(),
+    old = { ...process.env };
+  const hosts = writeHosts(fixture);
+  const approved = JSON.parse(readFileSync(hosts, 'utf8'));
+  for (const host of approved.hosts) host.performance = true;
+  writeFileSync(hosts, JSON.stringify(approved));
+  const physical = randomUUID(),
+    logical = randomUUID();
+  const inner = `
+    import {mkdirSync,writeFileSync} from 'node:fs';
+    import {dirname,join} from 'node:path';
+    import {registerArtifactDeclarations,captureArtifactReturns} from ${JSON.stringify(join(repository, 'scripts/check-artifacts.ts'))};
+    import {KERNEL_CLIENT_OUTPUT,encodeOutputTree} from ${JSON.stringify(join(repository, 'scripts/check-output-tree.ts'))};
+    const root=process.cwd(), path=KERNEL_CLIENT_OUTPUT.transport;
+    const stage=process.env.REZICS_CHECK_ARTIFACTS_DIR, physical=process.env.REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID;
+    await registerArtifactDeclarations(root,stage,physical,[path]);
+    mkdirSync(join(root,KERNEL_CLIENT_OUTPUT.root),{recursive:true});
+    writeFileSync(join(root,KERNEL_CLIENT_OUTPUT.root,'retained.d.ts'),'export type Retained = true;');
+    mkdirSync(dirname(join(root,path)),{recursive:true});
+    writeFileSync(join(root,path),encodeOutputTree(root,{host:'a',run:'fixture-run',sourceSha256:'a'.repeat(64)}));
+    await captureArtifactReturns(root,stage,physical,[path]);
+    process.exitCode=1;
+  `;
+  const command = ['bun', '-e', inner];
+  for (let i = 0; i < 3; i++) recordPeak(fixture.memory, checkClass(command, fixture.root), 2 * 2 ** 30);
+  try {
+    Object.assign(process.env, placementEnvironment(fixture, hosts, 'artifact'));
+    process.env.WORKER_REMOTE_MODE = 'artifact';
+    process.env.WORKER_ARTIFACT_REMOTE_BASE = join(fixture.root, '.temp/fake-check-host');
+    const code = await runWorkerCheck(
+      command,
+      fixture.root,
+      false,
+      undefined,
+      60_000,
+      logical,
+      0,
+      undefined,
+      true,
+      physical,
+    );
+    expect(code).toBe(1);
+    const stage = join(fixture.root, '.temp/goal/checks/artifact-returns', physical);
+    expect(existsSync(join(stage, 'manifest.json'))).toBe(true);
+    expect(readFileSync(join(stage, 'files/000.bin'), 'utf8')).toContain('export type Retained = true;');
+    const manifest = JSON.parse(readFileSync(join(stage, 'manifest.json'), 'utf8'));
+    expect(manifest.physicalRunId).toBe(physical);
+    expect(manifest.entries[0].path).toBe('.temp/check-output-tree/kernel-client-v1.bin');
+  } finally {
+    restoreWorkerEnvironment(old);
+    if (old.WORKER_ARTIFACT_REMOTE_BASE === undefined) delete process.env.WORKER_ARTIFACT_REMOTE_BASE;
+    else process.env.WORKER_ARTIFACT_REMOTE_BASE = old.WORKER_ARTIFACT_REMOTE_BASE;
   }
 });

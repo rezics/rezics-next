@@ -354,7 +354,9 @@ or persisted the final.
 
 `stackRun({ returns: [...] })` and worker-check's `--returns <path>` declare workspace-relative output files. Each physical run accepts at most 64 unique paths and 256 MiB total. Absolute paths, dot or parent components, control characters, and symlink escapes are rejected. For a nested stack runner on an outer remote check host, worker-check prepares a staging directory keyed by the outer physical run ID; `stack-run` writes only the declared files and manifest there, and the outer remote transport returns that one directory before deleting its run directory.
 
-Returned bytes are checked against the manifest size and SHA-256 before they replace the declared local destination. A new physical run removes prior declared output so a stale image cannot prove a later result. Missing, oversized, unsafe, or failed staging is logged with the physical run identity; it does not rewrite the command's exit status or turn a missing output into a pass. A failed command may still return declared bytes that were written before failure. Returned files remain in the caller's workspace after remote cleanup; the per-run staging directory is removed after restoration.
+Returned bytes are checked against the manifest size and SHA-256 before they replace the declared local destination. A new physical run removes prior declared output so a stale image cannot prove a later result. Missing, oversized, unsafe, or failed staging is logged with the physical run identity; it does not rewrite the command's exit status or turn a missing output into a pass. A failed command may still return declared bytes that were written before failure. Returned files remain in the caller's workspace after remote cleanup; the per-run staging directory is removed only after complete restoration. Rejected, missing or unreadable returns
+retain that same physical staging directory and manifest for the existing owner to inspect or replay; a missing
+publication receipt is logged without deleting the only producer bytes.
 
 ### Durable worker-check custody
 
@@ -1135,6 +1137,14 @@ transport and compiler-input receipt together. Qualification permits that produc
 the authenticated atomic tree receiver publishes the exact consumer-compiled declarations. Missing transport or
 mismatched evidence requires typing-only proof; custom commands and changed source, configuration or dependencies
 never gain a pass from this pipeline rule.
+
+The official emitter adds `producerExitCode: 0` to its existing sealed tree header only after generation succeeds.
+A later consumer failure does not revoke that producer result: the authenticated receiver may publish its exact
+source-bound declarations while retaining the containing command's nonzero exit and all consumer failures. All
+host/run/source, complete-manifest, member-hash and atomic-publication checks still apply. Legacy bundles without
+this independent producer completion field retain their original rule: a failed containing command cannot qualify
+them. Neither producer publication nor retained failed-wrapper artifacts establishes a successful Web check.
+
 
 ## Check cost
 

@@ -255,6 +255,7 @@ test('wrong physical run, source, profile, root, version, failed command and for
     { profile: 'unknown' },
     { root: 'packages/client/src' },
     { status: 'pending' },
+    { producerExitCode: 23 },
   ]) {
     const changed = bundle([], [], patch as Partial<OutputTreeHeader>);
     expect(() => restoreOutputTree(consumer, changed, authority(changed))).toThrow();
@@ -521,3 +522,54 @@ test('unowned backup or staging links never gain deletion authority from a new r
   expect(readdirSync(outside)).toEqual([]);
   assertOld(consumer);
 });
+
+test('a completed official producer publishes exact declarations after a later consumer fails without changing its result', () =>
+  isolatedArtifactEnvironment(async () => {
+    const { withKernelClientOutput } = await import('./check-output-tree.ts');
+    const producer = workspace(),
+      consumer = workspace();
+    let calls = 0;
+    const producerExit = await withKernelClientOutput(
+      producer,
+      async () => {
+        calls++;
+        generated(producer, 3);
+        return 0;
+      },
+      {
+        recognize: () => ({
+          outcome: 'admitted',
+          runId: source.run,
+          scope: 'fixture.scope',
+          supervisor: { pid: 1, started: '1', group: 1 },
+        }),
+        prepared: () => source,
+      },
+    );
+    expect(producerExit).toBe(0);
+    const wrapperExit = 1;
+    const bytes = readOutputTreeFile(producer, PROFILE.transport);
+    const native = { ...source, exitCode: wrapperExit };
+    const entries = [
+      { path: PROFILE.transport, size: bytes.length, sha256: outputTreeDigest(bytes), kind: 'file' as const },
+    ];
+    receiveOutputTrees(producer, consumer, { status: 'complete', entries }, native, [PROFILE.transport]);
+    expect(collectOutputTree(consumer).members).toEqual(collectOutputTree(producer).members);
+    expect(
+      validateOutputTree(bytes, { ...native, bundleSha256: outputTreeDigest(bytes) }).header.producerExitCode,
+    ).toBe(0);
+    expect(wrapperExit).toBe(1);
+    expect(calls).toBe(1);
+    // Old bundles never acquire independent producer authority from a failed wrapper.
+    const legacy = encodeOutputTree(producer, source);
+    expect(() => restoreOutputTree(consumer, legacy, { ...native, bundleSha256: outputTreeDigest(legacy) })).toThrow(
+      'completed producer receipt',
+    );
+    expect(() =>
+      restoreOutputTree(consumer, bytes, {
+        ...native,
+        sourceSha256: 'b'.repeat(64),
+        bundleSha256: outputTreeDigest(bytes),
+      }),
+    ).toThrow('wrong source');
+  }));

@@ -9391,7 +9391,7 @@ test('lifecycle control uses the selected host run and recovers idempotently aft
   }
 });
 
-test.each(['complete', 'wrong-source', 'wrong-run', 'corrupt', 'missing', 'failed'] as const)(
+test.each(['complete', 'wrong-source', 'wrong-run', 'corrupt', 'missing', 'failed', 'consumer-failed'] as const)(
   'the real remote return pipeline receives the named 282-member profile with physical source custody: %s',
   async (mode) => {
     const caller = workspace(true);
@@ -9407,18 +9407,22 @@ test.each(['complete', 'wrong-source', 'wrong-run', 'corrupt', 'missing', 'faile
         writeFileSync(file, `export declare const query${i}: ${i};\n`);
       }
       const expected = collectOutputTree(producer).members;
-      const bytes = encodeOutputTree(producer, {
-        host: 'a',
-        run: 'template-run',
-        sourceSha256: mode === 'wrong-source' ? 'f'.repeat(64) : source.sourceSha256,
-      });
+      const bytes = encodeOutputTree(
+        producer,
+        {
+          host: 'a',
+          run: 'template-run',
+          sourceSha256: mode === 'wrong-source' ? 'f'.repeat(64) : source.sourceSha256,
+        },
+        mode === 'consumer-failed' ? 0 : undefined,
+      );
       const physical = scenario({
         a: {
           treeBundle: bytes.toString('base64'),
           treeSource: source.sourceSha256,
           treeWrongRun: mode === 'wrong-run',
           treeCorrupt: mode === 'corrupt',
-          exit: mode === 'failed' ? 23 : 0,
+          exit: mode === 'failed' || mode === 'consumer-failed' ? 23 : 0,
           present: mode === 'missing' ? [] : [PROFILE.transport],
         },
       });
@@ -9433,8 +9437,8 @@ test.each(['complete', 'wrong-source', 'wrong-run', 'corrupt', 'missing', 'faile
       expect(Buffer.byteLength(String(launches[0]!.launchCommand))).toBeLessThan(4096);
       expect(String(launches[0]!.script)).toContain(source.sourceSha256);
       expect(physical.events().filter((event) => event.kind === 'docker')).toHaveLength(0);
-      if (mode === 'complete') {
-        expect(result.code, result.stderr).toBe(0);
+      if (mode === 'complete' || mode === 'consumer-failed') {
+        expect(result.code, result.stderr).toBe(mode === 'consumer-failed' ? 23 : 0);
         expect(collectOutputTree(caller).members).toEqual(expected);
         expect(existsSync(join(caller, PROFILE.root, 'obsolete.d.ts'))).toBe(false);
         for (let i = 0; i < 282; i++) {

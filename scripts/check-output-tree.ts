@@ -53,6 +53,8 @@ export type OutputTreeHeader = OutputTreeBinding & {
   profile: typeof KERNEL_CLIENT_OUTPUT.profile;
   root: typeof KERNEL_CLIENT_OUTPUT.root;
   status: 'complete';
+  /** Official producer completed; a later consumer may still fail the containing command. */
+  producerExitCode?: 0;
   count: number;
   totalBytes: number;
   catalogueSha256: string;
@@ -238,7 +240,7 @@ export function collectOutputTree(root: string): { members: OutputTreeMember[]; 
   ordered(collected.map((item) => item.member));
   return { members: collected.map((item) => item.member), contents: collected.map((item) => item.bytes) };
 }
-export function encodeOutputTree(root: string, source: OutputTreeBinding): Buffer {
+export function encodeOutputTree(root: string, source: OutputTreeBinding, producerExitCode?: 0): Buffer {
   binding(source);
   const { members, contents } = collectOutputTree(root);
   const catalogue = Buffer.from(members.map((member) => `${JSON.stringify(member)}\n`).join(''));
@@ -251,6 +253,7 @@ export function encodeOutputTree(root: string, source: OutputTreeBinding): Buffe
     root: KERNEL_CLIENT_OUTPUT.root,
     ...source,
     status: 'complete',
+    ...(producerExitCode === 0 ? { producerExitCode } : {}),
     count: members.length,
     totalBytes: contents.reduce((sum, bytes) => sum + bytes.length, 0),
     catalogueSha256: outputTreeDigest(catalogue),
@@ -263,11 +266,7 @@ export function encodeOutputTree(root: string, source: OutputTreeBinding): Buffe
 export function validateOutputTree(bytes: Buffer, authority: OutputTreeAuthority): ValidatedOutputTree {
   binding(authority);
   if (bytes.length > OUTPUT_TREE_TRANSPORT_BYTES) fail('encoded byte bound');
-  if (
-    authority.exitCode !== 0 ||
-    !HASH.test(authority.bundleSha256) ||
-    outputTreeDigest(bytes) !== authority.bundleSha256
-  )
+  if (!HASH.test(authority.bundleSha256) || outputTreeDigest(bytes) !== authority.bundleSha256)
     fail('failed command or unauthenticated transport bytes');
   if (bytes.length > OUTPUT_TREE_TRANSPORT_BYTES || !bytes.subarray(0, MAGIC.length).equals(MAGIC))
     fail('unknown tree version or encoded byte bound');
@@ -281,7 +280,15 @@ export function validateOutputTree(bytes: Buffer, authority: OutputTreeAuthority
     return record;
   }
   const header = JSON.parse(line(OUTPUT_TREE_HEADER_BYTES).toString('utf8')) as OutputTreeHeader;
-  keys(header, 'catalogueSha256,count,host,profile,root,run,sourceSha256,status,totalBytes,version');
+  keys(
+    header,
+    `catalogueSha256,count,host,${Object.hasOwn(header, 'producerExitCode') ? 'producerExitCode,' : ''}profile,root,run,sourceSha256,status,totalBytes,version`,
+  );
+  if (
+    (header.producerExitCode !== undefined && header.producerExitCode !== 0) ||
+    (authority.exitCode !== 0 && header.producerExitCode !== 0)
+  )
+    fail('failed command lacks a completed producer receipt');
   if (header.version !== 1) fail('unknown tree version');
   if (
     header.profile !== KERNEL_CLIENT_OUTPUT.profile ||
@@ -515,7 +522,7 @@ export async function withKernelClientOutput(
     if (code !== 0) return code; // failed output can never become a successful tree receipt
     if (existsSync(safeOutputTreePath(root, generationMarker)))
       fail('client generation did not replace previous declarations');
-    const bytes = encodeOutputTree(root, source);
+    const bytes = encodeOutputTree(root, source, 0);
     atomic(root, KERNEL_CLIENT_OUTPUT.transport, bytes);
     return code;
   } finally {
@@ -639,7 +646,7 @@ export function receiveOutputTrees(
 ): void {
   const candidates = outputTreeTransportCandidates(sourceRoot, manifest, declarations);
   if (!candidates.length) return;
-  if (manifest.status !== 'complete' || terminal.exitCode !== 0) fail('incomplete or failed physical output');
+  if (manifest.status !== 'complete') fail('incomplete physical output');
   if (candidates.length !== 1) fail('duplicate physical output tree');
   const contains = (declaration: string, path: string) => path === declaration || path.startsWith(`${declaration}/`);
   if (
