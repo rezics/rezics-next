@@ -7,7 +7,7 @@ import { openDb } from './db.ts';
 import { settle } from './settle.ts';
 import { recoverWorkerTyping } from './typing-recovery.ts';
 import { WorkerJob } from './job.ts';
-import { captureTypingInputs } from './worker-check-typing-inputs.ts';
+import { beginTypingInputReceipt, readTypingInputReceipt, captureTypingInputs } from './worker-check-typing-inputs.ts';
 import { readFileSync } from 'node:fs';
 import { WorkerStore } from './store.ts';
 import { brief, harness, temporaryDirectory } from './test-support.ts';
@@ -15,6 +15,8 @@ import type { Attempt, Settings } from './types.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import type { WorkerTasks } from './tasks.ts';
 import {
+  isTypingSettlementResult,
+  isTypingEvidenceUnavailableResult,
   checkCommandIncludesTypecheck,
   admitWorkerCheckHostRun,
   readWorkerCheckHostStamp,
@@ -399,7 +401,7 @@ test('a final verification typecheck failure keeps its stamp and the next refusa
   }
 });
 
-test('settlement records a typing failure after a failed or stale host typecheck; failing tests alone keep today handling', () => {
+test('settlement distinguishes compiler failures from stale evidence; failing tests alone keep today handling', () => {
   const controller = temporaryDirectory();
   const worktree = temporaryDirectory();
   try {
@@ -480,8 +482,9 @@ test('settlement records a typing failure after a failed or stale host typecheck
       limit: 2,
     });
     expect(stale.ok).toBe(false);
-    if (stale.ok) throw new Error('expected stale typing failure');
-    expect(stale.result).toContain('Worktree content changed after the last check-host typecheck.');
+    if (stale.ok) throw new Error('expected pending typing evidence');
+    expect(stale.kind).toBe('evidence-unavailable');
+    expect(stale.result).toContain('Compiler input closure is unavailable');
     expect(stale.result).toContain('Legacy evidence has no retained compiler-input closure');
     tests.close();
     passed.close();
@@ -780,4 +783,73 @@ test('missing compiler evidence parks completed source without a model retry, th
   } finally {
     await h.disposeAsync();
   }
+});
+
+test.each(['during', 'after'])(
+  'zero-exit input drift %s compilation retains the same completed attempt without a writer',
+  async (when) => {
+    const h = harness();
+    try {
+      const command = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'];
+      const physical = 'b2b2b2b2-2222-4222-8222-222222222222';
+      const retained = await settleSuccessWithHostCheck(h, 'kernel typecheck completed', (budget, worktree) => {
+        const env = {
+          REZICS_TYPING_INPUTS_PHYSICAL: physical,
+          REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(command)).toString('base64'),
+        };
+        const complete = beginTypingInputReceipt(worktree, env, command)!;
+        const change = () => writeFileSync(join(worktree, 'drift.ts'), 'export const changed = true;');
+        if (when === 'during') change();
+        complete(0);
+        if (when === 'after') change();
+        const file = join(budget, '1');
+        const stamp = JSON.parse(readFileSync(file, 'utf8'));
+        stamp.exitCode = 0;
+        stamp.typingRequest = {
+          physicalRunId: physical,
+          command,
+          capture: 'physical-command',
+          localPrepared: [],
+        };
+        stamp.typingInputs = readTypingInputReceipt(worktree, physical, command);
+        writeFileSync(file, JSON.stringify(stamp));
+      });
+      expect(retained.landings).toEqual([]);
+      expect(h.store.attempt(retained.ref)).toMatchObject({
+        failureKind: null,
+        result: 'RESULT: success',
+        typingEvidencePending: { command },
+      });
+      const job = new WorkerJob(
+        h.tasks,
+        {
+          enqueue: () => {
+            throw new Error('unverified source cannot land');
+          },
+        },
+        { deliver: () => {} },
+      );
+      h.store.saveRetryIntent(retained.ref, {});
+      h.tasks.retry = async () => {
+        throw new Error('unverified evidence cannot start a source writer');
+      };
+      job.resumePendingRetries();
+      await job.drain();
+      expect(h.store.retryIntent(retained.ref)?.status).toBe('abandoned');
+      expect(h.store.task(retained.task.id).currentAttempt).toBe(1);
+      expect(await recoverWorkerTyping(h.tasks, job.landing, retained.ref)).toMatchObject({ status: 'pending' });
+    } finally {
+      await h.disposeAsync();
+    }
+  },
+  15_000,
+);
+
+test('historical drift settlement recovers compiler evidence while genuine compiler errors retain source repair', () => {
+  const stale = 'Worktree content changed after the last check-host typecheck. retained log';
+  expect(isTypingSettlementResult(stale)).toBe(true);
+  expect(isTypingEvidenceUnavailableResult(stale)).toBe(true);
+  const failed = 'Last check-host run failed its typecheck. error TS2322';
+  expect(isTypingSettlementResult(failed)).toBe(true);
+  expect(isTypingEvidenceUnavailableResult(failed)).toBe(false);
 });

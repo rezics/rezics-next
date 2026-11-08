@@ -58,8 +58,13 @@ import {
   settleWorkerCheckHostBudget,
   workerCheckHostCommandReached,
 } from '../tools/goal/src/worker-check-budget.ts';
-import { typingInputCommand, typingInputsReceiptPath } from '../tools/goal/src/worker-check-typing-inputs.ts';
+import {
+  kernelClientTypingPipeline,
+  typingInputCommand,
+  typingInputsReceiptPath,
+} from '../tools/goal/src/worker-check-typing-inputs.ts';
 import { acquireStackSlot } from './stack-lease.ts';
+import { KERNEL_CLIENT_OUTPUT } from './check-output-tree.ts';
 import {
   CHECK_RECORD_CUSTODY_VERSION,
   controllerProofReservationPath,
@@ -1197,6 +1202,11 @@ export function workerCheckNeedsStack(argv: readonly string[], cwd = process.cwd
   return classifyCheck(argv, resolve(cwd)).placement === 'remote';
 }
 
+/** Official compiler outputs use the existing authenticated output-tree transport. */
+export function workerCheckCompilerOutputs(argv: readonly string[], root = process.cwd()): string[] {
+  return kernelClientTypingPipeline(root, argv) ? [KERNEL_CLIENT_OUTPUT.transport] : [];
+}
+
 export async function runWorkerCheck(
   argv: readonly string[],
   cwd = process.cwd(),
@@ -1232,6 +1242,9 @@ export async function runWorkerCheck(
   const declaredReturns = validateArtifactDeclarations(returnPaths);
   returnPaths.splice(0, returnPaths.length, ...declaredReturns);
   const root = resolve(cwd);
+  const compilerOutputs = typingInvocation ? workerCheckCompilerOutputs(argv, root) : [];
+  const clientPipeline = compilerOutputs.length > 0;
+  for (const path of compilerOutputs) if (!returnPaths.includes(path)) returnPaths.push(path);
   if (typingInvocation) returnPaths.push(typingInputsReceiptPath(physicalRunId));
   const checkId = recordedCheckId ?? (/^[0-9a-f-]{36}$/i.test(logicalCheckId ?? '') ? logicalCheckId! : randomUUID());
   const cancellation = workerCheckCancellation(checkId, root);
@@ -1421,7 +1434,8 @@ export async function runWorkerCheck(
     const artifactRelative = artifactRunRelativePath(physicalRunId);
     let artifactPrepared = false;
     try {
-      if (!lifecycle) {
+      if (!lifecycle && !clientPipeline) {
+        // The complete tree is declared directly; do not duplicate it in a nested envelope.
         prepareArtifactRun(root, physicalRunId);
         artifactPrepared = true;
       }
