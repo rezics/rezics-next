@@ -172,6 +172,7 @@ test('filtered preview exhausts native Members pages before status confirmation'
   expect(operation.selectionSource).toMatchObject({
     id: source.id,
     revision: source.revision + 101,
+    sort: 'id',
     scannedCandidates: 101,
     selectedSubjects: 1,
   });

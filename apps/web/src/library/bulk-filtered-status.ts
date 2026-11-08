@@ -35,7 +35,11 @@ export function captureFilteredStatus(
 ): FilteredStatusCapture {
   if (!sourceId || !libraryEntryStateWrite(state)) throw new TypeError('Invalid filtered status request');
   const query = collectionFilterQuery(filter);
-  const request: Admission = { action: 'set_status', state, selection: { kind: 'query', sourceId, ...query } };
+  const request: Admission = {
+    action: 'set_status',
+    state,
+    selection: { kind: 'query', sourceId, sort: 'id', ...query },
+  };
   const body = JSON.stringify(request);
   if (new TextEncoder().encode(body).byteLength > 64 * 1024)
     throw new RangeError('Filtered status request exceeds limit');
@@ -65,7 +69,7 @@ function matches(operation: FilteredStatusOperation, capture: FilteredStatusCapt
     operation.state === capture.state &&
     source?.id === capture.sourceId &&
     !!source.sourceDigest &&
-    source.sort === null &&
+    source.sort === 'id' &&
     sameFilter(source.filter, capture.filter)
   );
 }

@@ -6,7 +6,7 @@ export type RemovalOperation = BulkOperation;
 export type RemovalOutcome = BulkOutcomes['outcomes'][number];
 type NativeRequest = Parameters<KernelClient['libraryOperations']['post']>[0];
 export type RemovalRequest = Extract<NativeRequest, { action: 'remove_from_collection' }> & {
-  selection: { kind: 'query'; sourceId: string; filter?: string };
+  selection: { kind: 'query'; sourceId: string; filter?: string; sort: 'id' };
 };
 export type RemovalResult =
   | { state: 'ready'; operation: RemovalOperation }
@@ -33,7 +33,12 @@ export function filteredOccurrenceRemovalManifest(
   const request: RemovalRequest = {
     action: 'remove_from_collection',
     collectionId: source.id,
-    selection: { kind: 'query', sourceId: source.id, ...(filter ? { filter: JSON.stringify(filter) } : {}) },
+    selection: {
+      kind: 'query',
+      sourceId: source.id,
+      ...(filter ? { filter: JSON.stringify(filter) } : {}),
+      sort: 'id',
+    },
   };
   const body = JSON.stringify(request);
   if (new TextEncoder().encode(body).byteLength > 64 * 1024) throw new Error('Bulk command exceeds 64 KiB');
@@ -131,6 +136,7 @@ export class FilteredOccurrenceRemoval {
       operation.collectionId !== manifest.source.id ||
       !source ||
       source.id !== manifest.source.id ||
+      source.sort !== 'id' ||
       source.membershipKind !== 'curated' ||
       !source.sourceDigest ||
       !operation.selectionComplete ||
@@ -144,8 +150,9 @@ export class FilteredOccurrenceRemoval {
     try {
       const request: RemovalRequest = JSON.parse(manifest.preview.body);
       return (
+        request.selection.sort === 'id' &&
         canonical(source.filter === null ? null : JSON.parse(source.filter)) ===
-        canonical(request.selection.filter === undefined ? null : JSON.parse(request.selection.filter))
+          canonical(request.selection.filter === undefined ? null : JSON.parse(request.selection.filter))
       );
     } catch {
       return false;

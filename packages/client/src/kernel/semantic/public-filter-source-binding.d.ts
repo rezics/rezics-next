@@ -244,8 +244,11 @@ export type NativePublicFilterPublicationCompletion = Readonly<{
 export declare function createPublicFilterSourceBinding(pool: Pool, routing: Uint8Array, access: Access): PublicFilterSourceBootstrapBinding;
 export declare function readNativePublicFilterPublicationCompletion(binding: PublicFilterSourceBinding, request: NativePublicFilterPublicationRequest, context: PublicFilterConsumerContext): Promise<NativePublicFilterPublicationCompletion>;
 /** Internal native preparation handoff; the bootstrap remains the original persisted Source cut. */
-type NativePreparationInput = Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] | Readonly<{
+type NativePreparationInput = (Parameters<PublicFilterSourceBootstrapBinding['begin']>[0] & Readonly<{
+    inputLimit?: number;
+}>) | Readonly<{
     bootstrap: string;
+    inputLimit?: number;
 }>;
 export type NativePublicFilterPreparation = PublicSourceBootstrapResult | Readonly<{
     status: 'preparing';

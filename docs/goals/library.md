@@ -54,7 +54,7 @@ the other.
 
 - [Library and Collections](../library-and-collections.md) owns shared facts, identities, disclosure, destinations and
   lifecycle; the [Library module](../../services/kernel/src/library/README.md) owns native algorithms and composition.
-- Specialized contracts: [labels](../library-labels.md), [profiles](../library-profile-consumers.md),
+- Specialized contracts: [bulk selection and actions](../library-bulk.md), [labels](../library-labels.md), [profiles](../library-profile-consumers.md),
   [dynamic Collections](../dynamic-collections.md), [owner queries](../library-owner-queries.md),
   [Continue](../library-continue.md), [pins](../library-pins.md), [filtered lists](../filtered-lists.md),
   [Collection presentation](../collection-presentation.md), [Collection Source](../collection-source.md),

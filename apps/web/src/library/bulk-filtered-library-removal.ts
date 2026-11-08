@@ -124,6 +124,7 @@ export class FilteredLibraryRemoval {
       operation.selectionKind === 'query' &&
       operation.collectionId === null &&
       operation.selectionSource?.id === this.request.selection.sourceId &&
+      operation.selectionSource.sort === 'id' &&
       operation.selectionComplete &&
       operation.counts.targets <= 1000
     );

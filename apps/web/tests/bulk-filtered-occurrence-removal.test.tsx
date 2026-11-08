@@ -26,7 +26,7 @@ const operation = (phase: RemovalOperation['phase'] = 'preview'): RemovalOperati
     exposure: 'private',
     sourceDigest: 'native-source',
     filter: null,
-    sort: null,
+    sort: 'id',
     scannedCandidates: 3,
     selectedSubjects: 1,
   },
@@ -108,7 +108,7 @@ test('whole-filtered review uses all persisted occurrence IDs, preserving duplic
   expect(JSON.parse(calls[0]!.body)).toEqual({
     action: 'remove_from_collection',
     collectionId: source.id,
-    selection: { kind: 'query', sourceId: source.id },
+    selection: { kind: 'query', sourceId: source.id, sort: 'id' },
   });
   await journey.read();
   expect(journey.state.read?.state === 'ready' && journey.state.read.page.outcomes.map((x) => x.memberId)).toEqual([
