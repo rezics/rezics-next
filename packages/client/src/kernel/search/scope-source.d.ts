@@ -1,10 +1,9 @@
 import { type FilterDocument, type FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { type KernelClock } from '../clock.ts';
-import type { CollectionSourceObservation } from '../library/collection-source.ts';
 import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
-import type { NativeSourceIdentity } from '../library/native-source-custody.ts';
-import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
+import type { CollectionSourceObservation, NativeSourceIdentity } from '../library/contract/index.ts';
+import type { NativeOrdinalKey } from '../library/contract/index.ts';
 import { type SearchScopeOrder, type SearchScopeOrdinalPrefix } from './service-scope-order.ts';
 import type { LeafOptions, LeafProgress, LeafWork } from '../semantic/scope-leaf-evidence.ts';
 import { type ScopeLeafPosition } from './scope-progress.ts';
@@ -14,6 +13,7 @@ import type { SearchHit } from './query.ts';
 import { type PreparedRealmScope, type RealmSubjectCapabilities } from './realm-scope.ts';
 import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
 import { type IndexedSubject, type RelationFacetMatch, type SubjectSource } from './source.ts';
+import type { SearchLibraryScopePort } from './library-scope-port.ts';
 import { type ScopeNameSortTuple, type ScopeNativeOrder, type ScopeOrderedPrefixRequest, type SearchScopeOrderedPrefix } from './scope-ordered.ts';
 export type { ScopeNativeOrder, ScopeNameSortTuple, ScopeCollectionsSortTuple, ScopeOrderedPrefixRequest, SearchScopeOrderedPrefix, } from './scope-ordered.ts';
 /** Independent native work reservation; none of these units are candidate keys. */
@@ -95,7 +95,7 @@ export type SearchScopeEvaluation = {
 /** Native service runtime, immutable admission and factory-local handles. Native producers
  * own structural capture, current authorization and evidence; this module owns execution.
  */
-export declare function createSearchScopeSource({ pool, client, prefix, source: _source, release, realmRelease, evidence, realmSubjects, realmSubjectCapabilities, clock, }: {
+export declare function createSearchScopeSource({ pool, client, prefix, source: _source, release, realmRelease, evidence, realmSubjects, realmSubjectCapabilities, clock, library, }: {
     pool: Pool;
     client: OpenSearch;
     prefix: string;
@@ -109,6 +109,7 @@ export declare function createSearchScopeSource({ pool, client, prefix, source: 
     realmSubjects?: RealmSubjectSource;
     realmSubjectCapabilities?: RealmSubjectCapabilities;
     clock?: KernelClock;
+    library?: SearchLibraryScopePort;
 }): {
     realm: {
         realms(scope: PreparedRealmScope): readonly string[];
@@ -117,11 +118,11 @@ export declare function createSearchScopeSource({ pool, client, prefix, source: 
             work: WorkReceipt;
         }>>;
         sourcePrefix(scope: PreparedRealmScope, realm: string, after: string | null, limit: number, allowance: WorkAllowance): Promise<{
+            basis: string;
+            work: WorkReceipt;
             subjects: readonly string[];
             after: string | null;
             exhausted: boolean;
-            basis: string;
-            work: WorkReceipt;
         }>;
         evaluate(scope: PreparedRealmScope, subjects: readonly string[], allowance: WorkAllowance): Promise<{
             basis: string;

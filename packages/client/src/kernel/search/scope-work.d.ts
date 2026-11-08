@@ -1,6 +1,5 @@
 import type { WorkAllowance, WorkDimensions, WorkReceipt, IdentityScopeWork, PublicFilterCost, LeafWork } from './scope-execution.ts';
-export declare const scopeWorkAxes: readonly ['candidateKeys', 'nativeRows', 'identityMetadataRows', 'emptySeeks', 'nativePoints', 'witnessKeys', 'statements', 'bytes'];
-export declare function zeroScopeWork(): WorkDimensions;
+export { scopeWorkAxes, zeroScopeWork } from './contract/index.ts';
 /** Compatibility ceilings are independent of the candidate reservation. They never grow on refill. */
 export declare function scopeAllowance(keys: number, reservationId: string, remaining?: WorkDimensions): WorkAllowance;
 export declare class ScopeWork {

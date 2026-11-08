@@ -1,13 +1,13 @@
 import type { Pool } from 'pg';
-import { type PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
-import { type AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
-import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
+import type { PublicFilterConsumer } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerContext, PublicFilterConsumerUnavailable } from './public-filter-consumer-contract.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import { type IndexAction, type SubjectDocument } from './document.ts';
 import { type OpenSearch } from './opensearch.ts';
 import { type SubjectListingSource, type SubjectSource } from './source.ts';
 import { type DiscoveryProjection, type DiscoveryRepairEffect } from './account-discovery.ts';
+import type { SearchNativePublicationCompletionReader, SearchPublicFilterCost } from './semantic-source-port.ts';
 /** Durable native evidence retained by the existing writer, never supplied by Source callers. */
 export type SearchRepairWriterReceipt = Readonly<{
     locator: string;
@@ -105,7 +105,7 @@ export declare function createDiscoveryRepairWriter(options: {
         completion: IdentityNativeReceipt;
     }>>;
 };
-export declare const SEARCH_IDENTITY_WRITER_CHUNK = 100;
+export { SEARCH_IDENTITY_WRITER_CHUNK } from './writer-limits.ts';
 /** A locator only. All adoption reads retained native rows under the current home owner. */
 export type SearchWriterBarrierLocator = Readonly<{
     partition: number;
@@ -170,24 +170,24 @@ export type SearchWriterPublicationGuard = SearchWriterGuard & Readonly<{
     }>, context: PublicFilterConsumerContext): Promise<{
         status: 'fenced';
         fence: SearchWriterPublicationFence;
-        cost: PublicFilterCost;
+        cost: SearchPublicFilterCost;
     } | PublicFilterConsumerUnavailable>;
     drainPublication(fence: SearchWriterPublicationFence, context: PublicFilterConsumerContext): Promise<{
         status: 'draining' | 'drained';
         fence: SearchWriterPublicationFence;
-        cost: PublicFilterCost;
+        cost: SearchPublicFilterCost;
     } | PublicFilterConsumerUnavailable>;
     adoptPublication(fence: SearchWriterPublicationFence, context: PublicFilterConsumerContext): Promise<{
         status: 'held';
         fence: SearchWriterPublicationFence;
-        cost: PublicFilterCost;
+        cost: SearchPublicFilterCost;
     } | PublicFilterConsumerUnavailable>;
     releasePublication(fence: SearchWriterPublicationFence, context: PublicFilterConsumerContext): Promise<{
         status: 'released';
-        cost: PublicFilterCost;
+        cost: SearchPublicFilterCost;
     } | PublicFilterConsumerUnavailable>;
 }>;
-export declare function bindSearchWriterPublicationSource(guard: SearchWriterPublicationGuard, binding: PublicFilterSourceBinding): void;
+export declare function bindSearchWriterPublicationReader(guard: SearchWriterPublicationGuard, reader: SearchNativePublicationCompletionReader): void;
 /** Read current native projection bodies with the external versions actually settled by this writer.
  * A later writer-custody command advances the home head without changing those external versions.
  * Missing/uncertain custody returns null and cannot certify a generation.

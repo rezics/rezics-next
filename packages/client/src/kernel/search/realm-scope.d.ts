@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import type { RelationFacetMatch } from './source.ts';
-import { type RealmSubjectSource, type RealmSubjectDisclosure, type RealmSubjectMaintenance } from '../content/realm-subject-source.ts';
+import type { RealmSubjectSource, RealmSubjectDisclosure, RealmSubjectMaintenance } from '../content/realm-subject-source.ts';
 export type { RealmSubjectObservation, RealmSubjectResolution, RealmSubjectMembership, RealmSubjectSource, RealmSubjectDisclosure, RealmSubjectMaintenance, } from '../content/realm-subject-source.ts';
 /** Native composition belongs to Content. Supplying only structural census or exact
  * candidate disclosure cannot establish live population readiness.
@@ -33,6 +33,7 @@ export declare function createRealmScopeSource(input: {
     reader?: LeafOptions;
     source?: RealmSubjectSource;
     capabilities?: RealmSubjectCapabilities;
+    library?: import('./library-scope-port.ts').SearchLibraryScopePort;
     release: (digest?: string) => Promise<Readonly<{
         digest: string;
         release: FilterRelease;
@@ -46,11 +47,11 @@ export declare function createRealmScopeSource(input: {
     }>>;
     /** Raw producer input for finite preparation. Never a successful Search result page. */
     sourcePrefix(scope: PreparedRealmScope, realm: string, after: string | null, limit: number, allowance: WorkAllowance): Promise<{
+        basis: string;
+        work: WorkReceipt;
         subjects: readonly string[];
         after: string | null;
         exhausted: boolean;
-        basis: string;
-        work: WorkReceipt;
     }>;
     /** Preparation-only full catalogue/Realm predicate, using the existing native
      * catalogue evaluator and its ledger. Final Search disclosure still requires the

@@ -11,7 +11,7 @@ import type { Resource, AccessCheck } from '../../request/access.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import type { Pool } from 'pg';
-import { type PublicSearchPage } from '../service.ts';
+import type { PublicSearchPage } from '../service-contract.ts';
 import { EmptyRecoverySchema } from './empty-recovery-schemas.ts';
 import { MatchEvidenceSchema } from './match-evidence-schema.ts';
 

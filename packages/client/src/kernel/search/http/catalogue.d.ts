@@ -3,7 +3,7 @@ import { activeRelease } from '../../semantic/definitions.ts';
 import type { Resource, AccessCheck } from '../../request/access.ts';
 import type { Static } from 'typebox';
 import type { Pool } from 'pg';
-import { type PublicSearchPage } from '../service.ts';
+import type { PublicSearchPage } from '../service-contract.ts';
 import { EmptyRecoverySchema } from './empty-recovery-schemas.ts';
 export declare const FactSchema: import("typebox").TUnion<[import("typebox").TObject<{
     kind: import("typebox").TLiteral<"item">;

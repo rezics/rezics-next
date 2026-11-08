@@ -11,7 +11,7 @@ import {
 import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import { parseText } from './text.ts';
-import type { SearchRequest } from './service.ts';
+import type { SearchRequest } from './service-contract.ts';
 import type { PublicFilterSource } from '../semantic/index.ts';
 import type { PublicFilterConsumerOperations } from './public-filter-consumer-contract.ts';
 import { withReadTransaction } from '../semantic/read.ts';

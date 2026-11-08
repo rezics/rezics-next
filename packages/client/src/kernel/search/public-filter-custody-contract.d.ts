@@ -1,9 +1,9 @@
 import type { KindCataloguePin } from '@rezics/definitions';
 import type { PublicCanonicalCaptureInput, PublicFilterConsumerCaptureInput, PublicFilterConsumerContext, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
-import type { PrivacyReductionStart, PublicFilterConsumer, PublicFilterCost, PublicFilterDependencyKey, PublicFilterProjectionMeaning } from '../semantic/public-filter-source-contract.ts';
+import type { PrivacyReductionStart, PublicFilterConsumer, PublicFilterCost, PublicFilterDependencyKey, PublicFilterProjectionMeaning } from '../semantic/index.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
-import type { PublicFilterSourceBinding, NativeSourceRepairLocator, PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
+import type { PublicFilterSourceBinding, NativeSourceRepairLocator, PublicSourceRepair } from '../semantic/index.ts';
 /** Structural Source data copied by trusted producers; custody never certifies Source authority. */
 export type CustodyDefinition<Capture extends PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput> = Readonly<{
     source: Readonly<{
@@ -90,7 +90,7 @@ export type PublicFilterRepairSettlementResult = CustodyFailure | Readonly<{
     cost: CustodyCost;
 }>;
 /** The original Source module owns repair verification and its durable locators. */
-export type { NativeSourceRepairLocator, NativeSourceRepairRead, NativeSourceRepairVerification, NativeSourceRepairStepRead, NativeSourceRepairStepVerification, } from '../semantic/public-filter-source-binding.ts';
+export type { NativeSourceRepairLocator, NativeSourceRepairRead, NativeSourceRepairVerification, NativeSourceRepairStepRead, NativeSourceRepairStepVerification, } from '../semantic/index.ts';
 export type PublicFilterRepairSourceBinding = PublicFilterSourceBinding;
 export type RetainedSourceRepair = Omit<PublicSourceRepair, 'receipt'> & Readonly<{
     receipt: NativeSourceRepairLocator;

@@ -1,13 +1,13 @@
 import type { FilterDocument } from '@rezics/filter';
-import type { PublicFilterCost, PublicFilterProjectionMeaning } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterCost, PublicFilterProjectionMeaning } from '../semantic/index.ts';
 import type { PublicFilterConsumerCapture, PublicFilterConsumerContext, PublicFilterConsumerOperations, PublicFilterConsumerUnavailable, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
 import type { FacetDiscoveryValue } from './facet-discovery-contract.ts';
 import type { ScopedFacetAdmission } from './scoped-facet-source.ts';
 import type { TextNode } from './text.ts';
 import type { CreditQualifierOperand } from './credit-search-query.ts';
-/** Native facet plan after ordinary facet admission. A scoped request is supplied internally by its owner;
- * its source identity, meaning, population observation and current authorization are retained and rechecked.
- * The facet wire remains unchanged.
+/** Native facet plan after ordinary facet admission. A scoped request is supplied internally by its owner
+ * through `createScopedFacetApplication`; its source identity, meaning, population observation and current
+ * authorization are retained and rechecked. The facet wire remains unchanged.
  */
 export type FacetNativePlan = Readonly<{
     filterDocument: FilterDocument | undefined;
