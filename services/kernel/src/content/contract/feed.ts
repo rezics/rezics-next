@@ -51,6 +51,8 @@ export type FeedPosition = Readonly<{
   following: string | null | false;
   continue: string | null | false;
   resume: Readonly<{ fingerprint: string; after: string }> | null;
+  /** Native Rating question revision admitted by this cursor, when selected. */
+  ratingQuestionRevision?: number;
 }>;
 
 export type FeedKey<Owner extends string = string, Kind extends string = string> = Readonly<{
@@ -289,6 +291,23 @@ export type FeedItem =
 export type FeedLaneCandidate = Readonly<{
   item: FeedItem | null;
   after?: string;
+  /** Current Content witness carried by the source candidate; never serialized on FeedItem. */
+  questionWitness?: Readonly<
+    { subjectId: string; threadId: string; voteRevision?: number } & (
+      | { kind: 'thread'; postId?: never }
+      | { kind: 'post'; postId: string }
+    )
+  >;
+  /** Search can identify a selected review whose exact readable witness is unavailable. */
+  questionWitnessState?: 'absent' | 'refused';
+}>;
+
+export type FeedQuestionAdmission = 'current' | 'absent' | 'refused';
+export type FeedQuestionSession = Readonly<{
+  id: string;
+  revision: number;
+  qualify(candidates: readonly FeedLaneCandidate[]): Promise<readonly FeedQuestionAdmission[]>;
+  finish(): Promise<void>;
 }>;
 
 export type FeedPage = Readonly<{
@@ -425,6 +444,10 @@ export type FeedSpacePort = Readonly<{
   ): Promise<FeedSpaceSession | undefined>;
 }>;
 
+export type FeedQuestionPort = Readonly<{
+  open(actor: FeedActor, ratingQuestionId: string, deadline: number): Promise<FeedQuestionSession>;
+}>;
+
 export type FeedFinishResult = {
   items: FeedItem[];
   rewind?: ReadonlySet<FeedLane>;
@@ -472,6 +495,7 @@ export type FeedApplicationPorts = Readonly<{
   presentation?: FeedPresentationPort;
   discovery?: FeedDiscoveryPort;
   following?: FeedFollowingPort;
+  question: FeedQuestionPort;
   admission: FeedAdmissionPort;
   cursor: FeedCursorPort;
   space: FeedSpacePort;

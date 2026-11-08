@@ -308,8 +308,13 @@ Home accepts exact `spaceId` and `ratingQuestionId` request selections. Space se
 uses the existing Following order and examined positions, including sparse continuation;
 Discovery and Continue intersect their original complete populations before page selection.
 An unknown or unreadable selected Space returns `not_found`. Question selection still
-returns `dependency_unavailable` before enumeration until its original population producer
-is composed; point review witnesses do not activate it. Failed source lanes
+resolves the current native question before enumeration, then qualifies each candidate in
+the existing bounded Discovery, Following and Continue windows with an immutable readable
+review witness for that exact Subject, review, thread or post. Kind, Space and question
+membership are conjunctive on the same primary candidate. The encrypted cursor binds the
+question's current revision, the complete selection and current viewer authority; a revised
+or unreadable selection cannot resume the old page. Qualification consumes no votes or
+aggregates and never widens a lane's candidate or frontier budget. Failed source lanes
 remain omitted; only a ready lane with a native frontier enables Next, while Retry may
 retry a failed lane. The available default sources remain catalogue/Account discovery,
 recent Following and Continue. Adopted public Collection/review/Space discovery awaits the native producers
@@ -504,10 +509,10 @@ Dependency failure propagates to the page owner rather than returning a guessed 
 Content's [native witness reader](../services/kernel/src/content/README.md#review-backed-question-witnesses)
 checks exact primary/review pairs against current question authority, opening citations and disclosure.
 Private vote changes preserve published citations. Opening edits and retirement affect the next witness
-read. These point reads supply no population coverage and do not activate candidate selection.
+read. These point reads supply no population coverage. Home applies them only to candidates in its original bounded
+Discovery, Following and Continue windows; it does not activate the Search request predicate.
 
-Rating-question Context has an adopted meaning and a feed request surface; native
-candidate eligibility integration remains undelivered. It selects one exact native rating-question
+Home's selected-question path selects one exact native rating-question
 identity. A Subject qualifies when at least one live currently readable review of that
 exact Subject has a currently readable opening revision whose immutable citation names
 the selected question. A review thread requires its own current opening citation and a
@@ -520,13 +525,14 @@ claim that the cited review was posted in the selected Space.
 Private votes, aggregates, question applicability/grain, editorial Contexts and Realm
 populations are not membership witnesses. The separate future request-only `ratingQuestion.id`
 predicate shape remains uninstalled; it is not a stored-reference predicate, permission or rating threshold.
-Before exposing a Context selector, finish current native witnesses and lifecycle/Source
-coverage, definitions:read before enumeration, bounded real question choices with signed
-keysets and current metadata, signed selection/revision binding and the default feed
-composition. Preserve native candidate/frontier bounds and unavailable responses; no
-browser filter, downloaded-first-page directory or selectable placeholder supplies these
-dependencies. Kind and actual Space delivery need not wait for Context. The full dimensions
-outcome remains incomplete.
+The Home reader resolves `definitions:read` before enumeration and binds the current question revision to its
+existing signed cursor. For Subject cards, it reads an evenly divided bounded prefix of review identity
+dependencies and admits only an exact readable witness; an exhausted prefix with no match is absent, while
+overflow or a refused witness keeps that lane retryable. This does not read votes or increase the existing
+candidate/frontier budgets. Full Search population coverage and Context membership remain separate work.
+
+Decision: Home admits a selected-question card only through a current native question and an immutable readable
+review witness for its exact primary candidate; cursors bind the current revision, complete selection and viewer authority.
 
 ## Home review and immediate-parent receiving
 

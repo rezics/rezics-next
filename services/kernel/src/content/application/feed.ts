@@ -106,7 +106,12 @@ export function createFeedApplication(
       const position: FeedPosition = query.cursor
         ? await ports.cursor.decode(actor, bindingQuery, languages, query.cursor, now)
         : initialFeedPosition({ stream, personal, boundary: now.toISOString() });
-      if (query.ratingQuestionId !== undefined) return ports.refuse('dependency_unavailable');
+      const question =
+        query.ratingQuestionId === undefined
+          ? undefined
+          : await ports.question.open(actor, query.ratingQuestionId, deadline);
+      if (query.cursor !== undefined && question !== undefined && position.ratingQuestionRevision !== question.revision)
+        return ports.refuse('invalid_cursor');
       let space: FeedSpaceSession | undefined;
       let spacePopulation: FeedSpaceSession | undefined;
       if (query.spaceId !== undefined) {
@@ -123,7 +128,9 @@ export function createFeedApplication(
         following: FeedPosition['following'];
         continue: FeedPosition['continue'];
         resume: FeedPosition['resume'];
+        ratingQuestionRevision?: number;
       } = { ...position };
+      if (question) next.ratingQuestionRevision = question.revision;
       let continueFingerprint = '';
       let discoveryAsOf: string | undefined;
       const widths = feedLaneWidths({ stream, personal, limit });
@@ -225,6 +232,22 @@ export function createFeedApplication(
       };
 
       await Promise.all(FEED_LANES.map(loadLane));
+      const qualifyQuestionLanes = async (selected: readonly FeedLane[]) => {
+        if (!question) return;
+        const candidates = selected.flatMap((lane) =>
+          lanes[lane].map((candidate, candidatePosition) => ({ lane, candidate, candidatePosition })),
+        );
+        const admissions = await question.qualify(candidates.map(({ candidate }) => candidate));
+        if (admissions.length !== candidates.length) throw new TypeError('Question admission lost feed positions');
+        const refused = new Set<FeedLane>();
+        for (const [index, { lane, candidate, candidatePosition }] of candidates.entries()) {
+          const result = admissions[index]!;
+          if (result === 'refused') refused.add(lane);
+          else if (result === 'absent') lanes[lane][candidatePosition] = { ...candidate, item: null };
+        }
+        for (const lane of refused) failLane(lane, new FeedRefusedError('dependency_unavailable'));
+      };
+      await qualifyQuestionLanes(FEED_LANES);
       const sourceWitnesses = new Map(
         FEED_LANES.flatMap((lane) =>
           lanes[lane].flatMap(({ item }) => (item ? [[item.id, JSON.stringify(item)] as const] : [])),
@@ -293,6 +316,7 @@ export function createFeedApplication(
         if (query.spaceId !== undefined)
           space = await ports.space.open(actor, query.spaceId, deadline, now.toISOString());
         for (const lane of selected) await loadLane(lane);
+        await qualifyQuestionLanes(selected);
         Object.assign(next, retained);
         const current = new Map(
           selected.flatMap((lane) =>
@@ -318,6 +342,7 @@ export function createFeedApplication(
         viewerPersonalActions = personalPage.viewerPersonalActions;
       } else if (stream === 'home' && advice.hasTargets) await reopenSelected();
       if (advice.finish) feedItems = await advice.finish(feedItems);
+      await question?.finish();
 
       return {
         feedItems,

@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { fromPlainText } from '@rezics/document';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { readConfig, startServer } from '../../src/server.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
@@ -269,6 +271,52 @@ test('Default feed route applies the selected native kind across the mixed strea
     }
     const book = subjects['schema:Book']!;
     const movie = subjects['schema:Movie']!;
+    const reviewBoard = await driver.fixtures.send(
+      curator,
+      'POST',
+      '/v1/boards',
+      {
+        conceptId: book,
+        title: 'Selected Home question review board',
+        purpose: 'reviews',
+        visibility: 'published',
+      },
+      key(),
+    );
+    expect(reviewBoard.status, JSON.stringify(reviewBoard.body)).toBe(201);
+    const reviewBoardId = (reviewBoard.body.board as { id: string }).id;
+    await driver.fixtures.grantAccount(curator, ['thread:create', 'board:read'], reviewBoardId);
+    const vote = await driver.fixtures.send(
+      curator,
+      'PUT',
+      `/v1/subjects/${book}/ratings/${STANDARD_QUESTION_ID}/vote`,
+      { units: 14 },
+      key(),
+    );
+    expect(vote.status, JSON.stringify(vote.body)).toBe(200);
+    const recordedVote = vote.body as { units: number; revision: number };
+    const selectedReview = await driver.fixtures.send(
+      curator,
+      'POST',
+      '/v1/threads',
+      {
+        kind: 'review',
+        title: 'Selected Home question review',
+        body: fromPlainText('A current review witness for Home.'),
+        licence: 'CC-BY-4.0',
+        boardId: reviewBoardId,
+        subjectIds: [book],
+        visibility: 'published',
+        voteCitation: {
+          questionId: STANDARD_QUESTION_ID,
+          units: recordedVote.units,
+          revision: recordedVote.revision,
+        },
+      },
+      key(),
+    );
+    expect(selectedReview.status, JSON.stringify(selectedReview.body)).toBe(201);
+    expect((await driver.fixtures.send(viewer, 'PUT', `/v1/follows/${book}`, undefined, key())).status).toBe(200);
     const created = await driver.fixtures.send(
       curator,
       'POST',
@@ -324,11 +372,13 @@ test('Default feed route applies the selected native kind across the mixed strea
       cursor?: string,
       personal = true,
       spaceId?: string,
+      ratingQuestionId?: string,
     ) {
       const query = new URLSearchParams({ stream, limit: String(limit) });
       if (kind !== undefined) query.set('kind', kind);
       if (cursor) query.set('cursor', cursor);
       if (spaceId) query.set('spaceId', spaceId);
+      if (ratingQuestionId) query.set('ratingQuestionId', ratingQuestionId);
       const result = await response(query, personal);
       expect(result.status, JSON.stringify(result.body)).toBe(200);
       if (personal) expect(result.headers.get('cache-control')).toBe('private, no-store');
@@ -398,6 +448,17 @@ test('Default feed route applies the selected native kind across the mixed strea
     });
     const second = await page('schema:Book', 'home', 1, first.next!);
     expect(second.feedItems[0]).toMatchObject({ source: 'continue', key: { id: book, kind: 'schema:Book' } });
+
+    const selectedQuestionFirst = await eventually(async () => {
+      const result = await page('schema:Book', 'home', 20, undefined, true, undefined, STANDARD_QUESTION_ID);
+      return result.sources.continue === 'ready' &&
+        result.sources.following === 'ready' &&
+        result.sources.discovery === 'ready' &&
+        result.feedItems.some((item) => item.key.id === book)
+        ? result
+        : undefined;
+    });
+    expect(selectedQuestionFirst.feedItems.every((item) => item.key.id === book)).toBe(true);
 
     const raw = await createFeedActivityStore({
       clock: () => new Date(),
@@ -485,8 +546,8 @@ test('Default feed route applies the selected native kind across the mixed strea
           ratingQuestionId: movie,
         }),
       );
-      expect(unavailable.status).toBe(503);
-      expect(unavailable.body.code).toBe('dependency_unavailable');
+      expect(unavailable.status).toBe(404);
+      expect(unavailable.body.code).toBe('not_found');
     }
     for (const name of ['spaceId', 'ratingQuestionId']) {
       expect((await response(new URLSearchParams({ [name]: 'invalid' }))).status).toBe(400);

@@ -12,6 +12,7 @@ export type FeedPosition = {
   following: string | null | false;
   continue: string | null | false;
   resume: { fingerprint: string; after: string } | null;
+  ratingQuestionRevision?: number;
 };
 export const FEED_CURSOR_BYTES = 32768;
 export const fingerprint = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -105,7 +106,9 @@ export async function decodeFeedCursor(
         return entry === null || entry === false || typeof entry === 'string';
       }) ||
       (value.resume !== null &&
-        (typeof value.resume?.fingerprint !== 'string' || typeof value.resume.after !== 'string'))
+        (typeof value.resume?.fingerprint !== 'string' || typeof value.resume.after !== 'string')) ||
+      (value.ratingQuestionRevision !== undefined &&
+        (!Number.isSafeInteger(value.ratingQuestionRevision) || value.ratingQuestionRevision < 1))
     )
       throw new Error();
     return value;
