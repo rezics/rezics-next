@@ -1,5 +1,8 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { KERNEL_CLIENT_OUTPUT } from './check-output-tree.ts';
 import { expect, test } from 'bun:test';
-import { withOriginalContext } from './worker-check.ts';
+import { withOriginalContext, workerCheckCompilerOutputs } from './worker-check.ts';
 
 const command = [
   'bun',
@@ -41,4 +44,32 @@ test('original context merges into an existing env prefix used for artifact stag
     'REZICS_CHECK_ARTIFACTS_DIR=.temp/stage',
     ...command,
   ]);
+});
+
+test('known producer-consumer chain declares the official client tree once; custom and non-fail-fast chains do not', () => {
+  const parent = join(import.meta.dir, '../.temp');
+  mkdirSync(parent, { recursive: true });
+  const root = mkdtempSync(join(parent, 'compiler-output-plan-'));
+  try {
+    for (const [path, typecheck] of [
+      ['services/kernel', 'bun scripts/typecheck.ts'],
+      ['packages/client', 'bun check --no-script -p tsconfig.json'],
+    ]) {
+      mkdirSync(join(root, path!), { recursive: true });
+      writeFileSync(join(root, path!, 'package.json'), JSON.stringify({ scripts: { typecheck } }));
+    }
+    const chain = 'bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck';
+    expect(workerCheckCompilerOutputs(['sh', '-c', chain], root)).toEqual([KERNEL_CLIENT_OUTPUT.transport]);
+    expect(workerCheckCompilerOutputs(['sh', '-c', chain.replace('&&', ';')], root)).toEqual([]);
+    expect(workerCheckCompilerOutputs(['sh', '-c', chain.replace('packages/client', 'packages/custom')], root)).toEqual(
+      [],
+    );
+    writeFileSync(
+      join(root, 'services/kernel/package.json'),
+      JSON.stringify({ scripts: { typecheck: 'custom-generator' } }),
+    );
+    expect(workerCheckCompilerOutputs(['sh', '-c', chain], root)).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

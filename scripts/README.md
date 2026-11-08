@@ -1087,6 +1087,14 @@ Increasing `slots` beyond slice capacity adds no usable capacity.
 Drain runs before reducing limits. Reprovision changed memory or CPU limits and update the matching JSON fields.
 To remove a host, delete its entry once its runs have drained. Do not stop other workers' checks.
 
+The worker wrapper recognizes the fail-fast chain
+`bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck`
+under `sh -c` or `bash -c` with the installed owning scripts. It declares the existing `kernel-client-v1` output-tree
+transport and compiler-input receipt together. Qualification permits that producer's declaration changes only after
+the authenticated atomic tree receiver publishes the exact consumer-compiled declarations. Missing transport or
+mismatched evidence requires typing-only proof; custom commands and changed source, configuration or dependencies
+never gain a pass from this pipeline rule.
+
 ## Check cost
 
 The [check cost report](../docs/research/check-cost.md) observed 141 check-hours in one 24-hour window, led by

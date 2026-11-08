@@ -1,13 +1,16 @@
 import { afterEach, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import {
   beginTypingInputReceipt,
   readTypingInputReceipt,
   typingInputsMatch,
   typingInputCommand,
   captureTypingInputs,
+  qualifyTypingInputs,
+  kernelClientTypingPipeline,
 } from './worker-check-typing-inputs.ts';
 import {
   admitWorkerCheckHostRun,
@@ -15,6 +18,7 @@ import {
   settleWorkerCheckHostBudget,
   workerCheckHostTypingSettlement,
 } from './worker-check-budget.ts';
+import { KERNEL_CLIENT_OUTPUT, outputTreeDigest, restoreOutputTree } from '../../../scripts/check-output-tree.ts';
 
 const roots: string[] = [];
 const physical = 'a1a1a1a1-1111-4111-8111-111111111111';
@@ -288,4 +292,166 @@ test('a rejected artifact cannot borrow legacy compatibility and malformed evide
     ok: false,
     kind: 'evidence-unavailable',
   });
+});
+const clientPipeline = [
+  'sh',
+  '-c',
+  'bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck',
+];
+function pipelineFixture() {
+  const root = fixture();
+  write(root, '.gitignore', readFileSync(join(root, '.gitignore'), 'utf8') + '\n**/node_modules/\n');
+  write(root, 'services/kernel/package.json', JSON.stringify({ scripts: { typecheck: 'bun scripts/typecheck.ts' } }));
+  write(
+    root,
+    'packages/client/package.json',
+    JSON.stringify({
+      scripts: { typecheck: 'bun check --no-script -p tsconfig.json' },
+      dependencies: { fixture: '1' },
+    }),
+  );
+  write(root, 'packages/client/node_modules/fixture/package.json', '{"version":"1"}');
+  write(
+    root,
+    'packages/client/tsconfig.json',
+    '{"compilerOptions":{"strict":true,"noEmit":true,"types":[],"skipLibCheck":true},"include":["src"]}',
+  );
+  write(root, 'packages/client/src/kernel/current.d.ts', 'export type Current = "old";');
+  write(
+    root,
+    'packages/client/src/index.ts',
+    'import type {Current} from "./kernel/current"; const value: Current = "current";',
+  );
+  const owner = join(import.meta.dir, '../../../scripts/check-output-tree.ts');
+  write(
+    root,
+    'services/kernel/scripts/typecheck.ts',
+    `import {rmSync,mkdirSync,writeFileSync} from 'node:fs';
+    import {resolve} from 'node:path'; import {withKernelClientOutput} from ${JSON.stringify(owner)};
+    const root=resolve(process.cwd(),'../..');
+    process.exit(await withKernelClientOutput(root,async()=>{
+      rmSync(root+'/packages/client/src/kernel',{recursive:true,force:true});
+      mkdirSync(root+'/packages/client/src/kernel',{recursive:true});
+      writeFileSync(root+'/packages/client/src/kernel/current.d.ts','export type Current = "current";');
+      return 0;
+    },{recognize:()=>({outcome:'admitted',runId:'pipeline-owner-run',scope:'fixture.scope',supervisor:{pid:1,started:'1',group:1}}),
+      prepared:()=>({host:'c',run:'pipeline-owner-run',sourceSha256:'a'.repeat(64)})}));`,
+  );
+  mkdirSync(join(root, '.temp/bin'), { recursive: true });
+  // Keep the exact owner command chain while using a tiny compiler fixture, without the product Kernel stack.
+  const compiler = join(dirname(createRequire(import.meta.url).resolve('typescript/package.json')), 'bin/tsc');
+  write(
+    root,
+    '.temp/bin/bun',
+    `#!${process.execPath}
+    import {spawnSync} from 'node:child_process';
+    const args=process.argv.slice(2);
+    const kernel=JSON.stringify(args)===JSON.stringify(['run','--cwd','services/kernel','typecheck','--emit-client']);
+    const client=JSON.stringify(args)===JSON.stringify(['run','--cwd','packages/client','typecheck']);
+    if(!kernel&&!client) throw new Error('Unexpected fixture command');
+    const result=spawnSync(${JSON.stringify(process.execPath)},kernel?['scripts/typecheck.ts','--emit-client']:[${JSON.stringify(compiler)},'-p','tsconfig.json'],
+      {cwd:process.cwd()+(kernel?'/services/kernel':'/packages/client'),stdio:'inherit',env:process.env});
+    process.exit(result.status??1);
+  `,
+  );
+  chmodSync(join(root, '.temp/bin/bun'), 0o755);
+  return root;
+}
+
+test('known Kernel emission followed by consumer typing qualifies only the received atomic output tree', () => {
+  const root = pipelineFixture();
+  expect(kernelClientTypingPipeline(root, clientPipeline)).toBe(true);
+  const env = {
+    ...environment,
+    PATH: `${join(root, '.temp/bin')}:${process.env.PATH}`,
+    REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(clientPipeline)).toString('base64'),
+  };
+  const result = Bun.spawnSync([process.execPath, ...typingInputCommand(clientPipeline).slice(1)], {
+    cwd: root,
+    env: { ...process.env, ...env },
+  });
+  if (result.exitCode !== 0)
+    throw new Error(new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr));
+  expect(result.exitCode).toBe(0);
+  const receipt = readTypingInputReceipt(root, physical, clientPipeline)!;
+  expect(receipt.outputs).toEqual(['kernel-client-v1']);
+  expect(receipt.sourceStable).toBe(true);
+  expect(qualifyTypingInputs(root, receipt)).toBe('evidence-unavailable');
+  const bytes = readFileSync(join(root, KERNEL_CLIENT_OUTPUT.transport));
+  restoreOutputTree(root, bytes, {
+    host: 'c',
+    run: 'pipeline-owner-run',
+    sourceSha256: 'a'.repeat(64),
+    exitCode: 0,
+    bundleSha256: outputTreeDigest(bytes),
+  });
+  expect(qualifyTypingInputs(root, receipt)).toBe('matched');
+  write(root, 'packages/client/node_modules/fixture/package.json', '{"version":"2"}');
+  expect(qualifyTypingInputs(root, receipt)).toBe('prepared-changed');
+  write(root, 'packages/client/node_modules/fixture/package.json', '{"version":"1"}');
+
+  expect(
+    qualifyTypingInputs(root, {
+      ...receipt,
+      completed: { ...receipt.completed, runtime: 'another evaluator' },
+    }),
+  ).toBe('evidence-unavailable');
+  write(root, 'packages/client/src/kernel/current.d.ts', 'export type Current = "tampered";');
+  expect(qualifyTypingInputs(root, receipt)).toBe('evidence-unavailable');
+});
+
+test('legacy pipeline generation is missing proof, while unknown compilers and real input changes never qualify', () => {
+  const root = pipelineFixture();
+  const env = {
+    ...environment,
+    REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(clientPipeline)).toString('base64'),
+  };
+  const complete = beginTypingInputReceipt(root, env, clientPipeline)!;
+  write(root, 'packages/client/src/kernel/current.d.ts', 'export type Current = "current";');
+  complete(0);
+  const receipt = readTypingInputReceipt(root, physical, clientPipeline)!;
+  const legacy = { ...receipt, sourceStable: false };
+  delete legacy.outputs;
+  expect(qualifyTypingInputs(root, legacy)).toBe('evidence-unavailable');
+  const budget = join(root, '.temp/budget');
+  admitWorkerCheckHostRun({ directory: budget, worktree: root, limit: 2 });
+  write(
+    root,
+    '.temp/budget/1',
+    JSON.stringify({
+      exitCode: 0,
+      includedTypecheck: true,
+      typingRequest: {
+        physicalRunId: physical,
+        command: clientPipeline,
+        localPrepared: [],
+        capture: 'physical-command',
+      },
+      typingInputs: legacy,
+    }),
+  );
+  expect(
+    workerCheckHostTypingSettlement({
+      directory: budget,
+      worktree: root,
+      limit: 2,
+    }),
+  ).toMatchObject({
+    ok: false,
+    kind: 'evidence-unavailable',
+  });
+  for (const file of ['packages/client/src/index.ts', 'tsconfig.base.json', 'bun.lock']) {
+    const old = readFileSync(join(root, file), 'utf8');
+    write(root, file, old + '\nchanged');
+    expect(qualifyTypingInputs(root, receipt)).toBe('source-changed');
+    write(root, file, old);
+  }
+  const custom = ['sh', '-c', 'bun arbitrary-generator.ts && bun run --cwd packages/client typecheck'];
+  expect(kernelClientTypingPipeline(root, custom)).toBe(false);
+  const customComplete = beginTypingInputReceipt(root, env, custom)!;
+  write(root, 'packages/client/src/kernel/current.d.ts', 'export type Current = "custom";');
+  customComplete(0);
+  const customReceipt = readTypingInputReceipt(root, physical, clientPipeline)!;
+  expect(customReceipt.sourceStable).toBe(false);
+  expect(qualifyTypingInputs(root, customReceipt)).toBe('source-changed');
 });
