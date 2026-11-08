@@ -42,6 +42,7 @@ function bunWorkspace(path: string, tracked: ReadonlySet<string>): string | unde
 
 const WEB_ROOT = 'apps/web';
 const AUTH_ROOT = 'services/auth';
+const KERNEL_ROOT = 'services/kernel';
 const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/iu;
 const HOST_TEST_FILE = /\.host\.test\.[cm]?[jt]sx?$/iu;
 const webLaneEnvironment = new Set([
@@ -277,10 +278,10 @@ function preparePlacement(check: DevVerifierCheck, tracked: ReadonlySet<string>,
   if (!repoSelectors.length && (inAuthWorkspace || authOnlyClosure)) {
     const authScope = inAuthWorkspace ? [AUTH_ROOT + '/**'] : check.closure;
     const files = [...tracked].filter((path) => isAuthLaneTest(path) && matchesPath(path, authScope));
-    return { check: authRunnerCheck(check, invocation, files) };
+    return { check: databaseRunnerCheck(check, invocation, files, AUTH_ROOT) };
   }
   if (repoSelectors.length && repoSelectors.every(isAuthLaneTest))
-    return { check: authRunnerCheck(check, invocation, [...new Set(repoSelectors)]) };
+    return { check: databaseRunnerCheck(check, invocation, [...new Set(repoSelectors)], AUTH_ROOT) };
   const selectedWorkspace = new Set(repoSelectors.map((path) => bunWorkspace(path, tracked)));
   const hasWebSelector = repoSelectors.some(isWebWorkspacePath);
   const allSelectorsAreWeb = repoSelectors.every(isWebWorkspacePath);
@@ -365,10 +366,11 @@ function isAuthLaneTest(path: string): boolean {
   return path.startsWith(AUTH_ROOT + '/test/') && /\.test\.ts$/.test(path);
 }
 
-function authRunnerCheck(
+function databaseRunnerCheck(
   check: DevVerifierCheck,
   invocation: BunTestInvocation,
   files: readonly string[],
+  workspace: string,
 ): DevVerifierCheck {
   const { cwd: _cwd, ...base } = check;
   return {
@@ -378,9 +380,9 @@ function authRunnerCheck(
       'bun',
       'run',
       '--cwd',
-      AUTH_ROOT,
+      workspace,
       'check',
-      ...files.map((file) => file.slice(AUTH_ROOT.length + 1)),
+      ...files.map((file) => file.slice(workspace.length + 1)),
       ...invocation.testFlags,
       ...(invocation.programArgs.length ? ['--', ...invocation.programArgs] : []),
     ],
@@ -451,10 +453,17 @@ export function placeInWorkspaceChecks(
       ...new Set(invocation.selectors.map((selector) => repositoryPath(selector, currentCwd, checkout))),
     ];
     const authFiles = repoSelectors.filter(isAuthLaneTest);
-    if (authFiles.length) {
-      const authCheck = authRunnerCheck(check, invocation, authFiles);
-      const otherFiles = repoSelectors.filter((path) => !isAuthLaneTest(path));
-      return [authCheck, ...directWorkspaceChecks(check, invocation, otherFiles, tracked, checkout)];
+    const kernelFiles = tracked.has(`${KERNEL_ROOT}/scripts/check.ts`)
+      ? repoSelectors.filter((path) => path.startsWith(`${KERNEL_ROOT}/test/`) && TEST_FILE.test(path))
+      : [];
+    if (authFiles.length || kernelFiles.length) {
+      const ownedFiles = new Set([...authFiles, ...kernelFiles]);
+      const otherFiles = repoSelectors.filter((path) => !ownedFiles.has(path));
+      return [
+        ...(authFiles.length ? [databaseRunnerCheck(check, invocation, authFiles, AUTH_ROOT)] : []),
+        ...(kernelFiles.length ? [databaseRunnerCheck(check, invocation, kernelFiles, KERNEL_ROOT)] : []),
+        ...directWorkspaceChecks(check, invocation, otherFiles, tracked, checkout),
+      ];
     }
   }
   return splitWebPlacement(preparePlacement(check, tracked, checkout));
