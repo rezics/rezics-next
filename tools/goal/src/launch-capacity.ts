@@ -4,6 +4,15 @@ import { basename, join } from 'node:path';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { processIdentity, sameProcess } from './process.ts';
 import type { Attempt, Task } from './types.ts';
+import {
+  pressureBrake,
+  readHostPressure,
+  workerHeadroomMiB,
+  workerReservationMiB,
+  HEAVY_WORKER_MIB,
+  type PressureBrake,
+  type PressureSample,
+} from './host-pressure.ts';
 
 export type HostCapacity = { maxWorkers: number; minAvailableMiB: number; urgentSlots?: number };
 export type CapacityRelease = () => void;
@@ -40,8 +49,16 @@ export function capacityAvailable(
   } catch {
     /* Defaults. */
   }
-  const running = store.capacityAttemptsCount(false) + admittedStarts(stateDirectory);
-  return hasCapacity(running, availableMiB(), capacity);
+  const running = store.capacityAttemptsCount(false) + store.capacityAttemptsCount(true);
+  return (
+    hasCapacity(
+      running + admittedStarts(stateDirectory) + admittedStarts(stateDirectory, true),
+      availableMiB(),
+      capacity,
+    ) &&
+    !pressureBrake(readPressureBrake(stateDirectory), readHostPressure(), Date.now()).paused &&
+    workerHeadroomMiB(running) >= admittedMemoryMiB(stateDirectory) + HEAVY_WORKER_MIB
+  );
 }
 /** Stabilize and critical-path starts receive a bounded queue head start while respecting host capacity. */
 export function startsFirst(task: Pick<Task, 'taskClass' | 'brief'>): boolean {
@@ -73,6 +90,8 @@ export async function awaitHostCapacity(
     goalMaxInFlight?: number | undefined;
     excludeTaskId?: string | undefined;
     availableMiB?: () => number;
+    pressure?: () => PressureSample;
+    workerHeadroomMiB?: (running: number) => number;
   } = {},
 ): Promise<CapacityRelease> {
   const policy = options.policy ?? defaultPolicy.capacity;
@@ -95,7 +114,16 @@ export async function awaitHostCapacity(
   mkdirSync(queue, { recursive: true });
   const owner = processIdentity();
   if (!owner) throw new Error('Cannot identify capacity ticket owner');
-  writeFileSync(join(queue, ticket), JSON.stringify({ ...owner, taskId, goal: options.goal, goalSequence }));
+  writeFileSync(
+    join(queue, ticket),
+    JSON.stringify({
+      ...owner,
+      taskId,
+      goal: options.goal,
+      goalSequence,
+      memoryMiB: workerReservationMiB(options.goal ?? (taskId ? store.taskGoal?.(taskId) : undefined)),
+    }),
+  );
   let reported = false;
   let watcher: ReturnType<typeof watch> | undefined;
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
@@ -130,6 +158,18 @@ export async function awaitHostCapacity(
         const hostCapacity = existsSync(file) || urgent;
         const admitted = hostCapacity ? admittedStarts(stateDirectory, urgent) : 0;
         const running = hostCapacity ? store.capacityAttemptsCount(urgent, taskId, targetAttempt) : 0;
+        const otherRunning = hostCapacity ? store.capacityAttemptsCount(!urgent, taskId, targetAttempt) : 0;
+        const otherAdmitted = hostCapacity ? admittedStarts(stateDirectory, !urgent) : 0;
+        const brake = pressureBrake(
+          readPressureBrake(stateDirectory),
+          (options.pressure ?? readHostPressure)(),
+          options.now?.() ?? Date.now(),
+        );
+        if (hostCapacity) writeFileSync(join(stateDirectory, 'capacity-pressure.json'), JSON.stringify(brake));
+        const memoryReservation = workerReservationMiB(options.goal ?? (taskId ? store.taskGoal?.(taskId) : undefined));
+        const sliceAvailable =
+          (options.workerHeadroomMiB ?? workerHeadroomMiB)(running + otherRunning) >=
+          admittedMemoryMiB(stateDirectory) + memoryReservation;
         const ahead = hostCapacity ? waitersAhead(queue, ticket) : 0;
         const limit = urgent ? capacity.urgentSlots : capacity.maxWorkers;
         const memory = hostCapacity ? (options.availableMiB ?? availableMiB)() : Number.POSITIVE_INFINITY;
@@ -142,7 +182,12 @@ export async function awaitHostCapacity(
             ? 0
             : goalWaitersAhead(queue, ticket, options.goal!, goalSequence, store, goalReservations);
         const hostAvailable =
-          !hostCapacity || (running + admitted + ahead < limit && memory >= capacity.minAvailableMiB);
+          !hostCapacity ||
+          (running + admitted + ahead < limit &&
+            running + otherRunning + admitted + otherAdmitted + ahead < capacity.maxWorkers &&
+            memory >= capacity.minAvailableMiB &&
+            !brake.paused &&
+            sliceAvailable);
         const goalAvailable = goalCap === undefined || goalInFlight + goalAdmitted + goalAhead < goalCap;
         if (hostAvailable && goalAvailable) {
           const reservation = join(queue, `${ticket}.admitted`);
@@ -175,6 +220,34 @@ export async function awaitHostCapacity(
     clearTimeout(pollTimer);
     rmSync(join(queue, ticket), { force: true });
   }
+}
+function readPressureBrake(stateDirectory: string): PressureBrake {
+  try {
+    const value = JSON.parse(readFileSync(join(stateDirectory, 'capacity-pressure.json'), 'utf8'));
+    return {
+      paused: value.paused === true,
+      ...(Number.isFinite(value.healthySince) ? { healthySince: value.healthySince } : {}),
+    };
+  } catch {
+    return { paused: false };
+  }
+}
+function admittedMemoryMiB(stateDirectory: string): number {
+  let total = 0;
+  for (const lane of ['capacity-queue', 'urgent-capacity-queue']) {
+    const queue = join(stateDirectory, lane);
+    if (!existsSync(queue)) continue;
+    for (const name of readdirSync(queue)) {
+      if (!name.endsWith('.admitted') || !liveTicket(queue, name)) continue;
+      try {
+        const value = JSON.parse(readFileSync(join(queue, name), 'utf8'));
+        total += value.memoryMiB === 2048 ? 2048 : HEAVY_WORKER_MIB;
+      } catch {
+        total += HEAVY_WORKER_MIB;
+      }
+    }
+  }
+  return total;
 }
 function ticketMetadata(
   queue: string,

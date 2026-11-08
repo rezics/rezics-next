@@ -287,6 +287,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const managerServices: ManagerServices = {
     policy: settings.policy ?? defaults.policy,
     command,
+    canStartTurn: (spec) => tasks.managerTurnAllowed(spec.pool.id, spec.engine),
     backlogDirectory: backlogDirectory(settings.stateDirectory),
     checkCompletion,
     windows: new TermspacesWindows({

@@ -14,6 +14,19 @@ const CHECK_SLICE = 'rezics-check.slice';
 /** One attempt's scope: a runaway test (22 GB on 2026-11-06) is killed inside its own scope instead of filling the host. */
 export const WORKER_SCOPE_MEMORY_MAX = '12G';
 
+/** Existing operator limits outrank adaptive tuning; an explicit launch override may only tighten them. */
+export function workerMemoryHigh(desiredGiB: number, limits: string, explicit = false): string {
+  const read = (name: string) => {
+    const value = limits.match(new RegExp('^' + name + '=(\\d+)$', 'm'))?.[1];
+    return value ? Number(value) : Infinity;
+  };
+  const high = read('MemoryHigh'),
+    max = read('MemoryMax');
+  const requested = Number.isFinite(high) && !explicit ? high : Math.min(desiredGiB * GIB, high);
+  const bytes = Math.min(requested, max);
+  return bytes % GIB === 0 ? `${bytes / GIB}G` : String(bytes);
+}
+
 type Run = (command: string, args: string[], options: SpawnSyncOptions) => SpawnSyncReturns<Buffer>;
 type ReadMeminfo = () => string;
 
@@ -130,6 +143,13 @@ export class WorkerSlice {
         totalGiB - checkGiB - this.policy.memoryReserveGiB,
       );
     }
+    const existing = this.run(
+      'systemctl',
+      ['--user', 'show', WORKER_SLICE, '--property=MemoryHigh', '--property=MemoryMax'],
+      configuration,
+    );
+    if (existing.error || existing.status !== 0) return `Could not read existing worker limits: ${failure(existing)}`;
+    const boundedHigh = workerMemoryHigh(memoryHigh, existing.stdout?.toString() ?? '', override !== undefined);
     const result = this.run(
       'systemctl',
       [
@@ -139,7 +159,7 @@ export class WorkerSlice {
         WORKER_SLICE,
         `CPUWeight=${this.policy.cpuWeight}`,
         `IOWeight=${this.policy.ioWeight}`,
-        `MemoryHigh=${memoryHigh}G`,
+        `MemoryHigh=${boundedHigh}`,
       ],
       configuration,
     );

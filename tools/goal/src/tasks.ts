@@ -31,8 +31,9 @@ import {
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError } from './lease.ts';
 import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.ts';
+import { poolAllowed } from './allowance.ts';
 import { choosePoolWithFallback, PoolPolicyReloader, withRetainedHistory } from './pools.ts';
-import { pace, readCodexSchedule, retainPoolReadings } from './pacing.ts';
+import { pace, readCodexSchedule, readRetainedPoolReadings, retainPoolReadings } from './pacing.ts';
 import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
 import { applyRenderedPrompt, launch, renderWorkerPrompt, type RunningWorker } from './launch.ts';
 import { awaitHostCapacity, startsFirst } from './launch-capacity.ts';
@@ -365,6 +366,21 @@ export class WorkerTasks {
       history: retainPoolReadings(this.settings.stateDirectory, readings, now, spanMs),
       running: this.store.runningAttemptsByPool(),
     };
+  }
+  /** Metadata-only manager wake admission using the current pool policy and retained allowance history. */
+  managerTurnAllowed(poolName: string, engine: 'codex' | 'claude'): boolean {
+    const pool = this.poolPolicies.read().find((candidate) => candidate.name === poolName);
+    if (!pool || pool.cli !== engine) return false;
+    const readings = readRetainedPoolReadings(this.settings.stateDirectory);
+    const now = Date.now();
+    const spanMs = this.settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs;
+    return poolAllowed(pool, readings, {
+      now,
+      spanMs,
+      history: readings,
+      policy: this.settings.policy?.provider,
+      running: this.store.runningAttemptsByPool(),
+    });
   }
   /**
    * A task's dependencies are met once each integrated and its commit is on the branch the task bases on. A stopped

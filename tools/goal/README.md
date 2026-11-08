@@ -70,11 +70,11 @@ Revocation prevents new urgent dispatches; existing tasks retain their lane acro
 Decision: backlog sweeps authenticate urgent dispatch as the confirmed Goal-directory owner; missing grants return
 the brief.
 
-`policy.capacity.urgentSlots` defaults to 2 and can also be overridden by `capacity.json`. These slots are outside
-`maxWorkers`; ordinary tasks never consume them. Urgent work still waits for `minAvailableMiB` of memory and for a
-reserved slot if all are occupied, independently of the ordinary queue. The reserved slot stays occupied while an
-urgent attempt runs or waits for a check, and frees when that attempt ends. Urgent admission enforces its slot and
-memory limits even without `capacity.json`; ordinary admission retains the existing opt-in behaviour.
+`policy.capacity.urgentSlots` defaults to 2 and can also be overridden by `capacity.json`. It is an urgent
+sublimit inside the shared `maxWorkers` cap. Both lanes and admitted-but-not-started tickets consume that cap;
+ordinary tasks never consume the urgent sublimit. Urgent work still waits for `minAvailableMiB` of memory.
+Only running sessions and pending launch reservations occupy slots; attempts parked for checks release them.
+Urgent admission enforces its limits even without `capacity.json`; ordinary admission retains its opt-in behaviour.
 `status`, `report`, `report --flow` and the hourly report mark urgent work and count its outcomes separately from
 ordinary throughput. Resource usage totals still include urgent work.
 
@@ -1247,10 +1247,13 @@ Decision: Daily audits use a half-open previous-UTC-day window for counts and co
 Decision: host-capacity tickets, waiters, memory/cap policy and `releaseWhenStarted` live in `launch-capacity.ts`.
 `launch.ts` re-exports that public admission entry. `WorkerTasks` and `WorkerJob` consume the capacity module; process
 identity, width snapshots and launch evidence stay with their current owners.
-Decision: existing capacity-wait, admission-reservation, urgent-dispatch and worker-prompt assertions stay;
-`launch-capacity.test.ts` pins public re-export identity, concurrent cap, queued progress after release, admitted-pending
-handoff and cancellation ticket cleanup at the original `launch.ts` entry.
-
+The existing admission lease also serializes both lanes' working-set reservations and pressure brake. A finite
+operator worker slice enables aggregate memory admission: product code starts reserve 2 GiB initially, control-plane
+and unknown starts 4 GiB. Existing worker scopes reserve at least 4 GiB or their measured peak, whichever is larger;
+support services' current memory and admitted reservations are included. The 12 GiB per-worker hard limit remains a
+burst safety ceiling, not an expected working set. Support growth can still compete within the hard aggregate.
+Linux memory-full PSI at 1% or I/O-full at 10% pauses new starts. Recovery requires 30 seconds continuously below
+0.2% and 2% respectively, sampled in the existing admission loop without another watcher or model turn.
 Decision: Host admission and width observations share the indexed, trigger-maintained `worker_current_attempts`
 projection; admission counts only each task's current attempt, while width retains its process-identity classification.
 
@@ -2915,14 +2918,15 @@ the eleventh in an hour sends the supermanager one `environment` alarm and the m
 turns-without-decision limit counts consecutive completed turns. A turn in which a ready brief in the Goal's backlog was
 written or moved back (by modification or status time), or a brief the backlog run dispatched was written, counts as a
 decision, as any control-plane command already does; a decision resets the count to zero.
-For Codex managers, the host pauses the existing native Goal after a completed turn when no inbox event needs delivery.
-The managed manager remains running on the same thread with its objective, token budget and usage. When an inbox event
-arrives, the host sets that Goal active, then delivers the event through the existing start-or-steer path. If Goal
-activation starts a turn before the explicit start request, the host resumes the thread and steers that turn, so the
-event is delivered once. A completed turn returns the Goal to paused when no new event is waiting. Recovery reads the
-persisted Goal status and only reactivates it to deliver pending inbox events; idle polling creates no model turns.
-Focused fake-app-server tests pin the pause/reactivation and turn-race request behavior; they do not exercise provider
-scheduling. See the
+For Codex managers, the host persists idle intent and pauses the existing native Goal after each matched completed turn.
+The managed manager remains running on the same thread with its objective, token budget and usage. A real inbox event
+is held unread while the existing pool policy and retained allowance history refuse a new model turn; the current
+inbox tick retries that admission without querying the provider. Once admitted, the host reactivates the parked Goal
+and delivers through the existing start-or-steer path. If Goal activation starts the turn first, the host rejoins that
+turn and steers the event into it. Completion parks autonomy again; empty wakeups and host recovery do not resume an
+idle thread. Managed user pauses and Goal budget/guard states stay distinct and are never reactivated by an inbox
+event. Focused fake-app-server tests pin idle parking, preserved mail, same-thread delivery and the start/steer race;
+they do not exercise provider scheduling. See the
 [official OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex)
 for native continuation behavior.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is

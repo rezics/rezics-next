@@ -133,6 +133,8 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 
 - Decide and report once. Delegate with a short brief that names the files and the question. A subagent returns
   findings, not file dumps, and does not re-verify facts the brief states.
+- Reactivate a finished helper with `followup_task`; `send_message` alone does not restart it. Confirm that the
+  helper is running before waiting for a new deliverable.
 - Add a periodic duty that wakes other agents only when each wake produces a decision or landed work. Every wake costs
   each recipient a full context read.
 - Never send a question that blocks work; see [supermanager](supermanager.md).
