@@ -40,6 +40,7 @@ import {
   effectiveRunLifetimeMs,
   parseRemoteCommandStatus,
   RUN_LIFETIME_FAILURE_MARKER,
+  rsyncCompressionArguments,
   parseRunLifetimeFailure,
   parseRemotePhysicalRunReceipt,
   requestExecutionCancellation,
@@ -936,6 +937,7 @@ if (script.includes('/proc/loadavg')) {
       return { path, size: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex'), kind: 'file' };
     });
   console.log('MANIFEST ' + Buffer.from(JSON.stringify(manifest)).toString('base64'));
+  console.log('ZSTD ' + (config.zstd === false ? '0' : '1'));
 } else if (script.includes('REMOTE_CHECK_BASE_STATE')) {
   log({ kind: 'base', slotHeld: slotHeld() });
   console.log('BASE ' + (config.base ?? '-'));
@@ -6655,7 +6657,7 @@ test('bounded return inventory retains output, status and receipts at the unchan
       inventory.stdout
         .trimEnd()
         .split('\n')
-        .filter((line) => !line.startsWith('MANIFEST '))
+        .filter((line) => !line.startsWith('MANIFEST ') && !/^ZSTD [01]$/.test(line))
         .sort(),
     ).toEqual(['exit-status', 'output.log', 'receipt.json'].map((file) => `PRESENT ${path}/${file}`).sort());
     const encoded = inventory.stdout
@@ -6687,7 +6689,7 @@ test('bounded return inventory retains output, status and receipts at the unchan
         atLimit.stdout
           .trimEnd()
           .split('\n')
-          .filter((line) => !line.startsWith('MANIFEST ')),
+          .filter((line) => !line.startsWith('MANIFEST ') && !/^ZSTD [01]$/.test(line)),
       ).size,
     ).toBe(CHECK_ARTIFACTS_MAX_FILES);
     expect(atLimit.stdout).not.toContain('OVERSIZE');
@@ -9871,3 +9873,30 @@ time.sleep(${priority !== 'gate' ? 60 : 2.2})`,
   expect(completed.execute().status).toBe(0);
   expect(existsSync(join(completed.run, 'run-lifetime-status.json'))).toBe(false);
 }, 20_000);
+
+test('rsync compression selects zstd only when both endpoints advertise it', () => {
+  expect(rsyncCompressionArguments(true, true)).toEqual(['--compress', '--compress-choice=zstd', '--compress-level=3']);
+  for (const [remote, local] of [
+    [true, false],
+    [false, true],
+    [false, false],
+  ])
+    expect(rsyncCompressionArguments(remote!, local!)).toEqual(['--compress']);
+});
+for (const zstd of [true, false])
+  test(`returned outputs use negotiated compression (remote zstd=${zstd}) without changing content`, async () => {
+    const content = 'lossless returned declarations\n'.repeat(512);
+    const { env, events } = scenario({ a: { available: 8e9, zstd, present: ['artifact'], returnedContent: content } });
+    const directory = workspace();
+    const result = await remote(env, directory, ['true'], ['--returns', 'artifact']);
+    expect(result.code, result.stderr).toBe(0);
+    expect(readFileSync(join(directory, 'artifact'), 'utf8')).toBe(content);
+    const transfer = events().find((event) => event.kind === 'rsync' && event.step === 'returns copy')!;
+    const args = transfer.args as string[];
+    expect(args).toContain('--compress');
+    expect(args.includes('--compress-choice=zstd')).toBe(zstd);
+    expect(args).toContain('--no-links');
+    expect(transfer.files).toEqual(['artifact']);
+    expect(events().filter((event) => event.kind === 'run')).toHaveLength(1);
+    expect(events().filter((event) => event.kind === 'returns')).toHaveLength(1);
+  });

@@ -1,4 +1,5 @@
 import defaults from '../defaults.json';
+import { createHash } from 'node:crypto';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import { migrate } from './db.ts';
@@ -55,6 +56,11 @@ export const flowMigrations = [
     module: 'flow',
     version: 6,
     sql: `CREATE TABLE page_data_repairs (repair_key TEXT PRIMARY KEY, created_at TEXT NOT NULL, status TEXT NOT NULL, detail TEXT NOT NULL); CREATE INDEX page_data_repairs_status ON page_data_repairs(status, created_at);`,
+  },
+  {
+    module: 'flow',
+    version: 7,
+    sql: `ALTER TABLE flow_alarm_sends ADD COLUMN fingerprint TEXT; ALTER TABLE flow_alarm_sends ADD COLUMN active INTEGER NOT NULL DEFAULT 1;`,
   },
 ];
 export function ensureFlow(db: Database): void {
@@ -712,6 +718,25 @@ export type FlowThresholds = {
   attemptsPerIntegrated: number;
 };
 export const DEFAULT_FLOW_THRESHOLDS: FlowThresholds = defaults.flow;
+
+function waitingQueueFingerprint(queues: ReturnType<typeof flowReport>['queues']): string {
+  const hash = createHash('sha256');
+  const add = (value: string) => hash.update(`${value.length}:`).update(value).update('\0');
+  for (const queue of queues) {
+    add(queue.stage);
+    add(String(queue.length));
+    for (const task of queue.tasks) add(task);
+  }
+  return hash.digest('hex');
+}
+
+function flowAlarmFingerprint(key: string, measurement: string, queueFingerprint: string): string {
+  const hash = createHash('sha256');
+  for (const value of [key, measurement, queueFingerprint])
+    hash.update(`${value.length}:`).update(value).update('\0');
+  return `v1:${hash.digest('hex')}`;
+}
+
 export function checkFlowAlarms(
   db: Database,
   report: ReturnType<typeof flowReport>,
@@ -737,11 +762,43 @@ export function checkFlowAlarms(
       `attempts per integrated task ${report.attemptsPerIntegrated.toFixed(2)}`,
     ]);
   const sent: string[] = [];
+  const activeThresholds = new Set(breaches.map(([key]) => key));
+  const previouslyActive = db.query('SELECT threshold FROM flow_alarm_sends WHERE active=1').all() as {
+    threshold: string;
+  }[];
+  for (const row of previouslyActive)
+    if (!activeThresholds.has(row.threshold))
+      db.query('UPDATE flow_alarm_sends SET active=0 WHERE threshold=?').run(row.threshold);
+  const queueFingerprint = waitingQueueFingerprint(report.queues);
+  const hasWaitingTasks = report.queues.some((queue) => queue.length > 0 || queue.tasks.length > 0);
   for (const [key, stage, measurement] of breaches) {
-    const old = db.query('SELECT sent_at FROM flow_alarm_sends WHERE threshold=?').get(key) as {
+    const old = db.query('SELECT sent_at, fingerprint, active FROM flow_alarm_sends WHERE threshold=?').get(key) as {
       sent_at: string;
+      fingerprint: string | null;
+      active: number;
     } | null;
-    if (old && now.getTime() - Date.parse(old.sent_at) < policy.flow.alertEveryMs) continue;
+    const fingerprint = flowAlarmFingerprint(key, measurement, queueFingerprint);
+    const isRecent = old !== null && now.getTime() - Date.parse(old.sent_at) < policy.flow.alertEveryMs;
+    const legacyCooldown = isRecent && old?.fingerprint === null;
+    const globalMetric = !key.startsWith('queue-');
+    const changedGlobal =
+      globalMetric && old !== null && old.fingerprint !== null && old.fingerprint !== fingerprint;
+    const recovered = old?.active === 0;
+    const unchangedEmptyGlobal =
+      globalMetric && !hasWaitingTasks && old?.active === 1 && old.fingerprint === fingerprint;
+    if (unchangedEmptyGlobal) continue;
+    if (legacyCooldown) {
+      // Seed the new bounded fingerprint without breaking a legacy row's existing cooldown.
+      db.query('UPDATE flow_alarm_sends SET fingerprint=COALESCE(fingerprint,?), active=1 WHERE threshold=?').run(
+        fingerprint,
+        key,
+      );
+      continue;
+    }
+    if (isRecent && !changedGlobal && !recovered) {
+      db.query('UPDATE flow_alarm_sends SET active=1 WHERE threshold=?').run(key);
+      continue;
+    }
     const stageQueue = report.queues.find((queue) => queue.stage === stage);
     const exampleQueues = stageQueue
       ? [stageQueue]
@@ -762,7 +819,9 @@ export function checkFlowAlarms(
       if (top.length >= exampleLimit) break;
     }
     inbox(`Flow alarm: stage ${stage}; measurement ${measurement}; top waiting tasks ${top.join(', ') || 'none'}`);
-    db.query('INSERT OR REPLACE INTO flow_alarm_sends(threshold,sent_at) VALUES (?,?)').run(key, now.toISOString());
+    db.query(
+      'INSERT OR REPLACE INTO flow_alarm_sends(threshold,sent_at,fingerprint,active) VALUES (?,?,?,1)',
+    ).run(key, now.toISOString(), fingerprint);
     sent.push(key);
   }
   return sent;
