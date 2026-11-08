@@ -48,6 +48,7 @@ async function emptyGrowth(drain: boolean) {
       name: `${drain ? 'post-drain repeated-empty' : 'zero-eligible'} Auth retention: ${axis}`,
       scales: retentionScales,
       repetitions: 1,
+      captureMode: 'cost-folded',
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
       indexProbes: 100 * pages,
@@ -106,6 +107,7 @@ async function emptyGrowth(drain: boolean) {
           pages,
           cost: sample.cost,
           native: sample.occurrenceRepetitions,
+          background: sample.cost.backgroundCosts,
         }),
       );
     }

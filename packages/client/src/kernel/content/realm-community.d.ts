@@ -1,5 +1,5 @@
 import { type ContentBoardDependencies } from './boards.ts';
-import { type CommunityComments } from './community-projection/index.ts';
+import type { CommunityComments } from './community-projection/index.ts';
 import type { BoardRecord, ReadContext } from './model.ts';
 import type { ThreadView } from './reads.ts';
 export type RealmCommunityThread = Readonly<{
@@ -73,16 +73,22 @@ export declare function RealmCommunityRecentSchema(): import("typebox").TObject<
     }>>;
     complete: import("typebox").TBoolean;
 }>;
-/** One activity batch for the entire admitted Board window: 20 × 3 keys fits
- * the producer's 100-key bound. Missing coverage stays unavailable, never zero.
- * The three-card projection carries reading destinations only, without actions,
- * author-account hydration, reactions or a complete Board opening per row.
- */
+/** Native compatibility entry; the installed application owns orchestration. */
 export declare function observeRealmCommunity(deps: ContentBoardDependencies, boards: readonly BoardRecord[], context: ReadContext): Promise<{
     recent: Map<string, Readonly<{
         state: 'current';
-        threads: readonly RealmCommunityThread[];
         complete: boolean;
+        threads: readonly Readonly<{
+            thread: ThreadView;
+            target: Readonly<{
+                kind: 'thread';
+                id: string;
+                boardId: string;
+            }>;
+            comments: {
+                state: 'unavailable';
+            } | CommunityComments;
+        }>[];
     }>>;
     current(): Promise<boolean>;
 }>;

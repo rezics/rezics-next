@@ -22,7 +22,8 @@ import {
   showcaseVocabularyExternalId,
   type ShowcaseVocabularyRequirement,
 } from './showcase-contract.ts';
-import { captureShowcaseCommands, type ShowcaseJournal } from './showcase-publication.ts';
+import { captureShowcaseCommands } from './showcase-journal.ts';
+import type { ShowcaseJournal } from './showcase-journal.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const characterKey = /^c[1-9][0-9]{0,31}$/u;

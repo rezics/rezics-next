@@ -1,5 +1,6 @@
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { OwnerFilterNativeOperations } from './owner-filter-plan.ts';
 import { type FilterDocument, type FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
@@ -9,7 +10,8 @@ import type { WorkClient } from '../work/client.ts';
 import type { WorkExecutionOriginal } from '../command/execution-contract.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
-import { type OperationalWorkRegistration, type OperationalWorkTransfer } from '../history/contract/index.ts';
+import type { OperationalWorkRegistration, OperationalWorkTransfer } from '../history/contract/index.ts';
+import type { LibraryDomain } from './contract/index.ts';
 /** Saved population selector. Owner keys keep the retained six-part basis; a catalogue key adds one element. */
 export type PreparationSource = Readonly<{
     kind: 'owner' | 'catalogue';
@@ -41,12 +43,8 @@ export type PreparationDefinitionBasis = Readonly<{
 }>;
 /** Normalize accepted definitions to their exact shared expansion before native deduplication. */
 export declare function preparationDefinitionBases(ownerAccountId: string, collectionId: string, definitions: readonly PreparationDefinitionInput[]): readonly PreparationDefinitionBasis[];
-export type PreparationLocator = Readonly<{
-    route: number;
-    ownerAccountId: string;
-    collectionId: string;
-    episodeId: string;
-}>;
+export type { PreparationLocator } from './contract/index.ts';
+import type { PreparationLocator } from './contract/index.ts';
 /** Exact retained native episode inputs. Data only; never admission or disclosure authority. */
 export type MembersPreparationWorkDefinition = Readonly<{
     definition: PreparationDefinition;
@@ -108,6 +106,10 @@ export interface MembersPreparation {
     readRetainedDefinition(tx: OperationalTransaction, locator: PreparationLocator): Promise<PreparationDefinition | null>;
     /** Read-only on the SAME live admitted Core client; null for an obsolete or unbound episode. */
     readWorkDefinition(tx: OperationalTransaction, locator: PreparationLocator): Promise<MembersPreparationWorkDefinition | null>;
+    readPreparedMembers(dependencies: PreparedMembersReadDependencies, input: PreparedMembersReadInput, options?: {
+        limit?: number;
+        cursor?: string | null;
+    }): Promise<PreparedMembersRead>;
 }
 /** Recover only the exact admitted definition, using the immutable release owned by Semantic.
  * The lookup digest is checked before release I/O; neither it nor the retained bytes grants Source authority.
@@ -118,6 +120,15 @@ export declare function restorePreparationDefinition(ownerAccountId: string, col
 }>, loadRelease: (digest: string) => Promise<FilterRelease | null>): Promise<PreparationDefinition>;
 declare function validLocator(locator: PreparationLocator): boolean;
 /** Native private episode admission. Work starts only after Core and Access have admitted the current owner. */
+export declare function createMembersPreparationNative(config: {
+    pool: Pool;
+    workClient: WorkClient;
+    access: Access;
+    capabilities: Pick<LibraryDomain, 'authorization' | 'identityDisclosure' | 'searchPreparation' | 'memberPreparation'>;
+    ownerFilter: OwnerFilterNativeOperations;
+    clock?: KernelClock;
+}): MembersPreparation;
+/** Compatibility constructor; Library composition supplies the installed native capabilities. */
 export declare function createMembersPreparation(config: {
     pool: Pool;
     workClient: WorkClient;
@@ -153,24 +164,27 @@ export declare function readPreparationSource(tx: OperationalTransaction, locato
         committedRevision: bigint;
     }>;
 } | null>;
+export declare function readPreparationOwnerFenceNative(tx: OperationalTransaction, locator: PreparationLocator, definition: PreparationDefinition, capabilities: Pick<LibraryDomain, 'searchPreparation' | 'memberPreparation'>): Promise<string | null>;
+/** Compatibility read; native access and Access preparation come from the installed Library runtime. */
 export declare function readPreparationOwnerFence(tx: OperationalTransaction, locator: PreparationLocator, definition: PreparationDefinition): Promise<string | null>;
 /** Native source/currentness inside a genuine selected apply, never the expired request handoff. */
-export declare function checkMembersPreparationCompletion(tx: OperationalTransaction, locator: PreparationLocator): Promise<Readonly<{
+export declare function checkMembersPreparationCompletionNative(tx: OperationalTransaction, locator: PreparationLocator): Promise<Readonly<{
     status: 'obsolete';
 }> | Readonly<{
     status: 'current';
 }> | Readonly<{
     status: 'unavailable';
 }>>;
+export declare function checkMembersPreparationCompletion(tx: OperationalTransaction, locator: PreparationLocator): ReturnType<typeof checkMembersPreparationCompletionNative>;
 export type PreparationStepState = NonNullable<Awaited<ReturnType<typeof readPreparationStep>>>;
-type ReaderDependencies = {
+export type PreparedMembersReadDependencies = {
     pool: Pool;
     access: Access;
     tokens: KeyRing;
     clock?: KernelClock;
     routeKey?: Uint8Array;
 };
-type ReadInput = Readonly<{
+export type PreparedMembersReadInput = Readonly<{
     actor: Actor;
     collectionId: string;
     definition: PreparationDefinition;
@@ -191,11 +205,13 @@ export type PreparedMembersRead = Readonly<{
     revalidate(): Promise<void>;
     release(): void;
 }>;
-/** Pure retained-result read. Its caller may choose ONE successful-read touch after the whole composed read.
- * Candidate rows supply order only. The native reader revalidates every authority before any complete page.
- */
-export declare function readPreparedMembers(deps: ReaderDependencies, input: ReadInput, options?: {
+export type PreparedMembersReadOperation = (dependencies: PreparedMembersReadDependencies, input: PreparedMembersReadInput, options?: {
+    limit?: number;
+    cursor?: string | null;
+}) => Promise<PreparedMembersRead>;
+export declare function createMembersPreparationReader(capabilities: Pick<LibraryDomain, 'authorization' | 'identityDisclosure'>, ownerFilter: OwnerFilterNativeOperations): PreparedMembersReadOperation;
+/** Compatibility call used by existing readers; composition owns the installed implementation. */
+export declare function readPreparedMembers(dependencies: PreparedMembersReadDependencies, input: PreparedMembersReadInput, options?: {
     limit?: number;
     cursor?: string | null;
 }): Promise<PreparedMembersRead>;
-export {};

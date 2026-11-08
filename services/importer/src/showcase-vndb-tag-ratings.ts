@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ShowcaseJournal } from './showcase-publication.ts';
+import type { ShowcaseJournal } from './showcase-journal.ts';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
 import type { AdmittedPublicTag, VndbPublicTagCategory } from './vndb-public-tags.ts';
 import { vndbTagsRatingEndpoint } from '@rezics/conversion/vndb-vocabulary';

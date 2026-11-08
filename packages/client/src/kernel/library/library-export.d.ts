@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { type KernelClock } from '../clock.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import { type LibraryExportFinalManifest } from './library-export-format.ts';

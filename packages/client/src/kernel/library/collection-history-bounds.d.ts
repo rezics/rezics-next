@@ -1,33 +1,12 @@
 /** Immutable nine-axis declarations for the existing Collection metadata journal SQL. */
-import { type Bound } from '@rezics/bounds';
 import type { PoolClient } from 'pg';
-export declare const COLLECTION_METADATA_HISTORY_LIMIT = 128;
-export declare const COLLECTION_METADATA_HISTORY_PAGE_SIZE = 25;
-export declare const COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE = 50;
-export type CollectionMetadataSnapshotInput = Readonly<{
-    title: string;
-    description: string | null;
-    visibility: 'private' | 'unlisted' | 'public';
-    presentationKind: string | null;
-    coverMediaId: string | null;
-}>;
-export type CollectionMetadataFieldInput = 'title' | 'description' | 'visibility' | 'presentationKind' | 'coverMediaId';
 type QueryClient = Pick<PoolClient, 'query'>;
-export type CollectionMetadataHistorySqlPlan<Input = unknown> = Readonly<{
-    kind: string;
-    input: Readonly<Input>;
-    total: Bound;
-    withinExistingCeiling: boolean;
-}>;
-export declare function collectionMetadataHistoryInitializePlan(input: {
-    route: number;
-    collection: Readonly<{
-        id: string;
-        curatorAccountId: string;
-    }>;
-    transactionId: string;
-    time: string;
-}): Readonly<{
+import { createCollectionHistoryPlans } from './core/index.ts';
+import type { CollectionMetadataHistorySqlPlan } from './contract/index.ts';
+export { COLLECTION_METADATA_HISTORY_LIMIT, COLLECTION_METADATA_HISTORY_PAGE_SIZE, COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE, } from './core/index.ts';
+export type { CollectionMetadataSnapshotInput, CollectionMetadataFieldInput } from './core/index.ts';
+export type { CollectionMetadataHistorySqlPlan, CollectionMetadataHistoryCapturePlan } from './contract/index.ts';
+export declare function collectionMetadataHistoryInitializePlan(input: Parameters<ReturnType<typeof createCollectionHistoryPlans>['collectionMetadataHistoryInitializePlan']>[0]): Readonly<{
     kind: string;
     input: Readonly<{
         route: number;
@@ -36,65 +15,48 @@ export declare function collectionMetadataHistoryInitializePlan(input: {
         transaction_id: string;
         updated_at: string;
     }>;
-    total: Bound;
+    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+        engineRequests: number;
+    }>;
     withinExistingCeiling: boolean;
 }>;
-export type CollectionMetadataHistoryCapturePlan = Readonly<{
+export declare function collectionMetadataHistoryCapturePlan(input: Parameters<ReturnType<typeof createCollectionHistoryPlans>['collectionMetadataHistoryCapturePlan']>[0]): Readonly<{
     kind: 'collection.metadata-history.no-change' | 'collection.metadata-history.capture';
     input: Readonly<{
         route: number;
-        before: CollectionMetadataSnapshotInput;
-        after: CollectionMetadataSnapshotInput;
+        before: import("./collection-metadata-history.ts").CollectionMetadataSnapshot;
+        after: import("./collection-metadata-history.ts").CollectionMetadataSnapshot;
         collectionId: string;
         curatorAccountId: string;
         revision: number;
         transactionId: string;
         time: string;
     }>;
-    changedFields: readonly CollectionMetadataFieldInput[];
+    changedFields: readonly ("coverMediaId" | "description" | "presentationKind" | "title" | "visibility")[];
     leaves: Readonly<{
         owner?: CollectionMetadataHistorySqlPlan;
         append?: CollectionMetadataHistorySqlPlan;
         prune?: CollectionMetadataHistorySqlPlan;
         pruned?: CollectionMetadataHistorySqlPlan;
     }>;
-    total: Bound;
+    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+        engineRequests: number;
+    }>;
     withinExistingCeiling: boolean;
 }>;
-export declare function collectionMetadataHistoryCapturePlan(input: {
-    route: number;
-    before: CollectionMetadataSnapshotInput & Readonly<{
-        id: string;
-    }>;
-    after: CollectionMetadataSnapshotInput & Readonly<{
-        id: string;
-        curatorAccountId: string | null;
-        revision: number;
-    }>;
-    transactionId: string;
-    time: string;
-}): CollectionMetadataHistoryCapturePlan;
-export declare function collectionMetadataHistoryStatePlan(input: {
-    route: number;
-    collectionId: string;
-    curatorAccountId: string;
-}): Readonly<{
+export declare function collectionMetadataHistoryStatePlan(input: Parameters<ReturnType<typeof createCollectionHistoryPlans>['collectionMetadataHistoryStatePlan']>[0]): Readonly<{
     kind: string;
     input: Readonly<{
         route: number;
         collection_id: string;
         curator_account_id: string;
     }>;
-    total: Bound;
+    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+        engineRequests: number;
+    }>;
     withinExistingCeiling: boolean;
 }>;
-export declare function collectionMetadataHistoryPagePlan(input: {
-    route: number;
-    collectionId: string;
-    curatorAccountId: string;
-    afterRevision: number | null;
-    limit: number;
-}): Readonly<{
+export declare function collectionMetadataHistoryPagePlan(input: Parameters<ReturnType<typeof createCollectionHistoryPlans>['collectionMetadataHistoryPagePlan']>[0]): Readonly<{
     kind: string;
     input: Readonly<{
         route: number;
@@ -103,15 +65,12 @@ export declare function collectionMetadataHistoryPagePlan(input: {
         after_revision: number | null;
         page_limit: number;
     }>;
-    total: Bound;
+    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+        engineRequests: number;
+    }>;
     withinExistingCeiling: boolean;
 }>;
-export declare function collectionMetadataHistoryEntryPlan(input: {
-    route: number;
-    collectionId: string;
-    curatorAccountId: string;
-    revision: number;
-}): Readonly<{
+export declare function collectionMetadataHistoryEntryPlan(input: Parameters<ReturnType<typeof createCollectionHistoryPlans>['collectionMetadataHistoryEntryPlan']>[0]): Readonly<{
     kind: string;
     input: Readonly<{
         route: number;
@@ -119,7 +78,9 @@ export declare function collectionMetadataHistoryEntryPlan(input: {
         curator_account_id: string;
         revision: number;
     }>;
-    total: Bound;
+    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+        engineRequests: number;
+    }>;
     withinExistingCeiling: boolean;
 }>;
 export declare function executeCollectionMetadataHistoryInitialize(client: QueryClient, plan: CollectionMetadataHistorySqlPlan): Promise<{
@@ -164,4 +125,3 @@ export declare function executeCollectionMetadataHistoryEntry(client: QueryClien
     beforeCoverMediaId: string | null;
     afterCoverMediaId: string | null;
 } | null>;
-export {};

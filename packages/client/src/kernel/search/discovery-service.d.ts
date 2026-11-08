@@ -1,6 +1,6 @@
 import type { FilterRelease } from '@rezics/filter';
 import { type TextNode } from './text.ts';
-import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterSource } from '../semantic/index.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { ConceptFilterExecution } from './concept-browse-statements.ts';
 import { type MixedDiscoveryRequest } from './discovery-request.ts';
@@ -8,6 +8,7 @@ import type { DiscoveryPage, DiscoveryReadContext, DiscoveryRegistry, DiscoveryO
 import type { DiscoverySearch } from './discovery-api.ts';
 import type { IndexedSubject } from './source.ts';
 import type { PublicFilterConsumerJob, PublicDiscoveryConsumerOperations, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
+import { type SearchDisclosureApplication } from './disclosure-application.ts';
 type Principal = 'anonymous' | `account:${string}`;
 export type { DiscoverySearch } from './discovery-api.ts';
 export type RetainedDiscoveryRead = Readonly<{
@@ -18,6 +19,7 @@ export type RetainedDiscoveryRead = Readonly<{
 }>;
 export type RetainedDiscoverySearch = (principal: Principal, request: MixedDiscoveryRequest, context: DiscoveryReadContext) => Promise<RetainedDiscoveryRead>;
 type DiscoveryConfiguration = {
+    disclosure?: SearchDisclosureApplication;
     consumer: PublicDiscoveryConsumerOperations;
     source: PublicFilterSource;
     keys: KeyRing;

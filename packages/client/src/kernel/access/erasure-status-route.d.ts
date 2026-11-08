@@ -6458,6 +6458,57 @@ export declare function erasureStatusRoutes(app: ReturnType<typeof definitionRou
 } & {
     v1: {
         definitions: {
+            get: {
+                body: unknown;
+                params: {};
+                query: unknown;
+                headers: unknown;
+                response: {
+                    200: {
+                        digest: string;
+                        head: number;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             active: {
                 get: {
                     body: unknown;
@@ -6983,15 +7034,15 @@ export declare function erasureStatusRoutes(app: ReturnType<typeof definitionRou
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: import("../request/access.ts").AccountActor | {
+        readonly actor: import("./check.ts").AccountActor | {
             kind: 'anonymous';
         };
         readonly session: {
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("./index.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorize: (resource: import("./index.ts").Resource) => Promise<import("./index.ts").AccessCheck>;
+        readonly authorizeCommand: (resource: import("./index.ts").Resource, denied: () => Error) => Promise<import("./check.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -7335,15 +7386,15 @@ export declare function erasureStatusRoutes(app: ReturnType<typeof definitionRou
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: import("../request/access.ts").AccountActor | {
+            readonly actor: import("./check.ts").AccountActor | {
                 kind: 'anonymous';
             };
             readonly session: {
                 readonly components: import("../tokens/session.ts").SessionComponent[];
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("./index.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorize: (resource: import("./index.ts").Resource) => Promise<import("./index.ts").AccessCheck>;
+            readonly authorizeCommand: (resource: import("./index.ts").Resource, denied: () => Error) => Promise<import("./check.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -7363,15 +7414,15 @@ export declare function erasureStatusRoutes(app: ReturnType<typeof definitionRou
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: import("../request/access.ts").AccountActor | {
+    readonly actor: import("./check.ts").AccountActor | {
         kind: 'anonymous';
     };
     readonly session: {
         readonly components: import("../tokens/session.ts").SessionComponent[];
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("./index.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorize: (resource: import("./index.ts").Resource) => Promise<import("./index.ts").AccessCheck>;
+    readonly authorizeCommand: (resource: import("./index.ts").Resource, denied: () => Error) => Promise<import("./check.ts").AccessCommandAuthorization>;
 }) => Promise<Readonly<{
     accountId: string;
     state: 'pending' | 'retention-outstanding' | 'complete';

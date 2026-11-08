@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
+import type { BatchStatement } from '@rezics/definitions/bulk';
 import { createImportTransport } from '../src/import-client.ts';
+import { safeCandidatePage } from '../src/showcase-current-reads.ts';
 import {
   admitSelectedSynopsisSupport,
   createPublicBulkClient,
@@ -9,6 +11,37 @@ import {
 
 const original = '019a1b2c-3d4e-7f00-8a00-000000000001';
 const canonical = '019a1b2c-3d4e-7f00-8a00-000000000002';
+
+test('candidate page normalization drops tombstones and builds selection only at the terminal page', () => {
+  const statement: BatchStatement = {
+    property: { id: 'schema:abstract' },
+    value: { type: 'novalue' },
+    references: [{ parts: [{ property: { id: 'schema:reference' }, value: { type: 'novalue' } }] }],
+  };
+  const preferred = { id: original, source: null, statement, head: null, rank: 'preferred' as const };
+  const normal = { id: canonical, source: null, statement, head: null, rank: 'normal' as const };
+  const tombstone = { id: '019a1b2c-3d4e-7f00-8a00-000000000003', deleted: true };
+  const continuation = safeCandidatePage({
+    candidates: [preferred, tombstone],
+    next: 'next-page',
+    adoption: { mode: 'replace', head: 7 },
+  });
+  expect(continuation.candidates).toEqual([preferred]);
+  expect(continuation.adoption).toEqual({ head: 7 });
+
+  const terminal = safeCandidatePage({
+    candidates: [preferred, normal, tombstone],
+    next: null,
+    adoption: { mode: 'replace', head: 7 },
+  });
+  expect(terminal.adoption).toEqual({
+    head: 7,
+    selection: [
+      { candidate: original, rank: 'preferred' },
+      { candidate: canonical, rank: 'normal' },
+    ],
+  });
+});
 
 test('review and independent public publication reads bypass caches through current canonical redirects', async () => {
   const requests: Request[] = [];

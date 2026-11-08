@@ -3,7 +3,7 @@ import { type ContentEditionBuyerFactReader } from './authenticated-benefit.ts';
 import { type PermissionAccount } from './account-authority.ts';
 import { type Account } from './account-data.ts';
 import { type AuthoritativeTime } from '../command/command.ts';
-import { type ResourcePage, type AccessRealmRoleReader, type ReadDecisions, type Access, type AccessClient, type AccessContext, type AccessCheck, type AccountActor, type ActionCatalogue, type Actor, type Resource } from '../request/access.ts';
+import { type ResourcePage, type AccessRealmRoleReader, type ReadDecisions, type Access, type AccessClient, type AccessContext, type AccessCheck, type AccountActor, type ActionCatalogue, type Actor, type Resource } from './check.ts';
 import { type ResourceRoleCatalogue } from './resource-roles.ts';
 import { type KindOriginalProducer } from './kind-audience-original.ts';
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.

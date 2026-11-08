@@ -5,7 +5,7 @@ import { createSearchScopeSource } from '../search/scope-source.ts';
 import { type CollectionPublicationLocator } from './collection-publication-work-admission.ts';
 import type { CollectionOutputRef } from './collection-source-output.ts';
 import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import { type CollectionPublicationFrontier } from './collection-publication-staging-state.ts';
 type Runtime = Parameters<typeof createSearchScopeSource>[0];
 /** Search client used to revalidate public catalogue generation/uuid/index at seal and readback. */

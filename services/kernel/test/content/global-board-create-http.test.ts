@@ -19,7 +19,7 @@ import { actionCatalogue, IDEMPOTENCY_HEADER, SESSION_HEADER } from '../../src/h
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
@@ -265,27 +265,45 @@ async function postThread(board: Board, kind: 'review' | 'discussion', voteCitat
 test.serial(
   'a governance account creates published and protected Global boards over HTTP and authors post reviews and discussions on them',
   async () => {
-    // Count the complete HTTP creation at exactly these existing Global board populations.
-    const statements: number[] = [];
-    for (const scale of [1, 64, 512]) {
-      const count = Number(
-        (await db.admin.query('SELECT count(*) AS n FROM content.board WHERE realm_id IS NULL')).rows[0].n,
-      );
-      const ids = Array.from({ length: scale - count }, () => newId(routeOf(conceptId)!));
-      await db.admin.query(
-        `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-      SELECT $1,id,$2,'Unrelated Global board','published',1,id FROM unnest($3::uuid[]) AS id`,
-        [routeOf(conceptId), conceptId, ids],
-      );
-      expect(
-        Number((await db.admin.query('SELECT count(*) AS n FROM content.board WHERE realm_id IS NULL')).rows[0].n),
-      ).toBe(scale);
-      const measured = await capture(db, () => createBoard('discussion'));
-      expect(measured.value.response.status).toBe(201);
-      statements.push(costOf(measured.capture).statements);
+    const conceptRoute = routeOf(conceptId)!;
+    const report = await checkGrowth(db, {
+      name: 'Global board creation',
+      scales: [1, 8, 64],
+      repetitions: 1,
+      warmups: 1,
+      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
+      async grow(database, scale) {
+        const count = Number(
+          (
+            await database.admin.query(
+              'SELECT count(*) AS n FROM content.board WHERE route = $1 AND subject_id = $2 AND realm_id IS NULL',
+              [conceptRoute, conceptId],
+            )
+          ).rows[0]!.n,
+        );
+        const ids = Array.from({ length: Math.max(0, scale - count) }, () => newId(conceptRoute));
+        if (ids.length === 0) return;
+        await database.admin.query(
+          `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
+           SELECT $1,id,$2,'Unrelated Global board','published',1,id FROM unnest($3::uuid[]) AS id`,
+          [conceptRoute, conceptId, ids],
+        );
+      },
+      async operation() {
+        const result = await createBoard('discussion');
+        expect(result.response.status).toBe(201);
+        return result;
+      },
+    });
+    expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
+    for (const { cost } of report.samples) {
+      expect(cost.rows).toBeGreaterThan(0);
+      expect(cost.statements).toBeGreaterThan(0);
+      expect(cost.controlStatements).toBeGreaterThan(0);
+      expect(cost.requestBytes).toBeGreaterThan(0);
+      expect(cost.responseBytes).toBeGreaterThan(0);
     }
-    expect(statements[0]).toBeGreaterThan(0);
-    expect(new Set(statements).size).toBe(1);
 
     const publishedResult = await createBoard('reviews');
     expect(publishedResult.response.status).toBe(201);

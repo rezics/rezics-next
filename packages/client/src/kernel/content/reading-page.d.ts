@@ -1,5 +1,5 @@
-import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
-import { type ViewerActionBindings } from '../access/viewer-actions.ts';
+import { readAccountDiscoverySummaries } from './access-port.ts';
+import type { ViewerActionBindings } from '../access/content-adapter.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { ContentReadDependencies, PostEntry } from './reads.ts';
 import type { AnchoredPosition } from './model.ts';
@@ -74,7 +74,27 @@ export declare function ReadingPageResponseSchema(): import("typebox").TObject<{
     }>]>;
     documentMedia: import("typebox").TUnsafe<Readonly<{
         state: 'available' | 'unavailable' | 'overflow';
-        documents: readonly import("./reading-page-documents.ts").ReadingPageDocument[];
+        documents: readonly import("./contract/reading-page.ts").ReadingPageDocument<Readonly<{
+            id: string;
+            containerId: string;
+            digest: string;
+            width: number;
+            height: number;
+            variants: readonly {
+                format: 'avif' | 'webp';
+                width: number;
+                height: number;
+            }[];
+            placeholder: {
+                thumbhash: string;
+                color: string;
+            } | null;
+            focalPoint: {
+                x: number;
+                y: number;
+            } | null;
+            credit: import("@rezics/definitions/media-import").MediaImportRequest['credit'] | null;
+        }>>[];
     }>>;
     replies: import("typebox").TObject<{
         items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TUnsafe<import("./reads.ts").ItemView & {
@@ -250,7 +270,9 @@ export type ReadingPageDependencies = ContentReadDependencies & Readonly<{
     routeKey: Uint8Array;
     viewerActionRuntime?: () => ReadingPageViewerActionRuntime;
 }>;
-/** A consumer-selected, exact native reference. Subject selections retain their Subject key and place. */
+/** A consumer-selected, exact native reference. `placeId` is the current Board identity.
+ * Subject selections also retain the Subject key; the Board's current Realm or Global home
+ * is observed from that Board, and the thread need not share the Board's native route. */
 export type SelectedReadingCardReference = Readonly<{
     type: 'content.thread';
     id: string;
@@ -440,7 +462,27 @@ export declare function readContentReadingPage(dependencies: ReadingPageDependen
         };
         documentMedia: Readonly<{
             state: 'available' | 'unavailable' | 'overflow';
-            documents: readonly import("./reading-page-documents.ts").ReadingPageDocument[];
+            documents: readonly import("./contract/reading-page.ts").ReadingPageDocument<Readonly<{
+                id: string;
+                containerId: string;
+                digest: string;
+                width: number;
+                height: number;
+                variants: readonly {
+                    format: 'avif' | 'webp';
+                    width: number;
+                    height: number;
+                }[];
+                placeholder: {
+                    thumbhash: string;
+                    color: string;
+                } | null;
+                focalPoint: {
+                    x: number;
+                    y: number;
+                } | null;
+                credit: import("@rezics/definitions/media-import").MediaImportRequest['credit'] | null;
+            }>>[];
         }>;
         replies: {
             items: ({
@@ -449,7 +491,8 @@ export declare function readContentReadingPage(dependencies: ReadingPageDependen
                 route: number;
                 parentId: string | null;
                 removed: true;
-                availability: "withheld";
+                availability: "erased";
+                restorableUntil?: string;
                 body: null;
                 sha256: null;
             } | {
@@ -458,8 +501,7 @@ export declare function readContentReadingPage(dependencies: ReadingPageDependen
                 route: number;
                 parentId: string | null;
                 removed: true;
-                availability: "erased";
-                restorableUntil?: string;
+                availability: "withheld";
                 body: null;
                 sha256: null;
             } | (import("./reads.ts").ItemView & {

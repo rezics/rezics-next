@@ -4,7 +4,8 @@ import { createWorkflowRetention } from './application/index.ts';
 import { workflowRetentionStore } from './retention-store.ts';
 import { workflowRetentionScan } from './adapters/workflow-retention.ts';
 import type { WorkflowStatusScanContinuation } from './retention-scan.ts';
-import type { WorkflowCopyRetirement, WorkflowRetentionPage } from './contract/index.ts';
+import { deleteAuthSdkTechnical } from './sdk-retirement-fence.ts';
+import type { AuthRetentionInvocation, WorkflowCopyRetirement, WorkflowRetentionPage } from './contract/index.ts';
 
 export {
   AUTH_WORKFLOW_APPLICATION,
@@ -24,7 +25,7 @@ export {
 } from './contract/index.ts';
 export { readWorkflowRetentionConfig, AUTH_WORKFLOW_RETENTION_COST } from './core/index.ts';
 export { installWorkflowRequestRetention } from './adapters/request-retention.ts';
-export type WorkflowRetentionSdk = Pick<typeof DBOS, 'deleteWorkflows'>;
+export type WorkflowRetentionSdk = Pick<typeof DBOS, 'openWorkflowStatusScan' | 'readWorkflowStatusScanPage'>;
 
 /** Auth assembly supplies the existing native consumer/SDK retirement capability.
  * This composition creates no writer, ledger, scheduler or second SDK runtime.
@@ -37,11 +38,9 @@ export function createAuthWorkflowRetention(
 ) {
   return createWorkflowRetention({
     store: workflowRetentionStore<WorkflowStatusScanContinuation>(database),
-    scan: workflowRetentionScan(),
+    scan: workflowRetentionScan(sdk),
     retireCopy,
-    deleteTechnical: async (ids) => {
-      await sdk.deleteWorkflows(ids, false);
-    },
+    deleteTechnical: deleteAuthSdkTechnical,
     now,
   });
 }
@@ -53,8 +52,9 @@ export function runWorkflowRetentionPage(
   sdk: WorkflowRetentionSdk = DBOS,
   now = new Date(),
   retireCopy: WorkflowCopyRetirement,
+  invocation?: AuthRetentionInvocation,
 ): Promise<WorkflowRetentionPage> {
-  return createAuthWorkflowRetention(database, retireCopy, sdk, () => now.getTime()).page(retentionDays);
+  return createAuthWorkflowRetention(database, retireCopy, sdk, () => now.getTime()).page(retentionDays, invocation);
 }
 
 export function runWorkflowRetentionBatch(
@@ -63,8 +63,9 @@ export function runWorkflowRetentionBatch(
   sdk: WorkflowRetentionSdk = DBOS,
   now = new Date(),
   retireCopy: WorkflowCopyRetirement,
+  invocation?: AuthRetentionInvocation,
 ): Promise<number> {
-  return createAuthWorkflowRetention(database, retireCopy, sdk, () => now.getTime()).batch(retentionDays);
+  return createAuthWorkflowRetention(database, retireCopy, sdk, () => now.getTime()).batch(retentionDays, invocation);
 }
 
 export function runWorkflowRetentionSweep(
@@ -73,6 +74,7 @@ export function runWorkflowRetentionSweep(
   sdk: WorkflowRetentionSdk = DBOS,
   now = new Date(),
   retireCopy: WorkflowCopyRetirement,
+  invocation?: AuthRetentionInvocation,
 ): Promise<number> {
-  return createAuthWorkflowRetention(database, retireCopy, sdk, () => now.getTime()).sweep(retentionDays);
+  return createAuthWorkflowRetention(database, retireCopy, sdk, () => now.getTime()).sweep(retentionDays, invocation);
 }

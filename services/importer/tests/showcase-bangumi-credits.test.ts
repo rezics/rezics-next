@@ -178,14 +178,19 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     readReviewedSubject: async (id) => read(id),
     async reviewedCandidates(id, query) {
       expect(query.context).toBe(globalContext);
+      const key = `${id}\0${query.property}`;
+      const current = adopted.get(key);
+      const ranks = new Map(current?.selection.map((item) => [item.candidate, item.rank]));
       return {
-        candidates: [...candidates.values()].filter(
-          (candidate) =>
-            candidate.source.external_id === subjects.get(id)?.sourceExternalId &&
-            candidate.statement.property.id === query.property,
-        ),
+        candidates: [...candidates.values()]
+          .filter(
+            (candidate) =>
+              candidate.source.external_id === subjects.get(id)?.sourceExternalId &&
+              candidate.statement.property.id === query.property,
+          )
+          .map((candidate) => ({ ...candidate, rank: ranks.get(candidate.id) ?? null })),
         next: null,
-        adoption: adopted.get(`${id}\0${query.property}`) ?? null,
+        adoption: current ? { mode: 'replace', head: current.head } : null,
       } as never;
     },
     async acceptReviewedCandidate(_id, candidateId) {

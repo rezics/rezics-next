@@ -25,7 +25,9 @@ type HttpDependencies = Omit<Parameters<typeof ratingRoutes>[1], 'pool' | 'capab
 type ApplicationDependencies = Omit<HttpDependencies, 'access'> & {
     access: Access;
 };
-/** One declaration supplies the native HTTP, event, permission and durable-work inventories. */
+/** One declaration supplies the native HTTP, event, permission and durable-work inventories.
+ * Process composition binds native capabilities before this runs; the constructor does not install them.
+ */
 export declare function createRatingDefinition(): {
     name: 'rating';
     routes: {
@@ -9356,6 +9358,7 @@ export declare function createRatingDefinition(): {
 };
 export type RatingDefinition = ReturnType<typeof createRatingDefinition>;
 /** The host lends its resources. Construction opens no connection and starts no process or service.
+ * Native capabilities come from the bound process composition, not from ambient test-preload state.
  * Omitting `producer` uses the composition-bound Semantic instance; passing one is the command-factory seam.
  */
 export declare function createRatingModule(options: {
@@ -18797,7 +18800,7 @@ export declare function createRatingModule(options: {
         };
         providers: {
             write: (input: {
-                actor: import("../request/access.ts").Actor;
+                actor: import("./dependencies.ts").Actor;
                 subjectId: string;
                 source: string;
                 value: Omit<import("./source-statistics.ts").SourceStatistic, "observation" | "source"> & {
@@ -18809,7 +18812,7 @@ export declare function createRatingModule(options: {
                 subjectAvailable?: boolean;
             }) => Promise<import("./source-statistics.ts").SourceStatistic>;
             writeCommand: (input: {
-                actor: import("../request/access.ts").Actor;
+                actor: import("./dependencies.ts").Actor;
                 subjectId: string;
                 source: string;
                 value: Omit<import("./source-statistics.ts").SourceStatistic, "observation" | "source"> & {
@@ -18823,7 +18826,7 @@ export declare function createRatingModule(options: {
                 preparedFenceRevision: string | null;
             }>>;
             clear: (input: {
-                actor: import("../request/access.ts").Actor;
+                actor: import("./dependencies.ts").Actor;
                 subjectId: string;
                 source: string;
                 value: Readonly<{

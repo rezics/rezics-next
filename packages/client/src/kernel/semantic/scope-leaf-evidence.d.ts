@@ -1,3 +1,4 @@
+import type { ScopeEvidenceReader } from './contract/index.ts';
 import type { Pool } from 'pg';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -54,20 +55,7 @@ export type LeafRequest = Readonly<{
     revalidate: string | null;
     budget: LeafWork;
 }>;
-type LeafWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext ? Readonly<{
-    actor?: never;
-    nativeT?: never;
-    work: W;
-}> : never;
-export type LeafOptions = Readonly<{
-    access: Access;
-    routeKey: Uint8Array;
-    deadline: number;
-}> & (Readonly<{
-    actor: Actor;
-    nativeT?: AuthoritativeTime;
-    work?: never;
-}> | LeafWorkContext);
+export type LeafOptions = ScopeEvidenceReader<Access, Actor, AuthoritativeTime, ScopeWorkContext>;
 export type LeafReader = (pool: Pool, request: LeafRequest, options: LeafOptions) => Promise<LeafEvidence>;
 /** Native selected evidence only; matching remains the shared Search pure matcher. */
 export declare function readScopeLeafEvidence(pool: Pool, request: LeafRequest, options: LeafOptions): Promise<LeafEvidence>;

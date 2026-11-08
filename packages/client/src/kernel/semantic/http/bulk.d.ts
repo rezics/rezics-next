@@ -2,7 +2,8 @@ import type { Pool } from 'pg';
 import type { OpenAPIV3 } from 'openapi-types';
 import { type Access } from '../../request/access.ts';
 import type { subjectRoutes } from './subjects.ts';
-export declare function logPendingFenceFailure(requestId: string, commandIndex: number): Error;
+export { BULK_WRITE_ROUTE, PROBLEM_TYPE_BASE, bulkWriteAction, bulkWriteCommandProblem, bulkWriteDiagnostics, bulkWriteUnavailableSchema, logBulkWriteUnavailable, logPendingFenceFailure, } from './batch.ts';
+export type { BulkWriteAction, BulkWriteProblemBody, BulkWriteTransactionPhase } from './batch.ts';
 export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool, routeKey, access, clock }: {
     pool: Pool;
     routeKey: Uint8Array;

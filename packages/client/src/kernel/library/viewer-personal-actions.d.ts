@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { Access, Actor } from '../request/access.ts';
-import { type ViewerActionBindings, type ViewerActionResources } from '../access/viewer-actions.ts';
+import type { ViewerActionBindings, ViewerActionResources } from '../access/viewer-actions.ts';
 import { type ViewerFact, type ViewerFactInput, type ViewerFactsPage, type ViewerQuestion } from './viewer-facts.ts';
 export type ViewerPersonalActionInput = ViewerFactInput & Readonly<{
     resourceType: string;

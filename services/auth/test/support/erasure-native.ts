@@ -18,7 +18,7 @@ export type Person = { accountId: string; cookie: string; email: string; bearer:
 
 /** Fault a native transaction, preserving both pg checkout overloads. Restoring
  * the hook never changes product state or manufactures a completion marker. */
-export function failNativeQueries(pool: Pool, fails: (sql: string) => boolean) {
+export function failNativeQueries(pool: Pool, fails: (sql: string) => boolean, timing: 'before' | 'after' = 'before') {
   const connect = pool.connect;
   const wrap = (client: PoolClient) =>
     new Proxy(client, {
@@ -26,8 +26,17 @@ export function failNativeQueries(pool: Pool, fails: (sql: string) => boolean) {
         const value = Reflect.get(target, property);
         if (property === 'query')
           return (...args: unknown[]) => {
-            if (fails(String(args[0]))) throw new Error('Injected native consumer interruption');
-            return Reflect.apply(value, target, args);
+            const failure = () => {
+              if (fails(String(args[0]))) throw new Error('Injected native consumer interruption');
+            };
+            if (timing === 'before') failure();
+            const result = Reflect.apply(value, target, args);
+            return timing === 'after'
+              ? Promise.resolve(result).then((reply) => {
+                  failure();
+                  return reply;
+                })
+              : result;
           };
         return typeof value === 'function' ? value.bind(target) : value;
       },

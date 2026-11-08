@@ -1,21 +1,6 @@
-/** Retained contributions disclose a current identity, a deletion label, or no available identity. */
-export type LiveContributionAttribution = {
-    readonly id: string;
-    readonly kind: 'actor' | 'organization';
-    readonly displayName: string | null;
-};
-export type DeletedContributionAttribution = {
-    readonly displayName: 'Deleted account' | 'Deleted organization';
-};
-/** Null is unavailable/absent attribution. It never attests account deletion. */
-export type ContributionAttribution = LiveContributionAttribution | DeletedContributionAttribution | null;
-export declare function ContributionAttributionSchema(): import("typebox").TUnion<[import("typebox").TObject<{
-    id: import("typebox").TString;
-    kind: import("typebox").TUnion<[import("typebox").TLiteral<"actor">, import("typebox").TLiteral<"organization">]>;
-    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-}>, import("typebox").TObject<{
-    displayName: import("typebox").TUnion<[import("typebox").TLiteral<"Deleted account">, import("typebox").TLiteral<"Deleted organization">]>;
-}>, import("typebox").TNull]>;
+import type { ContributionAttribution, DeletedContributionAttribution } from './contract/index.ts';
+export { ContributionAttributionSchema } from './contract/index.ts';
+export type { ContributionAttribution, LiveContributionAttribution, DeletedContributionAttribution, } from './contract/index.ts';
 /** Input comes from the owner's current public projection, never a guessed lifecycle state. */
 export type ContributionIdentity = {
     readonly id?: string;

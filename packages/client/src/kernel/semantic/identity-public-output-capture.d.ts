@@ -1,12 +1,13 @@
 import type { Pool } from 'pg';
-import { type CommandTransaction } from '../command/command.ts';
-import type { PublicOutputCommandContext, LockPublicOutputDisposition } from '../library/native-public-output-contract.ts';
+import { type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
+import type { NativePublicOutputApplication, PublicOutputCommandContext, LockPublicOutputDisposition } from '../library/contract/native-public-output.ts';
+type NativePublicOutputPort = NativePublicOutputApplication<CommandTransaction, Pool, AuthoritativeTime>;
 import type { PublicFilterSourceFactory } from './public-filter-source-contract.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import type { IdentityScopeKey } from './identity-scope-types.ts';
 import type * as T from './identity-public-output-types.ts';
 /** Every call owns one finite frame. Command retries are surrendered; continuation is persisted. */
-export declare function createPublicIdentityOutputCapture(config: Parameters<PublicFilterSourceFactory>[0]): {
+export declare function createPublicIdentityOutputCapture(config: Parameters<PublicFilterSourceFactory>[0], nativeOutput: NativePublicOutputPort): {
     accept: (request: T.PublicIdentityOutputAcceptance, options: T.PublicIdentityOutputWork) => Promise<T.PublicIdentityOutputResult<{
         status: 'accepted';
         capture: Readonly<{
@@ -172,9 +173,9 @@ export declare function createPublicIdentityOutputCapture(config: Parameters<Pub
     }>>;
 };
 /** Commerce calls this on the actual original Collection command. No caller payload is evidence. */
-export declare const resolvePublicIdentityOutputCaptureDisposition: LockPublicOutputDisposition;
+export declare const resolvePublicIdentityOutputCaptureDisposition: LockPublicOutputDisposition<CommandTransaction, Pool, AuthoritativeTime>;
 /** Source-local current guard for the explicit variant. The caller transfers its own remainder. */
-export declare function lockPublicIdentityOutputCaptureCurrent(tx: CommandTransaction, selection: T.PublicIdentityOutputCapture | IdentityScopeKey, ctx: PublicOutputCommandContext, retained?: boolean): Promise<{
+export declare function lockPublicIdentityOutputCaptureCurrent(tx: CommandTransaction, selection: T.PublicIdentityOutputCapture | IdentityScopeKey, ctx: PublicOutputCommandContext<Pool, AuthoritativeTime>, nativeOutput: NativePublicOutputPort, retained?: boolean): Promise<{
     status: "current" | "retained";
     key: {
         source: {
@@ -201,14 +202,14 @@ export declare function lockPublicIdentityOutputCaptureCurrent(tx: CommandTransa
         bindingDigest: string;
     }>;
     committedRevision: bigint;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 } | {
     status: "changed" | "unavailable";
     reason: "binding" | "closure" | "continuation" | "current" | "fenced" | "foreign_closure_missing" | "provenance";
     dependency?: string;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 }>;
-export declare function readPublicIdentityOutputCaptureCurrent(pool: Pool, selection: T.PublicIdentityOutputCapture | IdentityScopeKey, options: T.PublicIdentityOutputWork): Promise<{
+export declare function readPublicIdentityOutputCaptureCurrent(pool: Pool, selection: T.PublicIdentityOutputCapture | IdentityScopeKey, options: T.PublicIdentityOutputWork, nativeOutput: NativePublicOutputPort): Promise<{
     status: "current" | "retained";
     key: {
         source: {
@@ -235,12 +236,12 @@ export declare function readPublicIdentityOutputCaptureCurrent(pool: Pool, selec
         bindingDigest: string;
     }>;
     committedRevision: bigint;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 } | {
     status: "changed" | "unavailable";
     reason: "binding" | "closure" | "continuation" | "current" | "fenced" | "foreign_closure_missing" | "provenance";
     dependency?: string;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 }>;
 /** Original pre-arm receipts invalidate even a stale retained output; they never grant fresh eligibility. */
 export declare function receivePublicIdentityOutputCapturePrearm(pool: Pool, selection: import('./identity-epoch-prearm-contract.ts').IdentityPrearmTicketLocator, options: T.PublicIdentityOutputWork, cancellation?: IdentityNativeReceipt): Promise<{
@@ -251,10 +252,11 @@ export declare function receivePublicIdentityOutputCapturePrearm(pool: Pool, sel
         position: bigint;
         transactionId: string;
     }>;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 } | {
     status: "changed" | "unavailable";
     reason: "binding" | "closure" | "continuation" | "current" | "fenced" | "foreign_closure_missing" | "provenance";
     dependency?: string;
-    work: import("../library/access-capabilities.ts").WorkReceipt;
+    work: import("../search/scope-execution.ts").WorkReceipt;
 }>;
+export {};

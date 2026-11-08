@@ -2,6 +2,7 @@ import type { RatingCapabilities } from './contract/capabilities.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { SessionComponent } from '../tokens/session.ts';
+import { type RatingVoteSemantic } from './adapters/vote-semantic.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { type OwnCountedVoteObservation } from './own-votes-counted.ts';
 import { type RatingQuestionScale } from './question-scale.ts';
@@ -77,6 +78,7 @@ type Dependencies = {
     access: Access;
     capabilities?: RatingCapabilities;
     clock?: KernelClock;
+    semantic?: RatingVoteSemantic;
 };
 /** Shared native command preparation for a selected exact slot. Advice retains no authorization. */
 export declare function prepareVoteTarget(config: Dependencies, actor: Actor, input: {
@@ -85,7 +87,10 @@ export declare function prepareVoteTarget(config: Dependencies, actor: Actor, in
     units?: number | null;
 }, deadline: number): Promise<{
     question: RatingQuestion;
-    target: import("../library/subject-anchor.ts").ResolvedSubject;
+    target: Readonly<{
+        subjectId: string;
+        requestedSubjectId: string | null;
+    }>;
 }>;
 /** Writes and reads the signed-in person's current rating vote on the account's partition. */
 export declare function createVoteCommands(config: Dependencies): {

@@ -34,7 +34,7 @@ import {
   type JourneyPublishedRow,
 } from './showcase-bangumi-journey.ts';
 import type { CrossMediaSeedReport } from './cross-media-seed.ts';
-import type { ShowcasePublicationResult } from './showcase-publication.ts';
+import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceRoot = resolve(root, '.temp/imports-walk');

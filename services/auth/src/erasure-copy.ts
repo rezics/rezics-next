@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { AuthRetentionInvocation } from './contract/index.ts';
 import { DBOS, type DBOSClient, type WorkflowHandle } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
 import { retireNativeWorkflowRequest } from './request-retention.ts';
@@ -6,6 +7,7 @@ import {
   AUTH_SDK_RETIREMENT,
   authSdkFundedReadiness,
   closeAuthSdkWriters,
+  createAuthSdkRetirementInvocation,
   deleteAuthSdkPayload,
   nativeFence,
   readAuthSdkFence,
@@ -28,11 +30,34 @@ export const COPY_TABLES = [
 ] as const;
 const names = ['accounts.registration', 'accounts.operation', 'accounts.client-reduction'] as const;
 type Name = (typeof names)[number];
-export async function copyTransaction<T>(pool: Pool, action: (connection: PoolClient) => Promise<T>): Promise<T> {
+export async function copyTransaction<T>(
+  pool: Pool,
+  action: (connection: PoolClient) => Promise<T>,
+  invocation?: AuthRetentionInvocation,
+): Promise<T> {
   const connection = await pool.connect();
   try {
+    invocation?.check();
     await connection.query('BEGIN');
-    const value = await action(connection);
+    if (invocation)
+      await connection.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)", [
+        Math.max(1, invocation.deadline - Date.now()) + 'ms',
+      ]);
+    // Cleanup retains the raw connection so expiry cannot suppress ROLLBACK.
+    const checked = invocation
+      ? new Proxy(connection, {
+          get(target, key) {
+            if (key === 'query')
+              return (...args: Parameters<PoolClient['query']>) => {
+                invocation.check();
+                return Reflect.apply(target.query, target, args);
+              };
+            return Reflect.get(target, key, target);
+          },
+        })
+      : connection;
+    const value = await action(checked);
+    invocation?.check();
     await connection.query('COMMIT');
     return value;
   } catch (error) {
@@ -245,7 +270,13 @@ export async function finishCopyResult(database: Pool, id: string, value: unknow
  * recovery. It consumes the real return, checked against its native producer's
  * committed result. SUCCESS is only a nonblocking SDK-read guard, never proof.
  * Unknown/failed/live producers and missing returns remain pending. */
-export async function completeCopy(database: Pool, id: string, value?: unknown): Promise<boolean> {
+export async function completeCopy(
+  database: Pool,
+  id: string,
+  value?: unknown,
+  invocation?: AuthRetentionInvocation,
+): Promise<boolean> {
+  if (invocation) await invocation.charge('consumer');
   const work = (
     await database.query<{ ready: boolean; retired: boolean; source_key: string | null; result_digest: Buffer | null }>(
       'SELECT ready,retired,source_key,result_digest FROM auth_copy_work WHERE workflow_id=$1',
@@ -256,10 +287,15 @@ export async function completeCopy(database: Pool, id: string, value?: unknown):
   if (!work.source_key || !work.result_digest) return false;
   if (work.ready) return true;
   if (value === undefined) {
+    invocation?.check();
     const status = await DBOS.getWorkflowStatus(id);
     if (status?.status !== 'SUCCESS') return false;
-    value = await DBOS.retrieveWorkflow(id).getResult();
+    invocation?.check();
+    value = invocation
+      ? await DBOS.getResult(id, { deadlineEpochMS: invocation.deadline })
+      : await DBOS.retrieveWorkflow(id).getResult();
   }
+  invocation?.check();
   const digest = resultDigest(value);
   if (!work.result_digest.equals(digest)) return false;
   return !!(
@@ -271,8 +307,10 @@ export async function completeCopy(database: Pool, id: string, value?: unknown):
   ).rowCount;
 }
 /** Raw-key probes use the deployed native schema. No payloads or history listing. */
-export async function copiesAbsent(database: Pool, id: string): Promise<boolean> {
-  for (const table of COPY_TABLES)
+export async function copiesAbsent(database: Pool, id: string, invocation?: AuthRetentionInvocation): Promise<boolean> {
+  if (invocation) await invocation.charge('absence');
+  for (const table of COPY_TABLES) {
+    invocation?.check();
     if (
       (
         await database.query(
@@ -282,6 +320,8 @@ export async function copiesAbsent(database: Pool, id: string): Promise<boolean>
       ).rowCount
     )
       return false;
+  }
+  invocation?.check();
   if ((await database.query('SELECT 1 FROM auth_dbos.streams WHERE workflow_uuid=$1 LIMIT 1', [id])).rowCount)
     return false;
   return true;
@@ -409,64 +449,90 @@ async function retirementPreconditions(client: PoolClient, work: RetirementWork)
 /** One exact bounded execution, never descendants or unrelated work. The SDK
  * retirement transaction itself touches the Auth recorder: release our copy lock
  * before calling it, then revalidate under that same copy-generation/role lock. */
-export async function eraseCopy(database: Pool, id: string): Promise<boolean> {
-  const before = await copyTransaction(database, async (client) => {
-    const work = await retirementWork(client, id);
-    if (!work) return null;
-    if (work.retired && !storedFence(work)) {
-      await pending(client, id, 'auth-sdk-original-copy-mapping-unavailable');
-      return null;
-    }
-    if (work.absent) return work;
-    return (await retirementPreconditions(client, work)) ? work : null;
-  });
+export async function eraseCopy(
+  database: Pool,
+  id: string,
+  invocation: AuthRetentionInvocation = createAuthSdkRetirementInvocation(),
+): Promise<boolean> {
+  await invocation.charge('custody');
+  const before = await copyTransaction(
+    database,
+    async (client) => {
+      const work = await retirementWork(client, id);
+      if (!work) return null;
+      if (work.retired && !storedFence(work)) {
+        await pending(client, id, 'auth-sdk-original-copy-mapping-unavailable');
+        return null;
+      }
+      if (work.absent) return work;
+      return (await retirementPreconditions(client, work)) ? work : null;
+    },
+    invocation,
+  );
   if (!before) return false;
   const funded = authSdkFundedReadiness();
   if (!funded.ready) return pending(database, id, funded.gap);
   const saved = storedFence(before);
-  const receipt = saved ? await readAuthSdkFence(id) : await closeAuthSdkWriters(id);
+  const receipt = saved ? await readAuthSdkFence(id, invocation) : await closeAuthSdkWriters(id, invocation);
   if (!receipt) return pending(database, id, AUTH_SDK_RETIREMENT.gap);
   if (saved && !sameNativeFence(saved, receipt)) return pending(database, id, 'auth-sdk-native-fence-receipt-mismatch');
-  const retired = await copyTransaction(database, async (client) => {
-    const work = await retirementWork(client, id);
-    if (!work) return false;
-    const current = storedFence(work);
-    if (current && !sameNativeFence(current, receipt))
-      return pending(client, id, 'auth-sdk-native-fence-receipt-mismatch');
-    if (work.absent) return !!current;
-    if (
-      work.name !== before.name ||
-      work.version !== before.version ||
-      work.parent_workflow_id !== before.parent_workflow_id ||
-      work.scope_count !== before.scope_count ||
-      !work.digest.equals(before.digest) ||
-      work.source_key !== before.source_key ||
-      !work.result_digest?.equals(before.result_digest ?? Buffer.alloc(0)) ||
-      work.result_finished_at?.getTime() !== before.result_finished_at?.getTime() ||
-      !(await retirementPreconditions(client, work))
-    )
-      return false;
-    // The permanent receipt contains only native technical identity. It commits
-    // in the existing receiving progress before any request or SDK deletion.
-    await client.query(
-      `UPDATE auth_copy_work SET sdk_fence_generation=$2,sdk_fence_closure_id=$3,
+  await invocation.charge('custody');
+  const retired = await copyTransaction(
+    database,
+    async (client) => {
+      const work = await retirementWork(client, id);
+      if (!work) return false;
+      const current = storedFence(work);
+      if (current && !sameNativeFence(current, receipt))
+        return pending(client, id, 'auth-sdk-native-fence-receipt-mismatch');
+      if (work.absent) return !!current;
+      if (
+        work.name !== before.name ||
+        work.version !== before.version ||
+        work.parent_workflow_id !== before.parent_workflow_id ||
+        work.scope_count !== before.scope_count ||
+        !work.digest.equals(before.digest) ||
+        work.source_key !== before.source_key ||
+        !work.result_digest?.equals(before.result_digest ?? Buffer.alloc(0)) ||
+        work.result_finished_at?.getTime() !== before.result_finished_at?.getTime() ||
+        !(await retirementPreconditions(client, work))
+      )
+        return false;
+      // The permanent receipt contains only native technical identity. It commits
+      // in the existing receiving progress before any request or SDK deletion.
+      await invocation.charge('receipt');
+      await client.query(
+        `UPDATE auth_copy_work SET sdk_fence_generation=$2,sdk_fence_closure_id=$3,
        sdk_fence_closed_at=$4,sdk_fence_pending=NULL,retired=true WHERE workflow_id=$1`,
-      [id, receipt.generation, receipt.closureID, receipt.closedAt],
-    );
-    await retireNativeWorkflowRequest(client, id);
-    return true;
-  });
+        [id, receipt.generation, receipt.closureID, receipt.closedAt],
+      );
+      await retireNativeWorkflowRequest(client, id);
+      return true;
+    },
+    invocation,
+  );
   if (!retired) return false;
   // Retirement revoked native writers already. Cancellation would itself be a
   // forbidden post-fence SDK write, and supplies no original consumer authority.
-  await deleteAuthSdkPayload(id, receipt);
-  const after = await readAuthSdkFence(id);
+  await invocation.charge('deletion-custody');
+  await deleteAuthSdkPayload(id, receipt, invocation);
+  const after = await readAuthSdkFence(id, invocation);
   if (!after || !sameNativeFence(receipt, after))
     return pending(database, id, 'auth-sdk-native-fence-receipt-mismatch');
-  if (!(await copiesAbsent(database, id))) return pending(database, id, 'auth-sdk-physical-copies-pending');
-  await database.query(
-    "UPDATE auth_copy_work SET absent=true,sdk_fence_pending=NULL,digest=decode(repeat('00',32),'hex') WHERE workflow_id=$1 AND retired",
-    [id],
+  if (!(await copiesAbsent(database, id, invocation))) return pending(database, id, 'auth-sdk-physical-copies-pending');
+  await invocation.charge('absent-write');
+  await copyTransaction(
+    database,
+    async (client) => {
+      // Coverage described the now-absent bytes. Keep the native fence and original
+      // consumer commitment, and retire the exact physical artifact inventory.
+      await client.query('DELETE FROM auth_copy_artifact WHERE workflow_id=$1', [id]);
+      await client.query(
+        "UPDATE auth_copy_work SET absent=true,rows=0,bytes=0,sdk_fence_pending=NULL,digest=decode(repeat('00',32),'hex') WHERE workflow_id=$1 AND retired",
+        [id],
+      );
+    },
+    invocation,
   );
   return true;
 }

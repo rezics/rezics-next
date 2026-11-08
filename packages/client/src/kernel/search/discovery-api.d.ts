@@ -7,7 +7,7 @@ import type { SummaryReaderDependencies, SubjectSummary } from '../semantic/inde
 import type { SpaceDiscoveryDependencyReadiness, SpaceEntryPage, SpaceEntryPresentation } from '../community/index.ts';
 import type { Fact } from './hits.ts';
 import type { MatchEvidence, MatchEvidenceQuery } from './match-evidence.ts';
-import type { SearchRequest } from './service.ts';
+import type { SearchRequest } from './service-contract.ts';
 import type { SearchFreshness } from './search-context.ts';
 import type { PublicFilterConsumerCaptureInput } from './public-filter-consumer-contract.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';

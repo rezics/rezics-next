@@ -1,56 +1,28 @@
+import type { Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Pool } from 'pg';
-import type { Access, Actor } from '../request/access.ts';
-import { type BuiltinCollectionKey } from './builtin-identity.ts';
-import type { CollectionKind } from './collection-kind.ts';
 import type { OwnerQueryDependencies } from './builtin-runtime-query.ts';
-import type { FilterDocument } from '@rezics/filter';
-export type BuiltinCollectionView = {
-    id: string;
-    curatorAccountId: string;
-    membershipKind: 'dynamic';
-    builtinKind: 'everything' | 'state' | 'liked';
-    builtin: BuiltinCollectionKey;
-    builtinLabels?: Readonly<Record<string, string>>;
-    visibility: 'private';
-    title: string | null;
-    description: string | null;
-    revision: number;
-    presentationKind: CollectionKind['presentationKind'];
-    presentationKindSource: CollectionKind['presentationKindSource'];
-    cover: null;
-    coverSource: 'none';
-};
-export type DynamicMemberView = {
-    kind: 'dynamic';
-    subjectId: string;
-};
-type ReadScope = 'collection:read' | 'collection:update' | 'collection:delete';
-/** Logical owner reads share the native account/scopes boundary. They create no header, grant, receipt or work. */
+export type { BuiltinCollectionView, DynamicMemberView } from './adapters/builtin-runtime.ts';
+/** The ordinary composition owns all built-in construction and current producer bindings. */
 export declare function createBuiltinRuntime(config: Omit<OwnerQueryDependencies, 'access'> & {
     access?: Access;
     tokens?: KeyRing;
 }): {
-    read: (actor: Actor, id: string, scope?: ReadScope, deadline?: number) => Promise<BuiltinCollectionView | null>;
-    discover: (actor: Actor, after?: string | null, limit?: number) => Promise<BuiltinCollectionView[]>;
-    resolve: (actor: Actor, key: Exclude<BuiltinCollectionKey, {
+    read: (actor: import("./adapters/authorization.ts").Actor, id: string, scope?: "collection:delete" | "collection:read" | "collection:update", deadline?: number) => Promise<import("./builtin-runtime.ts").BuiltinCollectionView | null>;
+    discover: (actor: import("./adapters/authorization.ts").Actor, after?: string | null, limit?: number) => Promise<import("./builtin-runtime.ts").BuiltinCollectionView[]>;
+    resolve: (actor: import("./adapters/authorization.ts").Actor, key: Exclude<import("./builtin-identity.ts").BuiltinCollectionKey, {
         kind: 'liked';
-    }>, deadline?: number) => Promise<BuiltinCollectionView | null>;
-    members: (actor: Actor, id: string, options?: {
-        limit?: number;
-        cursor?: string | null;
-        deadline?: number;
-        query?: {
-            filter: FilterDocument;
-            releaseDigest: string;
-        };
-    }) => Promise<{
-        members: DynamicMemberView[];
+    }>, deadline?: number) => Promise<import("./builtin-runtime.ts").BuiltinCollectionView | null>;
+    members: (actor: import("./contract/actors.ts").LibraryActor, id: string, options?: import("./contract/builtin-presentation.ts").BuiltinMemberOptions<{
+        filter: import("@rezics/filter").FilterDocument;
+        releaseDigest: string;
+    }>) => Promise<{
+        members: import("./builtin-runtime.ts").DynamicMemberView[];
         next: string | null;
     }>;
-    sourceVersion: (actor: Actor, source: BuiltinCollectionView, deadline: number, allowAbsent?: boolean) => Promise<string>;
+    sourceVersion: (actor: import("./adapters/authorization.ts").Actor, source: import("./builtin-runtime.ts").BuiltinCollectionView, deadline: number, allowAbsent?: boolean) => Promise<string>;
 };
-/** Internal native primitive for the real participant/retained plan integration. Never a successful member page. */
+/** Retained participant input: one native prefix and the producer's exact batched mappings. */
 export declare function readBuiltinOriginalInputs(pool: Pool, accountId: string, after: string | null, limit: number): Promise<{
     fact: {
         original: string;
@@ -69,4 +41,3 @@ export declare function readBuiltinOriginalInputs(pool: Pool, accountId: string,
     };
     mapping: import("../semantic/identity-epoch-contract.ts").IdentityMapping;
 }[]>;
-export {};

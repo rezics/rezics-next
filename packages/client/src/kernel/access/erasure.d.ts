@@ -2,10 +2,7 @@ import type { WorkModule } from '../work/registry.ts';
 import type { Pool } from 'pg';
 import { type CommandTransaction } from '../command/command.ts';
 import type { AccessClient } from '../request/access.ts';
-/** Append versions; never change a list used by a recorded erasure. */
-export declare const ERASURE_PARTICIPANTS: Readonly<{
-    1: readonly ["access", "auth", "library", "commerce", "content", "community", "semantic", "search", "imports", "shared-history", "delivery"];
-}>;
+export { ERASURE_PARTICIPANTS } from './contract/erasure.ts';
 export declare const ERASURE_PARTICIPANT_VERSION = 1;
 /** Owners register every effect that writes cross-partition erasure locators here. */
 export declare const ERASURE_LOCATOR_EFFECTS: ReadonlySet<string>;
@@ -91,4 +88,3 @@ export declare function advanceErasureCompletion(deps: {
 export declare const erasureWorkModule: WorkModule;
 /** Explicit platform resolution, after the owner has handled the copy. The caller emits its command event. */
 export declare function resolveLocatorWork(tx: CommandTransaction, workflowId: string): Promise<void>;
-export {};

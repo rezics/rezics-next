@@ -1,5 +1,6 @@
 import type { AccessActor, AccessDecision, AccessIdentityIntent, AccessIdentityJobRef, AccessIdentityReceipt, AccessPool, AccessQueryClient } from './vocabulary.ts';
 import type { AccessWorkDeclaration, AccessWorkDimensions } from './bounds.ts';
+import type { CollectionListPolicyOutcome, CollectionPolicyPort } from './collection-policy.ts';
 export type AvatarSummary = Readonly<{
     media: string;
     width: number;
@@ -73,7 +74,7 @@ export type AccessAccountAgentLink = Readonly<{
     verified: boolean;
     receipt_id: string | null;
 }>;
-/** Native composition binds mapping from semantic/agents.ts, original recovery, read snapshots, Source custody and maintenance from those public entries. */
+/** Native composition binds mapping from semantic/agents.ts, original recovery, read snapshots, Source custody and maintenance from those public entries. Public subject overlay uses semantic/public-subject-facts.ts; a missing method keeps presentation unavailable. */
 export type IdentitySemanticPort = {
     accountAgentId(accountId: string): string;
     accountAgentsForSubjects(client: AccessQueryClient, subjects: readonly string[]): Promise<ReadonlyMap<string, AccessAccountAgentLink>>;
@@ -85,6 +86,11 @@ export type IdentitySemanticPort = {
     verifyOriginalAccountAgentIdentity?(tx: unknown, selection: unknown, result: unknown): Promise<boolean>;
     withReadTransaction<T>(pool: AccessPool, body: (client: AccessQueryClient) => Promise<T>): Promise<T>;
     activeIdentitySourceConsumerMaintenance?(pool: AccessPool): boolean;
+    readPublicSubject?(client: AccessQueryClient, subjectId: string): Promise<{
+        id: string;
+        label: string;
+        type: string;
+    } | null>;
 };
 export type IdentityRecoveryStorePort = {
     readVerificationDecision(pool: AccessPool, receipt: AccessIdentityReceipt): Promise<{
@@ -228,6 +234,7 @@ export type AccessApplicationPorts = {
     readonly searchErasure?: SearchErasurePort;
     readonly nativeErasure: NativeErasureCoordinatorPort;
     readonly resourceAuthorization?: ResourceAuthorizationPort;
+    readonly collectionPolicy?: CollectionPolicyPort;
     readonly clock?: () => Date;
 };
 export type QualifyAvatarInput = {
@@ -294,4 +301,6 @@ export type AccessApplication = {
     readonly originalWorkLocalAllowance: AccessWorkDimensions;
     decideAuthorization(facts: DecideAuthorizationInput): AccessDecision;
     authorizeResource(facts: DecideAuthorizationInput): Promise<AccessDecision>;
+    specializeCollectionList(access: unknown, fullView: boolean): CollectionListPolicyOutcome;
+    collectionAuthorizationPreparation(): AccessWorkDimensions;
 };

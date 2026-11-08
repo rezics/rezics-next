@@ -37,3 +37,4 @@ export { zoneRoutes } from './http.ts';
 export { zoneViewerActionResource } from './viewer-actions.ts';
 export { zoneIfMatch, createZoneCommands } from './resource-commands.ts';
 export { createZoneReads, requireZoneAccount, zoneIdentity, zoneOwned, zonePublic } from './resource-reads.ts';
+export type { ZoneCollectionPublicView } from './collection-port.ts';

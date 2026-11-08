@@ -1,7 +1,7 @@
+export { strict } from './collection-schema-validation.ts';
 import type { Pool } from 'pg';
-import type { Static, TSchema } from 'typebox';
 import type { KernelClock } from '../clock.ts';
-import { type Access } from '../request/access.ts';
+import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
@@ -344,30 +344,6 @@ export declare function collectionResourceSchema(): import("typebox").TUnion<[im
     cover: import("typebox").TNull;
     coverSource: import("typebox").TLiteral<"none">;
 }>]>;
-/** Validate original JSON without Elysia's removal of undeclared body properties. */
-export declare function strict<S extends TSchema>(schema: S): {
-    '~standard': {
-        version: 1;
-        vendor: string;
-        types: {
-            input: Static<S>;
-            output: Static<S>;
-        } | undefined;
-        validate(value: unknown): {
-            value: Static<S>;
-            issues?: never;
-        } | {
-            value?: never;
-            issues: {
-                message: string;
-            }[];
-        };
-        jsonSchema: {
-            input: () => S;
-            output: () => S;
-        };
-    };
-};
 /** Transport only: the merged commands and reads own authorization, privacy and ordering. */
 export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
@@ -6812,6 +6788,57 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
 } & {
     v1: {
         definitions: {
+            get: {
+                body: unknown;
+                params: {};
+                query: unknown;
+                headers: unknown;
+                response: {
+                    200: {
+                        digest: string;
+                        head: number;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             active: {
                 get: {
                     body: unknown;
@@ -12541,11 +12568,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
     }>;
     response: {
         400: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -12555,11 +12582,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             }>>>;
         }>;
         401: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -12569,11 +12596,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             }>>>;
         }>;
         403: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -12583,11 +12610,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             }>>>;
         }>;
         404: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -12597,11 +12624,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             }>>>;
         }>;
         409: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -12611,11 +12638,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             }>>>;
         }>;
         422: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -12625,11 +12652,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             }>>>;
         }>;
         503: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -12895,11 +12922,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
         }>;
         response: {
             400: import("typebox").TObject<{
-                type: TSchema;
-                title: TSchema;
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
-                code: TSchema;
-                retryable: TSchema;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
                 effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -12909,11 +12936,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                 }>>>;
             }>;
             401: import("typebox").TObject<{
-                type: TSchema;
-                title: TSchema;
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
-                code: TSchema;
-                retryable: TSchema;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
                 effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -12923,11 +12950,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                 }>>>;
             }>;
             403: import("typebox").TObject<{
-                type: TSchema;
-                title: TSchema;
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
-                code: TSchema;
-                retryable: TSchema;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
                 effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -12937,11 +12964,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                 }>>>;
             }>;
             404: import("typebox").TObject<{
-                type: TSchema;
-                title: TSchema;
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
-                code: TSchema;
-                retryable: TSchema;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
                 effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -12951,11 +12978,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                 }>>>;
             }>;
             409: import("typebox").TObject<{
-                type: TSchema;
-                title: TSchema;
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
-                code: TSchema;
-                retryable: TSchema;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
                 effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -12965,11 +12992,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                 }>>>;
             }>;
             422: import("typebox").TObject<{
-                type: TSchema;
-                title: TSchema;
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
-                code: TSchema;
-                retryable: TSchema;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
                 effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -12979,11 +13006,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                 }>>>;
             }>;
             503: import("typebox").TObject<{
-                type: TSchema;
-                title: TSchema;
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
-                code: TSchema;
-                retryable: TSchema;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
                 effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
                 detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -13094,11 +13121,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
     }>;
     response: {
         400: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -13108,11 +13135,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             }>>>;
         }>;
         401: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -13122,11 +13149,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             }>>>;
         }>;
         403: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -13136,11 +13163,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             }>>>;
         }>;
         404: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -13150,11 +13177,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             }>>>;
         }>;
         409: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -13164,11 +13191,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             }>>>;
         }>;
         422: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -13178,11 +13205,11 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             }>>>;
         }>;
         503: import("typebox").TObject<{
-            type: TSchema;
-            title: TSchema;
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
-            code: TSchema;
-            retryable: TSchema;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
             effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
             detail?: import("typebox").TOptional<import("typebox").TString>;
@@ -13235,4 +13262,3 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
     };
 }>;
-export {};

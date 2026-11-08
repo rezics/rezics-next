@@ -1,4 +1,4 @@
-import { type Actor } from '../request/access.ts';
+import type { Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { OwnerQueryDependencies } from './builtin-runtime-query.ts';
 import type { ContinueActiveSession } from './continue-source.ts';

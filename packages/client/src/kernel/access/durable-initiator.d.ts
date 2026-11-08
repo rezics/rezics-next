@@ -1,3 +1,4 @@
+export { DurableInitiatorUnavailableError } from './contract/index.ts';
 import type { Pool } from 'pg';
 import type { CurrentConsentReader } from './auth-consent.ts';
 import type { AuthorizationAnchor } from './resource-authorization.ts';
@@ -153,9 +154,6 @@ export type InitiatorRestorerConfig = Readonly<{
 export type InitiatorRestorer = Readonly<{
     restoreInitiator(operation: InitiatorRestoreInput, time: AuthoritativeTime): Promise<AccountActor>;
 }>;
-export declare class DurableInitiatorUnavailableError extends Error {
-    constructor();
-}
 /** Restore inside CommandAuthorization.prepare, at the SAME live attempt T,
  * before target checkout. Every retry, step and receipt replay must invoke this
  * method anew. It evaluates the installed native formula on the independently

@@ -1,11 +1,13 @@
 import type { Pool, PoolClient } from 'pg';
-import { type Access, type Actor } from '../request/access.ts';
+import { type Access, type Actor } from './dependencies.ts';
+import { type RatingVoteSemantic } from './adapters/vote-semantic.ts';
 import questionRead from './question-read.sql.d.ts';
 import type { QuestionGrain } from './question-authoring.ts';
 type Dependencies = {
     pool: Pool;
     access: Access;
     deadlineNow?: () => number;
+    semantic?: RatingVoteSemantic;
 };
 export type QuestionMetadata = NonNullable<Awaited<ReturnType<typeof questionRead.run>>>;
 export type RatingQuestionView = {

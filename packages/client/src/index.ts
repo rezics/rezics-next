@@ -44,6 +44,7 @@ export type {
   ZoneSubjectsClient,
   ZoneSubjectsQuery,
 } from './zones.ts';
+export type { ZoneCollectionPublicView } from './kernel/zones/index.ts';
 export {
   decodePreferenceAdvice,
   decodePreferencePage,

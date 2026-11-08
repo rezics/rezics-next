@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { type CommandTransaction } from '../command/command.ts';
-import { type Access, type AccessContext, type Actor, type Resource } from '../request/access.ts';
+import { type Access, type AccessContext, type Actor, type Resource } from './check.ts';
 /** Only kernel-authenticated actor objects belong in this context; request JSON
  * supplies the command input, never this context or an authorization decision.
  */

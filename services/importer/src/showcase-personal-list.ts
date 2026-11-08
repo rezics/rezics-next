@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import type { KernelClient } from '@rezics/client';
-import type { ShowcaseJournal } from './showcase-publication.ts';
+import type { ShowcaseJournal } from './showcase-journal.ts';
 
 type VndbSurface = KernelClient['libraryImports']['vndb'];
 type PreviewResponse = Awaited<ReturnType<VndbSurface['$preview']['post']>>;

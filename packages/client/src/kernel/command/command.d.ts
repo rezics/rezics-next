@@ -1,3 +1,4 @@
+import { type CommandPrincipal } from './key.ts';
 export declare const DEFAULT_REQUEST_DEADLINE_MS = 2000;
 import type { Pool, PoolClient } from 'pg';
 import type { Actor } from '../request/access.ts';
@@ -23,17 +24,7 @@ export type CommandResult<T> = Readonly<{
  */
 export declare function noEffect<T>(value: T): CommandResult<T>;
 export declare const MAX_COMMAND_EVENTS = 1000;
-/** Principal kind marker only; never an account ID. */
-export declare const ANONYMOUS_PRINCIPAL_ID = "00000000-0000-0000-0000-000000000000";
-export type CommandPrincipal = {
-    kind: 'account';
-    id: string;
-} | {
-    kind: 'anonymous';
-    id: typeof ANONYMOUS_PRINCIPAL_ID;
-};
-/** Pure receipt-key validation; the anonymous marker never identifies an account. */
-export declare function normalizeCommandKey(principal: CommandPrincipal, key: string): string;
+export { ANONYMOUS_PRINCIPAL_ID, normalizeCommandKey, type CommandPrincipal } from './key.ts';
 export type PrincipalCommandIdentity = Readonly<{
     principal: Readonly<Extract<CommandPrincipal, {
         kind: 'account';

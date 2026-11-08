@@ -2,7 +2,7 @@ import type { IdentitySourceConsumerReference } from '../semantic/identity-sourc
 import type { Pool } from 'pg';
 import { type CommandTransaction } from '../command/command.ts';
 import type { IdentityNativeReceipt, IdentityIntent, IdentityJobRef, IdentityReceipt } from '../semantic/identity-epoch-contract.ts';
-import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
+import { IdentityEpochStoreError } from '../semantic/contract/index.ts';
 import { type AgentIdentitySourceKey } from '../history/contract/index.ts';
 export { ACCOUNT_IDENTITY_ACCEPTED_BINDING_DECLARATION, ACCOUNT_IDENTITY_FENCE_DECLARATION, ACCOUNT_IDENTITY_INTENT_DECLARATION, ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION, ACCOUNT_IDENTITY_REVERSAL_READ_DECLARATION, ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION, ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION, ACCOUNT_IDENTITY_ROLE_INVENTORY_DECLARATION, ACCOUNT_IDENTITY_SOURCE_ADMISSION_DECLARATION, ACCOUNT_IDENTITY_SOURCE_DECLARATION, ACCOUNT_IDENTITY_TECHNICAL_FALLBACK_DECLARATION, } from './agent-verification-identity-work.ts';
 type AccountReceipt = Exclude<IdentityReceipt, {

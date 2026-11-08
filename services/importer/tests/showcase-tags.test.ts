@@ -1025,6 +1025,8 @@ test('reviewed-tag pages separate pending acceptance from rejected rows and reti
         decision: null,
         retracted: null,
         head: 1,
+        statement: {},
+        rank: null,
         source: { source: 'vndb', external_id: 'g311' },
       },
       {
@@ -1033,6 +1035,7 @@ test('reviewed-tag pages separate pending acceptance from rejected rows and reti
         retracted: null,
         rank: 'normal',
         head: 2,
+        statement: {},
         source: { source: 'vndb', external_id: 'g12' },
       },
       {
@@ -1040,6 +1043,8 @@ test('reviewed-tag pages separate pending acceptance from rejected rows and reti
         decision: 'rejected',
         retracted: null,
         head: 3,
+        statement: {},
+        rank: null,
         source: { source: 'vndb', external_id: 'g88' },
       },
       {
@@ -1047,11 +1052,13 @@ test('reviewed-tag pages separate pending acceptance from rejected rows and reti
         decision: 'accepted',
         retracted: null,
         head: 4,
+        statement: {},
+        rank: null,
         source: { source: 'vndb', external_id: 'g99' },
       },
     ],
     next: null,
-    adoption: { head: 4, selection: [{ candidate: '00000000-0000-4000-8000-000000000002', rank: 'normal' }] },
+    adoption: { mode: 'replace', head: 4 },
   });
   const opened = openReviewedTagCandidates(page);
   expect(opened.pending.map((row) => row.id)).toEqual(['00000000-0000-4000-8000-000000000001']);
@@ -1082,7 +1089,7 @@ function candidateRow(
   decision: 'accepted' | 'rejected' | null = null,
   rank: 'normal' | 'preferred' | null = null,
 ) {
-  return { id, decision, retracted: null, head: 1, rank, source };
+  return { id, decision, retracted: null, head: 1, rank, source, statement: {} };
 }
 
 function journaledReview(options: {
@@ -1176,12 +1183,20 @@ function journaledReview(options: {
     },
     async reviewedCandidates(id: string, query: { property: string; cursor?: string }) {
       if (id !== workId || query.property !== 'schema:genre') return { candidates: [], next: null, adoption: null };
-      if (query.cursor === 'page-2')
-        return { candidates: workCandidates.second, next: null, adoption: workCandidates.adoption };
+      const currentRows = query.cursor === 'page-2' ? workCandidates.second : workCandidates.first;
+      const currentRanks = new Map(workCandidates.adoption?.selection.map((item) => [item.candidate, item.rank]));
+      const candidates = currentRows.map((row) => ({
+        ...row,
+        rank: currentRanks.get(row.id) ?? row.rank,
+      }));
+      const adoption = workCandidates.adoption
+        ? { head: workCandidates.adoption.head, mode: 'replace' as const }
+        : null;
+      if (query.cursor === 'page-2') return { candidates, next: null, adoption };
       return {
-        candidates: workCandidates.first,
+        candidates,
         next: workCandidates.second.length ? 'page-2' : null,
-        adoption: workCandidates.adoption,
+        adoption,
       };
     },
     async acceptReviewedCandidate(_id: string, candidate: string) {
@@ -1194,7 +1209,14 @@ function journaledReview(options: {
       const recovered = committedAdoptions.get(key);
       if (recovered) {
         workCandidates.adoption = recovered;
-        return { adoption: recovered };
+        return {
+          adoption: {
+            context: globalContext,
+            property: isRecord(body) && typeof body.property === 'string' ? body.property : 'schema:genre',
+            mode: 'replace',
+            ...recovered,
+          },
+        };
       }
       if (conflictOnce) {
         conflictOnce = false;
@@ -1215,7 +1237,14 @@ function journaledReview(options: {
         loseAdopt = false;
         throw new Error('Lost committed adoption');
       }
-      return { adoption };
+      return {
+        adoption: {
+          context: globalContext,
+          property: isRecord(body) && typeof body.property === 'string' ? body.property : 'schema:genre',
+          mode: 'replace',
+          ...adoption,
+        },
+      };
     },
     async readReviewedSubject(id: string) {
       if (id === schemeId && !schemeAvailable) throw new ImportTransportError(404);
@@ -1279,9 +1308,7 @@ test('journaled caller paginates, binds distinct refresh keys, applies managed r
     expect(review.adoptKeys).toHaveLength(1);
     const sealedKey = review.adoptKeys[0]!;
     review.moveHead();
-    review.addCandidate(
-      candidateRow(extraEditorialId, { source: 'editorial', external_id: 'note-2' }, 'accepted', 'preferred'),
-    );
+    review.addCandidate(candidateRow(extraEditorialId, { source: 'editorial', external_id: 'note-2' }, 'accepted'));
     journal.close();
     journal = new ShowcaseJournal(journalPath);
 

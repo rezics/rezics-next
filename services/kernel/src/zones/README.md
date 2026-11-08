@@ -69,6 +69,9 @@ basis read and two serial source passes revalidate mount configuration, visibili
 permissions and safe summaries before returning `{collections,next}`. No Collection members, owner predicates or
 hidden source ordinals are read or retained.
 
+Decision: the mounted Zone Collection route keeps the native `ZoneCollectionPublicView` vocabulary by statically
+wrapping the existing Library schema; generated declarations and client helpers use that same route type.
+
 ### Cost
 
 - The Zone has at most 16 configured mounts. Each pass reads at most 16 owner summaries; the full request makes

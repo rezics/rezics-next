@@ -547,6 +547,7 @@ test.serial(
       indexProbes: 3 + 1 + 2 * (18 + 4) + 3,
       scales,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
       repetitions: 1,
       grow: async (growthDb, scale, previous) => {
         // Fourteen related rows per ordinal must commit together: a 500-row split can separate a

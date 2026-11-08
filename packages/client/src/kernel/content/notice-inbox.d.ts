@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type NoticeActor, type NoticeCandidate, type NoticeOpenAction, type NoticeTarget } from './notice-disclosure.ts';
 export type InboxDependencies = Readonly<{

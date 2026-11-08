@@ -1,3 +1,6 @@
+export { executeStatusTarget, executeCollectionRemoveTarget, reconcileBulkTarget } from './bulk-target-dispatch.ts';
+export { BULK_PAGE_LIMIT, BULK_SEGMENT_PAGES, BULK_EXECUTION_HOURS, BULK_RESULTS_HOURS, BULK_COMMAND_DEADLINE_MS, } from './contract/index.ts';
+/** Common bulk wire and executor contracts; native composition lives in collection-bulk-* modules. */
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime, CommandOutcome, CommandTransaction } from '../command/command.ts';
@@ -7,11 +10,6 @@ import type { Access, AccountActor, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkContext } from '../work/registry.ts';
 import type { EntryDeletion, EntryState } from './entry-model.ts';
-export declare const BULK_PAGE_LIMIT = 100;
-export declare const BULK_SEGMENT_PAGES = 100;
-export declare const BULK_EXECUTION_HOURS = 24;
-export declare const BULK_RESULTS_HOURS = 48;
-export declare const BULK_COMMAND_DEADLINE_MS = 5000;
 export { BULK_ADMISSION_BODY_BYTES, BULK_MAX_SELECTION_IDS } from './bulk-limits.ts';
 export type DecimalSequence = string;
 export type SubjectSelection = {
@@ -363,14 +361,8 @@ export declare function commitBulkPage(_tx: CommandTransaction, _time: Authorita
  */
 export declare function captureCollectionPage(_dependencies: BulkDependencies, _input: SegmentInput): Promise<OccurrencePage>;
 export declare function acknowledgeOccurrencePage(_dependencies: BulkDependencies, _page: OccurrencePage): Promise<Checkpoint>;
-export declare function executeStatusTarget(_dependencies: BulkDependencies, _command: TargetCommand): Promise<AttemptResult>;
 export { executeLibraryRemovalTarget } from './collection-bulk-library-removal.ts';
 export { executeCollectionAddTarget } from './collection-bulk-add.ts';
-export declare function executeCollectionRemoveTarget(dependencies: BulkDependencies, command: TargetCommand): Promise<AttemptResult>;
-/** Private source-bound accounting; can recover prior commits after revocation,
- * cannot restore an initiator, issue personal effects or disclose target data.
- */
-export declare function reconcileBulkTarget(dependencies: BulkDependencies, command: TargetCommand): Promise<AttemptResult | null>;
 export declare function acknowledgeBulkOutcome(dependencies: BulkDependencies, evidence: TargetEvidence): Promise<OperationView | null>;
 export declare function cancelBulkPage(_dependencies: BulkDependencies, _input: SegmentInput): Promise<Checkpoint>;
 /** At most 100 pages per segment; returns only a native checkpoint locator. */

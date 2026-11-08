@@ -7,3 +7,4 @@ export type { SpaceDiscoveryDependencyReadiness } from './space-discovery-depend
 export type { SpaceEntryPage, SpaceEntryPresentation } from './space-discovery-entry-contract.ts';
 /** Native transaction-bound claim custody consumed by Access composition. */
 export { applyRealmClaimApproval, lockRealmClaimApprovalSource, type LockedRealmClaimApproval, type RealmClaimApprovalResult, } from './realm-claim-approval.ts';
+export { readPublication } from './publication.ts';

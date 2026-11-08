@@ -2,7 +2,7 @@ import type { ShelfTitleSource } from './shelf-title-source.ts';
 import type { TSchema } from 'typebox';
 import type { Pool } from 'pg';
 import { type KernelClock } from '../clock.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type LoanHttpWorkOwner } from './loan-operation-bounds.ts';
@@ -6467,6 +6467,57 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
 } & {
     v1: {
         definitions: {
+            get: {
+                body: unknown;
+                params: {};
+                query: unknown;
+                headers: unknown;
+                response: {
+                    200: {
+                        digest: string;
+                        head: number;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             active: {
                 get: {
                     body: unknown;
@@ -12744,11 +12795,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
         updatedAt: string;
         ownerId: string;
     } & object & {
-        target?: (import("../semantic/summaries.ts").SubjectSummary | {
-            id: string;
-            label: string;
-            type: string;
-        }) | null;
+        target?: import("./contract/presentation.ts").LibraryTargetSummary | import("../semantic/summaries.ts").SubjectSummary | null;
     } & {
         destination?: import("./following-space-contract.ts").FollowingSpaceDestination;
         actions?: import("./following-space-contract.ts").FollowingSpaceActions;

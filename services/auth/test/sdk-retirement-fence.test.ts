@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
+import { createAuthRetentionInvocation } from '../src/core/index.ts';
 import { completeCopy, copiesAbsent, eraseCopy } from '../src/erasure-copy.ts';
 import { authSdkFundedReadiness, authSdkRetirementReadiness, readAuthSdkFence } from '../src/sdk-retirement-fence.ts';
-import { nativeFixture } from './support/erasure-native.ts';
+import { failNativeQueries, nativeFixture } from './support/erasure-native.ts';
 
 test('Bind permanent native SDK writer fence to existing Auth copy retirement', async () => {
   const f = await nativeFixture();
@@ -82,6 +83,40 @@ test('Bind permanent native SDK writer fence to existing Auth copy retirement', 
       ).rowCount,
     ).toBeGreaterThan(0);
   } finally {
+    await f.close();
+  }
+}, 180_000);
+
+test('post-fence native deletion failure reuses the persisted receipt without another closure', async () => {
+  const f = await nativeFixture();
+  let restore = () => {};
+  try {
+    const person = await f.person('post-fence-deletion');
+    const id = (
+      await f.pool.query<{ workflow_id: string }>(
+        `SELECT w.workflow_id FROM auth_copy_work w JOIN auth_copy_role r USING(workflow_id)
+       WHERE r.account_id=$1 AND w.name='accounts.registration'`,
+        [person.accountId],
+      )
+    ).rows[0]!.workflow_id;
+    const invocation = createAuthRetentionInvocation({ deadline: Date.now() + 60_000 });
+    restore = failNativeQueries(f.pool, (sql) => sql.includes('DELETE FROM') && sql.includes('workflow_input'));
+    await expect(eraseCopy(f.pool, id, invocation)).rejects.toThrow('Injected native consumer interruption');
+    restore();
+    const receipt = await readAuthSdkFence(id);
+    expect(receipt).toMatchObject({ workflowID: id, generation: '2' });
+    expect(
+      (await f.pool.query('SELECT retired,absent FROM auth_copy_work WHERE workflow_id=$1', [id])).rows[0],
+    ).toEqual({ retired: true, absent: false });
+    const paid = invocation.snapshot();
+    expect(paid.dispatches['delete:delete-workflow_input']).toBe(1);
+    expect(await eraseCopy(f.pool, id, invocation)).toBe(true);
+    expect(await readAuthSdkFence(id)).toEqual(receipt);
+    expect(invocation.snapshot().closures).toHaveLength(1);
+    expect(invocation.snapshot().dispatches['delete:delete-workflow_input']).toBe(2);
+    expect(invocation.snapshot().reserved.statements).toBeGreaterThan(paid.reserved.statements);
+  } finally {
+    restore();
     await f.close();
   }
 }, 180_000);

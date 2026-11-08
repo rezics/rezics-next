@@ -12,7 +12,8 @@ import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { mapVndbVocabulary } from '@rezics/conversion/vndb-vocabulary';
 import { commandKey, sourceDigest, sourceEnvelope } from '@rezics/conversion/support';
 import type { ImporterOptions } from './importer.ts';
-import { captureShowcaseCommands, ShowcaseJournal, type ShowcasePublicationResult } from './showcase-publication.ts';
+import { captureShowcaseCommands, ShowcaseJournal } from './showcase-journal.ts';
+import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
 import {
   showcaseDigest,
   showcaseLimits,

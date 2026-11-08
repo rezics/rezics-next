@@ -28,7 +28,7 @@ import {
   showcaseVocabularyExternalId,
   type ShowcaseVocabularyRequirement,
 } from './showcase-contract.ts';
-import type { ShowcaseJournal } from './showcase-publication.ts';
+import type { ShowcaseJournal } from './showcase-journal.ts';
 import { VNDB_CHARACTER_TRAIT_DICTIONARY_COLUMNS, VNDB_CHARACTER_TRAIT_PARENT_COLUMNS } from './vndb-tables.ts';
 
 const CODE = /^i[1-9][0-9]*$/u;

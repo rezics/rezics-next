@@ -1,15 +1,63 @@
 import { type Pool, type PoolClient } from 'pg';
-import { type Bound } from '@rezics/bounds';
+import { requireLibraryDomain } from './domain-binding.ts';
 import { type OperationalTransaction } from '../command/operational.ts';
 import { type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { NativeOrdinalKey } from './collection-source-order.ts';
-export { readNativePublicCollectionOutput, lockNativePublicCollectionOutput, bindAndHoldNativePublicCollectionOutput, revalidateNativePublicCollectionOutputHold, transferNativePublicCollectionOutputHold, releaseNativePublicCollectionOutputHold, } from './native-public-output-custody.ts';
+type NativePublicOutputOperations = NonNullable<ReturnType<typeof requireLibraryDomain>['nativePublicOutput']>;
+/** Compatibility facade over the fully composed native public-output application. */
+export declare function readNativePublicCollectionOutput(...args: Parameters<NativePublicOutputOperations['readNativePublicCollectionOutput']>): Promise<import("./native-public-output-contract.ts").PublicOutputPage>;
+export declare function lockNativePublicCollectionOutput(...args: Parameters<NativePublicOutputOperations['lockNativePublicCollectionOutput']>): Promise<Readonly<{
+    status: 'changed' | 'unavailable';
+    dependency?: string;
+    work: WorkReceipt;
+}> | Readonly<{
+    status: 'locked';
+    tuple: import("./native-public-output-contract.ts").PublicOutputTuple;
+    work: WorkReceipt;
+}>>;
+export declare function bindAndHoldNativePublicCollectionOutput(...args: Parameters<NativePublicOutputOperations['bindAndHoldNativePublicCollectionOutput']>): Promise<Readonly<{
+    status: 'changed' | 'unavailable';
+    dependency?: string;
+    work: WorkReceipt;
+}> | Readonly<{
+    status: 'bound';
+    binding: import("./native-public-output-contract.ts").NativePublicOutputBinding;
+    work: WorkReceipt;
+}>>;
+export declare function revalidateNativePublicCollectionOutputHold(...args: Parameters<NativePublicOutputOperations['revalidateNativePublicCollectionOutputHold']>): Promise<Readonly<{
+    status: 'changed' | 'unavailable';
+    dependency?: string;
+    work: WorkReceipt;
+}> | Readonly<{
+    status: 'locked';
+    binding: import("./native-public-output-contract.ts").NativePublicOutputBinding;
+    work: WorkReceipt;
+}>>;
+export declare function transferNativePublicCollectionOutputHold(...args: Parameters<NativePublicOutputOperations['transferNativePublicCollectionOutputHold']>): Promise<Readonly<{
+    status: 'changed' | 'unavailable';
+    dependency?: string;
+    work: WorkReceipt;
+}> | Readonly<{
+    status: 'transferred';
+    successorHoldId: string;
+    transfer: import("./native-public-output-contract.ts").NativePublicOutputReceipt;
+    work: WorkReceipt;
+}>>;
+export declare function releaseNativePublicCollectionOutputHold(...args: Parameters<NativePublicOutputOperations['releaseNativePublicCollectionOutputHold']>): Promise<Readonly<{
+    status: 'changed' | 'unavailable';
+    dependency?: string;
+    work: WorkReceipt;
+}> | Readonly<{
+    status: 'released';
+    release: import("./native-public-output-contract.ts").NativePublicOutputReceipt;
+    work: WorkReceipt;
+}>>;
 /** Structural alias of the existing raw owner key; no canonical-order or Access claim. */
 export type CanonicalRangeKey = CanonicalRawKey;
 type Options = {
@@ -78,19 +126,12 @@ export type NativeCollectionProbe = ProbeEvidence & {
     work: WorkReceipt;
 };
 import type { CollectionOutputPublication } from './collection-source-output.ts';
-export type NativeCollectionOrdinalPageBound = Readonly<{
-    limit: number;
-    requestBytes: number;
-    resultBytes: number;
-    /** Complete legacy Source footprint, including request bindings and the result projection ceiling. */
-    work: WorkDimensions;
-    /** Projection-only dimensions used by the shared native SQL dispatcher. */
-    projection: Readonly<Partial<WorkDimensions>>;
-}>;
+export type { NativeCollectionOrdinalPageBound } from './contract/source.ts';
+import type { NativeCollectionOrdinalPageBound } from './contract/source.ts';
 /** The single native ordinal statement's literal and schema-width bounds. */
 export declare function nativeCollectionOrdinalPageBound(limit: number): NativeCollectionOrdinalPageBound;
 export declare const nativeCollectionPartitionMetadataSQL = "SELECT partition_no AS \"partitionNo\", write_state AS \"writeState\", epoch, position::text AS position FROM core.partition WHERE partition_no=$1";
-export declare function COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST(): Bound;
+export { COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST } from './collection-source-probe-bounds.ts';
 export declare function nativeCollectionFootprint(sql: string, values: readonly unknown[], work?: NativeCollectionWork): WorkDimensions | undefined;
 export declare function readNativeCollectionWorkingMetadata(pool: Pool, ref: Ref, options: Options): Promise<{
     metadata: Readonly<Ref & {

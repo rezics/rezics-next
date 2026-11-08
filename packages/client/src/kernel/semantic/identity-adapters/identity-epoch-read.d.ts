@@ -1,6 +1,8 @@
 import { identityRatingReviewEvidence, type IdentityMappingEvidence, type IdentityMappingRequest, type IdentityRatingControlLocator, type IdentityRatingNativeEvidence, type IdentityRatingReviewOperand, type IdentityRatingReviewResult, type IdentityRatingReviewUnavailableReason } from '../identity-core/index.ts';
 import type { Pool, PoolClient } from 'pg';
-import type { IdentityMapping } from './identity-epoch-contract.ts';
+import type { CommandTransaction } from '../../command/command.ts';
+import type { IdentityNativeReaders, NativeIdentityCapabilities } from '../identity-adapter-port.ts';
+import type { IdentityIntent, IdentityMapping } from './identity-epoch-contract.ts';
 export type { IdentityRatingControlLocator, IdentityRatingReviewOperand, IdentityRatingReviewResult, IdentityRatingReviewUnavailableReason, IdentityRatingNativeEvidence, };
 type Queryable = Readonly<{
     query: (text: string, values?: unknown[]) => Promise<{
@@ -8,12 +10,6 @@ type Queryable = Readonly<{
     }>;
 }>;
 export { identityRatingReviewEvidence };
-/** Bounded exact reviewed mapping evidence; source/control homes are released independently and double-collected. */
-export declare function readIdentityRatingReview(pool: Pool, input: Readonly<{
-    requestedOriginalId: string;
-    canonicalTerminalId: string;
-    deadline: number;
-}>): Promise<IdentityRatingReviewResult>;
 /** One bounded reread on the caller's original command connection after its native home lock. */
 export declare function readIdentityRatingEvidenceInTransaction(client: Queryable, input: Readonly<{
     sourceIdentities: readonly string[];
@@ -46,8 +42,12 @@ export declare function readIdentityRepairEvidenceInTransaction(client: Queryabl
 }>): Promise<IdentityRepairEvidence>;
 /** Pure classifier reused by the transaction participant after it has acquired the native owner fence. */
 export declare function classifyIdentityRatingReviewEvidence(requestedOriginalId: string, canonicalTerminalId: string, sourceIdentities: readonly string[], sourceHomes: readonly number[], evidence: IdentityRatingNativeEvidence): IdentityRatingReviewResult;
-/** Bounded exact mapping proof, with source and control homes released independently. */
-export declare function readIdentityMappings(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]>;
+/** One keyed selection in the captured generation, independent of presentation visibility. */
+export declare function selectIdentityEpochRemainder(tx: CommandTransaction, intent: IdentityIntent, input: {
+    partition_no: number;
+    terminal: string;
+    generation: string;
+}): Promise<string | null>;
 /** Native structural tuple. Generation/pending remain Semantic's identity authority. */
 export type HomeIdentity = Readonly<{
     partition: number;
@@ -66,7 +66,16 @@ export type BasisRead = {
     state: 'not_ready';
 };
 export declare function readIdentityHome(client: PoolClient, partition: number): Promise<HomeIdentity>;
-/** Two released observations, never an Access decision or promise about subsequent writes. */
+/** Mapping, rating-review and basis readers closed over one native read capability. */
+export declare function createIdentityReaders(capabilities: NativeIdentityCapabilities): IdentityNativeReaders;
+export declare function readIdentityRatingReview(pool: Pool, input: Readonly<{
+    requestedOriginalId: string;
+    canonicalTerminalId: string;
+    deadline: number;
+}>): Promise<IdentityRatingReviewResult>;
+export declare function readIdentityMappings(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]>;
 export declare function readIdentityBasis(pool: Pool, options: {
     deadline: number;
 }): Promise<BasisRead>;
+/** One original through the same bounded producer and current native capability set. */
+export declare function readIdentityMapping(pool: Pool, original: string): Promise<IdentityMapping>;

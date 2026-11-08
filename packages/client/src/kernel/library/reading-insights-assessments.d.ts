@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { type Actor } from '../request/access.ts';
+import type { Actor } from '../request/access.ts';
 export declare const READING_INSIGHTS_ASSESSMENT_REVISION_LIMIT = 16;
 export declare const MAX_READING_INSIGHTS_ASSESSMENT_BYTES = 16384;
 export type ReadingInsightsAssessmentCounts = Readonly<{

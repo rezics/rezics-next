@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { DBOS } from '@dbos-inc/dbos-sdk';
+import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
+import { bindAuthSdkMaintenance, unbindAuthSdkMaintenance } from '../src/sdk-retirement-fence.ts';
+import { failNativeQueries } from './support/erasure-native.ts';
 import { Pool } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthHost, type AuthHostOptions } from '../src/host.ts';
@@ -26,6 +28,7 @@ const cutoff = now.getTime() - 30 * day;
 const fixture = testDatabase();
 const pool = new Pool({ connectionString: fixture.url });
 let maintenance: ReturnType<typeof registerAuthMaintenance>;
+let sdk: DBOSClient;
 const unclassified: WorkflowCopyRetirement = async () => false;
 
 beforeAll(async () => {
@@ -41,10 +44,18 @@ beforeAll(async () => {
     logLevel: 'warn',
   });
   await DBOS.launch();
+  sdk = await DBOSClient.create({
+    systemDatabaseUrl: fixture.url,
+    systemDatabasePool: pool,
+    systemDatabaseSchemaName: AUTH_SYSTEM_SCHEMA,
+  });
+  bindAuthSdkMaintenance(pool, sdk);
   await installWorkflowRequestRetention(pool);
   await maintenance.start('0 0 1 1 *');
 });
 afterAll(async () => {
+  unbindAuthSdkMaintenance(sdk);
+  await sdk.destroy();
   await DBOS.shutdown({ deregister: true });
   await pool.end();
   fixture.close();
@@ -90,10 +101,10 @@ test('Auth retention nested cost includes funded close, delete, request trigger 
   expect(AUTH_WORKFLOW_RETENTION_COST.fundedClose.statements).toBeGreaterThan(
     AUTH_WORKFLOW_RETENTION_COST.technicalDelete.applicationStatements,
   );
-  expect(AUTH_WORKFLOW_RETENTION_COST.technicalDelete).toEqual({
+  expect(AUTH_WORKFLOW_RETENTION_COST.technicalDelete).toMatchObject({
     applicationStatements: 4,
     controlStatements: 2,
-    description: 'SDK deleteWorkflows(ids, false): BEGIN, four exact-ID deletes, COMMIT',
+    description: 'per exact workflow: supported maintainWorkflowOnce, four deletes, native lock and settings',
   });
   expect(AUTH_WORKFLOW_RETENTION_COST.requestTrigger.statements).toBe(1);
   expect(AUTH_WORKFLOW_RETENTION_COST.absenceProbes.families).toBe(8);
@@ -216,28 +227,31 @@ test('a lost deletion reply preserves cutoff and replays while retaining unclass
   await seed('a:delete', 'SUCCESS', cutoff - 1);
   await seed('b:delete', 'SUCCESS', cutoff - 1);
   let failed = false;
-  await expect(
-    runWorkflowRetentionPage(
-      pool,
-      30,
-      {
-        async deleteWorkflows(ids, children) {
-          await DBOS.deleteWorkflows(ids, children);
-          failed = true;
-          throw new Error('lost native delete reply');
-        },
-      },
-      now,
-      unclassified,
-    ),
-  ).rejects.toThrow('lost native delete reply');
+  let deleting = false;
+  const restore = failNativeQueries(
+    pool,
+    (sql) => {
+      if (sql.includes('DELETE FROM') && sql.includes('workflow_status')) deleting = true;
+      if (!deleting || failed || sql !== 'COMMIT') return false;
+      failed = true;
+      return true;
+    },
+    'after',
+  );
+  try {
+    await expect(runWorkflowRetentionPage(pool, 30, DBOS, now, unclassified)).rejects.toThrow(
+      'Injected native consumer interruption',
+    );
+  } finally {
+    restore();
+  }
   expect(failed).toBe(true);
   expect(await continuation()).toMatchObject({
     createdBefore: cutoff,
     lastExaminedKey: null,
     upperKey: { workflowID: 'b:delete' },
   });
-  expect(await page(new Date(now.getTime() + day))).toMatchObject({ cutoff, retired: 0, done: true });
+  expect(await page(new Date(now.getTime() + day))).toMatchObject({ cutoff, retired: 1, done: true });
   expect(
     (await pool.query("SELECT 1 FROM auth_workflow_request WHERE workflow_id IN ('a:delete','b:delete')")).rowCount,
   ).toBe(2);

@@ -1,6 +1,8 @@
 /** Application result types. Callers and tests alias these; adapters do not own them. */
+import type { FollowCountRuntime } from './follow-counts.ts';
 import type { LibraryActor } from './actors.ts';
 import type { LibraryCapabilities } from './capabilities.ts';
+import type { ProgressOperationApplication } from './progress-operations.ts';
 import type { MembershipPage, NestedAdmissionAccount, OccurrenceDraft } from './membership.ts';
 import type { CollectionSourceObservation, PreparedCollectionSource } from './source.ts';
 import type { WorkAllowance, WorkReceipt } from './work-dimensions.ts';
@@ -59,6 +61,7 @@ export type EntryProgressAdmission = Readonly<{
     admission: NestedAdmissionAccount;
 }>;
 export type LibraryDomain = LibraryCapabilities & Readonly<{
+    followCounts?: FollowCountRuntime;
     ownerQuery: {
         open(input: OwnerQueryInput): Promise<OwnerQueryOpen>;
     };
@@ -102,4 +105,5 @@ export type LibraryDomain = LibraryCapabilities & Readonly<{
             at?: unknown;
         }): Promise<EntryProgressAdmission>;
     };
+    progressOperations: ProgressOperationApplication;
 }>;

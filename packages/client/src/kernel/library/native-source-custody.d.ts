@@ -1,35 +1,13 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 import { nativeSourceCustodyFootprint } from './native-source-custody-bounds.ts';
 export { nativeSourceCustodyFootprint };
 export { declareNativeIdentitySourceBasisStatements } from './identity-native-planner-selected-pricing.ts';
-import type { NativePublicOutputIdentity } from './native-source-output-types.ts';
-export type { NativeOutputActivation, NativePublicOutputIdentity } from './native-source-output-types.ts';
-/** Lookup hints only. Native records, not possession of this value, establish custody. */
-type AccountSourceIdentity = Readonly<{
-    route: number;
-    collectionId: string;
-    accountId: string;
-    incarnation: string;
-    generation: string;
-    ownerEpoch: number;
-    receivingEpoch: string;
-    effectKey: string;
-} & ({
-    scope: 'curated' | 'private_builtin';
-    outputGeneration?: never;
-    publicationTransactionId?: never;
-    publicationPosition?: never;
-} | {
-    scope: 'active_explicit_output';
-    outputGeneration: string;
-    publicationTransactionId: string;
-    publicationPosition: string;
-})>;
-export type NativeSourceIdentity = AccountSourceIdentity | NativePublicOutputIdentity;
+import type { NativeAccountSourceIdentity, NativeSourceIdentity } from './contract/source.ts';
+export type { NativeAccountSourceIdentity, NativeOutputActivation, NativePublicOutputIdentity, NativeSourceIdentity, } from './contract/source.ts';
 export type NativeSourceDriver = 'member' | 'entry' | 'entry_deleted' | 'label' | 'assignment' | 'session' | 'unit' | 'change' | 'copy' | 'output' | 'done';
 export type NativeSourceFrontier = Readonly<{
     captureId: string;
@@ -117,7 +95,7 @@ export interface NativeLibrarySourceCustody {
     }): Promise<Unavailable | {
         status: 'complete';
         capture: NativeSourceCapture & Readonly<{
-            identity: AccountSourceIdentity;
+            identity: NativeAccountSourceIdentity;
         }>;
         work: WorkReceipt;
     }>;

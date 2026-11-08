@@ -1,9 +1,7 @@
 import type { Pool } from 'pg';
 import { type CommandAuthorization, type CommandTransaction, type CommandOutcome } from '../command/command.ts';
 import type { AccountActor } from '../request/access.ts';
-export declare class LifecycleDeniedError extends Error {
-    constructor();
-}
+export { LifecycleDeniedError } from './contract/errors.ts';
 type Mutation = {
     route: number;
     id: string;
@@ -28,4 +26,3 @@ export type LifecycleReceipt = {
  * Responses/events contain identity and coordination facts, never patch bodies.
  */
 export declare function lifecycleExecutor(pool: Pool, clock?: () => Date): <T>(options: Mutation, body: (tx: CommandTransaction, transactionId: string, receipt: LifecycleReceipt) => Promise<T>) => Promise<CommandOutcome<T>>;
-export {};

@@ -14,7 +14,7 @@ import { MAX_DOCUMENT_BYTES } from '../content/document.ts';
 import { SESSION_HEADER } from '../http/request.ts';
 import { ProblemError, problemResponse } from '../http/problem.ts';
 import type { FieldError } from '../http/problem.ts';
-import { validateSearchLimit } from '../search/service.ts';
+import { validateSearchLimit } from '../search/hits.ts';
 import { withPublicStatementReader } from '../semantic/statement-disclosure.ts';
 import { decodeSession, encodeSession, mergeSession } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';

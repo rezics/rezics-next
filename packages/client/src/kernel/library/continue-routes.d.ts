@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { OperationCatalogue } from '@rezics/operations';
 import type { KernelClock } from '../clock.ts';
-import { type Access } from '../request/access.ts';
+import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SearchService } from '../search/service-scope.ts';
@@ -6457,6 +6457,57 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
 } & {
     v1: {
         definitions: {
+            get: {
+                body: unknown;
+                params: {};
+                query: unknown;
+                headers: unknown;
+                response: {
+                    200: {
+                        digest: string;
+                        head: number;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
             active: {
                 get: {
                     body: unknown;
@@ -7004,85 +7055,10 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
         spaceId: import("typebox").TOptional<import("typebox").TString>;
     }>;
     response: {
-        readonly 200: import("typebox").TObject<{
-            subjects: import("typebox").TArray<import("typebox").TObject<{
-                subjectId: import("typebox").TString;
-                state: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                lastActivityAt: import("typebox").TString;
-                activeProgressSession: import("typebox").TUnion<[import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    subjectId: import("typebox").TString;
-                    versionSubjectId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    mode: import("typebox").TUnion<[import("typebox").TLiteral<"scalar_amount">, import("typebox").TLiteral<"cursor_position">, import("typebox").TLiteral<"completed_units">]>;
-                    unit: import("typebox").TString;
-                    total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    completedUnitCount: import("typebox").TInteger;
-                    state: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>, import("typebox").TLiteral<"retired">]>;
-                    revision: import("typebox").TInteger;
-                    startedAt: import("typebox").TString;
-                    completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    measures: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        unit: import("typebox").TString;
-                        amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        presentation: import("typebox").TOptional<import("typebox").TUnsafe<Readonly<{
-                            meaning: 'known' | 'unknown' | 'unavailable';
-                            unitLabel?: string;
-                            unitLabelLanguage?: string;
-                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
-                            dimension?: string;
-                            structure: 'unverified';
-                            recording: Readonly<{
-                                state: 'supported';
-                                inputRules: import("@rezics/progress").ProgressInputRules;
-                            } | {
-                                state: 'unsupported' | 'unavailable';
-                            }>;
-                        }>>>;
-                    }>>>;
-                }>, import("typebox").TNull]>;
-                subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    type: import("typebox").TString;
-                    types: import("typebox").TArray<import("typebox").TString>;
-                    label: import("typebox").TUnion<[import("typebox").TObject<{
-                        value: import("typebox").TString;
-                        language: import("typebox").TString;
-                    }>, import("typebox").TNull]>;
-                    creativeWork: import("typebox").TBoolean;
-                    cover: import("typebox").TUnion<[import("typebox").TObject<{
-                        media: import("typebox").TString;
-                        width: import("typebox").TInteger;
-                        height: import("typebox").TInteger;
-                        placeholder: import("typebox").TObject<{
-                            thumbhash: import("typebox").TString;
-                            color: import("typebox").TString;
-                        }>;
-                        variants: import("typebox").TArray<import("typebox").TObject<{
-                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
-                            width: import("typebox").TInteger;
-                        }>>;
-                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
-                            x: import("typebox").TNumber;
-                            y: import("typebox").TNumber;
-                        }>, import("typebox").TNull]>;
-                        credit: import("typebox").TObject<{
-                            rightsHolder: import("typebox").TString;
-                            via: import("typebox").TObject<{
-                                name: import("typebox").TString;
-                                url: import("typebox").TString;
-                            }>;
-                            license: import("typebox").TString;
-                            obligations: import("typebox").TArray<import("typebox").TString>;
-                        }>;
-                    }>, import("typebox").TNull]>;
-                }>, import("typebox").TNull]>>;
-            }>>;
-            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>;
+        readonly 200: import("typebox").TUnsafe<Readonly<{
+            subjects: readonly import("./contract/continue.ts").ContinueSubject<import("../semantic/summaries.ts").SubjectSummary>[];
+            next: string | null;
+        }>>;
         readonly 400: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -7180,85 +7156,10 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
         redirect?: never;
     };
     status: import("elysia").SelectiveStatus<{
-        readonly 200: {
-            subjects: {
-                subjectId: string;
-                state: string | null;
-                lastActivityAt: string;
-                activeProgressSession: {
-                    id: string;
-                    subjectId: string;
-                    versionSubjectId: string | null;
-                    mode: "completed_units" | "cursor_position" | "scalar_amount";
-                    unit: string;
-                    total: string | null;
-                    amount: string | null;
-                    locator: string | null;
-                    position: string | null;
-                    completedUnitCount: number;
-                    state: "abandoned" | "active" | "completed" | "retired";
-                    revision: number;
-                    startedAt: string;
-                    completedAt: string | null;
-                    measures?: {
-                        unit: string;
-                        amount: string | null;
-                        total: string | null;
-                        presentation?: Readonly<{
-                            meaning: 'known' | 'unknown' | 'unavailable';
-                            unitLabel?: string;
-                            unitLabelLanguage?: string;
-                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
-                            dimension?: string;
-                            structure: 'unverified';
-                            recording: Readonly<{
-                                state: 'supported';
-                                inputRules: import("@rezics/progress").ProgressInputRules;
-                            } | {
-                                state: 'unsupported' | 'unavailable';
-                            }>;
-                        }>;
-                    }[];
-                } | null;
-                subject?: {
-                    id: string;
-                    type: string;
-                    types: string[];
-                    label: {
-                        value: string;
-                        language: string;
-                    } | null;
-                    creativeWork: boolean;
-                    cover: {
-                        media: string;
-                        width: number;
-                        height: number;
-                        placeholder: {
-                            thumbhash: string;
-                            color: string;
-                        };
-                        variants: {
-                            format: "avif" | "webp";
-                            width: number;
-                        }[];
-                        focalPoint: {
-                            x: number;
-                            y: number;
-                        } | null;
-                        credit: {
-                            rightsHolder: string;
-                            via: {
-                                name: string;
-                                url: string;
-                            };
-                            license: string;
-                            obligations: string[];
-                        };
-                    } | null;
-                } | null;
-            }[];
+        readonly 200: Readonly<{
+            subjects: readonly import("./contract/continue.ts").ContinueSubject<import("../semantic/summaries.ts").SubjectSummary>[];
             next: string | null;
-        };
+        }>;
         readonly 400: {
             type: unknown;
             title: unknown;
@@ -7316,85 +7217,10 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
         };
     }>;
     problem: import("elysia").SelectiveProblem<{
-        readonly 200: {
-            subjects: {
-                subjectId: string;
-                state: string | null;
-                lastActivityAt: string;
-                activeProgressSession: {
-                    id: string;
-                    subjectId: string;
-                    versionSubjectId: string | null;
-                    mode: "completed_units" | "cursor_position" | "scalar_amount";
-                    unit: string;
-                    total: string | null;
-                    amount: string | null;
-                    locator: string | null;
-                    position: string | null;
-                    completedUnitCount: number;
-                    state: "abandoned" | "active" | "completed" | "retired";
-                    revision: number;
-                    startedAt: string;
-                    completedAt: string | null;
-                    measures?: {
-                        unit: string;
-                        amount: string | null;
-                        total: string | null;
-                        presentation?: Readonly<{
-                            meaning: 'known' | 'unknown' | 'unavailable';
-                            unitLabel?: string;
-                            unitLabelLanguage?: string;
-                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
-                            dimension?: string;
-                            structure: 'unverified';
-                            recording: Readonly<{
-                                state: 'supported';
-                                inputRules: import("@rezics/progress").ProgressInputRules;
-                            } | {
-                                state: 'unsupported' | 'unavailable';
-                            }>;
-                        }>;
-                    }[];
-                } | null;
-                subject?: {
-                    id: string;
-                    type: string;
-                    types: string[];
-                    label: {
-                        value: string;
-                        language: string;
-                    } | null;
-                    creativeWork: boolean;
-                    cover: {
-                        media: string;
-                        width: number;
-                        height: number;
-                        placeholder: {
-                            thumbhash: string;
-                            color: string;
-                        };
-                        variants: {
-                            format: "avif" | "webp";
-                            width: number;
-                        }[];
-                        focalPoint: {
-                            x: number;
-                            y: number;
-                        } | null;
-                        credit: {
-                            rightsHolder: string;
-                            via: {
-                                name: string;
-                                url: string;
-                            };
-                            license: string;
-                            obligations: string[];
-                        };
-                    } | null;
-                } | null;
-            }[];
+        readonly 200: Readonly<{
+            subjects: readonly import("./contract/continue.ts").ContinueSubject<import("../semantic/summaries.ts").SubjectSummary>[];
             next: string | null;
-        };
+        }>;
         readonly 400: {
             type: unknown;
             title: unknown;
@@ -7459,85 +7285,10 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
             spaceId: import("typebox").TOptional<import("typebox").TString>;
         }>;
         response: {
-            readonly 200: import("typebox").TObject<{
-                subjects: import("typebox").TArray<import("typebox").TObject<{
-                    subjectId: import("typebox").TString;
-                    state: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    lastActivityAt: import("typebox").TString;
-                    activeProgressSession: import("typebox").TUnion<[import("typebox").TObject<{
-                        id: import("typebox").TString;
-                        subjectId: import("typebox").TString;
-                        versionSubjectId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        mode: import("typebox").TUnion<[import("typebox").TLiteral<"scalar_amount">, import("typebox").TLiteral<"cursor_position">, import("typebox").TLiteral<"completed_units">]>;
-                        unit: import("typebox").TString;
-                        total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        completedUnitCount: import("typebox").TInteger;
-                        state: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>, import("typebox").TLiteral<"retired">]>;
-                        revision: import("typebox").TInteger;
-                        startedAt: import("typebox").TString;
-                        completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        measures: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                            unit: import("typebox").TString;
-                            amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            presentation: import("typebox").TOptional<import("typebox").TUnsafe<Readonly<{
-                                meaning: 'known' | 'unknown' | 'unavailable';
-                                unitLabel?: string;
-                                unitLabelLanguage?: string;
-                                unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
-                                dimension?: string;
-                                structure: 'unverified';
-                                recording: Readonly<{
-                                    state: 'supported';
-                                    inputRules: import("@rezics/progress").ProgressInputRules;
-                                } | {
-                                    state: 'unsupported' | 'unavailable';
-                                }>;
-                            }>>>;
-                        }>>>;
-                    }>, import("typebox").TNull]>;
-                    subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
-                        id: import("typebox").TString;
-                        type: import("typebox").TString;
-                        types: import("typebox").TArray<import("typebox").TString>;
-                        label: import("typebox").TUnion<[import("typebox").TObject<{
-                            value: import("typebox").TString;
-                            language: import("typebox").TString;
-                        }>, import("typebox").TNull]>;
-                        creativeWork: import("typebox").TBoolean;
-                        cover: import("typebox").TUnion<[import("typebox").TObject<{
-                            media: import("typebox").TString;
-                            width: import("typebox").TInteger;
-                            height: import("typebox").TInteger;
-                            placeholder: import("typebox").TObject<{
-                                thumbhash: import("typebox").TString;
-                                color: import("typebox").TString;
-                            }>;
-                            variants: import("typebox").TArray<import("typebox").TObject<{
-                                format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
-                                width: import("typebox").TInteger;
-                            }>>;
-                            focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
-                                x: import("typebox").TNumber;
-                                y: import("typebox").TNumber;
-                            }>, import("typebox").TNull]>;
-                            credit: import("typebox").TObject<{
-                                rightsHolder: import("typebox").TString;
-                                via: import("typebox").TObject<{
-                                    name: import("typebox").TString;
-                                    url: import("typebox").TString;
-                                }>;
-                                license: import("typebox").TString;
-                                obligations: import("typebox").TArray<import("typebox").TString>;
-                            }>;
-                        }>, import("typebox").TNull]>;
-                    }>, import("typebox").TNull]>>;
-                }>>;
-                next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            }>;
+            readonly 200: import("typebox").TUnsafe<Readonly<{
+                subjects: readonly import("./contract/continue.ts").ContinueSubject<import("../semantic/summaries.ts").SubjectSummary>[];
+                next: string | null;
+            }>>;
             readonly 400: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
@@ -7672,7 +7423,10 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
-}) => Promise<import("./continue-reads.ts").ContinuePage>, {
+}) => Promise<Readonly<{
+    subjects: readonly import("./contract/continue.ts").ContinueSubject<import("../semantic/summaries.ts").SubjectSummary>[];
+    next: string | null;
+}>>, {
     query: import("typebox").TObject<{
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
@@ -7680,85 +7434,10 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
         spaceId: import("typebox").TOptional<import("typebox").TString>;
     }>;
     response: {
-        readonly 200: import("typebox").TObject<{
-            subjects: import("typebox").TArray<import("typebox").TObject<{
-                subjectId: import("typebox").TString;
-                state: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                lastActivityAt: import("typebox").TString;
-                activeProgressSession: import("typebox").TUnion<[import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    subjectId: import("typebox").TString;
-                    versionSubjectId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    mode: import("typebox").TUnion<[import("typebox").TLiteral<"scalar_amount">, import("typebox").TLiteral<"cursor_position">, import("typebox").TLiteral<"completed_units">]>;
-                    unit: import("typebox").TString;
-                    total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    completedUnitCount: import("typebox").TInteger;
-                    state: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>, import("typebox").TLiteral<"retired">]>;
-                    revision: import("typebox").TInteger;
-                    startedAt: import("typebox").TString;
-                    completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    measures: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                        unit: import("typebox").TString;
-                        amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        presentation: import("typebox").TOptional<import("typebox").TUnsafe<Readonly<{
-                            meaning: 'known' | 'unknown' | 'unavailable';
-                            unitLabel?: string;
-                            unitLabelLanguage?: string;
-                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
-                            dimension?: string;
-                            structure: 'unverified';
-                            recording: Readonly<{
-                                state: 'supported';
-                                inputRules: import("@rezics/progress").ProgressInputRules;
-                            } | {
-                                state: 'unsupported' | 'unavailable';
-                            }>;
-                        }>>>;
-                    }>>>;
-                }>, import("typebox").TNull]>;
-                subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    type: import("typebox").TString;
-                    types: import("typebox").TArray<import("typebox").TString>;
-                    label: import("typebox").TUnion<[import("typebox").TObject<{
-                        value: import("typebox").TString;
-                        language: import("typebox").TString;
-                    }>, import("typebox").TNull]>;
-                    creativeWork: import("typebox").TBoolean;
-                    cover: import("typebox").TUnion<[import("typebox").TObject<{
-                        media: import("typebox").TString;
-                        width: import("typebox").TInteger;
-                        height: import("typebox").TInteger;
-                        placeholder: import("typebox").TObject<{
-                            thumbhash: import("typebox").TString;
-                            color: import("typebox").TString;
-                        }>;
-                        variants: import("typebox").TArray<import("typebox").TObject<{
-                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
-                            width: import("typebox").TInteger;
-                        }>>;
-                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
-                            x: import("typebox").TNumber;
-                            y: import("typebox").TNumber;
-                        }>, import("typebox").TNull]>;
-                        credit: import("typebox").TObject<{
-                            rightsHolder: import("typebox").TString;
-                            via: import("typebox").TObject<{
-                                name: import("typebox").TString;
-                                url: import("typebox").TString;
-                            }>;
-                            license: import("typebox").TString;
-                            obligations: import("typebox").TArray<import("typebox").TString>;
-                        }>;
-                    }>, import("typebox").TNull]>;
-                }>, import("typebox").TNull]>>;
-            }>>;
-            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>;
+        readonly 200: import("typebox").TUnsafe<Readonly<{
+            subjects: readonly import("./contract/continue.ts").ContinueSubject<import("../semantic/summaries.ts").SubjectSummary>[];
+            next: string | null;
+        }>>;
         readonly 400: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -7855,85 +7534,10 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
             redirect?: never;
         };
         status: import("elysia").SelectiveStatus<{
-            readonly 200: {
-                subjects: {
-                    subjectId: string;
-                    state: string | null;
-                    lastActivityAt: string;
-                    activeProgressSession: {
-                        id: string;
-                        subjectId: string;
-                        versionSubjectId: string | null;
-                        mode: "completed_units" | "cursor_position" | "scalar_amount";
-                        unit: string;
-                        total: string | null;
-                        amount: string | null;
-                        locator: string | null;
-                        position: string | null;
-                        completedUnitCount: number;
-                        state: "abandoned" | "active" | "completed" | "retired";
-                        revision: number;
-                        startedAt: string;
-                        completedAt: string | null;
-                        measures?: {
-                            unit: string;
-                            amount: string | null;
-                            total: string | null;
-                            presentation?: Readonly<{
-                                meaning: 'known' | 'unknown' | 'unavailable';
-                                unitLabel?: string;
-                                unitLabelLanguage?: string;
-                                unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
-                                dimension?: string;
-                                structure: 'unverified';
-                                recording: Readonly<{
-                                    state: 'supported';
-                                    inputRules: import("@rezics/progress").ProgressInputRules;
-                                } | {
-                                    state: 'unsupported' | 'unavailable';
-                                }>;
-                            }>;
-                        }[];
-                    } | null;
-                    subject?: {
-                        id: string;
-                        type: string;
-                        types: string[];
-                        label: {
-                            value: string;
-                            language: string;
-                        } | null;
-                        creativeWork: boolean;
-                        cover: {
-                            media: string;
-                            width: number;
-                            height: number;
-                            placeholder: {
-                                thumbhash: string;
-                                color: string;
-                            };
-                            variants: {
-                                format: "avif" | "webp";
-                                width: number;
-                            }[];
-                            focalPoint: {
-                                x: number;
-                                y: number;
-                            } | null;
-                            credit: {
-                                rightsHolder: string;
-                                via: {
-                                    name: string;
-                                    url: string;
-                                };
-                                license: string;
-                                obligations: string[];
-                            };
-                        } | null;
-                    } | null;
-                }[];
+            readonly 200: Readonly<{
+                subjects: readonly import("./contract/continue.ts").ContinueSubject<import("../semantic/summaries.ts").SubjectSummary>[];
                 next: string | null;
-            };
+            }>;
             readonly 400: {
                 type: unknown;
                 title: unknown;
@@ -7991,85 +7595,10 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
             };
         }>;
         problem: import("elysia").SelectiveProblem<{
-            readonly 200: {
-                subjects: {
-                    subjectId: string;
-                    state: string | null;
-                    lastActivityAt: string;
-                    activeProgressSession: {
-                        id: string;
-                        subjectId: string;
-                        versionSubjectId: string | null;
-                        mode: "completed_units" | "cursor_position" | "scalar_amount";
-                        unit: string;
-                        total: string | null;
-                        amount: string | null;
-                        locator: string | null;
-                        position: string | null;
-                        completedUnitCount: number;
-                        state: "abandoned" | "active" | "completed" | "retired";
-                        revision: number;
-                        startedAt: string;
-                        completedAt: string | null;
-                        measures?: {
-                            unit: string;
-                            amount: string | null;
-                            total: string | null;
-                            presentation?: Readonly<{
-                                meaning: 'known' | 'unknown' | 'unavailable';
-                                unitLabel?: string;
-                                unitLabelLanguage?: string;
-                                unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
-                                dimension?: string;
-                                structure: 'unverified';
-                                recording: Readonly<{
-                                    state: 'supported';
-                                    inputRules: import("@rezics/progress").ProgressInputRules;
-                                } | {
-                                    state: 'unsupported' | 'unavailable';
-                                }>;
-                            }>;
-                        }[];
-                    } | null;
-                    subject?: {
-                        id: string;
-                        type: string;
-                        types: string[];
-                        label: {
-                            value: string;
-                            language: string;
-                        } | null;
-                        creativeWork: boolean;
-                        cover: {
-                            media: string;
-                            width: number;
-                            height: number;
-                            placeholder: {
-                                thumbhash: string;
-                                color: string;
-                            };
-                            variants: {
-                                format: "avif" | "webp";
-                                width: number;
-                            }[];
-                            focalPoint: {
-                                x: number;
-                                y: number;
-                            } | null;
-                            credit: {
-                                rightsHolder: string;
-                                via: {
-                                    name: string;
-                                    url: string;
-                                };
-                                license: string;
-                                obligations: string[];
-                            };
-                        } | null;
-                    } | null;
-                }[];
+            readonly 200: Readonly<{
+                subjects: readonly import("./contract/continue.ts").ContinueSubject<import("../semantic/summaries.ts").SubjectSummary>[];
                 next: string | null;
-            };
+            }>;
             readonly 400: {
                 type: unknown;
                 title: unknown;
@@ -8137,85 +7666,10 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                 [key: string]: unknown;
             };
             response: {
-                readonly 200: {
-                    subjects: {
-                        subjectId: string;
-                        state: string | null;
-                        lastActivityAt: string;
-                        activeProgressSession: {
-                            id: string;
-                            subjectId: string;
-                            versionSubjectId: string | null;
-                            mode: "completed_units" | "cursor_position" | "scalar_amount";
-                            unit: string;
-                            total: string | null;
-                            amount: string | null;
-                            locator: string | null;
-                            position: string | null;
-                            completedUnitCount: number;
-                            state: "abandoned" | "active" | "completed" | "retired";
-                            revision: number;
-                            startedAt: string;
-                            completedAt: string | null;
-                            measures?: {
-                                unit: string;
-                                amount: string | null;
-                                total: string | null;
-                                presentation?: Readonly<{
-                                    meaning: 'known' | 'unknown' | 'unavailable';
-                                    unitLabel?: string;
-                                    unitLabelLanguage?: string;
-                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
-                                    dimension?: string;
-                                    structure: 'unverified';
-                                    recording: Readonly<{
-                                        state: 'supported';
-                                        inputRules: import("@rezics/progress").ProgressInputRules;
-                                    } | {
-                                        state: 'unsupported' | 'unavailable';
-                                    }>;
-                                }>;
-                            }[];
-                        } | null;
-                        subject?: {
-                            id: string;
-                            type: string;
-                            types: string[];
-                            label: {
-                                value: string;
-                                language: string;
-                            } | null;
-                            creativeWork: boolean;
-                            cover: {
-                                media: string;
-                                width: number;
-                                height: number;
-                                placeholder: {
-                                    thumbhash: string;
-                                    color: string;
-                                };
-                                variants: {
-                                    format: "avif" | "webp";
-                                    width: number;
-                                }[];
-                                focalPoint: {
-                                    x: number;
-                                    y: number;
-                                } | null;
-                                credit: {
-                                    rightsHolder: string;
-                                    via: {
-                                        name: string;
-                                        url: string;
-                                    };
-                                    license: string;
-                                    obligations: string[];
-                                };
-                            } | null;
-                        } | null;
-                    }[];
+                readonly 200: Readonly<{
+                    subjects: readonly import("./contract/continue.ts").ContinueSubject<import("../semantic/summaries.ts").SubjectSummary>[];
                     next: string | null;
-                };
+                }>;
                 readonly 400: {
                     type: unknown;
                     title: unknown;

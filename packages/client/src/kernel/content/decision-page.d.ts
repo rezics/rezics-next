@@ -1,4 +1,4 @@
-import { type Actor } from '../request/access.ts';
+import type { Actor } from '../request/access.ts';
 import { type ContentReadDependencies, type NoticeBoardContext, type NoticePostContext } from './reads.ts';
 export declare function DecisionPageSchema(): import("typebox").TObject<{
     id: import("typebox").TString;

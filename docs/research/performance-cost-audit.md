@@ -1,6 +1,6 @@
 # Performance cost audit
 
-This is a static audit of the development tree at `ebce4dbf01` (the source baseline before the audit document). The completion rule does **not** hold: some implemented paths have no Cost table row, some citations measure another operation, and some bounds or descriptions are stale. No growth check was run for this audit.
+This is the historical static audit of the development tree at `ebce4dbf01` (the source baseline before the audit document). Its inventory and counts remain that baseline snapshot. The Board rows and former Board gap notes are superseded for source revision `1e1c663655e7855e89f40045567721808024bddf` by the current reconciliation below. No growth check was run for the historical audit or for the current Board reconciliation in this attempt.
 
 ## Scope and reading rules
 
@@ -412,12 +412,10 @@ Every `no` row is a gap even when marked `P`. For each owner below, the smallest
 
 ### Content
 
-- Convert the prose-only authored document, avatar, author index/page, hot/active board/rank, sitemap, erasure, reaction aggregation/merge, subject-index, download and moderation surfaces into table rows. Retain the existing collection fixed-neighbourhood and actual-Delta linear series, erasure page/fanout series, and protected-Realm HTTP composition proof; these are not missing merely because the primary thread fixtures inject authorization.
+- Convert the prose-only authored document, avatar, author index/page, sitemap, erasure, reaction aggregation/merge, subject-index, download and moderation surfaces into table rows. Board order, rank and projection now have separate Cost mappings; retain the existing collection fixed-neighbourhood and actual-Delta linear series, erasure page/fanout series, and protected-Realm HTTP composition proof.
 - Replace the obsolete Report admission entry with storage/read/projection rows. It says “Database rows/blocks/statements zero” and “Report storage/effect APIs are stubs.” In production, `reports.ts:createReport` executes `await tx.query(` with `insert.sql`, imported from `insert-report.sql`, whose first line is `INSERT INTO content.report`; `report-effect.ts:applyReportEffect` reads the source reference and runs a target-partition command. The cited `growth-lifecycle` closure calls only `verifier.verify('fixed-growth-token')` and asserts `[0, 0, 0]`. Cite `reports.test.ts`'s native creation/inspection `checkGrowth` for those operations; exclude the pure verifier from the SQL hot-path inventory.
 - Add a route-level inspection admission growth capture for `report-admission.requireReportInspection`, including its extra Access/partition snapshot. The native report command/read checks call their functions directly and omit this route-only phase.
 - Add a separate measured native report-effect operation. `reports.test.ts` explicitly says “Public grant commands and native report projection run outside the measured growth bound.” Its check name includes “reverse projection”, but the closure only creates, point-reads and lists reports. Grow source reports and target reverse-index history with one event fixed; include replay/idempotence without duplicating changes.
-- Add native growth checks for concept-board creation and `boards.readRealmBoard`; the existing `realm-boards` listing series measures `listRealmBoards`, and `boards-http` measures current thread-page disclosure. Neither is the creation or concept-addressed point-read path.
-- Add ascending candidate and oldest-listing growth closures. The Board candidate page row describes “either index direction”; its cited closure calls only descending `readBoardCandidates`, while `pageBoardCandidates` rewrites `) < (` to `) > (` and ` DESC` to ` ASC`. Retain that derivation, exercise both directions at a fixed page/cursor neighbourhood, and cite the existing newest/hot/active proofs separately. The active helper uses `board-rank-page.sql`, not the created-at index named by that row.
 - Correct the Reaction slot citation's obsolete “256, 2048, 16384 reactions”: the named native check uses `scales: [64, 512, 4096]`. Add clear/delete growth closures for both thread/post and subject slots, and a post target/ancestor closure; the current captures call `setReaction` on a thread or subject only. The row explicitly promises `setReaction` / `clearReaction` and bounded ancestor eligibility, so set-only evidence leaves those branches open. The count and own-reaction HTTP reads listed separately already have native proofs and need table rows only.
 - Add `checkGrowth` to `liftTakedown`; the existing file's behavior checks do not use that harness. Credit the existing `subject-reactions-http` “subject reaction read” capture for `reaction-projection.readReactionCounts`; the aggregation check alone would not prove it.
 - Cover native content enqueue/status and registered image/import/erasure workflow persistence. `content/work.test.ts` proves real collection SQL, not every durable content path. Reuse the Work proof for common persistence and capture domain-specific I/O in each remaining step at fixed payload/page size. Existing standalone image/import/erasure body checks remain valid components.
@@ -508,4 +506,27 @@ Counts are operation-family rows, not HTTP aliases, SQL statements, individual t
 
 The literal table requirement (crediting the shared Kernel service Cost table), inclusion of concrete internal native ports, exclusion of SQL-free stubs/one-time orchestration, fixed-neighbourhood versus input/fanout axes, and acceptance of explicit supplemental cost assertions are the audit decisions used consistently above. Native helper evidence is kept separate from complete HTTP/durable-wrapper evidence. An unimplemented specification is recorded as excluded scope, not invented runtime cost; implemented residual reads before a not-ready response remain in scope.
 
-Sources read were the Kernel/Auth route and work registries named above; the inventoried source functions and their SQL/key definitions; module README Cost sections; relevant database schemas/migrations; and the cited tests' measured closures, grow functions, bounds and supplemental assertions, including the shared growth harness. No external reference project was required by this contract, and no external research was used. The audit changes only this document. Validation is the contract's nonempty-file check plus document/source-path/function/reference/count consistency and whitespace checks; code, tests and READMEs were left unchanged. The audit itself passes acceptance even though the audited development tree has the gaps counted above.
+Sources read were the Kernel/Auth route and work registries named above; the inventoried source functions and their SQL/key definitions; module README Cost sections; relevant database schemas/migrations; and the cited tests' measured closures, grow functions, bounds and supplemental assertions, including the shared growth harness. No external reference project was required by this contract, and no external research was used. At the time, the audit changed only this document. Its validation was the contract's nonempty-file check plus document/source-path/function/reference/count consistency and whitespace checks; code, tests and READMEs stayed unchanged. The historical audit itself passed acceptance even though the audited development tree had the gaps counted above.
+
+## Current Board reconciliation
+
+The exact producer/caller/case map for source `1e1c663655e7855e89f40045567721808024bddf` is owned by the
+[Kernel performance contract](../../services/kernel/performance-contract.md#content-board-source-map), with raw work
+units in [Content Cost](../../services/kernel/src/content/README.md#board-page-raw-work-units). These current rows
+supersede historical inventory entries 138–139, 168, 179–181, 193–194 and 197. The old
+`KT/content/growth-boards.test.ts` references are historical only; the current projection, candidate, Concept creation,
+Realm point-read and ascending/oldest cases are in `KT/content/board-read-growth.test.ts`.
+
+The reconciliation maps source projection and candidate upsert to their actual effects/commands; descending and
+ascending candidate readers to their distinct keyset directions; newest, oldest, active and hot list paths to their
+rank or created-at producers and disclosure cases; and Realm/Global creation, point reads, listings, protected member
+reads, rank refresh and sitemap calls to their current callers. `pageActiveBoardCandidates` has no production caller
+at this revision: active/hot requests execute the rank query inside `boards.ts:listBoardThreads`, and the map does not
+credit a neighboring helper as that producer.
+
+The selected-window ceiling, raw candidate scans, per-round Content and Access disclosure, final page checks, pins,
+Realm state, row removals multiplied by loops, buffers, statements and request/response bytes are derived in the
+Content owner document. The table mapper asserts exact operation labels, repository paths and declared titles through
+the existing parser; no duplicate citation reader is used. These cases are declared but not executed in this attempt.
+Native measurements, including nested effects, remain open until the original integrated-dev selections execute on
+this source revision; source mapping does not certify growth acceptance.

@@ -1,15 +1,17 @@
 import type { Pool } from 'pg';
-import { type ParentAnchor } from '../access/index.ts';
 import { type CommandAuthorization } from '../command/command.ts';
-import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
+import { CONTEXT_GLOBAL_ID } from './context-literals.ts';
+import type { ResourceEligibility } from '../access/index.ts';
+import { type ContextAccessPort, type ContextAccountActor, type ContextParentAnchor, type ContextQueryClient, type ContextResource } from './context-access-port.ts';
 export declare const CREATE_CONTEXT = "context.create";
-export declare const globalContextAnchor: ParentAnchor;
+export { CONTEXT_GLOBAL_ID };
+export declare const globalContextAnchor: ContextParentAnchor;
 /** A server-bound editorial Context anchor. The caller chooses a Context id;
  * this binding fixes its route and verifies the community row on the released
  * authorization connection before Access evaluates the grant at command T.
  */
-export declare function editorialContextAnchor(id: string): ParentAnchor;
-export declare function contextTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource;
+export declare function editorialContextAnchor(id: string): ContextParentAnchor;
+export declare function contextTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): ContextResource;
 export declare class ContextAccessDeniedError extends Error {
     constructor();
 }
@@ -27,18 +29,18 @@ export type ContextRecord = {
     defaults: Record<string, 'inherit' | 'suppress'>;
 };
 export declare function createContext(pool: Pool, options: {
-    actor: AccountActor;
-    target: Resource;
+    actor: ContextAccountActor;
+    target: ContextResource;
     idempotencyKey: string;
     digest: Uint8Array;
     input: unknown;
     settings?: ContextRecord['settings'];
     defaults?: ContextRecord['defaults'];
-    authorize?: AccessCheck;
+    authorize?: (client: ContextQueryClient, time?: unknown) => Promise<boolean>;
     authorization?: CommandAuthorization;
     deadline?: number;
     clock?: () => Date;
-}): Promise<{
+}, accessPort?: ContextAccessPort): Promise<{
     context: {
         id: string;
         kind: 'community';
@@ -56,7 +58,7 @@ export declare function createContext(pool: Pool, options: {
     };
     replayed: boolean;
 }>;
-export declare function readContext(pool: Pool, id: string, authorize: (client: Parameters<AccessCheck>[0]) => Promise<boolean>): Promise<{
+export declare function readContext(pool: Pool, id: string, authorize: (client: ContextQueryClient) => Promise<boolean>, accessPort?: ContextAccessPort): Promise<{
     context: ContextRecord;
     component: {
         partition: number;
@@ -64,6 +66,6 @@ export declare function readContext(pool: Pool, id: string, authorize: (client: 
         position: bigint;
     };
 } | null>;
-export declare function contextSnapshot(pool: Pool, id: string): Promise<ContextRecord | null>;
+export declare function contextSnapshot(pool: Pool, id: string, accessPort?: ContextAccessPort): Promise<ContextRecord | null>;
 export declare function contextLabels(id: string, input: unknown): Record<string, string>;
-export declare function publicContextEligibility(resource: Resource): import("../access/eligibility.ts").ResourceEligibility;
+export declare function publicContextEligibility(resource: ContextResource, accessPort?: ContextAccessPort): ResourceEligibility;
