@@ -203,7 +203,7 @@ test('a changed native credential epoch retires private command readback', async
   const fixture = await mountOwnDrafts();
   try {
     await fixture.render({
-      identity: { ...identity, authnEpoch: 0 },
+      identity: { ...identity, authnEpoch: null },
       active: true,
       reader,
       commands: {

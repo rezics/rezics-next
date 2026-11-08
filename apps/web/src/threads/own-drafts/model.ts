@@ -63,7 +63,8 @@ export type OwnDraftLocalWritingReader = Readonly<{
 
 export type OwnDraftIdentity = Readonly<{
   accountId: string;
-  authnEpoch: number;
+  /** The route learns the native epoch from its first admitted page. */
+  authnEpoch: number | null;
   /** Opaque in-memory caller generation. Never a token or route value. */
   callerEpoch: string;
   locale: OwnDraftLocale;
@@ -73,11 +74,14 @@ export type OwnDraftIdentity = Readonly<{
 
 export type OwnDraftPageRequest = Readonly<{
   accountId: string;
+  /** Omitted only for the first page, which establishes this visit's native epoch. */
+  authnEpoch?: number;
   cursor?: string;
 }>;
 
 export type OwnDraftSelectionRequest = Readonly<{
   accountId: string;
+  authnEpoch?: number;
   id: string;
   threadId: string;
 }>;
@@ -186,11 +190,17 @@ export async function readSelectedOwnDraft(
   identity: OwnDraftIdentity,
   entry: OwnDraftEntry,
   signal: AbortSignal,
+  current: () => boolean = () => true,
 ): Promise<OwnDraftSelection | OwnDraftReadFailure> {
-  if (signal.aborted) return 'unavailable';
+  if (signal.aborted || !current()) return 'unavailable';
+  if (identity.authnEpoch === null || !Number.isSafeInteger(identity.authnEpoch) || identity.authnEpoch <= 0)
+    return 'denied';
   if (!admittedOwnDraftAction(entry, identity.accountId, 'resume')) return 'concealed';
-  const result = await reader.resume({ accountId: identity.accountId, id: entry.id, threadId: entry.threadId }, signal);
-  if (signal.aborted) return 'unavailable';
+  const result = await reader.resume(
+    { accountId: identity.accountId, authnEpoch: identity.authnEpoch, id: entry.id, threadId: entry.threadId },
+    signal,
+  );
+  if (signal.aborted || !current()) return 'unavailable';
   if (typeof result === 'string') return result;
   if (result.post.id !== entry.id || result.post.threadId !== entry.threadId) return 'concealed';
   if (!result.post.body || result.revision !== entry.revisionId) return 'stale';

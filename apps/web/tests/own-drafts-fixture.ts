@@ -1,6 +1,6 @@
 import { mock } from 'bun:test';
 import type { OwnDraftEntry, OwnDraftIdentity } from '../src/threads/own-drafts/model';
-import { act, createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { dirname } from 'node:path';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 
@@ -96,10 +96,12 @@ export async function mountOwnDrafts() {
   return {
     host,
     window,
+    client,
     async render(props: Parameters<typeof OwnDraftsPage>[0]) {
-      await act(async () =>
-        root.render(createElement(QueryClientProvider, { client }, createElement(OwnDraftsPage, props))),
-      );
+      await this.renderComponent(createElement(OwnDraftsPage, props));
+    },
+    async renderComponent(element: ReactNode) {
+      await act(async () => root.render(createElement(QueryClientProvider, { client }, element)));
     },
     async click(label: string) {
       const button = [...window.document.querySelectorAll('button')].find((node) => node.textContent === label);
