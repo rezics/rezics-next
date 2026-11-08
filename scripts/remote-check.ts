@@ -1083,7 +1083,7 @@ marker_open_live() {
   marker_attempt=0
   while [ "$marker_attempt" -lt 3 ]; do
     exec 7>&-
-    exec 7<>"$marker_file" 2>/dev/null || return 1
+    { exec 7<>"$marker_file"; } 2>/dev/null || return 1
     if flock -n 7; then
       marker_fd_identity=$(stat -Lc '%d:%i' "/proc/$$/fd/7" 2>/dev/null || true)
       marker_path_identity=$(stat -Lc '%d:%i' -- "$marker_file" 2>/dev/null || true)
@@ -1416,7 +1416,7 @@ marker_open_live() {
   marker_attempt=0
   while [ "$marker_attempt" -lt 3 ]; do
     exec 7>&-
-    exec 7<>"$marker_file" 2>/dev/null || return 1
+    { exec 7<>"$marker_file"; } 2>/dev/null || return 1
     if flock -n 7; then
       marker_fd_identity=$(stat -Lc '%d:%i' "/proc/$$/fd/7" 2>/dev/null || true)
       marker_path_identity=$(stat -Lc '%d:%i' -- "$marker_file" 2>/dev/null || true)
@@ -1546,6 +1546,10 @@ fi`;
 now=$(date +%s)
 for run in ${ROOT}/runs/*; do
   [ -d "$run" ] || continue
+  if [ -e "$run/command-started" ] && [ ! -f "$run/.remote-check-supervisor" ]; then
+    echo "remote-check: retaining started run \${run##*/}: supervisor custody unavailable" >&2
+    continue
+  fi
   alive="$run/.alive"
   age=
   if [ -f "$alive" ]; then
@@ -1883,6 +1887,32 @@ def validate_producer_controls(root,run,host,stage):
     return True
 `;
 
+/** Stop only owned units; an unloaded unit is already absent, while query/stop failures retain custody. */
+function stopOwnedCheckUnitShell(): string {
+  return `stop_owned_check_unit() {
+  cleanup_unit=$1
+  case "$cleanup_unit" in rezics-check-*.scope|rezics-check-*.slice) ;; *) echo 'cleanup: refusing foreign unit' >&2; return 1 ;; esac
+  cleanup_state=$(systemctl show --property=LoadState --property=ActiveState "$cleanup_unit" 2>&1) || {
+    printf 'cleanup: unit observation failed for %s: %s\\n' "$cleanup_unit" "$cleanup_state" >&2; return 1;
+  }
+  cleanup_load=$(printf '%s\\n' "$cleanup_state" | sed -n 's/^LoadState=//p')
+  cleanup_active=$(printf '%s\\n' "$cleanup_state" | sed -n 's/^ActiveState=//p')
+  if [ "$cleanup_load" = not-found ] && [ "$cleanup_active" = inactive ]; then return 0; fi
+  case "$cleanup_load" in loaded|masked) ;; *) printf 'cleanup: unknown owned unit state for %s: %s\\n' "$cleanup_unit" "$cleanup_state" >&2; return 1 ;; esac
+  cleanup_stop_code=0
+  cleanup_stop_error=$(systemctl stop "$cleanup_unit" 2>&1) || cleanup_stop_code=$?
+  cleanup_state=$(systemctl show --property=LoadState --property=ActiveState "$cleanup_unit" 2>&1) || {
+    printf 'cleanup: unit verification failed for %s (stop exit %s): %s\\n' "$cleanup_unit" "$cleanup_stop_code" "$cleanup_state" >&2; return 1;
+  }
+  cleanup_load=$(printf '%s\\n' "$cleanup_state" | sed -n 's/^LoadState=//p')
+  cleanup_active=$(printf '%s\\n' "$cleanup_state" | sed -n 's/^ActiveState=//p')
+  case "$cleanup_load:$cleanup_active" in loaded:inactive|not-found:inactive|masked:inactive) return 0 ;; esac
+  printf 'cleanup: owned unit %s remains unverified (load=%s active=%s stop exit=%s): %s\\n' "$cleanup_unit" "$cleanup_load" "$cleanup_active" "$cleanup_stop_code" "$cleanup_stop_error" >&2
+  if [ "$cleanup_stop_code" -ne 0 ]; then return "$cleanup_stop_code"; fi
+  return 1
+}`;
+}
+
 /** Both normal cleanup and the stale-directory sweep reconcile only Docker resources labelled for this run. */
 function cleanupCommands(removeDirectory = true): string {
   const settleResources = `settle_owned_docker_resources() {
@@ -1914,27 +1944,29 @@ function cleanupCommands(removeDirectory = true): string {
 }`;
   if (removeDirectory) {
     return `set -eu
+${stopOwnedCheckUnitShell()}
+if [ -e "$run_directory/command-started" ] && [ ! -f "$run_directory/.remote-check-supervisor" ]; then echo 'cleanup: started run supervisor custody unavailable' >&2; exit 1; fi
 [ "$run_directory" = ${quote(`${ROOT}/runs/`)}"$run_id" ] || exit 1
 ${stopSupervisor('"$run_directory"')} || exit 1
-systemctl stop "rezics-check-$run_id.scope" >/dev/null 2>&1 || true
-if systemctl is-active --quiet "rezics-check-$run_id.scope"; then echo 'cleanup: command scope remains active' >&2; exit 1; fi
+stop_owned_check_unit "rezics-check-$run_id.scope" || exit $?
 command -v docker >/dev/null 2>&1 || { echo 'cleanup: Docker control is unavailable' >&2; exit 1; }
 ${settleResources}
 settle_owned_docker_resources || exit 1
-systemctl stop "$run_slice" >/dev/null 2>&1 || true
-if systemctl is-active --quiet "$run_slice"; then echo 'cleanup: run slice remains active' >&2; exit 1; fi
+stop_owned_check_unit "$run_slice" || exit $?
 mkdir -p ${quote(`${ROOT}/receipts`)}
 if [ -e "$run_directory" ]; then rm -rf -- "$run_directory" || { echo 'cleanup: run directory removal failed' >&2; exit 1; }; fi
 [ ! -e "$run_directory" ] || { echo 'cleanup: run directory remains' >&2; exit 1; }
 printf 'CLEANED %s\\n' "$run_id"`;
   }
   return `set -eu
+${stopOwnedCheckUnitShell()}
+if [ -e "$run_directory/command-started" ] && [ ! -f "$run_directory/.remote-check-supervisor" ]; then echo 'cleanup: started run supervisor custody unavailable' >&2; exit 1; fi
 ${settleResources}
 ${stopSupervisor('"$run_directory"')} || exit 1
-systemctl stop "rezics-check-$run_id.scope" >/dev/null 2>&1
+stop_owned_check_unit "rezics-check-$run_id.scope" || exit $?
 command -v docker >/dev/null 2>&1 || { echo 'cleanup: Docker control is unavailable' >&2; exit 1; }
 settle_owned_docker_resources || exit 1
-systemctl stop "$run_slice" >/dev/null 2>&1
+stop_owned_check_unit "$run_slice" || exit $?
 `;
 }
 
