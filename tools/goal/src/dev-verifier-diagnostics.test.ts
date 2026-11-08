@@ -367,8 +367,9 @@ test('Auth setup denial and precommand remote slot failure remain custody eviden
     },
   ]);
   expect(setupCounts).toMatchObject({ failed: 0, unknown: 1, repairs: [] });
-  expect([...authFixture.findings.values()][0]).toMatchObject({
-    test: undefined,
+  const setupFinding = [...authFixture.findings.values()][0]!;
+  expect(setupFinding.test).toBeUndefined();
+  expect(setupFinding).toMatchObject({
     cause: 'setup',
     result: 'infrastructure',
     status: 'unknown',
