@@ -1020,16 +1020,86 @@ export async function collectApiCapture(
   return cases;
 }
 
-type CaptureHandoff = {
+export type CaptureHandoff = {
   slot: string;
   runtimeRevision: string;
-  seedResultPath: string;
-  seedCompleted: true;
+  seedCompleted?: boolean;
+  seedState?: string;
   origins: Origins;
-  keysPath: string;
-  bindingsPath: string;
-  recoveryDirectory: string;
+  keysPath?: string;
+  bindingsPath?: string;
+  recoveryDirectory?: string;
 };
+
+export function parseCaptureHandoff(value: unknown): CaptureHandoff {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid capture handoff');
+  const input = value as Record<string, unknown>;
+  if (typeof input.slot !== 'string' || !input.slot || typeof input.runtimeRevision !== 'string')
+    throw new Error('invalid capture handoff identity');
+  if (!/^[a-f0-9]{40}$/.test(input.runtimeRevision)) throw new Error('invalid capture runtime revision');
+  if (input.seedCompleted !== undefined && typeof input.seedCompleted !== 'boolean')
+    throw new Error('invalid capture seed observation');
+  if (input.seedState !== undefined && typeof input.seedState !== 'string')
+    throw new Error('invalid capture seed observation');
+  if (!input.origins || typeof input.origins !== 'object' || Array.isArray(input.origins))
+    throw new Error('invalid capture origins');
+
+  const rawOrigins = input.origins as Record<string, unknown>;
+  const originNames = ['web', 'issuer', 'native', 'kernel'] as const;
+  for (const value of Object.values(rawOrigins)) {
+    if (typeof value !== 'string') throw new Error('invalid capture origin');
+    const url = new URL(value);
+    if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.origin !== value)
+      throw new Error('capture requires loopback origins');
+  }
+  const origins = Object.fromEntries(
+    originNames.map((name) => {
+      const value = rawOrigins[name];
+      if (typeof value !== 'string') throw new Error('invalid capture origin');
+      return [name, value];
+    }),
+  ) as Origins;
+
+  const optionalPath = (name: 'keysPath' | 'bindingsPath' | 'recoveryDirectory') => {
+    const path = input[name];
+    if (path === undefined) return undefined;
+    if (typeof path !== 'string' || !path) throw new Error('invalid capture credential path');
+    return path;
+  };
+
+  return {
+    slot: input.slot,
+    runtimeRevision: input.runtimeRevision,
+    ...(input.seedCompleted === undefined ? {} : { seedCompleted: input.seedCompleted }),
+    ...(input.seedState === undefined ? {} : { seedState: input.seedState }),
+    origins,
+    keysPath: optionalPath('keysPath'),
+    bindingsPath: optionalPath('bindingsPath'),
+    recoveryDirectory: optionalPath('recoveryDirectory'),
+  };
+}
+
+export async function runApiCaptureOnHandoff(
+  handoff: CaptureHandoff,
+  sourceRevision: string,
+  operations: Record<CaptureId, () => Promise<unknown>>,
+  persist: (identity: Json, cases: CaptureCase[]) => Promise<void>,
+): Promise<{ identity: Json; cases: CaptureCase[] }> {
+  const identity: Json = {
+    sourceRevision,
+    observedAt: new Date().toISOString(),
+    runtimeRevision: handoff.runtimeRevision,
+    slot: handoff.slot,
+    lease: handoff.slot,
+    origins: handoff.origins,
+    seed: {
+      completed: handoff.seedCompleted ?? null,
+      state: handoff.seedState ?? null,
+    },
+  };
+  const cases = await collectApiCapture(operations, (rows) => persist(identity, rows));
+  return { identity, cases };
+}
 
 async function captureOriginalAuthJourneys(): Promise<number> {
   if (!process.env.GOAL_TASK_ID || !/native/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
@@ -1037,62 +1107,8 @@ async function captureOriginalAuthJourneys(): Promise<number> {
   const directory = join(root, API_CAPTURE_DIRECTORY);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const sourceRevision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();
-  let prerequisite =
-    'manager_event_idle visual/seed owner: admitted current-revision slot/origins and completed seed result handoff';
-  let handoff: CaptureHandoff | undefined;
   let identity: Json = { sourceRevision, observedAt: new Date().toISOString() };
-  try {
-    const path = process.env.REZICS_API_CAPTURE_HANDOFF;
-    if (!path) throw new Error('handoff unavailable');
-    handoff = JSON.parse(await readFile(path, 'utf8')) as CaptureHandoff;
-    if (!handoff.slot || !/^[a-f0-9]{40}$/.test(handoff.runtimeRevision) || handoff.seedCompleted !== true)
-      throw new Error('handoff not seed-ready');
-    for (const value of Object.values(handoff.origins)) {
-      const url = new URL(value);
-      if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.origin !== value)
-        throw new Error('handoff requires loopback origins');
-    }
-    identity = { ...identity, runtimeRevision: handoff.runtimeRevision, slot: handoff.slot, origins: handoff.origins };
-    prerequisite = 'completed seed result';
-    const seedBytes = await readFile(handoff.seedResultPath);
-    const seed = JSON.parse(seedBytes.toString()) as Json;
-    if (!Array.isArray(seed.readings) || !Array.isArray(seed.workLinks))
-      throw new Error('seed result missing native identity handoff');
-    identity = {
-      ...identity,
-      runtimeRevision: handoff.runtimeRevision,
-      slot: handoff.slot,
-      origins: handoff.origins,
-      seed: {
-        resultPath: handoff.seedResultPath,
-        sha256: createHash('sha256').update(seedBytes).digest('hex'),
-        completed: true,
-      },
-    };
-    process.env.REZICS_CAPTURE_RECOVERY_DIR = handoff.recoveryDirectory;
-    const runtime = handoff;
-    const persist = async (cases: CaptureCase[]) => {
-      await writeFile(join(directory, 'capture.json'), JSON.stringify({ identity, cases }, null, 2) + '\n', {
-        mode: 0o600,
-      });
-    };
-    const cases = await collectApiCapture(
-      {
-        J03: () => originalJ03(runtime.origins),
-        J04: () => originalJ04(runtime.origins),
-        J10: async () => {
-          // Missing website setup affects only revocation, never recovery or credential replacement.
-          if (activeCapture) activeCapture.operation = 'website private key/binding setup';
-          const keys = JSON.parse(await readFile(runtime.keysPath, 'utf8')) as { website: JWK };
-          const bindings = await parseEnv(runtime.bindingsPath);
-          return originalJ10(runtime.origins, bindings, keys.website);
-        },
-      },
-      persist,
-    );
-    console.log(`accounts-api-capture: ${cases.map((entry) => `${entry.id} ${entry.result}`).join('; ')}`);
-    return cases.every((entry) => entry.result === 'PASS') ? 0 : 1;
-  } catch {
+  const persistUnverified = async (prerequisite: string) => {
     const cases = API_CAPTURE_JOURNEYS.map((id) => ({
       id,
       result: 'unverified',
@@ -1111,8 +1127,7 @@ async function captureOriginalAuthJourneys(): Promise<number> {
           : id === 'J04'
             ? ['signup', 'sign-in', 'stage', 'approve', 'apply', 'old/new-password sign-in', 'current-session read']
             : ['signup', 'website OAuth', 'admitted Kernel read', 'revoke', 'formerly admitted Kernel bearer denial'],
-      owner:
-        'existing manager_event_idle visual/seed owner via Content and supermanager; SDK startup repair retains its existing owner',
+      owner: 'existing manager_event_idle visual runtime owner via Content and supermanager',
       phases: [],
       elapsedMs: 0,
       personaRole: 'newly registered ordinary human (not provisioned)',
@@ -1121,8 +1136,46 @@ async function captureOriginalAuthJourneys(): Promise<number> {
       mode: 0o600,
     });
     console.log(`accounts-api-capture: unverified; prerequisite: ${prerequisite}`);
+  };
+
+  let handoff: CaptureHandoff;
+  const path = process.env.REZICS_API_CAPTURE_HANDOFF;
+  if (!path) {
+    await persistUnverified('admitted runtime handoff is unavailable');
     return 1;
   }
+  try {
+    handoff = parseCaptureHandoff(JSON.parse(await readFile(path, 'utf8')) as unknown);
+  } catch {
+    await persistUnverified('admitted runtime handoff is invalid or unavailable');
+    return 1;
+  }
+
+  const runtime = handoff;
+  const operations: Record<CaptureId, () => Promise<unknown>> = {
+    J03: () => {
+      if (!runtime.recoveryDirectory) throw new Error('runtime recovery delivery path unavailable');
+      process.env.REZICS_CAPTURE_RECOVERY_DIR = runtime.recoveryDirectory;
+      return originalJ03(runtime.origins);
+    },
+    J04: () => originalJ04(runtime.origins),
+    J10: async () => {
+      // Missing website setup affects only revocation, never recovery or credential replacement.
+      if (activeCapture) activeCapture.operation = 'website private key/binding setup';
+      if (!runtime.keysPath || !runtime.bindingsPath) throw new Error('website credential paths unavailable');
+      const keys = JSON.parse(await readFile(runtime.keysPath, 'utf8')) as { website: JWK };
+      const bindings = await parseEnv(runtime.bindingsPath);
+      return originalJ10(runtime.origins, bindings, keys.website);
+    },
+  };
+  const { cases } = await runApiCaptureOnHandoff(runtime, sourceRevision, operations, async (recordedIdentity, rows) => {
+    identity = recordedIdentity;
+    await writeFile(join(directory, 'capture.json'), JSON.stringify({ identity, cases: rows }, null, 2) + '\n', {
+      mode: 0o600,
+    });
+  });
+  console.log(`accounts-api-capture: ${cases.map((entry) => `${entry.id} ${entry.result}`).join('; ')}`);
+  return cases.every((entry) => entry.result === 'PASS') ? 0 : 1;
 }
 
 if (import.meta.main && process.argv.includes('--api-capture')) {
