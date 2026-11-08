@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import type { Pool } from 'pg';
@@ -161,7 +162,7 @@ test.serial(
       const module: WorkModule = {
         name: 'realm_subject_lifecycle_fixture',
         register(context) {
-          const effect = contentEffects(context.pool, context.client).find(
+          const effect = contentEffects(context.pool, context.client, readTestRealmSubjectIdentityMappings).find(
             (candidate) => candidate.name === REALM_SUBJECT_LIFECYCLE_EFFECT,
           );
           if (!effect) throw new Error('Content registration omitted the Realm Subject lifecycle effect');
@@ -193,7 +194,10 @@ test.serial(
       }
       expect(await replacementCandidate()).toMatchObject({ active: true, revision_id: revised.revisionId });
 
-      const lifecycle = createRealmSubjectLifecycle({ pool: world.db.pool });
+      const lifecycle = createRealmSubjectLifecycle({
+        pool: world.db.pool,
+        readIdentityMappings: readTestRealmSubjectIdentityMappings,
+      });
       await lifecycle.effect.run(toCloudEvent(openingEvent));
       await lifecycle.effect.run(toCloudEvent(revisionEvent));
       expect(await replacementCandidate()).toMatchObject({ active: true, revision_id: revised.revisionId });

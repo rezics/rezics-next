@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
@@ -429,6 +430,7 @@ export async function runOperationWorkerProcess(): Promise<void> {
     fetch,
   });
   const content = createContentWork({
+    readIdentityMappings: readTestRealmSubjectIdentityMappings,
     storage,
     access,
     readConsent,
@@ -440,7 +442,7 @@ export async function runOperationWorkerProcess(): Promise<void> {
     name: 'content',
     async register(context) {
       await content.register(context);
-      context.addEffects(contentEffects(context.pool, context.client));
+      context.addEffects(contentEffects(context.pool, context.client, readTestRealmSubjectIdentityMappings));
     },
   };
   const growthMode = config.growthMode;
@@ -466,7 +468,7 @@ export async function runOperationWorkerProcess(): Promise<void> {
         name: 'content',
         async register(context) {
           await content.register({ ...context, pool: growth!.pool });
-          context.addEffects(contentEffects(growth!.pool, context.client));
+          context.addEffects(contentEffects(growth!.pool, context.client, readTestRealmSubjectIdentityMappings));
         },
       };
       work = await composeWork([growthModule], {

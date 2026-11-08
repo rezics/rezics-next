@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from '../realm-identity-reader.ts';
 import { Pool, type PoolClient } from 'pg';
 import sharp from 'sharp';
 import { DBOS } from '@dbos-inc/dbos-sdk';
@@ -194,6 +195,7 @@ if (process.argv.includes('--imported-field-native-worker')) {
   globalThis.fetch = externalFetch;
   const worker = await startWorker({ databaseUrl, executorId: process.env.IMPORTED_FIELD_EXECUTOR_ID!, poolSize: 10 }, [
     createContentWork({
+      readIdentityMappings: readTestRealmSubjectIdentityMappings,
       storage: new R2Storage({
         endpoint: storageEndpoint,
         bucket: 'media-test',
@@ -212,7 +214,7 @@ if (process.argv.includes('--imported-field-native-worker')) {
     {
       name: 'content-relays',
       register(context) {
-        context.addEffects(contentEffects(context.pool, context.client));
+        context.addEffects(contentEffects(context.pool, context.client, readTestRealmSubjectIdentityMappings));
       },
     },
   ]);

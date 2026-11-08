@@ -1,8 +1,12 @@
 import type { Actor } from '../request/access.ts';
-import type { ViewerPersonalActionInput, ViewerPersonalActionsPage } from '../library/viewer-personal-actions.ts';
+import type { ViewerPersonalActionsReader } from '../library/adapters/index.ts';
+import type { ViewerPersonalActionsPage } from '../library/index.ts';
 import { routeOf } from '../route/route.ts';
 import type { FeedDependencies } from './feed.ts';
 import type { FeedItem } from './feed-contract.ts';
+import type { FeedEnrichmentPorts } from './feed-enrichment-ports.ts';
+
+type ViewerPersonalActionInput = Parameters<ViewerPersonalActionsReader>[1][number];
 
 /** Only explicit work cards and original review targets can supply personal operands. */
 export function feedViewerReferences(items: readonly FeedItem[]): ViewerPersonalActionInput[] {
@@ -29,20 +33,15 @@ export function feedViewerReferences(items: readonly FeedItem[]): ViewerPersonal
 /** One call is one page cohort. No cached result or deduplicated raw input crosses calls. */
 export async function composeFeedViewerPersonalActions(
   deps: Pick<FeedDependencies, 'pool' | 'routeKey' | 'access' | 'viewerPersonalActions'>,
+  enrichment: FeedEnrichmentPorts,
   actor: Actor,
   items: readonly FeedItem[],
   deadline: number,
   languages: readonly string[],
   finalAdmission: () => Promise<readonly FeedItem[]>,
 ): Promise<ViewerPersonalActionsPage> {
-  // Native owners also import mounted Content contracts. Resolve their runtime
-  // readers only after route/schema initialization has completed.
-  const [{ readSubjectSummaryObservation }, { STANDARD_QUESTION_ID }] = await Promise.all([
-    import('../semantic/summaries.ts'),
-    import('../rating/votes.ts'),
-  ]);
   const references = feedViewerReferences(items);
-  const subjects = await readSubjectSummaryObservation(
+  const subjects = await enrichment.readSubjectSummaryObservation(
     { ...deps, actor, deadline },
     [...new Set(references.map((row) => row.subjectId))],
     { languages },
@@ -53,7 +52,7 @@ export async function composeFeedViewerPersonalActions(
   });
   let result: ViewerPersonalActionsPage;
   try {
-    result = await deps.viewerPersonalActions(actor, rows, STANDARD_QUESTION_ID, deadline);
+    result = await deps.viewerPersonalActions(actor, rows, enrichment.standardQuestionId, deadline);
   } catch {
     result = { state: 'unavailable', reason: 'currentness', retryable: true };
   }

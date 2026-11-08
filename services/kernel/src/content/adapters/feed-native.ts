@@ -19,14 +19,13 @@ import {
 } from '../feed-conversation-activity.ts';
 import { decodeFeedCursor, encodeFeedCursor, feedBinding, fingerprint } from '../feed-cursor.ts';
 import { feedExcerpt, feedAuthor } from '../feed-summary.ts';
-import { prepareFeedContentContext, type FeedContentContextReference } from '../feed-context.ts';
+import type { FeedContentContextReference } from '../feed-context.ts';
 import { projectFeedReactions } from '../feed-reactions.ts';
 import { prepareFeedReactionAdvice, type FeedReactionAdviceComposition } from '../feed-reaction-advice.ts';
 import { prepareFeedSubjectReactions } from '../feed-subject-reactions.ts';
 import { feedDiscoveryItem } from '../feed-discovery.ts';
 import { openFollowingSpace, type FollowingSpace } from '../feed-space.ts';
 import { openSpaceSubjectPopulation, type SpaceSubjectPopulation } from '../feed-subject-scope.ts';
-import { composeFeedViewerPersonalActions } from '../feed-viewer.ts';
 import type { FeedDependencies, FeedProducerCapabilities } from './feed-capabilities.ts';
 export type { FeedDependencies } from './feed-capabilities.ts';
 import { isDiscoveryReview, isFollowingPost, isFollowingThread } from '../core/index.ts';
@@ -471,7 +470,7 @@ export function createNativeFeedPorts(
         }
         if (!contextReferences.length) return { items };
         try {
-          const composition = await prepareFeedContentContext(
+          const composition = await capabilities.prepareContentContext(
             content,
             contextReferences,
             { actor: live, deadline },
@@ -654,10 +653,10 @@ export function createNativeFeedPorts(
       async personalActions(items, actor, languages, deadline, reopen) {
         const live = asPlatformActor(actor, liveActor());
         if (live.kind !== 'account') return { items };
-        const viewerPersonalActions = await composeFeedViewerPersonalActions(
+        const viewerPersonalActions = await capabilities.composeViewerPersonalActions(
           deps,
           live,
-          items as Parameters<typeof composeFeedViewerPersonalActions>[2],
+          items,
           deadline,
           languages,
           reopen as never,
@@ -668,7 +667,7 @@ export function createNativeFeedPorts(
         if (!contextReferences.length) return items;
         const live = asPlatformActor(actor, liveActor());
         const finalContexts = await (
-          await prepareFeedContentContext(
+          await capabilities.prepareContentContext(
             content,
             contextReferences.map(({ key, threadId, postId }) => ({
               key,

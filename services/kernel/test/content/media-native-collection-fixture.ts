@@ -1,10 +1,15 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { createHash } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import pg, { type Pool } from 'pg';
 import { R2Storage } from '../../src/content/r2-storage.ts';
 import { createContentWorkModule } from '../../src/content/register.ts';
 
-const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
+const registerContent = createContentWorkModule({
+  readIdentityMappings: readTestRealmSubjectIdentityMappings,
+  fetch: (request) => fetch(request),
+  now: () => Date.now(),
+});
 import { effectWorkflowId, relayEffects } from '../../src/events/effects.ts';
 import type { Envelope } from '../../src/events/log.ts';
 import { contentWorkWorkflowId } from '../../src/content/work-contract.ts';

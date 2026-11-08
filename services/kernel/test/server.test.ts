@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './content/realm-identity-reader.ts';
 import { expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { randomBytes } from 'node:crypto';
@@ -486,7 +487,7 @@ async function nativeWorker(databaseUrl: string) {
     console.log('starting');
     const worker = await startWorker(
       { databaseUrl: process.env.DATABASE_URL, executorId: 'server-content-test', poolSize: 5 },
-      [{ name: 'content-effects', register(context) { context.addEffects(contentEffects(context.pool, context.client)); } }],
+      [{ name: 'content-effects', register(context) { context.addEffects(contentEffects(context.pool, context.client, readTestRealmSubjectIdentityMappings)); } }],
     );
     console.log('ready');
     for await (const line of console) {

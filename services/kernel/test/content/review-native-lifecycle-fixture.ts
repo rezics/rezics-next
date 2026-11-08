@@ -5,7 +5,7 @@ import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
+import { createNativeContentSystem, nativeGrantor, type NativeContentSystem } from './support/native-system.ts';
 
 export type ReviewLifecyclePerson = Readonly<{ accountId: string; bearer: string }>;
 export type ReviewLifecycleResponse = Readonly<{
@@ -103,7 +103,7 @@ export async function createReviewLifecycleFixture(): Promise<ReviewLifecycleFix
 
     await checked('POST', '/v1/platform/exposure/personal_library:open', { bearer: governance.bearer }, 200);
     await checked('POST', '/v1/grants', {
-      bearer: governance.bearer,
+      bearer: nativeGrantor(system).bearer,
       body: {
         resource: PLATFORM_RESOURCE,
         subject: { kind: 'account', id: author.accountId },

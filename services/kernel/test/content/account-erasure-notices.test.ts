@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText, normalizeDocument } from '@rezics/document';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -85,6 +86,7 @@ async function startContentWork(options: { relays?: boolean } = {}) {
         name: 'content',
         async register(context) {
           await createContentWork({
+            readIdentityMappings: readTestRealmSubjectIdentityMappings,
             storage: contentWorkDependencies({}, fetch).storage,
             access: workAccess,
             readConsent: (input) =>
@@ -95,7 +97,7 @@ async function startContentWork(options: { relays?: boolean } = {}) {
             collectionPartitions: [0],
           }).register(context);
           context.addEffects([
-            ...contentEffects(context.pool, context.client),
+            ...contentEffects(context.pool, context.client, readTestRealmSubjectIdentityMappings),
             ...contentNoticeEffects(context.pool, workAccess),
           ]);
         },

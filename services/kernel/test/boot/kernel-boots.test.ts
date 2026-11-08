@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { withThrowawayDatabase } from '../../scripts/derived.ts';
 import { ordinaryCollectionPagePlan } from '../../src/library/ordinary-read-bounds.ts';
+import { readTestRealmSubjectIdentityMappings } from '../content/realm-identity-reader.ts';
 import { configureTestReceiptKeys, testReceiptKeysEnv } from '../support/receipt-keys.ts';
 
 setDefaultTimeout(600_000);
@@ -200,7 +201,7 @@ async function boot(env: NodeJS.ProcessEnv) {
       sequence: String(row.position).padStart(19, '0'),
       data: row.data,
     };
-    const lifecycle = createRealmSubjectLifecycle({ pool });
+    const lifecycle = createRealmSubjectLifecycle({ pool, readIdentityMappings: readTestRealmSubjectIdentityMappings });
     await lifecycle.effect.run(event);
     await expect(lifecycle.effect.run({ ...event, id: crypto.randomUUID() })).rejects.toThrow('native outbox anchor');
   } finally {

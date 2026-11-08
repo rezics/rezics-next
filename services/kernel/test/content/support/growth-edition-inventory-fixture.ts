@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from '../realm-identity-reader.ts';
 import { expect } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
@@ -8,7 +9,11 @@ import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createContentWorkModule } from '../../../src/content/register.ts';
 
-const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
+const registerContent = createContentWorkModule({
+  readIdentityMappings: readTestRealmSubjectIdentityMappings,
+  fetch: (request) => fetch(request),
+  now: () => Date.now(),
+});
 import type { CreatorEditionPage } from '../../../src/content/edition-index.ts';
 import type { ContentEditionView } from '../../../src/content/edition-model.ts';
 import { effectWorkflowId, type Effect } from '../../../src/events/effects.ts';

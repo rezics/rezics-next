@@ -1,5 +1,7 @@
 import type { SubjectSummary } from '../../semantic/contract/index.ts';
 import type { ContinuePage, ContinueSubject } from '../../library/contract/index.ts';
+import type { PublicCollectionDiscoverySummary } from '../../search/index.ts';
+import type { ViewerPersonalActionsPage } from '../../library/index.ts';
 
 /** Mixed Home feed vocabulary and consumer-owned continuation, summary and presentation ports. */
 
@@ -226,12 +228,7 @@ export type FeedItem =
       },
       FeedAccountDestination
     >
-  | FeedRow<
-      'discovery',
-      FeedKey<'commerce', 'collection'>,
-      { id: string; title: string; description: string | null; card: unknown },
-      FeedCollectionDestination
-    >
+  | FeedRow<'discovery', FeedKey<'commerce', 'collection'>, PublicCollectionDiscoverySummary, FeedCollectionDestination>
   | FeedRow<'discovery', FeedKey<'content', 'review'>, FeedDiscoveryReviewSummary, FeedThreadDestination>
   | FeedRow<
       'discovery',
@@ -285,7 +282,7 @@ export type FeedLaneCandidate = Readonly<{
 
 export type FeedPage = Readonly<{
   feedItems: readonly FeedItem[];
-  viewerPersonalActions?: unknown;
+  viewerPersonalActions?: ViewerPersonalActionsPage;
   next: string | null;
   asOf: string;
   reactionsAsOf?: FeedReactionFreshness | null;
@@ -448,7 +445,7 @@ export type FeedFinishPort = Readonly<{
     languages: readonly string[],
     deadline: number,
     reopen: () => Promise<FeedItem[]>,
-  ): Promise<{ items: FeedItem[]; viewerPersonalActions?: unknown }>;
+  ): Promise<{ items: FeedItem[]; viewerPersonalActions?: ViewerPersonalActionsPage }>;
   reopenSelected(
     items: FeedItem[],
     actor: FeedActor,
