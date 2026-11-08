@@ -10,6 +10,10 @@ function failure(status: number, value: unknown): OwnDraftReadFailure {
   return 'unavailable';
 }
 
+function validAuthnEpoch(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
 /** The supplied client owns authentication and locale; advice strings are never transport destinations. */
 export function nativeOwnDraftRequests(client: KernelClient): OwnDraftReader {
   return {
@@ -22,7 +26,12 @@ export function nativeOwnDraftRequests(client: KernelClient): OwnDraftReader {
         });
         if (signal.aborted) return 'unavailable';
         if (result.error || result.status !== 200 || !result.data) return failure(result.status, result.error?.value);
-        if (result.data.viewer.accountId !== request.accountId) return 'denied';
+        if (
+          result.data.viewer.accountId !== request.accountId ||
+          !validAuthnEpoch(result.data.viewer.authnEpoch) ||
+          (request.authnEpoch !== undefined && result.data.viewer.authnEpoch !== request.authnEpoch)
+        )
+          return 'denied';
         if (result.data.drafts.length > 20) return 'unavailable';
         return result.data;
       } catch {

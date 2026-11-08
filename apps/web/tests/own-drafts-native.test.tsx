@@ -142,6 +142,24 @@ test('generated selection validates native author, resource, draft visibility an
   expect(await late).toBe('unavailable');
 });
 
+test('generated inventory rejects a different viewer or authentication epoch from the admitted visit', async () => {
+  let payload: unknown = page;
+  const reader = nativeOwnDraftRequests(
+    createKernelClient('https://kernel.test', {
+      async fetch() {
+        return response(payload);
+      },
+    }),
+  );
+  const request = { accountId, authnEpoch: 2 };
+  const controller = new AbortController();
+  expect(await reader.list(request, controller.signal)).toEqual(page);
+  payload = { ...page, viewer: { accountId: threadId, authnEpoch: 2 } };
+  expect(await reader.list(request, controller.signal)).toBe('denied');
+  payload = { ...page, viewer: { accountId, authnEpoch: 3 } };
+  expect(await reader.list(request, controller.signal)).toBe('denied');
+});
+
 test('native conflict inspection retires replaced revision advice and erase review restores keyboard focus', async () => {
   const reader = nativeOwnDraftRequests(
     createKernelClient('https://kernel.test', {

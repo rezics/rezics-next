@@ -23,11 +23,13 @@ Decision: Keep the selected revision in the private erase retry intent and use t
 whose native contract accepts an idempotency key but no revision precondition.
 
 The signed-in localized route, account navigation, composer choice, save/publish/erase controls, and current-post
-readback are connected through typed Web actions. The list always requests at most 20 metadata rows and the exact
-selected read supplies the strong revision ETag. Account, post, thread, author, visibility and revision are validated
-before selected bytes can enter the composer. Invalid or stale cursors require explicit restart; operational failures
-retry the same cursor or selection. Explicit conflict replacement retires the selected context and its advice before
-requesting a new inventory. Browser-local writing remains independent after replacement or acknowledgement.
+readback are connected through typed Web actions. A signed-in visit can still list and inspect with a null CSRF
+credential, but it receives no write or erase commands. The list always requests at most 20 metadata rows and the
+exact selected read supplies the strong revision ETag. Account, post, thread, author, visibility and revision are
+validated before selected bytes can enter the composer. Invalid or stale cursors require explicit restart;
+operational failures retry the same cursor or selection. Explicit conflict replacement retires the selected context
+and its advice before requesting a new inventory. Browser-local writing remains independent after replacement or
+acknowledgement.
 
 Account, authentication/caller epoch, locale, source, reader, local-writing reader, command adapter and active-state
 replacements retire the private visit, including equal restoration and A/B/A changes. Each movement re-admits its
@@ -53,6 +55,10 @@ chosen server or browser body and its retry state; deliberate departure returns 
   identity/cursor keying. Mounted `own-drafts-resume.test.tsx` checks 1/10/20-row pages, one explicitly selected body,
   sparse replacement, focus restoration and late-response retirement. `own-drafts-navigation.test.tsx` checks fresh
   Previous/First reads, exact retries, finite coordinate history, movement retirement and focus handoff.
+  `own-drafts-visit.test.tsx` exercises the mounted route composition, learned authentication epoch, read-only
+  admission, synchronous session/exposure retirement, A/B/A replacement, exact retained credentials, and late
+  page/body/readback suppression. `own-drafts-native.test.tsx` checks native HTTP viewer and epoch mismatches alongside
+  the existing retry, revision, conflict, and keyboard behavior.
   `own-drafts-commands.test.tsx` pins exact account/resource/revision action advice, including malformed and absolute
   paths. Native 256/1024/4096 history and partition growth remain Content acceptance.
 
@@ -62,3 +68,6 @@ or restarting the inventory is explicit.
 Decision: Retain one unresolved erase episode under the active private reader, independently of inventory and
 inspection; show its original title/revision and exact retry on either surface, block replacement writes until it
 settles, and retain erase acknowledgement for deliberate readback across navigation. Review alone remains cancellable.
+
+Decision: Bind `/drafts` reads to the shared browser observation and one irreversible address lease; each command
+intent keeps its first owned CSRF credential, while retired leases suppress later dispatch and late effects.
