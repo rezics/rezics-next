@@ -39,6 +39,7 @@ import {
   parseRemotePhysicalRunReceipt,
   readHosts,
   RUN_LIFETIME_FAILURE_MARKER,
+  runLifetimeFailureMarker,
   type RemotePhysicalRunReceipt,
 } from './remote-check.ts';
 import { mainCheckout, writeLedger, type CheckLedgerEntry } from './check-ledger.ts';
@@ -158,7 +159,7 @@ export function remoteLifetimeInfrastructureCause(
     receipt.host === physical.host &&
     receipt.run === physical.run &&
     JSON.stringify(receipt) === JSON.stringify(physical.lifetimeFailure)
-    ? RUN_LIFETIME_FAILURE_MARKER + JSON.stringify(receipt)
+    ? runLifetimeFailureMarker(receipt) + JSON.stringify(receipt)
     : undefined;
 }
 

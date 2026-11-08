@@ -615,10 +615,23 @@ the slice's `memory.reclaim` once and re-probes before waiting or reporting no s
 When slice memory cannot be read, it uses the machine's `MemAvailable` instead. Every run disables Node's compile
 cache and keeps Bun's transpiler cache inside its run directory so those pages cannot fill the 6 GiB slice; cleanup
 removes the run directory. After `bun install`, the run reclaims only that slice's `inactive_file` pages.
-Slots and per-run MemoryMax together reserve admission capacity. Each run's nested slice and scope have `MemoryMax`
+Slots and per-run MemoryMax together reserve admission capacity. Reservations use the lower of the configured
+host budget and the effective check-slice `memory.max`, both in client ranking and under the existing slot lock. Each run's nested slice and scope have `MemoryMax`
 (`memoryPerRunGiB`, default 6 GiB) and `MemorySwapMax` 0, covering the command and its containers. A kernel OOM kill
 exits 137 and reports `check exceeded its memory limit (<n> GiB)` with the test file that was running (from command
 output, else the last test path in argv). It does not wait for the run-lifetime timeout.
+
+The existing slot admission and owned supervisor share a bounded pressure state in the host slot directory.
+Memory-full PSI at 1% or I/O-full at 10% pauses new heavy commands; recovery requires 30 continuously healthy
+seconds below 0.2% and 2%. The supervisor samples every two seconds. After 15 seconds at memory-full 5% or
+I/O-full 25%, one ordinary run may stop only its own process tree through the existing identity-checked cleanup.
+A host-wide 30-second cooldown prevents simultaneous shedding; gate, landing and critical runs are protected.
+Ordinary multi-slot work is eligible through the same exact-run marker and resource cleanup path. The supervisor records `phase=host-pressure` in the existing durable lifecycle receipt, emits
+`remote-check: infrastructure failure: host pressure interrupted owned run `, and exits 124. The pressure receipt includes measured memory/I/O stall percentages and sustained-pressure duration, separately
+from run elapsed time. A published command result remains authoritative while its cleanup completes. Matching physical
+host/run evidence is required for the controller's infrastructure classification; it is not a compiler failure,
+a command pass, or proof of cleanup. The usual process/container settlement and retained-unknown rules still apply.
+These decisions use existing admission and lifetime loops, with no extra watcher, model turn or scheduler.
 
 One slot is express capacity. Only a non-gate, one-slot run with an explicit estimate of at most
 120,000 ms qualifies. It takes an ordinary slot first, then express if needed.

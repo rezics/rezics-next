@@ -3,14 +3,17 @@
 These reviewed drop-ins target the 62.6 GiB coordinator. They are not installed automatically on other hosts.
 The user and system managers have separate hierarchies: their similarly named `rezics.slice` units are not a
 common parent. The user worker branch gets 28 GiB and the system check branch gets 16 GiB, totaling 44 GiB.
-About 18.6 GiB remains for the OS, desktop, remote access rather than an assertion of strict hardware isolation. Goal host and verifier must share the worker
-branch after a controlled, checkpointed restart; until then the coverage is partial.
+About 18.6 GiB remains for the OS, desktop and remote access. This is practical containment, not strict hardware
+isolation. Goal host and verifier must share the worker branch after a controlled, checkpointed restart; until then
+the coverage is partial.
 
 Install mappings after checking current usage and reviewing the code guard:
 
 | Source in this directory | Destination |
 | --- | --- |
 | worker-slice.conf | `~/.config/systemd/user/rezics-workers.slice.d/60-host-budget.conf` |
+| control-plane.conf | `~/.config/systemd/user/rezics-goal-host.service.d/90-goal-containment.conf` |
+| control-plane.conf | `~/.config/systemd/user/rezics-goal-verifier.service.d/90-goal-containment.conf` |
 | maintenance.conf | `~/.config/systemd/user/rezics-goal-maintenance.service.d/60-host-budget.conf` |
 | regeneration.conf | `~/.config/systemd/user/rezics-goal-regenerate.service.d/60-host-budget.conf` |
 | check-slice.conf | `/etc/systemd/system/rezics-check.slice.d/60-host-budget.conf` |
@@ -67,18 +70,17 @@ slice on the next start; do not relocate a running oneshot or restart a check to
 and effective properties. The source change never writes `MemoryMax` or `MemorySwapMax` during worker launch.
 
 
-## Pending coverage completion
+## Control-plane coverage and safe activation
 
-The Goal host and verifier currently remain outside the 44 GiB split. This is partial containment only. The Goal
-host's observed peak was about 17.63 GiB, so that omission is substantial. The minimal completion is to give both
-services `Slice=rezics-workers.slice`, sharing the same 28 GiB user aggregate. Do not install that membership change
-blindly while Home or checks are active: first checkpoint the existing Home branch/uncommitted source and persisted
-thread/check identities through the existing owner workflow. Wait for a safe turn/check boundary, let the Goal host
-perform its supported graceful shutdown of its own provider processes, and confirm no owned helper remains in the
-old cgroup before a single controlled service restart. Then verify actual `ControlGroup` for host and verifier, not
-only their configured `Slice`. Existing worker scopes and system check runs must not be restarted. Keep the existing
-restart delay/limits; a failed start under the budget requires an operator decision, not a restart loop.
+The Goal host and verifier share the 28 GiB worker aggregate through `control-plane.conf`. Their observed host peak
+was about 17.63 GiB, so leaving them outside would be a substantial gap. A membership drop-in alone does not move
+a running service: checkpoint the existing Home branch, uncommitted source and persisted thread/check identities,
+then use one controlled owner restart at a safe turn/check boundary. Verify both actual `ControlGroup` values and
+that the old app cgroups are absent. The host's `KillMode=process` makes checking old helper processes necessary.
+Do not restart existing worker scopes, system check runs or critical OS/display/network services for this move.
+Without that verified activation, describe containment as partial. Cache maintenance likewise retains a bounded
+256 MiB transition outside the check branch until its next safe activation.
 
-Until that controlled move, the host remains at about 3.55 GiB current / 17.63 GiB peak outside the split. A possible
-interim cap must be based on this observed peak and reviewed separately; imposing 2 or 6 GiB on it would knowingly
-risk an immediate Home/control-plane failure. No interim Goal-host cap or restart is applied by this increment.
+Restore the separate saved host/verifier membership drop-ins and reload the user manager to undo that membership;
+it changes back only at another safe restart. The original five-unit budget backup does not contain those later
+membership files. Check effective cgroups and properties after rollback, rather than inferring them from drop-ins.

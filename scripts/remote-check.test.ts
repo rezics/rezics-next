@@ -148,6 +148,7 @@ test('a trusted driver without a Bun pin binds a candidate runtime through remot
   copyFileSync(remoteCheck, join(driver, 'scripts/remote-check.ts'));
   for (const file of [
     'check-ssh.ts',
+    'check-host-pressure.ts',
     'check-artifacts.ts',
     'check-output-tree.ts',
     'check-placement.ts',
@@ -2482,6 +2483,30 @@ test('a processor-bounded host does not lose slots to its memoryMaxGiB', async (
 test('memory reservations that exceed a host limit queue with the host and both amounts', async () => {
   const { env } = scenario({
     a: { slots: 3, memoryMax: 8 * 2 ** 30, memoryMaxGiB: 8, ordinaryBusy: 1, busyMemoryGiB: 6 },
+  });
+  const directory = workspace();
+  const run = startRemote(env, directory, ['true'], ['--memory-gib', '4']);
+  await waitFor(() => run.output.stderr.includes('6 GiB reserved + 4 GiB requested of 8 GiB'));
+  const hostKey = 'ops_a_test';
+  rmSync(join(env.FAKE_DIR!, `${hostKey}.slot.0`), { recursive: true, force: true });
+  rmSync(join(env.FAKE_DIR!, `${hostKey}.slot.0.memory`), { force: true });
+  expect(await run.child.exited).toBe(0);
+  const waiting = await run.stderr;
+  expect(waiting).toContain('a 0/2 free');
+  expect(waiting).toContain('6 GiB reserved + 4 GiB requested of 8 GiB');
+  expect(waiting).toContain('0 GiB reclaimable file cache');
+});
+
+test('effective slice maximum bounds reservations even when retained host configuration is larger', async () => {
+  const { env } = scenario({
+    a: {
+      slots: 3,
+      memoryMax: 8 * 2 ** 30,
+      memoryMaxGiB: 16,
+      memoryHeadroom: 8 * 2 ** 30,
+      ordinaryBusy: 1,
+      busyMemoryGiB: 6,
+    },
   });
   const directory = workspace();
   const run = startRemote(env, directory, ['true'], ['--memory-gib', '4']);
@@ -7800,6 +7825,7 @@ sys.exit(child.wait())
       source?: string;
       bound?: number;
       lifetime?: number;
+      priority?: string;
       version?: string;
       lock?: string;
       delay?: string;
@@ -7833,7 +7859,7 @@ sys.exit(child.wait())
       'a',
       hostRuntime(),
       60_000,
-      'ordinary',
+      settings.priority ?? 'ordinary',
       settings.bound ?? 5_000,
       undefined,
       settings.lifetime,
@@ -7860,6 +7886,8 @@ sys.exit(child.wait())
       PREPARATION_READY: ready,
       PREPARATION_INSTALL_DELAY: settings.delay ?? '0',
     };
+    const entry = join(directory, id + '-entry.sh');
+    writeFileSync(entry, script);
     return {
       run,
       ready,
@@ -7867,14 +7895,14 @@ sys.exit(child.wait())
       script,
       environment,
       execute: () =>
-        spawnSync('sh', ['-c', script], {
+        spawnSync('sh', [entry], {
           env: environment,
           cwd: repository,
           encoding: 'utf8',
           timeout: settings.timeout ?? 10_000,
         }),
       start: () => {
-        const child = Bun.spawn(['sh', '-c', script], {
+        const child = Bun.spawn(['sh', entry], {
           env: environment,
           cwd: repository,
           stdout: 'pipe',
@@ -9239,7 +9267,7 @@ test.each([7, 124])(
     expect(completed.code, completed.stderr).toBe(exit);
     if (exit === 124) {
       expect(completed.stderr).toContain(RUN_LIFETIME_FAILURE_MARKER);
-      expect(completed.stderr).toContain('returns failed after recorded run-lifetime infrastructure failure');
+      expect(completed.stderr).toContain('returns failed after recorded remote lifecycle infrastructure interruption');
       const receipt = parseRunLifetimeFailure(completed.stderr)!;
       expect(receipt).toMatchObject({ phase: 'run-lifetime', limitMs: 9000 });
       expect(
@@ -9789,3 +9817,57 @@ test('missing unit alone never retires a started stale run with unavailable supe
     await holder.exited;
   }
 });
+
+test('host pressure sheds only an owned ordinary run and keeps completed or protected command results', async () => {
+  const fixture = preparationFixture();
+  const program = dependencyPreparationProgram.replace(
+    "_, shed, pressure_evidence = update_host_pressure(root.parent.parent / 'slots', ordinary_pressure)",
+    "_, shed, pressure_evidence = False, ordinary_pressure and (root / 'command-ready').exists(), {'memoryFull': 5, 'ioFull': 0, 'sustainedMs': 15000}",
+  );
+  for (const priority of ['ordinary', 'multi-slot', 'gate']) {
+    const run = fixture.create({
+      program,
+      priority,
+      lifetime: 60_000,
+      bound: 30_000,
+      command: [
+        'python3',
+        '-c',
+        `import os,pathlib,time
+root=pathlib.Path.cwd()
+(root/'command-ready').touch()
+(root/'owned-pid').write_text(str(os.getpid()))
+time.sleep(${priority !== 'gate' ? 60 : 2.2})`,
+      ],
+      timeout: 10_000,
+    });
+    const sentinel = Bun.spawn(['/bin/sleep', '30'], { stdout: 'ignore', stderr: 'ignore' });
+    let result;
+    try {
+      result = run.execute();
+      expect(existsSync(`/proc/${sentinel.pid}`)).toBe(true);
+    } finally {
+      sentinel.kill('SIGTERM');
+      await sentinel.exited;
+    }
+    expect(result.status, String(result.error ?? result.stderr)).toBe(priority !== 'gate' ? 124 : 0);
+    const pid = Number(readFileSync(join(run.run, 'owned-pid'), 'utf8'));
+    expect(existsSync(`/proc/${pid}`)).toBe(false);
+    if (priority !== 'gate') {
+      const receipt = JSON.parse(readFileSync(join(run.run, 'run-lifetime-status.json'), 'utf8'));
+      expect(receipt).toMatchObject({ phase: 'host-pressure', limitMs: 15000, status: 'infrastructure-failure' });
+      expect(parseRunLifetimeFailure(result.stderr)).toEqual(receipt);
+      expect(result.stderr).toContain('host pressure interrupted owned run');
+    } else {
+      expect(existsSync(join(run.run, 'run-lifetime-status.json'))).toBe(false);
+    }
+  }
+  const completedProgram = program.replace(
+    "terminal_status(root).write_text(str(code) + '\\n')",
+    "terminal_status(root).write_text(str(code) + '\\n'); time.sleep(2.2)",
+  );
+  expect(completedProgram).not.toBe(program);
+  const completed = fixture.create({ program: completedProgram, bound: 30_000, command: ['touch', 'command-ready'] });
+  expect(completed.execute().status).toBe(0);
+  expect(existsSync(join(completed.run, 'run-lifetime-status.json'))).toBe(false);
+}, 20_000);
