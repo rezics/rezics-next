@@ -81,8 +81,8 @@ test('refuses a non-loopback bind address', () => {
   expect(() => storybookLaunchPlan(['--app', '--host=0.0.0.0'], {}, roots)).toThrow('loopback address');
 });
 
-test('Vite app and finite test serving generate Paraglide messages before the child starts', () => {
-  expect(webServeNeedsGeneratedMessages('app')).toBe(true);
+test('finite test Vite prepares Paraglide messages while the live plugin owns its cache', () => {
+  expect(webServeNeedsGeneratedMessages('app')).toBe(false);
   expect(webServeNeedsGeneratedMessages('vite')).toBe(true);
   expect(webServeNeedsGeneratedMessages('storybook')).toBe(false);
   const source = readFileSync(resolve(import.meta.dir, 'storybook-dev.ts'), 'utf8');
@@ -96,6 +96,9 @@ test('Vite app and finite test serving generate Paraglide messages before the ch
     source.indexOf('await ensureMessagesReady(webRoot, startupEnv'),
   );
   expect(viteConfig).toContain('ensureMessagesReady(appRoot, process.env');
+  expect(viteConfig).toContain('shouldUseStandaloneLocalizationGenerator()');
+  expect(viteConfig).toContain("env.REZICS_TEST_RUNTIME === '1' && Boolean(env.REZICS_PARAGLIDE_COMPILER_MODULE)");
+  expect(viteConfig).toContain("[paraglideVitePlugin({ project: './project.inlang' })]");
   expect(viteConfig).toContain('traceWebVitePlugins(');
   expect(viteConfig).toContain("name: 'web-startup-evidence'");
   expect(viteConfig).not.toContain('withParaglideGenerateLock');
