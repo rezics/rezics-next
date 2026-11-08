@@ -1,3 +1,9 @@
+import {
+  workerBootCustody,
+  HOST_INTERRUPTION_EVENT,
+  HOST_INTERRUPTION_RETAINED,
+  primaryWorkerStderr,
+} from './worker-host-custody.ts';
 import { readProofObservation, proofSourceUnchanged, nativeCheckId } from './verification.ts';
 import { createHash } from 'node:crypto';
 import { parseAgentExit } from './agents.ts';
@@ -17,7 +23,7 @@ import {
   transportRetryBackoffMs,
 } from './agents/shared.ts';
 import { evidenceBundle } from './evidence.ts';
-import { isEmptyProcessGroupUnconfirmed, terminateProcessGroup } from './process.ts';
+import { isEmptyProcessGroupUnconfirmed, terminateProcessGroup, processIdentity } from './process.ts';
 import { releaseWorkerTemporaryDirectory, type RunningWorker } from './launch.ts';
 import { removeAttemptContainers } from './worker-containers.ts';
 import { reapAttemptResources } from './attempt-resources.ts';
@@ -99,8 +105,11 @@ export async function settle(
   const ref = worker.attempt;
   const policy = tasks.settings.policy ?? defaultPolicy;
   let code: number | null;
+  let exitSignal: string | null = null;
   try {
-    code = (await worker.exited).code;
+    const exit = await worker.exited;
+    code = exit.code;
+    exitSignal = exit.signal;
   } catch {
     code = -1;
   }
@@ -111,7 +120,7 @@ export async function settle(
     .events(ref.taskId, ref.attempt)
     .filter((event) => event.kind === 'worker-run-started')
     .at(-1);
-  let runMetadata: { logStartOffset?: number; resuming?: boolean } = {};
+  let runMetadata: { logStartOffset?: number; resuming?: boolean; workerHost?: unknown } = {};
   try {
     runMetadata = runEvent ? (JSON.parse(runEvent.body) as typeof runMetadata) : {};
   } catch {
@@ -131,12 +140,13 @@ export async function settle(
     // Stopped or superseded attempts still need Docker cleanup even though they no longer settle records.
     const currentAttempt = store.attempt(ref);
     const poolForAttempt = tasks.settings.pools.find((p) => p.name === ref.pool);
-    const pendingChecks = readMeasurement(currentAttempt, {
+    const initialMeasurement = readMeasurement(currentAttempt, {
       policy,
       configDirectory: poolForAttempt?.configDirectory,
       maxLogBytes: policy.worker.logTailBytes,
       ...(logStartOffset !== undefined ? { logStartOffset } : {}),
-    }).waitingChecks;
+    });
+    const pendingChecks = initialMeasurement.waitingChecks;
     const proofTask = store.task(ref.taskId).brief.kind === 'verification';
     const proofObservation = proofTask
       ? await readProofObservation(
@@ -144,6 +154,81 @@ export async function settle(
           pendingChecks?.length ? pendingChecks : currentAttempt.checks,
         )
       : undefined;
+    const currentBoot = processIdentity()?.boot ?? null;
+    const bootCustody = currentAttempt.process
+      ? workerBootCustody(currentAttempt.process, runMetadata.workerHost, currentBoot)
+      : 'current-boot';
+    if (
+      code === null &&
+      exitSignal === null &&
+      bootCustody !== 'current-boot' &&
+      !proofTask &&
+      ['running', 'pending'].includes(currentAttempt.state) &&
+      (bootCustody !== 'previous-local-boot' ||
+        (!reportsSuccess(initialMeasurement.result, agentAdapter(currentAttempt.profile.cli)) &&
+          !initialMeasurement.failureKind &&
+          !initialMeasurement.blocker))
+    ) {
+      const adapter = agentAdapter(currentAttempt.profile.cli);
+      const session = initialMeasurement.session ?? currentAttempt.session;
+      const interruptions = store
+        .events(ref.taskId, ref.attempt)
+        .filter((event) => event.kind === HOST_INTERRUPTION_EVENT || event.kind === TRANSPORT_FAILURE_EVENT).length;
+      const canResume =
+        bootCustody === 'previous-local-boot' &&
+        adapter.canResume &&
+        Boolean(session) &&
+        interruptions < (policy.worker.transportRetryLimit ?? TRANSPORT_RETRY_LIMIT);
+      const line = canResume
+        ? 'Confirmed local host reboot interrupted this worker; CLI exit status is unobserved.'
+        : `${HOST_INTERRUPTION_RETAINED} ${bootCustody === 'unknown-host' ? 'host provenance is unavailable or foreign' : 'no resumable session or same-attempt interruption budget exhausted'}; CLI exit status is unobserved.`;
+      await write(() => {
+        store.assertCurrent(ref);
+        const task = store.task(ref.taskId);
+        const latest = store.attempt(ref);
+        const latestRun = store
+          .events(ref.taskId, ref.attempt)
+          .findLast((event) => event.kind === 'worker-run-started');
+        if (
+          !['running', 'ready'].includes(task.state) ||
+          !['running', 'pending'].includes(latest.state) ||
+          latest.terminationIntent ||
+          (latestRun?.sequence ?? 0) !== (runEvent?.sequence ?? 0) ||
+          JSON.stringify(latest.process) !== JSON.stringify(currentAttempt.process)
+        )
+          return;
+        store.updateAttempt(ref, (attempt) => {
+          attempt.state = canResume ? 'waiting' : 'exited';
+          attempt.driver = null;
+          if (bootCustody === 'previous-local-boot') attempt.process = null;
+          attempt.session = session;
+          attempt.exitCode = null;
+          attempt.result = line;
+          attempt.failureKind = canResume ? null : 'tool';
+          if (!canResume) attempt.endedAt = new Date().toISOString();
+          if (pendingChecks?.length) attempt.checks = [...new Set([...(attempt.checks ?? []), ...pendingChecks])];
+        });
+        store.updateTask(ref, (task) => {
+          task.state = canResume ? 'running' : 'stopped';
+        });
+        const delayMs = transportRetryBackoffMs(interruptions + 1, policy.worker.transportRetryBackoffMs);
+        store.event(ref, HOST_INTERRUPTION_EVENT, {
+          previousReport: initialMeasurement.result,
+          previousProcess: currentAttempt.process,
+          resume: canResume,
+          count: interruptions + 1,
+          custody: bootCustody,
+          previousBoot: currentAttempt.process?.boot,
+          currentBoot,
+          line,
+          nextResumeAt: new Date(
+            Date.now() + (process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1' ? 0 : delayMs),
+          ).toISOString(),
+          delayMs,
+        });
+      });
+      return;
+    }
     if (!proofTask && !pendingChecks?.length) {
       removeAttemptContainers(ref.taskId, ref.attempt, policy.containers);
       await reapAttemptResources({
@@ -155,11 +240,12 @@ export async function settle(
     }
     store.assertCurrent(ref);
     try {
-      await terminateProcessGroup(
-        store.attempt(ref).process,
-        tasks.settings.terminationGraceMs,
-        tasks.settings.policy?.process,
-      );
+      if (bootCustody !== 'previous-local-boot')
+        await terminateProcessGroup(
+          store.attempt(ref).process,
+          tasks.settings.terminationGraceMs,
+          tasks.settings.policy?.process,
+        );
     } catch (error) {
       // The wrapper already exited; a zombie linger must not hide the worker's real stderr as unconfirmed custody.
       const identity = store.attempt(ref).process;
@@ -211,7 +297,8 @@ export async function settle(
           ...(logStartOffset !== undefined ? { logStartOffset } : {}),
         },
       );
-      const stderr = readAttemptStderr(current.logPath);
+      const rawStderr = readAttemptStderr(current.logPath);
+      const stderr = primaryWorkerStderr(rawStderr);
       const adapter = agentAdapter(current.profile.cli);
       if (
         resuming &&
@@ -338,7 +425,7 @@ export async function settle(
         : '';
       const transportFailures = store
         .events(ref.taskId, ref.attempt)
-        .filter((event) => event.kind === TRANSPORT_FAILURE_EVENT).length;
+        .filter((event) => event.kind === TRANSPORT_FAILURE_EVENT || event.kind === HOST_INTERRUPTION_EVENT).length;
       if (
         transport &&
         !proofTask &&
@@ -411,7 +498,7 @@ export async function settle(
             : finalMeasurement.result.slice(-policy.worker.failedResultCharacters);
         // Cursor also refuses a spent allowance mid-session ("You're out of usage"); it excludes the pool, not a tool fault.
         finalMeasurement.failureKind = adapter.signals?.(stderr).allowance ? 'pool-exhausted' : 'tool';
-        finalMeasurement.result = `Worker ended without a success report (${code === null ? 'killed' : `exit ${code}`}): ${detail}`;
+        finalMeasurement.result = `Worker ended without a success report (${code === null ? (exitSignal ? `signal ${exitSignal}` : 'exit unobserved') : `exit ${code}`}): ${detail}`;
         if (transportLine) finalMeasurement.blocker = transportLine;
       }
       if (

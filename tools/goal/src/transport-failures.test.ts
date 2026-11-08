@@ -1,3 +1,11 @@
+import {
+  localWorkerHost,
+  workerBootCustody,
+  HOST_INTERRUPTION_RETAINED,
+  HOST_INTERRUPTION_EVENT,
+  primaryWorkerStderr,
+} from './worker-host-custody.ts';
+import { processIdentity, sameProcess } from './process.ts';
 import { expect, test } from 'bun:test';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -371,3 +379,162 @@ test('Cursor resume-stop starts fresh on the existing worktree without a transpo
     await h.disposeAsync();
   }
 }, 30_000);
+
+const MCP_CHILD =
+  '2026-11-08T03:00:00Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when Client(HttpRequest(HttpRequest("http/request failed: error sending request for url (http://127.0.0.1:9200/mcp)")))';
+const OLD_BOOT = '11111111-1111-4111-8111-111111111111';
+
+test('worker boot proof requires the authoritative same machine/host; legacy journal proof is bounded and optional', () => {
+  const host = { hostname: 'fixture', machineHash: 'a'.repeat(64) };
+  const process = { pid: 2147483647, start: '1', group: 2147483647, boot: OLD_BOOT };
+  expect(workerBootCustody(process, host, 'current', host, () => null)).toBe('previous-local-boot');
+  expect(workerBootCustody(process, { ...host, hostname: 'foreign' }, 'current', host, () => host)).toBe(
+    'unknown-host',
+  );
+  expect(workerBootCustody(process, undefined, 'current', host, () => host)).toBe('previous-local-boot');
+  expect(workerBootCustody(process, undefined, 'current', host, () => null)).toBe('unknown-host');
+  expect(workerBootCustody({ ...process, boot: 'current' }, undefined, 'current', host, () => null)).toBe(
+    'current-boot',
+  );
+  expect(primaryWorkerStderr(MCP_CHILD + '\nError: required MCP server database is unavailable')).toContain(
+    'required MCP server',
+  );
+  expect(primaryWorkerStderr(MCP_CHILD)).toBe('');
+});
+
+test('optional MCP child stderr does not turn completed repository work into a CLI failure; required MCP failure stays real', async () => {
+  const h = settleHarness();
+  try {
+    const complete = runningAttempt(h, MCP_CHILD, [
+      { type: 'thread.started', thread_id: 'wake-session' },
+      { type: 'item.completed', item: { type: 'agent_message', text: 'RESULT: success' } },
+      { type: 'turn.completed', usage: { input_tokens: 3, output_tokens: 1 } },
+    ]);
+    await settle(h.tasks, { attempt: complete, exited: Promise.resolve({ code: 0, signal: null }) }, { enqueue() {} });
+    expect(h.store.attempt(complete).failureKind).toBeNull();
+    expect(h.store.attempt(complete).result).toContain('RESULT: success');
+    const required = runningAttempt(h, MCP_CHILD + '\nError: required MCP server database failed initialization');
+    await settle(h.tasks, { attempt: required, exited: Promise.resolve({ code: 1, signal: null }) }, { enqueue() {} });
+    expect(h.store.attempt(required).failureKind).toBe('tool');
+    expect(h.store.attempt(required).result).toContain('required MCP server database');
+    const signaled = runningAttempt(h, MCP_CHILD);
+    await settle(
+      h.tasks,
+      { attempt: signaled, exited: Promise.resolve({ code: null, signal: 'SIGKILL' }) },
+      { enqueue() {} },
+    );
+    expect(h.store.attempt(signaled).result).toContain('signal SIGKILL');
+    expect(h.store.attempt(signaled).result).not.toContain('rmcp');
+    expect(h.store.attempt(signaled).result.toLowerCase()).not.toContain('oom');
+  } finally {
+    await h.disposeAsync();
+  }
+}, 15_000);
+
+test('confirmed local reboot resumes the same existing worker session without another attempt or discarded source', async () => {
+  const h = settleHarness(tlsCli);
+  const independent = Bun.spawn([process.execPath, '-e', 'setInterval(()=>{},1000)'], {
+    detached: true,
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  const independentIdentity = processIdentity(independent.pid)!;
+  try {
+    const attempt = runningAttempt(h, MCP_CHILD);
+    const task = h.store.task(attempt.taskId);
+    writeFileSync(join(task.worktree, 'partial-source.txt'), 'keep committed source');
+    const commit = Bun.spawnSync(['git', 'add', 'partial-source.txt'], { cwd: task.worktree });
+    expect(commit.exitCode).toBe(0);
+    expect(Bun.spawnSync(['git', 'commit', '-qm', 'Keep partial source'], { cwd: task.worktree }).exitCode).toBe(0);
+    writeFileSync(join(task.worktree, 'partial-dirty.txt'), 'keep dirty source');
+    h.store.updateAttempt(attempt, (current) => {
+      current.process = { ...independentIdentity, start: '1', boot: OLD_BOOT };
+    });
+    h.store.event(attempt, 'worker-run-started', { workerHost: localWorkerHost() });
+    const before = h.store.task(task.id).currentAttempt;
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.recoverOrphans();
+    await job.drain();
+    expect(h.store.attempt(attempt)).toMatchObject({
+      state: 'waiting',
+      session: 'wake-session',
+      failureKind: null,
+      exitCode: null,
+      process: null,
+    });
+    expect(
+      h.store.events(task.id, attempt.attempt).filter((event) => event.kind === HOST_INTERRUPTION_EVENT),
+    ).toHaveLength(1);
+    await job.recoverOrphans();
+    await job.drain();
+    expect(h.store.task(task.id).currentAttempt).toBe(before);
+    expect(h.store.attempt(attempt).result).toContain('RESULT: success');
+    expect(h.store.attempt(attempt).failureKind).toBeNull();
+    expect(readFileSync(join(task.worktree, 'partial-source.txt'), 'utf8')).toBe('keep committed source');
+    expect(readFileSync(join(task.worktree, 'partial-dirty.txt'), 'utf8')).toBe('keep dirty source');
+    expect(sameProcess(independentIdentity)).toBe(true);
+  } finally {
+    independent.kill();
+    await independent.exited;
+    await h.disposeAsync();
+  }
+}, 15_000);
+
+test.each(['foreign', 'exhausted'] as const)(
+  'foreign or exhausted host custody (%s) retains source without false MCP blame or automatic writer retry',
+  async (kind) => {
+    const h = settleHarness();
+    try {
+      const attempt = runningAttempt(h, MCP_CHILD);
+      const old = { pid: 2147483647, start: '1', group: 2147483647, boot: OLD_BOOT };
+      const checks = ['22222222-2222-4222-8222-222222222222'];
+      h.store.updateAttempt(attempt, (current) => {
+        current.process = old;
+        current.checks = checks;
+      });
+      h.store.event(attempt, 'worker-run-started', {
+        workerHost: kind === 'foreign' ? { hostname: 'foreign', machineHash: 'f'.repeat(64) } : localWorkerHost(),
+      });
+      if (kind === 'exhausted')
+        for (let n = 0; n < (h.settings.policy?.worker.transportRetryLimit ?? 6); n++)
+          h.store.event(attempt, 'transport-failure', {
+            count: n + 1,
+            line: TLS,
+            nextResumeAt: new Date().toISOString(),
+          });
+      await settle(
+        h.tasks,
+        { attempt: h.store.attempt(attempt), exited: Promise.resolve({ code: null, signal: null }) },
+        { enqueue() {} },
+      );
+      expect(h.store.attempt(attempt)).toMatchObject({
+        state: 'exited',
+        process: kind === 'foreign' ? old : null,
+        checks,
+        session: 'wake-session',
+        exitCode: null,
+      });
+      expect(h.store.attempt(attempt).result).toStartWith(HOST_INTERRUPTION_RETAINED);
+      expect(h.store.attempt(attempt).result).not.toContain('rmcp');
+      const notices: unknown[] = [];
+      const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => notices.push(event) });
+      h.store.saveRetryIntent(attempt, {});
+      let starts = 0;
+      h.tasks.retry = async () => {
+        starts++;
+        throw new Error('host uncertainty cannot launch another writer');
+      };
+      job.resumePendingRetries();
+      await job.drain();
+      job.onAttemptExit(attempt);
+      expect(starts).toBe(0);
+      expect(h.store.retryIntent(attempt)?.status).toBe('abandoned');
+      expect(h.store.task(attempt.taskId).state).toBe('stopped');
+      expect(h.store.task(attempt.taskId).currentAttempt).toBe(attempt.attempt);
+      expect(notices).toHaveLength(1);
+    } finally {
+      await h.disposeAsync();
+    }
+  },
+  15_000,
+);
