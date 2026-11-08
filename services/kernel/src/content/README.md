@@ -809,6 +809,15 @@ participation, read and board creation authority separately. The released Realm 
 are rechecked in native parent validation before checkout of the new-board transaction. No subject page or link
 projection readiness is required. Every replay repeats authorization before looking up its receipt.
 
+Growth contract: `global-board-create-http.test.ts` scales the total Global population across routes, defined as
+`count(*)` from `content.board WHERE realm_id IS NULL`, at exact pre-command counts 1, 64 and 512. Its one real,
+unmeasured HTTP warmup creates a board, so fixture seeding targets `scale - 1`; the warmup reads back and asserts the
+actual population immediately before the single measured create. Seeding uses unrelated synthetic subject IDs, and
+prior scale writes remain in the database. The selected Concept's actual pre-command population is asserted separately
+as 1, 3 and 5, reflecting warmups and prior measured creates rather than the Global population axis. Fixture seeding
+and population readback stay outside the measured operation; its cost disclosure retains native rows, blocks, statements,
+control statements and request/response bytes.
+
 An item read discloses only if its board passes before the thread chain is prepared and again after the chain's
 final check: the board's first signature, availability and prepared Access check must still pass in its own
 partition. A revocation committed before the board recheck is observed; bytes, digests and keys leave only after
