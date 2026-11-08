@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from 'bun:test';
 import { createServer as createViteServer, type Plugin, type ViteDevServer } from 'vite';
 import { resolveWebViteConfig } from './support/vite-config';
-import { shouldGenerateLocalization } from '../vite.config.ts';
+import { shouldUseStandaloneLocalizationGenerator } from '../vite.config.ts';
 import {
   bindViteDepCacheAlign,
   elysiaTypeboxLiveModuleCode,
@@ -661,12 +661,18 @@ test('Workers resolve both share-card public Wasm exports through the installed 
   expect(result.exitCode).toBe(0);
 });
 
-test('serve skips Paraglide generate under test runtime unless a compiler module is supplied', () => {
-  expect(shouldGenerateLocalization({ REZICS_TEST_RUNTIME: '1' })).toBe(false);
+test('standalone Paraglide generation is limited to test runtime custom compilers', () => {
+  expect(shouldUseStandaloneLocalizationGenerator({ REZICS_TEST_RUNTIME: '1' })).toBe(false);
   expect(
-    shouldGenerateLocalization({ REZICS_TEST_RUNTIME: '1', REZICS_PARAGLIDE_COMPILER_MODULE: '/tmp/compiler.mjs' }),
+    shouldUseStandaloneLocalizationGenerator({
+      REZICS_TEST_RUNTIME: '1',
+      REZICS_PARAGLIDE_COMPILER_MODULE: '/tmp/compiler.mjs',
+    }),
   ).toBe(true);
-  expect(shouldGenerateLocalization({})).toBe(true);
+  expect(shouldUseStandaloneLocalizationGenerator({})).toBe(false);
+  expect(shouldUseStandaloneLocalizationGenerator({ REZICS_PARAGLIDE_COMPILER_MODULE: '/tmp/compiler.mjs' })).toBe(
+    false,
+  );
 });
 
 test('vite.config identity stays Node-loadable without Bun process custody', () => {

@@ -245,9 +245,9 @@ function pinWorkerSsrOptimizeDeps(environment?: { optimizeDeps?: Record<string, 
   };
 }
 
-export function shouldGenerateLocalization(env: NodeJS.ProcessEnv = process.env): boolean {
-  // Isolated tests already ran generate.ts. A custom compiler module is the localization-startup seam.
-  return env.REZICS_TEST_RUNTIME !== '1' || Boolean(env.REZICS_PARAGLIDE_COMPILER_MODULE);
+export function shouldUseStandaloneLocalizationGenerator(env: NodeJS.ProcessEnv = process.env): boolean {
+  // Normal serve uses Paraglide's content-validated Vite cache; only custom test compilers need the standalone runner.
+  return env.REZICS_TEST_RUNTIME === '1' && Boolean(env.REZICS_PARAGLIDE_COMPILER_MODULE);
 }
 
 let inspectorPort: number | false = false;
@@ -488,8 +488,8 @@ export default defineConfig((context) => {
       {
         name: 'generate-localization',
         async config(_config, { command }) {
-          // Isolated tests already prepared messages. Other serve callers share the same freshness lock as startup.
-          if (command !== 'serve' || !shouldGenerateLocalization()) return;
+          // A normal serve is compiled by Paraglide's Vite plugin below. Keep the standalone runner for test seams.
+          if (command !== 'serve' || !shouldUseStandaloneLocalizationGenerator()) return;
           const traceId = webStartupTraceId();
           const code = await ensureMessagesReady(appRoot, process.env, traceId ? { traceId } : {});
           if (code !== 0) throw new Error(`Paraglide generation exited ${code} before Vite started`);
