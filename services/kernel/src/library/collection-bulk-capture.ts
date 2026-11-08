@@ -91,7 +91,9 @@ export async function captureCollectionBulkSource(
   deadline: number,
 ): Promise<{ subjects: { subjectId: string }[]; source: BulkSelectionSource }> {
   const filter = canonicalFilter(selection.filter);
-  const sort = selection.sort ?? null;
+  // A sealed bulk population always has one deterministic Members order, even for
+  // older callers that omit the optional wire operand.
+  const sort = 'id' as const;
   const before = sourceDescriptor(await reads.readCollection(actor, selection.sourceId, deadline));
   if (before.id.toLowerCase() !== selection.sourceId.toLowerCase()) return failUnavailable();
   const subjects: { subjectId: string }[] = [];

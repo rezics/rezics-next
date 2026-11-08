@@ -31,7 +31,7 @@ function operation(count = 4): FilteredAddOperation {
       exposure: 'public',
       sourceDigest: 'a'.repeat(64),
       filter: capture().request.selection.filter!,
-      sort: null,
+      sort: 'id',
       scannedCandidates: count,
       selectedSubjects: count,
     },
@@ -110,7 +110,7 @@ test('whole-filtered preview sends only a native query and displays its exact la
   expect((calls[0] as FilteredAddCommand).capture.request).toEqual({
     action: 'add_to_collection',
     collectionId: destination.id,
-    selection: { kind: 'query', sourceId: source.id, filter: capture().request.selection.filter },
+    selection: { kind: 'query', sourceId: source.id, filter: capture().request.selection.filter, sort: 'id' },
   });
   expect(JSON.stringify(calls)).not.toContain('targets');
 });

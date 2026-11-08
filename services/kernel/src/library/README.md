@@ -2548,14 +2548,16 @@ reauthorize native actor retirement and target readability. Other consumers must
 
 - Touches: admitted Source/filter/identity/foreign dependencies, complete selection/occurrence capture, exact target
   commands/receipts/ACKs and native/shared retention. Summary reads one fixed header, never counts the manifest;
-  outcomes use immutable operation ordinals. All child, duplicate, rejected, lookahead, empty, failed, repeated and
-  rollback work is charged. See [the detailed bulk Cost contract](bulk-contract.md#cost).
-- Bound: existing shared read/preparation allowances and the stronger applicable 100 raw native keys/step remain;
-  manifest writes spend the same remaining ledger, with one connection/backend. Whole confirmation includes the
-  complete missing validation-to-confirm primitive, with no O(1) claim. Stable total work targets
-  `O(N + M + D + T + E)` over raw source/target-member/repair keys, targets and attempts; bytes include dependencies,
-  targets/receipts and replay. These are obligations, not measurements or a new population cap/budget. Proposed
-  summary work is `R O(1)`, `S O(1)` plus logarithmic blocks/current authority; its runtime is absent.
+  outcomes use immutable operation ordinals. Child, duplicate, rejected, lookahead, empty, failed, repeated and
+  rollback work stays in the composed cost. See the [inclusive bulk work contract](bulk-contract.md#inclusive-work).
+- Bound: filtered capture requests at most 100 Members pages of 100 raw rows (10,000 candidates), refuses above 1,000
+  distinct Subjects or 1,000 effects, and sums every existing per-page reservation/build/read/query/currentness cost,
+  descriptor check, occurrence expansion and manifest write. The per-page ceiling is not a whole-operation
+  measurement. Confirmation touches one authorized operation root and outbox event; the default worker handles at
+  most 100 manifest rows per step and ten steps per segment, including each target's existing native admission,
+  receipt reconciliation and acknowledgement. Result pages remain at most 20 rows plus lookahead; cleanup remains
+  indexed and bounded to 100 child rows per command. These static bounds do not replace the original growth or
+  custody measurements.
   Real `pageBulkOutcomes` uses the independently authorized caller's source RR client and exact operation-owner
   proof: one `bulk_target_pkey` or exact-state `bulk_target_state` seek, route/operation/account predicates, at most
   21 fetched/20 emitted rows and last-emitted continuation only with lookahead. State is current at that snapshot;
@@ -2569,8 +2571,9 @@ reauthorize native actor retirement and target readability. Other consumers must
   blocks and no sequential scan/planner settings. The original `specs/library-bulk-outcomes.test.ts` titles
   `progress is bounded truthful and outcome pagination does not repeat or expose the manifest on summary` and
   `growth axes retain indexed admission replay summary and fixed outcome pages without manifest recounts` remain
-  deferred acceptance obligations. Whole preview/confirmation, shared/native costs and custody acceptance are
-  deferred/unimplemented. Existing test source is not measured full-product evidence.
+  deferred acceptance obligations. Filtered query capture and confirmation have focused retained scenarios, while
+  the original native 64/512/4096 growth, authority, PoolAccess ABA, complete shared/native cost and custody
+  acceptance remain with their original receiver. Existing test source is not measured full-product evidence.
 
 ### Session start
 

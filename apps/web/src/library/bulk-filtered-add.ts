@@ -45,7 +45,12 @@ export function captureFilteredAdd(
   const request: FilteredAddRequest = {
     action: 'add_to_collection',
     collectionId: destination.id.toLowerCase(),
-    selection: { kind: 'query', sourceId: source.id.toLowerCase(), ...(filter === undefined ? {} : { filter }) },
+    selection: {
+      kind: 'query',
+      sourceId: source.id.toLowerCase(),
+      ...(filter === undefined ? {} : { filter }),
+      sort: 'id',
+    },
   };
   const body = JSON.stringify(request);
   if (new TextEncoder().encode(body).byteLength > 64 * 1024) return { ok: false, reason: 'limit' };
@@ -95,7 +100,7 @@ function matches(capture: FilteredAddCapture, operation: FilteredAddOperation) {
     operation.collectionId === capture.request.collectionId &&
     operation.selectionKind === 'query' &&
     source?.id === capture.request.selection.sourceId &&
-    source.sort === null &&
+    source.sort === 'id' &&
     source.filter === (capture.request.selection.filter ?? null) &&
     operation.selectionComplete &&
     operation.occurrencesComplete &&

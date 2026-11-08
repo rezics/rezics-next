@@ -45,7 +45,7 @@ const native = {
   action: 'add_to_collection',
   selectionKind: 'query',
   collectionId: destination.id,
-  selectionSource: { id: source.id, filter: null, sort: null, sourceDigest: 'a'.repeat(64), selectedSubjects: 42 },
+  selectionSource: { id: source.id, filter: null, sort: 'id', sourceDigest: 'a'.repeat(64), selectedSubjects: 42 },
   phase: 'preview',
   selectionComplete: true,
   occurrencesComplete: true,

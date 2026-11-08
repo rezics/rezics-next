@@ -30,7 +30,7 @@ const operation = (change: Partial<FilteredStatusOperation> = {}): FilteredStatu
     exposure: 'private',
     sourceDigest: 'native-digest',
     filter: JSON.stringify(filter),
-    sort: null,
+    sort: 'id',
     scannedCandidates: 201,
     selectedSubjects: 201,
   },
@@ -105,7 +105,7 @@ test('a later-page Collection previews all native matches, then explicitly confi
   expect(JSON.parse((calls[0] as { body: string }).body)).toEqual({
     action: 'set_status',
     state: 'completed',
-    selection: { kind: 'query', sourceId, filter: JSON.stringify(filter) },
+    selection: { kind: 'query', sourceId, filter: JSON.stringify(filter), sort: 'id' },
   });
   expect(journey.state.operation?.counts.targets).toBe(201);
   expect(calls).toHaveLength(2);
@@ -142,6 +142,31 @@ test('preparing, refused, unavailable and incomplete captures cannot confirm an 
   const { journey } = harness({ preview: async () => ({ kind: 'ready', operation: empty, confirmation: 'empty' }) });
   await journey.preview();
   expect(journey.canConfirm).toBe(true);
+});
+
+test('a preparing response retries the same sealed preview while Members preparation advances', async () => {
+  let captures = 0;
+  let attempts = 0;
+  const previewCalls: Parameters<FilteredStatusSender['preview']>[0][] = [];
+  const { journey } = harness({
+    capture: async () => {
+      captures++;
+      return 'same-preview-command';
+    },
+    preview: async (call) => {
+      previewCalls.push(call);
+      return attempts++ === 0
+        ? { kind: 'preparing' }
+        : { kind: 'ready', operation: operation(), confirmation: 'sealed-confirm' };
+    },
+  });
+  await journey.preview();
+  expect(journey.state.phase).toBe('preparing');
+  await journey.preview();
+  expect(journey.state.phase).toBe('previewed');
+  expect(captures).toBe(1);
+  expect(previewCalls).toHaveLength(2);
+  expect(previewCalls[1]).toBe(previewCalls[0]);
 });
 
 test('changed predicates/status retire review; uncertain confirmation and paged skips keep the original command', async () => {

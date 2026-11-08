@@ -18,6 +18,11 @@ then seals the exact selected Subject/occurrence manifest. Source mutation after
 confirmation retries, cancellation and current dependency revocation resolve only manifest rows through the existing
 native writers and retain each terminal outcome.
 
+An omitted optional query `sort` is normalized to `id` before the first Members read. Every continuation carries that
+same order, and the sealed source reports it; current Web callers send `id` and accept only a matching response.
+Pending Members preparation remains source-owned: the same preview command and idempotency key can be retried while
+its durable checkpoint advances, without sealing a partial bulk manifest.
+
 Use the existing occurrence selection, removal and Undo commands and UI. Preserve selected occurrence identity
 and multiplicity. Each effect compares the captured revision/incarnation in its actual native write. Record a
 changed entry as `conflict/revision_mismatch`, displayed as “Changed since preview; skipped”; continue the other
@@ -193,3 +198,21 @@ header completion update (the last two share a statement). No runtime quotes, fu
 Execution expires 24 hours after preview and results are retained for 48 hours. Retention never substitutes for
 current authorization or authorizes erasure by itself. Whole composed admission and worker ceilings must include
 the existing native command, Access, source and executor bounds when those adapters are installed.
+
+## Inclusive work
+
+Filtered capture has a hard ceiling of 100 Members pages, each requesting at most 100 raw rows: at most 10,000 raw
+candidate rows per attempt, at most 1,000 distinct Subject targets, and at most 1,000 persisted effects. Account the
+whole attempt as the sum of both source-descriptor reads, every bounded Members reservation/build/query/read and
+currentness/disclosure check, all returned duplicate and rejected rows, continuation/lookahead and empty-page work,
+occurrence-target expansion, source drift checks, atomic manifest persistence, and failure/rollback work. The
+Members allowance belongs to each existing source read; a per-page ceiling is not a measured whole-operation cost.
+The enclosing prepared command supplies its existing attempt deadline, and preparation failure does not create a
+partial bulk manifest.
+
+Confirmation is one owner command over the sealed operation root and outbox event; it does not re-run the filter or
+enumerate the source. The default Library work module processes pending manifest rows in pages of at most 100,
+registers ten pages per workflow segment, and includes each action's existing native admission, target command,
+receipt reconciliation, source acknowledgement, retry and rollback work. Current authority and target CAS remain
+part of each target command. The original 64/512/4096 native growth, authority and PoolAccess ABA acceptance keeps
+its existing receiver; these static bounds describe composition and do not claim a measurement.

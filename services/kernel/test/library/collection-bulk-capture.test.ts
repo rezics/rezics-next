@@ -36,12 +36,20 @@ const descriptor = (revision = 7) => ({
 });
 type Reads = Parameters<typeof captureCollectionBulkSource>[0];
 
-function readsFor(rows: string[], options: { revision?: () => number; preparing?: boolean } = {}): Reads {
+function readsFor(
+  rows: string[],
+  options: {
+    revision?: () => number;
+    preparing?: boolean;
+    readQueries?: { sort?: string; cursor?: string; limit?: number }[];
+  } = {},
+): Reads {
   return {
     async readCollection() {
       return descriptor(options.revision?.() ?? 7);
     },
     async readMembers(_actor, _sourceId, query = {}) {
+      options.readQueries?.push(query);
       if (options.preparing) return { preparing: true };
       const start = query.cursor == null ? 0 : Number(query.cursor);
       const page = rows.slice(start, start + (query.limit ?? 100));
@@ -56,15 +64,27 @@ function readsFor(rows: string[], options: { revision?: () => number; preparing?
 
 test('captures every Members page, canonical filter and unique subject operand', async () => {
   const members = [...Array.from({ length: 203 }, (_, index) => subjectId(index + 1)), subjectId(1), subjectId(2)];
-  const result = await captureCollectionBulkSource(readsFor(members), actor, selection, Date.now() + 5000);
+  const readQueries: { sort?: string; cursor?: string; limit?: number }[] = [];
+  const result = await captureCollectionBulkSource(
+    readsFor(members, { readQueries }),
+    actor,
+    selection,
+    Date.now() + 5000,
+  );
   expect(result.subjects).toHaveLength(203);
   expect(result.source).toMatchObject({
     id: sourceId,
     revision: 7,
     filter: '{"state":"planned"}',
+    sort: 'id',
     scannedCandidates: 205,
     selectedSubjects: 203,
   });
+  expect(readQueries.map(({ cursor, sort }) => [cursor ?? null, sort])).toEqual([
+    [null, 'id'],
+    ['100', 'id'],
+    ['200', 'id'],
+  ]);
   expect(result.source.sourceDigest).toMatch(/^[a-f0-9]{64}$/);
 });
 
