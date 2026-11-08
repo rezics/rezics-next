@@ -985,6 +985,9 @@ function choiceCost(statements: StatementCounts, maximum: number): CostDetail {
   });
 }
 
+/** Maximum caller cost for one operation. Runtime dispatch consumes the same statement
+ * multiplicities and literal maxima on the caller's live ledger, including held controls.
+ */
 function operationCost(definition: OperationDefinition): CostDetail {
   const costs: CostDetail[] = [];
   if (definition.checkout)

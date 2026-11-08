@@ -19,11 +19,10 @@ import {
   revalidateBoundLibraryIdentityWork,
   withLibraryIdentityWork,
 } from './identity-native-planner-work.ts';
-import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
+import type { WorkAllowance, WorkReceipt } from './contract/index.ts';
 import {
   nativeSourceCustodyExecutionBound,
   nativeSourceCustodyFootprint,
-  nativeSourceCustodyOperationBound,
   NATIVE_SOURCE_CUSTODY_RETIREMENT_PAGE_BOUND,
   nativeSourceCustodyQueries,
   nativeSourceCustodyWorkDimensions,
@@ -123,13 +122,10 @@ function nextCapture() {
   return memoizedValue(nextCapture, () => nativeSourceCustodyQueries().retirement.nextCapture);
 }
 
-import type { NativeAccountSourceIdentity, NativeSourceIdentity } from './contract/source.ts';
-export type {
-  NativeAccountSourceIdentity,
-  NativeOutputActivation,
-  NativePublicOutputIdentity,
-  NativeSourceIdentity,
-} from './contract/source.ts';
+import type { NativeAccountSourceIdentity, NativeSourceIdentity } from './contract/index.ts';
+import type { NativeOutputActivation, NativePublicOutputIdentity } from './contract/native-public-output.ts';
+export type { NativeAccountSourceIdentity, NativeSourceIdentity } from './contract/index.ts';
+export type { NativeOutputActivation, NativePublicOutputIdentity } from './contract/native-public-output.ts';
 export type NativeSourceDriver =
   | 'member'
   | 'entry'
@@ -510,13 +506,10 @@ function nativeLibrarySourceCustody(
           ? withLibraryIdentityWork(pool, work, () => operation(work, operationUse))
           : operation(work, operationUse);
       if (!operationKind) return await invoke();
-      const allowance: WorkAllowance = {
-        reservationId: work.receipt().reservationId,
-        remaining: nativeSourceCustodyWorkDimensions(nativeSourceCustodyOperationBound(operationKind)),
-      };
-      // This static ceiling scopes the same ledger and is checked against its current original.
-      // It transfers no child, creates no credit and does not settle from returned row counts.
-      return await work.withinAllowance(allowance, invoke);
+      // The operation ceiling is enforced by closed statement multiplicities and each
+      // literal's immutable maximum. Keep the caller frame live so actual statements and
+      // the transaction's pre-held COMMIT/ROLLBACK slots consume one shared remainder.
+      return await invoke();
     } catch (error) {
       if (error instanceof Refused) return { status: 'unavailable', reason: error.reason, work: work.receipt() };
       if (error instanceof ProblemError && error.code === 'dependency_unavailable')

@@ -1,6 +1,6 @@
 import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { CollectionOutputRef } from '../library/collection-source-output.ts';
-import type { NativeOutputActivation } from '../library/native-source-output-types.ts';
+import type { NativeOutputActivation } from '../library/contract/native-public-output.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import type { PublicFilterSourceDefinition } from './public-filter-source-binding.ts';
 

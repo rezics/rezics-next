@@ -4,7 +4,7 @@ import type {
   NativeSourceFrontier,
   NativeSourceIdentity,
 } from '../library/native-source-custody.ts';
-import type { NativePublicOutputIdentity } from '../library/native-source-output-types.ts';
+import type { NativePublicOutputIdentity } from '../library/contract/native-public-output.ts';
 import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import type { IdentityReceivingRecord, IdentityReceivingSelection } from './identity-receiving-effects-types.ts';

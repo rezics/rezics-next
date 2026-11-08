@@ -36,6 +36,10 @@ Decision: the fewest tests pin constructed-instance Character document bindings,
 published-A authority over working B, and port-supplied properties. Existing native and
 browser page walks remain the hourly acceptance.
 
+Decision: configured page execution imports Library's built-in runtime and Platform session
+vocabulary through their declared entries. Kernel composition installs the existing runtime;
+current viewer authorization and nested page budgets remain authoritative.
+
 Build checks in `test/presentation/platform-profile.test.ts`:
 
 - the platform profile is valid and gives every bundled type a default page

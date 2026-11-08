@@ -195,6 +195,7 @@ test('owner parsing rejects unknown selectors, malformed operands and non-native
 test('current-owner completed-session absence uses NOT over the same admitted completed-session leaf', () => {
   const absence: FilterDocument = {
     and: [
+      book,
       { owner: { presence: true } },
       { not: { owner: { session: { profileId: 'recipe.v2', lifecycle: 'completed' } } } },
     ],

@@ -1,6 +1,7 @@
 import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import type { Pool } from 'pg';
 import { startWorker } from '../../src/worker.ts';
 import type { WorkModule } from '../../src/work/registry.ts';
@@ -169,9 +170,15 @@ test.serial(
           context.addEffects([effect]);
         },
       };
-      worker = await startWorker({ databaseUrl: world.db.url, poolSize: 10, executorId: 'realm-subject-lifecycle' }, [
-        module,
-      ]);
+      worker = await startWorker(
+        {
+          databaseUrl: world.db.url,
+          poolSize: 10,
+          executorId: 'realm-subject-lifecycle',
+          receiptKeys: testReceiptKeys(),
+        },
+        [module],
+      );
 
       const discussionCandidate = () => candidate(world.db.admin, discussion.threadId, original);
       const replacementCandidate = () => candidate(world.db.admin, discussion.threadId, replacement);
