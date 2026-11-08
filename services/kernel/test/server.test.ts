@@ -550,6 +550,7 @@ test('db up writes development secrets once and keeps them across restarts', () 
     'AUTH_ISSUER',
     'AUTH_JWKS_URL',
     'DATABASE_URL',
+    'KERNEL_POOL_ACQUIRE_TIMEOUT_MS',
     'KERNEL_RATING_COUNTER_SECRET',
     'KERNEL_RECEIPT_KEYS',
     'KERNEL_ROUTE_KEY',
@@ -558,6 +559,7 @@ test('db up writes development secrets once and keeps them across restarts', () 
   ]);
   expect(values.AUTH_ISSUER).toBe('http://127.0.0.1:4200');
   expect(values.AUTH_JWKS_URL).toBe(`${values.AUTH_ISSUER}/.well-known/jwks.json`);
+  expect(values.KERNEL_POOL_ACQUIRE_TIMEOUT_MS).toBe('200');
   expect(values.KERNEL_RECEIPT_KEYS).not.toBe(values.KERNEL_SESSION_KEYS);
   expect(values.KERNEL_RECEIPT_KEYS).toMatch(/^1:[A-Za-z0-9_-]{43}$/);
   expect(values.KERNEL_RATING_COUNTER_SECRET).toMatch(/^[A-Za-z0-9_-]{43}$/);

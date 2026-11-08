@@ -79,7 +79,9 @@ export function developmentEnv(existing: string, url: string, freshDatabase = fa
     KERNEL_SEARCH_PREFIX: `local-${randomBytes(12).toString('hex')}-`,
     KERNEL_RECEIPT_KEYS: `1:${randomBytes(32).toString('base64url')}`,
     KERNEL_WRITE_RATE_SECRET: randomBytes(32).toString('base64url'),
-    KERNEL_POOL_ACQUIRE_TIMEOUT_MS: '10000',
+    // Pool queueing must expire before the default two-second request deadline; pg does not cancel a queued query
+    // when a caller's deadline race wins.
+    KERNEL_POOL_ACQUIRE_TIMEOUT_MS: '200',
     KERNEL_WRITE_RATE_OVERRIDES: JSON.stringify({
       'new-account': { write: { maximum: 100000, seconds: 60 } },
       member: { write: { maximum: 100000, seconds: 60 } },
