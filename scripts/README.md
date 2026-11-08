@@ -149,6 +149,12 @@ idle sockets. A failed probe never stops a master: a busy master times out too, 
 multiplexed through it (their rsync sessions end with exit 255). A socket file left by a killed master is removed when
 `-O check` reports a refused or missing listener; while it remains, OpenSSH prints `already exists, disabling
 multiplexing` and every connection pays a full handshake.
+
+Once original supervisor and command terminal custody is established, admission cleanup accepts a verified absent
+owned scope or slice. A started run without its supervisor evidence remains retained. Systemd bus and stop failures
+keep their diagnostics; unit absence alone does not prove whole-run cleanup. Marker descriptor helpers scope stderr
+redirection to the descriptor operation so later admission diagnostics remain visible. Remote-check fixtures cover
+absence, real failures and descriptor handling; a real admission probe qualifies transport before product checks resume.
 Decision: retirement holds the host's exclusive lease lock through the control check and socket cleanup; acquisition
 holds that same lock shared before probing and through execution. A delayed control answer remains uncertain, even
 without a current lease. Affirmatively dead masters may be recovered at most once per minute. Five minutes of
