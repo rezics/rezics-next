@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { fromPlainText, serializeDocument } from '@rezics/document';
@@ -84,7 +85,9 @@ async function append(partition: number, events: CommandEvent[], db = pool): Pro
 }
 
 function effectFor(event: CloudEvent, db = pool, work = client): Effect {
-  const matches = contentEffects(db, work).filter((effect) => effect.types.includes(event.type));
+  const matches = contentEffects(db, work, readTestRealmSubjectIdentityMappings).filter((effect) =>
+    effect.types.includes(event.type),
+  );
   expect(matches).toHaveLength(1);
   return matches[0]!;
 }
@@ -364,7 +367,7 @@ test(
       name: 'content_effect_fixture',
       register(context) {
         expect(DBOS.isInitialized()).toBe(false);
-        effects = contentEffects(context.pool, context.client);
+        effects = contentEffects(context.pool, context.client, readTestRealmSubjectIdentityMappings);
         // The minimal fixture has no media executor. Stop further native queue
         // dispatch only after this shared effect has started, leaving its retry
         // active while the resulting media work remains durably queued.

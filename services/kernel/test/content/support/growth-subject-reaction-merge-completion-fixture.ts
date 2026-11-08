@@ -1,10 +1,15 @@
+import { readTestRealmSubjectIdentityMappings } from '../realm-identity-reader.ts';
 import { randomUUID } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import readSubjectReactionMergePage from '../../../src/content/subject-reaction-merge-page.sql';
 import { createContentWorkModule } from '../../../src/content/register.ts';
 
-const registerContent = createContentWorkModule({ fetch: (request) => fetch(request), now: () => Date.now() });
+const registerContent = createContentWorkModule({
+  readIdentityMappings: readTestRealmSubjectIdentityMappings,
+  fetch: (request) => fetch(request),
+  now: () => Date.now(),
+});
 import { effectsRelay, type Effect } from '../../../src/events/effects.ts';
 import { startRelays } from '../../../src/events/relays.ts';
 import { newId } from '../../../src/route/route.ts';

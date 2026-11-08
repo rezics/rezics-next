@@ -480,13 +480,15 @@ test('the production API admits trusted content and leaves effects to the native
 async function nativeWorker(databaseUrl: string) {
   const workerEntry = new URL('../src/worker.ts', import.meta.url).href;
   const relayEntry = new URL('../src/content/relays.ts', import.meta.url).href;
+  const identityReaderEntry = new URL('./content/realm-identity-reader.ts', import.meta.url).href;
   const source = `
     import { startWorker } from ${JSON.stringify(workerEntry)};
     import { contentEffects } from ${JSON.stringify(relayEntry)};
+    import { readTestRealmSubjectIdentityMappings } from ${JSON.stringify(identityReaderEntry)};
     console.log('starting');
     const worker = await startWorker(
       { databaseUrl: process.env.DATABASE_URL, executorId: 'server-content-test', poolSize: 5 },
-      [{ name: 'content-effects', register(context) { context.addEffects(contentEffects(context.pool, context.client)); } }],
+      [{ name: 'content-effects', register(context) { context.addEffects(contentEffects(context.pool, context.client, readTestRealmSubjectIdentityMappings)); } }],
     );
     console.log('ready');
     for await (const line of console) {

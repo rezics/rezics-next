@@ -1,10 +1,9 @@
-import type { KernelClient } from '@rezics/client';
+import type { FeedPage as InstalledFeedPage, KernelClient } from '@rezics/client';
 import { parseDiscoveryFilter } from '@rezics/filter';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 
-/** Inferred from Content's mounted FeedPageSchema, never a parallel browser DTO. */
-type ClientFeedPage = NonNullable<Awaited<ReturnType<KernelClient['feedItems']['get']>>['data']>;
-export type FeedPage = ClientFeedPage;
+/** Home reads consume the installed, owner-composed Content response contract. */
+export type FeedPage = InstalledFeedPage;
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedStream = 'home' | 'following';
 export type FeedInput = {

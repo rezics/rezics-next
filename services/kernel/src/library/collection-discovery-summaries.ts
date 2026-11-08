@@ -33,6 +33,7 @@ import {
 import { readDiscoveryOutputs } from './collection-discovery-summaries-output.ts';
 import rowsQuery from './collection-discovery-summaries-rows.sql';
 import type { CollectionOutputPublication } from './collection-source-output.ts';
+import type { PublicCollectionDiscoverySummary } from './contract/index.ts';
 import type {
   CollectionDiscoveryQuery,
   CollectionDiscoveryRecency,
@@ -65,17 +66,6 @@ type Card = Omit<CollectionPresentation, 'coverMediaId'> &
     revision: number;
     sourceGeneration: string;
   }>;
-export type PublicCollectionDiscoverySummary = Card &
-  (
-    | Readonly<{
-        membershipKind: 'curated';
-        memberCount: number;
-        orderEpoch: number;
-        createdAt: string;
-        updatedAt: string;
-      }>
-    | Readonly<{ membershipKind: 'dynamic'; outputGeneration: string }>
-  );
 export type PublicCollectionDiscoveryOperand = Readonly<{
   id: string;
   presentationKind: CollectionPresentationKind;

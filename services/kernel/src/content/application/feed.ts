@@ -216,8 +216,11 @@ export function createFeedApplication(
           lanes.following = [...page.candidates];
           next.following = page.next;
         } catch (error) {
-          if (error instanceof FeedRefusedError) throw error;
-          failLane(lane, error);
+          if (!(error instanceof FeedRefusedError) || error.code === 'dependency_unavailable') {
+            failLane(lane, error);
+            return;
+          }
+          throw error;
         }
       };
 

@@ -5,20 +5,21 @@ import { readAccountDiscoverySummaries } from './access-port.ts';
 import type { AccessClient } from '../request/access.ts';
 import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import type { SummaryReaderDependencies, SubjectSummary } from '../semantic/summaries.ts';
+import type {
+  CollectionDiscoveryContext,
+  CollectionCurator,
+  CollectionPreview,
+  CollectionPreviewMember,
+} from './contract/index.ts';
+export type {
+  CollectionDiscoveryContext,
+  CollectionCurator,
+  CollectionPreview,
+  CollectionPreviewMember,
+} from './contract/index.ts';
 
 export const COLLECTION_PREVIEW_SIZE = 3;
 export const COLLECTION_PREVIEW_EXAMINED = COLLECTION_PREVIEW_SIZE + 1;
-export type CollectionCurator =
-  | Readonly<{ state: 'available'; id: string; label: string | null; destination: string | null }>
-  | Readonly<{ state: 'unavailable'; reason: 'deidentified' | 'withheld' | 'native_projection' }>;
-export type CollectionPreviewMember = Readonly<{
-  id: string;
-  subject: Pick<SubjectSummary, 'id' | 'type' | 'types' | 'label'>;
-}>;
-export type CollectionPreview =
-  | Readonly<{ state: 'available'; members: readonly CollectionPreviewMember[]; partial: boolean; truncated: boolean }>
-  | Readonly<{ state: 'empty' | 'withheld' | 'unavailable' }>;
-export type CollectionDiscoveryContext = Readonly<{ curator: CollectionCurator; preview: CollectionPreview }>;
 export type DiscoveryMemberKey = Readonly<{ id: string; subjectId: string }>;
 export type ContextSource = Readonly<{
   id: string;

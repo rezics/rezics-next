@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { Pool } from 'pg';
@@ -173,7 +174,9 @@ test('a real subject merge queues one event-derived job and reactions converge w
   const mergedResult = await merge(first, second);
   const envelope = await mergeEnvelope(mergedResult);
   const event = envelope.events[0]!;
-  const mergeEffect = contentEffects(f.db.pool, workClient).find((effect) => effect.types.includes(event.type));
+  const mergeEffect = contentEffects(f.db.pool, workClient, readTestRealmSubjectIdentityMappings).find((effect) =>
+    effect.types.includes(event.type),
+  );
   expect(mergeEffect).toBeDefined();
   await mergeEffect!.run(event);
   await mergeEffect!.run(event);

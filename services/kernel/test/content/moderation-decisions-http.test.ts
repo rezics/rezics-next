@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { normalizeDocument } from '@rezics/document';
 import { randomUUID } from 'node:crypto';
@@ -138,7 +139,7 @@ describe('moderation decisions through HTTP and committed effects', () => {
     return { thread, id, key, path, result };
   }
   async function deliver(id: string) {
-    const effect = contentEffects(db.pool, {} as WorkClient).find(
+    const effect = contentEffects(db.pool, {} as WorkClient, readTestRealmSubjectIdentityMappings).find(
       (effect) => effect.name === 'content_moderation_decision',
     );
     expect(effect).toBeDefined();

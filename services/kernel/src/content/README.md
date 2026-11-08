@@ -691,7 +691,7 @@ readiness remains authoritative; installation, an empty page or a preparing cens
 
 ### Cost: selected Home review and reply context
 
-`prepareFeedContentContext(dependencies, references, context, languages?, options?)` returns a one-use composition with
+`prepareFeedContentContext(dependencies, enrichment, references, context, languages?, options?)` returns a one-use composition with
 `finish(): Promise<{contexts: ReadonlyMap<string, FeedContentContextValue>, anchors: readonly AnchoredPosition[]}>`.
 Each selected reference carries an exact thread key and may carry one post key and already disclosed initial values.
 The public context preserves current permitted review-target and question summaries, the exact recorded vote units and
@@ -724,11 +724,11 @@ stays with sole Goal walks. No extra stories or publisher.
 
 ## Worker authorization composition
 
-Content's worker is `createContentWorkModule({ fetch, now })`, declared through `contentDeclaration()`. Production
+Content's worker is `createContentWorkModule({ fetch, now, readIdentityMappings })`, declared through `contentDeclaration()`. Production
 registers it from `composition/work-modules.ts` (`contentDeclaration().work(ambient)`); `startWorker` binds Content
 first, then supplies `fetch`, wall-clock `now` and `id`, and shares `database.pool` between `WorkClient` and
 `composeWork`. Registration observation uses that original client; native queue registration refuses a stub.
-The composition root supplies `fetch` and wall-clock `now`. It consumes `WorkContext.getAuthorization()` from the shared worker registry. That port
+The composition root supplies `fetch`, wall-clock `now`, and the same required Semantic-backed Content identity reader used by the native Realm adapter. The worker forwards that reader to both lifecycle registration and relay effects; neither constructor defers a missing-producer failure. It consumes `WorkContext.getAuthorization()` from the shared worker registry. That port
 memoizes the actual fully mounted kernel Access and canonical Auth current-consent reader for the context.
 The same Access object goes to `createContentWork` and `contentNoticeEffects`; the same consent function goes to
 author-erasure restoration and to edition sale reads as an explicit operand. Content keeps no pool-keyed consent
@@ -739,7 +739,7 @@ Missing or invalid configuration and unavailable current consent retain the shar
 
 Author erasure keeps its native full-domain checks before and at the final step, current source, ancestry,
 roles and consent, evidence no older than 1,000 ms, and known-nonce/current-operation proof. Explicit
-`createContentWork({ access, readConsent, ... })` callers retain their injected ports; exported
+`createContentWork({ access, readConsent, readIdentityMappings, ... })` callers retain their injected ports; exported
 `createContentWorkAccess(clock, pool?)` remains available for standalone fixtures and callers.
 Image processing, URL imports, collection and purge retain their committed source, state, ownership and hold
 checks and existing queues, retention and page bounds. These mechanical jobs do not restore a person initiator.
@@ -4517,13 +4517,23 @@ declaration, cast or generator.
 
 ## Current Home personal Library composition
 
+Decision: Content composition installs existing Semantic summary/observation readers, visible Rating questions, the standard vote ID and the required Semantic-backed Realm identity reader; Content's pure feed contract depends only on Library and Semantic contract entries, carries the exact Library card and viewer-action value types, and keeps Search's closed Collection summary as the runtime source. Client FeedPage/FeedItem aliases prefer concrete mounted fields and use Library fallbacks only for unknown fields across all Home ServerFns.
+
 [Current Home personal facts](../../../../docs/feeds.md#current-home-personal-facts) owns the
 response and full per-page cost. `feed-viewer.ts` calls the installed native personal-actions
 reader once per authenticated Home page and retains raw duplicate occurrence keys. Final
 Home source loads use the original cursor operands and repeat actual content/Subject and
-Space/Realm/publication disclosure; no private overlay can admit its own source. The mounted
-schema extends Library's native facts schema and flows through the existing generated FeedPage
-root export at the complete-input publication stage. Web retains its receiver and writers.
+Space/Realm/publication disclosure; no private overlay can admit its own source. Required
+Content-owned enrichment ports keep Semantic summary observation, visible Rating questions and
+the standard vote question installed once. Realm lifecycle receives the Semantic identity
+mapping through its composition adapter, retaining the original pool and lifecycle deadlines.
+The mounted `FeedPage` schema consumes Search's public Collection summary and Library's current
+viewer-action schema. The pure Content contract represents the Search envelope with Library's
+public card type, avoiding a dependency on the Search adapter; Library's viewer-action page is also
+published by its contract entry. The official Client carries those concrete fields to
+`readHomePage`, `readPublicHomePage` and `readPrivateHomePage`, using its Library aliases only
+while a mounted declaration remains unknown. Web derives its page from the installed client
+response rather than introducing another DTO.
 
 ## Exact post contribution attribution
 

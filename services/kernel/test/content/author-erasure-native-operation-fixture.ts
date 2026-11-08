@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { randomUUID, createHash } from 'node:crypto';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -469,6 +470,7 @@ async function runWorker() {
     const workClient = client;
     const clock = () => new Date();
     const module = createContentWork({
+      readIdentityMappings: readTestRealmSubjectIdentityMappings,
       access: createContentWorkAccess(clock, pool),
       readConsent: createAuthConsentReader({
         url: new URL('/internal/v1/consents:read', bridge).href,
@@ -488,7 +490,7 @@ async function runWorker() {
           name: module.name,
           async register(context) {
             await module.register(context);
-            context.addEffects(contentEffects(pool, workClient));
+            context.addEffects(contentEffects(pool, workClient, readTestRealmSubjectIdentityMappings));
           },
         },
       ],

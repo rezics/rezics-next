@@ -5,9 +5,8 @@ import type { ContentReadDependencies, PostEntry, ThreadView } from './reads.ts'
 import type { AnchoredPosition, FeedParentAuthor, FeedParentContext, FeedReviewContext, ReadContext } from './model.ts';
 import type { AccountDiscoverySummary } from '../search/index.ts';
 import { readAccountDiscoverySummaries } from './access-port.ts';
-import { readSubjectSummaries, readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { readVisibleRatingQuestion } from '../rating/question-directory.ts';
+import type { FeedEnrichmentPorts } from './feed-enrichment-ports.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 
 export const FEED_CONTEXT_MAX_REFERENCES = 20;
@@ -248,9 +247,9 @@ async function loadContent(
 }
 
 type OwnerViews = Readonly<{
-  subjects: Awaited<ReturnType<typeof readSubjectSummaryObservation>>['summaries'];
+  subjects: Awaited<ReturnType<FeedEnrichmentPorts['readSubjectSummaryObservation']>>['summaries'];
   accounts: ReadonlyMap<string, AccountDiscoverySummary | null>;
-  questions: ReadonlyMap<string, Awaited<ReturnType<typeof readVisibleRatingQuestion>>>;
+  questions: ReadonlyMap<string, Awaited<ReturnType<FeedEnrichmentPorts['readVisibleRatingQuestion']>>>;
   confirmSubjects?: () => Promise<boolean>;
 }>;
 
@@ -261,8 +260,11 @@ type ContextOwnerOptions = Readonly<{
   authors?: boolean;
 }>;
 
+export type FeedContentContextOptions = ContextOwnerOptions & Readonly<{ observeThreads?: FeedThreadObserver }>;
+
 async function loadOwners(
   dependencies: FeedContentContextDependencies,
+  enrichment: FeedEnrichmentPorts,
   references: readonly FeedContentContextReference[],
   content: ContentObservation,
   context: ReadContext,
@@ -316,13 +318,13 @@ async function loadOwners(
   const [subjects, accounts, questions] = await Promise.all([
     subjectIds.size
       ? options.confirmSubjects
-        ? readSubjectSummaryObservation(ownerContext, [...subjectIds], { languages: [...languages] }).then(
-            (observation) => {
+        ? enrichment
+            .readSubjectSummaryObservation(ownerContext, [...subjectIds], { languages: [...languages] })
+            .then((observation) => {
               confirmSubjects = observation.current;
               return observation.summaries;
-            },
-          )
-        : readSubjectSummaries(ownerContext, [...subjectIds], { languages: [...languages] })
+            })
+        : enrichment.readSubjectSummaries(ownerContext, [...subjectIds], { languages: [...languages] })
       : Promise.resolve(new Map()),
     accountIds.size
       ? readAccountDiscoverySummaries(ownerContext, [...accountIds], { languages: [...languages] })
@@ -330,7 +332,10 @@ async function loadOwners(
     Promise.all(
       [...questionIds].map(async (id) => {
         try {
-          return [id, await readVisibleRatingQuestion(dependencies, context.actor, id, context.deadline)] as const;
+          return [
+            id,
+            await enrichment.readVisibleRatingQuestion(dependencies, context.actor, id, context.deadline),
+          ] as const;
         } catch (error) {
           if (error instanceof ProblemError && error.code === 'not_found') return [id, null] as const;
           throw error;
@@ -465,10 +470,11 @@ function composeValues(
  * pass their exact subject/place observer so membership stays with that owner. */
 export async function prepareFeedContentContext(
   dependencies: FeedContentContextDependencies,
+  enrichment: FeedEnrichmentPorts,
   references: readonly FeedContentContextReference[],
   context: ReadContext,
   languages: readonly string[] = [],
-  options: ContextOwnerOptions & Readonly<{ observeThreads?: FeedThreadObserver }> = {},
+  options: FeedContentContextOptions = {},
 ): Promise<FeedContentContextComposition> {
   if (references.length > FEED_CONTEXT_MAX_REFERENCES)
     throw new RangeError('At most 20 selected feed content references');
@@ -486,7 +492,7 @@ export async function prepareFeedContentContext(
   const initialThreads = initialThreadMap(references);
   const initialPosts = initialPostMap(references);
   const initial = await loadContent(dependencies, references, context, initialThreads, initialPosts, undefined, true);
-  await loadOwners(dependencies, references, initial, context, languages, options);
+  await loadOwners(dependencies, enrichment, references, initial, context, languages, options);
   let completed = false;
 
   return {
@@ -507,7 +513,7 @@ export async function prepareFeedContentContext(
         const after = current.posts.get(postKey(reference.threadId, reference.postId))?.value;
         if (before && after && before.parentId !== after.parentId) throw new ProblemError('dependency_unavailable');
       }
-      const owners = await loadOwners(dependencies, references, current, context, languages, options);
+      const owners = await loadOwners(dependencies, enrichment, references, current, context, languages, options);
       if (owners.confirmSubjects && !(await owners.confirmSubjects())) throw new ProblemError('dependency_unavailable');
       return { contexts: composeValues(references, current, owners), anchors: current.anchors };
     },

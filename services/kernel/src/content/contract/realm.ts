@@ -1,6 +1,7 @@
 /** Content consumes exact observations, never publication-derived authority. */
 export const REALM_SUBJECT_DISCLOSURE_BATCH = 8;
 export const REALM_SUBJECT_DISCLOSURE_FRESH_MS = 1000;
+export type RealmSubjectIdentityMapping = Readonly<{ terminal: string | null; identityEpoch: string | null }>;
 export type RealmSubjectCandidate = Readonly<{ threadId: string; openingPostId: string; subjectId: string }>;
 export type RealmSubjectDisclosureInput = Readonly<{ realmId: string; candidates: readonly RealmSubjectCandidate[] }>;
 export type RealmObservation<A> = Readonly<{ signature: string; anchors: readonly A[] }>;

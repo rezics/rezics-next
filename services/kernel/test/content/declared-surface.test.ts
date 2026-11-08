@@ -1,3 +1,4 @@
+import { readTestRealmSubjectIdentityMappings } from './realm-identity-reader.ts';
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { readDocument } from '../../src/content/document-read.ts';
@@ -18,7 +19,13 @@ test('content declares its events, permissions, effects and worker from one valu
   expect(Object.keys(declared.events())).toContain('com.rezics.content.thread.created.v1');
   expect(Object.keys(declared.events())).toContain('com.rezics.content.report-reporter.projected.v1');
   expect([...declared.permissions.keys()]).toContain('content.thread');
-  expect(declared.work({ fetch: (request) => fetch(request), now: () => 0 }).name).toBe('content');
+  expect(
+    declared.work({
+      fetch: (request) => fetch(request),
+      now: () => 0,
+      readIdentityMappings: readTestRealmSubjectIdentityMappings,
+    }).name,
+  ).toBe('content');
   expect(declared.effects).toBeTypeOf('function');
   expect(contentDeclaredEvents()).toEqual(declared.events());
   const http = contentHttpDeclaration();
@@ -42,6 +49,7 @@ test('native ambient supplies clock, now, id and fetch as explicit operands', ()
 test('content work register requires an explicit now when the application is unbound', async () => {
   unbindContentApplication();
   const module = createContentWork({
+    readIdentityMappings: readTestRealmSubjectIdentityMappings,
     storage: {
       async get() {
         return null;

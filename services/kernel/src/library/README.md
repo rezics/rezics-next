@@ -131,7 +131,8 @@ provisional facts on false currentness. `readViewerFactsPage` performs that sequ
 Collection member consumers. Search retains admission, source witnesses, private assembly and its final guard.
 
 `viewer-personal-actions.ts` adds the callable `readViewerPersonalActionsPage` over those same facts and the kernel's
-live mounted Access action runtime. Its caller supplies each admitted occurrence key, original Subject ID and
+live mounted Access action runtime. Serializable facts and action-page values live at the Library contract entry.
+Its caller supplies each admitted occurrence key, original Subject ID and
 disclosed resource type. It preserves duplicate row keys, deduplicates native action references only after raw row
 and byte validation, distinguishes current empty actions from unavailable admission, and returns typed unavailable
 action state when final action currentness is not proven. Home receives the callable as
@@ -2370,8 +2371,8 @@ Decision: the Library owns complete nine-axis actor-command declarations for add
 ### Public Collection discovery summaries
 
 `readPublicCollectionDiscoverySummaries(dependencies, ids, context)` is the native hydration producer for Search
-candidates, exported with owner-local request/context/dependency/summary/result types from
-[`collection-discovery-summaries.ts`](collection-discovery-summaries.ts). Content and Web must obtain a ready
+candidates. Its adapter entry owns request/context/dependency/result types; the serializable card summary lives at
+the Library contract entry for Content and Client consumers. Content and Web must obtain a ready
 native card before displaying a Collection. It has no candidate-source import or dependency. See the precise
 [consumer union and omission contract](../../../../docs/dynamic-collections.md#native-public-discovery-card-hydration).
 

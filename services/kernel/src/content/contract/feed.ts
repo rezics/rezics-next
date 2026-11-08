@@ -1,5 +1,10 @@
 import type { SubjectSummary } from '../../semantic/contract/index.ts';
-import type { ContinuePage, ContinueSubject } from '../../library/contract/index.ts';
+import type {
+  ContinuePage,
+  ContinueSubject,
+  PublicCollectionDiscoverySummary as LibraryCollectionCard,
+  ViewerPersonalActionsPage,
+} from '../../library/contract/index.ts';
 
 /** Mixed Home feed vocabulary and consumer-owned continuation, summary and presentation ports. */
 
@@ -180,6 +185,14 @@ export type FeedDiscoveryReviewSummary = Omit<FeedContentSummary, 'author'> & {
   subject?: { id: string; title: string | null } | null;
 };
 
+/** Search's public result envelope with Library's exact serializable card. */
+export type FeedCollectionDiscoverySummary = Readonly<{
+  id: string;
+  title: string;
+  description: string | null;
+  card: LibraryCollectionCard;
+}>;
+
 export type FeedSubjectDestination = { kind: 'subject'; id: string; title: string | null };
 export type FeedAccountDestination = { kind: 'account'; id: string; title: string | null };
 export type FeedThreadDestination = { kind: 'thread'; id: string; title: string | null };
@@ -226,12 +239,7 @@ export type FeedItem =
       },
       FeedAccountDestination
     >
-  | FeedRow<
-      'discovery',
-      FeedKey<'commerce', 'collection'>,
-      { id: string; title: string; description: string | null; card: unknown },
-      FeedCollectionDestination
-    >
+  | FeedRow<'discovery', FeedKey<'commerce', 'collection'>, FeedCollectionDiscoverySummary, FeedCollectionDestination>
   | FeedRow<'discovery', FeedKey<'content', 'review'>, FeedDiscoveryReviewSummary, FeedThreadDestination>
   | FeedRow<
       'discovery',
@@ -285,7 +293,7 @@ export type FeedLaneCandidate = Readonly<{
 
 export type FeedPage = Readonly<{
   feedItems: readonly FeedItem[];
-  viewerPersonalActions?: unknown;
+  viewerPersonalActions?: ViewerPersonalActionsPage;
   next: string | null;
   asOf: string;
   reactionsAsOf?: FeedReactionFreshness | null;
@@ -448,7 +456,7 @@ export type FeedFinishPort = Readonly<{
     languages: readonly string[],
     deadline: number,
     reopen: () => Promise<FeedItem[]>,
-  ): Promise<{ items: FeedItem[]; viewerPersonalActions?: unknown }>;
+  ): Promise<{ items: FeedItem[]; viewerPersonalActions?: ViewerPersonalActionsPage }>;
   reopenSelected(
     items: FeedItem[],
     actor: FeedActor,

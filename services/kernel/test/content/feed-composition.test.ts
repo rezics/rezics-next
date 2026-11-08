@@ -3,7 +3,6 @@ import type { Pool } from 'pg';
 import { composeContentApplication, composeContentFeed } from '../../src/composition/content.ts';
 import {
   bindFeedCapabilities,
-  createNativeFeedPorts,
   tryFeedCapabilities,
   unbindContentApplication,
   unbindFeedCapabilities,
@@ -11,11 +10,14 @@ import {
   type FeedNativeSuppliers,
   type FeedProducerCapabilities,
 } from '../../src/content/adapters/index.ts';
+import { createNativeFeedPorts } from '../../src/content/adapters/feed-native.ts';
 import { bindContentApplication, tryContentApplication } from '../../src/content/adapters/bind.ts';
 import { AuthenticationError } from '../../src/access/contract/authentication.ts';
 import { createFeedReads } from '../../src/content/feed.ts';
 import { createFeedActivityStore } from '../../src/content/feed-activity.ts';
 import { SubjectSummarySchema } from '../../src/semantic/contract/index.ts';
+import { readSubjectSummaries, readSubjectSummaryObservation } from '../../src/semantic/summaries.ts';
+import { readVisibleRatingQuestion, STANDARD_QUESTION_ID } from '../../src/rating/index.ts';
 import { SubjectSummarySchema as transportSummary } from '../../src/semantic/adapters/public-summary-schema.ts';
 
 let io = 0;
@@ -54,6 +56,12 @@ test('default composition installs and retains real suppliers once before IO', a
     composeContentApplication();
     expect(tryFeedCapabilities()).toBe(bound);
     expect(composeContentFeed()).toBe(bound);
+    expect(bound.enrichment.readSubjectSummaries).toBe(readSubjectSummaries);
+    expect(bound.enrichment.readSubjectSummaryObservation).toBe(readSubjectSummaryObservation);
+    expect(bound.enrichment.readVisibleRatingQuestion).toBe(readVisibleRatingQuestion);
+    expect(bound.enrichment.standardQuestionId).toBe(STANDARD_QUESTION_ID);
+    expect(bound.prepareContentContext).toBeFunction();
+    expect(bound.composeViewerPersonalActions).toBeFunction();
     const suppliers = bound.create(dependencies, createFeedActivityStore(dependencies));
     expect(suppliers.publicSummary.read).toBeFunction();
     expect(suppliers.readCollection).toBeFunction();
@@ -64,7 +72,7 @@ test('default composition installs and retains real suppliers once before IO', a
     const row = { subjectId: 'x', state: null, lastActivityAt: 't', activeProgressSession: null };
     expect(suppliers.present(row)).toBe(row);
     const actor = { kind: 'anonymous' } as const;
-    const deadline = performance.now() + 30_000;
+    const deadline = Date.now() + 30_000;
     await expect(
       suppliers.continuation.list(actor, { limit: 6, view: 'FULL' }, deadline, ['en']),
     ).rejects.toBeInstanceOf(AuthenticationError);
@@ -127,6 +135,7 @@ test('native ports retain one supplied producer set and forward live operands un
     },
   };
   const capabilities: FeedProducerCapabilities = {
+    ...composeContentFeed(),
     create: () => {
       created++;
       return suppliers;
