@@ -22,6 +22,8 @@ type Dependencies = {
     routeKey?: Uint8Array;
     clock?: KernelClock;
 };
+/** Search uses the same owner-fact fence through this Library entry, never by importing its SQL directly. */
+export declare function readNativeOwnerFilterBindingFence(client: Pick<PoolClient, 'query'>, route: number, accountId: string): Promise<string | null>;
 /** References to an existing native execution, never a caller-issued safety assertion. */
 export type OwnerFilterQueryRead = Readonly<{
     filter: FilterDocument;
