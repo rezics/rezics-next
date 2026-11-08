@@ -16,6 +16,7 @@ these authorities.
 
 Decision: Personal Library page smoke fixtures mount the installed application boundary inside their QueryClient
 provider, preserving the real reading capabilities and localized navigation assertions.
+The German Labels expectation follows the released message, `Etiketten`.
 
 Specialized behavior lives with its owner: [profiles](library-profile-consumers.md), [labels](library-labels.md),
 [pins](library-pins.md), [Continue](library-continue.md), [private follow counts](private-follow-counts.md),

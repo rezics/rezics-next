@@ -15,7 +15,7 @@ const labels = [
   ['zh-Hans', '标签'],
   ['ja', 'ラベル'],
   ['ko', '라벨'],
-  ['de', 'Schlagwörter'],
+  ['de', 'Etiketten'],
   ['fr', 'Étiquettes'],
   ['es', 'Etiquetas'],
 ] as const;
