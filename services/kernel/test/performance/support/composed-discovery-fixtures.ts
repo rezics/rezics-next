@@ -223,6 +223,7 @@ export type ComposedDiscoveryWorld = Readonly<{
   publicCollection: PublicSource;
   labels: Map<string, string>;
   everythingId: string;
+  everythingRecipeId: string;
   ownStateIds: Readonly<Record<'schema:Book' | 'schema:Recipe', string>>;
   zones: Readonly<Record<PublicJob | 'composed', string>>;
   documents: Readonly<Record<PublicJob | 'composed', CompositionDocument>>;
@@ -403,7 +404,19 @@ export async function createComposedDiscoveryWorld(options: {
     const diet = await fixture.diet();
     const books = await fixture.books();
     const recipes = await fixture.recipes();
-    const filters = fixture.filters(classification, diet);
+    const publicFilters = fixture.filters(classification, diet);
+    const recipeHistory = await population.recipes();
+    const recipeProfileId = population.profile('schema:Recipe').profile.id;
+    const filters: JobFilterSet = {
+      ...publicFilters,
+      notCooked: {
+        and: [
+          publicFilters.dietTime,
+          { owner: { presence: true } },
+          { not: { owner: { session: { profileId: recipeProfileId, lifecycle: 'completed' } } } },
+        ],
+      },
+    };
     const filterErrors = [...PUBLIC_JOBS].flatMap((job) =>
       validateDocumentFilters(
         platformRegistry,
@@ -505,7 +518,9 @@ export async function createComposedDiscoveryWorld(options: {
     }
     for (const [subject, state] of [
       ...Object.values(books.subjects).map((subject) => [subject, bookActive.id] as const),
-      ...Object.values(recipes.subjects).map((subject) => [subject, recipeActive.id] as const),
+      ...Object.entries(recipes.subjects)
+        .filter(([name]) => name !== 'R-edge')
+        .map(([, subject]) => [subject, recipeActive.id] as const),
     ]) {
       const existing = await population.request('alice', 'GET', `/v1/libraryEntries/${subject.id}`);
       if (existing.status === 404) {
@@ -516,7 +531,26 @@ export async function createComposedDiscoveryWorld(options: {
         );
       } else requireStatus(existing, 200, `Read Alice state for ${subject.id}`);
     }
+    const cookedEntry = requireStatus(
+      await population.request('alice', 'GET', `/v1/libraryEntries/${recipes.subjects['R-cooked'].id}`),
+      200,
+      'Read Alice cooked Recipe entry before clearing state',
+    ).body.libraryEntry as { revision: number };
+    requireStatus(
+      await population.request(
+        'alice',
+        'DELETE',
+        `/v1/libraryEntries/${recipes.subjects['R-cooked'].id}?revision=${cookedEntry.revision}`,
+        undefined,
+        discoveryKey(),
+      ),
+      204,
+      'Clear Alice cooked Recipe entry while retaining its completed session',
+    );
+    if (recipeHistory.alice.session.state !== 'completed' || recipeHistory.bob.session.state !== 'completed')
+      throw new Error('Released Recipe owner sessions did not retain their completed lifecycle');
     const everythingId = await builtinCollection(population, fixture, 'everything', 'schema:Book');
+    const everythingRecipeId = await builtinCollection(population, fixture, 'everything', 'schema:Recipe');
     const ownStateIds = {
       'schema:Book': await builtinCollection(population, fixture, 'state', 'schema:Book'),
       'schema:Recipe': await builtinCollection(population, fixture, 'state', 'schema:Recipe'),
@@ -526,6 +560,11 @@ export async function createComposedDiscoveryWorld(options: {
         await population.request(persona, 'GET', `/v1/collections/${everythingId}`),
         404,
         'Conceal Everything',
+      );
+      requireStatus(
+        await population.request(persona, 'GET', `/v1/collections/${everythingRecipeId}`),
+        404,
+        'Conceal Recipe Everything',
       );
       requireStatus(
         await population.request(persona, 'GET', `/v1/collections/${ownStateIds['schema:Book']}`),
@@ -548,6 +587,7 @@ export async function createComposedDiscoveryWorld(options: {
       publicCollection,
       labels,
       everythingId,
+      everythingRecipeId,
       ownStateIds,
       zones: {
         'long-harem-light-novels': bookZone,

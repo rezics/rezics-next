@@ -66,6 +66,7 @@ import {
   createIdentityNativeCatalog,
   createProgressOperationCatalog,
   createNativeSourceCaptureAdapter,
+  readNativeCollectionScopeIdentity,
   createNativePublicOutputAdapter,
   observeNativePublicCollectionOutput,
   createNativeLibraryPresentation,
@@ -90,8 +91,12 @@ import {
   preparedSource,
   type LibraryCapabilities,
   type LibraryDomain,
+  type NativeSourceIdentity,
   type PreparedCollectionSource,
   type PreparedSearchScope,
+  type WorkAllowance,
+  type WorkDimensions,
+  type WorkReceipt,
 } from '../library/contract/index.ts';
 import { admissionTerm, sumAdmission, createProgressOperationBounds } from '../library/core/index.ts';
 
@@ -158,11 +163,54 @@ function nativeIdentityDisclosurePorts(): IdentityDisclosureAdapterPorts {
   };
 }
 
-function nativeSearchPreparationPorts(search?: unknown): SearchPreparationAdapterPorts {
+function sourceAllowanceAfter(allowance: WorkAllowance, receipt: WorkReceipt): WorkAllowance {
+  const remaining = { ...allowance.remaining };
+  for (const axis of Object.keys(remaining) as (keyof WorkDimensions)[]) remaining[axis] -= receipt.used[axis];
+  return { reservationId: allowance.reservationId, remaining };
+}
+
+function addSearchWork(first: WorkReceipt | null, second: WorkReceipt): WorkReceipt {
+  if (!first) return second;
+  const used: WorkDimensions = {
+    candidateKeys: first.used.candidateKeys + second.used.candidateKeys,
+    nativeRows: first.used.nativeRows + second.used.nativeRows,
+    identityMetadataRows: first.used.identityMetadataRows + second.used.identityMetadataRows,
+    emptySeeks: first.used.emptySeeks + second.used.emptySeeks,
+    nativePoints: first.used.nativePoints + second.used.nativePoints,
+    witnessKeys: first.used.witnessKeys + second.used.witnessKeys,
+    statements: first.used.statements + second.used.statements,
+    bytes: first.used.bytes + second.used.bytes,
+  };
+  return { reservationId: first.reservationId, used };
+}
+
+function nativeSearchPreparationPorts(search?: unknown, pool?: Pool): SearchPreparationAdapterPorts {
   return {
     async prepareScope(input) {
       const service = (input.search as SearchService | undefined) ?? (search as SearchService | undefined);
       if (!service) throw new TypeError('The registered Search service is not configured.');
+      let identity: NativeSourceIdentity | undefined =
+        preparedSource in input.identity ? undefined : (input.identity as NativeSourceIdentity);
+      let identityWork: WorkReceipt | null = null;
+      if (preparedSource in input.identity) {
+        if (!pool) throw new TypeError('Resolving a captured Library Source requires its native pool.');
+        const captured = input.identity as PreparedCollectionSource;
+        const resolved = await readNativeCollectionScopeIdentity(pool, {
+          route: captured.observation.route,
+          collectionId: captured.observation.collectionId,
+          deadline: input.deadline,
+          allowance: input.allowance,
+        });
+        if (
+          !resolved.identity ||
+          resolved.identity.route !== captured.observation.route ||
+          resolved.identity.collectionId !== captured.observation.collectionId ||
+          resolved.identity.incarnation !== captured.observation.incarnation
+        )
+          throw new TypeError('The captured Library Source has no current native Search identity.');
+        identity = resolved.identity;
+        identityWork = resolved.work;
+      }
       const scope = createSearchScopeForService(service, {
         access: input.access,
         actor: input.actor,
@@ -174,12 +222,16 @@ function nativeSearchPreparationPorts(search?: unknown): SearchPreparationAdapte
         input.filter as FilterDocument,
         {
           releaseDigest: input.releaseDigest,
-          order: input.identity ? { kind: 'id', source: input.identity } : { kind: 'id' },
-          allowance: input.allowance,
+          order: identity ? { kind: 'id', source: identity } : { kind: 'id' },
+          allowance: identityWork ? sourceAllowanceAfter(input.allowance, identityWork) : input.allowance,
           readOnly: true,
         } as Parameters<typeof scope.prepare>[1],
       );
-      return { prepared, work: scope.work(prepared), scope } as PreparedSearchScope;
+      return {
+        prepared,
+        work: addSearchWork(identityWork, scope.work(prepared)),
+        scope,
+      } as PreparedSearchScope;
     },
     filterLeaves(filter) {
       return compileCurrentOwnerFilter(filter as FilterDocument).leaves.map((leaf) =>
@@ -373,7 +425,7 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
       createIdentityDisclosureAdapter({ pool: options.pool, ports: nativeIdentityDisclosurePorts() }),
     searchPreparation:
       options.capabilities?.searchPreparation ??
-      createSearchPreparationAdapter(nativeSearchPreparationPorts(options.search)),
+      createSearchPreparationAdapter(nativeSearchPreparationPorts(options.search, options.pool)),
     contentPublication:
       options.capabilities?.contentPublication ??
       createContentPublicationAdapter(nativeContentPublicationPorts(options)),

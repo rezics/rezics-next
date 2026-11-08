@@ -477,8 +477,14 @@ test('Entry/progress refuses before identity disclosure when collection authoriz
 });
 
 test('owner-query filter uses the Search preparation capability and records nested admission on the ledger', async () => {
+  let searchIdentity: unknown;
+  let searchFilter: unknown;
+  let searchReleaseDigest: string | undefined;
   const searchPreparation: LibraryCapabilities['searchPreparation'] = {
     async prepareScope(input) {
+      searchIdentity = input.identity;
+      searchFilter = input.filter;
+      searchReleaseDigest = input.releaseDigest;
       return {
         prepared: { basis: input.releaseDigest, filter: input.filter, releaseDigest: input.releaseDigest },
         work: {
@@ -545,11 +551,12 @@ test('owner-query filter uses the Search preparation capability and records nest
     at: { epoch: 1 },
   });
   const filtered = await searchingOpen.filter({ all: [] }, 'digest');
-  expect(filtered.prepared).toEqual({
-    basis: 'digest',
-    filter: { all: [] },
-    releaseDigest: 'digest',
-  });
+  expect(searchIdentity).toBe(searchingOpen.source);
+  expect(filtered.prepared).toMatchObject({ basis: 'digest' });
+  expect(searchFilter).toEqual({ all: [] });
+  expect(searchReleaseDigest).toBe('digest');
+  expect(filtered.scope).toBeDefined();
+  expect(filtered.work.used.statements).toBe(1);
   expect(searchingWork.receipt().used.statements).toBe(1);
 });
 

@@ -12,6 +12,12 @@ operation. The whole request is capped at 64 KiB. Pending source preparation rem
 missing source authority remains `503 dependency_unavailable`, never a fabricated empty result. Confirmation never
 reruns a filter or adds new matches.
 
+Decision: filtered capture applies the same admitted Library Source, expanded Filter AST and canonical `id`
+ordering used for the preview. It hashes every returned raw occurrence before canonical Subject deduplication,
+then seals the exact selected Subject/occurrence manifest. Source mutation after capture cannot add a target;
+confirmation retries, cancellation and current dependency revocation resolve only manifest rows through the existing
+native writers and retain each terminal outcome.
+
 Use the existing occurrence selection, removal and Undo commands and UI. Preserve selected occurrence identity
 and multiplicity. Each effect compares the captured revision/incarnation in its actual native write. Record a
 changed entry as `conflict/revision_mismatch`, displayed as “Changed since preview; skipped”; continue the other

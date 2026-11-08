@@ -55,6 +55,17 @@ type Dependencies = {
   routeKey?: Uint8Array;
   clock?: KernelClock;
 };
+
+/** Search uses the same owner-fact fence through this Library entry, never by importing its SQL directly. */
+export async function readNativeOwnerFilterBindingFence(
+  client: Pick<PoolClient, 'query'>,
+  route: number,
+  accountId: string,
+): Promise<string | null> {
+  const row = await ownerFenceQuery.run(client, { route, account_id: accountId });
+  return row?.generation ?? null;
+}
+
 /** References to an existing native execution, never a caller-issued safety assertion. */
 export type OwnerFilterQueryRead = Readonly<{
   filter: FilterDocument;
@@ -510,12 +521,16 @@ export async function bindNativeOwnerFilterRead(
   const admitted = readNativeCollectionMemberAdmission(admission);
   if (!admitted || admitted.actor !== actor || admitted.pool !== dependencies.pool)
     throw new TypeError('Foreign native owner admission');
-  // Saved catalogue meaning must reach the mounted Search population producer. Until that producer
-  // is installed here, never prepare the owner's Library capture as a substitute population.
-  if (admitted.source.kind === 'catalogue') return { status: 'unavailable' } as const;
-  deadline = Math.min(deadline, admitted.deadline);
   const inherited = reads.getStore();
   if (inherited && inherited.actor !== actor) throw new TypeError('Foreign native owner reader');
+  // A saved catalogue rule is only admitted when Search lends the retained query that produced its
+  // population. A Library capture is never a replacement catalogue population.
+  if (
+    admitted.source.kind === 'catalogue' &&
+    (!inherited?.query || !isDeepStrictEqual(inherited.query.filter, admission.filter))
+  )
+    return { status: 'unavailable' } as const;
+  deadline = Math.min(deadline, admitted.deadline);
   if (attempt) {
     deadline = Math.min(deadline, commandAttemptDeadline(attempt));
     if (

@@ -835,17 +835,22 @@ final owner, complete Source, disclosure and version comparisons run after this 
 existing unavailable response without delivering either the page or its headers. The cursor binding, activity order,
 readiness, and BASIC shape are unchanged.
 
-This is default caller composition, not native readiness or main proof. In this checkout the actual
-`identity-scoped-observations.ts` factory returns `source_unready` and `public-filter-source.ts` returns
-`source_pending`/`dependency_unavailable`. The coordinator and mapping runtime modules are absent. The native
-Collection Source still lacks logical headerless and Content reaction group bindings; those admitted logical
-Collections return dependency unavailability rather than a false missing/empty page. Search also still refuses
-owner leaves and requires the public index even for native source orders. Commerce has been asked to close that
-exact native-owner interface with Search. Existing Source statement/row/byte ceilings are preserved: missing
-readiness or insufficient complete work never becomes a successful partial page. No identity ACK, synthetic actor,
-private Boolean evaluator, replacement index, global identity sweep or shared custody completion is supplied here.
-The existing nonempty/session-only/reaction-only native user cases and the added current-source-unavailable case
-remain integration evidence to run; local typing does not establish those outcomes.
+This is default caller composition, not native readiness or main proof. Logical headerless and Content reaction
+group bindings retain their existing readiness boundary. For an admitted catalogue-plus-owner request, Search
+passes its retained filter, public binding, queried observation and execution to Library's native owner reader;
+Library revalidates that execution and its privacy-reduction closure. Owner-only and mixed predicates use the
+same captured Library Source and same caller reservation for native identity, preparation, candidate work and
+final disclosure. A catalogue-source owner filter without that actual Search query remains unavailable; a
+Library capture never substitutes for the public Catalogue population. Missing readiness or insufficient
+complete work still cannot become a successful partial page. No synthetic actor, private Boolean evaluator,
+replacement index, global identity sweep or shared custody completion is supplied here. Native user cases and
+the added current-source-unavailable case remain integration evidence to run; local typing does not establish
+those outcomes.
+
+Search obtains owner fact locators and the owner-fact fence through installed Library native ports backed by the
+public `owner-filter-native-closure.ts` and `owner-filter-native-binding.ts` entries. Library owns the fact SQL,
+fence query and locator mapping; Search charges each bounded read to the existing member-work reservation before
+dispatch. Search does not import Library owner SQL or reimplement its native fact mapping.
 
 ### Scoped subject-search status
 
@@ -2156,7 +2161,7 @@ refusal behavior and preserved output. This subsection remains the owner anchor 
   Worker cases also exercise source/commit crash replay, concurrent replacement/CAS loss, account T and moved/fenced
   fresh-sweep recovery. This scope proves neither global absence/readiness nor complete shared-history erasure.
 
-### Built-in membership and indexed filtering (required; runtime incomplete)
+### Built-in membership and indexed filtering (broader runtime remains incomplete)
 
 - Touches: private owner-partition candidate/native fact indexes, effective label parents, admitted catalogue indexes,
   current disclosure anchors, prepared results and canonical identity-epoch maintenance in bounded durable steps.
@@ -2166,18 +2171,24 @@ refusal behavior and preserved output. This subsection remains the owner anchor 
   results or rejection before enumeration must preserve filled/final pages or preparing.
 - Growth check: actual first/deep pages under
   [the shared three-scale checks](../../../../docs/filtered-lists.md#three-scale-checks), with duplicate histories, stale label parents
-  and sparse filters are required. Native helpers and existing curated measurements below do not supply these
-  results. Complete built-in/filter runtime and these measurements are missing; no native check ran for adoption.
+  and sparse filters are required. This increment supplies the request-owned completed-session predicate on curated,
+  Everything and own-state Collections; unrelated built-in families and the native measurements remain open. Native
+  receiving was not run in minimal verification.
 
 ### Common member filter admission
 
 - Touches: the shared bounded AST/release expansion, one current viewer account point and existing private-family
   exposure gates after Collection read authorization. Presence admits all three native family list actions;
   state/label use `library_entry:list`, session uses `progress_session:list`, holding uses `copy:list`.
-- Bound: shared AST bounds, at most one owner account point and three existing family gate decisions. No native
-  fact, candidate, history, identity or preparation enumeration occurs while execution producers are unavailable.
+- Bound: shared AST bounds, at most one owner account point and three existing family gate decisions. The ordinary
+  reader then spends the same `NativeCollectionWork` reservation on captured Source identity/preparation, bounded
+  candidate support, complete original/terminal disclosure, duplicate occurrences, final Source checks and optional
+  FULL facts. A completed-session leaf is existential over the admitted viewer's retained history; its `NOT` uses the
+  same leaf and complete owner closure. Unknown or undisclosed facts retain their native outcome and cannot prove a
+  negative or successful exhaustion.
 - Growth check: `test/library/owner-filter-growth.test.ts` requires useful first/deep native pages and the existing
-  direct-plan physical bounds under retained-session growth. It is unrun and remains a runtime requirement.
+  direct-plan physical bounds under retained-session growth. The owner completion regression also pins cleared-entry
+  history, no-entry support, independent owners and state inequality. Three-scale native receiving remains open.
 
 ### Terminal whole-graph cleanup (required; runtime incomplete)
 

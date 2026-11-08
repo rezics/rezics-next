@@ -8,9 +8,13 @@ type LibraryOwnerFilterPlanApi = Pick<
   typeof import('../library/owner-filter-plan.ts'),
   'bindOwnerFilterRead' | 'readOwnerFilterCandidate' | 'readOwnerFilterCandidateClosure'
 >;
+type LibraryOwnerFilterClosureApi = Pick<
+  typeof import('../library/owner-filter-native-closure.ts'),
+  'readNativeOwnerFilterCandidateFacts'
+>;
 type LibraryOwnerFilterNativeApi = Pick<
   typeof import('../library/owner-filter-native-binding.ts'),
-  'withOwnerFilterNativeRead'
+  'withOwnerFilterNativeRead' | 'readNativeOwnerFilterBindingFence'
 >;
 type LibraryCustodyApi = Pick<typeof import('../library/native-source-custody.ts'), 'createNativeLibrarySourceCustody'>;
 type LibraryKindAdmissionApi = Pick<
@@ -29,6 +33,7 @@ type LibraryCollectionDiscoveryApi = Pick<
 export type SearchLibraryNativePort = Readonly<
   LibraryOwnerFilterApi &
     LibraryOwnerFilterPlanApi &
+    LibraryOwnerFilterClosureApi &
     LibraryOwnerFilterNativeApi &
     LibraryCustodyApi &
     LibraryKindAdmissionApi &
