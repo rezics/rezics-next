@@ -40,7 +40,7 @@ const subject: v.GenericSchema<NativeSubject> = v.strictObject({
         rightsHolder: v.string(),
         via: v.strictObject({ name: v.string(), url: v.string() }),
         license: v.string(),
-        obligations: v.array(v.string()),
+        obligations: v.array(v.picklist(['cc:Attribution', 'cc:ShareAlike', 'cc:Notice', 'cc:SourceCode'])),
       }),
     }),
   ),

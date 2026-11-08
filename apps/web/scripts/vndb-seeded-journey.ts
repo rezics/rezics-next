@@ -243,7 +243,7 @@ try {
   const client = createKernelClient(stack.kernel);
   const anonymous = data(
     await client.subjects({ id: subjectId }).threads.get({
-      query: { place: globalContext, kind: 'discussion', board: boardId, limit: 20 },
+      query: { place: globalContext, kind: 'discussion', board: boardId, limit: '20' },
     }),
     'selected Subject entry',
   );
@@ -254,7 +254,7 @@ try {
   }
   const unselected = data(
     await client.subjects({ id: subjectId }).threads.get({
-      query: { place: globalContext, kind: 'discussion', limit: 20 },
+      query: { place: globalContext, kind: 'discussion', limit: '20' },
     }),
     'unselected Subject entry',
   );
