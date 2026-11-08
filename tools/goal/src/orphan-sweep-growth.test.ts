@@ -383,8 +383,8 @@ test('host maintenance reaches a fixed cleanup and process neighbourhood across 
       repositoryFixture.close();
     }
   }
-  for (const trace of traces.slice(1)) expect(trace).toEqual(traces[0]);
-  for (const units of unitScales.slice(1)) expect(units).toEqual(unitScales[0]);
+  for (const trace of traces.slice(1)) expect(trace).toEqual(traces[0]!);
+  for (const units of unitScales.slice(1)) expect(units).toEqual(unitScales[0]!);
 }, 60_000);
 
 test('deep cleanup backlog drains in fixed pages and empty passes stop scanning history', () => {
@@ -475,8 +475,8 @@ test('unregistered directory recovery keeps its complete native trace fixed acro
       repositoryFixture.close();
     }
   }
-  for (const trace of traces.slice(1)) expect(trace).toEqual(traces[0]);
-  for (const units of unitScales.slice(1)) expect(units).toEqual(unitScales[0]);
+  for (const trace of traces.slice(1)) expect(trace).toEqual(traces[0]!);
+  for (const units of unitScales.slice(1)) expect(units).toEqual(unitScales[0]!);
 }, 60_000);
 
 test('the next command settles an exited attempt that remains current and unsettled', async () => {

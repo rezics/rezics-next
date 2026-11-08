@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
-import { opendir, type Dir } from 'node:fs/promises';
+import { opendir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -96,7 +96,14 @@ type CleanupReporter = (task: Task, disposition: WorktreeCleanupDisposition) => 
 type Owner = { uid: number; gid: number } | null;
 type WorktreeStat = NonNullable<ReturnType<typeof lstatSync>>;
 type StrayReclaimRecord = { at: number; path: string; bytes: number; taskId?: string };
-type WorktreeScanHandle = { store: WorkerStore; dir: Dir; generation: string; consumed: number; restoreTo: number };
+type DirectoryHandle = Awaited<ReturnType<typeof opendir>>;
+type WorktreeScanHandle = {
+  store: WorkerStore;
+  dir: DirectoryHandle;
+  generation: string;
+  consumed: number;
+  restoreTo: number;
+};
 const worktreeScanHandles = new Map<string, WorktreeScanHandle>();
 
 function statIfPresent(path: string): ReturnType<typeof lstatSync> | undefined {
@@ -354,7 +361,7 @@ async function scanWorktreeDirectoryPage(
       handle = undefined;
     }
     if (!handle) {
-      let dir: Dir;
+      let dir: DirectoryHandle;
       try {
         dir = await opendir(directory.path);
       } catch (error) {
