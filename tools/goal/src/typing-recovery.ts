@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { isKnownTypingCompiler } from './worker-check-typing-inputs.ts';
 import type { AttemptRef, LandingQueue } from './contracts.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { sameProcess } from './process.ts';
@@ -7,6 +8,8 @@ import { settle } from './settle.ts';
 import type { WorkerTasks } from './tasks.ts';
 import {
   expandCheckCommands,
+  grantWorkerTypingRecovery,
+  TYPING_RECOVERY_ENV,
   isTypecheckCommand,
   isTypingEvidenceUnavailableResult,
   workerCheckBudgetDirectory,
@@ -27,6 +30,7 @@ export async function recoverWorkerTyping(
   try {
     store.assertCurrent(ref);
     const task = store.task(ref.taskId);
+    let authority: AuthenticatedManager | undefined;
     if (actor !== undefined) {
       const live = actor && backlogManagerActor(store.db, actor.id);
       if (
@@ -35,6 +39,7 @@ export async function recoverWorkerTyping(
         ![task.brief.manager, settings.integration.operationsManager].includes(live.id)
       )
         throw new Error('typing recovery requires the authenticated owning or operations manager');
+      authority = live;
     }
     if (task.state === 'landing') return { ...ref, status: 'landing' as const };
     const attempt = store.attempt(ref);
@@ -75,10 +80,34 @@ export async function recoverWorkerTyping(
       return { ...ref, status: 'typing-failure' as const, result: typing.result };
     }
     if (!typing.ok) {
-      const commands = expandCheckCommands(typing.command ?? attempt.typingEvidencePending?.command ?? []).filter(
-        isTypecheckCommand,
-      );
+      const original = typing.command ?? attempt.typingEvidencePending?.command ?? [];
+      const commands = isKnownTypingCompiler(task.worktree, original)
+        ? [original]
+        : expandCheckCommands(original).filter(
+            (command) => isTypecheckCommand(command) && (!authority || isKnownTypingCompiler(task.worktree, command)),
+          );
       if (!commands.length) commands.push(['bun', 'scripts/typecheck.ts']);
+      const grants = authority
+        ? commands.map((command) =>
+            grantWorkerTypingRecovery({
+              stateDirectory: settings.stateDirectory,
+              database: store.db.filename,
+              taskId: task.id,
+              attempt: ref.attempt,
+              worktree: task.worktree,
+              command,
+              actor: authority!,
+            }),
+          )
+        : [];
+      for (const grant of grants)
+        store.event(ref, 'typing-recovery-authorized', {
+          actor: grant.actor,
+          token: grant.token,
+          identity: grant.identity,
+          command: grant.command,
+          checkId: grant.checkId,
+        });
       store.updateTask(ref, (current) => {
         current.state = 'stopped';
       });
@@ -93,9 +122,11 @@ export async function recoverWorkerTyping(
             GOAL_ATTEMPT: String(ref.attempt),
             GOAL_WORKER_CHECK_BUDGET: String(workerCheckHostBudgetLimit(task, ref.attempt)),
             GOAL_WORKER_CHECK_BUDGET_DIR: directory,
+            ...(grants.length === 1 ? { [TYPING_RECOVERY_ENV]: grants[0]!.token } : {}),
           },
-          commands: commands.map((command) => [
-            'bun',
+          commands: commands.map((command, index) => [
+            ...(grants.length > 1 ? ['env', `${TYPING_RECOVERY_ENV}=${grants[index]!.token}`] : []),
+            ...(grants.length ? [process.execPath] : ['bun']),
             join(settings.mainCheckout, 'scripts/worker-check.ts'),
             '--run',
             '--',

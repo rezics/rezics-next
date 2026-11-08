@@ -188,6 +188,11 @@ function compilerGraph(root: string, argv: readonly string[], files: readonly st
   return { workspaces, executables };
 }
 
+/** Admission authority is limited to these installed owning compiler commands, never filename heuristics. */
+export function isKnownTypingCompiler(root: string, command: readonly string[]): boolean {
+  return compilerGraph(root, command, gitFiles(root)) !== undefined;
+}
+
 /** Config parsing uses TypeScript's own include/extends semantics, including ignored generated root files. */
 function configuredInputs(
   root: string,
