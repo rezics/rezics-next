@@ -634,8 +634,8 @@ export async function verifyAccountIdentityTechnicalSource(
 }
 
 export {
-  readAccountIdentityTechnicalSource,
   readAccountIdentityReversalSettlement,
   verifyAccountIdentityReversalSettlement,
   type AccountIdentityReversalSettlement,
 } from './agent-verification-identity-reversal.ts';
+export { readAccountIdentityTechnicalSource } from './agent-verification-identity-retention.ts';
