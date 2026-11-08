@@ -268,7 +268,7 @@ For process loss or abandonment, callers use the durable invocation id from the 
 ```text
 bun scripts/check-run-settlement.ts status <invocation-id> [--state-dir <absolute-dir>]
 bun scripts/check-run-settlement.ts cancel <invocation-id> [--signal 1|2|15] [--state-dir <absolute-dir>]
-bun scripts/check-run-settlement.ts reconcile <invocation-id> [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]
+bun scripts/check-run-settlement.ts reconcile <invocation-id> [--cleanup-only] [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]
 ```
 
 Reconciliation without `--hosts` handles a prepared/queued invocation with no physical run: it durably cancels the
@@ -279,8 +279,15 @@ bound observation as `physicalCleanup`, independently of `native` and `final`: n
 settlement is invented. It records remote supervisor/group, container and run-directory terminality separately from
 reaping the reconciliation transport and positively identifying the original local transport as absent. A missing
 original PID remains unknown. Original infrastructure failure and frozen inputs stay retained; repeated reconciliation
-replays the observation without another remote operation or cleanup downgrade. Producer and host binding checks still
-apply before acquiring new evidence; an observation already received under that binding stays readable after upgrades. A final
+replays the observation without another remote operation or cleanup downgrade. Result receiving and return restoration still require current producer, candidate and source checks. Explicit
+`reconcile <invocation-id> --cleanup-only --hosts <absolute-original-hosts-json>` instead observes/stops only the retained
+physical host/run and receives cleanup through `acceptCheckRunPhysicalCleanup`. The owner-private record supplies its
+original nonce and full binding; the host file must still match the retained hash and approve that same host. Cleanup
+uses controller-owned scratch and an empty return declaration, so it neither needs a mutable candidate/current producer
+closure nor probes or restores artifacts. Native results and immutable finals remain untouched. Incomplete or mismatched
+cleanup stays unknown; already verified physical cleanup is replayed without another remote operation. Frozen inputs
+stay retained, and a missing original transport identity stays unknown. `reconcileRegisteredCheckRun` exposes the same
+explicit mode through `{ cleanupOnly: true }`; ordinary reconciliation retains its existing result/restoration fences. A final
 record is replayed by `status`; `run-prepared` rejects its descriptor after the one claim and never starts a replacement.
 For a preparation process lost before a registration record exists, use
 `bun scripts/check-run-settlement.ts reconcile --descriptor <absolute-private-json> [--state-dir <absolute-dir>]`.

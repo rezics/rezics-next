@@ -1622,6 +1622,23 @@ function assertPhysicalCleanupBinding(
     throw new Error('check-run-settlement: physical cleanup differs from the original invocation binding');
 }
 
+/** Receive exact physical cleanup independently of native result acceptance and return restoration. */
+export async function acceptCheckRunPhysicalCleanup(
+  invocationId: string,
+  value: CheckRunPhysicalCleanup,
+  options: CheckRunStateOptions = {},
+): Promise<CheckRunInvocationRecord> {
+  const observation = validatePhysicalCleanup(value);
+  return mutateRecord(invocationId, options, async (directory, record) => {
+    assertPhysicalCleanupBinding(record, observation);
+    if (record.physicalCleanup) return record;
+    return updateRecord(directory, record, {
+      physicalCleanup: observation,
+      phase: record.final ? record.phase : 'unknown',
+    });
+  });
+}
+
 function validateRecord(value: unknown): CheckRunInvocationRecord {
   const item = closedObjectWithOptional(
     value,
@@ -2566,7 +2583,7 @@ export async function reconcileCheckRunInvocation(
   options: CheckRunReconcileOptions = {},
 ): Promise<CheckRunInvocationRecord> {
   const before = await getCheckRunStatus(invocationId, options);
-  if (before.physicalCleanup) return before;
+  if (before.physicalCleanup && !before.native && !before.final) return before;
   if (before.final) {
     const custody = before.finalCustody ?? makeFinalCustody(before, before.final, 'unknown');
     const identityFailure = validateFinalCustodyIdentity(before, custody);
@@ -2933,7 +2950,7 @@ function usage(): string {
     '  bun scripts/check-run-settlement.ts register --binding <private-json> [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts status <invocation-id> [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts cancel <invocation-id> [--signal 1|2|15] [--state-dir <absolute-dir>]',
-    '  bun scripts/check-run-settlement.ts reconcile <invocation-id> [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]',
+    '  bun scripts/check-run-settlement.ts reconcile <invocation-id> [--cleanup-only] [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts reconcile --descriptor <absolute-private-json> [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]',
   ].join('\n');
 }
@@ -2980,10 +2997,15 @@ if (import.meta.main) {
         (hostsFile !== undefined && !isAbsolute(hostsFile))
       )
         throw new Error('reconcile needs an id and, for a physical run, an absolute --hosts file');
+      const cleanupOnly = args.includes('--cleanup-only');
+      if (cleanupOnly && descriptorFile) throw new Error('cleanup-only reconciliation requires an invocation id');
       const checkRun = await import('./check-run.ts');
       const reconciled = descriptorFile
         ? await checkRun.reconcileCheckRunPreparationIntent(descriptorFile, hostsFile, stateOptions)
-        : await checkRun.reconcileRegisteredCheckRun(id!, hostsFile, stateOptions);
+        : await checkRun.reconcileRegisteredCheckRun(id!, hostsFile, {
+            ...stateOptions,
+            ...(cleanupOnly ? { cleanupOnly: true } : {}),
+          });
       process.stdout.write(`${JSON.stringify(reconciled)}\n`);
     } else {
       throw new Error(usage());

@@ -63,6 +63,7 @@ import {
 } from './check-output-tree.ts';
 import { environmentCommandIsSafe, performanceHosts } from './check-placement.ts';
 import {
+  acceptCheckRunPhysicalCleanup,
   allocateCheckRunPhysical,
   beginCheckRunAllocation,
   bindCheckRunWorkspace,
@@ -1203,12 +1204,7 @@ export function reconcileCheckRunPhysicalCleanup(
   remote: RemoteCheckSettlement,
   transportIdentity: CheckRunTransportIdentityState,
 ): CheckRunReconciliation {
-  if (
-    remote.native !== null ||
-    remote.host !== physical.host ||
-    remote.run !== physical.run ||
-    !remoteCleanupIsVerified(remote)
-  )
+  if (remote.host !== physical.host || remote.run !== physical.run || !remoteCleanupIsVerified(remote))
     return {
       disposition: 'unknown',
       reason: 'original physical cleanup is incomplete or mismatched; no replacement was started',
@@ -2632,14 +2628,56 @@ export async function runPreparedCheckRunInvocation(
   }
 }
 
+export type CheckRunPhysicalCleanupDependencies = {
+  reconcileRemote?: typeof reconcileRemoteRun;
+  reapTransport?: typeof reapRetainedTransportChild;
+};
+
+/** Cleanup authority is the retained invocation and host configuration, never a mutable candidate or producer tree. */
+async function reconcileRegisteredPhysicalCleanup(
+  initial: CheckRunInvocationRecord,
+  hostsFile: string | undefined,
+  stateOptions: CheckRunStateOptions,
+  dependencies: CheckRunPhysicalCleanupDependencies,
+): Promise<CheckRunInvocationRecord> {
+  if (!initial.physical) throw new Error('cleanup-only reconciliation needs an original physical host and run');
+  if (!hostsFile || !isAbsolute(hostsFile)) throw new Error('cleanup-only reconciliation needs an absolute hosts file');
+  const stats = lstatSync(hostsFile);
+  if (!stats.isFile() || stats.isSymbolicLink() || (await hashFile(hostsFile)) !== initial.binding.hostsSha256)
+    throw new Error('cleanup-only host configuration differs from the retained invocation binding');
+  const hosts = performanceHosts(readHosts(hostsFile));
+  if (!hosts.some(({ name }) => name === initial.physical!.host))
+    throw new Error('cleanup-only original host is absent from the bound performance host set');
+  const remote = await (dependencies.reconcileRemote ?? reconcileRemoteRun)({
+    hosts,
+    physical: initial.physical,
+    workspace: checkRunSettlementStateDirectory(stateOptions),
+    returns: [], // The existing transport returns immediately without any artifact probe or restoration.
+    expectedSourceSha256: initial.binding.sourceSha256,
+    allowedHosts: hosts.map(({ name }) => name),
+  });
+  const identity = initial.transportChild
+    ? await (dependencies.reapTransport ?? reapRetainedTransportChild)(initial.transportChild)
+    : 'unknown';
+  const observed = reconcileCheckRunPhysicalCleanup(initial.physical, initial, remote, identity);
+  if (observed.disposition !== 'physical-cleanup') return getCheckRunStatus(initial.invocationId, stateOptions);
+  return acceptCheckRunPhysicalCleanup(initial.invocationId, observed.observation, stateOptions);
+}
+
 /** Reconcile one retained invocation by host/run identity; this path never allocates another run. */
 export async function reconcileRegisteredCheckRun(
   invocationId: string,
   hostsFile?: string,
-  stateOptions: CheckRunStateOptions = {},
+  stateOptions: CheckRunStateOptions & { cleanupOnly?: boolean } = {},
+  dependencies: CheckRunPhysicalCleanupDependencies = {},
 ): Promise<CheckRunInvocationRecord> {
   let initial = await getCheckRunStatus(invocationId, stateOptions);
-  if (initial.physicalCleanup) return initial;
+  if (initial.physicalCleanup && (stateOptions.cleanupOnly || (!initial.native && !initial.final))) return initial;
+  if (stateOptions.cleanupOnly) {
+    if (initial.final?.cleanup.disposition === 'settled' || initial.finalCustody?.reconciliation === 'settled')
+      return initial;
+    return reconcileRegisteredPhysicalCleanup(initial, hostsFile, stateOptions, dependencies);
+  }
   if (
     initial.final &&
     (initial.final.cleanup.disposition === 'settled' || initial.finalCustody?.reconciliation === 'settled')
