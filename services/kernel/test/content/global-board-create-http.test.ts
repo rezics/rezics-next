@@ -322,9 +322,9 @@ test.serial(
         return result;
       },
     });
-    expect(measuredGlobalPopulations).toEqual(scales);
+    expect(measuredGlobalPopulations).toEqual([...scales]);
     expect(measuredSubjectPopulations).toEqual([1, 3, 5]);
-    expect(report.samples.map(({ scale }) => scale)).toEqual(scales);
+    expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
     for (const { cost } of report.samples) {
       expect(cost.rows).toBeGreaterThan(0);
       expect(cost.blocks).toBeGreaterThan(0);
