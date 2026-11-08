@@ -1,5 +1,5 @@
 import { createContext, createElement, useContext, type ReactNode } from 'react';
-export { candidateContext } from './candidate-context';
+export { candidateContext } from '../catalogue/candidate-context';
 
 /** The page reader's native outcome vocabulary. */
 export type CandidateFailure = {
