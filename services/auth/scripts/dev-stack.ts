@@ -810,9 +810,8 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
       ).rows[0]
     : undefined;
   const reusableAccountId = reusableCompletedExpiredPersonaId(registration, seededAccountId);
-  const context = { pool: kernelPool, deadline: Date.now() + 30_000 };
   let person: { accountId: string };
-  let actor: Awaited<ReturnType<typeof access.authenticate>>;
+  let bearer: string;
   const bootstrap = async (accountId: string) => {
     await bootstrapGovernance(kernelPool, accountId);
     await bootstrapLocalShowcaseBoardCreation(kernelPool, accountId);
@@ -830,8 +829,8 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
       scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
       fetch: (input, init) => host.handler(new Request(input, init)),
     });
-    const bearer = await tokenProvider(true);
-    actor = await access.authenticate(bearer, context);
+    bearer = await tokenProvider(true);
+    const actor = await access.authenticate(bearer, { pool: kernelPool, deadline: Date.now() + 30_000 });
     if (actor.kind !== 'account' || actor.accountId !== reusableAccountId)
       throw new Error('Existing local developer key did not authenticate its completed persona');
     await bootstrap(person.accountId);
@@ -909,9 +908,10 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
     }
     const token = await host.handler(new Request(`${origins.issuer}/token`, { method: 'POST', headers, body: '{}' }));
     if (!token.ok) throw new Error(`Local persona token failed: ${token.status}`);
-    const bearer = ((await token.json()) as { access_token: string }).access_token;
-    actor = await access.authenticate(bearer, context);
+    bearer = ((await token.json()) as { access_token: string }).access_token;
   }
+  const context = { pool: kernelPool, deadline: Date.now() + 30_000 };
+  const actor = await access.authenticate(bearer, context);
   if (actor.kind !== 'account' || actor.accountId !== person.accountId)
     throw new Error('Local persona authentication did not match its account');
   const exposure = createExposureCommands({ pool: kernelPool, clock: () => new Date() });
