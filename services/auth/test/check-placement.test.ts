@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runPlacedTests } from '../scripts/placed-tests.ts';
+import { checkPlan } from '../scripts/check.ts';
 import type { withTestDatabaseLane } from '../scripts/database.ts';
 
 function lane(events: string[]): typeof withTestDatabaseLane {
@@ -20,6 +21,17 @@ function temporary(): string {
   mkdirSync(root, { recursive: true });
   return mkdtempSync(resolve(root, 'auth-placement-'));
 }
+
+test('Auth tests-only check requires explicit test files and preserves the default full plan', () => {
+  const service = resolve(import.meta.dir, '..');
+  expect(checkPlan([], service).files).toBeNull();
+  expect(() => checkPlan([], service, { testsOnly: true })).toThrow('requires explicit test files');
+  expect(() => checkPlan(['src/index.ts'], service, { testsOnly: true })).toThrow('requires explicit test files');
+  expect(checkPlan(['test/recovery-completion.test.ts'], service, { testsOnly: true })).toMatchObject({
+    files: ['test/recovery-completion.test.ts'],
+    tests: ['test/recovery-completion.test.ts'],
+  });
+});
 
 test('placed runner preserves executable, caller cwd, production environment, reference and exact test filter', async () => {
   const directory = temporary();

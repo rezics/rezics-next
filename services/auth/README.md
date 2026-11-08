@@ -156,6 +156,10 @@ the 120-second default. Reylo typecheck uses `rezics_compiler` inside the same
 fixture instead of a second PostgreSQL container. Docker is required; a missing
 database URL never skips tests. Direct database tests must use
 `bun run --cwd services/auth check <file>` so the whole test can be placed.
+For a focused diagnostic run, `bun run --cwd services/auth check --tests-only
+<test-file...> [Bun test options]` keeps the same placement, schema/database
+setup, test lanes and cleanup while skipping package typecheck, lint and format.
+It requires explicit existing test files and does not replace the full check.
 `AUTH_TEST_DATABASE_URL` is reserved for the check's fixture, never a development database.
 
 Create an Auth-only database and apply migrations before starting an application:

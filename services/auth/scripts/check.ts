@@ -68,12 +68,18 @@ function pathIsWithin(parent: string, candidate: string): boolean {
   return path !== '' && path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path);
 }
 
-export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
+export function checkPlan(args: string[], moduleDirectory: string, options: { testsOnly?: boolean } = {}): CheckPlan {
   const root = resolve(moduleDirectory);
   const allTests = moduleTests(root);
-  if (args.length === 0) return { files: null, tests: allTests };
+  if (args.length === 0) {
+    if (options.testsOnly) throw new Error('Auth tests-only mode requires explicit test files');
+    return { files: null, tests: allTests };
+  }
   const { paths: selections, testArguments } = checkArguments(args);
-  if (!selections.length) return { files: null, tests: allTests, ...(testArguments.length ? { testArguments } : {}) };
+  if (!selections.length) {
+    if (options.testsOnly) throw new Error('Auth tests-only mode requires explicit test files');
+    return { files: null, tests: allTests, ...(testArguments.length ? { testArguments } : {}) };
+  }
 
   let rootRealPath: string | null;
   try {
@@ -101,19 +107,24 @@ export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
 
   const sortedFiles = Array.from(files).sort();
   const testFiles = new Set(allTests);
-  return {
+  const plan = {
     files: sortedFiles,
     tests: sortedFiles.filter((file) => testFiles.has(file)),
     ...(testArguments.length ? { testArguments } : {}),
   };
+  if (options.testsOnly && (plan.tests.length === 0 || plan.tests.length !== plan.files.length))
+    throw new Error('Auth tests-only mode requires explicit test files');
+  return plan;
 }
 
 if (import.meta.main) {
   const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const args = process.argv.slice(2);
+  const originalArgs = process.argv.slice(2);
+  const testsOnly = originalArgs[0] === '--tests-only';
+  const args = testsOnly ? originalArgs.slice(1) : originalArgs;
   // A bad path is reported here, before any stack is started or a host is asked.
-  const plan = checkPlan(args, directory);
-  process.exitCode = await databaseCheck(['bun', 'scripts/check.ts', ...args], async () => {
+  const plan = checkPlan(args, directory, { testsOnly });
+  process.exitCode = await databaseCheck(['bun', 'scripts/check.ts', ...originalArgs], async () => {
     const database = ownDatabase();
     try {
       migrate(database.url);
@@ -138,16 +149,18 @@ if (import.meta.main) {
         await pool.end();
       }
       const env = { ...process.env, AUTH_TEST_DATABASE_URL: database.url };
-      await withCompilerSchema(database, async (compilerUrl) => {
-        run(
-          resolve('../../node_modules/.bin/tsc'),
-          ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
-          { ...env, DATABASE_URL: compilerUrl },
-          { timeout: 600_000 },
-        );
-      });
-      run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...(plan.files ?? ['.'])], env);
-      run(resolve('../../node_modules/.bin/oxfmt'), ['--check', ...(plan.files ?? ['.'])], env);
+      if (!testsOnly) {
+        await withCompilerSchema(database, async (compilerUrl) => {
+          run(
+            resolve('../../node_modules/.bin/tsc'),
+            ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
+            { ...env, DATABASE_URL: compilerUrl },
+            { timeout: 600_000 },
+          );
+        });
+        run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...(plan.files ?? ['.'])], env);
+        run(resolve('../../node_modules/.bin/oxfmt'), ['--check', ...(plan.files ?? ['.'])], env);
+      }
       if (plan.tests.length > 0) {
         const psql = async (sql: string): Promise<void> => {
           const result = await capture(
