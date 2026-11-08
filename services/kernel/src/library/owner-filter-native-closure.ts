@@ -2,7 +2,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Release } from '@rezics/definitions';
 import { deadlineClient } from './access-port.ts';
-import type { RelationFacetMatch } from '../search/source.ts';
+import type { RelationFacetMatch } from '../search/index.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { zeroScopeWork } from '../search/contract/index.ts';
