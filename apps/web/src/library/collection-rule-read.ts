@@ -1,7 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import type { LibraryProfile } from '@rezics/definitions';
 import { parseFilter, type FilterDocument } from '@rezics/filter';
-import { conditionMetadata, type ConditionMetadata } from '../search/contracts/condition-metadata';
+import { conditionMetadata, type ConditionMetadata } from '../search/condition-editor-model';
 import type { Release } from '../subject/definitions';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';

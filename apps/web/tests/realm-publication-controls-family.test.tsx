@@ -117,7 +117,7 @@ test('Realm publication selection and outcomes use installed shared family with 
               rightsHolder: 'Fixture artist',
               via: { name: 'Fixture source', url: 'https://example.com/source' },
               license: 'CC0-1.0',
-              obligations: ['Keep this credit'],
+              obligations: ['cc:Attribution'],
             },
           },
         }

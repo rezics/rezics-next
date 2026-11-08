@@ -2,7 +2,10 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { Account, CommunityDriver, Fixture, Publication } from '../../../../specs/community-driver.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import readSlot from '../../src/community/publication-preparation-read.sql';
-import { readPublicationPreparation } from '../../src/community/publication-preparation.ts';
+import {
+  PUBLICATION_PREPARATION_MAX_UTF8_BYTES,
+  readPublicationPreparation,
+} from '../../src/community/publication-preparation.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import reference from '../../src/semantic/read-subject-reference.sql';
 import summaryRead from '../../src/semantic/summaries-read.sql';
@@ -59,7 +62,11 @@ async function prepared(realmId: string, actor = people.owner) {
   expect(response.headers.get('cache-control')).toBe('private, no-store');
   expect(response.headers.get('rezics-session-token')).toEqual(expect.any(String));
   expect(response.headers.get('etag')).toBeNull();
-  return (value as { preparation: Preparation }).preparation;
+  const preparation = (value as { preparation: Preparation }).preparation;
+  expect(new TextEncoder().encode(JSON.stringify({ preparation })).byteLength).toBeLessThanOrEqual(
+    PUBLICATION_PREPARATION_MAX_UTF8_BYTES,
+  );
+  return preparation;
 }
 async function decide(realmId: string, verdict: 'withdraw' | 'reject', head: string) {
   const response = await driver.request({
@@ -84,14 +91,20 @@ test('one selected native slot exposes absent, adopted and terminal heads withou
     originalId: people.subject.id,
     currentId: people.subject.id,
     presentation: {
-      label: { state: 'available', value: 'Fixture subject', language: 'en' },
-      cover: { state: 'empty' },
+      original: {
+        label: { state: 'available', value: 'Fixture subject', language: 'en' },
+        cover: { state: 'empty' },
+      },
+      terminal: {
+        label: { state: 'available', value: 'Fixture subject', language: 'en' },
+        cover: { state: 'empty' },
+      },
     },
   });
   expect(empty.realm).toMatchObject({
     realmId,
-    title: 'Inspection Realm',
-    hostTitle: 'Inspection host',
+    title: { state: 'available', value: 'Inspection Realm' },
+    hostTitle: { state: 'available', value: 'Inspection host' },
   });
   expect(empty.commands.publish).toEqual({
     method: 'POST',
@@ -260,8 +273,8 @@ test('optional presentation failure stays unavailable while native command advic
     expect(result.status).toBe(200);
     const value = (await result.json()) as { preparation: Preparation };
     expect(value.preparation.subject.presentation).toEqual({
-      label: { state: 'unavailable' },
-      cover: { state: 'unavailable' },
+      original: { label: { state: 'unavailable' }, cover: { state: 'unavailable' } },
+      terminal: { label: { state: 'unavailable' }, cover: { state: 'unavailable' } },
     });
     expect(value.preparation.commands.publish.subjectId).toBe(people.subject.id);
   } finally {

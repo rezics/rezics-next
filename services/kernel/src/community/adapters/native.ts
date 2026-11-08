@@ -12,6 +12,8 @@ import type {
 } from '../contract/index.ts';
 import { createRealmMembership, type RealmMembershipDependencies } from '../membership.ts';
 import { createRealmParticipationCheck } from '../participation.ts';
+import { readPublicationPreparation } from '../publication-preparation.ts';
+import type { PublicationDependencies, PublicationReadContext } from '../publication.ts';
 import { communityDeclaredEffects } from './effects.ts';
 import { createNativeCommunityAmbient } from './ambient.ts';
 
@@ -50,6 +52,19 @@ function nativeAccess(ambient: CommunityAmbient): CommunityAccessPort {
   };
 }
 
+function nativePublicationPreparation(): CommunityApplicationPorts['publicationPreparation'] {
+  return {
+    read(input) {
+      return readPublicationPreparation(
+        input.dependencies as unknown as PublicationDependencies,
+        input.realmId,
+        input.subjectId,
+        input.context as unknown as PublicationReadContext,
+      );
+    },
+  };
+}
+
 function nativeEffects(): CommunityEffectPort {
   return {
     effects: communityDeclaredEffects,
@@ -63,6 +78,7 @@ export function createNativeCommunityPorts(
   return {
     access: nativeAccess(ambient),
     effects: nativeEffects(),
+    publicationPreparation: nativePublicationPreparation(),
     ambient,
   };
 }

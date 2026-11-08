@@ -1396,6 +1396,7 @@
         "apps/web/src/search/release-window.ts",
         "apps/web/src/search/language-preferences.tsx",
         "apps/web/src/search/condition-weight.tsx",
+        "apps/web/src/search/condition-editor-model.ts",
         "apps/web/src/features/pages/agent-reader-read/index.ts",
         "apps/web/src/features/pages/candidate-reading-application.ts",
         "apps/web/src/features/pages/showcase-work/index.ts",
@@ -1828,6 +1829,7 @@
       "publicEntries": [
         "apps/web/src/session/community-application.tsx",
         "apps/web/src/content-editions/sale-review.tsx",
+        "apps/web/src/content-editions/edition-api.ts",
         "apps/web/src/session/state.ts",
         "apps/web/src/kernel/client.ts",
         "apps/web/src/kernel/exposure.ts",

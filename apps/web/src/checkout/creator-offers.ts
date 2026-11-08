@@ -3,7 +3,7 @@ import { isSafeMinorAmount } from '@rezics/money';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import { parseEditionMetadata, type EditionMetadata } from '../content-editions/contract';
+import { parseEditionMetadata, type EditionMetadata } from '../content-editions/edition-api';
 import type { CreatorEditionMetadataReader } from './capabilities';
 import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';

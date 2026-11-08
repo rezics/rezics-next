@@ -2,6 +2,7 @@ import {
   createFilterConstruction,
   FilterError,
   parseFilter,
+  type FilterRelease,
   type FilterAdmissionOptions,
   type FilterDocument,
 } from '@rezics/filter';
@@ -10,12 +11,58 @@ import type { SearchLoaderDeps } from './search-params';
 import { facetProblem } from './refinement/request';
 import { requestResourceAdmissionShadow } from './resource-condition-model';
 
-export { conditionMetadata, type ConditionMetadata } from './contracts/condition-metadata';
+export type { ConditionMetadata } from './contracts/condition-metadata';
 import type { ConditionMetadata } from './contracts/condition-metadata';
 export type ConditionIssue = { pointer: string; code: string };
 export type SearchProblem = NonNullable<ReturnType<typeof facetProblem>>;
 export const CONDITION_POINTER = '/filter/and/0';
 export type ConditionConstructionOptions = FilterAdmissionOptions & { requestResources?: boolean };
+
+/** Project released filter grammar into the bounded public metadata used by Search and Library readers. */
+export function conditionMetadata(
+  release: Omit<FilterRelease, 'filters'> &
+    Pick<ConditionMetadata, 'types' | 'properties'> & {
+      digest?: string;
+      filters?: Record<string, { filter: unknown; labels?: Record<string, string> }>;
+    },
+): ConditionMetadata {
+  const filters: NonNullable<ConditionMetadata['filters']> = {};
+  for (const [id, definition] of Object.entries(release.filters ?? {})) {
+    try {
+      filters[id] = { filter: parseFilter(definition.filter), labels: { ...definition.labels } };
+    } catch {
+      // A malformed released reference stays unsupported; it never becomes an empty filter.
+    }
+  }
+  return {
+    types: Object.fromEntries(
+      Object.entries(release.types).map(([id, definition]) => [
+        id,
+        {
+          labels: definition.labels ?? {},
+          bases: definition.bases ?? [],
+          facets: definition.facets ?? [],
+        },
+      ]),
+    ),
+    properties: Object.fromEntries(
+      Object.entries(release.properties).map(([id, definition]) => [
+        id,
+        {
+          labels: definition.labels ?? {},
+          datatype: definition.datatype,
+          ...(definition.targets ? { targets: definition.targets } : {}),
+          ...(definition.relation ? { relation: { group: definition.relation.group } } : {}),
+          ...(definition.qualifiers ? { qualifiers: definition.qualifiers } : {}),
+          ...(definition.units ? { units: definition.units } : {}),
+          ...(definition.value ? { value: definition.value } : {}),
+        },
+      ]),
+    ),
+    ...(release.digest ? { digest: release.digest } : {}),
+    ...(release.filters ? { filters } : {}),
+  };
+}
 
 /** Distinguish colliding display labels within one selector, preserving native values and metadata order. */
 export function conditionChoiceLabels(choices: readonly { value: string; label: string }[]) {
