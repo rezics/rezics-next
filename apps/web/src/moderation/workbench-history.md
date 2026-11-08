@@ -3,10 +3,11 @@
 The workbench history visit reads one native Board history page and at most one selected exact decision, without
 report, appeal or pending-queue scans. The mounted producer is `GET /v1/boards/{id}/moderation-history`;
 `GET /v1/moderation-decisions/{id}` remains the selected receipt authority. The server binds both calls to its single
-prepared session and carries private/no-store on each read. Missing source tokens or missing native viewer/action
-projection produce unavailable, not empty. The local `MountedHistoryClient` seam in `workbench-history/read.ts`
-describes these mounted public response operands until the shared complete-input publisher installs declarations;
-it imports no private producer types and does not run or replace that publisher.
+prepared session and carries private/no-store and the original abort signal on each read. Both operations use the
+installed KernelClient declarations directly; the list projection derives its public fields from that response.
+No reflective mounted-client cast or private producer import remains. Missing source tokens or native viewer/action
+projection produce unavailable, not empty. Abort retires late page and exact results before receipt dispatch or final
+publication. Directory coverage and horizon remain owned by the independent directory observation.
 
 Decision: Board history uses independent `historyTargetKind` and `historyDecision` operands, renders a moderator-only
 receipt, and keeps target advice unavailable until the exact reader supplies current context.
@@ -38,7 +39,7 @@ cannot substitute a different target from a newer summary. Unknown browser admis
   producer's Content Cost declaration. Navigation replaces rather than appends pages.
 - Growth check: receiver tests pin actual transport operands, independent cursors, sparse pages, same-input retry,
   missing advice/source and exact-identity replacement. Native independent population/physical growth and rendered
-  browser acceptance remain controller checks; fixed output size alone establishes no native physical bound.
+  browser acceptance remain receiving checks; fixed output size alone establishes no native physical bound.
 
 Decision: reuse the queue coordinate engine for an independent Board history path in the same Router/QueryClient
 visit and private-reader lifetime; commit movement only on admitted native history-page readiness, independently
@@ -57,3 +58,9 @@ current exact row, or the heading if the row is absent. Current queue admission 
 movement still costs one native 20-row page read and at most one permitted selected exact read; there is no replay,
 prefetch, refill, persistence or receipt cache. Native continuations exceeding the 4096-character address boundary
 are unavailable rather than becoming a different browser address.
+
+The connected history stories use the installed page and exact operations with illustrative transport fixtures,
+including retained/retired reasons, sparse pages, receipt selection and captured queue return. They are not native API
+recordings or execution evidence. Focused regressions pin no-store, the shared prepared authorization and abort signal,
+late page/exact retirement and the independent history path through the installed client. Native, browser, growth and
+promoted acceptance remain separate from the supported wrapped Web workspace typecheck.

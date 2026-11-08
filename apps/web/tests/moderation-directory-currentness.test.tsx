@@ -1,7 +1,8 @@
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
 import { dirname } from 'node:path';
 import type { ModerationDirectoryPage } from '../src/moderation/workbench-queue/directory';
-import type { WorkbenchReader, WorkbenchNativeSource } from '../src/moderation/workbench-queue/read';
+import type { WorkbenchReader } from '../src/moderation/workbench-queue/read';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -23,7 +24,7 @@ for (const [key, value] of Object.entries(globals))
 const { act } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { prepareWorkbenchRead, readWorkbench } = await import('../src/moderation/workbench-queue/read');
+const { prepareWorkbenchRead, readWorkbenchPage } = await import('../src/moderation/workbench-queue/read');
 const { WorkbenchPage } = await import('../src/moderation/workbench-queue/page');
 const { WorkbenchView } = await import('../src/moderation/workbench-queue/view');
 const { workbenchSearch } = await import('../src/moderation/workbench-queue/scope');
@@ -60,12 +61,20 @@ const page = (lifetime = 60000): ModerationDirectoryPage => ({
     },
   ],
 });
-const source = (directory: WorkbenchNativeSource['directory']): WorkbenchNativeSource => ({
-  directory,
-  boardReports: async () => ({ reports: [], next: null }),
-  boardAppeals: async () => ({ appeals: [], next: null }),
-  catalogueReports: async () => ({ reports: [], next: null }),
-});
+function installedRead(respond: (request: Request) => Promise<ModerationDirectoryPage>): WorkbenchReader {
+  const native = createKernelClient('https://kernel.invalid', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      expect(new URL(request.url).pathname).toBe('/v1/me/moderation-directory');
+      expect(new URL(request.url).searchParams.get('limit')).toBe('20');
+      expect(request.headers.get('authorization')).toBe('Bearer prepared');
+      expect(init?.cache).toBe('no-store');
+      return Response.json(await respond(request));
+    }) as typeof fetch,
+  });
+  return (search, signal) => readWorkbenchPage(native, search, 'Bearer prepared', origin, signal);
+}
+
 function host() {
   const element = document.createElement('main');
   document.body.replaceChildren(element);
@@ -88,10 +97,7 @@ function deferred() {
 test('sparse continuation uses its native frontier, failure retries that page and expiry requires explicit restart', async () => {
   const selected: ReturnType<typeof workbenchSearch>[] = [];
   const initial = workbenchSearch({ directoryCursor: 'original-frontier' });
-  const sparse = await readWorkbench(
-    source(async () => ({ ...page(), items: [] })),
-    initial,
-  );
+  const sparse = await installedRead(async () => ({ ...page(), items: [] }))(initial);
   const element = host();
   await act(() => root!.render(<WorkbenchView page={sparse} onSearch={(next) => selected.push(next)} />));
   expect(element.textContent).toContain(m.moderation_directory_empty_next());
@@ -103,19 +109,10 @@ test('sparse continuation uses its native frontier, failure retries that page an
   const client = cache();
   const calls: string[] = [];
   let attempts = 0;
-  const read: WorkbenchReader = async (search, signal) => ({
-    ...(await readWorkbench(
-      source(async (operands, requestSignal) => {
-        expect(requestSignal).toBe(signal);
-        calls.push(operands.cursor!);
-        if (attempts++ < 2) throw new Error('temporary dependency failure');
-        return page(500);
-      }),
-      search,
-      signal,
-    )),
-    generation: crypto.randomUUID(),
-    readerOrigin: origin,
+  const read = installedRead(async (request) => {
+    calls.push(new URL(request.url).searchParams.get('cursor')!);
+    if (attempts++ < 2) throw new Error('temporary dependency failure');
+    return page(500);
   });
   const prepared = await prepareWorkbenchRead(client, input, read, new AbortController().signal);
   await act(() =>
@@ -159,14 +156,7 @@ test('successful equal replacement and batched A/B/A synchronously retire mounte
     const client = cache();
     const selections: unknown[] = [];
     const input = workbenchSearch({});
-    const read: WorkbenchReader = async (search) => ({
-      ...(await readWorkbench(
-        source(async () => page()),
-        search,
-      )),
-      generation: crypto.randomUUID(),
-      readerOrigin: origin,
-    });
+    const read = installedRead(async () => page());
     const prepared = await prepareWorkbenchRead(client, input, read, new AbortController().signal);
     const element = host();
     await act(() =>
@@ -191,46 +181,42 @@ test('successful equal replacement and batched A/B/A synchronously retire mounte
   }
 });
 
-test('session replacement aborts preparation; fetch start alone preserves the successful incarnation', async () => {
-  const client = cache();
-  const input = workbenchSearch({});
-  const response = deferred();
-  let signal!: AbortSignal;
-  const pending = prepareWorkbenchRead(
-    client,
-    input,
-    async (search, requestSignal) => {
-      signal = requestSignal!;
-      await response.promise;
-      return {
-        ...(await readWorkbench(
-          source(async () => page()),
-          search,
-          signal,
-        )),
-        generation: 'late',
-        readerOrigin: origin,
-      };
-    },
-    new AbortController().signal,
-  );
-  const fetching = deferred();
-  const fetch = client.fetchQuery({
-    queryKey: ['session'],
-    queryFn: async () => {
-      await fetching.promise;
-      return session;
-    },
-  });
-  expect(signal.aborted).toBe(false);
-  client.setQueryData(['session'], { ...session, subject: 'B' });
-  client.setQueryData(['session'], { ...session });
-  expect(signal.aborted).toBe(true);
-  response.resolve();
-  await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-  fetching.resolve();
-  await fetch;
-  client.clear();
+test('native in-flight results retire on equal, ABA or route abort; fetch start keeps the incarnation', async () => {
+  for (const replacement of ['equal', 'ABA', 'route'] as const) {
+    const client = cache();
+    const response = deferred();
+    const started = deferred();
+    let signal!: AbortSignal;
+    const read = installedRead(async (request) => {
+      signal = request.signal;
+      started.resolve();
+      await response.promise; // Deliberately ignore cancellation like a late transport.
+      return page();
+    });
+    const route = new AbortController();
+    const pending = prepareWorkbenchRead(client, workbenchSearch({}), read, route.signal);
+    await started.promise;
+    const fetching = deferred();
+    const fetch = client.fetchQuery({
+      queryKey: ['session'],
+      queryFn: async () => {
+        await fetching.promise;
+        return session;
+      },
+    });
+    expect(signal.aborted).toBe(false);
+    if (replacement === 'route') route.abort();
+    else {
+      if (replacement === 'ABA') client.setQueryData(['session'], { ...session, subject: 'B' });
+      client.setQueryData(['session'], { ...session });
+    }
+    expect(signal.aborted).toBe(true);
+    response.resolve();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    fetching.resolve();
+    await fetch;
+    client.clear();
+  }
 });
 
 test('locale replacement during preparation cannot publish labels', async () => {
@@ -240,17 +226,10 @@ test('locale replacement during preparation cannot publish labels', async () => 
   const pending = prepareWorkbenchRead(
     client,
     input,
-    async (search) => {
+    installedRead(async () => {
       await response.promise;
-      return {
-        ...(await readWorkbench(
-          source(async () => page()),
-          search,
-        )),
-        generation: 'late',
-        readerOrigin: origin,
-      };
-    },
+      return page();
+    }),
     new AbortController().signal,
   );
   setLocale(locale === 'en' ? 'de' : 'en', { reload: false });
@@ -258,5 +237,46 @@ test('locale replacement during preparation cannot publish labels', async () => 
   const result = await pending;
   expect(result.readerBinding?.retired).toBe(true);
   expect(result.directory).toBeUndefined();
+  client.clear();
+});
+
+test('native source replacement retires labels and selection while retaining the captured restart operands', async () => {
+  const client = cache();
+  const input = workbenchSearch({ realm: 'realm-filter', directoryCursor: 'opaque:/+frontier=' });
+  let epoch = 'native-source';
+  const read = installedRead(async (request) => {
+    expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({
+      limit: '20',
+      realmId: 'realm-filter',
+      cursor: 'opaque:/+frontier=',
+    });
+    return { ...page(), source: epoch };
+  });
+  const element = host();
+  const selections: unknown[] = [];
+  const render = async () => {
+    const prepared = await prepareWorkbenchRead(client, input, read, new AbortController().signal);
+    await act(() =>
+      root!.render(
+        <QueryClientProvider client={client}>
+          <WorkbenchPage page={prepared} search={input} read={read} onSearch={(next) => selections.push(next)} />
+        </QueryClientProvider>,
+      ),
+    );
+  };
+  await render();
+  const old = element.querySelector<HTMLButtonElement>('[data-moderation-scope]')!;
+  epoch = 'replaced-source';
+  await render();
+  expect(element.textContent).not.toContain('Native label');
+  expect(element.textContent).toContain(m.moderation_directory_expired());
+  await act(() => old.click());
+  expect(selections).toEqual([]);
+  await act(() =>
+    [...element.querySelectorAll('button')]
+      .find((button) => button.textContent === m.moderation_directory_restart())!
+      .click(),
+  );
+  expect(selections).toEqual([workbenchSearch({ realm: 'realm-filter' })]);
   client.clear();
 });

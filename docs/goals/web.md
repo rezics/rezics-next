@@ -408,20 +408,22 @@ Decision: extend existing routes on small owner-backed seams; keep ten slices in
   native thread identity and reviewed-Subject context; an exact Space destination keeps native address/lifecycle
   meaning. A Realm-backed Space does not become a second Realm hit.
 - **Moderator workbench.** `/moderation/workbench` is the one signed-in navigation entry. Choose one currently
-  permitted Realm board from the paged membership Realm list and that Realm's board directory, or the Global
-  catalogue. Submitted reports, pending appeals and resolved cases are exclusive native queues with their own
-  cursor; a board moderator is not given catalogue authority. Rows carry a stable report or appeal ID into the
+  permitted Board or independent Global catalogue queue from the installed native current moderation directory.
+  Discovery uses native labels, supported queues, source and exclusive horizon, independently of membership.
+  Submitted reports, pending appeals and resolved cases are exclusive native queues with their own cursor; a board
+  moderator is not given catalogue authority. Rows carry a stable report or appeal ID into the
   existing review routes. Resolution forms stay on those pages. Catalogue has no appeal list. There is no
   aggregate case search or platform-wide adjudication. Exact appeal selection now has an independent consumer beside
   the captured pending page, with no row scan or target enrichment. Its presentation separates original decision
   evidence from the disclosed current destination, shows only allowlisted appellant display fields and keeps explicit
-  pending/resolved outcomes. The installed generated client still lacks composed inspection, so production exact selection remains the named
-  unavailable `native-appeal-inspect` seam. A local admission seam validates exact source provenance, current
-  actor/client/epoch and opaque native session header; the consumer preserves that token on the original frozen
-  resolution command. Generated request binding and mounted producer cases remain continuation work. See the [case and appeal guide](../../apps/web/src/moderation/workbench-case.md). Decision: board decision history is reachable only from a
-  selected board; the Global catalogue has no history queue. The Web entry stays explicitly unavailable until
-  Content delivers its private native history reader. It never
-  derives history from report or appeal scans.
+  pending/resolved outcomes. Installed composed appeal reads retain their independent exact source/provenance admission
+  and opaque native session token on the original frozen resolution command. See the
+  [case and appeal guide](../../apps/web/src/moderation/workbench-case.md). Decision: board decision history is reachable only from a
+  selected board; the Global catalogue has no history queue. The installed Board history operation reads one
+  native 20-row page and at most one permitted exact receipt under the same prepared credential, no-store transport
+  and abort lifetime. Independent directory, queue and history frontiers survive only deliberate current-reader return;
+  history never derives from report or appeal scans. The [directory owner](../../apps/web/src/moderation/workbench-queue/README.md)
+  records admission and fixture evidence limits.
 
 - **Affected-author decision receipt.** `/moderation/decisions/{id}` reads one composed private native response for
   the retained reason, decision time, deadline, current appeal result, closed appeal advice and optional current
@@ -526,36 +528,37 @@ eligibility, disclosure, succession and growth evidence remain with Content and 
 ### My Realms current-entry boundary
 
 The existing `/realms` page keeps the current `MyRealmsCaller`, one-page cursor flow and signed-in route. The
-installed generated `GET /v1/me/realms` response and recorded example contain only `realmId`, `name`,
-`role: 'member'` and `next`. The native producer now adds `current` with presentation, media, destination,
-membership `since`, participation and explicitly unavailable actions; that expanded shape is not yet installed
-in the generated client or recorded example. The explicit projection in `my-realms-native.ts` remains bound to
-the installed generated type. No browser action contract is inferred from the newer producer.
+installed generated `GET /v1/me/realms` response and its refreshed recording carry `current` presentation, media,
+destination, Account-scoped membership episode and independent enter/manage/leave advice. Web projects this page
+once in supplied order and performs no row-by-row hydration. Entry and management links require matching native
+advice; selected leave uses the existing membership command and standing reader.
 
-Decision: display inventory rows with localized unavailable entry until the generated response admits a current destination; retain labels without deriving an ID-based link or management/leave authority from membership.
+Decision: Keep `/realms` on its existing bounded page and caller; project the installed current data directly, route admitted entry and management to the existing Realm and member-management pages, and bind leave review and original replay to the exact Account, episode, advice and credential while current membership reads reconcile accepted operations.
 
 Unavailable entry means this page has no admitted current destination. It does not establish that the Realm is
 deleted, unreadable elsewhere, or no longer joined. Ordinary continuation and same-cursor error retry keep their
 existing caller ownership; a sparse page still offers its opaque continuation, and first-page recovery stays explicit.
-There is no selected leave action on the installed response. Accepted leave pending/readback, unknown outcome retry,
-actual management advice and their episode binding remain the current-entry continuation's outcome, not delivered UI.
-Supplied descriptions remain presentation examples, not expanded native evidence.
+Accepted leave identity remains pending separately from current standing. A current member/participation read may
+reconcile that accepted UI without a workflow-status API; a matching later observation alone never proves an
+uncertain write. Exact replay keeps its original operation key and credential. Supplied descriptions and action
+advice are read from the same admitted page.
 
 The [caller lifetime guide](../../apps/web/src/community/my-realms-lifetime.md#expanded-entry-and-selected-leave-admission)
-owns expanded-response activation and selected-leave admission: original-operation readback and exact retry,
+owns expanded-response activation and selected-leave admission: accepted-operation current-standing readback and exact retry,
 Account-scoped opaque episodes, independent advice, and retirement of selected reviews and late effects. These
-rules apply when both the generated operation and recording are mounted; the existing unavailable-entry receiver
-remains the integration seam until then.
+rules apply to the installed generated operation and its refreshed recording. Ordinary native/browser/root and growth
+acceptance remain with the receiving Goal.
 
 #### Current native cost
 
 - Touches: one existing `/v1/me/realms` page read with its normal session preparation; Web formats the returned rows
-  once and performs no row-by-row membership, Account, Access or media read.
+  once and performs no row-by-row membership, Account, Access or media read. One explicit leave selection uses the
+  existing current-standing reader; accepted reconciliation stays within that one selected Realm.
 - Bound: native page size 20, raw scan budget 80, one current page and its opaque continuation; zero selected actions
-  while native action advice is unavailable. No sparse-page refill or private-page storage is introduced.
-- Growth: the installed projection covers 0/1/10/20 rows with one page read. Mounted unavailable-entry coverage
-  exercises the installed inventory; expanded presentation/media, selected leave and their retirement journeys remain
-  owed. Content owns native raw80 traversal and growth256/1024/4096 evidence.
+  unless the supplied advice admits them. No sparse-page refill or private-page storage is introduced.
+- Growth: the current projection covers 0/1/10/20 rows with one page read. Explicit accepted leave settlement uses
+  the existing four-read sequence; no workflow-status request or per-row standing read is added. Content owns native
+  raw80 traversal and growth256/1024/4096 evidence.
 
 ### Canonical episode checklist
 

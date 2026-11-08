@@ -69,6 +69,48 @@ test('FULL presentation withholding, missing headers and unknown wire fields nev
   }
 });
 
+test('FULL cover obligations use the native closed vocabulary', async () => {
+  const cover = {
+    media: fullRow.subjectId,
+    width: 100,
+    height: 150,
+    placeholder: { thumbhash: '', color: '#000000' },
+    variants: [{ format: 'webp', width: 100 }],
+    focalPoint: null,
+    credit: {
+      rightsHolder: 'Publisher',
+      via: { name: 'Source', url: 'https://example.test' },
+      license: 'CC BY-SA',
+      obligations: ['cc:Attribution', 'cc:ShareAlike', 'cc:Notice', 'cc:SourceCode'],
+    },
+  };
+  for (const [obligations, state] of [
+    [cover.credit.obligations, 'loaded'],
+    [['unknown'], 'unavailable'],
+  ] as const) {
+    const client = createKernelClient('https://kernel.example.test', {
+      async fetch() {
+        return Response.json({
+          subjects: [
+            {
+              ...fullRow,
+              subject: {
+                ...fullRow.subject,
+                cover: {
+                  ...cover,
+                  credit: { ...cover.credit, obligations },
+                },
+              },
+            },
+          ],
+          next: null,
+        });
+      },
+    });
+    expect((await nativeContinueSource(client, 'Bearer owner', { limit: 6 })).state).toBe(state);
+  }
+});
+
 test('one FULL request retains client language/session context, no-store and cancellation without inventing labels', async () => {
   const calls: Request[] = [];
   const signal = new AbortController();

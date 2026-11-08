@@ -7,7 +7,7 @@ import type { MembershipResult } from '../src/community/space';
 import type { NativeRealmHomeObservation } from '../src/community/realm-home-native';
 import type { RealmJoinAdvice } from '../src/community/native-operations';
 import type { RealmViewer } from '../src/community/realm-membership-queries';
-import { useRealmMembershipCaller } from '../src/community/realm-membership-lifetime';
+import { RealmMembershipLifetimeStore, useRealmMembershipCaller } from '../src/community/realm-membership-lifetime';
 import { realmMembershipTestReaders } from './realm-membership-test-fixture';
 import * as start from '../.storybook/react-start';
 
@@ -333,6 +333,34 @@ function resetFixtures() {
   realmMembershipTestReaders.readJoinAdvice = (id) => readJoinAdvice(id);
   sendMembership = async () => ({ outcome: 'accepted', workflowId: 'lifetime-workflow' });
 }
+
+test('accepted native membership attempts retain their exact workflow identity beside the original command', () => {
+  const client = new QueryClient();
+  const store = new RealmMembershipLifetimeStore(client);
+  const attempt = store.retainNativeCommand({
+    realmId: '0192f3a0-6c1e-7b2a-9d4e-000000000201',
+    actor: 'current-account',
+    credential: 'csrf-original',
+    body: {
+      realmId: '0192f3a0-6c1e-7b2a-9d4e-000000000201',
+      action: 'leave',
+      idempotencyKey: '123e4567-e89b-42d3-a456-426614174000',
+    },
+    observation: 7,
+    source: 'my-realms-episode',
+  });
+
+  store.acknowledgeNativeCommand(attempt, 'accepted-native-workflow');
+  expect(store.nativeCommandAcknowledged(attempt)).toBe(true);
+  expect(store.nativeCommandWorkflowId(attempt)).toBe('accepted-native-workflow');
+  expect(store.nativeCommand(attempt.realmId, attempt.actor)).toBe(attempt);
+  store.retireNativeCommandAcknowledgement(attempt);
+  expect(store.nativeCommandAcknowledged(attempt)).toBe(false);
+  expect(store.nativeCommandWorkflowId(attempt)).toBeNull();
+
+  store.dispose();
+  client.clear();
+});
 
 function observeFollowThrough(surface: Awaited<ReturnType<typeof makeSurface>>) {
   const invalidations: unknown[][] = [];

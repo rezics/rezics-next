@@ -128,9 +128,11 @@ export async function continueAgentList(
   const query = { cursor, limit: read.limit };
   const outcome =
     read.kind === 'accountPosts'
-      ? await client.accounts({ accountId }).posts.get({ query })
+      ? await client.accounts({ accountId }).posts.get({ query: { ...query, limit: String(query.limit) } })
       : read.kind === 'accountThreads'
-        ? await client.accounts({ accountId }).threads.get({ query: { ...query, kind: read.threadKind } })
+        ? await client
+            .accounts({ accountId })
+            .threads.get({ query: { ...query, limit: String(query.limit), kind: read.threadKind } })
         : await client.accounts({ accountId }).collections.get({ query: { ...query, view: 'BASIC' } });
   return {
     ...page,
