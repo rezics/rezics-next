@@ -25,6 +25,7 @@ import {
   type PageDataSection,
   type PageDataRepair,
   type SectionConfig,
+  dependencyFilesChanged,
 } from './page-data.ts';
 import type { Settings, Task } from './types.ts';
 import { harness } from './test-support.ts';
@@ -71,7 +72,7 @@ function fixture() {
   };
   const registry = new Map([[`${source.page}\t${source.persona}\t${source.section}`, source]]);
   const db = openDb(join(stateDirectory, 'state.sqlite'));
-  return { root, settings, source, registry, db };
+  return { root, settings, source, registry, db, git };
 }
 
 const section = (className: PageDataSection['class']): PageDataSection => ({
@@ -83,6 +84,37 @@ const section = (className: PageDataSection['class']): PageDataSection => ({
   goal: 'web',
   files: ['apps/web/src/routes/index.tsx'],
   ...(className === 'API' ? { firstErrorLine: 'home anonymous feed API' } : {}),
+});
+
+test('page-data refresh notices declared dependency patch changes but reuses unrelated source updates', () => {
+  const h = fixture();
+  try {
+    const patchPath = 'patches/@dbos-inc%2Fdbos-sdk@5.5.3-preview.patch';
+    mkdirSync(join(h.root, 'repo', 'patches'), { recursive: true });
+    writeFileSync(
+      join(h.root, 'repo', 'package.json'),
+      JSON.stringify({ patchedDependencies: { '@dbos-inc/dbos-sdk@5.5.3-preview': patchPath } }) + '\n',
+    );
+    writeFileSync(join(h.root, 'repo', 'bun.lock'), 'pinned dependencies\n');
+    writeFileSync(join(h.root, 'repo', patchPath), 'first pinned package patch\n');
+    h.git('add', 'package.json', 'bun.lock', patchPath);
+    h.git('commit', '-m', 'Seed a declared dependency patch');
+    const installed = h.git('rev-parse', 'HEAD');
+
+    writeFileSync(join(h.root, 'repo', patchPath), 'updated pinned package patch\n');
+    h.git('add', patchPath);
+    h.git('commit', '-m', 'Update a declared dependency patch');
+    const patched = h.git('rev-parse', 'HEAD');
+    expect(dependencyFilesChanged(join(h.root, 'repo'), installed, patched)).toBe(true);
+
+    mkdirSync(join(h.root, 'repo', 'src'), { recursive: true });
+    writeFileSync(join(h.root, 'repo', 'src/unrelated.ts'), 'export const value = 1;\n');
+    h.git('add', 'src/unrelated.ts');
+    h.git('commit', '-m', 'Update unrelated page-data source');
+    expect(dependencyFilesChanged(join(h.root, 'repo'), patched, h.git('rev-parse', 'HEAD'))).toBe(false);
+  } finally {
+    h.db.close();
+  }
 });
 
 test('page-data diagnostics skip command echoes, retain useful log references, and redact credentials', () => {

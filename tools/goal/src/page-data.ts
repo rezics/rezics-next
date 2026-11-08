@@ -1061,12 +1061,28 @@ async function stopStack(child: ChildProcess, timeoutMs: number): Promise<void> 
   }
 }
 
-function dependencyFilesChanged(cwd: string, oldHead: string | undefined, head: string): boolean {
+function declaredDependencyPatchFiles(cwd: string, revision: string): string[] {
+  const result = spawnSync('git', ['show', `${revision}:package.json`], {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: defaultPolicy.merge.gitBufferBytes,
+    timeout: defaultPolicy.merge.commandTimeoutMs,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(result.stderr?.trim() || 'Could not read page-data dependency patches');
+  const manifest = JSON.parse(result.stdout) as { patchedDependencies?: Record<string, string> };
+  return Object.values(manifest.patchedDependencies ?? {});
+}
+
+export function dependencyFilesChanged(cwd: string, oldHead: string | undefined, head: string): boolean {
   if (!oldHead) return true;
   if (oldHead === head) return false;
+  const patchFiles = [
+    ...new Set([...declaredDependencyPatchFiles(cwd, oldHead), ...declaredDependencyPatchFiles(cwd, head)]),
+  ];
   const result = spawnSync(
     'git',
-    ['diff', '--name-only', `${oldHead}..${head}`, '--', 'bun.lock', 'package.json', '**/package.json'],
+    ['diff', '--name-only', `${oldHead}..${head}`, '--', 'bun.lock', 'package.json', '**/package.json', ...patchFiles],
     {
       cwd,
       encoding: 'utf8',
