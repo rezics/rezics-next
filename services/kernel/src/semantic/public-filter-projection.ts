@@ -663,13 +663,11 @@ async function ensureBuildHeads(
   const retained = rows(
     await upsertRetainedHeads.run(client, {
       build_id: build,
-      heads: JSON.stringify(
-        [...heads.values()].map((head) => ({
-          partition_no: head.partition,
-          owner_epoch: head.epoch,
-          position: head.position.toString(),
-        })),
-      ),
+      heads: [...heads.values()].map((head) => ({
+        partition_no: head.partition,
+        owner_epoch: head.epoch,
+        position: head.position.toString(),
+      })),
     }),
   );
   return retained.length === heads.size;

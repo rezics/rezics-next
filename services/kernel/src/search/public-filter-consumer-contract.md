@@ -214,6 +214,21 @@ Keep retained finite progress; quiescent finite input finishes and replay reread
 Source preparation ceilings apply: `64 + 16*input` rows, six blocks per budgeted row, eight Access/dependency
 points per input, one connection per backend and 4 MiB response bytes.
 
+Search requests native Source repair pages with the fixed `inputLimit: 64`, and reuses that exact size when a
+dispatch or response is replayed. Before the call it reserves 768 of the existing 1000 input keys for the bounded
+producer and independent receipt-verification reads. Source uses this limit for repair-page empty-home batches;
+initial Account-home enrollment is a separate capture step and receives Search's live remaining input allowance.
+The first nonempty raw key or captured event still enters ordinary retained owner work.
+
+Initial Source preparation may commit a bounded contiguous batch of at most 16 per-home Account receipts within
+its existing `preparing` capture state. Search passes the remaining input allowance from its live 1000-input meter,
+minus 128 inputs for capture handoff and persistence; Semantic also reserves measured producer work and applies a
+conservative per-home estimate before admitting each receipt. Search retains the same registration/bootstrap
+identity across that continuation; it does not open a replacement Source cut. Access contention leaves the failed
+home at the durable cursor for an exact retry. Search counts this native preparation's actual input keys as the
+dependency/row denominator even before the query has produced candidates; its global input, byte, deadline and
+native-point limits still apply.
+
 `progress`/`settled`, status and their costs are diagnostics, NEVER persisted ACK/publication authority. Only the
 native producer can advance a contiguous prefix after persisted effect/frontier/receipt state proves ALL LOCAL
 and dependent FOREIGN repair refresh-visible for the exact physical incarnation, consumer/projection generations,

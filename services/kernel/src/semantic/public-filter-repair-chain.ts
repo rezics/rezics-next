@@ -235,9 +235,9 @@ export async function retainPublicFilterRepairVerification(
   });
 }
 
-/** One original closed window in the independently verified, non-branching
- * prefix ending at the actual complete successor. No current replacement page
- * or producer complete bit can supply this point lookup.
+/** One original home selected from the independently verified, non-branching
+ * captured-window prefix. Batched empty windows retain their range in the step
+ * state; no replacement page or producer complete bit supplies this lookup.
  */
 export async function readPublicFilterRepairHomeSeal(pool: Pool, chain: Chain) {
   return (
@@ -255,11 +255,16 @@ export async function readPublicFilterRepairHomeSeal(pool: Pool, chain: Chain) {
        SELECT w.step::text,w.predecessor::text,w.state,t.ack_after AS home,
        t.step::text AS terminal,t.ack_after AS after,t.verified_root AS root
      FROM semantic.public_filter_repair_step t
-     LEFT JOIN semantic.public_filter_repair_step w ON
-       (w.partition_no,w.bootstrap,w.execution,w.verified_home)=
-       (t.partition_no,t.bootstrap,t.execution,t.ack_after)
-       AND w.verified_binding=t.verified_binding AND w.verified_root IS NOT NULL
-       AND w.verified_ordinal<t.verified_ordinal
+     LEFT JOIN LATERAL (
+       SELECT candidate.step,candidate.predecessor,candidate.state,candidate.verified_home,
+         candidate.verified_binding,candidate.verified_root,candidate.verified_ordinal
+       FROM semantic.public_filter_repair_step candidate
+       WHERE candidate.partition_no=t.partition_no AND candidate.bootstrap=t.bootstrap
+         AND candidate.execution=t.execution AND candidate.verified_home<=t.ack_after
+         AND candidate.verified_binding=t.verified_binding AND candidate.verified_root IS NOT NULL
+         AND candidate.verified_ordinal<t.verified_ordinal
+       ORDER BY candidate.verified_home DESC LIMIT 1
+     ) w ON TRUE
      WHERE (t.partition_no,t.bootstrap,t.execution)=(0,$1,$2)
        AND t.verified_binding=$3 AND t.verified_root IS NOT NULL
        AND t.verified_next IS NULL AND t.complete`,
