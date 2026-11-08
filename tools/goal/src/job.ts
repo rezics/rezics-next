@@ -1,3 +1,9 @@
+import {
+  HOST_INTERRUPTION_RETAINED,
+  HOST_INTERRUPTION_RESUME_PROMPT,
+  pendingHostInterruption,
+  recordedWorkerBootCustody,
+} from './worker-host-custody.ts';
 import defaults from '../defaults.json';
 import { recoverWorkerTyping } from './typing-recovery.ts';
 import { isTypingEvidenceUnavailableResult } from './worker-check-budget.ts';
@@ -336,6 +342,10 @@ export class WorkerJob implements GateOutcomeSink {
       if (task.currentAttempt !== ref.attempt) return;
       if (ref.attempt > 0) {
         const completed = store.attempt(ref);
+        if (completed.result.startsWith(HOST_INTERRUPTION_RETAINED)) {
+          this.onAttemptExit(ref);
+          return;
+        }
         if (completed.typingEvidencePending || isTypingEvidenceUnavailableResult(completed.result)) {
           await recoverWorkerTyping(this.tasks, this.landing, ref, undefined, this.afterSettle);
           return;
@@ -630,7 +640,13 @@ export class WorkerJob implements GateOutcomeSink {
     if (freshSessionRequest && (!lastRun || freshSessionRequest.sequence > lastRun.sequence))
       return CURSOR_FRESH_SESSION_PROMPT;
     if (finalReportPending(this.tasks.store, attempt)) return FINAL_REPORT_PROMPT;
-    const transport = lastTransportFailure(this.tasks.store, attempt);
+    const hostInterruption = pendingHostInterruption(this.tasks.store, attempt);
+    if (
+      hostInterruption &&
+      Date.parse(hostInterruption.nextResumeAt) - Date.now() > this.policy.worker.retryIntentLeadMs
+    )
+      return null;
+    const transport = hostInterruption ? null : lastTransportFailure(this.tasks.store, attempt);
     if (transport) {
       if (Date.parse(transport.nextResumeAt) - Date.now() > this.policy.worker.retryIntentLeadMs) return null;
       if (!transportIncidentResumeAllowed(this.tasks.store, attempt)) return null;
@@ -639,6 +655,7 @@ export class WorkerJob implements GateOutcomeSink {
       const observed = observeWorkerChecks(task, attempt.checks, this.policy.worker);
       return observed.status === 'pending' ? null : observed.resumeText;
     }
+    if (hostInterruption) return HOST_INTERRUPTION_RESUME_PROMPT;
     if (transport) return TRANSPORT_RESUME_PROMPT;
     const observed = observeWorkerChecks(task, attempt.checks ?? [], this.policy.worker);
     return observed.status === 'pending' ? null : observed.resumeText;
@@ -1744,7 +1761,8 @@ export class WorkerJob implements GateOutcomeSink {
             try {
               // Follow at once, so the stall and start checks watch an adopted worker too; only its exit waits.
               const exited = (
-                attempt.process ? waitForProcessGroup(attempt.process, this.policy.process) : Promise.resolve()
+                attempt.process && recordedWorkerBootCustody(store,attempt)==='current-boot'
+                  ? waitForProcessGroup(attempt.process, this.policy.process) : Promise.resolve()
               ).then(() => readWorkerExit(attempt.logPath));
               await this.follow({ attempt, exited });
             } catch (error) {
@@ -1820,6 +1838,24 @@ export class WorkerJob implements GateOutcomeSink {
   onAttemptExit(ref: AttemptRef): void {
     const store = this.tasks.store;
     const completed = store.attempt(ref);
+    if (completed.result.startsWith(HOST_INTERRUPTION_RETAINED)) {
+      if (store.retryIntent(ref)?.status === 'pending')
+        store.updateRetryIntent(ref, (intent) => {
+          intent.status = 'abandoned';
+        });
+      if (!store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'worker-host-interruption-notified')) {
+        const task = store.task(ref.taskId);
+        store.event(ref, 'worker-host-interruption-notified', {});
+        this.inbox.deliver({
+          managerId: task.brief.manager,
+          taskId: task.id,
+          kind: 'environment',
+          summary: completed.result,
+          evidencePath: completed.evidencePath,
+        });
+      }
+      return;
+    }
     if (completed.typingEvidencePending || isTypingEvidenceUnavailableResult(completed.result)) {
       if (!store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'typing-evidence-notified')) {
         const task = store.task(ref.taskId);

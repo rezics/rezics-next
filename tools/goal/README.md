@@ -155,6 +155,20 @@ resumes reconnect and concurrent worktrees never share a server; a Web task also
 `STORYBOOK_UI_URL` ref. The prompt names the start commands and `/mcp` endpoints, and the Codex adapter adds those
 endpoints as MCP servers on fresh launches and resumes. The account's own MCP servers, such as the browser and
 Playwright, stay enabled; consultations still ignore the account configuration.
+An rmcp transport-worker diagnostic alone does not establish Codex CLI termination, provider failure or OOM. Keep
+that raw stderr as secondary evidence; explicit CLI exit/signal and structured worker outcomes retain precedence.
+Required MCP startup failures still refuse the run; optional account servers are neither disabled nor promoted to
+required by Goal. The [Codex MCP configuration contract](https://learn.chatgpt.com/docs/extend/mcp?surface=cli) keeps
+`required` and `enabled` separate.
+
+Worker launch metadata captures a hashed machine identity and host name. Existing orphan recovery validates that
+provenance against the current boot before waiting on or signaling an old PID/group. Matching local journal
+boot/machine/host fields can establish legacy provenance with one bounded, cached observation. A confirmed local
+reboot resumes the same existing session and attempt under the existing retry/backoff, capacity and quota limits;
+it preserves source and registered checks and does not infer remote check cleanup. Missing or foreign provenance,
+missing session or exhausted interruption recovery retains the source for an owner decision without another writer.
+An unobserved exit stays unobserved; SIGKILL alone is not an OOM diagnosis.
+
 
 The dev landing train runs the root typecheck on each final candidate only when `integration.devPrelandingTypecheck`
 is true, then the policy boot check only when `integration.devLandingBootCheck` is true and changed paths match
