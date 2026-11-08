@@ -27,6 +27,46 @@ import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../../
 import { createRealAccess } from '../real-access.ts';
 
 export const readContext = () => ({ deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) });
+
+/** Model the controlled native owner migration as one coherent partition/domain change. */
+export async function setNativePartitionEpochForFixture(
+  db: GrowthDatabase,
+  partition: number,
+  epoch: number,
+): Promise<void> {
+  const client = await db.admin.connect();
+  try {
+    await client.query('BEGIN');
+    // live_copy_domain is immutable to application writers; fixture owner rotation
+    // represents the controlled native migration that reconciles both rows together.
+    await client.query("SET LOCAL session_replication_role='replica'");
+    await client.query('UPDATE core.partition SET epoch=$2 WHERE partition_no=$1', [partition, epoch]);
+    await client.query('UPDATE access.live_copy_domain SET epoch=$2 WHERE partition_no=$1', [partition, epoch]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  const owner = (
+    await db.admin.query<{ epoch: number; domain_epoch: number; state: string; write_state: string }>(
+      `SELECT p.epoch,d.epoch AS domain_epoch,d.state,p.write_state
+       FROM core.partition p JOIN access.live_copy_domain d USING(partition_no)
+       WHERE p.partition_no=$1`,
+      [partition],
+    )
+  ).rows[0];
+  if (
+    !owner ||
+    owner.epoch !== epoch ||
+    owner.domain_epoch !== epoch ||
+    owner.state !== 'active' ||
+    owner.write_state !== 'active'
+  )
+    throw new Error('Native owner fixture did not reconcile the active partition epoch');
+}
+
 /** Existing concrete-only cases must fail if a producer unexpectedly drops scalar coverage. */
 export function indexed(record: PublicFilterProjectionRecord) {
   expect(record.indexed, `Unexpected unresolved native statement ${record.candidate}`).not.toBeNull();
@@ -294,7 +334,17 @@ export async function capturedConsumer(
 ) {
   for (let step = 0; step < 10000; step++) {
     const result = await consumer.operations.capture({ plan, snapshot }, readContext());
-    expect(['captured', 'preparing']).toContain(result.status);
+    if (result.status !== 'captured' && result.status !== 'preparing') {
+      const state = await f.db.admin.query(
+        `SELECT id,consumer_bootstrap,consumer_work IS NOT NULL AS has_consumer_work,
+                octet_length(consumer_work) AS consumer_work_bytes
+         FROM search.public_filter_registration WHERE physical_target=$1`,
+        [consumer.physicalTarget],
+      );
+      throw new Error(
+        `Native consumer capture step=${step}: ${JSON.stringify(result)} state=${JSON.stringify(state.rows)}`,
+      );
+    }
     if (result.status === 'preparing') await settleConsumer(consumer, result.repair);
     if (result.status === 'captured') {
       expect(result.queried.consumer.physicalTarget).toBe(consumer.physicalTarget);

@@ -8099,7 +8099,6 @@ CREATE TABLE semantic.public_filter_projection_replay (
     request_digest text NOT NULL,
     page_data text NOT NULL,
     page_digest text NOT NULL,
-    CONSTRAINT public_filter_projection_replay_check CHECK (((route >= (partition_no * 16)) AND (route < ((partition_no + 1) * 16)))),
     CONSTRAINT public_filter_projection_replay_execution_check CHECK (((octet_length(execution) >= 1) AND (octet_length(execution) <= 4096))),
     CONSTRAINT public_filter_projection_replay_page_digest_check CHECK ((page_digest ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT public_filter_projection_replay_partition_no_check CHECK ((partition_no = 0)),

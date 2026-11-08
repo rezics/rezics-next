@@ -15,11 +15,13 @@ import {
   fixture,
   nativeProducer,
   readContext,
+  setNativePartitionEpochForFixture,
 } from './support/public-filter-source.ts';
 
 type SourceBinding = ReturnType<typeof createPublicFilterSourceBinding>;
 /** Drive the same bounded native preparation used by Search, retaining its original cut. */
 async function prepareSource(
+  f: Awaited<ReturnType<typeof fixture>>,
   binding: SourceBinding,
   input: Parameters<SourceBinding['begin']>[0],
 ): Promise<Awaited<ReturnType<SourceBinding['begin']>>> {
@@ -27,10 +29,26 @@ async function prepareSource(
   if (!result || !('bootstrap' in result)) throw new Error(`Native Source preparation: ${JSON.stringify(result)}`);
   const original = result.bootstrap.id;
   for (let step = 0; result.status === 'preparing'; step++) {
-    expect(step, 'Finite original home enrollment must complete').toBeLessThan(10000);
+    expect(step, 'Bounded retained home batches must complete the original enrollment').toBeLessThan(512);
     result = await advanceNativePublicFilterPreparation(binding, { bootstrap: original }, readContext());
-    if (!result || !('bootstrap' in result))
-      throw new Error(`Native Source preparation ${original}: ${JSON.stringify(result)}`);
+    if (!result || !('bootstrap' in result)) {
+      const state = await f.db.admin.query(
+        `SELECT b.state,b.account_after,b.coverage_after,b.coverage_sealed,b.coverage_generation::text,
+                c.after_home,c.generation::text AS preparation_generation,
+                e.complete,e.receipt,e.owner_epoch,p.epoch,p.write_state
+         FROM semantic.public_filter_bootstrap b
+         LEFT JOIN search.public_filter_coverage_preparation c
+           ON (c.partition_no,c.bootstrap)=(b.partition_no,b.bootstrap)
+         LEFT JOIN semantic.public_filter_home_enrollment e
+           ON (e.partition_no,e.bootstrap)=(b.account_after-1,b.bootstrap)
+         LEFT JOIN core.partition p ON p.partition_no=b.account_after-1
+         WHERE b.partition_no=0 AND b.bootstrap=$1::uuid`,
+        [original.slice(2)],
+      );
+      throw new Error(
+        `Native Source preparation ${original} step=${step}: ${JSON.stringify(result)} state=${JSON.stringify(state.rows[0])}`,
+      );
+    }
     expect(result.bootstrap.id).toBe(original);
   }
   if (result.status !== 'begun') throw new Error(`Native Source preparation: ${JSON.stringify(result)}`);
@@ -130,7 +148,7 @@ test('canonical retained observation execution joins preserve complete compiler 
     );
     expect(registered.status).toBe('registered');
     if (registered.status !== 'registered') throw new Error(registered.reason);
-    const begun = await prepareSource(binding, {
+    const begun = await prepareSource(f, binding, {
       source,
       meaning: f.meaning,
       capture,
@@ -250,7 +268,7 @@ test('native Source repair receipts revalidate original steps, replay, and curre
       readContext(),
     );
     if (registered.status !== 'registered') throw new Error(registered.reason);
-    const begun = await prepareSource(binding, {
+    const begun = await prepareSource(f, binding, {
       source,
       meaning: f.meaning,
       capture,
@@ -315,11 +333,23 @@ test('native Source repair receipts revalidate original steps, replay, and curre
     // Ordinary native pages are the only way to reach the original produced step. No fixture receipt setter.
     let frontier: string | null = null;
     let found = false;
-    for (let steps = 0; steps < 20000; steps++) {
+    // At most 32 empty-home batches cover 4096 partitions; the extra budget is
+    // for the real subject advancement and projection receipts in this fixture.
+    for (let steps = 0; steps < 128; steps++) {
       const request = { ...original, frontier, inputLimit: 256 };
       const page = await binding.repairPage(request, readContext());
       expect(page.status).toBe('progress');
       if (page.status !== 'progress') throw new Error(`Native repair stopped: ${page.status}`);
+      if (steps === 0) {
+        const scan = await binding.readRepairStep(
+          { bootstrap: original.bootstrap, queried: retained.queried, execution, predecessor: null },
+          readContext(),
+        );
+        expect(scan).toMatchObject({ status: 'verified', predecessor: null, complete: false, receipts: [] });
+        const restarted = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+        const replay = await restarted.repairPage(request, readContext());
+        expect(replay).toMatchObject({ status: 'progress', frontier: page.frontier, repairs: [] });
+      }
       const repair = page.repairs.find((entry) => entry.source.subject === book);
       if (!repair) {
         frontier = page.frontier;
@@ -369,11 +399,33 @@ test('native Source repair receipts revalidate original steps, replay, and curre
       ).not.toBe('verified');
       expect((await recovered.repairPage({ ...request, inputLimit: 1 }, readContext())).status).not.toBe('progress');
       expect((await recovered.settle(original, readContext())).status).not.toBe('joined');
+      const owner = (
+        await f.db.admin.query<{ epoch: number; write_state: string; moved_to: string | null }>(
+          'SELECT epoch,write_state,moved_to FROM core.partition WHERE partition_no=$1',
+          [repair.source.partition],
+        )
+      ).rows[0]!;
+      try {
+        await setNativePartitionEpochForFixture(f.db, repair.source.partition, owner.epoch + 1);
+        expect((await recovered.readRepairReceipt(read, readContext())).status).not.toBe('verified');
+      } finally {
+        await setNativePartitionEpochForFixture(f.db, repair.source.partition, owner.epoch);
+      }
+      expect((await recovered.readRepairReceipt(read, readContext())).status).toBe('verified');
+      try {
+        await f.db.admin.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=$1", [
+          repair.source.partition,
+        ]);
+        expect((await recovered.readRepairReceipt(read, readContext())).status).not.toBe('verified');
+      } finally {
+        await f.db.admin.query('UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1', [
+          repair.source.partition,
+          owner.write_state,
+          owner.moved_to,
+        ]);
+      }
+      expect((await recovered.readRepairReceipt(read, readContext())).status).toBe('verified');
       await f.propose(book, person);
-      expect((await recovered.readRepairReceipt(read, readContext())).status).not.toBe('verified');
-      await f.db.admin.query('UPDATE core.partition SET epoch = epoch + 1 WHERE partition_no = $1', [
-        repair.source.partition,
-      ]);
       expect((await recovered.readRepairReceipt(read, readContext())).status).not.toBe('verified');
       break;
     }
@@ -641,7 +693,7 @@ test('native Source retains and replays a durable empty repair-step locator list
       readContext(),
     );
     if (registered.status !== 'registered') throw new Error(registered.reason);
-    const begun = await prepareSource(binding, {
+    const begun = await prepareSource(f, binding, {
       source,
       meaning: f.meaning,
       capture,

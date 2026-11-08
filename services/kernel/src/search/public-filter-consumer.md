@@ -12,7 +12,12 @@ and compares optional compiled DSL before native I/O. Native resolution fixes th
 read definition, physical UUID and original root. The Source bootstrap pre-arms the original cut; Search opens
 its real PIT with that exact cut and Source adopts the committed observation. Bootstrap uncertainty recovers
 that same identity; it never replaces the cut with current heads. Pending work stays in the existing registration
-and transfers to the immutable observation. Prepared materialization traverses that retained PIT in bounded steps
+and transfers to the immutable observation. Source preparation may advance a bounded batch of individually receipted
+Account homes; Search retains the original registration/bootstrap while it reports `preparing`, including when Access
+contention leaves the cursor on the current home. Search supplies its current remaining input allowance after a
+128-input reserve for capture handoff and persistence; Source admits up to 16 homes within that allowance and its
+compiler-key estimate. It reads the retained cursor once before and once after the batch, while each home keeps its
+own enrollment/adoption transaction and cursor CAS. Prepared materialization traverses that retained PIT in bounded steps
 and commits its immutable native row set before adoption. Mixed prepared rows retain every raw engine candidate,
 including duplicates and current-predicate rejects; serving revalidates native owners and may walk at most 600 of
 those retained rows. No count or ordinary checkpoint certifies completeness.
@@ -31,6 +36,8 @@ hits with raw ordinals; EOF requires both complete native exhaustion and consump
 Repair uses Source-owned bootstrap/execution/frontier locators, including local and foreign own-home advancement.
 Search persists uncertain native dispatch before writing, uses the Source's exact bigint position at the existing
 safe external-version boundary, rejects version conflicts, and verifies searchable current-winner body/version.
+Search fixes each Source page request at `inputLimit: 64` so the retained receipt has the same size after an
+uncertain delivery; the existing meter reserves capacity for the producer and independent Source-step replay.
 Each bounded Source repair page retains its members and next ordinal before dispatch. Item completion and
 ordinal advancement commit together; uncertain retries reuse the original version and document. Visibility
 records remain in native execution custody. Only Source settle can certify its owner receipts plus
