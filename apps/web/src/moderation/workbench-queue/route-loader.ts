@@ -10,7 +10,7 @@ type LoaderInput = {
 };
 
 /** The served loader and supplied-source review use the same preparation and visit boundary.
- * The default always reaches the production server reader, including its named unavailable seam.
+ * The default always reaches the production server reader, and its installed native directory/history sources.
  */
 export function createWorkbenchLoader(
   read: WorkbenchReader = (data, signal) => loadWorkbench({ data, ...(signal ? { signal } : {}) }),

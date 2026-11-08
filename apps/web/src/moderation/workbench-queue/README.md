@@ -6,10 +6,17 @@ account. Fetch start does not replace a successful session. The route's original
 request through preparation, server dispatch, native parsing and final publication. Locale and navigation replacement
 retire controls and late focus recovery.
 
-Production discovery stays on `nativeModerationDirectoryUnavailable` until the official installed KernelClient
-callable and response-derived types arrive. The local directory contract is a consumer seam, not a production DTO or
-coverage claim. Board and catalogue exact reads remain usable independently. Only native `viewer.open` advice can
-create an enabled directory selection; queue and case owners retain command authority and uncertain command intent.
+Decision: bind the default directory and Board history directly to the installed KernelClient operations with
+response-derived public types; keep the existing bounded readers, independent addresses and private visit lifetime.
+
+Production discovery calls `me["moderation-directory"].get` with the native string limit `"20"`, the supplied opaque
+continuation and optional exact Realm filter. The adapter carries the prepared authorization, private no-store fetch
+and original abort signal through dispatch and admission. Native response `source` and exclusive `validUntil` remain
+the directory authority observation; neither membership nor readable Board inventory can synthesize permission.
+An unbound supplied test source still returns unavailable. Native preparing, unavailable, denied and stale responses
+remain distinct, including HTTP invalid/stale cursor and concealed/denied failures. Only native `viewer.open` advice
+creates an enabled selection. Board and catalogue exact reads remain independent; queue and case owners retain
+command authority and uncertain command intent.
 
 Decision: directory return preserves the original opaque frontier and optional Realm filter as local search operands,
 then checks that page again; it never restores old advice or accepts a return URL.
@@ -47,3 +54,9 @@ One native page read of at most 20 rows backs each explicit Next, Previous, curr
 Case inspection performs its existing one exact report read; returning performs one captured queue read before current
 controls reappear. History keeps its existing independent reads. There is no prefetch, refill, cursor scan or per-row
 read. Replacing any page retires its prior selection and advice, including an equal replacement.
+
+The connected directory and Board-history stories run installed client calls against illustrative transport fixtures.
+They exercise the Web composition, not a recorded native authority result. Focused transport regressions cover exact
+operands, sparse continuation, exclusive horizon, source replacement, equal/A/B/A retirement, abort and late results.
+Native API, physical growth, browser and promoted acceptance remain separate receiving stages; Web workspace typing
+uses the normal worker wrapper.
