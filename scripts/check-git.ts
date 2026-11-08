@@ -20,6 +20,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
+import { acquireDirectoryLeaseWaiting } from '../tools/goal/src/lease.ts';
 
 const MANIFEST_FILE = 'manifest.json';
 const PACK_FILE = 'snapshot.pack';
@@ -189,9 +190,37 @@ flock -x ${shell(lock)} sh -c ${shell(gcBody)} || echo 'check-git: store age pru
 }
 
 const CHECK_REF = /^refs\/checks\/[a-zA-Z0-9-]+$/;
-const REF_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+const RELEASE_TIMEOUT_MS = 2000;
+export const CHECK_GIT_RELEASE_RETRY_MS = 60_000;
+type GitPushOutcome = {
+  kind: 'deadline' | 'exit' | 'signal' | 'execution';
+  operation?: string;
+  exitCode: number | null;
+  signal: string | null;
+  deadlineMs: number;
+  elapsedMs: number;
+  stderr: string;
+};
+class GitPushError extends Error {
+  constructor(readonly outcome: GitPushOutcome) {
+    super(
+      `check-git: check ref ${outcome.operation ?? 'push'} ${outcome.kind === 'deadline' ? 'deadline exceeded' : 'failed'} (exit ${outcome.exitCode}${outcome.signal ? `, ${outcome.signal}` : ''}; elapsed ${outcome.elapsedMs}ms; deadline ${outcome.deadlineMs}): ${outcome.stderr}`,
+    );
+  }
+}
 type OwnedPublication = CheckGitPublication & {
-  ownership: { origin: string | null; createdAt: number; state: 'active' | 'retained' | 'releasable' };
+  ownership: {
+    origin: string | null;
+    createdAt: number;
+    state: 'active' | 'retained' | 'releasable';
+    release?: {
+      requestedAt: number;
+      attempts: number;
+      retryAt?: number;
+      failure?: GitPushOutcome;
+      firstFailure?: GitPushOutcome;
+    };
+  };
 };
 type PublicationOptions = {
   ref: string;
@@ -252,10 +281,15 @@ export async function releaseCheckGit(
   manifestPath: string,
   options: { settled?: boolean; deadlineMs?: number } = {},
 ): Promise<void> {
+  let owned: { path: string; record: OwnedPublication } | undefined;
+  let lease: ReturnType<typeof acquireDirectoryLeaseWaiting> | undefined;
+  const deadlineMs = options.deadlineMs ?? Date.now() + RELEASE_TIMEOUT_MS;
   try {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as CheckGitPublication;
     if (!manifest.remote || !CHECK_REF.test(manifest.remote.ref)) return;
     const path = publicationRecord(workspace, manifest.remote.ref);
+    lease = acquireDirectoryLeaseWaiting(`${path}.release.lease`, Math.max(0, deadlineMs - Date.now()));
+    if (!existsSync(path)) return;
     const info = lstatSync(path);
     if (!info.isFile() || info.size > 16_384) return;
     const record = JSON.parse(readFileSync(path, 'utf8')) as OwnedPublication;
@@ -275,20 +309,54 @@ export async function releaseCheckGit(
       return;
     if (record.ownership.state === 'retained' && !options.settled) return;
     record.ownership.state = 'releasable';
+    record.ownership.release = {
+      ...record.ownership.release,
+      requestedAt: record.ownership.release?.requestedAt ?? Date.now(),
+      attempts: (record.ownership.release?.attempts ?? 0) + 1,
+    };
+    owned = { path, record };
     savePublication(path, record);
+    if (record.ownership.release.attempts > 1 && (await remoteRefAbsent(workspace, record.remote.ref, deadlineMs))) {
+      rmSync(path, { force: true });
+      return;
+    }
     await pushCheckGit(
       workspace,
       [`--force-with-lease=${record.remote.ref}:${record.remote.commit}`, `:${record.remote.ref}`],
       {},
-      options.deadlineMs ?? Date.now() + 2000,
+      deadlineMs,
     );
     rmSync(path, { force: true });
   } catch (error) {
+    if (!owned && (error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    if (owned) {
+      const release = owned.record.ownership.release!;
+      release.retryAt = Date.now() + CHECK_GIT_RELEASE_RETRY_MS;
+      release.failure =
+        error instanceof GitPushError
+          ? error.outcome
+          : {
+              kind: 'execution',
+              exitCode: null,
+              signal: null,
+              deadlineMs,
+              elapsedMs: 0,
+              stderr: transportDiagnostic(error).slice(-2048),
+            };
+      release.firstFailure ??= release.failure;
+      try {
+        savePublication(owned.path, owned.record);
+      } catch {
+        /* Existing exact custody remains authoritative. */
+      }
+    }
     console.error(`check-git: ref cleanup deferred: ${transportDiagnostic(error)}`);
+  } finally {
+    lease?.release();
   }
 }
 
-/** Scan at most 32 owned records, for at most ten seconds. Unknown, active and retained refs stay pinned. */
+/** Retry exact releasable custody after backoff, within the existing 32-record/ten-second sweep budget. */
 export async function sweepCheckGit(workspace: string, now = Date.now()): Promise<void> {
   const deadlineMs = Date.now() + 10_000;
   try {
@@ -307,10 +375,14 @@ export async function sweepCheckGit(workspace: string, now = Date.now()): Promis
             basename(path) !== `${record.remote.ref.slice('refs/checks/'.length)}.json` ||
             record.ownership.state !== 'releasable' ||
             !Number.isFinite(record.ownership.createdAt) ||
-            now - record.ownership.createdAt < REF_GRACE_MS
+            !Number.isFinite(
+              record.ownership.release?.retryAt ?? record.ownership.createdAt + CHECK_GIT_RELEASE_RETRY_MS,
+            ) ||
+            (record.ownership.release?.retryAt ?? record.ownership.createdAt + CHECK_GIT_RELEASE_RETRY_MS) > now
           )
             continue;
-          await releaseCheckGit(workspace, path, { deadlineMs: Math.min(deadlineMs, Date.now() + 2000) });
+          // A slow retry may use the remaining existing sweep budget, never a fresh unbounded per-record timeout.
+          await releaseCheckGit(workspace, path, { deadlineMs });
         } catch {
           /* Unknown ownership never grants deletion authority. */
         }
@@ -323,6 +395,22 @@ export async function sweepCheckGit(workspace: string, now = Date.now()): Promis
   }
 }
 
+async function remoteRefAbsent(workspace: string, ref: string, deadlineMs: number): Promise<boolean> {
+  const result = await gitTransport(
+    workspace,
+    ['ls-remote', '--exit-code', '--refs', 'origin', ref],
+    {},
+    deadlineMs,
+    Date.now,
+    [0, 2],
+  );
+  if (result.code === 2 && result.stdout.trim() === '') return true;
+  const rows = result.stdout.trim().split('\n');
+  if (result.code !== 0 || rows.length !== 1 || rows[0]!.split(/\s+/)[1] !== ref)
+    throw new Error('check-git: exact remote ref observation is unavailable');
+  return false;
+}
+
 async function pushCheckGit(
   workspace: string,
   refspecs: string[],
@@ -330,30 +418,90 @@ async function pushCheckGit(
   deadlineMs = Date.now() + GIT_OPERATION_TIMEOUT_MS,
   now = Date.now,
 ): Promise<void> {
-  const remaining = deadlineMs - now();
-  if (remaining <= 0) throw new Error('check-git: publication preparation deadline exceeded');
+  const result = await gitTransport(
+    workspace,
+    ['push', '--no-follow-tags', '--progress', 'origin', ...refspecs],
+    overrides,
+    deadlineMs,
+    now,
+  );
+  const bytes = result.stderr.match(/Writing objects: 100%[^\r\n]*/g)?.at(-1);
+  if (bytes) console.error(`check-git: ${bytes}`);
+}
+
+async function gitTransport(
+  workspace: string,
+  args: string[],
+  overrides: Record<string, string>,
+  deadlineMs: number,
+  now: () => number,
+  acceptedCodes: readonly number[] = [0],
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const beganAt = now();
+  const remaining = Math.min(GIT_OPERATION_TIMEOUT_MS, deadlineMs - beganAt);
+  if (remaining <= 0)
+    throw new GitPushError({
+      kind: 'deadline',
+      exitCode: null,
+      signal: null,
+      deadlineMs,
+      elapsedMs: 0,
+      operation: args[0]!,
+      stderr: 'publication preparation deadline exceeded before Git started',
+    });
   const env = environment(overrides);
   // Authentication remains local; it is never part of the published manifest or host repository.
   for (const key of ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM']) {
     if (process.env[key] === undefined) delete env[key];
     else env[key] = process.env[key]!;
   }
-  const pushed = Bun.spawn(['git', 'push', '--no-follow-tags', '--progress', 'origin', ...refspecs], {
+  const pushed = Bun.spawn(['git', ...args], {
     cwd: workspace,
     env,
     stdin: 'ignore',
-    stdout: 'ignore',
+    stdout: 'pipe',
     stderr: 'pipe',
-    timeout: Math.min(GIT_OPERATION_TIMEOUT_MS, remaining),
+    detached: true,
   });
-  const [code, stderr] = await Promise.all([pushed.exited, new Response(pushed.stderr).text()]);
+  let expired = false;
+  let killTimer: ReturnType<typeof setTimeout> | undefined;
+  const stop = (signal: NodeJS.Signals) => {
+    try {
+      process.kill(-pushed.pid, signal);
+    } catch {
+      /* The owned Git process group may already be gone. */
+    }
+  };
+  const timer = setTimeout(() => {
+    expired = true;
+    stop('SIGTERM');
+    killTimer = setTimeout(() => stop('SIGKILL'), 1000);
+  }, remaining);
+  let code: number;
+  let stderr: string;
+  let stdout: string;
+  try {
+    [code, stderr, stdout] = await Promise.all([
+      pushed.exited,
+      new Response(pushed.stderr).text(),
+      new Response(pushed.stdout).text(),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    clearTimeout(killTimer);
+  }
   const detail = transportDiagnostic(stderr);
-  if (code !== 0)
-    throw new Error(
-      `check-git: check ref push failed (exit ${code}${pushed.signalCode ? `, ${pushed.signalCode}` : ''}): ${detail}`,
-    );
-  const bytes = detail.match(/Writing objects: 100%[^\r\n]*/g)?.at(-1);
-  if (bytes) console.error(`check-git: ${bytes}`);
+  if (expired || !acceptedCodes.includes(code))
+    throw new GitPushError({
+      kind: expired ? 'deadline' : pushed.signalCode ? 'signal' : 'exit',
+      operation: args[0]!,
+      exitCode: pushed.signalCode ? null : code,
+      signal: pushed.signalCode ? String(pushed.signalCode) : null,
+      deadlineMs,
+      elapsedMs: Math.max(0, now() - beganAt),
+      stderr: detail.slice(-2048),
+    });
+  return { code, stdout, stderr: detail };
 }
 
 function environment(overrides: Record<string, string> = {}): Record<string, string> {

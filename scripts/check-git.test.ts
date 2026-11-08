@@ -17,7 +17,10 @@ import {
   writeSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { processIdentity } from './check-custody.ts';
+import { withCheckGitTransfer } from './remote-check.ts';
 import {
+  CHECK_GIT_RELEASE_RETRY_MS,
   stageCheckGit,
   restoreCheckGit,
   releaseCheckGit,
@@ -417,6 +420,8 @@ test('failed manifest delivery releases a published ref using the earlier intent
   const journal = join(source, '.temp/check-git-publications/interrupted.json');
   if (existsSync(journal)) await releaseCheckGit(source, journal);
   expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
+  await sweepCheckGit(source, Date.now() + CHECK_GIT_RELEASE_RETRY_MS + 1);
+  expect(existsSync(journal)).toBe(false);
 }, 30000);
 
 test('stale sweep deletes only settled owned identities and preserves active, frozen and foreign refs', async () => {
@@ -714,3 +719,139 @@ exec /usr/bin/git "$@"
   expect(git(deadRoot, 'write-tree')).toBe(reused.indexTree);
   expect(readFileSync(join(deadRoot, 'staged.txt'), 'utf8')).toBe('reused unique\n');
 }, 30000);
+
+test('owned Git release deadline reaps its process group and the existing sweep retries slow deletion within its shared bound', async () => {
+  const { root, source, origin } = publicationFixture('exit 0');
+  const manifest = await stageCheckGit(source, join(root, 'slow'), { ref: 'refs/checks/slow-release' });
+  const journal = join(source, '.temp/check-git-publications/slow-release.json');
+  const original = JSON.parse(readFileSync(journal, 'utf8'));
+  const pids = join(root, 'release-pids');
+  writeFileSync(
+    join(origin, 'hooks/pre-receive'),
+    `#!/bin/sh
+cat >/dev/null
+echo $$ > '${pids}'
+sleep 2.2 &
+echo $! >> '${pids}'
+wait
+`,
+  );
+  const errors: string[] = [];
+  const output = spyOn(console, 'error').mockImplementation((message) => errors.push(String(message)));
+  try {
+    const beganAt = Date.now();
+    await releaseCheckGit(source, manifest);
+    const record = JSON.parse(readFileSync(journal, 'utf8'));
+    expect(record.ownership).toMatchObject({
+      origin: original.ownership.origin,
+      createdAt: original.ownership.createdAt,
+      state: 'releasable',
+      release: { attempts: 1, failure: { kind: 'deadline', operation: 'push', signal: 'SIGTERM' } },
+    });
+    expect(record.ownership.release.failure.deadlineMs - beganAt).toBeGreaterThanOrEqual(1900);
+    expect(record.ownership.release.failure.deadlineMs - beganAt).toBeLessThanOrEqual(2100);
+    expect(record.ownership.release.failure.elapsedMs).toBeGreaterThanOrEqual(1900);
+    expect(record.ownership.release.firstFailure).toEqual(record.ownership.release.failure);
+    expect(errors.join('\n')).toContain('deadline exceeded');
+    for (const pid of readFileSync(pids, 'utf8').trim().split('\n').map(Number))
+      expect(processIdentity(pid)).toBeNull();
+    expect(git(root, '--git-dir', origin, 'rev-parse', 'refs/checks/slow-release')).toBe(original.remote.commit);
+    await sweepCheckGit(source);
+    expect(JSON.parse(readFileSync(journal, 'utf8')).ownership.release.attempts).toBe(1);
+    await sweepCheckGit(source, Date.now() + CHECK_GIT_RELEASE_RETRY_MS + 1);
+    expect(existsSync(journal)).toBe(false);
+    expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/slow-release')).toBe('');
+    expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/heads/dev')).toBe(
+      'refs/heads/dev',
+    );
+  } finally {
+    output.mockRestore();
+  }
+}, 15_000);
+
+test('actual Git rejection is not a deadline and deferred cleanup cannot rewrite a successful check or delete a replaced owner', async () => {
+  const { root, source, origin } = publicationFixture('exit 0');
+  const manifest = await stageCheckGit(source, join(root, 'logical'), { ref: 'refs/checks/logical-release' });
+  const journal = join(source, '.temp/check-git-publications/logical-release.json');
+  const original = JSON.parse(readFileSync(journal, 'utf8'));
+  writeFileSync(
+    join(origin, 'hooks/pre-receive'),
+    '#!/bin/sh\ncat >/dev/null\necho "fatal: release rejected by Git" >&2\nexit 1\n',
+  );
+  const result = await withCheckGitTransfer({ workspace: source }, async (transfer) => {
+    transfer.stage = { directory: dirname(manifest), manifest };
+    return { exitCode: 0, passed: 20, failed: 0 };
+  });
+  expect(result).toEqual({ exitCode: 0, passed: 20, failed: 0 });
+  const deadline = Date.now() + 3000;
+  let record;
+  while (Date.now() < deadline) {
+    record = JSON.parse(readFileSync(journal, 'utf8'));
+    if (record.ownership.release?.failure) break;
+    await Bun.sleep(10);
+  }
+  expect(record.ownership).toMatchObject({
+    origin: original.ownership.origin,
+    createdAt: original.ownership.createdAt,
+    state: 'releasable',
+    release: { attempts: 1, failure: { kind: 'exit', exitCode: 1, signal: null } },
+  });
+  expect(record.ownership.release.failure.stderr).toContain('release rejected by Git');
+  expect(record.ownership.release.failure.elapsedMs).toBeLessThan(2000);
+  expect(result.exitCode).toBe(0);
+  writeFileSync(join(origin, 'hooks/pre-receive'), '#!/bin/sh\ncat >/dev/null\nexit 0\n');
+  const replacement = git(source, 'rev-parse', 'HEAD');
+  git(source, 'push', '-q', '--force', 'origin', replacement + ':refs/checks/logical-release');
+  await sweepCheckGit(source, Date.now() + CHECK_GIT_RELEASE_RETRY_MS + 1);
+  expect(git(root, '--git-dir', origin, 'rev-parse', 'refs/checks/logical-release')).toBe(replacement);
+  const retained = JSON.parse(readFileSync(journal, 'utf8'));
+  expect(retained.remote).toEqual(original.remote);
+  expect(retained.ownership.release.firstFailure).toEqual(record.ownership.release.firstFailure);
+  expect(retained.ownership.release.attempts).toBe(2);
+  expect(result).toEqual({ exitCode: 0, passed: 20, failed: 0 });
+}, 10_000);
+
+test('actual Git SIGTERM before its deadline stays a signal failure with retained owned custody', async () => {
+  const { root, source, origin } = publicationFixture('exit 0');
+  const manifest = await stageCheckGit(source, join(root, 'signal'), { ref: 'refs/checks/signal-release' });
+  const ready = join(root, 'signal-ready');
+  writeFileSync(
+    join(origin, 'hooks/pre-receive'),
+    `#!/bin/sh
+cat >/dev/null
+echo $$ > '${ready}'
+sleep 10
+`,
+  );
+  const releasing = releaseCheckGit(source, manifest);
+  const deadline = Date.now() + 1000;
+  while (!existsSync(ready) && Date.now() < deadline) await Bun.sleep(5);
+  expect(existsSync(ready)).toBe(true);
+  const identity = processIdentity(Number(readFileSync(ready, 'utf8').trim()))!;
+  expect(identity.group).not.toBe(processIdentity()!.group);
+  process.kill(-identity.group, 'SIGTERM');
+  await releasing;
+  const journal = join(source, '.temp/check-git-publications/signal-release.json');
+  const record = JSON.parse(readFileSync(journal, 'utf8'));
+  expect(record.ownership.release.failure).toMatchObject({
+    kind: 'signal',
+    operation: 'push',
+    exitCode: null,
+    signal: 'SIGTERM',
+  });
+  expect(record.ownership.release.failure.elapsedMs).toBeLessThan(2000);
+  expect(record.ownership.state).toBe('releasable');
+}, 5000);
+
+test('legacy explicitly releasable custody retries through the same paced sweep without a seven-day delay', async () => {
+  const { root, source, origin } = publicationFixture('exit 0');
+  await stageCheckGit(source, join(root, 'legacy'), { ref: 'refs/checks/legacy-release' });
+  const journal = join(source, '.temp/check-git-publications/legacy-release.json');
+  const record = JSON.parse(readFileSync(journal, 'utf8'));
+  record.ownership.state = 'releasable';
+  record.ownership.createdAt = Date.now() - CHECK_GIT_RELEASE_RETRY_MS - 1;
+  writeFileSync(journal, JSON.stringify(record));
+  await sweepCheckGit(source);
+  expect(existsSync(journal)).toBe(false);
+  expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/legacy-release')).toBe('');
+}, 5000);
