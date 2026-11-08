@@ -100,9 +100,10 @@ export function storybookLaunchPlan(
   };
 }
 
-/** Vite must see complete Paraglide modules before it scans routes; generating inside config races SSR of /en. */
+/** Finite test Vite omits live Paraglide compilation, so it prepares modules before starting the child. */
 export function webServeNeedsGeneratedMessages(kind: LaunchPlan['kind']): boolean {
-  return kind === 'app' || kind === 'vite';
+  // The live Vite Paraglide plugin owns generation and its content-validated cache. Finite test Vite omits that plugin.
+  return kind === 'vite';
 }
 
 if (import.meta.main) {
