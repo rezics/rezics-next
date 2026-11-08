@@ -943,9 +943,20 @@ export function captureResponse(input: unknown): Json {
     'account_id',
     'sessions',
     'code',
+    'access_token',
+    'refresh_token',
     'token_type',
     'expires_in',
     'scope',
+    'effectRef',
+    'key',
+    'subjectId',
+    'purpose',
+    'digest',
+    'reference',
+    'expiresAt',
+    'receiptId',
+    'replayed',
   ];
   const shape = Object.fromEntries(
     fields.filter((key) => key in value).map((key) => [key, Array.isArray(value[key]) ? 'array' : typeof value[key]]),
@@ -1133,6 +1144,7 @@ function endCaptureRequest(entry: Json | undefined, response: Response, value: J
   Object.assign(entry, {
     status: response.status,
     response: captureResponse(value),
+    locationPresent: response.headers.has('location'),
     result: 'responded',
     classification: unknownHttpResponse({ status: response.status, value }) ? 'unknown' : 'response',
     elapsedMs: Date.now() - Date.parse(String(entry.startedAt)),
