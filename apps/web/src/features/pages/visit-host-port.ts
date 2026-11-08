@@ -1,4 +1,5 @@
 import { createContext, createElement, useContext, type ReactNode } from 'react';
+export { candidateContext } from './candidate-context';
 
 /** The page reader's native outcome vocabulary. */
 export type CandidateFailure = {
@@ -6,8 +7,6 @@ export type CandidateFailure = {
   reason: 'denied' | 'stale' | 'unavailable' | 'invalid';
   clearPrivate?: boolean;
 };
-
-export const candidateContext = '00000000-0000-8000-8000-000000000000';
 
 /** Missing and hidden use the same unavailable outcome. Never reveal existence from a denial. */
 export function candidateFailure(status: number): CandidateFailure {
