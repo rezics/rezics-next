@@ -93,6 +93,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
   const unknownRef = useRef<MalCommand | null>(restored?.command ?? null);
   const sender = useRef({ subject: visit.subject, csrfToken: visit.csrfToken });
   const titles = useRef(new Map<number, string>());
+  const retiredReviews = useRef(new Map<number, string>());
   const applyCommand = useRef<Extract<MalCommand, { kind: 'apply' }> | null>(
     restored?.command.kind === 'apply' ? restored.command : null,
   );
@@ -121,6 +122,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     admitQueue.current = [];
     uploadId.current = null;
     titles.current = new Map();
+    retiredReviews.current.clear();
     confirmFlags.current = { privacy: false, timestamps: false };
     setPage(null);
     setDrafts({});
@@ -231,7 +233,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
   }
 
   function acceptPage(nextPage: MalPage, cursor: number, switchToReview: boolean, preserveFields: boolean) {
-    const rows = withPreview(nextPage.rows);
+    const rows = withPreview(nextPage.rows).map((row) =>
+      row.review?.version === retiredReviews.current.get(row.index) ? { ...row, review: null } : row,
+    );
     for (const row of rows) titles.current.set(row.index, row.title);
     setPage({ ...nextPage, rows });
     setAfter(cursor);
@@ -315,7 +319,8 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
 
   async function saveReview(draft: RowDraft) {
     const id = uploadId.current;
-    if (!id || !page || (draft.score?.action === 'adopt' && draft.score.units === undefined)) return;
+    if (!id || !page || busy || unknownRef.current || !live()) return;
+    if (draft.score?.action === 'adopt' && draft.score.units === undefined) return;
     const score: MalScoreReviewInput | undefined =
       draft.score?.action === 'adopt'
         ? {
@@ -341,6 +346,13 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
         ...(draft.skip || !score ? {} : { score }),
       },
     };
+    const previous = page.rows.find((row) => row.index === draft.row)?.review;
+    if (previous) retiredReviews.current.set(draft.row, previous.version);
+    setPage((current) =>
+      current
+        ? { ...current, rows: current.rows.map((row) => (row.index === draft.row ? { ...row, review: null } : row)) }
+        : current,
+    );
     const response = await run(command, () => port.review(command));
     if (!response || response.kind !== 'reviewed' || !live()) return;
     if (command.input.score && command.input.target) {

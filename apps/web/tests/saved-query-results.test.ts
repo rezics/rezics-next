@@ -174,6 +174,42 @@ test('rule returns retain the directory origin and reset only the result cursor 
   );
 });
 
+test('default results and rule routes preserve the full admitted directory return through correction and deletion', async () => {
+  const { Route: results } = await import('../src/routes/collections/$id');
+  const { Route: rule } = await import('../src/routes/collections/$id_.rule');
+  const { savedQueryReturnTo } = await import('../src/library/saved-query-management/return-to');
+  const validate = (route: typeof results | typeof rule, returnTo: string) =>
+    (route.options.validateSearch as (input: Record<string, unknown>) => { returnTo?: string })({ returnTo }).returnTo;
+  for (const cursor of ['x'.repeat(4096), '%+'.repeat(2048), '\u0800'.repeat(4096)]) {
+    const directory = `/en/library/collections?${new URLSearchParams({ cursor, layout: 'previews' })}`;
+    const admitted = validate(results, directory);
+    expect(admitted).toBe(directory);
+    const href = savedQueryResultsAddress(
+      'en',
+      'saved',
+      cursor,
+      { type: 'schema:Book' },
+      {
+        layout: 'list',
+        returnTo: admitted,
+      },
+    );
+    expect(validate(rule, href)).toBe(href);
+    expect(savedQueryRuleReturn(href, 'saved', 'en')).toBe(href);
+    const corrected = new URL(savedQueryRuleReturn(href, 'saved', 'en', true), 'https://site.test');
+    expect(corrected.searchParams.has('cursor')).toBe(false);
+    expect(corrected.searchParams.get('type')).toBe('schema:Book');
+    expect(corrected.searchParams.get('layout')).toBe('list');
+    expect(savedQueryReturnTo(corrected.searchParams.get('returnTo')!, 'en')).toBe(directory);
+  }
+  for (const address of [
+    'https://elsewhere.test/en/library/collections',
+    '/ja/library/collections',
+    `/en/library/collections?cursor=${'x'.repeat(4097)}`,
+  ])
+    expect(validate(results, address)).toBe('/en/library/collections');
+});
+
 test('saved result coordinates traverse, revisit, reset and abandon the old forward branch', () => {
   const queries = new QueryClient();
   const base = savedQueryResultsWindowBase({

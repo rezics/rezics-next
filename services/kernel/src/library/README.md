@@ -3003,7 +3003,7 @@ writer barrier and owner counter lock, then page original follow keys, arbitrati
 lock. Insert a missing pair at revision 1 from current native truth and add its raw live state exactly once;
 already represented pairs retain their revision unless current truth changes. Hooks behind the cursor represent
 their own changes. Only complete exhaustion under this arbitration may establish coverage. No chronology is
-inferred from `updated_at`, UUIDs or a global stamp; bootstrap and acknowledgement code are not delivered here.
+inferred from `updated_at`, UUIDs or a global stamp. The default worker below installs bootstrap and acknowledgement.
 
 `pending_since` uses database statement time, retains the minimum uncompleted age across coalescing and starts
 again only after a future acknowledgement clears the current revision. The partial index
@@ -3013,12 +3013,11 @@ index alone is not a global health sampler. Retain negative rows/revisions while
 TTL or revision reuse. Terminal erasure must fence writers and acknowledge target withdrawals before deleting
 source payload/head. This migration supplies no terminal withdrawal, cleanup completion or identity participant ACK.
 
-Source runtime reconciliation, bounded bootstrap, account maintenance/effect admission ports, current-source
-delivery, target replacement/support/total, canonical identity/rekey, terminal fences/erasure, maintenance readiness,
-count HTTP and the frozen full outcome driver remain unbuilt. Account effect work must preserve event time and
-unprocessed age through queued/pending/ERROR/lost work; readiness must include effects consumerReady and consumer
-lag, never heartbeat freshness. Suspension must change incoming eligibility through that later maintenance,
-not raw outgoing intent or this counter. No count becomes publicly exposed by this storage slice.
+The [private-count runtime below](#maintain-and-read-private-follow-counts) composes source reconciliation,
+bounded bootstrap, account effect admission, current-source delivery, target replacement and count HTTP.
+Account effect work preserves event time and unprocessed age through queued/pending/ERROR/lost work; readiness
+includes effects consumerReady and consumer lag, never heartbeat freshness. Suspension changes incoming eligibility
+through that maintenance, not raw outgoing intent or this counter. Counts remain private.
 
 - Touches: One original follow and fixed owner-local source/counter/index points in its same native transaction;
   one keyed account data read. The hook executes five SQL statements on a live delta, four otherwise. The outer

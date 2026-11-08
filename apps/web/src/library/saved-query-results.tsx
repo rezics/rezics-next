@@ -1,6 +1,10 @@
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { collectionPageAddress } from './collection-presentation';
+import { mineCollectionsCursorLimit } from './mine-collections-address';
+import { savedQueryReturnTo, savedQueryReturnToLimit } from './saved-query-management/return-to';
+
+export { savedQueryReturnTo as savedQueryDirectoryReturn } from './saved-query-management/return-to';
 
 const localOrigin = 'https://rezics.invalid';
 
@@ -19,10 +23,16 @@ export function savedQueryResultsAddress(
   return address.pathname + address.search;
 }
 
+/** The rule return nests an encoded directory address beside its own cursor and existing filter budget. */
+export function savedQueryRuleReturnLimit(locale: string): number {
+  return 16_384 + mineCollectionsCursorLimit * 9 + savedQueryReturnToLimit(locale) * 3;
+}
+
 /** Navigation operands convey no rule, credential or authority. Only this saved identity may be returned to. */
 export function savedQueryRuleReturn(value: string | undefined, id: string, locale: string, afterSave = false): string {
   const fallback = savedQueryResultsAddress(locale, id, undefined);
-  if (!value?.startsWith('/') || value.startsWith('//') || value.length > 16_384) return fallback;
+  if (!value?.startsWith('/') || value.startsWith('//') || value.length > savedQueryRuleReturnLimit(locale))
+    return fallback;
   try {
     const destination = new URL(value, localOrigin);
     if (destination.origin !== localOrigin || destination.pathname !== fallback || destination.hash) return fallback;
@@ -39,7 +49,7 @@ export function savedQueryRuleReturn(value: string | undefined, id: string, loca
     }
     return savedQueryResultsAddress(locale, id, afterSave ? undefined : cursor, search, {
       ...(layout ? { layout } : {}),
-      ...(params.get('returnTo') ? { returnTo: params.get('returnTo')! } : {}),
+      ...(params.get('returnTo') ? { returnTo: savedQueryReturnTo(params.get('returnTo')!, locale) } : {}),
     });
   } catch {
     return fallback;

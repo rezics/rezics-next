@@ -63,28 +63,28 @@ export function MalConfirmPage({
           const stateSelected = !review.skip && !!draft?.fields.includes('status');
           const fields = review.skip ? [] : stateSelected ? ['status'] : [];
           const score = review.score;
-          const nativeQuestion = question ?? score?.question;
+          const nativeQuestion = score?.question ?? question;
           const scoreKey = scoreConsentKey(row);
           const scoreAvailable = scoreRows.includes(row);
-          const questionText = question
+          const questionText = score
             ? m.library_mal_question_details({
-                label: question.label,
-                revision: question.revision,
-                grain: question.grain,
-                meaning: question.meaning ?? '',
-                min: question.scale.min,
-                max: question.scale.max,
-                step: question.scale.displayStep,
+                label: score.question.label,
+                revision: score.question.revision,
+                grain: score.question.grain,
+                meaning: score.question.meaning ?? '',
+                min: score.question.scale.minimumUnits,
+                max: score.question.scale.maximumUnits,
+                step: score.question.scale.stepUnits,
               })
-            : score
+            : question
               ? m.library_mal_question_details({
-                  label: score.question.label,
-                  revision: score.question.revision,
-                  grain: score.question.grain,
-                  meaning: score.question.meaning ?? '',
-                  min: score.question.scale.minimumUnits,
-                  max: score.question.scale.maximumUnits,
-                  step: score.question.scale.stepUnits,
+                  label: question.label,
+                  revision: question.revision,
+                  grain: question.grain,
+                  meaning: question.meaning ?? '',
+                  min: question.scale.min,
+                  max: question.scale.max,
+                  step: question.scale.displayStep,
                 })
               : null;
           const target = review.target ?? row.target;

@@ -75,6 +75,12 @@ its last page observer leaves. Session incarnation comparison and session cache 
 to `browserObservation`. Equal successful replacement retires a personal query even when its account and token
 are unchanged. Ratings inventory, Library naming adapters and catalogue readers use this public entry.
 
+`browserSessionOwner` exposes only the active `useSession` QueryClient identity and a monotonic revision, never its
+session payload or credential. Owner changes and session-cache authority changes advance that revision. Subject
+population visits combine it with their existing `browserObservation` lease, so an older QueryClient cannot keep a
+comparison alive after another owner takes over, and returning to it creates a fresh visit. Its server snapshot is
+empty; hydrated reads wait for the browser owner and observation.
+
 Decision: public catalogue inspect and credit inspection read the prepared session cache through
 `cachedBrowserSession`, which never starts a session fetch. An absent cache is unknown, a replaced successful entry
 is the next read, and malformed or signed-out data never admits a subject. `tests/session-browser-cache.test.ts`

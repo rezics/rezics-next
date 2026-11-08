@@ -24,9 +24,9 @@ private unknown identity.
 | `409 stale_cursor`                        | Restart once at the first page of the same Collection, filter and sort. Surface that restart and keep a first-page link that drops only the members cursor from the admitted `f.`/`r.`/`l.`/type protocol.                                                                         |
 
 Filter and `id` sort stay on the saved rule and the current URL protocol. Changing filters drops the old cursor.
-Commerce owns evaluation, admission, publication and native disclosure. This page binds Collection GET plus the
-members statuses above. Remaining producer work: complete saved-source execution, explicit Publication for
-public/unlisted membership, and the generated dynamic Collection DTO.
+Commerce owns evaluation, admission, publication and native disclosure. This page consumes the installed generated
+dynamic Collection metadata union and binds Collection GET plus the members statuses above. Selected-set publication
+uses the installed command below; whole-query execution/publication and its original native proof remain separate.
 
 The selected-members Publication route reviews the currently disclosed owner page, confirms replacement (including
 an explicit empty selection) through `publishSelected`, and inspects confirmed output. Current dynamic results stay
@@ -35,7 +35,7 @@ previous membership is unavailable until a verified complete command in this own
 zero members. Immutable accepted meaning on this DTO is the Collection revision plus published title and description;
 release pins stay off this page. Missing publisher support stays unavailable. Public readers still see only the last
 complete permitted set. Management owns metadata/delete; Commerce owns execution, immutable rule release, publication
-and lifecycle. Bind `collections({id}).$publishSelected.post` when generated; an absent runtime stays unavailable.
+and lifecycle. Bind the installed `collections({collectionId}).$publishSelected.post`; an absent runtime stays unavailable.
 
 Decision: the owner rule review stays mounted across page observations and resets through its pageObservation binding, so an in-flight owner read settles on the handler that started it.
 Decision: reuse the installed Dynamic Collection reader and members GET; do not fork a second members runtime.
@@ -55,7 +55,8 @@ identity, never an external destination, credentials or another Collection. Rule
 owner read. The results link requires native `collection:update` / `collection_rule.update` admission and the current
 rule operation gates; the curator ID alone grants no management. Built-ins have no rule link. Successful updates
 leave through a document navigation to force a fresh admitted read; creation retains its existing create-once
-confirmation. Departure from an unsaved or uncertain draft uses the existing draft navigation boundary. An uncertain
+confirmation. Results and rule route admission preserve the directory's full finite encoded return envelope; they
+share the decoded 4096-character cursor limit rather than applying a smaller encoded-string cutoff. Departure from an unsaved or uncertain draft uses the existing draft navigation boundary. An uncertain
 command retains its original revision, key, credential and operands even after a read or an unexpected identity in
 an acknowledgement.
 

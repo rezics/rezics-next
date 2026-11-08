@@ -675,7 +675,7 @@ test.each(['restart', 'throw', 'unavailable', 'empty', 'denied', 'ready'] as con
         vote: { state: 'present', questionId: QUESTION, questionRevision: 1, units: 0, revision: 4 },
       })),
     };
-    const source: DiscoveryState = { status: 'ready', page };
+    let source: DiscoveryState = { status: 'ready', page };
     const bound: DiscoveryBoundPage = {
       state: source,
       capabilities: {
@@ -824,19 +824,41 @@ test.each(['restart', 'throw', 'unavailable', 'empty', 'denied', 'ready'] as con
       cancelling.focus();
       await act(async () => host.querySelector('form')!.requestSubmit());
       expect(reads).toBe(beforeCancel + 1);
-      await act(async () =>
-        client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null }),
-      );
-      expect(signals[beforeCancel]!.aborted).toBe(true);
-      await act(async () => {
-        if (outcome === 'throw') refresh.reject(new TypeError('retired aggregate failure'));
-        else refresh.resolve(bound);
-      });
-      expect(host.querySelectorAll('select')).toHaveLength(0);
-      expect(window.document.activeElement).not.toBe(cancelling);
-      expect(window.scrollY).toBe(210);
-      expect(host.textContent).not.toContain('Planned');
-      expect(reads).toBe(beforeCancel + 1);
+      if (outcome === 'ready') {
+        const retiredRead = refresh;
+        refresh = deferred<DiscoveryBoundPage>();
+        const replacementPage = structuredClone(page);
+        replacementPage.as_of = `${replacementPage.as_of}:replacement`;
+        source = { status: 'ready', page: replacementPage };
+        const replacement: DiscoveryBoundPage = { state: source, capabilities: bound.capabilities };
+        await act(async () =>
+          root.render(
+            <QueryClientProvider client={client}>
+              <Live locale="fr" />
+            </QueryClientProvider>,
+          ),
+        );
+        expect(signals[beforeCancel]!.aborted).toBe(true);
+        expect(host.querySelectorAll('select')).toHaveLength(0);
+        await act(async () => retiredRead.resolve(bound));
+        expect(host.querySelectorAll('select')).toHaveLength(0);
+        await act(async () => refresh.resolve(replacement));
+        expect(host.querySelectorAll('select')).toHaveLength(2);
+      } else {
+        await act(async () =>
+          client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null }),
+        );
+        expect(signals[beforeCancel]!.aborted).toBe(true);
+        await act(async () => {
+          if (outcome === 'throw') refresh.reject(new TypeError('retired aggregate failure'));
+          else refresh.resolve(bound);
+        });
+        expect(host.querySelectorAll('select')).toHaveLength(0);
+        expect(window.document.activeElement).not.toBe(cancelling);
+        expect(window.scrollY).toBe(210);
+        expect(host.textContent).not.toContain('Planned');
+        expect(reads).toBe(beforeCancel + 1);
+      }
     } finally {
       await act(async () => root.unmount());
       client.clear();

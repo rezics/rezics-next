@@ -44,7 +44,7 @@ import {
   stageSavedQueryResultsWindowMove,
   type ResultsWindowMove,
 } from '../../library/saved-query-results-windows';
-import { isOrdinarySavedQuery } from '../../library/saved-query-results';
+import { isOrdinarySavedQuery, savedQueryDirectoryReturn } from '../../library/saved-query-results';
 
 export const Route = createFileRoute('/collections/$id')({
   staticData: { publicCache: true },
@@ -57,7 +57,7 @@ export const Route = createFileRoute('/collections/$id')({
     );
     const filters: Record<string, string | string[]> = {};
     const returnTo =
-      typeof search.returnTo === 'string' && search.returnTo.length <= 4096 ? search.returnTo : undefined;
+      typeof search.returnTo === 'string' ? savedQueryDirectoryReturn(search.returnTo, getLocale()) : undefined;
     for (const [key, value] of Object.entries(search))
       if (key === 'type' && typeof value === 'string' && value.length <= 128) filters[key] = value;
       else if (
@@ -438,9 +438,10 @@ function CollectionResultLifetime({
   }
   async function readCurrentDynamicPage() {
     assertCurrent(true);
-    const result = await readCollectionPage({ data: { ...input, credentialMode: 'session' } });
+    const ownerInput = { ...input, editor: true };
+    const result = await readCollectionPage({ data: { ...ownerInput, credentialMode: 'session' } });
     assertCurrent(true);
-    if (!collectionResultMatches(result, input, 'session', viewerId) || !('preparing' in result))
+    if (!collectionResultMatches(result, ownerInput, 'session', viewerId) || !('preparing' in result))
       throw new Error('Current dynamic Collection read does not match this viewer and page');
     return result;
   }

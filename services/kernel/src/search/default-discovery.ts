@@ -20,7 +20,7 @@ import {
   type ViewerFactInput,
   type ViewerFactsPage,
   type PreparedViewerFacts,
-} from '../library/viewer-facts.ts';
+} from '../library/index.ts';
 import { readPublicFigureViews } from '../rating/public-figure-http.ts';
 import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
 import type { AccountActor } from '../request/access.ts';

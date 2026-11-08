@@ -369,16 +369,17 @@ Decision: extend existing routes on small owner-backed seams; keep ten slices in
   is a later extension.
 - **Following target reading.** One bounded twenty-row native page retains supplied order and exact follow identity.
   Inspect a supplied Subject or Collection without extra reads, open its localized reader and return to current follow
-  controls. Deliberate inspection of one community uses the existing typed Space point read for its current title,
-  summary, address and admitted nullable Realm identity. An address routes to `/spaces/{address}`; otherwise an
-  admitted Realm routes to `/realms/{realmId}`. Missing identity, pending or refused reads and no destination remain
+  controls. FULL Space rows supply the Community producer's admitted destination and actions. Deliberate inspection
+  uses one typed Space point read for current title, summary and confirmation of those supplied operands; it cannot
+  create a destination. A supplied address routes to `/spaces/{address}`; a supplied Realm routes to
+  `/realms/{realmId}`. Missing identity, pending or refused reads and no destination remain
   distinct from empty Following and never change the follow. Current-origin/session/exposure boundaries retire
   selected responses, destinations, clipboard feedback and focus on replacement. Existing follow controls retain
-  removal, uncertain review, refresh and cursor recovery. Commerce's one-page admitted destination/action projection
-  is still missing; summary Space IDs are never used as Realm IDs or addresses. Native access cost stays producer-owned.
+  removal, uncertain review, refresh and cursor recovery. Summary Space IDs are never used as Realm IDs or addresses.
+  Supplied Realm membership actions navigate to the existing Realm command owner. Native access cost stays producer-owned.
   Decision: preserve native row order and request twenty rows, replacing the base's type grouping and hundred-row read.
   Decision: after browser return, keep target inspection and links suspended until a fresh page observation arrives.
-  Destination actions remain explicitly unavailable until the installed generated follow row supplies admitted operands;
+  Destination actions remain explicitly unavailable when the installed generated follow row supplies no admitted operands;
   Collection exposure withdrawal retires inspection and old links independently of uncertain follow commands.
   Details: [Following reading](../../apps/web/src/library/following-reading/README.md).
 - **Collection discovery.** Home consumes disclosed Collection summaries through the existing ContentItem adapter
@@ -462,24 +463,21 @@ account inspection. The [members owner](../../apps/web/src/community/members/REA
 opaque continuation, exact failed-address retry, concealed/denied/failed states, selected advice, and consumer cost.
 Pending membership does not certify participation. Selected add uses the existing membership command owner, and the
 default Realm ban Panel retains ban/unban execution; both retain their own uncertain retry and native readback
-semantics. The production roster source remains unavailable until its generated GET, exact interval proof and native
-lifetime publication are installed.
+semantics. The production route uses its session-scoped source and the installed generated `members.get` operation.
 
-Decision: retain an unavailable production source until the installed roster has generated GET declarations and exposes
-an exact membership interval for selection; account ID and member state cannot substitute for that interval.
-The installed native GET currently checks intervals internally but exposes none, and its generated client still lacks
-the GET. Browser retirement now follows successful session incarnations and current incarnation-keyed exposure changes,
+Decision: derive roster query, response, row, selected episode and action types from the installed GET, preserving
+HTTP response validation and the exact Account-scoped episode as selection authority. The source copies producer
+viewer authority, page bound and opaque continuation; it does not synthesize authority or optional method availability.
+Browser retirement follows successful session incarnations and current incarnation-keyed exposure changes,
 including cache errors and batched away/back transitions, without fetching authority or retaining private query snapshots.
-Producer lifetime observations now have an optional composition seam that retires page, selection and deferred focus
-without fetching; it remains unbound until Content publishes native disclosure/currentness ownership and exact intervals.
-Management discovery consumes existing exact-Realm `realm.update` or appearance `canManage` observations independently
-of ban advice. Effect replay preserves the original producer observation across subscription cleanup and reconnection.
-The consumer composes current selected ban/unban advice and membership addition through those command owners, with
-explicit review, immutable retry, and selected readback. The default production visit is still unavailable because
-the generated GET, exact membership interval and native lifetime notification contract are unpublished. Add stories
-use the real command owner with deterministic response fixtures; consumer fixtures establish neither native completion nor
-producer growth. Full mounted native action acceptance and eight-locale phone/desktop light/dark visual review remain
-integration-owned.
+Producer lifetime observations have an optional composition seam that retires page, selection and deferred focus
+without fetching. Management discovery consumes existing exact-Realm `realm.update` or appearance `canManage`
+observations independently of ban advice. Effect replay preserves the original producer observation across subscription
+cleanup and reconnection. The consumer composes selected ban/unban advice and membership addition through those
+command owners, with explicit review, immutable retry and selected readback. Add stories use the real command owner
+with deterministic response fixtures. Generated receiver binding and Web typing do not establish native completion
+or producer growth. Full mounted native action acceptance and eight-locale phone/desktop light/dark visual review
+remain with the original member journey and integration verification.
 
 ### Current Realm ban identity and inspection boundary
 
@@ -604,31 +602,28 @@ producer contract remains the authority for its HTTP methods, caps and expiry.
 
 ### Personal list import
 
-Web provides a signed-in visit for uploading a person's own VNDB XML export. The route uses the installed generated
-`@rezics/client` methods for the mounted native `libraryImports.vndb` API, reading that Eden function surface by
-property access; native admission owns parsing, bounds, preview, review, apply, cancellation and deletion. Web adds no
-parser, synchronizer or import endpoint. VNDB label-apply remains a later native owner surface. The visit
-reads at most eight rows per page, displays native match states and private source evidence, and requires an explicit
-catalogue target and released Library state before a row can enter the confirmed selection. Skip and retain remain
-explicit choices. Confirmation names only the displayed selection, and unknown commands can retry only with their
-captured operands and current signed-in visit. Page, review and apply-result shapes come from the installed generated
-methods. Confirmation freezes its selected commands; beginning a replacement review withdraws its prior selection
-even when native admission refuses the replacement.
+Web provides signed-in visits for a person's own VNDB XML, AniList JSON, MAL XML and Bangumi export. Each binds
+its installed typed `libraryImports` provider methods; native owners supply parsing, bounds, matching, review,
+apply and retention. VNDB lives in `personal-list-import`. Web adds no parser, synchronizer or import endpoint.
+The visits show bounded native pages, match states and private source evidence. Targets, released Library state
+and native scores require their own explicit choices; skip and retain stay explicit.
 
-Decision: A row enters apply selection only after explicit target and released Library-state review; confirmation
-applies only the displayed admitted selection.
+Decision: retain the installed provider review/apply operations and Content guarded writer. Replacement review
+withdraws old confirmation before any admission read, including refusal; uncertain replay keeps its original intent.
+Independent score consent binds the reviewed target, question, source and native units or clear choice. A later
+question point read cannot relabel that consent. Acknowledged outcomes and fresh exact vote reads have separate
+presentation; counted zero remains a vote, and clear remains deliberate.
 
-VNDB score scale, source state, progress, dates and precision, notes, privacy, release records and unmapped values
-remain private source evidence. The installed generated client still publishes only the state import request/result
-shape; Web displays the original score and keeps native score review unavailable until typed score fields and Content
-atomic admission are published. Upload and state choices do not imply public vote consent, and existing votes remain
-unchanged. Notes do not become public reviews or local ratings, existing facts remain unless the person explicitly
-reviews a native replacement, and cancellation never promises rollback of acknowledged rows.
-Native admission enforces the independent 2 MiB XML bound and 12 MiB + 64-byte escaped JSON wire bound; invalid XML
-or XML overflow returns HTTP 400, and wire overflow returns HTTP 413. Browser file size is not the wire size. Native
-support does not include alternate VNDB namespaces or provider-catalogue/MAL imports. Details and field limits live
-in [personal list import](../../apps/web/src/library/personal-list-import.md) and
-[Personal VNDB list import](../library-import-vndb.md). MAL keeps its existing format and journey owner.
+Source scores keep their provider scales, spelling and unrated meaning. Notes, privacy, dates, progress, release
+records and unmatched evidence remain private unless their native owner admits an explicitly reviewed field.
+Uploading or selecting Library state never grants public vote consent. Existing votes remain unless the person
+chooses a native replacement; cancellation does not roll back acknowledged rows. Supported same-home score effects
+use Content's question and Semantic identity participants; foreign-home admission remains native-owned.
+
+VNDB accepts at most 2 MiB XML and independently bounds escaped JSON wire input at 12 MiB + 64 bytes. Invalid or
+oversized XML returns HTTP 400; oversized wire input returns HTTP 413. Browser file size is not wire size. Provider
+operation bindings and focused coverage live in [personal list import](../../apps/web/src/library/personal-list-import.md);
+VNDB field limits and native admission live in [Personal VNDB list import](../library-import-vndb.md).
 
 ## Ownership
 
@@ -969,8 +964,9 @@ Eight-locale copy and full-page phone390/desktop1280 stories cover selection, re
 source failure. Connected assertions cover native wire operands and refusal, independent recovery/public head,
 selection bounds, delayed work, equal-success and ABA replacement, QueryClient/visit/unmount and useful ordinary
 notifications. They are authored **UNRUN**; source presence and local typing are not whole-feature acceptance.
-Native/browser/growth/physical verification and integration proof remain deferred. Private first-render/SSR and
-unobserved cross-cache credential history remain unresolved, rather than proved by an in-memory fixture.
+Native/browser/growth/physical verification and integration proof remain deferred.
+
+Decision: Subject population admission keeps its per-client `browserObservation` and incarnation-bound visit lease, and captures the public session owner's monotonic active-QueryClient revision. Server rendering stays unknown until hydration; owner replacement retires the previous comparison even if the same reader later returns.
 
 Content retains questions, privacy/math, aggregates and native vote authority; Accounts/Auth retain session and
 Realm disclosure authority; Search retains public composition/canonical frame and its shared-file regions. The

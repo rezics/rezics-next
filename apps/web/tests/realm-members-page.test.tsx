@@ -7,7 +7,11 @@ import { QueryClient } from '@tanstack/react-query';
 import { realmMembersLifetimeSource } from '../src/community/members/lifetime';
 import type { MembersCaller } from '../src/community/members/page';
 import type { MemberAdditionIntent, MemberPageRead, RealmMembersSource } from '../src/community/members/source';
-import type { NativeRealmMember, NativeRealmMembersRead, RealmMembersReadInput } from '../src/community/members/native';
+import type {
+  NativeRealmMemberRow,
+  NativeRealmMembersRead,
+  RealmMembersReadInput,
+} from '../src/community/members/native';
 import type { SelectedRealmMember } from '../src/community/members/selected-account';
 import { loadRealmBans, writeRealmBan } from '../src/community/realm-bans';
 import { RealmBansControl } from '../src/community/realm-bans-control';
@@ -308,7 +312,7 @@ test('mounted native source renders producer viewer authority and preserves the 
   const viewerId = '0192f3a0-6c1e-7b2a-9d4e-000000000401';
   const episode = 'mep1.7-native-membership-proof';
   const unavailable = { state: 'unavailable', reason: 'no_mounted_method' } as const;
-  const member: NativeRealmMember = {
+  const member: NativeRealmMemberRow = {
     accountId,
     episode,
     membership: 'member',
