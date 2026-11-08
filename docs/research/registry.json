@@ -1936,7 +1936,7 @@
       "topic": "accounts-post-seed-api-capture",
       "researcher": "codex",
       "state": "adopted",
-      "decision": "docs/goals/accounts.capabilities.md#first-public-journeys"
+      "decision": "docs/goals/accounts.capabilities.md#post-seed-api-capture"
     }
   ]
 }

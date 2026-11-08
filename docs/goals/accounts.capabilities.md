@@ -6,7 +6,45 @@ Decision: capability rows record source-backed native coverage and its evidence 
 
 ## First-public journeys
 
-Decision: post-seed API capture reuses only original J03/J04/J10 with independent newly registered humans, explicit shared-runtime and seed identity, private random credentials and isolated phase evidence; it does not update the complete journey census or establish browser or whole-Goal acceptance. [Capture research](../research/accounts-post-seed-api-capture-codex.md) records the evidence boundaries.
+### Post-seed API capture
+
+Decision: adopt the [capture research](../research/accounts-post-seed-api-capture-codex.md) as the acceptance contract
+for the original recovery, credential replacement and website refresh-family revocation API journeys. Reuse the
+original runner functions and assertions with three independent newly registered ordinary humans on one admitted,
+seeded runtime. Each case records its result independently and continues after a sibling failure. This isolated
+capture leaves the complete nineteen-journey census and browser evidence separate.
+
+The existing visual/seed runtime owner supplies the current slot, explicit Web/issuer/native/Kernel origins, full
+runtime revision, completed seed result and matching private key, binding and local recovery-delivery paths.
+Capture records the source revision, runtime revision and seed-result hash together. A failed startup or absent
+handoff establishes only an unmet prerequisite; it supplies no result for an unreached API phase.
+
+| Original journey | Required reached phases and independent readback |
+| --- | --- |
+| Recovery | Sign up and sign in; start recovery; receive the actual private local delivery; complete recovery; try both old and new passwords; read with the original session. |
+| Credential replacement | Sign up and sign in; stage, approve and apply the original effect with the same subject/session binding; read back password and current-session consequences independently. |
+| Website refresh-family revocation | Sign up and obtain website OAuth authority; prove a Kernel read with the original bearer; send the original six form fields with their client, resource, issuer and token-kind bindings; independently repeat the Kernel read with that same bearer after revocation. |
+
+Record elapsed time, reached phase, first failing operation, allowlisted public response codes/shapes, request-field
+names and presence, authority relationships and native readbacks. Keep passwords, credentials, proofs, assertions,
+raw private keys and fixture contents private. Trusted internal diagnostics become causal evidence only when the
+runtime owner supplies an actual request correlation; nearby log lines supply none. A response status alone does
+not locate a service defect. In particular, a successful revocation response does not establish the original
+family or Kernel-authority consequence without the formerly admitted bearer readback.
+
+[Guarded recovery](../../services/auth/README.md#guarded-human-recovery),
+[trusted account effects](../../services/auth/README.md#trusted-account-effects),
+[website endpoints](../../services/auth/README.md#endpoints) and
+[source diagnostics](../../services/auth/README.md#source-diagnostic-emission) retain native behaviour and authority.
+The [seeded-walk owner](../development/local-stack.md#seeded-journey-walks) retains runtime startup and seed custody.
+Collect all three results before briefing one causal repair batch: capture owns setup ordering, the runtime owner
+owns startup, and Auth/Access own demonstrated service defects. Read-only reference research supplies no replacement
+Auth implementation or permission exception.
+
+Focused fixtures, source integration and preflight records do not complete these API journeys. Actual API capture,
+original browser receiving, whole Auth acceptance and whole-Goal completion remain distinct evidence stages.
+
+### Original journey census
 
 Decision: retain all nineteen original outcomes and assertions. Receive Auth catalogue/lifetime producers `31f519929c` and `9fc8c4745a`, boot receipt binding `e18772206f`, the complete selector producer at integrated `1cfb9ccec1cbf3afb5032dbca273cef0d4e1083f`, and the paid root composition from `64fd7d5011`. The selector formatting tip requires its integrated selection implementation; receive that coherent producer delta rather than the formatting hunk alone. The root delta moves the existing Recent Search binding around shell and outlet inside the real Library boundary, retaining one actual QueryClient/session host. Preserve the original driver, exact fixture-owned server selection and Bun leader/adopted-descendant custody. Under the authenticated final-typing decision, worker completion uses changed-workspace Web typing only; unchanged ten-file fixtures, Auth thirty-case acceptance and original nineteen native/browser/growth journeys remain dev verification. No money paths changed. Complete receiving evidence and the accepted reference union remain in `.temp/continuation/accounts-walk-receiving.md`.
 
