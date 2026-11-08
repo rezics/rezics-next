@@ -665,8 +665,11 @@ test('Auth erasure history uses its database runner while ordinary Auth unit sel
     },
   });
 
-  expect(commands).toContainEqual([
-    'env',
+  const normalizedCommands = commands.map((command) => {
+    const executable = command.findIndex((argument) => argument === 'bun' || argument.endsWith('/bun.exe'));
+    return ['bun', ...command.slice(executable + 1)];
+  });
+  expect(normalizedCommands).toContainEqual([
     'bun',
     'run',
     '--cwd',
@@ -680,8 +683,7 @@ test('Auth erasure history uses its database runner while ordinary Auth unit sel
     '--',
     'fixture.test.ts',
   ]);
-  expect(commands).toContainEqual([
-    'env',
+  expect(normalizedCommands).toContainEqual([
     'bun',
     'test',
     '--test-name-pattern',
@@ -885,8 +887,9 @@ test('precommand remote browser slot failure stays transport custody with no pro
   expect(ctx.store.devVerifierLatestRound()!.round).toMatchObject({ failed: 0, unknown: 1 });
   expect(repairs).toHaveLength(0);
   expect([...ctx.findings.values()]).toHaveLength(1);
-  expect([...ctx.findings.values()][0]).toMatchObject({
-    test: undefined,
+  const finding = [...ctx.findings.values()][0]!;
+  expect(finding.test).toBeUndefined();
+  expect(finding).toMatchObject({
     cause: 'transport',
     result: 'infrastructure',
     status: 'unknown',

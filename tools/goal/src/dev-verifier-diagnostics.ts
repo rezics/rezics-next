@@ -574,7 +574,9 @@ export function isPrecommandRemoteTransport(output: string): boolean {
 }
 
 export function isAuthDatabasePlacementFailure(output: string): boolean {
-  return /Auth test databases require placement; use bun run --cwd services\/auth check <file>/i.test(output);
+  return /Auth test databases require placement; use bun run --cwd (?:services\/auth|<path>) check (?:<file>|<path>)/i.test(
+    output,
+  );
 }
 
 export function isRsyncTelemetry(line: string): boolean {
