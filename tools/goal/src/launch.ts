@@ -1,3 +1,4 @@
+import { localWorkerHost } from './worker-host-custody.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import {
   proofSourceUnchanged,
@@ -329,6 +330,7 @@ export async function launch(
     // Publication and spawn share the fence's write lock. A retry cannot miss a just-started process.
     store.write(attempt, () => {
       store.event(attempt, 'worker-run-started', {
+        workerHost: localWorkerHost(),
         logStartOffset,
         resuming,
         checkWaitBaseline: checkWaitMs(attempt.logPath),
