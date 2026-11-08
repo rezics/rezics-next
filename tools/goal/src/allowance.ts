@@ -272,6 +272,27 @@ export function choosePool(
   return selected;
 }
 
+/** Apply the same freshness, reserve, pacing and occupancy rules to one already selected pool. */
+export function poolAllowed(
+  pool: Pool,
+  readings: readonly PoolReading[],
+  options: PoolSelectionOptions = {},
+): boolean {
+  const now = options.now ?? Date.now();
+  const spanMs = options.spanMs ?? defaultPolicy.pacing.burnSpanMs;
+  return (
+    assessPool(
+      pool,
+      indexAllowanceReadings(readings, options.history ?? []),
+      now,
+      options.policy,
+      spanMs,
+      options.running ?? {},
+      options.ignoreBurnCeiling === true,
+    ) !== null
+  );
+}
+
 /** The routed profile's pool, or the first fallback that has one; `undefined` when every candidate is refused. */
 export function findAllowedPool(
   profile: Profile,

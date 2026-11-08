@@ -5,6 +5,7 @@ import { processIdentity } from '../process.ts';
 const log = process.env.FAKE_RPC_LOG!;
 let nextThread = 0;
 let nextTurn = 0;
+let lateGoalStartSent = false;
 const goals = new Map<string, any>();
 const turns = new Map<string, any>();
 const delayed = new Map<number, any>();
@@ -14,8 +15,12 @@ function stalled(method: string, params: any): boolean {
   const path = process.env.FAKE_RPC_STALL_FILE;
   if (!path) return false;
   try {
-    const rule = JSON.parse(readFileSync(path, 'utf8')) as { method?: string; threadId?: string };
-    return rule.method === method && (!rule.threadId || rule.threadId === params?.threadId);
+    const rule = JSON.parse(readFileSync(path, 'utf8')) as { method?: string; threadId?: string; status?: string };
+    return (
+      rule.method === method &&
+      (!rule.threadId || rule.threadId === params?.threadId) &&
+      (!rule.status || rule.status === params?.status)
+    );
   } catch {
     return false;
   }
@@ -50,10 +55,29 @@ function respond(message: any): void {
       result = { thread: { id: p.threadId, turns: turns.has(p.threadId) ? [turns.get(p.threadId)] : [] } };
       break;
     case 'thread/goal/set': {
+      const previous = goals.get(p.threadId);
       const goal = { tokensUsed: 0, timeUsedSeconds: 0, ...goals.get(p.threadId), ...p };
       goals.set(p.threadId, goal);
       result = { goal };
       send({ method: 'thread/goal/updated', params: { threadId: p.threadId, goal } });
+      if (process.env.FAKE_GOAL_AUTO_START_ON_ACTIVE === '1' && previous?.status === 'paused' && p.status === 'active') {
+        const turn = { id: `turn-${++nextTurn}`, status: 'inProgress', source: 'goal' };
+        turns.set(p.threadId, turn);
+        send({ method: 'turn/started', params: { threadId: p.threadId, turn } });
+      }
+      if (
+        process.env.FAKE_GOAL_LATE_START_ON_PAUSE === '1' &&
+        !lateGoalStartSent &&
+        previous?.status === 'active' &&
+        p.status === 'paused'
+      ) {
+        lateGoalStartSent = true;
+        setTimeout(() => {
+          const turn = { id: `turn-${++nextTurn}`, status: 'inProgress', source: 'goal' };
+          turns.set(p.threadId, turn);
+          send({ method: 'turn/started', params: { threadId: p.threadId, turn } });
+        }, 0);
+      }
       break;
     }
     case 'thread/goal/get':

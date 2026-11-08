@@ -7,6 +7,7 @@ import {
   countRunningByPool,
   countWaitingByPool,
   PoolUnavailableError,
+  poolAllowed,
   poolBurnStatus,
 } from './allowance.ts';
 import { fixturePool, reading } from './test-support.ts';
@@ -66,6 +67,7 @@ test('A pool whose window used percent rose 2 points over the last 90 minutes, w
   const cursorReading = observed(cursor, 5, now);
   expect(burnPerHour(current, history, { now, spanMs: span })).toBeCloseTo(2 / 1.5, 5);
   expect(() => choosePool(profile, [codex], [current], { now, history, spanMs: span })).toThrow('no allowed pool');
+  expect(poolAllowed(codex, [current], { now, history, spanMs: span })).toBe(false);
   const chosen = choosePoolWithFallback(profile, [cursorProfile], [codex, cursor], [current, cursorReading], {
     now,
     history,

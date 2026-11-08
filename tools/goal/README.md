@@ -2915,14 +2915,15 @@ the eleventh in an hour sends the supermanager one `environment` alarm and the m
 turns-without-decision limit counts consecutive completed turns. A turn in which a ready brief in the Goal's backlog was
 written or moved back (by modification or status time), or a brief the backlog run dispatched was written, counts as a
 decision, as any control-plane command already does; a decision resets the count to zero.
-For Codex managers, the host pauses the existing native Goal after a completed turn when no inbox event needs delivery.
-The managed manager remains running on the same thread with its objective, token budget and usage. When an inbox event
-arrives, the host sets that Goal active, then delivers the event through the existing start-or-steer path. If Goal
-activation starts a turn before the explicit start request, the host resumes the thread and steers that turn, so the
-event is delivered once. A completed turn returns the Goal to paused when no new event is waiting. Recovery reads the
-persisted Goal status and only reactivates it to deliver pending inbox events; idle polling creates no model turns.
-Focused fake-app-server tests pin the pause/reactivation and turn-race request behavior; they do not exercise provider
-scheduling. See the
+For Codex managers, the host persists idle intent and pauses the existing native Goal after each matched completed turn.
+The managed manager remains running on the same thread with its objective, token budget and usage. A real inbox event
+is held unread while the existing pool policy and retained allowance history refuse a new model turn; the current
+inbox tick retries that admission without querying the provider. Once admitted, the host reactivates the parked Goal
+and delivers through the existing start-or-steer path. If Goal activation starts the turn first, the host rejoins that
+turn and steers the event into it. Completion parks autonomy again; empty wakeups and host recovery do not resume an
+idle thread. Managed user pauses and Goal budget/guard states stay distinct and are never reactivated by an inbox
+event. Focused fake-app-server tests pin idle parking, preserved mail, same-thread delivery and the start/steer race;
+they do not exercise provider scheduling. See the
 [official OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex)
 for native continuation behavior.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is
