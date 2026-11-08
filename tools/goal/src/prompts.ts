@@ -630,7 +630,7 @@ export function renderManagerOpening(input: {
       policy.backlog.stoppedTaskLimitMs === 3_600_000 ? 'an hour' : `${policy.backlog.stoppedTaskLimitMs} ms`,
     idleRule:
       input.spec.engine === 'codex'
-        ? 'When no decision is pending, end the turn; do not use clock.sleep or poll: the controller resumes this thread when an inbox event arrives.'
+        ? 'When no new inbox event or concrete result needs action, finish with a normal response and no tool call; native Goal continues after tool use. Do not read or wait on inbox, sleep, or poll workers/checks to look for work. The controller resumes this thread on the next inbox event.'
         : `When no decision is pending, run ${input.command} inbox wait ${input.spec.id} in the background and end the turn.`,
   };
   const roleText = collapse(fillTemplate(roleFile.text, view, policy));

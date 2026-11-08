@@ -47,7 +47,7 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   kind?: 'managed';
   threadId: string | null;
   activeTurnId: string | null;
-  /** Native Goal autonomy must remain paused until a real inbox event is dispatched. */
+  /** The managed turn ended without pending inbox work; native Goal remains active until new work arrives. */
   waitingForInbox?: boolean;
   status: 'starting' | 'running' | 'paused' | 'complete' | 'renewal-failed';
   startedAt: number;
@@ -366,7 +366,7 @@ export class ManagerSessions {
     if (state) this.background(state.id, () => this.handleNotification(state.id, notification));
   }
   private async handleNotification(id: string, { method, params }: Notification): Promise<void> {
-    let state = this.get(id);
+    const state = this.get(id);
     assertManagedManager(state);
     let completedCurrentTurn = false;
     // Notifications from a retired Codex thread can already be queued when renewal swaps sessions.
@@ -374,11 +374,6 @@ export class ManagerSessions {
     if (method === 'turn/started') {
       this.turnStarted(state, params.turn.id);
       if (state.status !== 'running') await this.pauseRemote(state);
-      else if (state.waitingForInbox && this.inbox.notifications(id).length === 0) {
-        await this.pauseForInbox(id);
-        state = this.get(id);
-        assertManagedManager(state);
-      }
     } else if (method === 'turn/completed') {
       completedCurrentTurn = this.turnEnded(state, params.turn.id);
     } else if (method === 'thread/goal/updated') {
@@ -391,23 +386,12 @@ export class ManagerSessions {
       return;
     } else return;
     this.save(state);
-    if (
-      method === 'thread/goal/updated' &&
-      state.status === 'running' &&
-      state.waitingForInbox &&
-      state.goalState?.status === 'active' &&
-      this.inbox.notifications(id).length === 0
-    ) {
-      await this.pauseForInbox(id);
-      state = this.get(id);
-      assertManagedManager(state);
-    }
     if (state.status === 'running') {
       if (method === 'thread/goal/updated' && (await this.handleGoalUpdate(state))) return;
       if (await this.checkLimits(state)) return;
       if (state.goalState?.status === 'complete') await this.completeInternal(state.id);
     }
-    if (completedCurrentTurn) await this.pauseForInbox(id);
+    if (completedCurrentTurn) this.markWaitingForInbox(id);
   }
   /** Event-driven managers sleep only by ending the turn: a `clock.sleep` loop re-reads the whole context each call. */
   private countSleep(state: ManagedManagerState): void {
@@ -939,7 +923,7 @@ export class ManagerSessions {
       await this.failRenewal(id, error, attempts);
     }
   }
-  private async pauseForInbox(id: string): Promise<void> {
+  private markWaitingForInbox(id: string): void {
     const state = this.get(id);
     assertManagedManager(state);
     if (
@@ -951,25 +935,14 @@ export class ManagerSessions {
       return;
     state.waitingForInbox = true;
     this.save(state);
-    if (state.goalState?.status === 'active') {
-      await this.pauseRemote(state, true);
-    } else if (state.activeTurnId) {
-      const client = await this.transport.client(state.pool);
-      if (this.inbox.notifications(id).length === 0)
-        await this.transport.interruptTurn(client, state, state.threadId, state.activeTurnId);
-    }
   }
-  private async pauseRemote(state: ManagerState, preservePendingDelivery = false): Promise<void> {
+  private async pauseRemote(state: ManagerState): Promise<void> {
     assertManagedManager(state);
     if (state.engine === 'codex' && state.threadId) {
       const client = await this.transport.client(state.pool);
       state.goalState = await this.transport.setGoalStatus(client, state.threadId, 'paused');
       this.save(state);
-      if (
-        state.activeTurnId &&
-        (!preservePendingDelivery || this.inbox.notifications(state.id).length === 0)
-      )
-        await this.transport.interruptTurn(client, state, state.threadId, state.activeTurnId);
+      if (state.activeTurnId) await this.transport.interruptTurn(client, state, state.threadId, state.activeTurnId);
     }
   }
   private async stopInternal(id: string): Promise<void> {
@@ -1001,7 +974,7 @@ export class ManagerSessions {
     if (state.status !== 'running') return;
     if (state.engine === 'claude') return await this.reviveClaude(state);
     const events = this.inbox.notifications(id);
-    // Inbox polling with no delivery must leave native Goal autonomy paused.
+    // An empty inbox wake is bookkeeping only; keep the active native Goal untouched.
     if (events.length === 0) return;
     const waitingForInbox = state.waitingForInbox === true;
     if (waitingForInbox) {
@@ -1009,7 +982,7 @@ export class ManagerSessions {
       this.save(state);
     }
     const client = await this.transport.client(state.pool);
-    if (waitingForInbox || state.goalState?.status === 'paused') {
+    if (state.goalState?.status === 'paused') {
       state.goalState = await this.transport.setGoalStatus(client, state.threadId!, 'active');
       this.save(state);
     }
@@ -1257,7 +1230,7 @@ export class ManagerSessions {
             return;
           }
           if (current.engine === 'codex' && (current.waitingForInbox || current.activeTurnId === null)) {
-            await this.pauseForInbox(current.id);
+            this.markWaitingForInbox(current.id);
             current = this.get(current.id);
             assertManagedManager(current);
           }

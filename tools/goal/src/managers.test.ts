@@ -13,10 +13,7 @@ import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
 import type { WorkerEvent } from './store.ts';
 import type { Task } from './types.ts';
 
-async function setup(
-  policy?: ControlPolicy,
-  options: { autoTurnOnGoalActivation?: boolean; autoTurnDuringGoalPause?: boolean } = {},
-) {
+async function setup(policy?: ControlPolicy) {
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'state.sqlite'));
   const log = join(temporary.path, 'rpc.jsonl');
@@ -25,8 +22,6 @@ async function setup(
     ...process.env,
     FAKE_RPC_LOG: log,
     FAKE_RPC_FAIL_FILE: failFile,
-    FAKE_RPC_AUTO_TURN_ON_GOAL_ACTIVATION: options.autoTurnOnGoalActivation ? '1' : '0',
-    FAKE_RPC_AUTO_TURN_DURING_GOAL_PAUSE: options.autoTurnDuringGoalPause ? '1' : '0',
   });
   await client.initialize();
   const inbox = new SqliteManagerInbox(db, temporary.path);
@@ -553,8 +548,8 @@ test('JSON-RPC errors propagate and an exiting app-server rejects pending reques
   }
 });
 
-test('A Codex manager pauses native Goal while idle and wakes once for an inbox event.', async () => {
-  const s = await setup(undefined, { autoTurnOnGoalActivation: true });
+test('A native source=goal turn stays active without mail; a genuine inbox event starts one pinned turn.', async () => {
+  const s = await setup();
   try {
     const manager = await s.managers.start(s.spec);
     await s.notify({
@@ -568,8 +563,9 @@ test('A Codex manager pauses native Goal while idle and wakes once for an inbox 
     expect(s.managers.get(manager.id)).toMatchObject({
       status: 'running',
       activeTurnId: null,
+      waitingForInbox: true,
       usage: { total: { totalTokens: 500 } },
-      goalState: { status: 'paused', objective: s.spec.objective, tokenBudget: s.spec.budget },
+      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
     });
     expect(s.requests().find((r) => r.method === 'thread/goal/set')?.params).toEqual({
       threadId: manager.threadId,
@@ -583,6 +579,24 @@ test('A Codex manager pauses native Goal while idle and wakes once for an inbox 
     expect(
       s.requests().filter((r) => r.method === 'turn/start' && r.params.threadId === manager.threadId),
     ).toHaveLength(1);
+    expect(s.requests().filter((r) => r.method === 'thread/goal/set')).toHaveLength(1);
+    await s.notify({
+      method: 'turn/started',
+      params: { threadId: manager.threadId, turn: { id: 'goal-turn', status: 'inProgress', source: 'goal' } },
+    });
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: 'goal-turn', status: 'completed' } },
+    });
+    expect(s.managers.get(manager.id)).toMatchObject({
+      status: 'running',
+      activeTurnId: null,
+      waitingForInbox: true,
+      turnsWithoutDecision: 2,
+      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
+    });
+    expect(s.requests().filter((r) => r.method === 'turn/interrupt')).toHaveLength(0);
+    expect(s.requests().filter((r) => r.method === 'thread/goal/set')).toHaveLength(1);
     s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Choose the next brief' });
     await s.managers.wake(manager.id);
     await s.managers.flush();
@@ -594,20 +608,13 @@ test('A Codex manager pauses native Goal while idle and wakes once for an inbox 
       effort: 'high',
       input: [{ type: 'text', text: 'Choose the next brief', text_elements: [] }],
     });
-    expect(s.requests().filter((r) => r.method === 'turn/steer')).toEqual([
-      expect.objectContaining({
-        params: {
-          threadId: manager.threadId,
-          expectedTurnId: 'turn-2',
-          input: [{ type: 'text', text: 'Choose the next brief', text_elements: [] }],
-        },
-      }),
-    ]);
-    expect(s.requests().filter((r) => r.method === 'thread/goal/set').map((r) => r.params.status)).toEqual([
-      'active',
-      'paused',
-      'active',
-    ]);
+    expect(s.requests().filter((r) => r.method === 'turn/steer')).toHaveLength(0);
+    expect(
+      s
+        .requests()
+        .filter((r) => r.method === 'thread/goal/set')
+        .map((r) => r.params.status),
+    ).toEqual(['active']);
     expect(s.inbox.notifications(manager.id)).toHaveLength(0);
     expect(s.managers.get(manager.id)).toMatchObject({
       threadId: manager.threadId,
@@ -623,58 +630,20 @@ test('A Codex manager pauses native Goal while idle and wakes once for an inbox 
     expect(s.managers.get(manager.id)).toMatchObject({
       status: 'running',
       activeTurnId: null,
-      goalState: { status: 'paused' },
+      waitingForInbox: true,
+      goalState: { status: 'active' },
     });
-    expect(s.managers.get(manager.id).turns).toBe(2);
+    expect(s.managers.get(manager.id).turns).toBe(3);
     await s.managers.wake(manager.id);
     expect(
       s.requests().filter((r) => r.method === 'turn/start' && r.params.threadId === manager.threadId),
     ).toHaveLength(2);
-    expect(s.requests().filter((r) => r.method === 'thread/goal/set').map((r) => r.params.status)).toEqual([
-      'active',
-      'paused',
-      'active',
-      'paused',
-    ]);
-  } finally {
-    await s.close();
-  }
-});
-
-test('A native turn started during the idle pause RPC is interrupted before it can continue.', async () => {
-  const s = await setup(undefined, { autoTurnDuringGoalPause: true });
-  try {
-    const manager = await s.managers.start(s.spec);
-    await s.notify({
-      method: 'turn/completed',
-      params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
-    });
-
-    expect(s.managers.get(manager.id)).toMatchObject({
-      status: 'running',
-      activeTurnId: null,
-      goalState: { status: 'paused' },
-      waitingForInbox: true,
-    });
-    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(1);
-    expect(s.requests().filter((r) => r.method === 'turn/interrupt')).toEqual([
-      expect.objectContaining({
-        params: { threadId: manager.threadId, turnId: 'turn-2' },
-      }),
-    ]);
-    await s.notify({
-      method: 'thread/goal/updated',
-      params: {
-        threadId: manager.threadId,
-        goal: { status: 'active', tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: s.spec.budget },
-      },
-    });
-    expect(s.managers.get(manager.id)).toMatchObject({
-      status: 'running',
-      activeTurnId: null,
-      waitingForInbox: true,
-      goalState: { status: 'paused', objective: s.spec.objective, tokenBudget: s.spec.budget },
-    });
+    expect(
+      s
+        .requests()
+        .filter((r) => r.method === 'thread/goal/set')
+        .map((r) => r.params.status),
+    ).toEqual(['active']);
   } finally {
     await s.close();
   }
@@ -698,8 +667,9 @@ test('Inbox decisions wake the existing thread once before and after host recove
     expect(s.managers.get(state.id)).toMatchObject({
       status: 'running',
       activeTurnId: null,
+      waitingForInbox: true,
       usage: { total: { totalTokens: 900 } },
-      goalState: { status: 'paused', objective: s.spec.objective, tokenBudget: s.spec.budget },
+      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
     });
     expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(1);
     s.inbox.deliver({ managerId: state.id, kind: 'instruction', summary: 'Decide before the host stops' });
@@ -713,7 +683,8 @@ test('Inbox decisions wake the existing thread once before and after host recove
     expect(s.managers.get(state.id)).toMatchObject({
       status: 'running',
       activeTurnId: null,
-      goalState: { status: 'paused' },
+      waitingForInbox: true,
+      goalState: { status: 'active' },
     });
     s.inbox.record(state.id, { kind: 'merged' });
     await s.managers.wake(state.id);
@@ -729,7 +700,7 @@ test('Inbox decisions wake the existing thread once before and after host recove
       status: 'running',
       activeTurnId: null,
       waitingForInbox: true,
-      goalState: { status: 'paused', objective: s.spec.objective, tokenBudget: s.spec.budget },
+      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
     });
     expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
     s.inbox.deliver({ managerId: state.id, kind: 'instruction', summary: 'Committed while the host was down' });
@@ -764,13 +735,12 @@ test('Inbox decisions wake the existing thread once before and after host recove
     await recovered.flush();
     expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(3);
     expect(s.requests().filter((r) => r.method === 'turn/steer')).toHaveLength(0);
-    expect(s.requests().filter((r) => r.method === 'thread/goal/set').map((request) => request.params.status)).toEqual([
-      'active',
-      'paused',
-      'active',
-      'paused',
-      'active',
-    ]);
+    expect(
+      s
+        .requests()
+        .filter((r) => r.method === 'thread/goal/set')
+        .map((request) => request.params.status),
+    ).toEqual(['active']);
     expect(s.requests().some((r) => ['thread/fork', 'thread/goal/clear', 'turn/interrupt'].includes(r.method))).toBe(
       false,
     );
@@ -821,8 +791,10 @@ test('a Codex manager opening ends idle turns instead of sleeping and names its 
     await s.managers.start(s.spec);
     const opening = s.requests().find((r) => r.method === 'turn/start')?.params.input[0]?.text as string;
     expect(opening).not.toContain('use clock.sleep inside the active turn');
-    expect(opening).toContain('When no decision is pending, end the turn; do not use clock.sleep or poll');
-    expect(opening).toContain('the controller resumes this thread when an inbox event arrives');
+    expect(opening).toContain('finish with a normal response and no tool call');
+    expect(opening).toContain('Do not read or wait on inbox, sleep, or poll workers/checks to look for work');
+    expect(opening).toContain('The controller resumes this thread on the next inbox event');
+    expect(opening).toContain('Read and acknowledge delivered inbox events');
     expect(opening).toContain(`ready briefs in ${join(s.path, 'state', 'backlog', 'refactor')}`);
     expect(opening).toContain("Synthesize your workers' reports");
     expect(opening).toContain('at most 60 words each');
@@ -830,6 +802,7 @@ test('a Codex manager opening ends idle turns instead of sleeping and names its 
     expect(opening).toContain('Read your brief and continuation once per session');
     expect(opening).toContain('CONTINUATION.md under 8,000 characters, replaced, not appended');
     expect(opening).toContain('Act on each stopped task within an hour');
+    expect(s.managers.get(s.spec.id).promptManifest?.overBudget).toEqual([]);
   } finally {
     await s.close();
   }
