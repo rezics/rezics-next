@@ -309,8 +309,8 @@ async function runGenerator(
   onStart: (pid: number | undefined) => void,
 ): Promise<number> {
   throwIfAborted(signal);
-  // `bun run` owns a script and compiler descendants; cancellation must settle their shared process group.
-  const child = spawn('bun', ['run', 'generate'], {
+  // Run the generator through this process's pinned Bun; cancellation must settle its compiler descendants too.
+  const child = spawn(process.execPath, ['scripts/generate.ts'], {
     cwd: appDirectory,
     env,
     detached: process.platform !== 'win32',
