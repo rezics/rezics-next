@@ -101,10 +101,10 @@ export declare function createNativeLibraryPresentation(ports: NativeLibraryPres
         limit?: number;
         languages?: readonly string[];
     }, deadline: number): Promise<import("../../search/service-contract.ts").SavedCatalogueMembersPage | {
+        preparing: true;
+    } | {
         members: import("../collection-reads.ts").MemberView[];
         next: string | null;
-    } | {
-        preparing: true;
     }>;
     fullView<T>(deps: LibraryPresentationDependencies, actor: Actor, view: string | undefined, body: T, options: {
         deadline: number;

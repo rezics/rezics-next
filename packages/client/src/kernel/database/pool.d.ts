@@ -1,4 +1,5 @@
 import { type Pool, type PoolClient } from 'pg';
+export { partitionReadClient, partitionReadClientObservation, partitionReadClients } from './read-snapshot.ts';
 export declare const KERNEL_POOL_MAX = 10;
 export declare function readPoolAcquireTimeoutMillis(env?: NodeJS.ProcessEnv): number;
 export declare class NestedPoolCheckoutError extends Error {

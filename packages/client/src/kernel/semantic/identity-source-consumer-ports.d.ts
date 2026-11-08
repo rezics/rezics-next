@@ -3,7 +3,7 @@ import type { CommandTransaction } from '../command/command.ts';
 import type { WorkAllowance, WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type { NativeCollectionWork } from '../library/collection-native-work.ts';
 import type { AccountIdentityReversalSettlement, AccountIdentitySource } from '../access/agent-verification-identity.ts';
-import type { IdentityIntent, IdentityNativeReceipt, IdentityReceipt } from './identity-epoch-contract.ts';
+import type { IdentityEpochStore, IdentityIntent, IdentityNativeReceipt, IdentityReceipt } from './identity-epoch-contract.ts';
 import type { IdentitySourceConsumerContext, IdentitySourceConsumerReference } from './identity-source-consumer-custody.ts';
 import type { LibraryExpectedEffectAfter, LibraryScopeEffectSeal, LibraryScopeEffectsKey, LibraryScopeEffectsPage, LibraryScopeEffectsPageInput } from '../library/identity-scope-effects.ts';
 export type IdentitySourceWorkDeclaration = Readonly<{
@@ -15,6 +15,7 @@ type AccountReceipt = Exclude<IdentityReceipt, {
 }>;
 /** Composition installs the Access, Library and binding bodies. Source never value-imports those owners. */
 export type IdentitySourceConsumerRuntime = Readonly<{
+    identityEpochStore(): IdentityEpochStore;
     readAccountIdentitySource(tx: CommandTransaction, receipt: AccountReceipt, intent?: IdentityIntent, undoOnly?: boolean): Promise<AccountIdentitySource>;
     originalSourceDeclaration(): IdentitySourceWorkDeclaration;
     reversalSettlementDeclaration(): IdentitySourceWorkDeclaration;
