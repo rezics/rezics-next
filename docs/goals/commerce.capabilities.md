@@ -540,30 +540,32 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Source authority:** [Profile consumers](../library-profile-consumers.md); [Audit](../research/api-acceptance-gaps.md); [Filtered lists](../filtered-lists.md).
 
-**Personas:** P; only Alice's supported population and live own completed-session absence are relevant; Bob/anonymous never query Alice's private completion.
+**Personas:** Alice queries her own admitted population; Bob's facts remain independent, and anonymous readers never receive Alice's private predicate or facts.
 
-**Released fixture data:** R, L, H, C, Q; proposed owner set `{R-quick,R-edge,R-other-cooked}` within supported population. NOTstate includes no-entry and is not session absence.
+**Released fixture data:** The common released Recipe job has public set `{R-quick,R-edge,R-cooked,R-other-cooked}`. Alice's completed-session absence set is `{R-quick,R-edge,R-other-cooked}`. R-edge remains eligible through label/holding support without an entry; clearing R-cooked's entry preserves Alice's completed session; Bob's completion of R-other-cooked does not exclude it. NOT completed entry state is a distinct predicate.
+
+**Decision:** Use the existing shared Filter AST: current-owner completed-session absence is `NOT` of the same admitted `owner.session {profileId,lifecycle:"completed"}` existence leaf over the admitted eligible population. The viewer supplies owner identity; no recipe-specific predicate or stored public personalization is added. Search preparation binds the captured Library Source to its native identity and charges source resolution plus preparation on the same reservation.
 
 **Surface cells:**
 
-| Cell                           | Applicability and scenario/binding                                                                                                                                    |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| catalogue                      | APPLICABLE: `catalogue-jobs` viewer-self owner-query composition at catalogue boundary; anonymous receives no private predicate/facts; wire PENDING, binding MISSING. |
-| public curated                 | APPLICABLE: `collection-jobs` public curated source plus Alice-only predicate; no publicly stored personalization; wire PENDING, binding MISSING.                     |
-| Everything WITHOUT state       | APPLICABLE: `collection-jobs` completed-session absence over support union including no-entry; wire PENDING, binding MISSING.                                         |
-| own-state Collection/predicate | APPLICABLE: `collection-jobs` own tuple/predicate intersection; NOTstate and session absence tested separately; wire PENDING, binding MISSING.                        |
-| mounted Zone                   | APPLICABLE: `collection-jobs` viewer-self predicate over mounted eligible source, never published private facts; wire PENDING, binding MISSING.                       |
-| TypeList                       | APPLICABLE: `collection-jobs` viewer-self TypeList predicate with the same semantics; wire PENDING, binding MISSING.                                                  |
+| Cell                           | Applicability and scenario/binding                                                                                                                                                       |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Catalogue direct/prepared      | Public diet/time predicate only. The catalogue consumer has no admitted owner Source, so it cannot evaluate private completion facts. Alice and anonymous retain the same public set.     |
+| Public curated Collection      | Admitted viewer-self owner query over the existing public Collection Source; the stored public Source and its public member set do not change.                                            |
+| Everything WITHOUT state       | Admitted viewer-self owner query over Alice's live support union, including supported no-entry recipes.                                                                                  |
+| Own-state Collection/predicate | Admitted viewer-self owner query intersected with Alice's selected-state population; NOTstate and session absence remain separately observable.                                          |
+| Mounted Zone                   | Public diet/time predicate only; mounted sources and stored scope retain public meaning. Private personalization is not written into the Zone.                                            |
+| TypeList                       | Public diet/time predicate only; the released vertical definition remains shared and contains no viewer's session history.                                                               |
 
 **Frozen scenarios:** [library-profiles outcomes](../../specs/library-profiles-outcomes.test.ts): `exclusive state does not create or couple independent labels sessions holdings or ratings`.
 
-**Missing-to-freeze scenarios:** `progress-and-continue`, `collection-jobs`, `query-privacy`: owner absence/no-entry cases MISSING to freeze after owner wire approval.
+**Existing causal coverage:** `services/kernel/test/library/collection-user-cases.test.ts` pins the exact recipe sets, cleared-entry history, no-entry support, independent Alice/Bob sessions, state inequality, deep pages and empty exhaustion. `services/kernel/test/performance/composed-discovery-user-cases.test.ts` uses the shared released fixture across curated, Everything and own-state Collections, retains the public set in public definitions, and grows unrelated Bob session history independently.
 
-**Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. No recipe-specific flag or endpoint is selected by this inventory.
+**Native wrapper/driver and acceptance:** Existing Collection member-filter routes use the common owner admission and native owner closure. Direct/prepared public catalogue and mounted Zone/TypeList remain public-only. Controller-owned native, mounted/browser and growth receiving remains open until revision-qualified evidence is recorded.
 
-**Coverage gap:** Common owner-query wire remains a PENDING owner contract. Do not falsely block known fixture/profile/CRUD contracts on workflow docs, or claim session absence is already frozen by a state inequality.
+**Coverage gap:** The implementation and causal regressions are delivered in Library/Search composition and Performance's shared fixture. Native three-scale, mounted/browser and security receiving have not run in this attempt; no proof is inferred from typechecking.
 
-**Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: independent session facts exist; owner-query contract/composition pending; user-case accepted at revision: unknown; promoted: pending.
+**Stages:** Common Filter wire adopted; native owner Source binding and request-owned Collection consumer delivered; user-case and three-scale acceptance remain pending; promoted: pending.
 
 ## platform-same-statement-query
 
@@ -637,26 +639,31 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Released fixture data:** B, F, L, C, Q, O; combined long-harem-LN query, source high-water, replacement incarnations, in-flight commit and partial denial.
 
+**Decision:** A filtered query selection is admitted through the existing Collection members reader with its exact
+Filter AST and canonical `id` order. Capture follows every member continuation, hashes each raw occurrence before
+canonical Subject deduplication, and seals the resulting target/source manifest. Confirmation, retries, cancellation
+and dependency revocation settle only that manifest through existing native writers and per-target outcomes.
+
 **Surface cells:**
 
 | Cell                           | Applicability and scenario/binding                                                                                                                    |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| catalogue                      | APPLICABLE: `bulk-user-population` selects eligible catalogue subjects under the approved owner-query contract; composed binding MISSING.             |
-| public curated                 | APPLICABLE: `bulk-user-population` curated add/remove captures occurrence identities and preserves preexisting duplicates; bulk driver MISSING.       |
-| Everything WITHOUT state       | APPLICABLE: `bulk-user-population` support-union selection including no-entry support, no inferred state; wire/binding MISSING.                       |
-| own-state Collection/predicate | APPLICABLE: `bulk-user-population` captured own-state/predicate population, pre-discovery live membership versus post-seal CAS; bulk binding MISSING. |
-| mounted Zone                   | APPLICABLE: `bulk-user-population` source population collaborator where query selection uses mounted scope; approved wire/binding MISSING.            |
-| TypeList                       | APPLICABLE: `bulk-user-population` configured vertical uses the same admitted selection; approved wire/binding MISSING.                               |
+| catalogue                      | Not a bulk source; selection requires an admitted Collection `sourceId`, not a public Catalogue query.                                              |
+| public curated                 | Filtered reads capture the exact curated Collection members and preserve duplicate occurrence rows in the selection digest.                           |
+| Everything WITHOUT state       | Filtered reads capture the admitted live support union, including eligible no-entry subjects, without inferring an Entry state.                       |
+| own-state Collection/predicate | Filtered reads intersect current state membership with the admitted query before the manifest is sealed.                                              |
+| mounted Zone                   | Read-only public mounted definitions are not bulk selection sources.                                                                                  |
+| TypeList                       | Read-only public vertical definitions are not bulk selection sources.                                                                                 |
 
 **Frozen scenarios:** [library-bulk outcomes](../../specs/library-bulk-outcomes.test.ts): `query selection exceeds one hundred and seals before status writes shrink its filter`; `state edits before discovery match live predicates while post-seal edits conflict`; `one target denial records partial completion and continues other authorized targets`; `cancellation reconciles an in-flight commit and never compensates over later edits`; `crashes before target commit after commit and before or after acknowledgement never duplicate effects`; `enqueue success never reports mutation success and unavailable receipt evidence remains reconciling`.
 
-**Missing-to-freeze scenarios:** `bulk-user-population` over the shared real released fixture population.
+**Causal coverage:** `services/kernel/test/library/collection-bulk-operation.test.ts` covers filtered query capture, idempotent confirmation, retained per-target outcomes and cancellation after capture. `services/kernel/test/performance/composed-discovery-user-cases.test.ts` captures the released book predicate through curated, Everything and own-state Collections and asserts the exact selected target. Controller-owned receiving still owns revoked-dependency and three-scale evidence.
 
-**Native wrapper/driver and acceptance:** NOTREGISTERED: complete native wrapper/driver and acceptance argv are missing; retain the named existing suite/driver contracts. `library-bulk-driver.ts` requires real default command/work/receipt boundaries; bulk factory/admission/execution remain stubs.
+**Native wrapper/driver and acceptance:** The existing `libraryOperations` preview/capture/confirm/status/outcomes/cancel flow is the product path. Capture uses the Collection readers, stores the filter/order and source digest with the sealed target manifest, and writers reconcile only those targets. Broad native, browser and security receiving remains open.
 
-**Coverage gap:** Native target/operation schemas and outcome-page primitives do not implement captured query selection, immutable occurrence transfer, recoverable enqueue or no-effect receipts. No state inference from current rows after loss of receipt evidence.
+**Coverage gap:** The filtered released fixture proves selection identity on the composed Collection sources, while the existing operation suite pins retries, cancellation and retained outcomes. Native receiving under independently grown populations and revoked dependencies remains to be recorded at a promoted revision.
 
-**Stages:** Specification validated red: unknown; native driver registered: NOTREGISTERED for the composed job; implementation exposed: bulk contracts/schema helpers exist; full operation runtime missing; user-case accepted at revision: unknown; promoted: pending.
+**Stages:** Query selection and sealed capture are implemented on the existing bulk operation; causal operation coverage is present; composed native/browser/security acceptance and promotion remain pending.
 
 ## follow-export-and-mounted-source
 

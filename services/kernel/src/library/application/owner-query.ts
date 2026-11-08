@@ -43,11 +43,17 @@ export function createOwnerQueryApplication(capabilities: {
             deadline: input.deadline,
             filter,
             releaseDigest,
-            identity: prepared.source.observation.incarnation,
+            // Composition resolves this captured Source to its full native identity under this same allowance.
+            // An incarnation string is only one fence field and cannot order a Search population.
+            identity: prepared.source,
             allowance: input.work.remaining(),
           });
           input.work.native(preparedScope.work);
-          return preparedScope;
+          return {
+            prepared: preparedScope.prepared,
+            scope: preparedScope.scope,
+            work: preparedScope.work,
+          };
         },
       };
     },

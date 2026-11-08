@@ -123,27 +123,31 @@ No test-only definitions, private labels standing in for diet, or title matches 
 Words exclude equality, unknown values, characters and edition pages. The combined book set is `{B-long}`;
 form/tag alone is `{B-long, B-edge, B-characters}`. Quick vegetarian recipes are
 `{R-quick, R-edge, R-cooked, R-other-cooked}`; Alice's supported not-cooked set is
-`{R-quick, R-edge, R-other-cooked}`. Completion semantics and the owner-query wire schema must be adopted by
-Commerce before freezing the new private predicate; clearing state cannot silently erase completed history.
+`{R-quick, R-edge, R-other-cooked}`. The not-cooked predicate uses the common current-owner completed-session
+leaf under Boolean `NOT`; it is request-owned over admitted Library Sources. Clearing R-cooked's entry retains its
+session history, R-edge remains eligible through supported no-entry facts, and Bob's completion of R-other-cooked
+does not affect Alice. Public catalogue, mounted Zone and TypeList definitions keep their public meaning.
 
 | Surface cell                     | Scope and reason                                                                                                                                                                                                                |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Catalogue: direct catalogue      | In scope: public book/recipe predicates through native search; owner-history predicates require Alice's admitted private population.                                                                                            |
-| Catalogue: prepared public plans | In scope: expensive public predicates must finish preparation and yield the same useful public sets.                                                                                                                            |
-| Curated Collection               | In scope: canonical browsing of `C-public` intersects its population; occurrence editing retains duplicate notes. Private personalization only where admitted.                                                                  |
-| Everything without state         | In scope: Alice's support union includes label/holding-only subjects without fabricating an entry or state.                                                                                                                     |
-| Own state                        | In scope: intersect Alice's accepted state/predicate; Bob's facts do not affect her result.                                                                                                                                     |
-| Mounted Zone                     | In scope: `Z-public` unions overlapping mounts/scopes; one composed page reaches 16 reads and 128 total slots. Public reads never inspect Alice's history.                                                                      |
-| TypeList                         | In scope: Book and Recipe are configured in `packages/definitions/presentation/book/zone.json` and `packages/definitions/presentation/recipe/zone.json`; exercise both public list consumers with the same released predicates. |
+| Catalogue: direct catalogue      | Public book/recipe predicates use native Search. Owner history has no admitted Catalogue Source here, so private predicates are not exposed.                                                                                          |
+| Catalogue: prepared public plans | Expensive public predicates finish preparation and yield the same useful public sets; preparation resume remains covered.                                                                                                                |
+| Curated Collection               | Canonical browsing of `C-public` intersects its population; Alice may add the admitted owner predicate per request without changing the stored public Source or duplicate notes.                                                       |
+| Everything without state         | Alice's request-owned owner query runs over her support union, including label/holding-supported no-entry subjects.                                                                                                                         |
+| Own state                        | Intersect Alice's accepted state population with the same owner query; Bob's facts do not affect the result, and state inequality remains separately tested.                                                                                 |
+| Mounted Zone                     | `Z-public` unions overlapping public mounts/scopes; stored reads do not inspect Alice's history. One composed page remains 16 reads and 128 total slots.                                                                                 |
+| TypeList                         | Released Book and Recipe definitions remain public and shared; viewer history is not written into either installed TypeList.                                                                                                                |
 
 The checked-in catalogue release `packages/definitions/release/rezics.json` includes Book and Recipe types and the
 `schema:wordCount` and `schema:suitableForDiet` properties. It does not embed the configured Zone documents.
 Existing TypeList configuration makes that cell required. The released predicates are available to the public jobs;
-the private completion/history predicate and its owner-query wire schema remain unadopted dependencies.
-Subject detail factual projection belongs to its owner; this capability measures the configured list consumer.
+private completion/history is admitted only through the request's current Library Source. Subject detail factual
+projection belongs to its owner; this capability measures the configured list consumer.
 
-**Decision for this increment:** execute the released public book and recipe jobs; defer “not cooked” and filtered
-bulk-query behavior until their completion/history and owner-query contracts are adopted by the owning modules.
+**Decision for this increment:** adopt completed-session absence as `NOT` of current-owner completed-session
+existence over an admitted eligible population. Bind it through curated, Everything and own-state Collection
+consumers. Keep catalogue direct/prepared, Zone and TypeList filters public, and keep filtered bulk selection sealed
+by its existing captured Source/filter/order manifest.
 
 **Reserved frozen scenario names:** each applicable public job/cell and Alice owner job/cell is a separately named
 native case, using `<job>/<surface>/<scenario>`. Jobs are `long-harem-light-novels`, `quick-vegetarian-recipes`,
@@ -179,23 +183,28 @@ bun run --cwd services/kernel check test/performance/composed-discovery-user-cas
 ```
 
 This file runs user jobs end to end through production HTTP and holds counted units with the shared harness.
-Search retains direct catalogue/prepared public checks; Commerce retains direct owner/prepared owner checks;
-the `POST /v1/zones/{id}:readPage` owner retains the per-plan composed-page check. Reuse their native plans and
-evidence rather than duplicate their checks or implement benchmark-only matching.
+Search retains direct catalogue/prepared public checks; Library and Commerce exercise request-owned owner predicates
+through admitted Collection Sources; the `POST /v1/zones/{id}:readPage` owner retains the per-plan composed-page
+check. Reuse their native plans and evidence rather than duplicate their checks or implement benchmark-only matching.
 
 **Scenario links:** reserved names live in
 `services/kernel/test/performance/composed-discovery-user-cases.test.ts` and
 `services/kernel/test/performance/support/composed-discovery-matrix.ts`. Public jobs
 `long-harem-light-novels` and `quick-vegetarian-recipes` execute on catalogue-direct, catalogue-prepared,
 curated-collection, everything-without-state, own-state, mounted-zone and configured-typelist. Named cases cover
-first/deep/empty pages, sparse and unrelated-history growth at 64/512/4096, composed-page-at-limits (16 reads,
-128 slots), aliases-and-duplicates, preparation-frontier-resume, foreign-dependency-revoked-midway, and
-hidden/denied/suspended/empty controls. Bound derivation is
+first/deep/empty pages, sparse Catalogue and unrelated owner-history growth at 64/512/4096,
+composed-page-at-limits (16 reads, 128 slots), aliases-and-duplicates, preparation-frontier-resume,
+foreign-dependency-revoked-midway, and hidden/denied/suspended/empty controls. The not-cooked request-owned job
+exercises curated, Everything and own-state Collections while public Catalogue/Zone/TypeList definitions retain
+their released predicates. Bound derivation is
 `services/kernel/test/performance/support/composed-discovery-bounds.ts` and is computed before repair.
 
 **Test choice:** Fewest tests: one HTTP/native helper per admitted public cell covering first/deep/empty together,
-sparse and unrelated-history growth as independent axes, one composed 16-read page, one alias/duplicate, one resume,
-one revocation, and named control cases; not-cooked and bulk stay frozen on Commerce prerequisites. Isolated Auth's
+one request-owned not-cooked job across curated, Everything and own-state Collections, and the same released book
+filter captured through each of those Collection Sources. Sparse Catalogue and unrelated history/owner growth stay
+independent axes; one composed 16-read page, one alias/duplicate, one resume, one revocation and named controls
+remain separate pins. Existing Library operation cases own confirmation, retry, cancellation and per-target outcomes.
+Isolated Auth's
 fork installs the ordinary History composition and product event catalogue (bun test preloads do not apply there),
 binds the parent Kernel receipt ring to its Access pool, reports the original Access error on the child stream, and
 settles acquired fixture resources on setup failure as well as completion. Released classification, diet, books and
@@ -215,7 +224,8 @@ Privacy-reduction served-share grows hidden unrelated subjects and checks a nond
 selected public job; it does not yet prove a production acknowledgement delay `τ`. Original/terminal alias uses
 native `POST /v1/subjects:merge`; if identity publication is still preparing, that cell reports the producer
 failure rather than a local matcher. Owner direct/prepared plans stay with Commerce. Native/browser/root
-acceptance after integration still owns promotion.
+acceptance after integration still owns promotion. Filtered-bulk outcome and all receiving checks remain unrun in
+this attempt; implementation and fixture typing do not establish those deferred proofs.
 
 ## private-follow-edge
 

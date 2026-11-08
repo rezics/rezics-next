@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import type { FilterDocument } from '@rezics/filter';
 import {
   composedLimitBound,
   deriveNestedProducerBound,
@@ -16,13 +17,12 @@ import {
   expectHarnessRows,
 } from './support/composed-discovery-bounds.ts';
 import {
-  DEFERRED_AUTHORITY,
-  DEFERRED_JOBS,
+  BULK_JOBS,
   FEWEST_TESTS_DECISION,
   OWNER_SURFACES,
+  OWNER_QUERY_SURFACES,
   PUBLIC_JOBS,
   PUBLIC_SURFACES,
-  SURFACES,
   applicableScenarios,
   frozenPublicCells,
   scenarioName,
@@ -36,6 +36,7 @@ import {
   assertDenied,
   assertPublicCell,
   cataloguePages,
+  collectionPages,
   composedLimitPage,
   expectedIds,
   nativePlan,
@@ -93,19 +94,18 @@ test('derived composed 16-read 128-slot bound matches the published Cost table b
   expect(ordinaryNestedBound).toEqual(deriveNestedProducerBound('direct', PAGE_SLOTS));
   expect(ordinaryNestedBound.discardedCandidates).toBe(ordinaryDirectBound.candidates);
   expect(ordinaryNestedBound.rereads).toBe(1);
-  expect(FEWEST_TESTS_DECISION).toContain('not-cooked and bulk stay frozen');
+  expect(FEWEST_TESTS_DECISION).toContain('request-owned not-cooked job');
+  expect(FEWEST_TESTS_DECISION).toContain('filtered bulk uses the sealed existing operation manifest');
 });
 
-test('every reserved public and deferred cell is named before the remaining surfaces are filled', () => {
+test('every reserved public, owner, and bulk cell is named before the remaining surfaces are filled', () => {
   const cells = frozenPublicCells();
   expect(cells.length).toBeGreaterThan(40);
   for (const cell of cells) {
     expect(cell.name).toBe(scenarioName(cell.job, cell.surface, cell.scenario));
     expect(applicableScenarios(cell.job, cell.surface)).toContain(cell.scenario);
   }
-  expect(
-    cells.filter(({ deferred }) => deferred).every(({ job }) => (DEFERRED_JOBS as readonly string[]).includes(job)),
-  ).toBe(true);
+  expect(cells.some(({ job }) => (BULK_JOBS as readonly string[]).includes(job))).toBe(true);
 });
 
 test('released long-harem book plan keeps native work bounded as sparse Books grow at 64/512/4096', async () => {
@@ -219,6 +219,140 @@ for (const job of PUBLIC_JOBS) {
     }, 180_000);
   }
 }
+
+test('quick-vegetarian-not-cooked uses Alice history over admitted Collections while public definitions stay public', async () => {
+  const job = 'quick-vegetarian-not-cooked' as const;
+  const expected = expectedIds(world!, job, 'curated-collection');
+  expect(expected).toEqual(
+    ['R-quick', 'R-edge', 'R-other-cooked']
+      .map((name) => recipes.subjects[name as keyof typeof recipes.subjects].id)
+      .sort(),
+  );
+  for (const surface of OWNER_QUERY_SURFACES) {
+    const first = await surfacePages(world!, job, surface, 'alice', 'job');
+    expect(first.ids).toEqual(expectedIds(world!, job, surface));
+    const deep = await surfacePages(world!, job, surface, 'alice', 'deep');
+    expect(deep.ids).toEqual(expectedIds(world!, job, surface, 'deep'));
+    expect(deep.pages).toBe(surface === 'own-state' ? 1 : 2);
+    expect((await surfacePages(world!, job, surface, 'alice', 'owner-empty')).ids).toEqual([]);
+  }
+
+  const history = await world!.population.recipes();
+  expect(history.alice.session).toMatchObject({ subjectId: recipes.subjects['R-cooked'].id, state: 'completed' });
+  expect(history.bob.session).toMatchObject({ subjectId: recipes.subjects['R-other-cooked'].id, state: 'completed' });
+  for (const name of ['R-edge', 'R-cooked'] as const) {
+    const absent = await world!.population.request('alice', 'GET', `/v1/libraryEntries/${recipes.subjects[name].id}`);
+    expect(absent.status).toBe(404);
+  }
+
+  // A cleared entry is not a completed session. The same source makes the two predicates observably different.
+  const profile = world!.population.profile('schema:Recipe').profile;
+  const completed = profile.entryStateSet?.states.find(({ role }) => role === 'completed');
+  expect(completed).toBeDefined();
+  const notCompletedState: FilterDocument = {
+    and: [
+      filters.dietTime,
+      { owner: { presence: true } },
+      {
+        not: {
+          owner: {
+            state: {
+              profileId: profile.id,
+              stateSetId: profile.entryStateSet!.id,
+              in: [completed!.id],
+            },
+          },
+        },
+      },
+    ],
+  };
+  const everyRecipe = Object.values(recipes.subjects)
+    .map(({ id }) => id)
+    .sort();
+  const stateAbsence = await collectionPages(
+    world!,
+    'alice',
+    world!.everythingRecipeId,
+    notCompletedState,
+    everyRecipe,
+  );
+  expect(stateAbsence.ids).toContain(recipes.subjects['R-cooked'].id);
+
+  const publicCurated = await surfacePages(world!, 'quick-vegetarian-recipes', 'curated-collection', 'alice', 'job');
+  expect(publicCurated.ids).toContain(recipes.subjects['R-cooked'].id);
+  for (const document of Object.values(world!.documents)) expect(JSON.stringify(document)).not.toContain('"owner"');
+}, 180_000);
+
+for (const surface of OWNER_QUERY_SURFACES) {
+  test(
+    scenarioName('bulk-long-harem-light-novels', surface, 'bulk-captured-population'),
+    async () => {
+      const sourceId =
+        surface === 'curated-collection'
+          ? world!.publicCollection.source.id
+          : surface === 'everything-without-state'
+            ? world!.everythingId
+            : world!.ownStateIds['schema:Book'];
+      const bookState = world!.population
+        .profile('schema:Book')
+        .profile.entryStateSet?.states.find(({ role }) => role === 'active');
+      expect(bookState).toBeDefined();
+      const filter = JSON.stringify(filters.combined);
+      const preview = await world!.population.request(
+        'alice',
+        'POST',
+        '/v1/libraryOperations',
+        {
+          action: 'set_status',
+          state: bookState!.id,
+          selection: { kind: 'query', sourceId, filter, sort: 'id' },
+        },
+        discoveryKey(),
+      );
+      expect(preview.status, JSON.stringify(preview.body)).toBe(201);
+      const operation = preview.body.operation as {
+        id: string;
+        phase: string;
+        selectionSource: {
+          id: string;
+          filter: string | null;
+          sort: string | null;
+          scannedCandidates: number;
+          selectedSubjects: number;
+        };
+        counts: { selectedSubjects: number; targets: number; pending: number };
+      };
+      expect(operation.phase).toBe('preview');
+      expect(operation.selectionSource).toMatchObject({
+        id: sourceId,
+        sort: 'id',
+        scannedCandidates: surface === 'curated-collection' ? 2 : 1,
+        selectedSubjects: 1,
+      });
+      expect(JSON.parse(operation.selectionSource.filter!)).toEqual(filters.combined);
+      expect(operation.counts).toMatchObject({ selectedSubjects: 1, targets: 1, pending: 1 });
+
+      const outcomes = await world!.population.request(
+        'alice',
+        'GET',
+        `/v1/libraryOperations/${operation.id}/outcomes?limit=20`,
+      );
+      expect(outcomes.status, JSON.stringify(outcomes.body)).toBe(200);
+      expect(outcomes.body.outcomes).toEqual([
+        expect.objectContaining({ subjectId: books.subjects['B-long'].id, state: 'pending' }),
+      ]);
+    },
+    180_000,
+  );
+}
+
+test('quick-vegetarian-not-cooked deduplicates released Recipe aliases before returning canonical owner results', async () => {
+  const original = await mergeAlias(fixture, recipes.subjects['R-edge'], 'R-edge owner-filter alias');
+  const page = await surfacePages(world!, 'quick-vegetarian-not-cooked', 'everything-without-state', 'alice', 'job');
+  expect(page.ids).toEqual(expectedIds(world!, 'quick-vegetarian-not-cooked', 'everything-without-state'));
+  expect(page.ids).not.toContain(original.id);
+  expect(page.ids.filter((id) => id === recipes.subjects['R-edge'].id)).toHaveLength(1);
+}, 180_000);
 
 test('long-harem-light-novels/mounted-zone/composed-page-at-limits', async () => {
   const page = await composedLimitPage(world!, 'anonymous');
@@ -420,6 +554,54 @@ test('long-harem-light-novels/own-state/unrelated-owner-history', async () => {
   expect(report.samples.map(({ scale }) => scale)).toEqual([...SCALES]);
 }, 600_000);
 
+test('quick-vegetarian-not-cooked/everything-without-state stays fixed as Bob completed-session history grows', async () => {
+  const accepted = world!.population.profile('schema:Recipe');
+  const mode = accepted.profile.progress?.allowed.find(({ mode }) => mode === 'scalar_amount');
+  const unit = mode?.units.find(({ id }) => id === 'minute');
+  expect(mode && unit).toBeDefined();
+  const subjectId = recipes.subjects['R-edge'].id;
+  const report = await checkGrowth(database!, {
+    name: 'Alice completed-session absence with independently growing Bob history',
+    scales: [...SCALES],
+    bounds: growthSeriesBounds,
+    byteBounds: growthByteBounds,
+    repetitions: 1,
+    warmup: async () => {},
+    async grow(_db, scale, previous) {
+      for (let ordinal = previous; ordinal < scale; ordinal++) {
+        const started = await world!.population.request(
+          'bob',
+          'POST',
+          '/v1/progressSessions',
+          {
+            subjectId,
+            mode: mode!.mode,
+            unit: unit!.id,
+            ...(unit!.totalPolicy === 'required' ? { total: unit!.maximum ?? unit!.minimum ?? '0' } : {}),
+          },
+          discoveryKey(),
+        );
+        expect(started.status, JSON.stringify(started.body)).toBe(201);
+        const session = started.body.progressSession as { id: string; revision: number };
+        const completed = await world!.population.request(
+          'bob',
+          'POST',
+          `/v1/progressSessions/${session.id}:complete`,
+          { revision: session.revision },
+          discoveryKey(),
+        );
+        expect(completed.status, JSON.stringify(completed.body)).toBe(200);
+      }
+    },
+    async operation() {
+      const page = await surfacePages(world!, 'quick-vegetarian-not-cooked', 'everything-without-state', 'alice');
+      expect(page.ids).toEqual(expectedIds(world!, 'quick-vegetarian-not-cooked', 'everything-without-state'));
+      return page.ids;
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...SCALES]);
+}, 600_000);
+
 test('long-harem-light-novels/catalogue-direct/privacy-reduction-served-share', async () => {
   let served = 1;
   const report = await checkGrowth(database!, {
@@ -481,12 +663,3 @@ test('long-harem-light-novels/catalogue-direct/privacy-reduction-served-share', 
   const shares = report.samples.map((sample) => sample.counted?.served?.value ?? 0);
   for (let index = 1; index < shares.length; index++) expect(shares[index]!).toBeGreaterThanOrEqual(shares[index - 1]!);
 }, 600_000);
-
-for (const job of DEFERRED_JOBS) {
-  for (const surface of SURFACES.filter((surface) => applicableScenarios(job, surface).length > 0)) {
-    test(`${job}/${surface}/first-page`, () => {
-      expect(world!.population.prerequisites.cookedQuery.state).toBe('prerequisite');
-      expect(DEFERRED_AUTHORITY[job]).toContain(job === 'quick-vegetarian-not-cooked' ? 'not-cooked' : 'bulk');
-    });
-  }
-}

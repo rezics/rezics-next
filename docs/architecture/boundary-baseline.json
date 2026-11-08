@@ -14043,16 +14043,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/search/scope-members-work.ts",
-          "edge": "value import \"../library/owner-filter-native-binding-fence.sql\" #1 => services/kernel/src/library/owner-filter-native-binding-fence.sql"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/scope-members-work.ts",
-          "edge": "value import \"../library/owner-filter-native-closure-facts.sql\" #1 => services/kernel/src/library/owner-filter-native-closure-facts.sql"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/scope-members-work.ts",
           "edge": "value import \"../library/owner-filter-plan.ts\" #1 => services/kernel/src/library/owner-filter-plan.ts"
         },
         {

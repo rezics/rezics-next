@@ -26,7 +26,11 @@ import {
 } from '../library/collection-publication-work-admission.ts';
 import { readPublicCollectionDiscoverySummaries } from '../library/collection-discovery-summaries.ts';
 import { createNativeLibrarySourceCustody } from '../library/native-source-custody.ts';
-import { withOwnerFilterNativeRead } from '../library/owner-filter-native-binding.ts';
+import { readNativeOwnerFilterCandidateFacts } from '../library/owner-filter-native-closure.ts';
+import {
+  readNativeOwnerFilterBindingFence,
+  withOwnerFilterNativeRead,
+} from '../library/owner-filter-native-binding.ts';
 import {
   bindOwnerFilterRead,
   readOwnerFilterCandidate,
@@ -135,6 +139,8 @@ export function composeSearchNativePorts(): SearchNativePorts {
     readNativePublicFilterRepairStart,
     readOwnerFilterCandidate,
     readOwnerFilterCandidateClosure,
+    readNativeOwnerFilterCandidateFacts,
+    readNativeOwnerFilterBindingFence,
     readPublicCollectionDiscoverySummaries,
     readPublicFilterSourceDefinition,
     readRelease,
