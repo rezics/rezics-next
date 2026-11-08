@@ -383480,7 +383480,39 @@
                               "type": "string"
                             },
                             "hostTitle": {
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "state": {
+                                      "const": "available",
+                                      "type": "string"
+                                    },
+                                    "value": {
+                                      "maxLength": 4096,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "value"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "state": {
+                                      "const": "unavailable",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
                             },
                             "realmId": {
                               "format": "uuid",
@@ -383491,7 +383523,39 @@
                               "type": "string"
                             },
                             "title": {
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "state": {
+                                      "const": "available",
+                                      "type": "string"
+                                    },
+                                    "value": {
+                                      "maxLength": 4096,
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state",
+                                    "value"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "state": {
+                                      "const": "unavailable",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "state"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
                             }
                           },
                           "required": [
@@ -383535,268 +383599,546 @@
                             "presentation": {
                               "additionalProperties": false,
                               "properties": {
-                                "cover": {
-                                  "anyOf": [
-                                    {
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "state": {
-                                          "const": "available",
-                                          "type": "string"
-                                        },
-                                        "value": {
+                                "original": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "cover": {
+                                      "anyOf": [
+                                        {
                                           "additionalProperties": false,
                                           "properties": {
-                                            "credit": {
+                                            "state": {
+                                              "const": "available",
+                                              "type": "string"
+                                            },
+                                            "value": {
                                               "additionalProperties": false,
                                               "properties": {
-                                                "license": {
-                                                  "maxLength": 128,
-                                                  "type": "string"
-                                                },
-                                                "obligations": {
-                                                  "items": {
-                                                    "maxLength": 8192,
-                                                    "type": "string"
-                                                  },
-                                                  "maxItems": 2048,
-                                                  "type": "array"
-                                                },
-                                                "rightsHolder": {
-                                                  "maxLength": 1024,
-                                                  "type": "string"
-                                                },
-                                                "via": {
+                                                "credit": {
                                                   "additionalProperties": false,
                                                   "properties": {
-                                                    "name": {
+                                                    "license": {
+                                                      "maxLength": 128,
+                                                      "type": "string"
+                                                    },
+                                                    "obligations": {
+                                                      "items": {
+                                                        "maxLength": 8192,
+                                                        "type": "string"
+                                                      },
+                                                      "maxItems": 2048,
+                                                      "type": "array"
+                                                    },
+                                                    "rightsHolder": {
                                                       "maxLength": 1024,
                                                       "type": "string"
                                                     },
-                                                    "url": {
-                                                      "maxLength": 1024,
+                                                    "via": {
+                                                      "additionalProperties": false,
+                                                      "properties": {
+                                                        "name": {
+                                                          "maxLength": 1024,
+                                                          "type": "string"
+                                                        },
+                                                        "url": {
+                                                          "maxLength": 1024,
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "name",
+                                                        "url"
+                                                      ],
+                                                      "type": "object"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "rightsHolder",
+                                                    "via",
+                                                    "license",
+                                                    "obligations"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "focalPoint": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "x": {
+                                                      "type": "number"
+                                                    },
+                                                    "y": {
+                                                      "type": "number"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "x",
+                                                    "y"
+                                                  ],
+                                                  "type": [
+                                                    "object",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "height": {
+                                                  "minimum": 1,
+                                                  "type": "integer"
+                                                },
+                                                "media": {
+                                                  "format": "uuid",
+                                                  "type": "string"
+                                                },
+                                                "placeholder": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "color": {
+                                                      "pattern": "^#[0-9a-f]{6}$",
+                                                      "type": "string"
+                                                    },
+                                                    "thumbhash": {
+                                                      "maxLength": 44,
                                                       "type": "string"
                                                     }
                                                   },
                                                   "required": [
-                                                    "name",
-                                                    "url"
+                                                    "thumbhash",
+                                                    "color"
                                                   ],
                                                   "type": "object"
-                                                }
-                                              },
-                                              "required": [
-                                                "rightsHolder",
-                                                "via",
-                                                "license",
-                                                "obligations"
-                                              ],
-                                              "type": "object"
-                                            },
-                                            "focalPoint": {
-                                              "additionalProperties": false,
-                                              "properties": {
-                                                "x": {
-                                                  "type": "number"
                                                 },
-                                                "y": {
-                                                  "type": "number"
-                                                }
-                                              },
-                                              "required": [
-                                                "x",
-                                                "y"
-                                              ],
-                                              "type": [
-                                                "object",
-                                                "null"
-                                              ]
-                                            },
-                                            "height": {
-                                              "minimum": 1,
-                                              "type": "integer"
-                                            },
-                                            "media": {
-                                              "format": "uuid",
-                                              "type": "string"
-                                            },
-                                            "placeholder": {
-                                              "additionalProperties": false,
-                                              "properties": {
-                                                "color": {
-                                                  "pattern": "^#[0-9a-f]{6}$",
-                                                  "type": "string"
-                                                },
-                                                "thumbhash": {
-                                                  "maxLength": 44,
-                                                  "type": "string"
-                                                }
-                                              },
-                                              "required": [
-                                                "thumbhash",
-                                                "color"
-                                              ],
-                                              "type": "object"
-                                            },
-                                            "variants": {
-                                              "items": {
-                                                "additionalProperties": false,
-                                                "properties": {
-                                                  "format": {
-                                                    "enum": [
-                                                      "avif",
-                                                      "webp"
+                                                "variants": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "format": {
+                                                        "enum": [
+                                                          "avif",
+                                                          "webp"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "width": {
+                                                        "minimum": 1,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "format",
+                                                      "width"
                                                     ],
-                                                    "type": "string"
+                                                    "type": "object"
                                                   },
-                                                  "width": {
-                                                    "minimum": 1,
-                                                    "type": "integer"
-                                                  }
+                                                  "maxItems": 12,
+                                                  "type": "array"
                                                 },
-                                                "required": [
-                                                  "format",
-                                                  "width"
-                                                ],
-                                                "type": "object"
+                                                "width": {
+                                                  "minimum": 1,
+                                                  "type": "integer"
+                                                }
                                               },
-                                              "maxItems": 12,
-                                              "type": "array"
-                                            },
-                                            "width": {
-                                              "minimum": 1,
-                                              "type": "integer"
+                                              "required": [
+                                                "media",
+                                                "width",
+                                                "height",
+                                                "placeholder",
+                                                "variants",
+                                                "focalPoint",
+                                                "credit"
+                                              ],
+                                              "type": "object"
                                             }
                                           },
                                           "required": [
-                                            "media",
-                                            "width",
-                                            "height",
-                                            "placeholder",
-                                            "variants",
-                                            "focalPoint",
-                                            "credit"
+                                            "state",
+                                            "value"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "const": "empty",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "const": "concealed",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "const": "unavailable",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
                                           ],
                                           "type": "object"
                                         }
-                                      },
-                                      "required": [
-                                        "state",
-                                        "value"
-                                      ],
-                                      "type": "object"
+                                      ]
                                     },
-                                    {
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "state": {
-                                          "const": "empty",
-                                          "type": "string"
+                                    "label": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "language": {
+                                              "maxLength": 64,
+                                              "type": "string"
+                                            },
+                                            "state": {
+                                              "const": "available",
+                                              "type": "string"
+                                            },
+                                            "value": {
+                                              "maxLength": 4096,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state",
+                                            "value",
+                                            "language"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "const": "empty",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "const": "concealed",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "const": "unavailable",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "type": "object"
                                         }
-                                      },
-                                      "required": [
-                                        "state"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    {
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "state": {
-                                          "const": "concealed",
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "state"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    {
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "state": {
-                                          "const": "unavailable",
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "state"
-                                      ],
-                                      "type": "object"
+                                      ]
                                     }
-                                  ]
+                                  },
+                                  "required": [
+                                    "label",
+                                    "cover"
+                                  ],
+                                  "type": "object"
                                 },
-                                "label": {
-                                  "anyOf": [
-                                    {
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "language": {
-                                          "maxLength": 64,
-                                          "type": "string"
+                                "terminal": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "cover": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "const": "available",
+                                              "type": "string"
+                                            },
+                                            "value": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "credit": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "license": {
+                                                      "maxLength": 128,
+                                                      "type": "string"
+                                                    },
+                                                    "obligations": {
+                                                      "items": {
+                                                        "maxLength": 8192,
+                                                        "type": "string"
+                                                      },
+                                                      "maxItems": 2048,
+                                                      "type": "array"
+                                                    },
+                                                    "rightsHolder": {
+                                                      "maxLength": 1024,
+                                                      "type": "string"
+                                                    },
+                                                    "via": {
+                                                      "additionalProperties": false,
+                                                      "properties": {
+                                                        "name": {
+                                                          "maxLength": 1024,
+                                                          "type": "string"
+                                                        },
+                                                        "url": {
+                                                          "maxLength": 1024,
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "name",
+                                                        "url"
+                                                      ],
+                                                      "type": "object"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "rightsHolder",
+                                                    "via",
+                                                    "license",
+                                                    "obligations"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "focalPoint": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "x": {
+                                                      "type": "number"
+                                                    },
+                                                    "y": {
+                                                      "type": "number"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "x",
+                                                    "y"
+                                                  ],
+                                                  "type": [
+                                                    "object",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "height": {
+                                                  "minimum": 1,
+                                                  "type": "integer"
+                                                },
+                                                "media": {
+                                                  "format": "uuid",
+                                                  "type": "string"
+                                                },
+                                                "placeholder": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "color": {
+                                                      "pattern": "^#[0-9a-f]{6}$",
+                                                      "type": "string"
+                                                    },
+                                                    "thumbhash": {
+                                                      "maxLength": 44,
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "thumbhash",
+                                                    "color"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "variants": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "format": {
+                                                        "enum": [
+                                                          "avif",
+                                                          "webp"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "width": {
+                                                        "minimum": 1,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "format",
+                                                      "width"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 12,
+                                                  "type": "array"
+                                                },
+                                                "width": {
+                                                  "minimum": 1,
+                                                  "type": "integer"
+                                                }
+                                              },
+                                              "required": [
+                                                "media",
+                                                "width",
+                                                "height",
+                                                "placeholder",
+                                                "variants",
+                                                "focalPoint",
+                                                "credit"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          },
+                                          "required": [
+                                            "state",
+                                            "value"
+                                          ],
+                                          "type": "object"
                                         },
-                                        "state": {
-                                          "const": "available",
-                                          "type": "string"
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "const": "empty",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "type": "object"
                                         },
-                                        "value": {
-                                          "maxLength": 4096,
-                                          "type": "string"
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "const": "concealed",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "const": "unavailable",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "type": "object"
                                         }
-                                      },
-                                      "required": [
-                                        "state",
-                                        "value",
-                                        "language"
-                                      ],
-                                      "type": "object"
+                                      ]
                                     },
-                                    {
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "state": {
-                                          "const": "empty",
-                                          "type": "string"
+                                    "label": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "language": {
+                                              "maxLength": 64,
+                                              "type": "string"
+                                            },
+                                            "state": {
+                                              "const": "available",
+                                              "type": "string"
+                                            },
+                                            "value": {
+                                              "maxLength": 4096,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state",
+                                            "value",
+                                            "language"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "const": "empty",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "const": "concealed",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "const": "unavailable",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "type": "object"
                                         }
-                                      },
-                                      "required": [
-                                        "state"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    {
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "state": {
-                                          "const": "concealed",
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "state"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    {
-                                      "additionalProperties": false,
-                                      "properties": {
-                                        "state": {
-                                          "const": "unavailable",
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "state"
-                                      ],
-                                      "type": "object"
+                                      ]
                                     }
-                                  ]
+                                  },
+                                  "required": [
+                                    "label",
+                                    "cover"
+                                  ],
+                                  "type": "object"
                                 }
                               },
                               "required": [
-                                "label",
-                                "cover"
+                                "original",
+                                "terminal"
                               ],
                               "type": "object"
                             }
@@ -383819,6 +384161,7 @@
                               "type": "integer"
                             },
                             "clientId": {
+                              "maxLength": 255,
                               "type": "string"
                             }
                           },
