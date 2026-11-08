@@ -132,6 +132,16 @@ under `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when OpenSSH's unix_
 placement-probe timeout recovers only an affirmatively dead ControlMaster, at most once per host per minute, under the
 same exclusive lease lock that acquisition holds shared; a delayed control check remains uncertainty. Five minutes of
 probe-timeout skips report one environment event and do not retire a live master.
+Slot and marker SSH admission drains stderr concurrently with stdout and retains a scrubbed 4 KiB byte tail.
+Transport failures identify the host alias, allocated run, connection, local SSH PID, actual exit or signal and any
+progress timeout separately. Configured addresses and identity paths are redacted. A zero-exit SSH EOF without the
+required admission marker is an incomplete protocol response, not capacity-busy; the explicit busy status keeps
+ordinary slot waiting. Before this boundary retained stderr, a missing marker could silently wait or report only a
+generic transport failure. Retry diagnostics now survive the existing bounded backoff and failed-host preference,
+which can continue on a healthy configured host. Neither these diagnostics nor termination of the local SSH child
+establish a native command result or remote physical cleanup. EOF alone does not identify a network or shell cause;
+that diagnosis requires the retained boundary evidence from the next already-required admitted check.
+
 Throwaway Kernel/compiler PostgreSQL uses `--rm` plus exact owner and create-nonce labels. A timed-out removal is a
 request, not observed absence: ordinary cleanup retries a bounded number of times and verifies the container and its
 nonce-labelled volume are absent. A failed Docker listing or inspect stays an unsettled cleanup result with its actual
