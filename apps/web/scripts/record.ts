@@ -20,6 +20,7 @@ const root = resolve(app, '../..');
 const accountId = Bun.randomUUIDv7();
 const kernelRouteKey = randomBytes(32).toString('base64url');
 const sessionKey = randomBytes(32).toString('base64url');
+const receiptKey = randomBytes(32).toString('base64url');
 // Immutable definition snapshots are generated from the same bundled release without a runtime.
 if (
   import.meta.main &&
@@ -371,7 +372,7 @@ async function recordBoardRealm(input: {
   const { origin, accountId } = input;
   const token = await libraryToken(
     accountId,
-    'access:grant context:create context:read space:create space:manage realm:create',
+    'access:grant context:create context:read space:create space:manage realm:create realm:read realm:join realm:participate',
   );
   const send = async (method: 'GET' | 'POST', path: string, body?: unknown): Promise<JsonObject> => {
     const key = JSON.stringify(Bun.randomUUIDv7());
@@ -414,6 +415,44 @@ async function recordBoardRealm(input: {
     'realm',
     'realmId',
   );
+  const { routeOf } = await import('../../../services/kernel/src/route/route.ts');
+  const realmRoute = routeOf(realmId);
+  const accountRoute = routeOf(accountId);
+  if (realmRoute === null || accountRoute === null)
+    throw new Error('The recorded Realm or Account id is not routable.');
+  await send('POST', '/v1/grants', {
+    resource: { route: realmRoute, id: realmId },
+    subject: { kind: 'account', id: accountId },
+    actions: ['realm:join'],
+    valid: '(,)',
+  });
+  // The disposable recording account is made a current member so the native current projection can be recorded.
+  // Keep the Realm membership source and Access inverse in sync, as the membership executor does.
+  const reservationId = Bun.randomUUIDv7();
+  const membershipTransactionId = Bun.randomUUIDv7();
+  const joinedAt = new Date(Date.now() - 60_000).toISOString();
+  const membershipConnection = await input.pool.connect();
+  try {
+    await membershipConnection.query('BEGIN');
+    await membershipConnection.query(
+      `INSERT INTO community.realm_member
+         (route, realm_id, account_id, role, valid, reservation_id, transaction_id)
+       VALUES ($1, $2, $3, 'member', tstzrange($4::timestamptz, NULL, '[)'), $5, $6)`,
+      [realmRoute, realmId, accountId, joinedAt, reservationId, membershipTransactionId],
+    );
+    await membershipConnection.query(
+      `INSERT INTO access.membership_inverse
+         (route, account_id, kind, group_id, reservation_id, transaction_id)
+       VALUES ($1, $2, 'realm', $3, $4, $5)`,
+      [accountRoute, accountId, realmId, reservationId, membershipTransactionId],
+    );
+    await membershipConnection.query('COMMIT');
+  } catch (error) {
+    await membershipConnection.query('ROLLBACK');
+    throw error;
+  } finally {
+    membershipConnection.release();
+  }
   // The board is inserted like the other recorded boards, in the route of its Realm. The route of an id is its
   // eleventh and twelfth bytes.
   const route = Number.parseInt(realmId.slice(24, 28), 16);
@@ -443,6 +482,20 @@ async function recordBoardRealm(input: {
     recorded.set(name, await send('GET', path));
   const board = objectBody(recorded.get('board-realm')?.board, 'board-realm board');
   if (board.realmId !== realmId) throw new Error(`The recorded board names ${String(board.realmId)}, not ${realmId}.`);
+  const personal = await retryOverloaded(() =>
+    fetch(new URL('/v1/me/realms', origin), {
+      headers: { authorization: `Bearer ${token}` },
+    }),
+  );
+  const personalBody = objectBody(await personal.json(), 'my-realms');
+  if (personal.status !== 200 || !Array.isArray(personalBody.items) || personalBody.items.length !== 1)
+    throw new Error(`my-realms did not return the seeded current member: ${JSON.stringify(personalBody)}`);
+  const currentItem = objectBody(personalBody.items[0], 'my-realms item');
+  const current = objectBody(currentItem.current, 'my-realms current projection');
+  const actions = objectBody(current.actions, 'my-realms actions');
+  if (currentItem.realmId !== realmId || actions.state !== 'current')
+    throw new Error(`my-realms did not return the created Realm's current projection: ${JSON.stringify(currentItem)}`);
+  recorded.set('my-realms', { ...personalBody, status: personal.status });
   return recorded;
 }
 
@@ -818,7 +871,11 @@ export function selectsRecording(name: string, names: readonly string[]): boolea
 
 /** Generated definitions and Home templates must reflect the current producer shape. */
 export function recordingSnapshot(name: string, value: unknown, previous: unknown): unknown {
-  const generated = name === 'definitions-active' || name === 'definitions-release' || homeRecordingNames.has(name);
+  const generated =
+    name === 'definitions-active' ||
+    name === 'definitions-release' ||
+    name === 'my-realms' ||
+    homeRecordingNames.has(name);
   return stableRecording(value, generated ? undefined : previous);
 }
 
@@ -1045,9 +1102,18 @@ async function main(): Promise<void> {
   const databaseUrl = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
   await waitForDatabase(databaseUrl);
   process.env.DATABASE_URL = databaseUrl;
+  process.env.KERNEL_RECEIPT_KEYS = `1:${receiptKey}`;
   migrate(databaseUrl);
   pool = new Pool({ connectionString: databaseUrl });
   await import(new URL('../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url).href);
+  // Direct recorder commands use the same native History/Access composition as the process roots. Install it after
+  // registering SQL and before importing setup or governance commands, matching the repository CLI bootstrap.
+  const { installNativeHistoryPreload } = await import(`${kernelBase}/src/composition/preload.ts`);
+  installNativeHistoryPreload();
+  // The recorder also creates an in-process page kernel; install the same Semantic read application the HTTP root
+  // installs so subject-page reads can consume native copy-work presentation.
+  const { installSemanticCopyWork } = await import(`${kernelBase}/src/composition/semantic-copy-work.ts`);
+  installSemanticCopyWork();
   const { setupSemantic } = await import(`${kernelBase}/src/semantic/setup.ts`);
   const { bundledRelease } = await import('@rezics/definitions/bundled');
   await setupSemantic(pool, bundledRelease);
@@ -1088,6 +1154,7 @@ async function main(): Promise<void> {
     KERNEL_PORT: String(kernelPort),
     KERNEL_ROUTE_KEY: kernelRouteKey,
     KERNEL_SESSION_KEYS: `1:${sessionKey}`,
+    KERNEL_RECEIPT_KEYS: `1:${receiptKey}`,
     KERNEL_WRITE_RATE_SECRET: randomBytes(32).toString('base64url'),
     // Seeding a used library writes more than a new account's minute budget; the budget is a startup override.
     KERNEL_WRITE_RATE_OVERRIDES: JSON.stringify(
@@ -1222,6 +1289,44 @@ async function main(): Promise<void> {
     },
     'the genre',
   );
+  if (only.length === 1 && only[0] === 'my-realms') {
+    if (!pool) throw new Error('Database pool is not open.');
+    const { newId } = await import(`${kernelBase}/src/route/route.ts`);
+    const { validateContentDocument } = await import(`${kernelBase}/src/content/document.ts`);
+    const documents = [
+      validateContentDocument(
+        blocks([
+          paragraph('edition-question', [text('I have never read it. Is there an edition you would start with?')]),
+        ]),
+      ),
+      validateContentDocument(
+        blocks([paragraph('edition-answer', [text('Start with the one you can find; they all have the fox.')])]),
+      ),
+    ];
+    const pages = await recordBoardRealm({
+      origin,
+      pool,
+      accountId,
+      conceptId: fable,
+      newId,
+      documents,
+    });
+    const response = pages.get('my-realms');
+    if (!response) throw new Error('The supported recorder did not return the My Realms response.');
+    const output = process.env.WEB_RECORD_OUTPUT ?? join(app, 'src/kernel/recorded');
+    await mkdir(output, { recursive: true });
+    const file = join(output, 'my-realms.json');
+    const snapshot = recordingSnapshot('my-realms', normalizeRecording(response, undefined, 'en'), undefined);
+    await writeFile(file, JSON.stringify(snapshot));
+    const formatted = Bun.spawnSync([join(root, 'node_modules/.bin/oxfmt'), '--write', file], {
+      cwd: root,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    if (formatted.exitCode !== 0)
+      throw new Error(`Formatting the recording failed: ${formatted.stderr.toString() || formatted.stdout.toString()}`);
+    return;
+  }
   const subjectId = await create(
     {
       type: 'schema:Book',
@@ -1434,33 +1539,35 @@ async function main(): Promise<void> {
     recorded.set(name, { ...body, status: response.status });
     return response.status;
   };
-  const deadline = Date.now() + 60_000;
-  while (true) {
-    if ((await savePost('subject-page', { target: { subject: subjectId } })) !== 200)
-      throw new Error(`subject-page returned ${JSON.stringify(recorded.get('subject-page'))}`);
-    const reads = Object.values(objectBody(objectBody(recorded.get('subject-page'), 'subject-page').reads, 'reads'));
-    const editions = reads
-      .map((read) => objectBody(objectBody(read, 'read').body, 'read body'))
-      .find(
-        (body) =>
-          Array.isArray(body.links) &&
-          body.links.some((link: unknown) => objectBody(link, 'link').property === 'schema:exampleOfWork'),
-      );
-    if (Array.isArray(editions?.links) && editions.links.length === editionIds.length) break;
-    if (worker.exitCode !== null) throw new Error(`Kernel worker exited with ${worker.exitCode}`);
-    if (Date.now() >= deadline)
-      throw new Error(`The recorded page should list ${editionIds.length} editions: ${JSON.stringify(reads)}`);
-    await Bun.sleep(500);
+  if (writes('subject-page', 'missing-subject-page')) {
+    const deadline = Date.now() + 60_000;
+    while (true) {
+      if ((await savePost('subject-page', { target: { subject: subjectId } })) !== 200)
+        throw new Error(`subject-page returned ${JSON.stringify(recorded.get('subject-page'))}`);
+      const reads = Object.values(objectBody(objectBody(recorded.get('subject-page'), 'subject-page').reads, 'reads'));
+      const editions = reads
+        .map((read) => objectBody(objectBody(read, 'read').body, 'read body'))
+        .find(
+          (body) =>
+            Array.isArray(body.links) &&
+            body.links.some((link: unknown) => objectBody(link, 'link').property === 'schema:exampleOfWork'),
+        );
+      if (Array.isArray(editions?.links) && editions.links.length === editionIds.length) break;
+      if (worker.exitCode !== null) throw new Error(`Kernel worker exited with ${worker.exitCode}`);
+      if (Date.now() >= deadline)
+        throw new Error(`The recorded page should list ${editionIds.length} editions: ${JSON.stringify(reads)}`);
+      await Bun.sleep(500);
+    }
+    const subjectPage = objectBody(recorded.get('subject-page'), 'subject-page');
+    const template = objectBody(subjectPage.template, 'subject-page template');
+    if (
+      subjectPage.subject !== subjectId ||
+      typeof subjectPage.profile !== 'string' ||
+      !/^sha256:[0-9a-f]{64}$/.test(subjectPage.profile) ||
+      typeof template.scope !== 'string'
+    )
+      throw new Error(`subject-page is not a page for the recorded subject: ${JSON.stringify(subjectPage)}`);
   }
-  const subjectPage = objectBody(recorded.get('subject-page'), 'subject-page');
-  const template = objectBody(subjectPage.template, 'subject-page template');
-  if (
-    subjectPage.subject !== subjectId ||
-    typeof subjectPage.profile !== 'string' ||
-    !/^sha256:[0-9a-f]{64}$/.test(subjectPage.profile) ||
-    typeof template.scope !== 'string'
-  )
-    throw new Error(`subject-page is not a page for the recorded subject: ${JSON.stringify(subjectPage)}`);
   const subjectRecord = objectBody(objectBody(recorded.get('subject'), 'subject').subject, 'subject record');
   const described = Object.keys(objectBody(subjectRecord.descriptions, 'subject descriptions'));
   const aliased = Object.values(objectBody(subjectRecord.aliases, 'subject aliases')).flat();
@@ -1468,10 +1575,12 @@ async function main(): Promise<void> {
     throw new Error(
       `The recorded subject needs descriptions in en and ja and two aliases: ${JSON.stringify(subjectRecord)}`,
     );
-  if ((await savePost('missing-subject-page', { target: { subject: missingSubjectId } })) !== 404)
-    throw new Error(`missing-subject-page returned ${JSON.stringify(recorded.get('missing-subject-page'))}`);
-  if (recorded.get('missing-subject-page')?.code !== 'not_found')
-    throw new Error(`missing-subject-page is not not_found: ${JSON.stringify(recorded.get('missing-subject-page'))}`);
+  if (writes('subject-page', 'missing-subject-page')) {
+    if ((await savePost('missing-subject-page', { target: { subject: missingSubjectId } })) !== 404)
+      throw new Error(`missing-subject-page returned ${JSON.stringify(recorded.get('missing-subject-page'))}`);
+    if (recorded.get('missing-subject-page')?.code !== 'not_found')
+      throw new Error(`missing-subject-page is not not_found: ${JSON.stringify(recorded.get('missing-subject-page'))}`);
+  }
   await expectStatus('board', `/v1/boards/${boardId}`, 200);
   await expectStatus('board-threads', `/v1/boards/${boardId}/threads`, 200);
   await expectStatus('thread', `/v1/threads/${threadId}`, 200);
@@ -1508,7 +1617,7 @@ async function main(): Promise<void> {
   if (!Array.isArray(ownedPosts) || ownedPosts.length !== 2)
     throw new Error(`The owned thread should hold two posts: ${JSON.stringify(ownedPosts)}`);
 
-  if (writes('board-realm')) {
+  if (writes('board-realm', 'my-realms')) {
     const realmDocuments = [
       blocks([
         paragraph('edition-question', [text('I have never read it. Is there an edition you would start with?')]),
@@ -1820,7 +1929,7 @@ async function main(): Promise<void> {
     const file = join(output, `${name}.json`);
     written.push(file);
     // Definitions are generated snapshots; retaining old strings would preserve stale digests and ratios.
-    const generated = name === 'definitions-active' || name === 'definitions-release';
+    const generated = name === 'definitions-active' || name === 'definitions-release' || name === 'my-realms';
     const oldRecording = (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
     const freshSnapshot = generated || homeRecordingNames.has(name);
     const previous = freshSnapshot ? undefined : oldRecording;
@@ -1911,13 +2020,19 @@ async function recordDefinitions(): Promise<void> {
 /** Hands the recording to a check host and copies the recorded pages back, including when the recording fails. */
 export async function runRecord(argv: readonly string[] = Bun.argv.slice(2)): Promise<number> {
   const names = argv.filter((argument) => argument !== '--');
+  // A named My Realms refresh writes one response. Declare that file directly so the shared artifact
+  // handoff stays within its file bound instead of scanning every unrelated recorded response.
+  const returns =
+    names.length === 1 && names[0] === 'my-realms'
+      ? ['apps/web/src/kernel/recorded/my-realms.json']
+      : ['apps/web/src/kernel/recorded'];
   return stackRun(
     {
       label: 'web record',
       root,
       cwd: app,
       command: ['bun', 'scripts/record.ts', ...names],
-      returns: ['apps/web/src/kernel/recorded'],
+      returns,
     },
     () => executeRecord(),
   );

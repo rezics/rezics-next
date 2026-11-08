@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef } from 'react';
 import { Link } from '@tanstack/react-router';
-import { ContentItem } from '@rezics/ui/content-item';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
+import { MyRealmsCurrentRowView } from './my-realms-current/states';
+import type { MyRealmsCurrentController } from './my-realms-current/contract';
 import type { MyRealmsPage } from './space';
 import type { MyRealmsMovement, MyRealmsNavigation } from './my-realms-caller';
 
@@ -12,11 +13,13 @@ export function MyRealmsPageView({
   navigation,
   onMove,
   focusContinuation,
+  currentController,
 }: {
   page: MyRealmsPage;
   navigation?: MyRealmsNavigation | undefined;
   onMove?: (kind: MyRealmsMovement, cursor: string | null, trigger?: HTMLElement) => boolean;
   focusContinuation?: (() => boolean) | undefined;
+  currentController?: MyRealmsCurrentController | undefined;
 }) {
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
@@ -30,7 +33,7 @@ export function MyRealmsPageView({
   }, [focusContinuation]);
 
   return (
-    <article className="min-w-0 max-w-3xl text-foreground [overflow-wrap:anywhere]">
+    <article data-slot="my-realms-page" className="min-w-0 max-w-3xl text-foreground [overflow-wrap:anywhere]">
       <section aria-labelledby={headingId} className="space-y-8">
         <header>
           <PageHeading id={headingId} ref={heading} tabIndex={-1}>
@@ -40,18 +43,9 @@ export function MyRealmsPageView({
         {page.realms.length ? (
           <ul aria-labelledby={headingId} className="space-y-1">
             {page.realms.map((realm) => (
-              <ContentItem
-                key={realm.realmId}
-                title={realm.name}
-                headingLevel={2}
-                className="flex items-start gap-4 rounded-xl px-4 py-3"
-                metadata={<p>{m.realms_entry_unavailable()}</p>}
-                preview={
-                  realm.description ? (
-                    <p className="text-sm leading-relaxed text-muted-foreground">{realm.description}</p>
-                  ) : undefined
-                }
-              />
+              <li key={realm.realmId}>
+                <MyRealmsCurrentRowView row={realm} controller={currentController} />
+              </li>
             ))}
           </ul>
         ) : (

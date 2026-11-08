@@ -8,6 +8,7 @@ import type { ReadCredentialMode } from '../kernel/credential';
 import { personalRead } from '../kernel/query';
 import type { MyRealmsPage, MyRealmsReaderOrigin } from './space';
 import { MyRealmsPageView } from './my-realms-page';
+import { MyRealmsCurrentControllerHost } from './my-realms-current/controller';
 import { myRealmsQuery } from './realm-membership-queries';
 
 const sessionKey = ['session'] as const;
@@ -49,6 +50,14 @@ type CacheQuery = object;
 type TaggedPage = { callerId: string; sourceRevision: number; query: CacheQuery };
 export type MyRealmsMovement = 'next' | 'previous' | 'first';
 export type MyRealmsNavigation = { previous?: string | null; first: boolean };
+export type MyRealmsViewOwner = {
+  readonly visit: MyRealmsVisit;
+  readonly ready: boolean;
+  subscribe(listener: () => void): () => void;
+  getRevision(): number;
+  isCurrent(): boolean;
+  acceptsPage(page: MyRealmsPage): boolean;
+};
 type InventoryNavigation = {
   ownerId: string;
   locale: string;
@@ -1019,6 +1028,17 @@ export function MyRealmsCallerHost({
     credentialMode: 'session' as const,
   };
   const matchingAddress = caller.isCurrentAddress(address);
+  const currentOwner = useMemo<MyRealmsViewOwner>(
+    () => ({
+      visit: initial.visit,
+      ready: hydrated && caller.isCurrent(),
+      subscribe: caller.subscribe,
+      getRevision: caller.getRevision,
+      isCurrent: () => caller.isCurrent(),
+      acceptsPage: (page) => caller.acceptsLoaderData(initial.visit, page) || caller.acceptsQueryData(page),
+    }),
+    [caller, hydrated, initial.visit],
+  );
   const focusContinuation = caller.hasContinuationFocus() ? () => caller.claimContinuationFocus() : undefined;
   const onMove = (kind: MyRealmsMovement, cursor: string | null, trigger?: HTMLElement) =>
     caller.move(kind, cursor, trigger);
@@ -1036,12 +1056,17 @@ export function MyRealmsCallerHost({
         <Link to="/realms/new" className="inline-flex min-h-10 items-center text-primary underline underline-offset-4">
           {m.space_setup_heading()}
         </Link>
-        <MyRealmsPageView
-          page={initial.page}
-          navigation={caller.navigation()}
-          onMove={onMove}
-          focusContinuation={focusContinuation}
-        />
+        <MyRealmsCurrentControllerHost page={initial.page} owner={currentOwner}>
+          {(controller) => (
+            <MyRealmsPageView
+              page={initial.page}
+              navigation={caller.navigation()}
+              onMove={onMove}
+              focusContinuation={focusContinuation}
+              currentController={controller}
+            />
+          )}
+        </MyRealmsCurrentControllerHost>
       </div>
     );
   if (hydrated && caller.adoptionPending()) return null;
@@ -1051,6 +1076,7 @@ export function MyRealmsCallerHost({
       caller={caller}
       initial={initial}
       cursor={cursor}
+      owner={currentOwner}
       onMove={onMove}
       focusContinuation={focusContinuation}
     />
@@ -1062,12 +1088,14 @@ function MyRealmsAdmittedPage({
   caller,
   initial,
   cursor,
+  owner,
   onMove,
   focusContinuation,
 }: {
   caller: MyRealmsCaller;
   initial: { page: MyRealmsPage; visit: MyRealmsVisit };
   cursor: string | undefined;
+  owner: MyRealmsViewOwner;
   onMove: (kind: MyRealmsMovement, cursor: string | null, trigger?: HTMLElement) => boolean;
   focusContinuation: (() => boolean) | undefined;
 }) {
@@ -1086,12 +1114,17 @@ function MyRealmsAdmittedPage({
       <Link to="/realms/new" className="inline-flex min-h-10 items-center text-primary underline underline-offset-4">
         {m.space_setup_heading()}
       </Link>
-      <MyRealmsPageView
-        page={page}
-        navigation={caller.navigation()}
-        onMove={onMove}
-        focusContinuation={focusContinuation}
-      />
+      <MyRealmsCurrentControllerHost page={page} owner={owner}>
+        {(controller) => (
+          <MyRealmsPageView
+            page={page}
+            navigation={caller.navigation()}
+            onMove={onMove}
+            focusContinuation={focusContinuation}
+            currentController={controller}
+          />
+        )}
+      </MyRealmsCurrentControllerHost>
     </div>
   );
 }

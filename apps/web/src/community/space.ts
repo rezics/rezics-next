@@ -8,7 +8,7 @@ import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } fr
 import { realmClaimSnapshot, type RealmClaimSnapshot } from './realm-claim';
 import { readRealmHomePresentation, type RealmHomePresentation } from './realm-home-presentation-native';
 import { nativeMembershipEffect, nativeRealmLeaveOwnerReason } from './realm-leave-recovery';
-import { formatMyRealmsInventory, type MyRealmsInventoryLink } from './my-realms-native';
+import { formatMyRealmsCurrent, type MyRealmsCurrentRow, type MyRealmsNativePage } from './my-realms-native';
 import {
   bindNativeRealmHomeOperations,
   nativeRealmHomeShelves,
@@ -107,7 +107,7 @@ export async function namePublishedTypes(page: SpacePageData, locale: string): P
   };
 }
 
-export type RealmLink = MyRealmsInventoryLink & { description?: string | null };
+export type RealmLink = MyRealmsCurrentRow;
 export type MyRealmsReaderOrigin =
   | { kind: 'session'; subject: string; csrfFingerprint: string }
   | { kind: 'anonymous' }
@@ -115,8 +115,8 @@ export type MyRealmsReaderOrigin =
 
 export type MyRealmsPage = {
   signedIn: boolean;
-  realms: RealmLink[];
-  next: string | null;
+  realms: readonly RealmLink[];
+  next: MyRealmsNativePage['next'];
   /** Review destination navigation keeps an expired frontier until the reader explicitly restarts. */
   cursorExpired?: boolean;
   /** Same-prepared-read provenance. It contains no credential or raw CSRF value. */
@@ -654,7 +654,7 @@ export async function loadMyRealms(
   const page = readCommunity(result);
   return {
     signedIn: true,
-    ...formatMyRealmsInventory(page),
+    ...formatMyRealmsCurrent(page),
     readerOrigin,
   };
 }

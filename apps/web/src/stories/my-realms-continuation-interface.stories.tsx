@@ -5,6 +5,8 @@ import { expect, userEvent, within } from 'storybook/test';
 import { MyRealmsPageView } from '../community/my-realms-page';
 import type { MyRealmsPage } from '../community/space';
 import type { MyRealmsNavigation } from '../community/my-realms-caller';
+import type { MyRealmsCurrentRow, MyRealmsNativePage } from '../community/my-realms-current/contract';
+import { formatMyRealmsCurrent } from '../community/my-realms-native';
 import recording from '../kernel/recorded/my-realms.json';
 import { m } from '../paraglide/messages.js';
 import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime.js';
@@ -13,30 +15,58 @@ import { ClosedErrorPage } from '../shell/closed';
 const cursor = 'opaque-empty-page.cursor?next=2&keep=%2F';
 const finalEmpty: MyRealmsPage = { signedIn: true, realms: [], next: null };
 const sparseEmpty: MyRealmsPage = { signedIn: true, realms: [], next: cursor };
+const recordedRows = formatMyRealmsCurrent(recording as unknown as MyRealmsNativePage).realms;
+
+function currentRow(index: number, name: string, description: string): MyRealmsCurrentRow {
+  const source = recordedRows[0];
+  if (!source) throw new Error('The refreshed My Realms recording needs a current row.');
+  const realmId = `0192f3a0-6c1e-7b2a-9d4e-${String(index + 1).padStart(12, '0')}`;
+  const replacePath = (action: MyRealmsCurrentRow['current']['actions']['enter'], suffix: string) =>
+    action.state === 'available' ? { ...action, path: `/v1/realms/${realmId}${suffix}` } : action;
+  return {
+    ...source,
+    realmId,
+    name,
+    current: {
+      ...source.current,
+      description,
+      destination: { ...source.current.destination, realmId },
+      actions: {
+        ...source.current.actions,
+        enter: replacePath(source.current.actions.enter, ''),
+        manage: replacePath(source.current.actions.manage, '/settings'),
+        leave: replacePath(source.current.actions.leave, '/membership'),
+      },
+    },
+  };
+}
+
 const populated: MyRealmsPage = {
   signedIn: true,
-  realms: recording.items.map((item, index) => ({
-    realmId: item.realmId,
-    name: item.name,
-    description:
-      index === 0 ? 'A welcoming table for patient readers, long conversations, and notes worth keeping.' : null,
-  })),
+  realms: recordedRows.map((row, index) =>
+    currentRow(
+      index,
+      row.name,
+      index === 0
+        ? 'A welcoming table for patient readers, long conversations, and notes worth keeping.'
+        : row.current.description,
+    ),
+  ),
   next: cursor,
 };
 const longText: MyRealmsPage = {
   signedIn: true,
-  realms: populated.realms.map((realm, index) => ({
-    ...realm,
-    name: `${realm.name} — ${'Readers sharing stories across languages and time zones 共讀社群 '.repeat(4)}`,
-    description:
-      index === 1
-        ? null
-        : `${'We read slowly, compare translations, and keep space for every reader. 共讀與交流筆記。 '.repeat(8)}${'UnbrokenReadingNotes'.repeat(16)}`,
-  })),
+  realms: Array.from({ length: 20 }, (_, index) =>
+    currentRow(
+      index + 1,
+      `${recordedRows[0]!.name} ${'Readers sharing stories across languages and time zones 共讀社群 '.repeat(4)}`,
+      `${'We read slowly, compare translations, and keep space for every reader. 共讀與交流筆記。 '.repeat(8)}${'UnbrokenReadingNotes'.repeat(16)}`,
+    ),
+  ),
   next: cursor,
 };
 
-/** Isolated supplied-page presentation: no query cache, server reader or native membership authority. */
+/** Supplied current pages with presentation-only descriptions and continuation coordinates. */
 function ContinuationExample({
   pages,
   direction = 'ltr',
@@ -81,7 +111,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Supplied-page observations for the production MyRealmsPageView. Realm IDs, order and names derive from the recorded my-realms response; descriptions, long text and opaque continuations are presentation examples. Use en/zh-Hant and phone390/desktop1280 globals for every state; RTL exports stress direction with those supported locales. Plays observe unavailable entry, native continuation destinations, target size, wrapping and keyboard focus without fetching another page. Unavailable reuses the existing route error presentation. These examples establish no native signed-in admission, SSR or caller lifetime evidence.',
+          'Current identity, media and advice derive from the recorded My Realms response. Long text and opaque continuations are presentation examples. These stories exercise sparse and final pages, native continuation destinations, finite Previous/First navigation, target size, wrapping and keyboard focus without fetching another page. They do not establish SSR or caller lifetime evidence.',
       },
     },
   },
@@ -94,32 +124,37 @@ const meta = {
       await expect(canvas.queryByText(m.realms_empty())).toBeNull();
       await expect(canvas.queryByText(m.realm_list_details_sparse_page_empty())).toBeNull();
       await expect(canvas.queryByRole('link', { name: m.realms_more() })).toBeNull();
-      await expect(canvasElement.querySelector('[data-slot="list-row"]')).toBeNull();
+      await expect(canvasElement.querySelector('[data-slot="my-realms-item"]')).toBeNull();
       return;
     }
 
     await canvas.findAllByRole('heading', { level: 1, name: m.realms_heading() });
-    const articles = [...canvasElement.querySelectorAll('article')];
+    const articles = [...canvasElement.querySelectorAll('[data-slot="my-realms-page"]')];
     await expect(articles).toHaveLength(args.pages.length);
     const headingIds: string[] = [];
     for (const [index, article] of articles.entries()) {
       const page = args.pages[index]!;
-      const view = within(article);
-      const rows = [...article.querySelectorAll('[data-slot="list-row"]')];
+      const view = within(article as HTMLElement);
+      const rows = [...article.querySelectorAll('[data-slot="my-realms-item"]')];
       await expect(rows).toHaveLength(page.realms.length);
-      await expect(article.querySelector('img, picture, source')).toBeNull();
       for (const [rowIndex, row] of rows.entries()) {
         const realm = page.realms[rowIndex]!;
-        const heading = within(row as HTMLElement).getByRole('heading', { level: 2, name: realm.name });
+        const item = within(row as HTMLElement);
+        const heading = item.getByRole('heading', { level: 2, name: realm.name });
         headingIds.push(heading.id);
         await expect(heading).toBeVisible();
-        await expect(within(row as HTMLElement).getByText(m.realms_entry_unavailable())).toBeVisible();
-        await expect(row.querySelectorAll('a')).toHaveLength(0);
-        if (realm.description) {
-          const description = row.querySelector('[data-content-item-slot="preview"] p');
-          await expect(description).toHaveTextContent(realm.description);
-          await expect(description).toHaveAttribute('class', 'text-sm leading-relaxed text-muted-foreground');
-        } else await expect(row.querySelector('[data-content-item-slot="preview"]')).toBeNull();
+        await expect(row.querySelector('header p')).toHaveTextContent(realm.current.description);
+        if (realm.current.actions.enter.state === 'available')
+          await expect(item.getByRole('link', { name: m.my_realms_open() })).toBeVisible();
+        else await expect(item.queryByRole('link', { name: m.my_realms_open() })).toBeNull();
+        if (realm.current.actions.manage.state === 'available')
+          await expect(item.getByRole('link', { name: m.my_realms_manage() })).toBeVisible();
+        else await expect(item.queryByRole('link', { name: m.my_realms_manage() })).toBeNull();
+        const media = [realm.current.avatar, realm.current.banner];
+        if (media.some((image) => image.state === 'none'))
+          await expect(item.getAllByText(m.realm_appearance_no_image())).not.toHaveLength(0);
+        if (media.some((image) => image.state === 'unavailable'))
+          await expect(item.getAllByText(m.realm_appearance_image_unavailable())).not.toHaveLength(0);
       }
 
       if (page.realms.length === 0) {
@@ -155,7 +190,7 @@ const meta = {
         await expect(view.queryByRole('navigation')).toBeNull();
         await expect(view.queryByRole('link', { name: m.realms_more() })).toBeNull();
       }
-      await expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth + 1);
+      await expect((article as HTMLElement).scrollWidth).toBeLessThanOrEqual((article as HTMLElement).clientWidth + 1);
     }
     await expect(new Set(headingIds).size).toBe(headingIds.length);
     const main = canvas.getByRole('main');
@@ -173,9 +208,7 @@ export const SparseEmpty: Story = {
   args: { pages: [sparseEmpty] },
   globals: { locale: 'en', viewport: { value: 'phone390' } },
 };
-export const PopulatedWithNext: Story = {
-  globals: { locale: 'en', viewport: { value: 'desktop1280' } },
-};
+export const PopulatedWithNext: Story = { globals: { locale: 'en', viewport: { value: 'desktop1280' } } };
 export const PopulatedWithoutNext: Story = {
   args: { pages: [{ ...populated, next: null }] },
   globals: { locale: 'en', viewport: { value: 'phone390' } },
@@ -188,9 +221,7 @@ export const SparseEmptyTraditionalChinese: Story = {
   args: { pages: [sparseEmpty] },
   globals: { locale: 'zh-Hant', viewport: { value: 'desktop1280' } },
 };
-export const PopulatedTraditionalChinese: Story = {
-  globals: { locale: 'zh-Hant', viewport: { value: 'phone390' } },
-};
+export const PopulatedTraditionalChinese: Story = { globals: { locale: 'zh-Hant', viewport: { value: 'phone390' } } };
 export const PopulatedWithoutNextTraditionalChinese: Story = {
   args: { pages: [{ ...populated, next: null }] },
   globals: { locale: 'zh-Hant', viewport: { value: 'desktop1280' } },
@@ -218,22 +249,4 @@ export const Unavailable: Story = {
 export const UnavailableTraditionalChinese: Story = {
   args: { pages: [], unavailable: true },
   globals: { locale: 'zh-Hant', viewport: { value: 'desktop1280' } },
-};
-
-/** Named missing state: an admitted later terminal window still offers deliberate return. */
-export const LaterEmptyWithReturn: Story = {
-  args: { pages: [finalEmpty], navigation: { previous: cursor, first: true } },
-  globals: { locale: 'en', viewport: { value: 'phone390' } },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await expect(await canvas.findByText(m.realms_empty())).toBeVisible();
-    const navigation = canvas.getByRole('navigation', { name: m.realms_heading() });
-    for (const label of [m.prq_previous(), m.realms_first_page()]) {
-      const link = within(navigation).getByRole('link', { name: label });
-      await expect(link).toBeVisible();
-      await expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-      await expect(getComputedStyle(link).whiteSpace).toBe('normal');
-    }
-    await expect(canvas.queryByRole('link', { name: m.realms_more() })).toBeNull();
-  },
 };
