@@ -15,6 +15,7 @@ import type {
   MalScoreReview,
 } from '../src/library/personal-mal-import/contract';
 import { kernelMalPort } from '../src/library/personal-mal-import/native';
+import { MAL_STANDARD_QUESTION_ID } from '../src/library/personal-mal-import/contract';
 import type { SessionEnv } from '../src/session/client';
 import { SESSION_COOKIE } from '../src/session/cookies';
 import { libraryNavigation } from '../src/library/navigation';
@@ -1074,4 +1075,53 @@ test('retained upload reopens private native evidence and results without a seco
   await click(m.library_mal_label_results());
   expect(host.textContent).toContain('accepted');
   expect(host.textContent).toContain(subject);
+});
+
+test('refused replacement cannot confirm a retained score review after page navigation', async () => {
+  const unavailable = async () => ({ kind: 'unavailable' as const });
+  const current = reviewedRow(row({ target: subject }), {
+    kind: 'review',
+    key: id,
+    id,
+    input: {
+      row: 0,
+      target: subject,
+      skip: false,
+      replace: false,
+      score: { action: 'clear', questionId, questionRevision: question.revision },
+    },
+  });
+  current.review!.score!.question.id = MAL_STANDARD_QUESTION_ID;
+  current.review!.score!.question.revision = 1;
+  await mount({
+    readQuestion: async () => ({ kind: 'question', question }),
+    preview: async () => ({ kind: 'previewed', id }),
+    page: async () => ({ kind: 'page', page: pageOf([structuredClone(current)], { next: 0 }) }),
+    review: async () => ({ kind: 'conflict' }),
+    apply: unavailable,
+    admitSource: unavailable,
+    cancel: unavailable,
+    delete: unavailable,
+  });
+  await uploadXml();
+  expect(button(m.library_mal_continue_confirm())?.disabled).toBe(false);
+  await click(m.library_mal_read_question());
+  await click(m.library_mal_continue_confirm());
+  expect(host.textContent).toContain(
+    m.library_mal_question_details({
+      label: question.label,
+      revision: 1,
+      grain: question.grain,
+      meaning: question.meaning!,
+      min: 0,
+      max: 20,
+      step: 1,
+    }),
+  );
+  await click(m.library_mal_return_review());
+  await click(m.library_mal_save_review());
+  expect(button(m.library_mal_continue_confirm())?.disabled).toBe(true);
+  await click(m.library_mal_next_page());
+  expect(button(m.library_mal_continue_confirm())?.disabled).toBe(true);
+  expect(host.textContent).toContain('secret note');
 });

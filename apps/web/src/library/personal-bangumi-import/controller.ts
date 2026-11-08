@@ -357,13 +357,6 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       current.proposedState = null;
       current.current = null;
       current.conflict = false;
-      current.reviewToken = null;
-      current.scoreReview = null;
-      current.scoreConsent = false;
-      current.entryReadback = null;
-      current.voteReadback = null;
-      const row = page.find((item) => item.ordinal === ordinal);
-      if (row) row.review = null;
     }
     if (state !== current.choice.state || skip !== current.choice.skip) current.scoreConsent = false;
     current.choice = {

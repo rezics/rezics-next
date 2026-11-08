@@ -602,31 +602,28 @@ producer contract remains the authority for its HTTP methods, caps and expiry.
 
 ### Personal list import
 
-Web provides a signed-in visit for uploading a person's own VNDB XML export. The route uses the installed generated
-`@rezics/client` methods for the mounted native `libraryImports.vndb` API, reading that Eden function surface by
-property access; native admission owns parsing, bounds, preview, review, apply, cancellation and deletion. Web adds no
-parser, synchronizer or import endpoint. VNDB label-apply remains a later native owner surface. The visit
-reads at most eight rows per page, displays native match states and private source evidence, and requires an explicit
-catalogue target and released Library state before a row can enter the confirmed selection. Skip and retain remain
-explicit choices. Confirmation names only the displayed selection, and unknown commands can retry only with their
-captured operands and current signed-in visit. Page, review and apply-result shapes come from the installed generated
-methods. Confirmation freezes its selected commands; beginning a replacement review withdraws its prior selection
-even when native admission refuses the replacement.
+Web provides signed-in visits for a person's own VNDB XML, AniList JSON, MAL XML and Bangumi export. Each binds
+its installed typed `libraryImports` provider methods; native owners supply parsing, bounds, matching, review,
+apply and retention. VNDB lives in `personal-list-import`. Web adds no parser, synchronizer or import endpoint.
+The visits show bounded native pages, match states and private source evidence. Targets, released Library state
+and native scores require their own explicit choices; skip and retain stay explicit.
 
-Decision: A row enters apply selection only after explicit target and released Library-state review; confirmation
-applies only the displayed admitted selection.
+Decision: retain the installed provider review/apply operations and Content guarded writer. Replacement review
+withdraws old confirmation before any admission read, including refusal; uncertain replay keeps its original intent.
+Independent score consent binds the reviewed target, question, source and native units or clear choice. A later
+question point read cannot relabel that consent. Acknowledged outcomes and fresh exact vote reads have separate
+presentation; counted zero remains a vote, and clear remains deliberate.
 
-VNDB score scale, source state, progress, dates and precision, notes, privacy, release records and unmapped values
-remain private source evidence. The installed generated client still publishes only the state import request/result
-shape; Web displays the original score and keeps native score review unavailable until typed score fields and Content
-atomic admission are published. Upload and state choices do not imply public vote consent, and existing votes remain
-unchanged. Notes do not become public reviews or local ratings, existing facts remain unless the person explicitly
-reviews a native replacement, and cancellation never promises rollback of acknowledged rows.
-Native admission enforces the independent 2 MiB XML bound and 12 MiB + 64-byte escaped JSON wire bound; invalid XML
-or XML overflow returns HTTP 400, and wire overflow returns HTTP 413. Browser file size is not the wire size. Native
-support does not include alternate VNDB namespaces or provider-catalogue/MAL imports. Details and field limits live
-in [personal list import](../../apps/web/src/library/personal-list-import.md) and
-[Personal VNDB list import](../library-import-vndb.md). MAL keeps its existing format and journey owner.
+Source scores keep their provider scales, spelling and unrated meaning. Notes, privacy, dates, progress, release
+records and unmatched evidence remain private unless their native owner admits an explicitly reviewed field.
+Uploading or selecting Library state never grants public vote consent. Existing votes remain unless the person
+chooses a native replacement; cancellation does not roll back acknowledged rows. Supported same-home score effects
+use Content's question and Semantic identity participants; foreign-home admission remains native-owned.
+
+VNDB accepts at most 2 MiB XML and independently bounds escaped JSON wire input at 12 MiB + 64 bytes. Invalid or
+oversized XML returns HTTP 400; oversized wire input returns HTTP 413. Browser file size is not wire size. Provider
+operation bindings and focused coverage live in [personal list import](../../apps/web/src/library/personal-list-import.md);
+VNDB field limits and native admission live in [Personal VNDB list import](../library-import-vndb.md).
 
 ## Ownership
 
