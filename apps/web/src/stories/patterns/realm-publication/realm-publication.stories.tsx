@@ -75,6 +75,7 @@ export const SelectionHierarchy: Story = {
     await expect(view.getByRole('heading', { level: 2, name: m.realm_published_heading() })).toBeVisible();
     await expect(view.getByRole('heading', { level: 3, name: m.realm_publication_curate() })).toBeVisible();
     const selected = view.getByRole('group', { name: m.realm_publication_selected() });
+    await expect(within(selected).getByText(m.realm_publication_original_subject())).toBeVisible();
     await expect(within(selected).getByRole('heading', { level: 4 })).toHaveTextContent(
       pickText(search.subjects[0]!.labels, getLocale()).text,
     );

@@ -1,7 +1,14 @@
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
-import { parseEditionMetadata, parseEditionRevision, type EditionApi, type EditionRead } from './contract';
+import { parseEditionMetadata, parseEditionRevision } from './edition-schema';
+import type { EditionApi, EditionRead } from './contract';
 export * from './contract';
+export {
+  editionSubjectIdentitySchema,
+  parseEditionMetadata,
+  parseEditionRevision,
+  parseEditionSourceRecognition,
+} from './edition-schema';
 
 function member(value: unknown, key: string): unknown {
   return value !== null && (typeof value === 'object' || typeof value === 'function')

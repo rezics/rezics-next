@@ -3,7 +3,7 @@ import { parseFilter } from '@rezics/filter';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import { conditionMetadata, type ConditionMetadata } from '../../search/contracts/condition-metadata';
+import { conditionMetadata, type ConditionMetadata } from '../../search/condition-editor-model';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';

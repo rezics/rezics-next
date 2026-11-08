@@ -743,6 +743,11 @@ if (script.includes('/proc/loadavg')) {
   const reservationBytes = Number(script.match(/# REMOTE_CHECK_MEMORY_RESERVATION_BYTES (\\d+)/)?.[1] ?? Math.round(2.5 * 2 ** 30));
   const slotClass = script.match(/# REMOTE_CHECK_SLOT_CLASS (ordinary|short)/)?.[1] ?? 'ordinary';
   const call = count('slot');
+  if(config.slotStderrBytes) await new Promise<void>((done)=>process.stderr.write('n'.repeat(config.slotStderrBytes),()=>done()));
+  if(config.slotStderr) await new Promise<void>((done)=>process.stderr.write(config.slotStderr,()=>done()));
+  if(config.slotStdoutBytes) await new Promise<void>((done)=>process.stdout.write('o'.repeat(config.slotStdoutBytes),()=>done()));
+  if(config.slotSignal) {process.kill(process.pid,config.slotSignal);await new Promise(()=>{});}
+  if(config.slotExit!==undefined) {log({kind:'slot-transport-exit',call,code:config.slotExit});process.exit(config.slotExit);}
   if (call < (config.stallSlotTakes ?? 0)) {
     process.on('SIGTERM', () => {
       log({ kind: 'slot-take-stopped', call });
@@ -1252,6 +1257,11 @@ type HostConfig = {
   stallReturnsCopy?: boolean;
   stallReturnsProbe?: boolean;
   stallSlotTakes?: number;
+  slotStderrBytes?: number;
+  slotStderr?: string;
+  slotStdoutBytes?: number;
+  slotExit?: number;
+  slotSignal?: string;
   stalledControlProbes?: number;
   failedControlProbes?: number;
   refuseControlSession?: boolean;
@@ -6246,8 +6256,11 @@ test('slot take is stopped and reaped when its control session makes no progress
   env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '250';
   env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
   const result = await remote(env, workspace(), ['true']);
-  expect(result.code).toBe(75);
+  expect(result.code, result.stderr).toBe(75);
   expect(result.stderr).toContain('connection to a failed during slot take');
+  expect(result.stderr).toContain('\"kind\":\"progress-timeout\"');
+  expect(result.stderr).toContain('\"exitCode\":143');
+  expect(result.stderr).toContain('\"timeoutMs\":250');
   expect(events().filter((event) => event.kind === 'slot-take-stalled')).toHaveLength(3);
   expect(events().filter((event) => event.kind === 'slot-take-stopped')).toHaveLength(3);
   expect(events().filter((event) => event.kind === 'run')).toHaveLength(0);
@@ -9528,3 +9541,100 @@ test('loopback c admission respects configured slots, memory and slice CPU capac
   expect(stdout.trim().split('\n').at(-1)).toBe('no-slot');
   expect(events().some((event) => event.kind === 'slot' && event.granted)).toBe(false);
 });
+
+test.each([5, 0])(
+  'slot SSH terminal evidence preserves exit %s and bounded scrubbed stderr without a native result',
+  async (exit) => {
+    const { env, events } = scenario({
+      b: {
+        available: 16e9,
+        slotExit: exit,
+        slotStdoutBytes: 128 * 1024,
+        slotStderrBytes: 1024 * 1024,
+        slotStderr:
+          'terminal marker: ops@b.test 10.20.30.40 fd12:abcd::7 Identity file /keys/b /home/private/.ssh/key refused',
+      },
+    });
+    env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
+    const result = await remote(env, workspace(), ['true']);
+    expect(result.code).toBe(75);
+    expect(result.stderr).toContain(`"kind":"${exit === 0 ? 'unexpected-eof' : 'exit'}"`);
+    expect(result.stderr).toContain(`"exitCode":${exit}`);
+    expect(result.stderr).toContain('"signal":null');
+    expect(result.stderr).toContain('"stderrTruncated":true');
+    expect(result.stderr).toContain(
+      'terminal marker: [private] [address] [address] Identity file [private] [private-path] refused',
+    );
+    expect(result.stderr).not.toContain('ops@b.test');
+    expect(result.stderr).not.toContain('/keys/b');
+    expect(result.stderr).not.toContain('10.20.30.40');
+    expect(result.stderr).not.toContain('/home/private');
+    expect(result.stderr.length).toBeLessThan(20_000);
+    expect(result.stderr).toMatch(/"run":"[a-z0-9]+-[a-f0-9]+","connection":"b","pid":\d+/);
+    expect(events().filter((event) => event.kind === 'slot-transport-exit')).toHaveLength(3);
+    expect(events().filter((event) => event.kind === 'run')).toHaveLength(0);
+    expect(slotMarkers(env, 'b')).toEqual([]);
+  },
+  15_000,
+);
+
+test('slot SSH signal is observed independently of progress timeout and native status', async () => {
+  const { env, events } = scenario({
+    b: { available: 16e9, slotSignal: 'SIGTERM', slotStderr: 'peer ended slot transport' },
+  });
+  env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
+  const result = await remote(env, workspace(), ['true']);
+  expect(result.code).toBe(75);
+  expect(result.stderr).toContain('"kind":"signal"');
+  expect(result.stderr).toContain('"exitCode":null');
+  expect(result.stderr).toContain('"signal":"SIGTERM"');
+  expect(result.stderr).not.toContain('"kind":"progress-timeout"');
+  expect(events().filter((event) => event.kind === 'run')).toHaveLength(0);
+}, 15_000);
+
+test.each([
+  ['a', 0],
+  ['c', 5],
+] as const)(
+  'slot transport failure on b retains diagnostics and continues on healthy %s using existing fallback',
+  async (healthy, exit) => {
+    const { env, events } = scenario({
+      b: { available: 16e9, slotExit: exit, slotStderr: 'mux peer closed before admission' },
+      [healthy]: { available: 8e9, fallback: true },
+    });
+    env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
+    const result = await remote(env, workspace(), ['true']);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain('connection to b failed during slot take');
+    expect(result.stderr).toContain(`"exitCode":${exit}`);
+    expect(result.stderr).toContain('mux peer closed before admission');
+    expect(result.stderr).toContain(`retrying transport failure on b with code ${exit}`);
+    expect(events().filter((event) => event.kind === 'slot-transport-exit')).toHaveLength(1);
+    expect(
+      events()
+        .filter((event) => event.kind === 'run')
+        .map((event) => event.address),
+    ).toEqual([`ops@${healthy}.test`]);
+    expect(slotMarkers(env, 'b')).toEqual([]);
+    expect(slotMarkers(env, healthy)).toEqual([]);
+  },
+  15_000,
+);
+
+test('explicit slot capacity-busy remains a wait on its selected host instead of a transport retry', async () => {
+  const { env, events } = scenario({
+    b: { available: 16e9, busy: 2, slotStderr: 'capacity busy' },
+    a: { available: 8e9, fallback: true },
+  });
+  const result = await remote(env, workspace(), ['true']);
+  expect(result.code).toBe(0);
+  expect(result.stderr).not.toContain('failed during slot take');
+  expect(result.stderr).not.toContain('retrying transport failure');
+  const busy = events().filter((event) => event.kind === 'slot' && event.granted === false);
+  expect(busy).toHaveLength(2);
+  expect(
+    events()
+      .filter((event) => event.kind === 'run')
+      .map((event) => event.address),
+  ).toEqual(['ops@b.test']);
+}, 15_000);

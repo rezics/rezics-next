@@ -39,20 +39,26 @@ const presentation: PublicationPresentation = {
         rightsHolder: 'Native image artist',
         via: { name: 'Image source', url: 'https://example.com/source' },
         license: 'CC-BY-4.0',
-        obligations: ['Retain this attribution.'],
+        obligations: ['cc:Attribution'],
       },
     },
   },
 };
-async function shape(verdict: 'adopt' | 'reject' | 'withdraw' | null = 'adopt', display = presentation) {
+async function shape(
+  verdict: 'adopt' | 'reject' | 'withdraw' | null = 'adopt',
+  original = presentation,
+  terminalPresentation = original,
+) {
   const result = await preparationFixture(
     reader,
     () => (verdict === null ? null : head),
     verdict ?? 'adopt',
-    display,
+    original,
   )({ realmId, subjectId });
   if (result.kind !== 'ready') throw new Error('Fixture must be ready');
   result.preparation.subject.currentId = terminal;
+  result.preparation.subject.presentation.original = structuredClone(original);
+  result.preparation.subject.presentation.terminal = structuredClone(terminalPresentation);
   return result.preparation;
 }
 function nativeClient(handle: (request: Request) => Response | Promise<Response>) {
@@ -63,8 +69,8 @@ function nativeClient(handle: (request: Request) => Response | Promise<Response>
   });
 }
 
-test('installed preparation uses one authenticated generated GET and preserves independent producer variants and exact projected bytes', async () => {
-  for (const shelfSize of [1, 100, 1000]) {
+test('installed preparation uses one authenticated generated GET and retains one bounded selected review', async () => {
+  for (const suppliedDetails of [1, 10, 20]) {
     const payload = await shape();
     const requests: Request[] = [];
     const client = nativeClient((request) => {
@@ -75,7 +81,7 @@ test('installed preparation uses one authenticated generated GET and preserves i
       realmId,
       async () => ({ kind: 'denied' }),
       () => {},
-      () => Array.from({ length: shelfSize }, () => ({ ...work, publicationId: 'unused-shelf-head' })),
+      () => Array.from({ length: suppliedDetails }, () => ({ ...work, publicationId: 'unused-shelf-head' })),
       true,
       undefined,
       (input) => readPublicationPreparation(client, 'Bearer curator', input),
@@ -90,10 +96,13 @@ test('installed preparation uses one authenticated generated GET and preserves i
     expect(new TextEncoder().encode(JSON.stringify(projected)).byteLength).toBe(
       new TextEncoder().encode(JSON.stringify(payload)).byteLength,
     );
+    expect(new TextEncoder().encode(JSON.stringify({ preparation: projected })).byteLength).toBeLessThanOrEqual(
+      128 * 1024,
+    );
     expect(JSON.stringify(draft.getSnapshot())).not.toContain(work.title);
     draft.retire();
   }
-  // Shelf sizes are not detail-field counts. The installed producer has no detail-field collection.
+  // Unrelated supplied rows never expand selected review retention.
   let status = 503;
   const client = nativeClient(() => Response.json({}, { status }));
   expect(await readPublicationPreparation(client, null, { realmId, subjectId })).toEqual({ kind: 'denied' });
@@ -107,6 +116,16 @@ test('installed preparation uses one authenticated generated GET and preserves i
   expect(await readPublicationPreparation(client, 'Bearer curator', { realmId, subjectId })).toEqual({
     kind: 'unavailable',
   });
+  const oversized = await shape();
+  oversized.subject.presentation.terminal.label = {
+    state: 'available',
+    value: '\u0000'.repeat(130_000),
+    language: 'en',
+  };
+  const oversizedClient = nativeClient(() => Response.json({ preparation: oversized }));
+  expect(await readPublicationPreparation(oversizedClient, 'Bearer curator', { realmId, subjectId })).toEqual({
+    kind: 'unavailable',
+  });
   const aborted = new AbortController();
   aborted.abort();
   let touches = 0;
@@ -118,6 +137,46 @@ test('installed preparation uses one authenticated generated GET and preserves i
     { kind: 'unavailable' },
   );
   expect(touches).toBe(0);
+});
+
+test('installed receiver retains complete multibyte labels, credit and every legal obligation within the response cap', async () => {
+  const payload = await shape();
+  const label = '書'.repeat(4096);
+  const credit = {
+    rightsHolder: '權'.repeat(1024),
+    via: { name: '來源'.repeat(341), url: 'https://example.com/source' },
+    license: 'CC-BY-4.0',
+    obligations: ['cc:Attribution' as const, 'cc:ShareAlike' as const, 'cc:Notice' as const, 'cc:SourceCode' as const],
+  };
+  const cover = {
+    media: terminal,
+    width: 640,
+    height: 960,
+    placeholder: { thumbhash: 'abcdefghijklmnopqrstuvwx', color: '#123456' },
+    variants: [{ format: 'webp' as const, width: 640 }],
+    focalPoint: null,
+    credit,
+  };
+  payload.subject.presentation.original = {
+    label: { state: 'available', value: label, language: 'zh-Hant' },
+    cover: { state: 'available', value: cover },
+  };
+  payload.subject.presentation.terminal = structuredClone(payload.subject.presentation.original);
+  const client = nativeClient(() => Response.json({ preparation: payload }));
+
+  const result = await readPublicationPreparation(client, 'Bearer curator', { realmId, subjectId });
+
+  expect(result.kind).toBe('ready');
+  if (result.kind !== 'ready') return;
+  expect(result.preparation.subject.presentation.original.label).toEqual({
+    state: 'available',
+    value: label,
+    language: 'zh-Hant',
+  });
+  expect(result.preparation.subject.presentation.terminal.cover).toEqual({ state: 'available', value: cover });
+  expect(new TextEncoder().encode(JSON.stringify({ preparation: result.preparation })).byteLength).toBeLessThanOrEqual(
+    128 * 1024,
+  );
 });
 
 test('a saved original retry reconciles only the latest inspected disclosure', async () => {
@@ -241,6 +300,21 @@ test('mounted selected review renders only current generated disclosure, seals u
   try {
     await paint();
     await click(m.realm_publication_curate());
+    payload = await shape(
+      'adopt',
+      { label: { state: 'available', value: 'Original eligible label', language: 'en' }, cover: { state: 'empty' } },
+      {
+        label: { state: 'available', value: 'Terminal eligible label', language: 'en' },
+        cover: presentation.cover,
+      },
+    );
+    await act(async () => control.choose(work));
+    expect(control.target?.title).toBe('Original eligible label');
+    expect(host.querySelector('[data-publication-subject="terminal"]')?.textContent).toContain(
+      'Terminal eligible label',
+    );
+    expect(host.querySelector('img')?.getAttribute('src')).toContain(terminal);
+    await act(async () => control.choose(null));
     for (const verdict of [null, 'adopt', 'reject', 'withdraw'] as const) {
       payload = await shape(verdict);
       const before = reads;
@@ -260,7 +334,7 @@ test('mounted selected review renders only current generated disclosure, seals u
       expect(host.textContent).toContain(terminal);
       expect(host.textContent).toContain('Current native label');
       expect(host.textContent).not.toContain(work.title);
-      expect(host.textContent).toContain('Retain this attribution.');
+      expect(host.textContent).toContain('cc:Attribution');
       expect(host.querySelector('img')?.getAttribute('src')).toContain(terminal);
       expect(button(m.realm_publication_review_withdraw()).disabled).toBe(verdict === null);
     }
@@ -277,7 +351,7 @@ test('mounted selected review renders only current generated disclosure, seals u
       await act(async () => control.inspect());
       expect(host.textContent?.includes('Current native label')).toBe(label === 'available');
       expect(host.querySelector('img') !== null).toBe(cover === 'available');
-      expect(host.textContent?.includes('Retain this attribution.')).toBe(cover === 'available');
+      expect(host.textContent?.includes('cc:Attribution')).toBe(cover === 'available');
       expect(
         host.querySelector('[data-publication-label]')?.getAttribute('data-publication-label') ?? 'available',
       ).toBe(label);

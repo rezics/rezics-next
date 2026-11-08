@@ -36,6 +36,9 @@ import type { LifecycleHostControl } from './check-lifecycle-child.ts';
 import {
   acquireHostControl,
   clearPlacementProbeTimeout,
+  collectSshStderr,
+  scrubSshDiagnostic,
+  SSH_DIAGNOSTIC_TAIL_BYTES,
   DEFAULT_CONTROL_PROBE_TIMEOUT_MS,
   notePlacementProbeTimeout,
   recoverHungHostMaster,
@@ -1047,7 +1050,7 @@ function quote(word: string): string {
   return /^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`;
 }
 
-const sshControlContext = new AsyncLocalStorage<{ directory: string; leases: HostControlLease[] }>();
+const sshControlContext = new AsyncLocalStorage<{ directory: string; leases: HostControlLease[]; run?: string }>();
 
 function boundSshDirectory(workspace = process.cwd()): string {
   return sshControlContext.getStore()?.directory ?? sshControlDirectory(workspace);
@@ -4947,10 +4950,14 @@ async function probeHost(host: Host, uploadedDirectory?: string): Promise<HostPr
   return result;
 }
 
-function sessionLease(host: Host, holder: Bun.Subprocess<'pipe', 'pipe', 'ignore'>): SessionLease {
+function sessionLease(
+  host: Host,
+  holder: Bun.Subprocess<'pipe', 'pipe', 'pipe'>,
+  stderrDrained: Promise<void>,
+): SessionLease {
   let ended = false;
   let released = false;
-  const exited = holder.exited.then((code) => {
+  const exited = Promise.all([holder.exited, stderrDrained]).then(([code]) => {
     ended = true;
     return code;
   });
@@ -4999,17 +5006,15 @@ async function takeSession(
   const holder = Bun.spawn([sshExecutable(), ...sshOptions(host, connectionId), host.address, script], {
     stdin: 'pipe',
     stdout: 'pipe',
-    stderr: 'ignore',
+    stderr: 'pipe',
   });
-  const lease = sessionLease(host, holder);
+  const stderr = collectSshStderr(host, holder.stderr);
+  const lease = sessionLease(host, holder, stderr.drained);
   const reader = holder.stdout.getReader();
   let accepted = false;
+  let stopping: Promise<void> | undefined;
   const stop = () => {
-    try {
-      holder.kill('SIGTERM');
-    } catch {
-      // The session may already have exited.
-    }
+    stopping ??= stopAndReap(holder);
   };
   signal.addEventListener('abort', stop, { once: true });
   let progressTimer: ReturnType<typeof setTimeout> | undefined;
@@ -5022,29 +5027,62 @@ async function takeSession(
       stop();
     }, noProgressTimeoutMs);
   };
+  const failure = (
+    kind: 'exit' | 'signal' | 'unexpected-eof' | 'progress-timeout' | 'stream-error',
+    code: number,
+    cause?: unknown,
+  ): RemoteTransportError =>
+    new RemoteTransportError(
+      host.name,
+      step,
+      progressExpired ? REMOTE_TRANSPORT_FAILURE : code,
+      true,
+      JSON.stringify({
+        kind: progressExpired ? 'progress-timeout' : kind,
+        invocation: /^[0-9a-f-]{36}$/i.test(process.env.REMOTE_CHECK_INVOCATION_ID ?? '')
+          ? process.env.REMOTE_CHECK_INVOCATION_ID
+          : null,
+        physicalRun: /^[0-9a-f-]{36}$/i.test(process.env.REZICS_CHECK_PHYSICAL_RUN_ID ?? '')
+          ? process.env.REZICS_CHECK_PHYSICAL_RUN_ID
+          : null,
+        run: sshControlContext.getStore()?.run ?? null,
+        connection: connectionId ?? host.name,
+        pid: holder.pid,
+        exitCode: holder.signalCode ? null : holder.exitCode,
+        signal: holder.signalCode ?? null,
+        ...(progressExpired ? { timeoutMs: noProgressTimeoutMs } : {}),
+        ...stderr.snapshot(),
+        ...(cause ? { streamError: scrubSshDiagnostic(host, String(cause)) } : {}),
+      }),
+    );
   armProgressTimer();
   try {
     let seen = '';
-    while (!token.test(seen)) {
+    let ready = false;
+    while (!ready) {
       if (signal.aborted) throw new Aborted();
       const chunk = await reader.read();
       if (chunk.done) {
         const code = await lease.exited;
         if (signal.aborted) throw new Aborted();
-        if (progressExpired) throw new RemoteTransportError(host.name, step, REMOTE_TRANSPORT_FAILURE);
+        if (progressExpired) throw failure('progress-timeout', REMOTE_TRANSPORT_FAILURE);
         if (code === SLOT_BUSY) return null;
-        if (code !== 0) throw new RemoteTransportError(host.name, step, code);
-        return null;
+        throw failure(holder.signalCode ? 'signal' : code === 0 ? 'unexpected-eof' : 'exit', code);
       }
       armProgressTimer();
-      seen += new TextDecoder().decode(chunk.value);
+      const output = seen + new TextDecoder().decode(chunk.value);
+      ready = token.test(output);
+      seen = output.slice(-SSH_DIAGNOSTIC_TAIL_BYTES);
     }
     if (signal.aborted) throw new Aborted();
-    if (progressExpired) throw new RemoteTransportError(host.name, step, REMOTE_TRANSPORT_FAILURE);
-    accepted = true;
+    if (progressExpired) {
+      await lease.exited;
+      throw failure('progress-timeout', REMOTE_TRANSPORT_FAILURE);
+    }
     // Keep the session's input pipe live while the remote script holds its marker and reads until EOF.
     holder.stdin.write('\n');
     await holder.stdin.flush();
+    accepted = true;
     return lease;
   } catch (error) {
     if (!accepted) {
@@ -5052,7 +5090,12 @@ async function takeSession(
       await lease.exited;
     }
     if (signal.aborted) throw new Aborted();
-    if (progressExpired) throw new RemoteTransportError(host.name, step, REMOTE_TRANSPORT_FAILURE);
+    if (progressExpired) {
+      await lease.exited;
+      throw failure('progress-timeout', REMOTE_TRANSPORT_FAILURE);
+    }
+    if (!(error instanceof RemoteTransportError))
+      throw failure('stream-error', holder.exitCode ?? REMOTE_TRANSPORT_FAILURE, error);
     throw error;
   } finally {
     clearTimeout(progressTimer);
@@ -5105,7 +5148,7 @@ async function takeSlots(
 }
 
 async function takeGateMarker(host: Host, signal: AbortSignal, connectionId?: string): Promise<SessionLease | null> {
-  return takeSession(host, gateMarkerScript(), /^GATE_MARKER$/m, signal, connectionId);
+  return takeSession(host, gateMarkerScript(), /^GATE_MARKER$/m, signal, connectionId, undefined, 'gate marker take');
 }
 
 async function takeMultiSlotMarker(
@@ -5115,7 +5158,15 @@ async function takeMultiSlotMarker(
   signal: AbortSignal,
   connectionId?: string,
 ): Promise<SessionLease | null> {
-  return takeSession(host, multiSlotMarkerScript(id, slots), /^MULTI_SLOT_MARKER$/m, signal, connectionId);
+  return takeSession(
+    host,
+    multiSlotMarkerScript(id, slots),
+    /^MULTI_SLOT_MARKER$/m,
+    signal,
+    connectionId,
+    undefined,
+    'multi-slot marker take',
+  );
 }
 
 async function takeLandingMarker(
@@ -5134,6 +5185,8 @@ async function takeLandingMarker(
     /^LANDING_MARKER$/m,
     signal,
     connectionId,
+    undefined,
+    'landing marker take',
   );
 }
 
@@ -7634,6 +7687,8 @@ async function runWithTransportRetries(
     let managedByRun = false;
     let uploaded = false;
     try {
+      const control = sshControlContext.getStore();
+      if (control) control.run = id;
       await options.allocated?.({ host: host.name, run: id });
       assertExecutionAllowed(options, signal);
       prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
@@ -7679,6 +7734,7 @@ async function runWithTransportRetries(
         signal.aborted
       )
         throw error;
+      console.error(scrubSshDiagnostic(prepared.host, error.message));
       lastFailure = error;
       failedHosts.add(error.host);
       transportAttempts += 1;
@@ -7763,6 +7819,8 @@ async function tryRemoteCheckOwned(
   };
   let uploaded = false;
   try {
+    const control = sshControlContext.getStore();
+    if (control) control.run = id;
     prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
     Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal, transfer));
     uploaded = true;

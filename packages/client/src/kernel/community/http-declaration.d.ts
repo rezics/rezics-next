@@ -12168,58 +12168,118 @@ export declare function createCommunityHttpDeclaration(ambient: CommunityAmbient
                                                     realmId: string;
                                                     spaceId: string;
                                                     contextId: string;
-                                                    title: string;
-                                                    hostTitle: string;
+                                                    title: {
+                                                        state: "available";
+                                                        value: string;
+                                                    } | {
+                                                        state: "unavailable";
+                                                    };
+                                                    hostTitle: {
+                                                        state: "available";
+                                                        value: string;
+                                                    } | {
+                                                        state: "unavailable";
+                                                    };
                                                 };
                                                 subject: {
                                                     originalId: string;
                                                     currentId: string;
                                                     presentation: {
-                                                        label: {
-                                                            state: "available";
-                                                            value: string;
-                                                            language: string;
-                                                        } | {
-                                                            state: "empty";
-                                                        } | {
-                                                            state: "concealed";
-                                                        } | {
-                                                            state: "unavailable";
-                                                        };
-                                                        cover: {
-                                                            state: "available";
-                                                            value: {
-                                                                media: string;
-                                                                width: number;
-                                                                height: number;
-                                                                placeholder: {
-                                                                    thumbhash: string;
-                                                                    color: string;
-                                                                };
-                                                                variants: {
-                                                                    format: "avif" | "webp";
-                                                                    width: number;
-                                                                }[];
-                                                                focalPoint: {
-                                                                    x: number;
-                                                                    y: number;
-                                                                } | null;
-                                                                credit: {
-                                                                    rightsHolder: string;
-                                                                    via: {
-                                                                        name: string;
-                                                                        url: string;
-                                                                    };
-                                                                    license: string;
-                                                                    obligations: string[];
-                                                                };
+                                                        original: {
+                                                            label: {
+                                                                state: "available";
+                                                                value: string;
+                                                                language: string;
+                                                            } | {
+                                                                state: "empty";
+                                                            } | {
+                                                                state: "concealed";
+                                                            } | {
+                                                                state: "unavailable";
                                                             };
-                                                        } | {
-                                                            state: "empty";
-                                                        } | {
-                                                            state: "concealed";
-                                                        } | {
-                                                            state: "unavailable";
+                                                            cover: {
+                                                                state: "available";
+                                                                value: {
+                                                                    media: string;
+                                                                    width: number;
+                                                                    height: number;
+                                                                    placeholder: {
+                                                                        thumbhash: string;
+                                                                        color: string;
+                                                                    };
+                                                                    variants: {
+                                                                        format: "avif" | "webp";
+                                                                        width: number;
+                                                                    }[];
+                                                                    focalPoint: {
+                                                                        x: number;
+                                                                        y: number;
+                                                                    } | null;
+                                                                    credit: {
+                                                                        rightsHolder: string;
+                                                                        via: {
+                                                                            name: string;
+                                                                            url: string;
+                                                                        };
+                                                                        license: string;
+                                                                        obligations: string[];
+                                                                    };
+                                                                };
+                                                            } | {
+                                                                state: "empty";
+                                                            } | {
+                                                                state: "concealed";
+                                                            } | {
+                                                                state: "unavailable";
+                                                            };
+                                                        };
+                                                        terminal: {
+                                                            label: {
+                                                                state: "available";
+                                                                value: string;
+                                                                language: string;
+                                                            } | {
+                                                                state: "empty";
+                                                            } | {
+                                                                state: "concealed";
+                                                            } | {
+                                                                state: "unavailable";
+                                                            };
+                                                            cover: {
+                                                                state: "available";
+                                                                value: {
+                                                                    media: string;
+                                                                    width: number;
+                                                                    height: number;
+                                                                    placeholder: {
+                                                                        thumbhash: string;
+                                                                        color: string;
+                                                                    };
+                                                                    variants: {
+                                                                        format: "avif" | "webp";
+                                                                        width: number;
+                                                                    }[];
+                                                                    focalPoint: {
+                                                                        x: number;
+                                                                        y: number;
+                                                                    } | null;
+                                                                    credit: {
+                                                                        rightsHolder: string;
+                                                                        via: {
+                                                                            name: string;
+                                                                            url: string;
+                                                                        };
+                                                                        license: string;
+                                                                        obligations: string[];
+                                                                    };
+                                                                };
+                                                            } | {
+                                                                state: "empty";
+                                                            } | {
+                                                                state: "concealed";
+                                                            } | {
+                                                                state: "unavailable";
+                                                            };
                                                         };
                                                     };
                                                 };

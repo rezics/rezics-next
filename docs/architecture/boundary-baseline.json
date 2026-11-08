@@ -29324,16 +29324,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/features/pages/subject-visit-navigation.ts",
-          "edge": "value import \"../../library/copies-query\" #1 => apps/web/src/library/copies-query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/subject-visit-navigation.ts",
-          "edge": "value import \"../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/features/pages/subject.tsx",
           "edge": "type import \"../../report/turnstile\" #1 => apps/web/src/report/turnstile.tsx"
         },

@@ -16,6 +16,10 @@ import read from './publication-preparation-read.sql';
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const nullableId = t.Union([id, t.Null()]);
+export const PUBLICATION_PREPARATION_MAX_UTF8_BYTES = 128 * 1024;
+const MAX_PRESENTATION_TEXT_LENGTH = 4096;
+const MAX_PRESENTATION_VALUE_BYTES = 25 * 1024;
+const MAX_PRESENTATION_COVER_BYTES = 12 * 1024;
 const command = t.Object(
   {
     method: t.Literal('POST'),
@@ -28,7 +32,11 @@ const command = t.Object(
 );
 const presentationLabel = t.Union([
   t.Object(
-    { state: t.Literal('available'), value: t.String({ maxLength: 4096 }), language: t.String({ maxLength: 64 }) },
+    {
+      state: t.Literal('available'),
+      value: t.String({ maxLength: MAX_PRESENTATION_TEXT_LENGTH }),
+      language: t.String({ maxLength: 64 }),
+    },
     closed,
   ),
   t.Object({ state: t.Literal('empty') }, closed),
@@ -76,6 +84,10 @@ const presentationCover = t.Union([
   t.Object({ state: t.Literal('unavailable') }, closed),
 ]);
 const presentation = t.Object({ label: presentationLabel, cover: presentationCover }, closed);
+const titlePresentation = t.Union([
+  t.Object({ state: t.Literal('available'), value: t.String({ maxLength: MAX_PRESENTATION_TEXT_LENGTH }) }, closed),
+  t.Object({ state: t.Literal('unavailable') }, closed),
+]);
 
 export const PublicationPreparationSchema = t.Object(
   {
@@ -84,8 +96,8 @@ export const PublicationPreparationSchema = t.Object(
         realmId: id,
         spaceId: id,
         contextId: id,
-        title: t.String(),
-        hostTitle: t.String(),
+        title: titlePresentation,
+        hostTitle: titlePresentation,
       },
       closed,
     ),
@@ -93,7 +105,7 @@ export const PublicationPreparationSchema = t.Object(
       {
         originalId: id,
         currentId: id,
-        presentation,
+        presentation: t.Object({ original: presentation, terminal: presentation }, closed),
       },
       closed,
     ),
@@ -123,7 +135,7 @@ export const PublicationPreparationSchema = t.Object(
       },
       closed,
     ),
-    viewer: t.Object({ accountId: id, clientId: t.String(), authnEpoch: t.Integer() }, closed),
+    viewer: t.Object({ accountId: id, clientId: t.String({ maxLength: 255 }), authnEpoch: t.Integer() }, closed),
   },
   closed,
 );
@@ -224,31 +236,153 @@ function destination(href: string, subjectId: string, head: string | null) {
   };
 }
 
+function jsonStringBytes(value: string, remaining: number): number | null {
+  let bytes = 2;
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (
+      code === 0x22 ||
+      code === 0x5c ||
+      code === 0x08 ||
+      code === 0x09 ||
+      code === 0x0a ||
+      code === 0x0c ||
+      code === 0x0d
+    ) {
+      bytes += 2;
+    } else if (code < 0x20) {
+      bytes += 6;
+    } else if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4;
+        index++;
+      } else bytes += 6;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      bytes += 6;
+    } else if (code <= 0x7f) {
+      bytes++;
+    } else if (code <= 0x7ff) {
+      bytes += 2;
+    } else {
+      bytes += 3;
+    }
+    if (bytes > remaining) return null;
+  }
+  return bytes <= remaining ? bytes : null;
+}
+
+/** Count JSON UTF-8 bytes incrementally and stop as soon as the supplied cap is crossed. */
+function boundedJsonBytes(value: unknown, limit: number): number | null {
+  let bytes = 0;
+  const add = (amount: number) => {
+    bytes += amount;
+    return bytes <= limit;
+  };
+  const visit = (current: unknown): boolean => {
+    if (current === null) return add(4);
+    if (typeof current === 'string') {
+      const length = jsonStringBytes(current, limit - bytes);
+      return length !== null && add(length);
+    }
+    if (typeof current === 'number' || typeof current === 'boolean') {
+      const text = JSON.stringify(current);
+      return text !== undefined && add(text.length);
+    }
+    if (Array.isArray(current)) {
+      if (!add(2)) return false;
+      for (let index = 0; index < current.length; index++) {
+        if ((index > 0 && !add(1)) || !visit(current[index])) return false;
+      }
+      return true;
+    }
+    if (typeof current === 'object') {
+      const entries = Object.entries(current);
+      if (!add(2)) return false;
+      let first = true;
+      for (const [key, entry] of entries) {
+        if (entry === undefined) continue;
+        const keyBytes = jsonStringBytes(key, limit - bytes);
+        if ((!first && !add(1)) || keyBytes === null || !add(keyBytes) || !add(1) || !visit(entry)) return false;
+        first = false;
+      }
+      return true;
+    }
+    return add(4);
+  };
+  return visit(value) ? bytes : null;
+}
+
+function titleValue(value: string) {
+  const result = { state: 'available' as const, value };
+  return value.length <= MAX_PRESENTATION_TEXT_LENGTH && boundedJsonBytes(result, MAX_PRESENTATION_VALUE_BYTES)
+    ? result
+    : { state: 'unavailable' as const };
+}
+
 function presentationValue(
   summary: SubjectSummary | null,
   coverState: 'available' | 'absent' | 'concealed' | undefined,
 ) {
-  if (!summary) return { label: { state: 'concealed' as const }, cover: { state: 'concealed' as const } };
-  const label = summary.label
-    ? summary.label.value.length <= 4096 && summary.label.language.length <= 64
-      ? { state: 'available' as const, value: summary.label.value, language: summary.label.language }
-      : { state: 'unavailable' as const }
-    : { state: 'empty' as const };
+  const candidateLabel = summary?.label
+    ? { state: 'available' as const, value: summary.label.value, language: summary.label.language }
+    : null;
+  const label = !summary
+    ? { state: 'concealed' as const }
+    : !candidateLabel
+      ? { state: 'empty' as const }
+      : candidateLabel.value.length <= MAX_PRESENTATION_TEXT_LENGTH &&
+          candidateLabel.language.length <= 64 &&
+          boundedJsonBytes(candidateLabel, MAX_PRESENTATION_VALUE_BYTES)
+        ? candidateLabel
+        : { state: 'unavailable' as const };
+  const cover =
+    coverState === 'absent'
+      ? emptyCover()
+      : coverState === 'concealed'
+        ? concealedCover()
+        : coverState !== 'available' || !summary?.cover
+          ? unavailableCover()
+          : boundedJsonBytes(summary.cover, MAX_PRESENTATION_COVER_BYTES) === null
+            ? unavailableCover()
+            : { state: 'available' as const, value: summary.cover };
   return {
     label,
-    cover:
-      coverState === 'available' && summary.cover
-        ? { state: 'available' as const, value: summary.cover }
-        : coverState === 'absent'
-          ? { state: 'empty' as const }
-          : { state: 'concealed' as const },
+    cover,
   };
 }
 
 function unavailablePresentation() {
-  return { label: { state: 'unavailable' as const }, cover: { state: 'unavailable' as const } };
+  return { label: unavailableLabel(), cover: unavailableCover() };
+}
+function unavailableLabel() {
+  return { state: 'unavailable' as const };
+}
+function unavailableCover() {
+  return { state: 'unavailable' as const };
+}
+function emptyCover() {
+  return { state: 'empty' as const };
+}
+function concealedCover() {
+  return { state: 'concealed' as const };
 }
 type SubjectPresentation = ReturnType<typeof presentationValue> | ReturnType<typeof unavailablePresentation>;
+type SubjectPresentations = Readonly<{ original: SubjectPresentation; terminal: SubjectPresentation }>;
+
+/** Project only selected ids by map lookup; unrelated admitted summaries are never scanned. */
+export function projectPublicationPresentations(
+  originalId: string,
+  terminalId: string,
+  summaries: ReadonlyMap<string, SubjectSummary | null>,
+  covers: ReadonlyMap<string, 'available' | 'absent' | 'concealed'>,
+): SubjectPresentations {
+  const selected = new Map<string, SubjectPresentation>();
+  for (const id of new Set([originalId, terminalId])) {
+    selected.set(id, presentationValue(summaries.get(id) ?? null, covers.get(id)));
+  }
+  return { original: selected.get(originalId)!, terminal: selected.get(terminalId)! };
+}
 
 function response(
   realmId: string,
@@ -256,7 +390,7 @@ function response(
   currentId: string,
   row: Row,
   actor: Account,
-  subjectPresentation: SubjectPresentation,
+  subjectPresentation: SubjectPresentations,
 ) {
   const base = `/v1/realms/${realmId}/publications`;
   const head = row.publication_id;
@@ -269,8 +403,8 @@ function response(
       realmId,
       spaceId: row.space_id,
       contextId: row.context_id,
-      title: row.realm_title,
-      hostTitle: row.space_title,
+      title: titleValue(row.realm_title),
+      hostTitle: titleValue(row.space_title),
     },
     subject: {
       originalId: subjectId,
@@ -302,6 +436,41 @@ function response(
   };
 }
 
+function boundedPreparation(preparation: ReturnType<typeof response>) {
+  const bounded = structuredClone(preparation);
+  const fits = () => boundedJsonBytes({ preparation: bounded }, PUBLICATION_PREPARATION_MAX_UTF8_BYTES) !== null;
+  const fallbacks = [
+    () => {
+      if (bounded.subject.presentation.original.cover.state === 'available')
+        bounded.subject.presentation.original.cover = unavailableCover();
+    },
+    () => {
+      if (bounded.subject.presentation.terminal.cover.state === 'available')
+        bounded.subject.presentation.terminal.cover = unavailableCover();
+    },
+    () => {
+      if (bounded.subject.presentation.original.label.state === 'available')
+        bounded.subject.presentation.original.label = unavailableLabel();
+    },
+    () => {
+      if (bounded.subject.presentation.terminal.label.state === 'available')
+        bounded.subject.presentation.terminal.label = unavailableLabel();
+    },
+    () => {
+      if (bounded.realm.title.state === 'available') bounded.realm.title = { state: 'unavailable' };
+    },
+    () => {
+      if (bounded.realm.hostTitle.state === 'available') bounded.realm.hostTitle = { state: 'unavailable' };
+    },
+  ];
+  for (const fallback of fallbacks) {
+    if (fits()) break;
+    fallback();
+  }
+  if (!fits()) throw new RangeError('Publication preparation exceeds its UTF-8 response budget');
+  return bounded;
+}
+
 /** Exact operational inspection. All dependencies are prepared on released homes;
  * final equality is conservative, never a claim of a global atomic snapshot.
  * No receipt, mutation, idempotency key or repair participates in this GET.
@@ -322,9 +491,13 @@ export async function readPublicationPreparation(
   if (!subject) return null;
   // No origin checkout is held while current Subject, label and Content media
   // observations run. Optional display failures do not change command advice.
-  let subjectPresentation: SubjectPresentation = unavailablePresentation();
+  let subjectPresentations: SubjectPresentations = {
+    original: unavailablePresentation(),
+    terminal: unavailablePresentation(),
+  };
   let summaryObservation: Awaited<ReturnType<typeof readSubjectSummaryObservation>> | undefined;
   try {
+    const selectedIds = [...new Set([subject.originalId, subject.currentId])];
     summaryObservation = await readSubjectSummaryObservation(
       {
         pool: deps.pool,
@@ -333,12 +506,14 @@ export async function readPublicationPreparation(
         actor,
         deadline: context.deadline,
       },
-      [subject.currentId],
+      selectedIds,
       { languages: context.languages ?? [] },
     );
-    subjectPresentation = presentationValue(
-      summaryObservation.summaries.get(subject.currentId) ?? null,
-      summaryObservation.covers.get(subject.currentId),
+    subjectPresentations = projectPublicationPresentations(
+      subject.originalId,
+      subject.currentId,
+      summaryObservation.summaries,
+      summaryObservation.covers,
     );
   } catch {
     // A missing optional display dependency is explicit and carries no stale
@@ -352,7 +527,9 @@ export async function readPublicationPreparation(
   if (!same(before, after)) throw new AccessUnavailableError('contention');
   requireAccessDeadline(context.deadline);
   return {
-    preparation: response(realmId, subjectId, subject.currentId, after.row, actor, subjectPresentation),
+    preparation: boundedPreparation(
+      response(realmId, subjectId, subject.currentId, after.row, actor, subjectPresentations),
+    ),
     components: [after.component, ...subject.components, ...(summaryObservation?.components ?? [])],
   };
 }

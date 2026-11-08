@@ -278,6 +278,12 @@ states; definition/Subject labels retain their native fallback language.
 
 ## Work relation region returns
 
+Decision: Subject return parsing, bounds and URL composition live in the non-rendering `subject-visit-return.ts`
+leaf, consumed by the application facade and `subject-visit-navigation.ts`. The existing composition installer
+binds its narrow Semantic navigation delegates through `subject-render-binding.ts`.
+The Subject leaf remains the sole navigation implementation; retain the saved Search export details through that
+leaf, without a module-global navigation facade that ordinary URL helpers require to be initialized first.
+
 Decision: retain the supported same-work Subject address and a single-hop opener, with stream/node and separate
 browse/evidence focus; a replaced or no-longer-admitted reading offers an explicit restart. A new graph hop carries only
 its own current opener, never the previous visit chain. An incoming (inverse) assertion keeps the opener of the stream

@@ -23,7 +23,7 @@ export {
   workTagReturnFragment,
   workTagReturnHref,
   zoneVisitReturn,
-} from './subject-page-application';
+} from './subject-visit-return';
 export type {
   ConnectionReturnWindow,
   OrganizationHistoryVisitReturn,
@@ -31,10 +31,10 @@ export type {
   SummaryReadingReturn,
   WorkCastVisitReturn,
   WorkTagReturn,
-} from './subject-page-application';
+} from './subject-visit-return';
 
 import { subjectHref } from '../../subject/subject-href';
-import { withSubjectVisitReturn } from './subject-page-application';
+import { withSubjectVisitReturn } from './subject-visit-return';
 
 /** Public handoff for a disclosed publication; the Realm operand and return address grant no authority. */
 export function communityPublicationVisitHref(

@@ -37,9 +37,25 @@ export type CommunityEffectPort = {
   effects(operands: CommunityEffectOperands): readonly unknown[];
 };
 
+/** Private preparation observation. The mounted route owns its response schema. */
+export type CommunityPublicationPreparationInput = Readonly<{
+  dependencies: object;
+  realmId: string;
+  subjectId: string;
+  context: Readonly<{ actor: object; deadline: number; languages?: readonly string[] }>;
+}>;
+export type CommunityPublicationPreparationObservation = Readonly<{
+  preparation: object;
+  components: readonly Readonly<{ partition: number; epoch: number; position: bigint }>[];
+}>;
+export type CommunityPublicationPreparationPort = Readonly<{
+  read(input: CommunityPublicationPreparationInput): Promise<CommunityPublicationPreparationObservation | null>;
+}>;
+
 export type CommunityApplicationPorts = {
   readonly access: CommunityAccessPort;
   readonly effects: CommunityEffectPort;
+  readonly publicationPreparation: CommunityPublicationPreparationPort;
   readonly ambient: CommunityAmbient;
 };
 
@@ -67,6 +83,9 @@ export type CommunityApplication = {
   elapsed(deadline: CommunityDeadline): boolean;
   remainingBudgetMs(deadline: CommunityDeadline): number;
   effects(operands: CommunityEffectOperands): readonly unknown[];
+  readPublicationPreparation(
+    input: CommunityPublicationPreparationInput,
+  ): Promise<CommunityPublicationPreparationObservation | null>;
   createMembership(dependencies: CommunityMembershipDependencies): unknown;
   createParticipation(
     input: Readonly<{ pool: CommunityPool; access: CommunityAccess; [key: string]: unknown }>,
