@@ -138,6 +138,18 @@ test('Home keeps native private states, duplicate occurrence keys and independen
     );
     expect(native).toEqual({ state: 'unavailable', reason: 'currentness', retryable: true });
     expect(Value.Check(FeedViewerPersonalActionsSchema(), native)).toBe(true);
+    const producerFailure = new Error('viewer action producer failed');
+    await expect(
+      composeFeedViewerPersonalActions(
+        { ...deps, viewerPersonalActions: async () => Promise.reject(producerFailure) },
+        enrichment,
+        actor,
+        [first],
+        Date.now() + 120_000,
+        [],
+        async () => [first],
+      ),
+    ).rejects.toBe(producerFailure);
     const refused: ViewerPersonalActionsPage = { state: 'unavailable', reason: 'response_limit', retryable: false };
     expect(
       await composeFeedViewerPersonalActions(

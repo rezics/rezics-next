@@ -1,6 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
-import type { ViewerPersonalActionsPage } from './viewer-personal-actions.ts';
+import type { ViewerPersonalActionsPage } from './contract/index.ts';
 import { viewerFactsResponseSchema } from './viewer-facts-schema.ts';
 
 const closed = { additionalProperties: false } as const;

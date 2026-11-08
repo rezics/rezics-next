@@ -19,8 +19,10 @@ import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/reques
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
 import type { ZoneSubjectListRoutes } from './kernel/zones/subjects.ts';
-import type { PublicCollectionDiscoverySummary as LibraryCollectionDiscoveryCard } from './kernel/library/index.ts';
-import type { ViewerPersonalActionsPage } from './kernel/library/viewer-personal-actions.ts';
+import type {
+  PublicCollectionDiscoverySummary as LibraryCollectionDiscoveryCard,
+  ViewerPersonalActionsPage,
+} from './kernel/library/contract/index.ts';
 
 export type {
   ContributionAttribution,

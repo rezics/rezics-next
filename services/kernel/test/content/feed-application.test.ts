@@ -20,6 +20,7 @@ import { FeedPageSchema } from '../../src/content/feed-contract.ts';
 
 type CollectionFeedItem = Extract<FeedItem, { key: { owner: 'commerce'; kind: 'collection' } }>;
 expectTypeOf<CollectionFeedItem['summary']['card']>().toEqualTypeOf<CollectionCard>();
+expectTypeOf<CollectionFeedItem['summary']>().toEqualTypeOf<CollectionSummary>();
 expectTypeOf<FeedPage['viewerPersonalActions']>().toEqualTypeOf<ViewerPersonalActionsPage | undefined>();
 expectTypeOf<
   Awaited<ReturnType<FeedApplicationPorts['finish']['personalActions']>>['viewerPersonalActions']

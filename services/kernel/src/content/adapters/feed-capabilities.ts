@@ -6,7 +6,7 @@ import type { WorkClient } from '../../work/client.ts';
 import type { AccountDiscoverySummary, DiscoverySearch } from '../../search/index.ts';
 import type { SearchService } from '../../search/service-scope.ts';
 import type { CollectionResourceView, ViewerPersonalActionsReader } from '../../library/adapters/index.ts';
-import type { ViewerPersonalActionsPage } from '../../library/index.ts';
+import type { ViewerPersonalActionsPage } from '../../library/contract/index.ts';
 import type { ReadingPageViewerActionRuntime } from '../reading-page.ts';
 import type { FeedActivityStore, FeedActivityTarget } from '../feed-activity.ts';
 import type {

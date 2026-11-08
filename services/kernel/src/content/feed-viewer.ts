@@ -1,6 +1,6 @@
 import type { Actor } from '../request/access.ts';
 import type { ViewerPersonalActionsReader } from '../library/adapters/index.ts';
-import type { ViewerPersonalActionsPage } from '../library/index.ts';
+import type { ViewerPersonalActionsPage } from '../library/contract/index.ts';
 import { routeOf } from '../route/route.ts';
 import type { FeedDependencies } from './feed.ts';
 import type { FeedItem } from './feed-contract.ts';
@@ -50,12 +50,12 @@ export async function composeFeedViewerPersonalActions(
     const subject = subjects.summaries.get(row.subjectId);
     return subject?.creativeWork && subject.id === row.subjectId && subject.type === row.resourceType;
   });
-  let result: ViewerPersonalActionsPage;
-  try {
-    result = await deps.viewerPersonalActions(actor, rows, enrichment.standardQuestionId, deadline);
-  } catch {
-    result = { state: 'unavailable', reason: 'currentness', retryable: true };
-  }
+  const result: ViewerPersonalActionsPage = await deps.viewerPersonalActions(
+    actor,
+    rows,
+    enrichment.standardQuestionId,
+    deadline,
+  );
   const admitted = await finalAdmission();
   if (!(await subjects.current())) return { state: 'unavailable', reason: 'currentness', retryable: true };
   if (result.state !== 'current') return result;

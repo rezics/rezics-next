@@ -1,4 +1,5 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, expect, expectTypeOf, mock, test } from 'bun:test';
+import type { FeedItem as InstalledFeedItem, FeedPage as InstalledFeedPage } from '@rezics/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRequire } from 'node:module';
@@ -22,6 +23,33 @@ import {
 } from '../src/kernel/fake/home-feed-stories';
 import { setLocale } from '../src/paraglide/runtime.js';
 import homePageRecording from '../src/kernel/recorded/home-page.json';
+
+type InstalledCollectionCard = Extract<
+  InstalledFeedItem,
+  { key: { owner: 'commerce'; kind: 'collection' } }
+>['summary']['card'];
+type InstalledViewerCurrent = Extract<NonNullable<InstalledFeedPage['viewerPersonalActions']>, { state: 'current' }>;
+expectTypeOf<InstalledCollectionCard['destination']>().toEqualTypeOf<`/collections/${string}`>();
+expectTypeOf<InstalledCollectionCard['preview']['state']>().toEqualTypeOf<
+  'available' | 'empty' | 'withheld' | 'unavailable'
+>();
+expectTypeOf<InstalledViewerCurrent['rows'][number]['actions']['state']>().toEqualTypeOf<'current' | 'unavailable'>();
+
+type HomeQueries = typeof import('../src/features/pages/home-queries');
+type HomeQueryPage = Awaited<ReturnType<NonNullable<ReturnType<HomeQueries['homePageQuery']>['queryFn']>>>;
+type PublicHomePage = Awaited<ReturnType<HomeQueries['readPublicHomePage']>>;
+type PrivateHomePage = Awaited<ReturnType<HomeQueries['readPrivateHomePage']>>;
+type ReadyHome = Extract<HomeFeedResult, { state: 'ready' }>;
+type ReadyCollectionCard = Extract<
+  ReadyHome['page']['feedItems'][number],
+  { key: { owner: 'commerce'; kind: 'collection' } }
+>['summary']['card'];
+type ReadyViewerCurrent = Extract<NonNullable<ReadyHome['page']['viewerPersonalActions']>, { state: 'current' }>;
+expectTypeOf<Extract<HomeQueryPage['feed'], { state: 'ready' }>['page']>().toEqualTypeOf<InstalledFeedPage>();
+expectTypeOf<Extract<PublicHomePage, { state: 'ready' }>['page']>().toEqualTypeOf<InstalledFeedPage>();
+expectTypeOf<Extract<PrivateHomePage, { state: 'ready' }>['page']>().toEqualTypeOf<InstalledFeedPage>();
+expectTypeOf<ReadyCollectionCard['destination']>().toEqualTypeOf<`/collections/${string}`>();
+expectTypeOf<ReadyViewerCurrent['rows'][number]['actions']['state']>().toEqualTypeOf<'current' | 'unavailable'>();
 
 let request = new Request('https://rezics.example/en');
 let sessionReads = 0;

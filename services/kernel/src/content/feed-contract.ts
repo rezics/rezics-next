@@ -9,7 +9,6 @@ import type { ThreadView } from './reads.ts';
 import type { ItemView } from './model.ts';
 import type {
   AccountDiscoverySummary,
-  PublicCollectionDiscoverySummary,
   PublicReviewDiscoverySummary,
   PublicSpaceDiscoverySummary,
 } from '../search/index.ts';
@@ -21,7 +20,7 @@ import type { ReactionCountFreshness, ViewerReactionKind } from './reads.ts';
 import type { ReactionTarget } from './reactions.ts';
 import { FeedParentContextSchema, FeedReviewContextSchema } from './feed-context-schema.ts';
 import type { FeedParentContext, FeedReviewContext } from './model.ts';
-import type { FeedItem, FeedPage } from './contract/index.ts';
+import type { FeedCollectionDiscoverySummary, FeedItem, FeedPage } from './contract/index.ts';
 
 const closed = { additionalProperties: false } as const;
 const nullable = t.Union([t.String(), t.Null()]);
@@ -267,7 +266,7 @@ const collectionSummary = t.Unsafe<Pick<CollectionResourceView, 'id' | 'title' |
 );
 function discoveryCollectionSummary() {
   return memoizedValue(discoveryCollectionSummary, () =>
-    t.Unsafe<PublicCollectionDiscoverySummary>(CollectionDiscoverySummarySchema()),
+    t.Unsafe<FeedCollectionDiscoverySummary>(CollectionDiscoverySummarySchema()),
   );
 }
 function discoveryReviewSummary() {

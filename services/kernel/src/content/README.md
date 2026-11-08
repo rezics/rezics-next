@@ -4517,7 +4517,7 @@ declaration, cast or generator.
 
 ## Current Home personal Library composition
 
-Decision: Content composition installs existing Semantic summary/observation readers, visible Rating questions, the standard vote ID and the required Semantic-backed Realm identity reader; Client's FeedPage/FeedItem aliases prefer concrete mounted fields and use the Library Collection card only for an unknown nested Search card (plus Library viewer actions only for an unknown page field), and all Home handlers consume those aliases.
+Decision: Content composition installs existing Semantic summary/observation readers, visible Rating questions, the standard vote ID and the required Semantic-backed Realm identity reader; Content's pure feed contract depends only on Library and Semantic contract entries, carries the exact Library card and viewer-action value types, and keeps Search's closed Collection summary as the runtime source. Client FeedPage/FeedItem aliases prefer concrete mounted fields and use Library fallbacks only for unknown fields across all Home ServerFns.
 
 [Current Home personal facts](../../../../docs/feeds.md#current-home-personal-facts) owns the
 response and full per-page cost. `feed-viewer.ts` calls the installed native personal-actions
@@ -4527,10 +4527,13 @@ Space/Realm/publication disclosure; no private overlay can admit its own source.
 Content-owned enrichment ports keep Semantic summary observation, visible Rating questions and
 the standard vote question installed once. Realm lifecycle receives the Semantic identity
 mapping through its composition adapter, retaining the original pool and lifecycle deadlines.
-The mounted `FeedPage` schema uses the public Search Collection summary (including Library's
-closed card) and Library's current viewer-action schema and page type; the official client
-publisher carries those exact types to all Home ServerFns. Web keeps deriving its page from the
-installed client response rather than introducing another DTO.
+The mounted `FeedPage` schema consumes Search's public Collection summary and Library's current
+viewer-action schema. The pure Content contract represents the Search envelope with Library's
+public card type, avoiding a dependency on the Search adapter; Library's viewer-action page is also
+published by its contract entry. The official Client carries those concrete fields to
+`readHomePage`, `readPublicHomePage` and `readPrivateHomePage`, using its Library aliases only
+while a mounted declaration remains unknown. Web derives its page from the installed client
+response rather than introducing another DTO.
 
 ## Exact post contribution attribution
 

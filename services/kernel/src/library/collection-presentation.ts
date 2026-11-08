@@ -3,18 +3,12 @@ import { systemClock, type KernelClock } from '../clock.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { libraryActorOf, type LibraryCoverSummary } from './contract/index.ts';
+import { libraryActorOf, type CollectionPresentation, type LibraryCoverSummary } from './contract/index.ts';
 import { peekLibraryDomain } from './domain-binding.ts';
-import { collectionKind, type CollectionKind } from './collection-kind.ts';
+import { collectionKind } from './collection-kind.ts';
 
 export type PresentationSelection = { presentationKind?: string | null; coverMediaId?: string | null };
-export type CollectionPresentation = {
-  presentationKind: CollectionKind['presentationKind'];
-  presentationKindSource: CollectionKind['presentationKindSource'];
-  cover: LibraryCoverSummary | null;
-  coverSource: 'owner' | 'member' | 'none' | 'pending';
-  coverMediaId?: string | null;
-};
+export type { CollectionPresentation };
 export type PresentationDependencies = {
   pool: Pool;
   access: Access;
