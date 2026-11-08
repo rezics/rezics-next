@@ -12,7 +12,7 @@ import { withConnection } from '../../src/database/pool.ts';
 import { workStepDeadline } from '../../src/library/command-support.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import { routeOf } from '../../src/route/route.ts';
-import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
+import { createProfileEntryFixture, entryTypes, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 let f: NativeProfileFixture;
 const clock = () => new Date();
@@ -52,6 +52,12 @@ async function preview(subjectIds: string[], requestKey = key()) {
     },
     requestKey,
   );
+}
+function plannedStateFilter(): string {
+  const profileId = f.original.types[entryTypes.game]?.library?.profileId;
+  const stateSet = profileId ? f.original.libraryProfiles?.[profileId]?.entryStateSet : undefined;
+  if (!profileId || !stateSet) throw new Error('The fixture release is missing its native Library state set');
+  return JSON.stringify({ owner: { state: { profileId, stateSetId: stateSet.id, in: ['planned'] } } });
 }
 
 test('preview is inert, confirmation binds stored peers, and changed entries are skipped individually', async () => {
@@ -355,12 +361,12 @@ test('filtered review pages never narrow the captured set; exact start replay ke
   const created = await f.send(owner.bearer, 'POST', '/v1/libraryOperations', {
     action: 'set_status',
     state: 'completed',
-    selection: { kind: 'query', sourceId: source.id, filter: '{ "owner": { "state": "planned" } }', sort: 'id' },
+    selection: { kind: 'query', sourceId: source.id, filter: plannedStateFilter(), sort: 'id' },
   });
   expect(created.status, await created.clone().text()).toBe(201);
   const operation = (await created.json()).operation;
   expect(operation).toMatchObject({
-    selectionSource: { id: source.id, filter: '{"owner":{"state":"planned"}}', sort: 'id' },
+    selectionSource: { id: source.id, filter: plannedStateFilter(), sort: 'id' },
   });
   expect(operation.counts).toMatchObject({ selectedSubjects: 25, targets: 25, pending: 25 });
   const review = await bulk.outcomes(owner.actor, operation.id, { limit: 10 });
@@ -418,7 +424,7 @@ test('filtered review pages never narrow the captured set; exact start replay ke
     {
       action: 'set_status',
       state: 'completed',
-      selection: { kind: 'query', sourceId: source.id, filter: '{"owner":{"state":"planned"}}', sort: 'id' },
+      selection: { kind: 'query', sourceId: source.id, filter: plannedStateFilter(), sort: 'id' },
     },
     key(),
   );

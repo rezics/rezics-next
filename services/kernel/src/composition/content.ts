@@ -27,7 +27,10 @@ import { readPublication } from '../community/index.ts';
 import { createNativeAccessReadingPorts } from '../access/adapters/reading.ts';
 import { createRealmScopeEvidence } from '../community/adapters/index.ts';
 import { createSubjectScopeEvidence } from '../semantic/adapters/index.ts';
+import { readIdentityMappings as readSemanticIdentityMappings } from '../semantic/identity-adapters/index.ts';
 import { withRealmDisclosureWork } from '../search/adapters/index.ts';
+import type { Pool } from 'pg';
+import type { RealmSubjectIdentityMapping } from '../content/contract/index.ts';
 import type { ContentAmbient, ContentApplication } from '../content/contract/index.ts';
 
 /** This process root chooses each foreign supplier. No supplier performs I/O at installation. */
@@ -77,6 +80,19 @@ export function composeContentReading(): void {
   bindReadingPageCapabilities(createNativeReadingPageCapabilities(createNativeAccessReadingPorts()));
 }
 
+/** Semantic remains the identity authority; Content receives the bounded mapping reader as a supplied producer. */
+export async function readContentIdentityMappings(
+  pool: Pool,
+  originals: readonly string[],
+): Promise<readonly RealmSubjectIdentityMapping[]> {
+  const mappings = await readSemanticIdentityMappings(pool, originals);
+  return mappings.map((mapping) =>
+    mapping.state === 'mapped'
+      ? { terminal: mapping.terminal, identityEpoch: mapping.epoch.toString() }
+      : { terminal: null, identityEpoch: null },
+  );
+}
+
 /** Ordinary server and worker composition bind the actual independent owner producers. */
 export function composeContentApplication(ambient?: Partial<ContentAmbient>): ContentApplication {
   composeContentReading();
@@ -89,6 +105,7 @@ export function composeContentApplication(ambient?: Partial<ContentAmbient>): Co
       {
         parent: parent.observe,
         subject: subject.observe,
+        readIdentityMappings: readContentIdentityMappings,
         withWork(reader, work, maximum, run) {
           // Content refuses actorless readers before asking Search for a native ledger.
           return withRealmDisclosureWork(reader, work, maximum, run);

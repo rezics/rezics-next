@@ -4,7 +4,6 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { Value } from 'typebox/value';
-import { readIdentityMappings } from '../semantic/identity-adapters/index.ts';
 import { SEMANTIC_EVENTS, SUBJECT_MERGED, SUBJECT_REVISED } from '../semantic/events.ts';
 import { COMMUNITY_EVENTS } from '../community/events.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -24,6 +23,7 @@ import type { RealmSubjectMaintenance } from './realm-subject-source.ts';
 import { createRealmSubjectScope, type RealmSubjectScopeChange } from './realm-subject-scope.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
+import type { RealmSubjectIdentityMapping } from './contract/index.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { zeroScopeWork } from '../search/contract/index.ts';
 
@@ -379,8 +379,14 @@ export function realmSubjectIdentityWorkflowId(
 export function createRealmSubjectLifecycle(input: {
   pool: Pool;
   enqueueIdentity?: (work: RealmSubjectIdentityWork) => Promise<void>;
+  readIdentityMappings?: (pool: Pool, originals: readonly string[]) => Promise<readonly RealmSubjectIdentityMapping[]>;
 }) {
   const { pool } = input;
+  const readIdentityMappings =
+    input.readIdentityMappings ??
+    (async () => {
+      throw new Error('Realm Subject identity mapping producer is not installed');
+    });
   const candidates = createRealmSubjectCandidates(pool);
   const census = createRealmSubjectCensus(pool);
   const scope = createRealmSubjectScope(pool);
@@ -448,8 +454,8 @@ export function createRealmSubjectLifecycle(input: {
       const mappings = await readIdentityMappings(pool, part);
       for (const [index, original] of part.entries()) {
         const mapping = mappings[index];
-        const terminal = mapping?.state === 'mapped' ? mapping.terminal : null;
-        const identityEpoch = mapping?.state === 'mapped' ? mapping.epoch.toString() : null;
+        const terminal = mapping?.terminal ?? null;
+        const identityEpoch = mapping?.identityEpoch ?? null;
         const candidate: RealmSubjectCandidate = {
           realm: native.realm,
           original,
@@ -507,8 +513,8 @@ export function createRealmSubjectLifecycle(input: {
       return { state: 'done', after: null };
     }
     const mapping = (await readIdentityMappings(pool, [work.original]))[0];
-    const terminal = mapping?.state === 'mapped' ? mapping.terminal : null;
-    const identityEpoch = mapping?.state === 'mapped' ? mapping.epoch.toString() : null;
+    const terminal = mapping?.terminal ?? null;
+    const identityEpoch = mapping?.identityEpoch ?? null;
     for (const row of rows.rows) {
       const threadRoute = realmSubjectRoute(row.thread);
       const version = await realmSubjectHome(pool, threadRoute, deadline, false, async (_client, current) => current);

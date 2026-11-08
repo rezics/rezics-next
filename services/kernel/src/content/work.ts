@@ -29,6 +29,7 @@ import { clearErasedPostRevisions } from './erased-post-cleanup.ts';
 import readOperationEnqueue from './read-operation-enqueue.sql';
 import readOperationEnqueueReceipt from './read-operation-enqueue-receipt.sql';
 import { CONTENT_EVENTS } from './events.ts';
+import type { RealmSubjectIdentityMapping } from './contract/index.ts';
 import { createImageJob } from './image-job.ts';
 import { createCollectionJob } from './collection-job.ts';
 import { tryContentApplication } from './adapters/bind.ts';
@@ -103,6 +104,7 @@ type ContentWorkOptions = Readonly<{
   storage: MediaStorage;
   access: Access;
   readConsent: CurrentConsentReader;
+  readIdentityMappings?: (pool: Pool, originals: readonly string[]) => Promise<readonly RealmSubjectIdentityMapping[]>;
   routeKey: Uint8Array;
   fetchConfig: MediaImportFetchConfig;
   /** Wall-clock budgets for durable steps. Composition supplies this; tests may freeze it. */
@@ -162,7 +164,10 @@ async function registerWork(
   if (!now) throw new Error('Content worker now is not supplied');
   registerReviewDiscoveryWork(context);
   registerReviewCensusWork(context, options.access, partitions);
-  const realmSubject = createRealmSubjectLifecycle({ pool: context.pool });
+  const realmSubject = createRealmSubjectLifecycle({
+    pool: context.pool,
+    ...(options.readIdentityMappings === undefined ? {} : { readIdentityMappings: options.readIdentityMappings }),
+  });
   if (options.registerErasureParticipant !== false) registerAccountErasureWork(context, storage, options.routeKey);
   const retry = contentStepRetryOptions(options.stepRetryDelaySeconds);
   const repairDrafts = DBOS.registerStep(() => repairOwnDraftPage(context.pool), {

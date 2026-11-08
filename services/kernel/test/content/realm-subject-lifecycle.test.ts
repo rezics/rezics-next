@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import type { Pool } from 'pg';
+import { readContentIdentityMappings } from '../../src/composition/content.ts';
 import { startWorker } from '../../src/worker.ts';
 import type { WorkModule } from '../../src/work/registry.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
@@ -161,16 +163,22 @@ test.serial(
       const module: WorkModule = {
         name: 'realm_subject_lifecycle_fixture',
         register(context) {
-          const effect = contentEffects(context.pool, context.client).find(
+          const effect = contentEffects(context.pool, context.client, readContentIdentityMappings).find(
             (candidate) => candidate.name === REALM_SUBJECT_LIFECYCLE_EFFECT,
           );
           if (!effect) throw new Error('Content registration omitted the Realm Subject lifecycle effect');
           context.addEffects([effect]);
         },
       };
-      worker = await startWorker({ databaseUrl: world.db.url, poolSize: 10, executorId: 'realm-subject-lifecycle' }, [
-        module,
-      ]);
+      worker = await startWorker(
+        {
+          databaseUrl: world.db.url,
+          poolSize: 10,
+          executorId: 'realm-subject-lifecycle',
+          receiptKeys: testReceiptKeys(),
+        },
+        [module],
+      );
 
       const discussionCandidate = () => candidate(world.db.admin, discussion.threadId, original);
       const replacementCandidate = () => candidate(world.db.admin, discussion.threadId, replacement);
@@ -193,7 +201,10 @@ test.serial(
       }
       expect(await replacementCandidate()).toMatchObject({ active: true, revision_id: revised.revisionId });
 
-      const lifecycle = createRealmSubjectLifecycle({ pool: world.db.pool });
+      const lifecycle = createRealmSubjectLifecycle({
+        pool: world.db.pool,
+        readIdentityMappings: readContentIdentityMappings,
+      });
       await lifecycle.effect.run(toCloudEvent(openingEvent));
       await lifecycle.effect.run(toCloudEvent(revisionEvent));
       expect(await replacementCandidate()).toMatchObject({ active: true, revision_id: revised.revisionId });

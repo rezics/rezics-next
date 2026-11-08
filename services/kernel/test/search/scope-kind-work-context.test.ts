@@ -7,7 +7,8 @@ import type {
 } from '../../src/library/collection-kind-work-admission.ts';
 import type { CollectionSourceContext, PrepareCollectionSource } from '../../src/library/collection-source.ts';
 import { createCollectionSource } from '../../src/library/collection-source.ts';
-import type { NativePublicOutputIdentity, NativeSourceIdentity } from '../../src/library/native-source-custody.ts';
+import type { NativeSourceIdentity } from '../../src/library/native-source-custody.ts';
+import type { NativePublicOutputIdentity } from '../../src/library/contract/native-public-output.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { Access } from '../../src/request/access.ts';
 import type { LeafOptions } from '../../src/semantic/scope-leaf-evidence.ts';

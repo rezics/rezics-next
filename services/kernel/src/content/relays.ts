@@ -19,6 +19,7 @@ import { createMentionNoticeEffect } from './mention-notices.ts';
 import { createReplyNoticeEffect } from './reply-notices.ts';
 import { createThreadWatchNoticeEffect } from './watch-notices.ts';
 import { createBoardWatchNoticeEffect } from './board-watch-notices.ts';
+import type { RealmSubjectIdentityMapping } from './contract/index.ts';
 import readOutboxEvent from './read-outbox-event-index.sql';
 import {
   createRealmSubjectLifecycle,
@@ -187,9 +188,14 @@ function enqueueSubjectReactionMergeEffect(pool: Pool, client: WorkClient): Effe
 
 /** Add once through WorkContext.addEffects before the sole worker is launched.
  * This static list owns no runner, workflow registration or checkpoint. */
-export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
+export function contentEffects(
+  pool: Pool,
+  client: WorkClient,
+  readIdentityMappings?: (pool: Pool, originals: readonly string[]) => Promise<readonly RealmSubjectIdentityMapping[]>,
+): Effect[] {
   const realmSubject = createRealmSubjectLifecycle({
     pool,
+    ...(readIdentityMappings === undefined ? {} : { readIdentityMappings }),
     enqueueIdentity: async (work) => {
       await client.enqueue(
         {

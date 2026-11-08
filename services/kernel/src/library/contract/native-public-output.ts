@@ -3,6 +3,8 @@
 import type { CollectionSourceRawKey, NativeOutputActivation, NativePublicOutputIdentity } from './source.ts';
 import type { WorkAllowance, WorkReceipt } from './work-dimensions.ts';
 
+export type { NativeOutputActivation, NativePublicOutputIdentity } from './source.ts';
+
 export type NativePublicOutputReceipt = Readonly<{
   partition: number;
   epoch: number;

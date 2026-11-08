@@ -2,15 +2,16 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type {
   CollectionAliasProgress,
   CollectionSourceContext,
   CollectionSourceObservation,
-} from '../library/contract/source.ts';
-import type { NativeOrdinalKey } from '../library/contract/ordering.ts';
+  LibraryActor,
+  NativeOrdinalKey,
+  WorkAllowance,
+  WorkReceipt,
+} from '../library/contract/index.ts';
 import type { Access } from '../request/access.ts';
-import type { LibraryActor } from '../library/contract/actors.ts';
 import type { ScopeWorkContext } from '../library/adapters/index.ts';
 import { SearchOperationError } from './operation-outcomes.ts';
 import type {

@@ -50,6 +50,10 @@ and `withRealmDisclosureWork`, the native Access-to-Search bridge. It keeps rese
 bounds, caller deadline and root unchanged. Content consumes a port; its native sparse cursor and allowance stay
 with their original owners.
 
+Decision: scoped Search consumes Collection Source and public-output types from Library's declared contracts and
+native operations from its adapter entry; composition binds the installed producers without changing ordered pages,
+authorization or nested work budgets.
+
 Decision: construct one complete native disclosure application and pass it through both ordinary Subject and mixed
 Search. `disclosure-application.ts` sequences owner admission, nested context hydration, exact owner revalidation,
 concept preparation and final CURRENT disclosure through explicit capabilities. `discovery-hydration.ts` binds registry

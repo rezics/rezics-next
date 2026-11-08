@@ -24,7 +24,7 @@ import {
   NATIVE_PUBLIC_OUTPUT_JOURNEYS,
   PUBLIC_OUTPUT_PARTITION_SIZE_SQL,
 } from '../../src/library/native-public-output-work.ts';
-import type { NativePublicOutputIdentity } from '../../src/library/native-source-output-types.ts';
+import type { NativePublicOutputIdentity } from '../../src/library/contract/native-public-output.ts';
 import holdSQL from '../../src/library/native-public-output-hold.sql';
 import pageSQL from '../../src/library/collection-source-output-page.sql';
 import partitionSQL from '../../src/partition/read.sql';

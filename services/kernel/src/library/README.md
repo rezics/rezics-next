@@ -229,6 +229,10 @@ retain that instance through nested calls; `createOrderedCollectionSourceApplica
 `createMembersWorkDefinitionApplication` are the application facades. Fewest tests: Search's construction suite
 pins the installed binding; Library domain-composition keeps its fake-capability coverage.
 
+Captured Collection scopes resolve their native identity against the caller's allowance and combine that receipt
+with Search work. Source custody narrows each declared operation ceiling to the remaining original ledger after
+identity reads; it never reissues capacity or creates a child allocation.
+
 [Collection mutations](collection-mutation.md) owns mutation layers, effects and focused tests.
 
 Fewest tests: one `domain-composition.test.ts` suite covering fake-capability applications plus Source, member,

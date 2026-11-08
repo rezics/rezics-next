@@ -12,6 +12,7 @@ import {
   nativeContextAccess,
   createSubjectScopeEvidence,
 } from '../semantic/adapters/index.ts';
+import { readIdentityMappings as readSemanticIdentityMappings } from '../semantic/identity-adapters/index.ts';
 import { bindContextAccess } from '../semantic/context-access-port.ts';
 import { createZoneResourceAccess } from '../zones/adapters/index.ts';
 import {
@@ -446,6 +447,14 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
       {
         parent: createRealmScopeEvidence(nativeRealmEvidenceHost).observe,
         subject: createSubjectScopeEvidence(nativeRealmEvidenceHost).observe,
+        readIdentityMappings: async (pool, originals) => {
+          const mappings = await readSemanticIdentityMappings(pool, originals);
+          return mappings.map((mapping) =>
+            mapping.state === 'mapped'
+              ? { terminal: mapping.terminal, identityEpoch: mapping.epoch.toString() }
+              : { terminal: null, identityEpoch: null },
+          );
+        },
         withWork: (reader, work, maximum, run) => withRealmDisclosureWork(reader, work, maximum, run),
       },
       contentRuntime.ambient.now,

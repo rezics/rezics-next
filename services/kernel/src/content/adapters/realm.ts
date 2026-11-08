@@ -5,7 +5,7 @@ import { AccessUnavailableError } from '../../access/unavailable.ts';
 import type { NativeScopeReader } from '../../semantic/adapters/index.ts';
 import type { ScopeWork } from '../../search/adapters/index.ts';
 import { createContentRealmApplication } from '../application/index.ts';
-import type { RealmCommunityPorts, RealmSearchPorts } from '../contract/index.ts';
+import type { RealmCommunityPorts, RealmSearchPorts, RealmSubjectIdentityMapping } from '../contract/index.ts';
 import type { BoardRecord, ReadContext, AnchoredPosition } from '../model.ts';
 import { observeBoardRecentThreads, type ContentBoardDependencies } from '../boards.ts';
 import type { ThreadView } from '../reads.ts';
@@ -35,6 +35,7 @@ type SearchPorts = RealmSearchPorts<
   RealmSubjectSource
 >;
 export type NativeRealmProducers = Pick<NativeRealmDisclosurePorts, 'parent' | 'subject'> & {
+  readIdentityMappings(pool: Pool, originals: readonly string[]): Promise<readonly RealmSubjectIdentityMapping[]>;
   withWork<T>(
     reader: Extract<NativeScopeReader, { actor: unknown }>,
     work: ScopeWork,
@@ -79,7 +80,7 @@ export function createNativeContentRealmApplication(producers: NativeRealmProduc
       createHash('sha256').update(`${realm}:${signature}:${ordinal}`).digest('base64url'),
     failure: realmSearchFailure,
     source(pool, disclosure) {
-      const lifecycle = createRealmSubjectLifecycle({ pool });
+      const lifecycle = createRealmSubjectLifecycle({ pool, readIdentityMappings: producers.readIdentityMappings });
       return createRealmSubjectSource({ pool, disclosure, maintenance: lifecycle.maintenance });
     },
   };

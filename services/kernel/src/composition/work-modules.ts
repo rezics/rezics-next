@@ -21,7 +21,7 @@ import { createSearchWorkModule } from '../search/work.ts';
 import { ratingNativeWorkModule } from '../rating/module.ts';
 import { workflowRetentionWorkModule } from '../work/retention.ts';
 import { importsWorkModule } from '../imports/erasure.ts';
-import { composeContentApplication } from './content.ts';
+import { composeContentApplication, readContentIdentityMappings } from './content.ts';
 import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
 import type { SearchNativePorts } from '../search/composition.ts';
 
@@ -76,6 +76,7 @@ function contentWorkAmbient(supplied?: ContentWorkAmbient): ContentWorkAmbient {
       const id = supplied?.id ?? composeContentApplication().ambient.id;
       return id();
     },
+    readIdentityMappings: supplied?.readIdentityMappings ?? readContentIdentityMappings,
   };
 }
 

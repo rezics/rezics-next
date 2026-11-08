@@ -19,7 +19,7 @@ import {
   revalidateBoundLibraryIdentityWork,
   withLibraryIdentityWork,
 } from './identity-native-planner-work.ts';
-import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/index.ts';
 import {
   nativeSourceCustodyExecutionBound,
   nativeSourceCustodyFootprint,
@@ -123,13 +123,10 @@ function nextCapture() {
   return memoizedValue(nextCapture, () => nativeSourceCustodyQueries().retirement.nextCapture);
 }
 
-import type { NativeAccountSourceIdentity, NativeSourceIdentity } from './contract/source.ts';
-export type {
-  NativeAccountSourceIdentity,
-  NativeOutputActivation,
-  NativePublicOutputIdentity,
-  NativeSourceIdentity,
-} from './contract/source.ts';
+import type { NativeAccountSourceIdentity, NativeSourceIdentity } from './contract/index.ts';
+import type { NativeOutputActivation, NativePublicOutputIdentity } from './contract/native-public-output.ts';
+export type { NativeAccountSourceIdentity, NativeSourceIdentity } from './contract/index.ts';
+export type { NativeOutputActivation, NativePublicOutputIdentity } from './contract/native-public-output.ts';
 export type NativeSourceDriver =
   | 'member'
   | 'entry'
@@ -510,11 +507,15 @@ function nativeLibrarySourceCustody(
           ? withLibraryIdentityWork(pool, work, () => operation(work, operationUse))
           : operation(work, operationUse);
       if (!operationKind) return await invoke();
+      const maximum = nativeSourceCustodyWorkDimensions(nativeSourceCustodyOperationBound(operationKind));
+      const remaining = { ...maximum };
+      for (const axis of Object.keys(remaining) as (keyof WorkDimensions)[])
+        remaining[axis] = Math.min(remaining[axis], work.available(axis));
       const allowance: WorkAllowance = {
         reservationId: work.receipt().reservationId,
-        remaining: nativeSourceCustodyWorkDimensions(nativeSourceCustodyOperationBound(operationKind)),
+        remaining,
       };
-      // This static ceiling scopes the same ledger and is checked against its current original.
+      // Narrow the operation ceiling to what the caller ledger has after identity reads.
       // It transfers no child, creates no credit and does not settle from returned row counts.
       return await work.withinAllowance(allowance, invoke);
     } catch (error) {

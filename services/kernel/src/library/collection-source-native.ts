@@ -29,7 +29,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
 import { nativeSourceFence } from './native-source-fence.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
-import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/index.ts';
 import { grantCapable } from './account-grant.ts';
 import { admittedOwnerWorkingSource } from './owner-filter-working-source.ts';
 import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-native-work.ts';
@@ -160,8 +160,8 @@ import outputHead from './collection-source-output-head.sql';
 import outputPage from './collection-source-output-page.sql';
 import outputProbe from './collection-source-output-probe.sql';
 
-export type { NativeCollectionOrdinalPageBound } from './contract/source.ts';
-import type { NativeCollectionOrdinalPageBound } from './contract/source.ts';
+export type { NativeCollectionOrdinalPageBound } from './contract/index.ts';
+import type { NativeCollectionOrdinalPageBound } from './contract/index.ts';
 
 /** The single native ordinal statement's literal and schema-width bounds. */
 export function nativeCollectionOrdinalPageBound(limit: number): NativeCollectionOrdinalPageBound {

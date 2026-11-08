@@ -10,11 +10,15 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { runCommand, noEffect, type CommandTransaction, type AuthoritativeTime } from '../../src/command/command.ts';
 import {
   createNativeLibrarySourceCustody,
-  type NativePublicOutputIdentity,
   type NativeSourceIdentity,
   type NativeSourceFrontier,
   type NativeSourceDependency,
 } from '../../src/library/native-source-custody.ts';
+import type { NativePublicOutputIdentity } from '../../src/library/contract/native-public-output.ts';
+import {
+  nativeSourceCustodyOperationBound,
+  nativeSourceCustodyWorkDimensions,
+} from '../../src/library/native-source-custody-bounds.ts';
 import { readNativeCollectionMetadata } from '../../src/library/collection-source-native.ts';
 import { partitionOf, routeOf, newId } from '../../src/route/route.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
@@ -29,20 +33,35 @@ beforeAll(async () => {
 afterAll(async () => {
   await native?.close();
 });
+const custodyOperations = [
+  'capturePage',
+  'finishCapture',
+  'readAndHold',
+  'revalidateHold',
+  'releaseHold',
+  'retireCapture',
+] as const;
+const custodyOperationBounds = custodyOperations.map((operation) =>
+  nativeSourceCustodyWorkDimensions(nativeSourceCustodyOperationBound(operation)),
+);
+const custodyAllowance = custodyOperationBounds.reduce(
+  (maximum, dimensions) => ({
+    candidateKeys: Math.max(maximum.candidateKeys, dimensions.candidateKeys),
+    nativeRows: Math.max(maximum.nativeRows, dimensions.nativeRows),
+    identityMetadataRows: Math.max(maximum.identityMetadataRows, dimensions.identityMetadataRows),
+    emptySeeks: Math.max(maximum.emptySeeks, dimensions.emptySeeks),
+    nativePoints: Math.max(maximum.nativePoints, dimensions.nativePoints),
+    witnessKeys: Math.max(maximum.witnessKeys, dimensions.witnessKeys),
+    statements: Math.max(maximum.statements, dimensions.statements),
+    bytes: Math.max(maximum.bytes, dimensions.bytes),
+  }),
+  custodyOperationBounds[0]!,
+);
 const work = () => ({
   deadline: Date.now() + 30000,
   allowance: {
     reservationId: entryKey(),
-    remaining: {
-      candidateKeys: 100,
-      identityMetadataRows: 0,
-      nativeRows: 100000,
-      nativePoints: 1000,
-      witnessKeys: 100,
-      statements: 100,
-      bytes: 1024 * 1024,
-      emptySeeks: 100,
-    },
+    remaining: custodyAllowance,
   },
 });
 async function make() {
@@ -86,8 +105,16 @@ async function scan(identity: NativeSourceIdentity, initial: NativeSourceFrontie
   let frontier = initial;
   const rows: NativeSourceDependency[] = [];
   for (let page = 0; page < 100; page++) {
-    const result = await custody.capturePage({ ...work(), identity, frontier, limit: 1 });
-    if (result.status !== 'pending') throw new Error(`Native capture unavailable: ${result.reason}`);
+    const input = work();
+    const result = await custody.capturePage({ ...input, identity, frontier, limit: 1 });
+    if (result.status !== 'pending')
+      throw new Error(
+        `Native capture unavailable: ${result.reason}; used=${JSON.stringify(result.work.used)}; ` +
+          `allowance=${JSON.stringify(input.allowance.remaining)}; ` +
+          `captureBound=${JSON.stringify(
+            nativeSourceCustodyWorkDimensions(nativeSourceCustodyOperationBound('capturePage')),
+          )}`,
+      );
     expect(result.work.used.nativeRows).toBeGreaterThan(result.rows.length);
     expect(result.work.used.statements).toBeGreaterThan(0);
     rows.push(...result.rows);
@@ -499,7 +526,7 @@ async function explicitSource() {
     visibility: 'public',
     rule: { filter: { owner: { presence: true } } },
   });
-  expect(response.status).toBe(201);
+  expect(response.status, await response.clone().text()).toBe(201);
   const collectionId = (await response.json()).collection.id as string;
   const ref = { route: routeOf(collectionId)!, collectionId };
   const output = async <T>(input: unknown, body: (tx: CommandTransaction) => Promise<T>) => {

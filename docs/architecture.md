@@ -151,6 +151,10 @@ Decision: Boundary repairs reuse existing public entries and extract shared Cand
 Semantic Source receives its identity store through the existing composition port. Native Character bindings keep concrete
 page adapters at composition, while transaction, actor, deadline, work and dependency allowances stay unchanged.
 
+Decision: configured Presentation pages and scoped Search consume Library runtime, Source and public-output contracts
+through declared entries; composition binds the existing producers, while Platform session and Kernel HTTP hosts are
+public entries. Existing authorization and nested page/source budgets stay unchanged.
+
 **Enforcement.** One static architecture check (manifest validation plus a dependency-graph check) runs on every
 landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
 before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,

@@ -1,1 +1,1 @@
-export type { NativeOutputActivation, NativePublicOutputIdentity } from './contract/source.ts';
+export type { NativeOutputActivation, NativePublicOutputIdentity } from './contract/native-public-output.ts';
