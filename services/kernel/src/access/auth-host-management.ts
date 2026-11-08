@@ -14,7 +14,7 @@ export type AuthHostManagementConfig = WorkflowApprovalConfig & {
 };
 
 export type AuthHostManagementReads = Readonly<{
-  context: () => { pool: unknown; deadline: number };
+  context: () => AccessContext;
   readOperatorTransferState: (
     token: string,
     input: OperatorTransferStateInput,
