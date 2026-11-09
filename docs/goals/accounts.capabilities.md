@@ -48,6 +48,10 @@ invalidating a refresh family. A response status alone does not locate a service
 a successful revocation response does not establish the original family or Kernel-authority consequence without the
 formerly admitted bearer readback.
 
+Decision: an idempotent website client registration reads for existing coverage before inserting it; PostgreSQL's
+`BEFORE INSERT` guard runs before `ON CONFLICT DO NOTHING`, so replaying an unchanged registration must not be
+classified as a new client-coverage authority mutation.
+
 The focused `apps/web/tests/accounts-api-capture.test.ts` regression pins exact denial codes, overload uncertainty,
 sibling continuation, seed-independent runtime admission and secret redaction. The API capture, native acceptance,
 browser evidence and whole Goal stages remain separate.

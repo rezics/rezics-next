@@ -492,10 +492,15 @@ export function websiteRoutes(input: {
           `INSERT INTO "oauthClientResource" (id,"clientId","resourceId") VALUES ($1,$2,$3) ON CONFLICT ("clientId","resourceId") DO NOTHING`,
           [hash(`${WEBSITE_CLIENT_ID}:${options.audience}`), WEBSITE_CLIENT_ID, options.audience],
         );
-        await connection.query(
-          'INSERT INTO auth_client_coverage (client_id,ready,ready_after) VALUES ($1,true,CURRENT_TIMESTAMP) ON CONFLICT (client_id) DO NOTHING',
+        const coverage = await connection.query(
+          'SELECT 1 FROM auth_client_coverage WHERE client_id=$1',
           [WEBSITE_CLIENT_ID],
         );
+        if (!coverage.rowCount)
+          await connection.query(
+            'INSERT INTO auth_client_coverage (client_id,ready,ready_after) VALUES ($1,true,CURRENT_TIMESTAMP)',
+            [WEBSITE_CLIENT_ID],
+          );
         if (ownsTransaction) await connection.query('COMMIT');
       } catch (error) {
         if (ownsTransaction) await connection.query('ROLLBACK');
