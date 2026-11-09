@@ -3,6 +3,7 @@ import { memoizedValue } from '../memoized.ts';
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST } from './collection-source-probe-bounds.ts';
 import { CANONICAL_SOURCE_RECEIVING_COST } from './canonical-source-bounds.ts';
+import { collectionAuthorizationPreparationWork } from './access-port.ts';
 import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
 import { OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT, OWNER_FILTER_CLOSURE_REFERENCE_LIMIT } from './contract/index.ts';
 import { MEMBERS_PREPARATION_SOURCE_COST } from './members-preparation-source-declaration.ts';
@@ -95,7 +96,15 @@ function compareHeaderRule() {
 }
 
 function sourcePrepare() {
-  return memoizedValue(sourcePrepare, () => CANONICAL_SOURCE_RECEIVING_COST().state);
+  return memoizedValue(sourcePrepare, () =>
+    sumBounds(
+      CANONICAL_SOURCE_RECEIVING_COST().state,
+      // Source.prepare observes metadata before authorization and again for public eligibility.
+      // The canonical state declaration pays only its own metadata observation.
+      repeatBound(CANONICAL_SOURCE_RECEIVING_COST().metadata, 2),
+      declareBound(collectionAuthorizationPreparationWork()),
+    ),
+  );
 }
 function sourceMembership() {
   return memoizedValue(sourceMembership, () =>
