@@ -25,7 +25,7 @@ import type {
   DiscoveryMetadataProducer,
   DiscoveryMetadataProducers,
 } from '../search/index.ts';
-import { DiscoveryPopulationCutChangedError, DiscoveryProducerCoverageError } from '../search/discovery-errors.ts';
+import { DiscoveryPopulationCutChangedError, DiscoveryProducerCoverageError } from '../search/index.ts';
 import type { SecondScopeDiscoveryKey, SecondScopeDiscoveryRecord } from '../search/discovery-documents.ts';
 
 export type DiscoveryOwnerAdapters = DiscoveryOwnerAdapterSlots &
