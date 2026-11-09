@@ -1401,6 +1401,7 @@
         "apps/web/src/features/pages/subject-visit-navigation.ts",
         "apps/web/src/features/pages/subject-slots.tsx",
         "apps/web/src/search/search.tsx",
+        "apps/web/src/search/scoped-search-reader.ts",
         "apps/web/src/search/query-text-limit.ts",
         "apps/web/src/search/search-window/index.ts",
         "apps/web/src/search/release-window.ts",

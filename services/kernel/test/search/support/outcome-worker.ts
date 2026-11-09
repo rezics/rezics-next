@@ -14,6 +14,7 @@ export interface WorkerStats {
   defaultModules: string[];
   registeredModules: string[];
   registrationCounts: Record<string, number>;
+  registeredEffects: Record<string, { name: string; types: readonly string[] }[]>;
   startedServices: Record<string, number>;
   searchStarterInvocations: number;
   stopped: boolean;
@@ -64,6 +65,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
     defaultModules: [],
     registeredModules: [],
     registrationCounts: {},
+    registeredEffects: {},
     startedServices: {},
     searchStarterInvocations: 0,
     stopped: false,
@@ -120,10 +122,17 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
                 observations.registeredModules.push(module.name);
                 observations.registrationCounts[module.name] = (observations.registrationCounts[module.name] ?? 0) + 1;
                 observations.startedServices[module.name] = 0;
+                observations.registeredEffects[module.name] = [];
                 let serviceOrdinal = 0;
-                // Only addService is decorated. Pool, queues, client, env, effects and clock retain their identities.
+                // Observe effects without replacing them; only the runner starter is controlled.
                 await module.register({
                   ...context,
+                  addEffects(effects) {
+                    observations.registeredEffects[module.name]!.push(
+                      ...effects.map(({ name, types }) => ({ name, types: [...types] })),
+                    );
+                    context.addEffects(effects);
+                  },
                   addService(original) {
                     // Search also owns retention/erasure services. Adopt only the actual
                     // runner returned by its post-launch starter, retaining every service.

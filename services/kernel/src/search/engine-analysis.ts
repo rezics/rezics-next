@@ -93,6 +93,13 @@ export async function analyzeInstalled(
   )
     unavailable();
   const tokens = response.body.tokens.map(readToken);
+  // These installed text analyzers omit empty terms. Accepting one makes every name match an empty prefix.
+  // Keep normalizers separate: removing an ignorable character can legitimately produce an empty key.
+  if (
+    (request.analyzer === CJK_ANALYZER || request.analyzer === NAME_PREFIX_ANALYZER) &&
+    tokens.some(({ token }) => token.length === 0)
+  )
+    unavailable();
   for (const token of tokens) sourceSpan(request.text, token);
   return tokens;
 }

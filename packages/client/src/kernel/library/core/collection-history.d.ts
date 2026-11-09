@@ -33,7 +33,7 @@ export declare function createCollectionHistoryPlans(statements: CollectionHisto
             transaction_id: string;
             updated_at: string;
         }>;
-        total: import("../collection-source.ts").WorkDimensions & Readonly<{
+        total: import("../access-capabilities.ts").WorkDimensions & Readonly<{
             engineRequests: number;
         }>;
         withinExistingCeiling: boolean;
@@ -62,7 +62,7 @@ export declare function createCollectionHistoryPlans(statements: CollectionHisto
             collection_id: string;
             curator_account_id: string;
         }>;
-        total: import("../collection-source.ts").WorkDimensions & Readonly<{
+        total: import("../access-capabilities.ts").WorkDimensions & Readonly<{
             engineRequests: number;
         }>;
         withinExistingCeiling: boolean;
@@ -82,7 +82,7 @@ export declare function createCollectionHistoryPlans(statements: CollectionHisto
             after_revision: number | null;
             page_limit: number;
         }>;
-        total: import("../collection-source.ts").WorkDimensions & Readonly<{
+        total: import("../access-capabilities.ts").WorkDimensions & Readonly<{
             engineRequests: number;
         }>;
         withinExistingCeiling: boolean;
@@ -100,7 +100,7 @@ export declare function createCollectionHistoryPlans(statements: CollectionHisto
             curator_account_id: string;
             revision: number;
         }>;
-        total: import("../collection-source.ts").WorkDimensions & Readonly<{
+        total: import("../access-capabilities.ts").WorkDimensions & Readonly<{
             engineRequests: number;
         }>;
         withinExistingCeiling: boolean;

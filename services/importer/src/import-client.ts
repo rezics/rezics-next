@@ -988,7 +988,7 @@ export function createImportTransport(options: ImportTransportOptions) {
           wrapper !== null && typeof wrapper === 'object' && !types.isProxy(wrapper)
             ? Object.getOwnPropertyDescriptor(wrapper, 'value')?.value
             : undefined;
-        const redirected = snapshot(redirectBody ?? reply.data, RESPONSE_BYTES) as {
+        const redirected = snapshot(redirectBody ?? wrapper ?? reply.data, RESPONSE_BYTES) as {
           redirect?: { from?: unknown; to?: unknown };
         };
         ensure(redirected.redirect?.from === current && typeof redirected.redirect.to === 'string');

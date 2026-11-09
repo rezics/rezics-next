@@ -88,7 +88,6 @@ import {
 export const IDENTITY_EPOCH_CONTROL_PARTITION = 0;
 /** Fixed initial production capacity, charged once per native (home,job). */
 export const IDENTITY_EPOCH_HOME_CAPACITY = 1;
-export { authorizeIdentityAdmission } from './identity-epoch-binding.ts';
 export { recordIdentityEpochNativeCommit } from './native-commit.ts';
 export {
   identityEpochRemainderTerminal,

@@ -23,6 +23,8 @@ present, sets `Cache-Control: private, no-store`, and derives `owner` from the c
 owner is compared with this value and cannot supply an actor, credential or grant. Kernel calls use the returned
 credential and the request's abort signal.
 
+Decision: consumers outside Search import the server-only reader through the `scoped-search-reader.ts` public entry.
+
 Public Search with no owner predicate, resource membership or rating population remains anonymous and may use the public route cache
 and dehydration. Any session-bound Search starts in a browser query and is keyed by the complete URL-derived state,
 locale, read mode and current owner. A basis or owner change unmounts the previous query, removes its results and

@@ -19,7 +19,7 @@ const identity = {
 };
 const tempRoot = join(import.meta.dir, '../../../.temp');
 
-test('uploads through the generated VNDB route and resumes the exact private intent after unknown delivery', async () => {
+test('uploads through the generated VNDB route and resumes exact intents after unavailable delivery and restored authority', async () => {
   await mkdir(tempRoot, { recursive: true });
   const directory = await mkdtemp(join(tempRoot, 'showcase-personal-list-'));
   const path = join(directory, 'showcase.sqlite');
@@ -27,9 +27,12 @@ test('uploads through the generated VNDB route and resumes the exact private int
   const calls: { path: string; key: string | null; body: string }[] = [];
   const firstId = '01900000-0000-4000-8000-000000000001';
   const changedId = '01900000-0000-4000-8000-000000000002';
+  const restoredId = '01900000-0000-4000-8000-000000000003';
   const xml =
     '<vndb-export version="1.0"><vns><vn id="v123"><title>Original</title></vn><vn id="v456" /></vns></vndb-export>';
   const changedXml = xml.replace('Original', 'Changed');
+  const restoredXml = changedXml.replace('Changed', 'Restored');
+  let unauthorized = false;
   const client = createKernelClient('https://kernel.test', {
     headers: { authorization: 'Bearer ordinary-person' },
     fetch: (async (input, init) => {
@@ -41,8 +44,13 @@ test('uploads through the generated VNDB route and resumes the exact private int
         body,
       });
       if (calls.length === 1) throw new TypeError('fetch failed');
+      if (unauthorized) return Response.json({ detail: 'owner authority unavailable' }, { status: 403 });
       const source = JSON.parse(body) as { xml: string };
-      return Response.json({ uploadId: source.xml === changedXml ? changedId : firstId, rows: 2, limits: {} });
+      return Response.json({
+        uploadId: source.xml === changedXml ? changedId : source.xml === restoredXml ? restoredId : firstId,
+        rows: 2,
+        limits: {},
+      });
     }) as typeof globalThis.fetch,
   });
 
@@ -75,6 +83,24 @@ test('uploads through the generated VNDB route and resumes the exact private int
     expect(calls[3]!.key).not.toBe(calls[0]!.key);
     expect(calls.slice(0, 3).map((call) => JSON.parse(call.body))).toEqual(Array(3).fill({ xml }));
     expect(JSON.parse(calls[3]!.body)).toEqual({ xml: changedXml });
+
+    unauthorized = true;
+    expect(await seedShowcasePersonalList({ client, journal, identity, xml: restoredXml })).toEqual({
+      state: 'unavailable',
+      code: 'http-403',
+    });
+    const denied = calls.at(-1)!;
+    journal.close();
+    journal = new ShowcaseJournal(path);
+    unauthorized = false;
+    expect(await seedShowcasePersonalList({ client, journal, identity, xml: restoredXml })).toEqual({
+      state: 'uploaded',
+      uploadId: restoredId,
+      rows: 2,
+    });
+    expect(calls.at(-1)?.key).toBe(denied.key);
+    expect(calls.at(-1)?.body).toBe(denied.body);
+    expect(JSON.parse(calls.at(-1)!.body)).toEqual({ xml: restoredXml });
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });

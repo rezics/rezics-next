@@ -224,7 +224,7 @@ export async function readOwnerCandidates(
     for (const [id, summary] of summaries) {
       if (!requested.has(id) || !validOwnerSummary(kind, summary, id))
         throw new TypeError('Owner discovery adapter returned a foreign or invalid current summary');
-      current.set(`${kind}:${id}`, summary);
+      current.set(`${kind}:${id}`, structuredClone(summary));
     }
   }
 

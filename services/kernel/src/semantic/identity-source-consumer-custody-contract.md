@@ -151,11 +151,11 @@ refunded or extended by a second allocator.
 
 The Semantic retained-directory reader, scoped fence, and Accounts technical receiver
 are present and consumed through these original ports. Their native receipts remain
-required; declarations or caller data do not establish them. The current Library
-module exports the required page and seal APIs, but its implementation returns
-unavailable/false in this checkout, so its scope branch stays pending. Null
-acceptance/fence results must be effects-free; after a successful receiver write,
-failed local verification rolls the whole command back.
+required; declarations or caller data do not establish them. Library now implements
+the bounded expected-effects page and same-home seal verifier. A missing current plan,
+native receipt, or scope fence remains pending; null acceptance/fence results are
+effects-free, and failed local verification after a receiver write rolls back the
+whole command.
 
 ### Source storage and transition
 
@@ -210,14 +210,15 @@ The returned proof is locally revalidated after commit; no foreign reads occur i
 verification command.
 
 Retained preparation is not terminal completion. No page EOF, caller count, participant
-ACK or terminal metadata alone establishes an empty effect set. With the current Library
-implementation unavailable, the first unresolved scope remains pending with no positive
-receipt. Even when the Library body supplies a current native seal, the binding owner must
-also supply genuine native reversal/consumer-settlement evidence before a subject-erasure
-discharge can commit. Requester/decider transfer remains gated on actual Accounts technical
-acceptance and same-source verification. Public-catalogue/public-output custody and missing
-History artifact associations remain pending. Account current-root and all-copy proof are
-separate requirements and are never inferred from this Source receipt.
+ACK or terminal metadata alone establishes an empty effect set. The first unresolved
+scope remains pending until its Library page, native seal and current fence all agree.
+Even when the Library body supplies a current native seal, the binding owner must also
+supply genuine native reversal/consumer-settlement evidence before a subject-erasure
+discharge can commit. Requester/decider transfer remains gated on actual Accounts
+technical acceptance and same-source verification. Public-catalogue/public-output
+custody and missing History artifact associations remain pending. Account current-root
+and all-copy proof are separate requirements and are never inferred from this Source
+receipt.
 
 ## Current consumer composition and positive retirement preflight
 
@@ -357,16 +358,12 @@ permanent fences stay pending without an original-owner bridge. Readiness, perma
 SDK technical closure, legal History cleanup, receiving recording, current Account
 settlement, root and all-copy proof are distinct obligations.
 
-The Library module in this checkout still returns `unavailable` / `false`. The paid
-producer review identifies the locked `identity-native-planner-read.sql` query, the
-native seal receipt read, `currentLibraryIdentityPlan` and nested
-`readNativeIdentitySourceBasis` work. Its planner module/SQL and final original-owner
-statement declarations are absent here. The precise missing handoff is **every actual
-page/verifier/nested-current-plan SQL literal and defensible per-axis dispatch bound**,
-including repeated and failed work, local-ledger interaction and receiving/fence controls.
-The consumer refuses the first unmatched dispatch; it does not import the provisional
-paid SQL into its whitelist. A producer's fixed local verifier ledger supplies no
-additional Source funding. No creator-sales or live-copy adapter supplies this seal.
+The Library implementation now reads bounded selections from its sealed native plan,
+returns the real seal receipt, and rechecks the current plan and same-home receipt before
+accepting that seal. Its native tests cover positive pages, exhaustive zero, and writer
+changes at the final fence. This does not replace the original Source frame: the consumer
+still rejects unmatched SQL and charges its existing ledger. No creator-sales or
+live-copy adapter supplies this seal.
 
 ### Funding decision pending complete bodies
 

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Access, AccountActor } from '../../src/request/access.ts';
 import { routeOf } from '../../src/route/route.ts';
-import { currentDiscoveryCandidates } from '../../src/search/discovery-current.ts';
+import { currentDiscoveryCandidates, currentDiscoveryPrimaryCandidates } from '../../src/search/discovery-current.ts';
 import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts';
 import { proveKindCount } from '../../src/search/kind-count-proof.ts';
 import { selectCurrentPredicatePage } from '../../src/search/current-predicate.ts';
@@ -270,4 +270,28 @@ test('an unready owner producer is readiness, not an empty successful collection
       context,
     ),
   ).rejects.toBeInstanceOf(SearchUnavailableError);
+});
+
+test('primary membership reobserves the live Subject owner after hydration instead of replaying its initial snapshot', async () => {
+  const row = book(1);
+  let reads = 0;
+  const owner = registry([row]);
+  const semantic = owner.entries.find((entry) => entry.owner === 'semantic')!;
+  if (semantic.owner !== 'semantic') throw new Error('Expected Subject owner');
+  const initial = semantic.source.read.bind(semantic.source);
+  semantic.source.read = async (partition, ids) => {
+    reads++;
+    const snapshot = await initial(partition, ids);
+    return reads === 1 ? snapshot : { ...snapshot, position: snapshot.position + 1n, subjects: [] };
+  };
+  await expect(
+    currentDiscoveryPrimaryCandidates(
+      owner,
+      [{ owner: 'semantic', kind: row.type, route: routeOf(row.id)!, id: row.id }],
+      undefined,
+      bundledRelease,
+      context,
+    ),
+  ).rejects.toMatchObject({ code: 'search_restart_required' });
+  expect(reads).toBe(2);
 });

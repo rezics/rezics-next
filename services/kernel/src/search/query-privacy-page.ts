@@ -1,5 +1,6 @@
 import {
   selectCurrentPredicatePage,
+  collectCurrentPredicateHits,
   type CurrentPredicateHit,
   type CurrentPredicateSelection,
 } from './current-predicate.ts';
@@ -60,16 +61,18 @@ function visible(subject: IndexedSubject | undefined): subject is IndexedSubject
 function disclosedMap(
   examined: readonly QueryPrivacyExaminedHit[],
   subjects: ReadonlyMap<QueryPrivacyExaminedHit, IndexedSubject>,
+  options: HitOptions,
 ): Map<QueryPrivacyExaminedHit, QueryPrivacyDisclosedHit> {
   const disclosed = new Map<QueryPrivacyExaminedHit, QueryPrivacyDisclosedHit>();
   for (const candidate of examined) {
-    const subject = subjects.get(candidate) ?? candidate.subject;
+    // An attached engine row is a nomination, never a substitute for refused current evidence.
+    const subject = subjects.get(candidate);
     if (!visible(subject)) continue;
     disclosed.set(candidate, {
       ...candidate,
       key: { ...candidate.key, kind: subject.type, id: subject.id },
       subject,
-      projected: projectHit(subject, { descriptions: false }),
+      projected: projectHit(subject, options),
     });
   }
   return disclosed;
@@ -119,18 +122,18 @@ export async function discloseQueryPrivacyPage(options: {
     aggregateProof: false,
   });
   if (queryPrivacyPreparing(options.currentness)) return preparingPage(emptyProofs);
-  const disclosed = disclosedMap(options.examined, options.subjects);
+  const hitOptions: HitOptions = {
+    descriptions: options.descriptions === true,
+    ...(options.languages === undefined ? {} : { languages: options.languages }),
+    ...(options.properties === undefined ? {} : { properties: options.properties }),
+  };
+  const disclosed = disclosedMap(options.examined, options.subjects, hitOptions);
   const selected = selectCurrentPredicatePage(options.examined, disclosed, {
     limit: options.limit,
     exhausted: options.exhausted,
   });
   let hits = selected.hits;
   if (options.nested) await options.nested(hits);
-  const hitOptions: HitOptions = {
-    descriptions: options.descriptions === true,
-    ...(options.languages === undefined ? {} : { languages: options.languages }),
-    ...(options.properties === undefined ? {} : { properties: options.properties }),
-  };
   if (options.source) {
     const current = await revalidateProjectedHits(
       options.source,
@@ -163,12 +166,12 @@ export async function discloseQueryPrivacyPage(options: {
       projected: { ...hit.projected, ...(Object.keys(facts[index] ?? {}).length ? { facts: facts[index] } : {}) },
     }));
   }
-  const identities = new Map<string, Set<string>>();
-  for (const hit of hits) {
-    const ids = identities.get(hit.key.kind) ?? new Set<string>();
-    ids.add(hit.key.id);
-    identities.set(hit.key.kind, ids);
-  }
+  // Final Source disclosure can remove identities. All facet and kind consumers must
+  // see that same final sequence, including its updated witnesses and exhaustion.
+  const final = collectCurrentPredicateHits(hits, new Map(hits.map((hit) => [hit, hit])));
+  const identities = final.witnesses;
+  const exhausted = options.exhausted && selected.consumed === options.examined.length;
+  const useful = hits.length === options.limit || exhausted;
   const witnesses = new Map([...identities].map(([kind, ids]) => [kind, ids.size]));
   const proofs = queryPrivacyProofs({
     currentness: options.currentness,
@@ -176,7 +179,7 @@ export async function discloseQueryPrivacyPage(options: {
     kinds: kinds.length ? kinds : witnesses.keys(),
     witnesses,
     continuation,
-    exhausted: options.exhausted && selected.consumed === options.examined.length,
+    exhausted,
     aggregateProof: options.aggregateProof === true,
   });
   return {
@@ -184,12 +187,19 @@ export async function discloseQueryPrivacyPage(options: {
     hits,
     dropped: selected.dropped + (selected.hits.length - hits.length),
     consumed: selected.consumed,
-    useful: hits.length === options.limit || options.exhausted,
-    exhausted: options.exhausted,
+    useful,
+    exhausted,
     empty: hits.length === 0,
     order: hits.map((hit) => hit.key.id),
     proofs,
-    selection: { ...selected, hits },
+    selection: {
+      ...selected,
+      hits,
+      witnesses: identities,
+      dropped: selected.dropped + selected.hits.length - hits.length,
+      exhausted,
+      useful,
+    },
   };
 }
 

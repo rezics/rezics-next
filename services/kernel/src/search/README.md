@@ -1,5 +1,7 @@
 # Search
 
+Decision: `search/index.ts` re-exports `DiscoveryProducerCoverageError` and `DiscoveryPopulationCutChangedError` from their native `operation-outcomes.ts` leaf to preserve canonical constructor identity in composition.
+
 Decision: `adapters/library-preparation.ts` implements Library's native preparation and scope-work capabilities.
 It uses the worker's existing Search runtime, original same-client work definition admission and definition/body
 meters. The ordered Source prepare/prefix/evaluate algorithm retains its exact cursor and partial-evaluation
@@ -37,6 +39,19 @@ Search and erasure. Receipt keys are resolved and bound at the server entry befo
 
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index
 generations.
+
+Decision: retained primary observations seed only the first read of each identity. Revalidation reads
+through the same live Subject or Account owner; request-local snapshots cannot certify their own currentness.
+Each catalogue kind gets its own initial reader so another kind cannot consume its initial observation.
+Owner summaries are detached before nested hydration to detect replacement and in-place reductions alike.
+The disclosed candidate map alone supplies page membership; attached indexed rows cannot revive refusals.
+Final page selection, facet identities and kind witnesses share the surviving sequence, and unconsumed
+lookahead cannot certify exhaustion or an exact aggregate. Public totals remain omitted. Native acceptance
+extends the original query-privacy cell with hidden/taken-down useful pages, independent current Recipe
+reads while Book predicates prepare, Collection public-to-private disclosure and ordinary relay recovery.
+The worker observes both original tombstone handlers without replacing effects or stopping other services.
+The original serial erasure cases remain required. Typing alone leaves native, browser and aggregate
+execution evidence open until their owning suites pass.
 
 Subject search, public hit bases and bounded kind metadata require `search` grants; advanced filters/scopes,
 facets and ratings require `search_advanced`. Population/privacy, incarnation, erasure and native growth proofs remain
@@ -499,6 +514,10 @@ subject to the pending real-source/composition proof in [Indexed membership, cur
 Match evidence is unavailable when an engine excerpt cannot be mapped uniquely to one current public title, alias or description value and language; locale fallback is never evidence. Positive named field probes retain the installed text query as the sole required clause and add no score. Engine excerpts are parsed on the server and only bounded safe text spans leave the service.
 Decision: names, descriptions and copied search text store character offsets so the unified highlighter returns exact source text, including `und` aliases, rather than ICU-folded tokens. Display locale never rewrites evidence language. Native truncation keeps the engine excerpt and the 32 KiB current-name scan; a later alias beyond that scan cannot become evidence.
 `engine-analysis.ts` is the installed-node `_analyze` and plugin inventory: `requireDevelopmentAnalyzer` proves OpenSearch 3.x with `analysis-icu` and ICU folding, and `analyzeInstalled` returns native offsets for the generation analyzer. Malformed analyzer or plugin replies are `SearchUnavailableError` and never retain engine bodies. `disclosure/current-text.ts` reuses those analyzers for query and prefix disclosure, including the same 16-way analyze bound as sort-key preparation, held as a module-init literal rather than a load-time read of `ENGINE_ANALYSIS_LIMITS`.
+`cjk_bigram_v2` and `name_prefix` omit empty terms: an empty returned token is unavailable, since accepting it
+would let an empty prefix match every current name. This boundary rule does not reject empty normalized keys.
+The native CJK case independently re-reads current source text before the writer catches up, checks that retired
+aliases lose disclosure and evidence immediately, then checks the refreshed engine's search and suggestion results.
 
 Projection runs inside the existing bounded candidate and current-source pass; it adds no per-hit search or history scan. Limits are 128 zero-score field probes per query, three 128-character fragments per field and hit, every current public title, alias and description within 32 KiB scanned per hit, 256 KiB of engine evidence per page and 128 KiB of serialized evidence per page. Evidence beyond any cap is marked unavailable while the hit, ranking and cursor remain unchanged.
 It does **not** establish immediate count privacy: general search totals and facet bucket counts can still include

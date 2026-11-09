@@ -543,6 +543,8 @@ from that mounted response. `createFeedReads(deps: FeedDependencies): FeedReads`
 `list(actor: Actor, query: FeedReadQuery, deadline: number, languages: readonly string[]): Promise<FeedPage>`.
 Decision: that factory is the transport-facing native adapter. Construction and read orchestration live in the
 Content feed application; Library Continue and Semantic public summaries bind once at ordinary composition.
+Decision: Kernel composition imports feed enrichment ports, Content context preparation and viewer personal actions
+through `content/adapters/index.ts`; the process root still assembles the mixed feed.
 Missing producer authority is unavailable. Wire shapes, page 20, candidate 160, one renderer and sparse
 frontiers are unchanged. Destination kinds remain distinct; disclosed summary and Continue page schemas stay
 composable TypeBox objects. The mounted schemas stamp those Content contract page types.
