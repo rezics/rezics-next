@@ -1,7 +1,24 @@
 import { afterAll, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { browserWorkerCommand, browserWorkerRequest, runBrowserWorker, runWebTestLanes } from '../scripts/check.ts';
+import {
+  browserWorkerCommand,
+  browserWorkerRequest,
+  runBrowserWorker,
+  runWebSelectedChecks,
+  runWebTestLanes,
+} from '../scripts/check.ts';
+
+test('one selected Web check reports both ordinary and native failures', async () => {
+  const ran: string[] = [];
+  const fail = (name: string) => async () => {
+    ran.push(name);
+    throw new Error(`${name} failed`);
+  };
+  const result = await runWebSelectedChecks([fail('ordinary'), fail('native')]).catch((error: Error) => error.message);
+  expect(ran).toEqual(['ordinary', 'native']);
+  expect(result).toBe('ordinary failed\nnative failed');
+});
 
 const app = resolve(import.meta.dir, '..');
 const root = resolve(app, '../..');

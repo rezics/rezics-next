@@ -688,6 +688,19 @@ async function runTests(
   if (unique.length > 0) throw new Error(`Web tests failed for ${unique.length} file(s):\n${unique.join('\n')}`);
 }
 
+/** Run independent selections under the same admission, without running two Web hosts at once. */
+export async function runWebSelectedChecks(checks: readonly (() => Promise<void>)[]): Promise<void> {
+  const failures: string[] = [];
+  for (const check of checks) {
+    try {
+      await check();
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  if (failures.length) throw new Error(failures.join('\n'));
+}
+
 export async function main(args: string[], runtime: WebCheckRuntime = {}): Promise<void> {
   const routedSelection = args.length === 1 && args[0] === '--routed-selection';
   const inheritedSelection = routedSelection ? readWebTestSelectionContext() : undefined;
@@ -796,14 +809,13 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
   if (requestedFiles.length > 0) {
     const nativeFiles = requestedFiles.filter(isWebHostTestFile);
     const ordinaryFiles = requestedFiles.filter((file) => !isWebHostTestFile(file));
-    await runTests(ordinaryFiles, env, testScript, testArgs);
+    const checks = [() => runTests(ordinaryFiles, env, testScript, testArgs)];
     if (nativeFiles.length > 0) {
-      await runWebHostTests(
-        env,
-        runtime.hostTests,
-        selection ? { ...selection, selectedFiles: nativeFiles } : undefined,
+      checks.push(() =>
+        runWebHostTests(env, runtime.hostTests, selection ? { ...selection, selectedFiles: nativeFiles } : undefined),
       );
     }
+    await runWebSelectedChecks(checks);
     return;
   }
   const results = await Promise.allSettled([runWebTypecheck(env), runTests(files, env, testScript, testArgs)]);
