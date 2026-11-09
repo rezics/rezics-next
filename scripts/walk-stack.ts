@@ -473,7 +473,8 @@ export function walkStackEnvironment(task: string, index: number): Record<string
     KERNEL_SEARCH_MEMORY: '768m',
     KERNEL_DATABASE_MEMORY: '384m',
     KERNEL_DATABASE_BOUNDED: '1',
-    KERNEL_WORKER_POOL_SIZE: '1',
+    // DBOS retains LISTEN and a background-job lock; jobs and native services need a third checkout.
+    KERNEL_WORKER_POOL_SIZE: '3',
     REZICS_WALK_SMOL: '1',
     // Vite/workerd, Playwright and the worker stay down through persona/seed; the journey starts them for browsers.
     REZICS_WALK_DEFER_FRONTENDS: '1',

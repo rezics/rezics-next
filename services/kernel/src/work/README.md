@@ -23,6 +23,21 @@ readiness, link convergence, failure cleanup and graceful drain under their orig
 The completed assembly reads Elysia's composed route view once for write rates, viewer bindings, guest security,
 path declarations and the native action catalogue. Those consumers share the same final declarations instead of
 recomposing hooks and schemas for each validation; HTTP handler compilation keeps its own transport lifecycle.
+Decision: the installed Worker reports bounded shutdown phases for relay, runtime, client, Content and pool
+settlement and each native service drain, preserving its original deadline and drain order. Registry authorization fixtures prepare the ordinary
+SDK client and bind Rating, Access and Community operands before replacing queue writes and forbidding further I/O.
+The original no-launch assertion and native Access checks remain.
+
+Decision: the native Worker requires at least three shared pool connections. The SDK holds one for `LISTEN`,
+then holds another in `backgroundJobLock` while its background jobs check out connections for their queries.
+One connection stalls the launch `NOTIFY` self-test; two stall background jobs and native service startup after
+SDK launch. Isolated walk stacks supply three connections, and Worker environment validation rejects smaller pools.
+The existing installed lifecycle runs the actual default modules at this minimum and retains its original deadline;
+the fresh Auth journey still owns the same 300-second budget, browser assertions and settlement reserve.
+The independent idempotent-stop fixture and direct-entrypoint host start together inside their existing 30-second
+lifecycle test deadline; both must settle, and the direct host must report every completed shutdown phase.
+
+
 Decision: direct WorkContext hosts supply the real pool, queue catalogue, client, clock and effect collector before
 registration, start every owned service, and drain them before closing the client. Search derives worker Access from
 the complete native action catalogue instead of compiling an unused HTTP host.

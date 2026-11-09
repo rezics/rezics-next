@@ -24,6 +24,39 @@ import { relayConcurrencyForPool, startRelays } from './events/relays.ts';
 import { configureReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
 import type { KeyRing } from './tokens/seal.ts';
 
+/** Report each owned drain boundary without changing its failure or settlement order. */
+function shutdownPhase(phase: string) {
+  const startedAt = performance.now();
+  const emit = (state: string) =>
+    console.error(
+      `worker: startup ${JSON.stringify({ phase, state, utc: new Date().toISOString(), elapsedMs: Math.round(performance.now() - startedAt) })}`,
+    );
+  return {
+    async run<T>(operation: () => T | Promise<T>): Promise<T> {
+      emit('starting');
+      try {
+        const result = await operation();
+        emit('ready');
+        return result;
+      } catch (error) {
+        emit('failed');
+        throw error;
+      }
+    },
+    runSync<T>(operation: () => T): T {
+      emit('starting');
+      try {
+        const result = operation();
+        emit('ready');
+        return result;
+      } catch (error) {
+        emit('failed');
+        throw error;
+      }
+    },
+  };
+}
+
 export type WorkerConfig = {
   databaseUrl: string;
   executorId?: string;
@@ -47,7 +80,8 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
     throw new ConfigError('DATABASE_URL');
   }
   const size = env.KERNEL_WORKER_POOL_SIZE ?? '10';
-  if (!/^\d+$/.test(size) || Number(size) < 1 || Number(size) > 100) {
+  // The SDK retains LISTEN and a background-job lock while its jobs need a third checkout.
+  if (!/^\d+$/.test(size) || Number(size) < 3 || Number(size) > 100) {
     throw new ConfigError('KERNEL_WORKER_POOL_SIZE');
   }
   let executorId = env.KERNEL_EXECUTOR_ID;
@@ -152,20 +186,20 @@ export async function startWorker(
         // A signal during registration or launch drains the runtime once startup settles.
         await starting?.catch(() => {});
         try {
-          await relays?.stop();
+          await shutdownPhase('shutdown.relays').run(() => relays?.stop());
         } finally {
-          if (work) await work.shutdown();
+          if (work) await shutdownPhase('shutdown.work').run(() => work!.shutdown());
         }
       } finally {
         process.removeListener('SIGINT', signal);
         process.removeListener('SIGTERM', signal);
         try {
-          await client.close();
+          await shutdownPhase('shutdown.client').run(() => client.close());
         } finally {
           try {
-            content.stop();
+            shutdownPhase('shutdown.content').runSync(() => content.stop());
           } finally {
-            await pool.end();
+            await shutdownPhase('shutdown.pool').run(() => pool.end());
           }
         }
       }
@@ -181,7 +215,25 @@ export async function startWorker(
   process.on('SIGTERM', signal);
   try {
     starting = (async () => {
-      work = await composeWork(resolvedModules, { ...config, pool, client, env });
+      // Keep each native service's drain visible inside the runtime shutdown boundary.
+      // The wrapper preserves registration order, service operands and reverse settlement.
+      const tracedModules = resolvedModules.map((module): WorkModule => ({
+        name: module.name,
+        register(context) {
+          let serviceIndex = 0;
+          return module.register({
+            ...context,
+            addService(start) {
+              const phase = `service.${module.name}.${serviceIndex++}.stop`;
+              context.addService(async () => {
+                const service = await start();
+                return { ...service, stop: () => shutdownPhase(phase).run(() => service.stop()) };
+              });
+            },
+          });
+        },
+      }));
+      work = await composeWork(tracedModules, { ...config, pool, client, env });
       await work.launch();
       relays = startRelays(pool, [effectsRelay(pool, work.effects)], {
         concurrency: relayConcurrencyForPool(pool),

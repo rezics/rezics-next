@@ -58,7 +58,7 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
     KERNEL_SEARCH_MEMORY: '768m',
     KERNEL_DATABASE_MEMORY: '384m',
     KERNEL_DATABASE_BOUNDED: '1',
-    KERNEL_WORKER_POOL_SIZE: '1',
+    KERNEL_WORKER_POOL_SIZE: '3',
     REZICS_WALK_SMOL: '1',
     REZICS_WALK_DEFER_FRONTENDS: '1',
     MALLOC_ARENA_MAX: '2',

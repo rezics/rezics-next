@@ -376,8 +376,9 @@ step still needs its own growth check on rows, blocks and statements.
 
 Run `bun run worker` for the kernel's single durable-work process. It requires `DATABASE_URL` and accepts
 `KERNEL_EXECUTOR_ID`, falling back to `NOMAD_JOB_NAME` plus `NOMAD_ALLOC_INDEX` when configured, or the SDK's local
-identity. `KERNEL_WORKER_POOL_SIZE` defaults to 10 and must be between 1 and 100; the module pool, enqueue client and
-SDK share this bounded pool. SIGINT and SIGTERM stop dispatch and drain in-flight workflows before closing it.
+identity. `KERNEL_WORKER_POOL_SIZE` defaults to 10 and must be between 3 and 100. The SDK retains one connection
+for notifications and another for its background-job lock; the jobs need a third checkout to run. The module pool, enqueue client and SDK
+share this bounded pool. SIGINT and SIGTERM stop dispatch and drain in-flight workflows before closing it.
 Migrations, not the worker, create and upgrade the `dbos` schema.
 
 The worker registers the six ADR-0033 queues once, calls every module registration in order, then launches DBOS
