@@ -226,7 +226,7 @@ export async function openApiRuntime(
     const identity = await time('identity and Auth setup', () =>
       openImportIdentity({
         publication: true,
-        additionalAccounts: options.additionalAccounts,
+        additionalAccounts: options.additionalAccounts ?? [],
         database: ownedDatabase!,
         authTemplate: prepared.auth.name,
         clock: () => new Date(),

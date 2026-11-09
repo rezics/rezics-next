@@ -72,8 +72,6 @@ export async function createCollectionPresentationFixture() {
     const owner = await credential('ordinary');
     const other = await credential('another', collectionScopes);
     const manager = await credential('governance', managementScopes);
-    // One connection suffices for the owner path. Any foreign checkout while it is held fails natively.
-    database.pool.options.max = 1;
     const app = createKernel({
       pool: database.pool,
       receiptKeys: testReceiptKeys(),
@@ -112,6 +110,9 @@ export async function createCollectionPresentationFixture() {
         );
     };
     await grant(owner.accountId, ['subject:create', 'offer:create']);
+    // Setup grants finish before limiting the owner path to one connection.
+    // Any foreign checkout while the owner holds it fails natively.
+    database.pool.options.max = 1;
     async function refresh() {
       owner.bearer = (await credential('ordinary')).bearer;
       other.bearer = (await credential('another')).bearer;
