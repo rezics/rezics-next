@@ -2578,7 +2578,7 @@ def evict_artifacts(cache):
     temporary.replace(state_file)
 
 
-def maintain(cache, continuous=False):
+def maintain(cache, service=False):
     global RECLAIM_CREDIT, MAINTENANCE_STOP
     cache.mkdir(parents=True, exist_ok=True)
     # Stable across service replacement and independent of run scopes. A competing registration exits harmlessly.
@@ -2598,30 +2598,25 @@ def maintain(cache, continuous=False):
             maintenance_report(cache, force=True, state='error', measurementValid=False, error=str(error))
         MAINTENANCE_STATUS.update(windowStartedAt=time.time(), pid=os.getpid(),
                                   deletedBytes=0, deletedNodes=0, admittedBytes=0, measurementValid=False)
+        if service and update_host_pressure(cache.parent / 'slots')[0]:
+            maintenance_report(cache, force=True, state='deferred', error=None)
+            return 0
         for number in [signal.SIGTERM, signal.SIGINT, signal.SIGHUP]:
             signal.signal(number, lambda *_: globals().__setitem__('MAINTENANCE_STOP', True))
-        while not MAINTENANCE_STOP:
-            try:
+        try:
+            observe_garbage(cache)
+            clean_garbage(cache)
+            resume_retirements(cache)
+            if not MAINTENANCE_STOP:
                 observe_garbage(cache)
-                clean_garbage(cache)
-                resume_retirements(cache)
-                if not MAINTENANCE_STOP:
-                    observe_garbage(cache)
-                    evict_artifacts(cache)
-                    observe_garbage(cache)
-                    maintenance_report(cache, force=True, state='idle', error=None)
-            except Exception as error:
-                maintenance_report(cache, force=True, state='error', measurementValid=False, error=str(error))
-                if not continuous:
-                    raise
-            if not continuous:
-                return 0
-            # Idle checks are unnecessary: systemd retains this process between checks and restarts failures.
-            for _ in range(30):
-                if MAINTENANCE_STOP:
-                    break
-                time.sleep(1)
-        maintenance_report(cache, force=True, state='stopped', measurementValid=False)
+                evict_artifacts(cache)
+                observe_garbage(cache)
+                maintenance_report(cache, force=True, state='idle', error=None)
+            else:
+                maintenance_report(cache, force=True, state='stopped', measurementValid=False)
+        except Exception as error:
+            maintenance_report(cache, force=True, state='error', measurementValid=False, error=str(error))
+            raise
     return 0
 
 
@@ -2661,7 +2656,7 @@ def register_maintenance(cache):
             raise RuntimeError(stopped.stderr.strip() or 'cannot stop stale cache maintenance')
         control('reset-failed', unit + '.service')
         result = subprocess.run(['systemd-run', '--unit=' + unit, '--collect', '--no-block',
-            '-p', 'Restart=always', '-p', 'RestartSec=5s',
+            '-p', 'Restart=no',
             '-p', 'TimeoutStopSec=15s', '-p', 'KillMode=control-group',
             '-p', 'MemoryMax=256M', '-p', 'CPUQuota=20%', '-p', 'IOSchedulingClass=idle',
             '-p', 'IOWeight=1', '-p', 'Nice=19',

@@ -815,8 +815,9 @@ remain separate questions for the existing compiler/health chain; this cohort su
    captured program's digest, replaces stale maintenance services and starts stopped current services. A stable
    registration lock serializes simultaneous registrations; registration failure is logged without changing results.
    The captured program survives run-directory cleanup and command modification. Reconciliation retries on failure.
-   `rezics-check-cache-maintenance.service` runs continuously between checks, with restart on exit, 256 MiB memory,
-   20% CPU quota, nice 19, idle I/O class and IOWeight 1. It has no runtime or deletion-node limit. Its stable
+   `rezics-check-cache-maintenance.service` runs one sweep for a registration, with no restart on exit. It defers
+   before scanning if the existing host pressure guard pauses admission, retaining the cleanup cursor and markers.
+   It uses 256 MiB memory, 20% CPU quota, nice 19, idle I/O class and IOWeight 1. Its stable
    `.maintenance.lock` admits one owner, including manual sweeps; shutdown cooperates between filesystem operations,
    with a 15-second systemd stop timeout and whole-control-group teardown. Interrupted deletion restarts from the
    remaining namespace, without a recursive call stack or one descriptor per tree depth. Symlinks are unlinked.

@@ -8278,7 +8278,7 @@ def install():`,
     expect(readFileSync(join(run.run, 'exit-status'), 'utf8')).toBe('23\n');
     expect(existsSync(join(run.run, 'command-invoked'))).toBe(true);
     const request = readFileSync(join(run.run, 'maintenance-request'), 'utf8');
-    for (const option of ['--no-block', 'Restart=always', 'IOSchedulingClass=idle', 'KillMode=control-group'])
+    for (const option of ['--no-block', 'Restart=no', 'IOSchedulingClass=idle', 'KillMode=control-group'])
       expect(request).toContain(option);
     expect(request).not.toContain('RuntimeMaxSec');
     expect(Number(readFileSync(join(cache, run.artifacts().key, '.cache-bytes'), 'utf8'))).toBeGreaterThan(0);
@@ -8287,6 +8287,26 @@ def install():`,
     await holder.stdin.end();
     expect(await holder.exited).toBe(0);
   }
+});
+
+test('scheduled cache maintenance defers before scanning while host pressure is paused', () => {
+  const fixture = preparationFixture();
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  const entry = join(cache, '.garbage', 'retained');
+  mkdirSync(dirname(entry), { recursive: true });
+  writeFileSync(entry, 'pending cleanup');
+  const program = dependencyPreparationProgram.replace('def maintain(cache, service=False):', `
+def update_host_pressure(_):
+    return True, False, None
+def observe_garbage(_):
+    raise RuntimeError('paused maintenance must not scan')
+def maintain(cache, service=False):`);
+  const result = spawnSync('python3', ['-c', program, 'maintain', cache], { encoding: 'utf8' });
+  expect(result.status, result.stderr).toBe(0);
+  expect(JSON.parse(readFileSync(join(cache, '.maintenance-status.json'), 'utf8'))).toMatchObject({
+    state: 'deferred', measurementValid: false,
+  });
+  expect(readFileSync(entry, 'utf8')).toBe('pending cleanup');
 });
 
 test('maintenance measures legacy batches, preserves active entries and locks, and deletes outside coordination', async () => {
