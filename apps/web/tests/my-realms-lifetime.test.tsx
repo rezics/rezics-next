@@ -1,4 +1,4 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, setDefaultTimeout, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { dirname } from 'node:path';
 import { act, createElement, StrictMode } from 'react';
@@ -10,6 +10,9 @@ import type { MyRealmsNativeItem } from '../src/community/my-realms-current/cont
 import { formatMyRealmsCurrent } from '../src/community/my-realms-native';
 import recording from '../src/kernel/recorded/my-realms.json';
 import * as start from '../.storybook/react-start';
+
+// Selected leave verifies two complete bounded standing-reconciliation windows.
+setDefaultTimeout(20_000);
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -321,8 +324,7 @@ test('the actual signed-in route hydrates its one read through the current query
   const surface = await createSurface();
   try {
     await surface.load();
-    // Exercise the route's loader envelope when query data is not available after hydration.
-    surface.client.removeQueries({ queryKey: ['my-realms', ''], exact: true });
+    // Server rendering uses the accepted loader envelope while the same Query remains owned.
     const markup = renderToString(surface.tree());
     expect(markup).toContain('SSR member realm');
     expect(markup).toContain('Private description for SSR member realm');

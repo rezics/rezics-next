@@ -162,7 +162,7 @@ test('rendered current rows expose only admitted destinations and retain supplie
         expect(row).toContain(m.my_realms_manage({}, { locale }));
         expect(row).toContain('/realms/');
         expect(row).toContain('/members');
-        expect(row).not.toContain(m.realm_leave()); // No selected review controller means read-only.
+        expect(row).not.toContain('<button'); // Explanatory read-only copy is not a Leave action.
         if (realm.current.avatar.state === 'none') expect(row).toContain(m.realm_appearance_no_image({}, { locale }));
         if (realm.current.avatar.state === 'unavailable')
           expect(row).toContain(m.realm_appearance_image_unavailable({}, { locale }));
