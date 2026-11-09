@@ -10,6 +10,7 @@ import { sourceDigest, vndbPublicTagTaxonomy } from '@rezics/conversion/support'
 import { showcaseTagParentCommand } from './showcase-cross-provider-tags.ts';
 import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import {
+  emptyCrossMediaPlan,
   showcaseDigest,
   showcaseLimits,
   showcaseSourceMatches,
@@ -366,6 +367,8 @@ export function showcaseMediaContext(input: {
 /** Build a finite publication intent only from selected source records and acknowledged native proposals. */
 export function buildShowcaseManifest(input: {
   plan: CrossMediaPlan;
+  /** Publish dependency vocabulary without reconverting its selected owner records. */
+  vocabularyOnly?: boolean;
   readings: readonly CrossMediaReading[];
   acknowledgements: readonly ShowcaseAcknowledgement[];
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
@@ -389,13 +392,22 @@ export function buildShowcaseManifest(input: {
   tagParentPublicationOutcomes?: readonly ShowcaseTagParentPublication[];
   workRelations?: readonly GraphEdgeEvidence[];
 }): ShowcaseManifest {
-  const { plan, readings, acknowledgements, aliases } = input;
+  const { readings, acknowledgements, aliases } = input;
+  const plan = input.vocabularyOnly ? emptyCrossMediaPlan() : input.plan;
   const selected = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
-  if (selected.length > showcaseLimits.records) throw new RangeError('Selected showcase record limit exceeded');
 
   const readingIndex = new Map(readings.map((reading) => [`${reading.source}\0${reading.externalId}`, reading]));
   const memberIndex = new Map(plan.members.map((member) => [`${member.source}\0${member.key}`, member]));
-  const selectedKeys = new Set(selected.map((row) => `${row.source}\0${row.key}`));
+  const owners = input.vocabularyOnly
+    ? [
+        ...input.plan.records.bangumi,
+        ...input.plan.entities.bangumi,
+        ...input.plan.records.vndb,
+        ...input.plan.entities.vndb,
+      ]
+    : selected;
+  if (owners.length > showcaseLimits.records) throw new RangeError('Selected showcase record limit exceeded');
+  const selectedKeys = new Set(owners.map((row) => `${row.source}\0${row.key}`));
   const appearanceOwners = new Map<string, string>();
   for (const appearance of plan.characterAppearances ?? [])
     appearanceOwners.set(envelopeKey(bangumiAppearanceSource(aliases.bangumi, appearance)), appearance.subjectId);

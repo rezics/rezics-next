@@ -14,11 +14,17 @@ import {
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
-import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.ts';
+import {
+  buildShowcaseManifest,
+  showcaseDigest,
+  showcaseVocabularyExternalId,
+  type ShowcaseVocabularyRequirement,
+} from '../src/showcase-manifest.ts';
 import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion/support';
 import {
   captureShowcaseCommands,
   publishShowcase,
+  publishShowcaseVocabulary,
   adoptResumeKeys,
   sendDurableAdopt,
   servedCoverVariants,
@@ -1026,6 +1032,116 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       code: 'review-http-403',
     });
     expect(acceptanceCalls.filter((call) => call.candidateId === refusedCandidate.id)).toHaveLength(refusedCallsBefore);
+    // Dependency stages must not revisit the whole selected family or its journal on resume.
+    const requirements: ShowcaseVocabularyRequirement[] = [];
+    for (const sourceKey of ['vndb.stage-one', 'vndb.stage-two']) {
+      const sourceUri = `https://vndb.org/${sourceKey}`;
+      const source = {
+        source: crossMediaAliases.vndb,
+        external_id: showcaseVocabularyExternalId(sourceKey),
+        record_revision: 'unversioned',
+        digest: 'a'.repeat(64),
+        converter_revision: 'stage-vocabulary@1',
+        field_group: 'facts',
+      };
+      const created = await captureShowcaseCommands(port, journal).batch({
+        commands: [
+          {
+            op: 'create',
+            key: `${sourceKey}:create`,
+            source,
+            subject: { type: 'skos:ConceptScheme', labels: { en: sourceKey } },
+          },
+        ],
+      });
+      const receipt = created.results[0]!;
+      if (receipt.status !== 200 && receipt.status !== 201) throw new Error('Vocabulary create failed');
+      const subjectId = (receipt.value as { id: string }).id;
+      await captureShowcaseCommands(port, journal).batch({
+        commands: [
+          {
+            op: 'propose',
+            key: `${sourceKey}:url`,
+            source,
+            subject: subjectId,
+            statement: {
+              property: { id: 'schema:url' },
+              value: { type: 'value', content: sourceUri },
+              references: [
+                { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: sourceUri } }] },
+              ],
+            },
+          },
+        ],
+      });
+      requirements.push({
+        provider: 'vndb',
+        ownerKey: 'v1',
+        sourceKey,
+        source,
+        sourceUri,
+        nativeType: 'skos:ConceptScheme',
+      });
+    }
+    const stage = (selected: ShowcaseVocabularyRequirement[]) =>
+      publishShowcaseVocabulary({
+        plan,
+        result: initialResult,
+        aliases: crossMediaAliases,
+        journal,
+        review,
+        publicClient,
+        vocabularyRequirements: selected,
+        onProgress() {},
+      });
+    const journalReads = spyOn(journal, 'acknowledgedCommands');
+    const candidateReads = spyOn(review, 'reviewedCandidates');
+    try {
+      publicReadIds.clear();
+      const firstStage = await stage(requirements.slice(0, 1));
+      expect(firstStage.status).toBe('published');
+      expect(firstStage.manifest.records).toEqual([]);
+      expect(firstStage.published.map((row) => row.sourceKey)).toEqual(['vndb.stage-one']);
+      const stageId = firstStage.published[0]!.subjectId;
+      expect([...publicReadIds]).toEqual([stageId]);
+      const calls = candidateReads.mock.calls.length;
+      const writes = acceptanceCalls.length;
+      candidateReads.mockClear();
+      publicReadIds.clear();
+      const repeated = await stage(requirements.slice(0, 1));
+      expect(repeated.status).toBe('published');
+      expect(candidateReads.mock.calls.length).toBeGreaterThan(0);
+      expect(candidateReads.mock.calls.length).toBeLessThanOrEqual(calls);
+      expect(candidateReads.mock.calls.every(([id]) => id === stageId)).toBe(true);
+      expect([...publicReadIds]).toEqual([stageId]);
+      expect(acceptanceCalls).toHaveLength(writes);
+      expect(journalReads.mock.calls).toEqual([[[requirements[0]!.source]], [[requirements[0]!.source]]]);
+      expect(journalReads.mock.results.every((entry) => entry.value.length === 2)).toBe(true);
+      const expanded = await stage(requirements);
+      expect(expanded.status).toBe('published');
+      expect(expanded.published.map((row) => row.sourceKey)).toEqual(requirements.map((row) => row.sourceKey));
+      expect(acceptanceCalls).toHaveLength(writes + 1);
+      const hidden = await publishShowcaseVocabulary({
+        plan,
+        result: initialResult,
+        aliases: crossMediaAliases,
+        journal,
+        review,
+        publicClient: {
+          ...publicClient,
+          async readSubject() {
+            throw new Error('unavailable');
+          },
+        },
+        vocabularyRequirements: requirements,
+        onProgress() {},
+      });
+      expect(hidden.status).toBe('incomplete');
+      expect(hidden.published).toEqual([]);
+    } finally {
+      journalReads.mockRestore();
+      candidateReads.mockRestore();
+    }
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });

@@ -886,11 +886,49 @@ type ShowcasePublicationInput = {
   onProgress?: (line: string) => void;
 };
 
+/** Intermediate stages publish only their dependency vocabulary. Every invocation
+ * still performs current review and public reads through the ordinary owner. */
+export function publishShowcaseVocabulary(
+  input: Pick<
+    ShowcasePublicationInput,
+    'plan' | 'result' | 'aliases' | 'journal' | 'review' | 'publicClient' | 'vocabularyRequirements' | 'onProgress'
+  >,
+): Promise<ShowcasePublicationResult> {
+  return runShowcasePublication(
+    {
+      ...input,
+      result: {
+        ...input.result,
+        status: 'imported',
+        readings: [],
+        mediaOutcomes: [],
+        gaps: [],
+        unresolved: [],
+        creditGaps: [],
+        characterDiagnostics: [],
+        vndbWorkRelations: [],
+        workRelations: undefined,
+        vndbCreditCandidateDigests: undefined,
+        bangumiGenrePublication: undefined,
+        bangumiGameGenrePublication: undefined,
+      },
+    },
+    true,
+  );
+}
+
 /** Accept exact acknowledged candidates, adopt only those selections, then check them as a public viewer. */
-export async function publishShowcase(input: ShowcasePublicationInput): Promise<ShowcasePublicationResult> {
+export function publishShowcase(input: ShowcasePublicationInput): Promise<ShowcasePublicationResult> {
+  return runShowcasePublication(input, false);
+}
+
+async function runShowcasePublication(
+  input: ShowcasePublicationInput,
+  vocabularyOnly: boolean,
+): Promise<ShowcasePublicationResult> {
   const progress = new SeedFinalization('publication', input.onProgress);
   try {
-    const result = await publishShowcasePhases(input, progress);
+    const result = await publishShowcasePhases(input, progress, vocabularyOnly);
     progress.complete();
     return result;
   } catch (error) {
@@ -902,24 +940,32 @@ export async function publishShowcase(input: ShowcasePublicationInput): Promise<
 async function publishShowcasePhases(
   input: ShowcasePublicationInput,
   progress: SeedFinalization<'publication'>,
+  vocabularyOnly: boolean,
 ): Promise<ShowcasePublicationResult> {
   progress.enter('cover-current-reads');
   const mediaOutcomes = await currentCoverOutcomes(input.result, input.review);
   progress.enter('target-current-reads');
-  const readings = await publicationTargetReadings({
-    ...input,
-    acknowledgements: input.journal.acknowledgedCommands(),
-  });
+  const acknowledgements = input.journal.acknowledgedCommands(
+    vocabularyOnly ? (input.vocabularyRequirements ?? []).map((requirement) => requirement.source) : undefined,
+  );
+  const readings = vocabularyOnly
+    ? []
+    : await publicationTargetReadings({
+        ...input,
+        acknowledgements,
+      });
   const result = { ...input.result, readings, mediaOutcomes };
   const pageCache = new Map<string, CandidatePage>();
   progress.enter('candidate-recovery');
-  const recovered = await resolveLegacyCandidates({
-    plan: input.plan,
-    result,
-    aliases: input.aliases,
-    review: input.review,
-    existing: input.journal.acknowledgedCommands(),
-  });
+  const recovered = vocabularyOnly
+    ? { acknowledgements, omissions: [] }
+    : await resolveLegacyCandidates({
+        plan: input.plan,
+        result,
+        aliases: input.aliases,
+        review: input.review,
+        existing: acknowledgements,
+      });
   const genre = input.result.bangumiGenrePublication;
   const gameGenre = input.result.bangumiGameGenrePublication;
   const tagParentCommandKeys = new Set((input.tagParentAcknowledgements ?? []).map((entry) => entry.command.key));
@@ -942,6 +988,7 @@ async function publishShowcasePhases(
   ) =>
     buildShowcaseManifest({
       plan: input.plan,
+      vocabularyOnly,
       readings: result.readings,
       acknowledgements,
       aliases: input.aliases,
