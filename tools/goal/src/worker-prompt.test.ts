@@ -297,7 +297,7 @@ test('worker and manager prompts trust repository callers and let dev repair con
   }
 });
 
-test('minimal verification keeps one wrapper budget and fail-fast dependency ordering', () => {
+test('minimal verification collects independent failures under one wrapper budget', () => {
   const directory = temporaryDirectory();
   try {
     writeFileSync(join(directory.path, 'verification-mode'), 'minimal\n');
@@ -305,20 +305,20 @@ test('minimal verification keeps one wrapper budget and fail-fast dependency ord
     expect(prompt).toContain('Defer ordinary acceptance/native/browser/root/growth suites; run declared control-plane acceptance before exit');
     expect(prompt).toContain('Typecheck each changed workspace');
     expect(prompt).toContain('Order producers before consumers');
-    expect(prompt).toContain('On prerequisite failure, stop and leave unreached checks unverified');
+    expect(prompt).toContain('On prerequisite failure, skip only dependent checks and report them unverified');
     expect(prompt).toContain('Use one wrapper submission for the pass');
     expect(prompt).toContain(
-      'Parallel independent children require an existing entry point that admits and aggregates them under the same check/budget',
+      'Run independent selected cases together through their owning runner and collect all failures in one pass',
     );
     expect(prompt).toContain('No extra submissions or shell fanout');
     expect(prompt).toContain('Kernel/Auth/Web mapper typechecks stay within the per-run memory cap');
-    expect(prompt).toContain("`sh -c 'cmd1 && cmd2 && cmd3'`");
+    expect(prompt).toContain('use `&&` only for real dependencies');
     expect(prompt).not.toContain('never joins them with `&&`');
     expect(prompt).not.toContain("cmd1; s=$?; cmd2 || s=1");
     expect(prompt).toContain('All must pass for success; reuse unchanged passing evidence');
     expect(prompt).toContain('Run checks through the wrapper');
     expect(prompt).not.toContain("under a 'failing tests' label in the summary");
-    expect(prompt).toContain('Fix each failure before one rerun of its chain');
+    expect(prompt).toContain('Group the observed failures by cause and rerun only affected checks after repair');
     expect(prompt).not.toContain('overrides');
     expect(prompt).not.toMatch(/do not run|must not run|prohibit/i);
   } finally {
@@ -595,16 +595,15 @@ test('a worker is told where reference projects are and to read the ones its con
 const MINIMAL_RULES = [
   'Typecheck each changed workspace',
   'Order producers before consumers',
-  'chain them fail-fast with `&&`',
-  "`sh -c 'cmd1 && cmd2 && cmd3'`",
-  'On prerequisite failure, stop and leave unreached checks unverified',
+  'use `&&` only for real dependencies',
+  'On prerequisite failure, skip only dependent checks and report them unverified',
   'Use one wrapper submission for the pass',
-  'Parallel independent children require an existing entry point that admits and aggregates them under the same check/budget',
+  'Run independent selected cases together through their owning runner and collect all failures in one pass',
   'No extra submissions or shell fanout',
   'Kernel/Auth/Web mapper typechecks stay within the per-run memory cap',
   'reuse unchanged passing evidence',
   'All must pass for success; reuse unchanged passing evidence',
-  'Fix each failure before one rerun of its chain',
+  'Group the observed failures by cause and rerun only affected checks after repair',
   'Defer ordinary acceptance/native/browser/root/growth suites; run declared control-plane acceptance before exit',
   'a type error is not a pass; a failing payment, payout, order settlement, points or balance test is not a pass',
   'a `tool` blocker; type and test failures are not infrastructure failures',
