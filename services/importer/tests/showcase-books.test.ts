@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchStatement, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
@@ -17,9 +17,12 @@ import {
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { acquireBangumiPersonCareerSources } from '../src/showcase-bangumi-careers.ts';
+import { acquireBangumiCoverSources } from '../src/showcase-media.ts';
 import {
   includeShowcaseBookRecords,
   planShowcaseBooks,
+  prepareShowcaseBookGeneration,
   showcaseBookFamily,
   showcaseBooksToCrossMediaPlan,
 } from '../src/showcase-books.ts';
@@ -736,6 +739,62 @@ test('wrong, missing or retracted author evidence withholds only that claim and 
     expect(JSON.stringify(volumeRead)).not.toContain('9784757728066');
     expect(retracted.selected.editions).toEqual([]);
     expect(retracted.planned.members.some((row) => row.role === 'volume' && row.key === '9001')).toBe(false);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test('full base enrichment excludes late book creators but the first source import includes them', async () => {
+  const planned = await planShowcaseBooks({
+    tables: tables({
+      people: [author, illustrator],
+      credits: [
+        { person_id: 6023, subject_id: 26, position: 2001 },
+        { person_id: 7001, subject_id: 26, position: 2002 },
+      ],
+    }),
+  });
+  const base = emptyCrossMediaPlan();
+  for (let index = 0; index < 64; index++) {
+    const payload = {
+      ...author,
+      id: index ? 10000 + index : author.id,
+      career: ['writer', 'producer'],
+      birth_year: 1973,
+      birth_mon: 3,
+      birth_day: 12,
+    };
+    const key = `person:${payload.id}`;
+    base.entities.bangumi.push({ source: 'bangumi', key, revision: null, payload });
+    base.members.push({ source: 'bangumi', key, kind: 'person', membership: 'referenced' });
+  }
+  let requests = 0;
+  const fetch = (async () => {
+    requests++;
+    throw new Error('Unexpected network request');
+  }) as typeof globalThis.fetch;
+  const generation = await prepareShowcaseBookGeneration(base, planned, async (selection) => {
+    const careers = await acquireBangumiPersonCareerSources(selection, { fetch });
+    return acquireBangumiCoverSources(careers, { fetch, sleep: async () => {} });
+  });
+  expect(requests).toBe(0);
+  expect(generation.entities.bangumi.find((row) => row.key === 'person:6023')?.payload).toEqual(
+    base.entities.bangumi[0]!.payload,
+  );
+  expect(generation.entities.bangumi.some((row) => row.key === 'person:7001')).toBe(true);
+  await mkdir('.temp', { recursive: true });
+  const directory = await mkdtemp(join(process.cwd(), '.temp/showcase-book-generation-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  try {
+    const world = reviewWorld(journal);
+    const first = await seedCrossMedia(generation, join(directory, 'state.sqlite'), world.port, undefined, {
+      providers: ['bangumi'],
+    });
+    expect(first.runs.bangumi).toMatchObject({ status: 'committed', counts: { vanished: 0 } });
+    expect(new Set(first.readings.map((row) => row.externalId))).toEqual(
+      new Set([...generation.records.bangumi, ...generation.entities.bangumi].map((row) => row.key)),
+    );
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });

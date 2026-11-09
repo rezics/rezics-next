@@ -790,7 +790,7 @@ export function showcaseBooksToCrossMediaPlan(plan: ShowcaseBookPlan): CrossMedi
   return next;
 }
 
-/** Admit later book records before sealing the shared source's first complete generation. */
+/** Admit later book records without replacing existing enriched source payloads. */
 export function includeShowcaseBookRecords(target: CrossMediaPlan, books: ShowcaseBookPlan): void {
   const selected = showcaseBooksToCrossMediaPlan(books);
   const keys = new Set([...target.records.bangumi, ...target.entities.bangumi].map((row) => row.key));
@@ -798,6 +798,18 @@ export function includeShowcaseBookRecords(target: CrossMediaPlan, books: Showca
   target.entities.bangumi.push(...selected.entities.bangumi.filter((row) => !keys.has(row.key)));
   const members = new Set(target.members.map((row) => `${row.source}\0${row.key}`));
   target.members.push(...selected.members.filter((row) => !members.has(`${row.source}\0${row.key}`)));
+}
+
+/** Finish bounded base enrichment before admitting the complete shared book generation. */
+export async function prepareShowcaseBookGeneration(
+  base: CrossMediaPlan,
+  books: ShowcaseBookPlan | undefined,
+  enrich: (plan: CrossMediaPlan) => Promise<CrossMediaPlan>,
+): Promise<CrossMediaPlan> {
+  const enriched = await enrich(base);
+  // Incomplete families keep their ordinary gap-only book result and add no source records.
+  if (books?.selected.series.length && books.selected.volumes.length) includeShowcaseBookRecords(enriched, books);
+  return enriched;
 }
 
 function readingIdentity(reading: CrossMediaReading): { id: string; type: string } | undefined {

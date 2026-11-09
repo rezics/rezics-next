@@ -26,3 +26,9 @@ Book subphases distinguish planning, record import, credit vocabulary, creator c
 An unsuccessful source generation registers only its local provider and run-status kind (including
 `mass-disappearance`); its diagnostic text stays private. These fields identify a pre-write generation refusal
 separately from native transport failures without exposing dump rows or remote responses.
+
+Decision: plan books once, finish the original bounded Person-career and cover enrichment selection, then admit
+complete book-family records before the first shared source import. Book-only creators do not consume the base
+enrichment bounds. Admission preserves enriched existing records and the complete source generation; incomplete
+families retain their ordinary gap-only result. Journal keys, missing-record checks and fresh publication reads
+keep their existing contracts.

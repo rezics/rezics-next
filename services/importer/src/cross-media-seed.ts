@@ -3708,13 +3708,10 @@ export async function runCrossMediaSeedCli(
   const finalization = new SeedFinalization('seed');
   try {
     finalization.enter('vocabulary-preparation');
-    const { planShowcaseBooks, includeShowcaseBookRecords, importShowcaseBooks, showcaseBooksToCrossMediaPlan } =
+    const { planShowcaseBooks, prepareShowcaseBookGeneration, importShowcaseBooks, showcaseBooksToCrossMediaPlan } =
       await import('./showcase-books.ts');
     const plannedBooks =
       options.selection && !options.includeBooks ? undefined : await planShowcaseBooks({ tables: input });
-    // One source alias has one complete generation, including records used by later publication stages.
-    if (plannedBooks?.selected.series.length && plannedBooks.selected.volumes.length)
-      includeShowcaseBookRecords(plan, plannedBooks);
     if (journal && publicClient)
       releaseClassificationPreparation = await prepareShowcaseVndbReleaseClassifications({
         plan,
@@ -3827,10 +3824,11 @@ export async function runCrossMediaSeedCli(
     }
     const episodeCatalogueSubjects = options.reviewedCatalogueSubjects ?? options.episodeCatalogueSubjects;
 
-    if (journal) {
-      plan = await acquireBangumiPersonCareerSources(plan, { journal });
-      plan = await acquireBangumiCoverSources(plan, { journal });
-    }
+    plan = await prepareShowcaseBookGeneration(plan, plannedBooks, async (base) => {
+      if (!journal) return base;
+      const careers = await acquireBangumiPersonCareerSources(base, { journal });
+      return acquireBangumiCoverSources(careers, { journal });
+    });
     const seedExtras = (references = vndbCreditReferences): CrossMediaSeedExtras => ({
       ...(options.sourceSnapshotAsOf === undefined ? {} : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
       ...(references ? { vndbCreditReferences: references } : {}),
