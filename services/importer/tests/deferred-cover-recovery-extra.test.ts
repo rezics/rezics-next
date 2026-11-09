@@ -73,7 +73,7 @@ function remote() {
               ? {
                   key: command.key,
                   status: 409,
-                  problem: { type: 'conflict', title: 'Temporary fixture failure', status: 409 },
+                  problem: { type: 'conflict', title: 'Temporary fixture failure', status: 409, retryable: false },
                 }
               : apply(command),
           ),

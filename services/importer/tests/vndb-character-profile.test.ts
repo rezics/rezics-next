@@ -287,7 +287,7 @@ test('unknown, malformed, withheld gender, refused Concepts and interrupted send
             ? {
                 key: command.key,
                 status: 403 as const,
-                problem: { type: 'about:blank', title: 'refused', status: 403 },
+                problem: { type: 'about:blank', title: 'refused', status: 403, retryable: false },
               }
             : byKey.get(command.key)!,
         ),

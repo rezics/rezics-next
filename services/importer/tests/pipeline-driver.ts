@@ -441,7 +441,7 @@ export const createImportPipelineDriver: (
             results: request.commands.map((command) => ({
               key: command.key,
               status: 409,
-              problem: { type: 'conflict', title: 'Fixture rejection', status: 409 },
+              problem: { type: 'conflict', title: 'Fixture rejection', status: 409, retryable: false },
             })),
           };
         const results = request.commands.map((command) => applyCommand(command, JSON.stringify(command)));

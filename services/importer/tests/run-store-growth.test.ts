@@ -126,7 +126,13 @@ test('fixed run-state operations stay indexed at three scales', async () => {
         d.acknowledge(run, { results: [{ key: command(r).key, status: 200, value: {} }] } as never),
       ).rejects.toThrow();
       await d.acknowledge(run, {
-        results: [{ key: command(r).key, status: 409, problem: { type: 'conflict', title: 'Conflict', status: 409 } }],
+        results: [
+          {
+            key: command(r).key,
+            status: 409,
+            problem: { type: 'conflict', title: 'Conflict', status: 409, retryable: false },
+          },
+        ],
       });
       const resumed = await d.reopen(run);
       await expect(
