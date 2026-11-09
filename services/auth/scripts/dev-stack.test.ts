@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
@@ -16,6 +17,8 @@ import {
   readLocalDeveloperAccountId,
   reusableCompletedExpiredPersonaId,
   root,
+  reconcilePageDataDefinitions,
+  pageDataDefinitionsEnvironment,
 } from './dev-stack.ts';
 import { StackFixtureLifetime } from './dev-stack-lifetime.ts';
 import { websiteRequestedScopes } from '../../../apps/web/src/session/website-scopes.ts';
@@ -308,4 +311,75 @@ test('the native Semantic walk client has explicit journey scopes and leaves imp
   expect(client.scopes).not.toContain('*');
   expect(client.scopes).not.toContain('gate:any');
   expect(importerScopes).not.toContain('zone:configure');
+});
+
+test('page-data Definitions mismatch stops seed, reconciles the exact head, then becomes a read-only no-op', async () => {
+  const before = { digest: `sha256:${'d'.repeat(64)}`, head: 1 };
+  let active = before;
+  const requests: Request[] = [];
+  let credentials = 0;
+  const options = {
+    activate: false,
+    bearer: async () => {
+      credentials++;
+      return 'operator';
+    },
+    async handle(request: Request) {
+      requests.push(request);
+      if (request.method === 'GET') return Response.json(active);
+      expect(request.headers.get('authorization')).toBe('Bearer operator');
+      if (request.url.endsWith(':activate')) {
+        expect(await request.json()).toEqual({ expected_head: before.head });
+        active = { digest: bundledDigest, head: before.head + 1 };
+        return Response.json(active);
+      }
+      expect(await request.json()).toEqual({ release: bundledRelease });
+      return Response.json({ digest: bundledDigest }, { status: 201 });
+    },
+  };
+  await expect(reconcilePageDataDefinitions(options)).rejects.toThrow('reconcile-definitions before resuming seed');
+  expect(credentials).toBe(0);
+  expect(requests.map((r) => r.method)).toEqual(['GET']);
+  requests.length = 0;
+  expect(await reconcilePageDataDefinitions({ ...options, activate: true })).toEqual({
+    digest: bundledDigest,
+    head: 2,
+  });
+  expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'POST', 'GET']);
+  requests.length = 0;
+  expect(await reconcilePageDataDefinitions({ ...options, activate: true })).toEqual(active);
+  expect(credentials).toBe(1);
+  expect(requests.map((r) => r.method)).toEqual(['GET']);
+});
+
+test('page-data Definitions leaves a concurrent activation conflict to the native owner', async () => {
+  let calls = 0;
+  await expect(
+    reconcilePageDataDefinitions({
+      activate: true,
+      bearer: async () => 'operator',
+      async handle() {
+        calls++;
+        return calls === 1
+          ? Response.json({ digest: 'old', head: 3 })
+          : calls === 2
+            ? Response.json({ digest: bundledDigest })
+            : new Response(null, { status: 409 });
+      },
+    }),
+  ).rejects.toThrow('HTTP 409');
+  expect(calls).toBe(3);
+});
+
+test('page-data Definitions rejects production, ordinary local stacks and a different database port', () => {
+  const env = {
+    NODE_ENV: 'development',
+    KERNEL_DATABASE_CONTAINER: 'rezics-pagecheck-0123456789',
+    REZICS_PAGE_DATA_STACK: 'rezics-pagecheck-0123456789',
+    KERNEL_DATABASE_PORT: '5433',
+  };
+  const url = 'postgres://127.0.0.1:5433/rezics';
+  expect(() => pageDataDefinitionsEnvironment(env, url)).not.toThrow();
+  for (const change of [{ NODE_ENV: 'production' }, { REZICS_PAGE_DATA_STACK: '' }, { KERNEL_DATABASE_PORT: '5434' }])
+    expect(() => pageDataDefinitionsEnvironment({ ...env, ...change }, url)).toThrow('dedicated development');
 });

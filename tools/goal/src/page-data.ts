@@ -749,6 +749,7 @@ function stackEnvironment(
     REZICS_LOCAL_STACK_ISSUER_ORIGIN: `http://127.0.0.1:${stack.issuerPort}`,
     REZICS_LOCAL_STACK_NATIVE_ORIGIN: `http://127.0.0.1:${stack.nativePort}`,
     REZICS_LOCAL_STACK_KERNEL_ORIGIN: `http://127.0.0.1:${stack.kernelPort}`,
+    REZICS_PAGE_DATA_STACK: names.database,
     NODE_ENV: 'development',
   };
 }
@@ -1095,15 +1096,7 @@ export function dependencyFilesChanged(cwd: string, oldHead: string | undefined,
   return Boolean(result.stdout.trim());
 }
 
-async function runDedicatedPageDataStack(
-  settings: Settings,
-  head: string,
-): Promise<{
-  output: string;
-  exitCode: number;
-  registry: ReadonlyMap<string, SectionConfig>;
-  stackOutput: string;
-}> {
+async function prepareDedicatedPageDataStack(settings: Settings, head: string) {
   const policy = pageDataSettings(settings);
   const { file, worktree, stack, names } = await stackConfiguration(settings);
   refreshWorktree(settings, worktree, head);
@@ -1126,6 +1119,21 @@ async function runDedicatedPageDataStack(
     writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
     env = stackEnvironment(worktree, config, names, settings.mainCheckout);
   }
+  return { policy, worktree, config, env };
+}
+
+async function runDedicatedPageDataStack(
+  settings: Settings,
+  head: string,
+): Promise<{
+  output: string;
+  exitCode: number;
+  registry: ReadonlyMap<string, SectionConfig>;
+  stackOutput: string;
+}> {
+  const { policy, worktree, config, env: preparedEnv } = await prepareDedicatedPageDataStack(settings, head);
+  const bun = process.execPath;
+  let env = preparedEnv;
   const seeded = join(settings.stateDirectory, 'page-data-seeded');
   const stackCapture: BoundedOutput = {
     value: '',
@@ -1205,6 +1213,17 @@ async function runDedicatedPageDataStack(
         [0],
         policy.stopTimeoutMs,
       );
+      await runCommand(
+        bun,
+        pageDataDefinitionsCommand(false),
+        worktree,
+        env,
+        policy.commandTimeoutMs,
+        policy.outputBytes,
+        'boot',
+        [0],
+        policy.stopTimeoutMs,
+      );
       env = { ...env, ...readEnvFile(join(worktree, '.temp/local-stack/seed.env')) };
       await runCommand(
         bun,
@@ -1278,4 +1297,42 @@ async function runDedicatedPageDataStack(
     registry: registry!,
     stackOutput: pageDataCaptureOutput(stackCapture, policy.outputBytes),
   };
+}
+
+/** Seed admission checks; activation is an explicit local operator action. */
+function pageDataDefinitionsCommand(activate: boolean): string[] {
+  return ['services/auth/scripts/dev-stack.ts', 'page-data-definitions', activate ? '--activate' : '--check'];
+}
+
+export async function reconcileDedicatedPageDataDefinitions(settings: Settings): Promise<void> {
+  if (!existsSync(join(settings.stateDirectory, 'page-data-stack.json')))
+    throw new Error('The dedicated page-data stack has not been created');
+  const lock = acquireDirectoryLease(join(settings.stateDirectory, 'page-data.lease'), settings.policy?.leases);
+  try {
+    if (!existsSync(join(settings.worktreeRoot, 'page-data-stack/.git')))
+      throw new Error('The dedicated page-data worktree is missing');
+    const head = runGit(settings.mainCheckout, ['rev-parse', settings.integrationBranch]);
+    const { policy, worktree, env } = await prepareDedicatedPageDataStack(settings, head);
+    const result = await runCommand(
+      process.execPath,
+      pageDataDefinitionsCommand(true),
+      worktree,
+      env,
+      policy.commandTimeoutMs,
+      policy.outputBytes,
+      'boot',
+      [0],
+      policy.stopTimeoutMs,
+    );
+    process.stdout.write(result.stdout);
+  } finally {
+    lock.release();
+  }
+}
+
+if (import.meta.main) {
+  if (process.argv.length !== 3 || process.argv[2] !== 'reconcile-definitions')
+    throw new Error('Usage: bun tools/goal/src/page-data.ts reconcile-definitions');
+  const { loadSettings } = await import('./settings.ts');
+  await reconcileDedicatedPageDataDefinitions(loadSettings());
 }

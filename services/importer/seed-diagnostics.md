@@ -32,3 +32,8 @@ complete book-family records before the first shared source import. Book-only cr
 enrichment bounds. Admission preserves enriched existing records and the complete source generation; incomplete
 families retain their ordinary gap-only result. Journal keys, missing-record checks and fresh publication reads
 keep their existing contracts.
+
+Decision: a stale dedicated page-data Definitions release is a pre-seed admission failure, not an importer retry.
+The [page-data operator contract](../../tools/goal/README.md) owns explicit publication and exact-head activation of
+the intended bundled release. Reconciliation preserves prepared proposal keys and all acknowledged journal work;
+ordinary resume follows only after the live digest matches. Importer scopes and field validation are unchanged.

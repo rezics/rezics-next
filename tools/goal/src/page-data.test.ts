@@ -26,6 +26,7 @@ import {
   type PageDataRepair,
   type SectionConfig,
   dependencyFilesChanged,
+  reconcileDedicatedPageDataDefinitions,
 } from './page-data.ts';
 import type { Settings, Task } from './types.ts';
 import { harness } from './test-support.ts';
@@ -455,4 +456,18 @@ test('readiness captures config without inventing listen and preserves its cause
   expect(result.output).toContain('ECONNREFUSED');
   expect(captured.events?.some((event) => event.kind === 'ready')).toBe(false);
   expect(Buffer.byteLength(result.output)).toBeLessThanOrEqual(16384);
+});
+
+test('page-data reconciliation requires the retained dedicated stack and never creates replacement state', async () => {
+  const h = harness();
+  try {
+    const config = join(h.settings.stateDirectory, 'page-data-stack.json');
+    await expect(reconcileDedicatedPageDataDefinitions(h.settings)).rejects.toThrow('has not been created');
+    expect(() => readFileSync(config)).toThrow();
+    writeFileSync(config, 'retained-stack-config');
+    await expect(reconcileDedicatedPageDataDefinitions(h.settings)).rejects.toThrow('worktree is missing');
+    expect(readFileSync(config, 'utf8')).toBe('retained-stack-config');
+  } finally {
+    h.dispose();
+  }
 });

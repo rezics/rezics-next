@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { securityScopeLimit } from '@rezics/auth-contract';
+import { bundledRelease, bundledDigest } from '@rezics/definitions/bundled';
 import { migrate } from './database.ts';
 import { mountedWebsiteConfiguration } from './website-composition.ts';
 import { websiteWorkerScopes } from '../../../apps/web/scripts/website-configuration.ts';
@@ -940,6 +941,97 @@ function printPersona(keys: DevelopmentKeys, accountId: string) {
   console.log(`Local persona: developer@rezics.test\nPassword: ${keys.password}\nAccount: ${accountId}`);
 }
 
+/** Refuse a concrete misbinding before the local operator can obtain a publication credential. */
+export function pageDataDefinitionsEnvironment(env: NodeJS.ProcessEnv, databaseUrl: string): void {
+  const database = localDatabase(databaseUrl);
+  if (
+    env.NODE_ENV !== 'development' ||
+    !/^rezics-pagecheck-[0-9a-f]{10}$/.test(env.KERNEL_DATABASE_CONTAINER ?? '') ||
+    env.REZICS_PAGE_DATA_STACK !== env.KERNEL_DATABASE_CONTAINER ||
+    database.port !== env.KERNEL_DATABASE_PORT
+  )
+    throw new Error('Definitions reconciliation requires the dedicated development page-data database');
+}
+
+/** Use only the native Definitions HTTP owner; the current-pointer path issues no writes or credentials. */
+export async function reconcilePageDataDefinitions(options: {
+  handle: (request: Request) => Promise<Response>;
+  activate: boolean;
+  bearer: () => Promise<string>;
+}): Promise<{ digest: string; head: number }> {
+  const request = async (path: string, init?: RequestInit) => {
+    const response = await options.handle(new Request(`${origins.kernel}/v1/definitions${path}`, init));
+    if (!response.ok)
+      throw new Error(`Page-data Definitions ${init?.method ?? 'GET'} ${path}: HTTP ${response.status}`);
+    return response;
+  };
+  // These responses come from the mounted native owner, whose declared types are authoritative.
+  const current = (await (await request('/active')).json()) as { digest: string; head: number };
+  if (current.digest === bundledDigest) return current;
+  if (!options.activate)
+    throw new Error(
+      `Page-data Definitions mismatch: active head=${current.head} digest=${current.digest}; intended=${bundledDigest}. ` +
+        'Run bun tools/goal/src/page-data.ts reconcile-definitions before resuming seed.',
+    );
+  const bearer = await options.bearer();
+  const headers = (key: string) => ({
+    authorization: `Bearer ${bearer}`,
+    'content-type': 'application/json',
+    'idempotency-key': JSON.stringify(key),
+  });
+  await request('/releases', {
+    method: 'POST',
+    headers: headers(`page-data:publish:${bundledDigest}`),
+    body: JSON.stringify({ release: bundledRelease }),
+  });
+  await request(`/releases/${bundledDigest}:activate`, {
+    method: 'POST',
+    headers: headers(`page-data:activate:${bundledDigest}:${current.head}`),
+    body: JSON.stringify({ expected_head: current.head }),
+  });
+  const active = (await (await request('/active')).json()) as { digest: string; head: number };
+  if (active.digest !== bundledDigest)
+    throw new Error(`Page-data Definitions changed after activation: head=${active.head} digest=${active.digest}`);
+  return active;
+}
+
+async function pageDataDefinitions(activate: boolean) {
+  const env = await kernelEnvironment();
+  pageDataDefinitionsEnvironment(process.env, env.DATABASE_URL!);
+  const composition = await assemble();
+  try {
+    const active = await reconcilePageDataDefinitions({
+      handle: (request) => composition.kernel.fetch(request),
+      activate,
+      async bearer() {
+        const account = await readLocalDeveloperAccountId(state);
+        if (!account) throw new Error('Provision the dedicated page-data persona before reconciling Definitions');
+        // A separate local operator client requests existing owner scopes. Importer clients and grants are unchanged.
+        const client = 'rezics-page-data-definitions';
+        const scopes = ['definitions:publish', 'definitions:activate'];
+        await composition.host.service.internal.registerClient({ clientId: client, firstParty: true, scopes });
+        const provider = await createAccountTokenProvider({
+          accountKeyPath: resolve(state, 'importer.jwk'),
+          account,
+          client,
+          authOrigin: origins.issuer,
+          issuerOrigin: origins.issuer,
+          scopes,
+          fetch: Object.assign(
+            (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+              composition.host.handler(new Request(input, init)),
+            { preconnect: fetch.preconnect },
+          ),
+        });
+        return provider(true);
+      },
+    });
+    console.log(`Page-data Definitions current: head=${active.head} digest=${active.digest}`);
+  } finally {
+    await composition.stop();
+  }
+}
+
 /** Native transport is private; Auth still validates requests at its public issuer. */
 export function issuerRequest(request: Request): Request {
   const url = new URL(request.url);
@@ -1640,6 +1732,10 @@ if (import.meta.main) {
         await privateFile(resolve(state, 'keys.json'), JSON.stringify(keys));
       }
       await setup();
+    } else if (action === 'page-data-definitions') {
+      const mode = process.argv[3];
+      if (mode !== '--check' && mode !== '--activate') throw new Error('Use page-data-definitions --check|--activate');
+      await pageDataDefinitions(mode === '--activate');
     } else if (action === 'host') await serveHost();
     else if (action === 'persona') {
       const composition = await assemble();
