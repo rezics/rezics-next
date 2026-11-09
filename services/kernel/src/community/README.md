@@ -18,6 +18,11 @@ tests may supply a fixed ambient. Membership, participation, publication, contai
 claim review, discovery projection/expiry and own-Realm reads retain supplied clocks. `deadlineFor` inherits request
 work's deadline and accepts its clock operand.
 
+Decision: ordinary Kernel defaults and native preloads enter Community through `composeCommunityApplication` before
+route construction. `createKernel` remains the low-level mount: catalogue and HTTP callers first install owner
+composition, which binds Content's existing Realm image schema before Community response factories run. Repeated
+default composition reuses the bound ambient; each Kernel mount still supplies its own deadline clock.
+
 `adapters/index.ts` also exports `createRealmScopeEvidence`. Its producer contract in `contract/index.ts` borrows
 the caller's released snapshot and accounted exact-point executor. The original Realm/Space binding, native read
 eligibility and current ban plans retain their keys, Source bounds and native time. Publication confers no authority;

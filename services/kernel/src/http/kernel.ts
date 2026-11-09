@@ -464,6 +464,8 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
   const communityAmbient = {
     deadlineNow: dependencies.deadlineNow ?? systemCommunityAmbient.deadlineNow,
   };
+  // The owner composition root installs Community domain ports before entering this low-level mount.
+  // Bind the per-kernel deadline ambient without replacing those Content-owned schema bindings.
   ensureCommunityApplication(communityAmbient);
   const communityDeclaration = createCommunityDeclaration(communityAmbient);
   const communityHttp = createCommunityHttpDeclaration(communityAmbient);
