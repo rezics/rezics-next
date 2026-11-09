@@ -542,7 +542,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   });
   function nativeAuth() {
     return betterAuth({
-      ...betterAuthOptions(database, options.issuer, options.secret),
+      // Producer installation belongs to the original pool. Lazy native init
+      // may run inside issuance, where the proxy's connect is a held lease;
+      // capturing it would make subsequent requests share that same socket.
+      ...betterAuthOptions(database, options.issuer, options.secret, options.database),
       emailAndPassword: {
         enabled: true,
         disableSignUp: true,

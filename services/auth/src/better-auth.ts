@@ -21,8 +21,8 @@ export const credentialOwnerSchema = {
 } satisfies BetterAuthPlugin;
 
 /** Shared with the official Better Auth migration generator. */
-export function betterAuthOptions(database: Pool, issuer: string, secret: string) {
-  installNativeRoleProducer(database);
+export function betterAuthOptions(database: Pool, issuer: string, secret: string, producerPool = database) {
+  installNativeRoleProducer(producerPool);
   return {
     ...nativeAttemptOptions(database, issuer, secret),
     logger: authBetterAuthLogger,

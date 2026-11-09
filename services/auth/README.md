@@ -2371,6 +2371,8 @@ retains native family revocation and Access-first denial of previously issued AP
 keeps the original grant assertions, rejects a wrong resource without effects and verifies the family cannot refresh.
 Code redemption serializes the native family-create/code-consume operation by code identity across service instances;
 the replay still passes confidential admission and native family revocation and returns `invalid_grant`.
+Lazy native initialization installs producer leases on the original pool and supplies the issuance proxy only as the
+native query database. Initializing during a token request must not capture its held socket as the pool connector.
 
 ### Registration and key rotation
 
