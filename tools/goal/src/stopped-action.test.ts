@@ -60,6 +60,10 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
         .run(taskId, JSON.stringify({ proof: { status: 'terminal', passed: false } }));
     const intent = { operation: 'cancel', state: 'unknown', processIdentity: 'unknown', process: null };
     stopped('cancel-pending', 'preserved', false, { terminationIntent: intent });
+    stopped('operator-paused', 'preserved', false, {
+      state: 'stopped',
+      terminationIntent: { operation: 'stop', requestedAt: old, state: 'complete', settledAt: old },
+    });
     stopped('routed-proof', 'preserved', true);
     terminal('routed-proof');
     event('routed-proof', 'proof-failure-routed', { managerId: 'preserved' });
@@ -97,9 +101,9 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
       );
     }
     const width = await sweepWidthGovernor(db, inbox, now);
-    expect(width.snapshot.system).toMatchObject({ stopped: 6, actionableStopped: 3 });
+    expect(width.snapshot.system).toMatchObject({ stopped: 7, actionableStopped: 3 });
     expect(width.snapshot.goals.find(({ goal }) => goal === 'preserved')).toMatchObject({
-      stopped: 3,
+      stopped: 4,
       actionableStopped: 0,
     });
     expect(width.deliveredGoals).toEqual(['ordinary', 'unreviewed']);
