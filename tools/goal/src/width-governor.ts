@@ -334,6 +334,8 @@ export async function sweepWidthGovernor(
       await new Promise<void>((resolve) => setImmediate(resolve));
     const goal = snapshot.goals[index]!;
     if (
+      // The host schedules a single daily audit; it has no manager backlog to refill.
+      goal.goal === 'daily-step-audit' ||
       !goal.managerId ||
       goal.managerConflict ||
       goal.running >= policy.width.workerThreshold ||

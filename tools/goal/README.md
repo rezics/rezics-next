@@ -2535,6 +2535,8 @@ split or cancel) and to keep at least eight ready briefs in its backlog. Runtime
 work, so Markdown files outside the task inventory are not counted. The notice uses the existing manager turn
 allowance, with at most one width event per Goal per 15-minute bucket; an identical event within the hour folds into
 the earlier one (see [shared inbox](#shared-inbox)). Paused, budget-limited and completed managers are protected.
+The single host-scheduled daily step audit stays visible in counts but has no backlog to refill, so it does not send
+a width event. Its dispatch failures and queue delays still use the existing flow notices.
 
 #### Goal backlogs
 
