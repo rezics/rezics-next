@@ -5,10 +5,13 @@ import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { withThrowawayDatabase } from '../../kernel/scripts/derived.ts';
 import {
   developmentWebsiteBindings,
+  developmentFrontendProcess,
   type developmentWebsiteConfiguration,
   type DevelopmentKeys,
   developmentMediaBindings,
   origins,
+  outputMarker,
+  startDevelopmentServices,
   importerScopes,
   readLocalDeveloperAccountId,
   reusableCompletedExpiredPersonaId,
@@ -16,6 +19,89 @@ import {
 } from './dev-stack.ts';
 import { StackFixtureLifetime } from './dev-stack-lifetime.ts';
 import { websiteRequestedScopes } from '../../../apps/web/src/session/website-scopes.ts';
+
+test('Worker readiness survives split writes and a coalesced trailing log chunk', () => {
+  const receive = outputMarker('Worker ready');
+  expect(receive('earlier log\nWor')).toBe(false);
+  expect(receive('ker ready\n' + 'next log\n'.repeat(1000))).toBe(true);
+  expect(receive('')).toBe(true);
+});
+
+test('cold Web starts before native readiness while every dependency gate still precedes final readiness', async () => {
+  const events: string[] = [];
+  let releaseIdentity!: () => void;
+  const identityReady = new Promise<void>((resolve) => {
+    releaseIdentity = resolve;
+  });
+  const started = startDevelopmentServices('complete', {
+    launch(service) {
+      events.push(`launch:${service}`);
+      return service;
+    },
+    async ready(service, children) {
+      expect(children[0]).toBe(service);
+      expect(children).toContain('identity');
+      expect(children).toContain('web');
+      if (service === 'identity') await identityReady;
+      events.push(`ready:${service}`);
+    },
+    stopping: () => false,
+  });
+  expect(events).toEqual(['launch:identity', 'launch:web']);
+  releaseIdentity();
+  await started;
+  expect(events).toEqual([
+    'launch:identity',
+    'launch:web',
+    'ready:identity',
+    'launch:kernel',
+    'ready:kernel',
+    'launch:worker',
+    'ready:worker',
+    'launch:pages',
+    'ready:pages',
+    'ready:web',
+  ]);
+});
+
+test('deferred walks omit Web and cancellation prevents further native launches', async () => {
+  for (const mode of ['walk', 'native'] as const) {
+    const launched: string[] = [];
+    await startDevelopmentServices(mode, {
+      launch(service) {
+        launched.push(service);
+        return service;
+      },
+      async ready() {},
+      stopping: () => false,
+    });
+    expect(launched).toEqual(mode === 'walk' ? ['identity', 'pages', 'kernel', 'worker'] : ['identity']);
+  }
+  const launched: string[] = [];
+  await expect(
+    startDevelopmentServices('complete', {
+      launch(service) {
+        launched.push(service);
+        return service;
+      },
+      async ready() {
+        throw new Error('native boot failed');
+      },
+      stopping: () => false,
+    }),
+  ).rejects.toThrow('native boot failed');
+  expect(launched).toEqual(['identity', 'web']);
+  launched.length = 0;
+  await startDevelopmentServices('complete', {
+    launch(service) {
+      launched.push(service);
+      return service;
+    },
+    async ready() {},
+    stopping: () => true,
+  });
+  expect(launched).toEqual(['identity', 'web']);
+});
 
 test('the local importer can request subject merging required by showcase seeding', () => {
   expect(importerScopes).toContain('subject:merge');
@@ -121,6 +207,34 @@ test('local setup and launch carry the complete real mounted host scope composit
   );
   const bindings = developmentWebsiteBindings({ website: {} } as DevelopmentKeys, website);
   expect(bindings.WEBSITE_SCOPES).toBe(website.scopes.join(' '));
+  for (const action of ['pages', 'web'] as const) {
+    const launch = developmentFrontendProcess(action, ['--clearScreen', 'false'], {
+      environment: { REZICS_TEST_RUNTIME: '1' },
+      kernelEnvironment: {},
+      website,
+      keys: { website: {} } as DevelopmentKeys,
+    });
+    expect(launch.command).toEqual([
+      'bun',
+      'run',
+      '--cwd',
+      action === 'pages' ? 'apps/auth' : 'apps/web',
+      'dev',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      new URL(action === 'pages' ? origins.issuer : origins.web).port,
+      '--strictPort',
+      '--clearScreen',
+      'false',
+    ]);
+    expect(launch.environment.WEBSITE_SCOPES).toBe(bindings.WEBSITE_SCOPES);
+    expect(launch.environment.AUTH_ORIGIN).toBe(origins.native);
+    if (action === 'pages')
+      expect(launch.environment.AUTH_SECURITY_SCOPE_CONFIGURATION).toBe(website.AUTH_SECURITY_SCOPE_CONFIGURATION);
+    else expect(launch.environment.REZICS_TEST_RUNTIME).toBeUndefined();
+  }
+
   expect(websiteRequestedScopes(bindings.WEBSITE_SCOPES)).toBe(bindings.WEBSITE_SCOPES);
   expect(website.scopes).toEqual(
     expect.arrayContaining([

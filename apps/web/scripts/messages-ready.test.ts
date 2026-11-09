@@ -7,6 +7,7 @@ import {
   ensureMessagesReady,
   generatedMessageModules,
   messagesCurrent,
+  prepareLiveMessages,
 } from './messages-ready.ts';
 import { processIdentity } from '../tests/support/server-custody.ts';
 
@@ -49,6 +50,24 @@ function makeApp(): { directory: string; cleanup: () => void; calls: string; out
 function recordCalls(file: string): string[] {
   return existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n') : [];
 }
+
+test('live preparation uses the pinned disposable compiler and preserves its failure status', async () => {
+  const app = makeApp();
+  try {
+    writeFileSync(
+      join(app.directory, 'scripts/prepare-live-messages.ts'),
+      `import { writeFileSync } from 'node:fs';
+       writeFileSync('live-runtime', process.execPath);
+       process.exitCode = 37;`,
+    );
+    expect(await prepareLiveMessages(app.directory, { ...process.env, PATH: '' })).toBe(37);
+    expect(readFileSync(join(app.directory, 'live-runtime'), 'utf8')).toBe(process.execPath);
+    expect(existsSync(join(app.directory, '.temp/paraglide-generate.lock'))).toBe(false);
+    expect(recordCalls(app.calls)).toEqual([]);
+  } finally {
+    app.cleanup();
+  }
+});
 
 function setMtime(file: string, milliseconds: number): void {
   const seconds = milliseconds / 1000;

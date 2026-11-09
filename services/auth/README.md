@@ -2421,6 +2421,34 @@ Decision: local website setup and page bindings mount the complete native Kernel
 HTTP handler/schema compilation to the serving host. Both required setup runs reconstruct that catalogue against
 the supplied database; no saved catalogue replaces current declarations or a supplied website configuration.
 
+Decision: the stack parent resolves the real mounted website bindings before starting native runtime services.
+Runtime initialization can add physical schema objects, so a frontend must not rediscover the catalogue and trigger
+full SQL analysis after Worker readiness. The parent launches and supervises the actual Auth/Web Vite commands with
+those captured bindings; restarts retain the same run's registration ceiling. Standalone `pages` and `web` commands
+still prepare their own mounted bindings. Native schema/source/compiler cache invalidation remains unchanged.
+The focused mounted-catalogue case covers both frontend launch environments; the original browser journey checks
+that binding preparation precedes identity readiness and no late SQL generation blocks the pages.
+
+Decision: after capturing those bindings, the complete stack starts Web alongside the native identity host.
+Cloudflare initializes its Worker and imports the application before Vite listens; live localization compilation
+also runs inside that initialization. Serializing this independent cold work behind identity, Kernel, Worker and
+Auth pages spent the journey's remaining startup budget. Web now compiles while those services become ready.
+Identity, Kernel, Worker and Auth-page readiness still complete in their original order before Web readiness is
+accepted. Deferred walks retain their smaller service sets. Failure or cancellation uses the same owned child list
+and drains the early Web process with every other child. Every readiness gate watches all started children, so an
+early Web exit ends native startup too. Keep the original 300-second total and 30-second settlement
+reserve, registration, sign-in, sign-out and resource-removal assertions. The readiness marker reader searches each
+whole incoming chunk before retaining a marker-sized suffix, including coalesced logs after `Worker ready`.
+
+### Cost: complete-stack startup coordination
+
+- Touches: the existing five service launches and their original readiness probes; one bounded stdout suffix.
+- Bound: no additional process, container, compiler or probe loop. Independent Web compilation overlaps native
+  startup; only readiness waiting remains ordered. Shutdown retains the existing child/process-group ownership.
+- Growth check: focused startup tests hold identity readiness pending and require Web to launch, preserve every
+  later gate, propagate native failure and retain deferred service sets. The original browser fixture exercises
+  the actual listener, hydration, account journey and resource settlement against one absolute deadline.
+
 Acceptance choice: keep all thirty original cases and their assertions; extend the supplied-database case to repeat
 composition and detect HTTP compilation, and add focused descendant-cancellation, inherited-pipe failure and deadline
 cases. The fresh browser fixture retains 300 seconds total, reserving its last 30 seconds for settlement. Admission,

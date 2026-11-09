@@ -239,6 +239,10 @@ export const webViteWorkerSsrOptimizeDeps = {
     'react-dom',
     'react-dom/server',
     'react-dom/server.edge',
+    // Worker export inspection imports the UI barrel before listen. Bundle its high-fan-out packages
+    // once instead of transforming thousands of icon and primitive modules through the SSR runner.
+    'lucide-react',
+    '@base-ui/react/*',
     '@tanstack/react-router > @tanstack/react-store',
     '@inlang/paraglide-js/urlpattern-polyfill',
     // CommonJS packages a Worker graph walk reached raw. Nested parents are not resolvable from the app root.

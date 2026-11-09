@@ -1,6 +1,7 @@
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
-import { ensureMessagesReady } from './messages-ready.ts';
+import { ensureMessagesReady, prepareLiveMessages } from './messages-ready.ts';
+import { ownBunProcess } from '../tests/support/server-custody.ts';
 import {
   createWebStartupTraceId,
   listenForWebStartupSignals,
@@ -14,6 +15,8 @@ import {
 const webRoot = resolve(import.meta.dir, '..');
 const repoRoot = resolve(webRoot, '../..');
 const uiRoot = resolve(repoRoot, 'packages/ui');
+const ownStartupChild = (child: Bun.Subprocess) =>
+  ownBunProcess(child, { label: 'Web startup', termGraceMs: 1_000, settleTimeoutMs: 5_000 });
 
 type LaunchPlan =
   | { kind: 'vite' | 'app'; command: string; cwd: string; args: string[] }
@@ -100,10 +103,18 @@ export function storybookLaunchPlan(
   };
 }
 
-/** Finite test Vite omits live Paraglide compilation, so it prepares modules before starting the child. */
+/** Both Web modes prepare in disposable Bun processes; the live plugin still validates its own cache in Vite. */
 export function webServeNeedsGeneratedMessages(kind: LaunchPlan['kind']): boolean {
-  // The live Vite Paraglide plugin owns generation and its content-validated cache. Finite test Vite omits that plugin.
-  return kind === 'vite';
+  return kind === 'vite' || kind === 'app';
+}
+
+/** Leave room for workerd and the native stack instead of sizing V8 from the whole host. */
+export function webServeEnvironment(kind: LaunchPlan['kind'], env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  if (kind !== 'app') return env;
+  const options = env.NODE_OPTIONS ?? '';
+  // An explicit operator heap limit remains authoritative; other Node options are retained.
+  if (/(?:^|\s)--max[-_]old[-_]space[-_]size(?:=|\s)/.test(options)) return env;
+  return { ...env, NODE_OPTIONS: `${options} --max-old-space-size=2048`.trim() };
 }
 
 if (import.meta.main) {
@@ -118,6 +129,7 @@ if (import.meta.main) {
       args = operatorEntry(args).args;
     }
     const plan = storybookLaunchPlan(args, startupEnv);
+    if (plan.kind === 'app') startupEnv.WEB_VITE_CACHE_DIR ??= resolve(webRoot, '.temp/vite-live');
     webStartupLog('binding-selection', webStartupSelection(plan.kind, startupEnv), startupEnv);
     if (plan.kind === 'vite') {
       webStartupLog('check-custody-start', {}, startupEnv);
@@ -130,10 +142,10 @@ if (import.meta.main) {
     if (webServeNeedsGeneratedMessages(plan.kind)) {
       const startedAt = performance.now();
       webStartupLog('messages-preparation-start', {}, startupEnv);
-      generated = await ensureMessagesReady(webRoot, startupEnv, {
-        signal: interruptions.signal,
-        traceId,
-      });
+      generated =
+        plan.kind === 'app'
+          ? await prepareLiveMessages(webRoot, startupEnv, { signal: interruptions.signal, traceId })
+          : await ensureMessagesReady(webRoot, startupEnv, { signal: interruptions.signal, traceId });
       webStartupLog(
         'messages-preparation-complete',
         { exit: generated, elapsedMs: Math.round(performance.now() - startedAt) },
@@ -141,12 +153,31 @@ if (import.meta.main) {
       );
     }
 
+    if (generated === 0 && plan.kind === 'app' && !interruptions.signal.aborted) {
+      const startedAt = performance.now();
+      webStartupLog('dependencies-preparation-start', {}, startupEnv);
+      // The same Worker optimizer used by finite cache construction runs without Cloudflare or application
+      // imports. Its native allocations end here, before the long-lived Worker module graph is retained.
+      generated = await runWebStartupChild('node', ['scripts/warm-vite-deps.ts'], plan.cwd, {
+        ownChild: ownStartupChild,
+        env: startupEnv,
+        signal: interruptions.signal,
+        traceId,
+      });
+      webStartupLog(
+        'dependencies-preparation-complete',
+        { exit: generated, elapsedMs: Math.round(performance.now() - startedAt) },
+        startupEnv,
+      );
+    }
+
     if (generated !== 0 && !interruptions.signal.aborted) {
-      console.error(`Paraglide generation exited ${generated} before Vite started`);
+      console.error(`Web preparation exited ${generated} before Vite started`);
       process.exitCode = generated;
     } else {
       process.exitCode = await runWebStartupChild(plan.command, plan.args, plan.cwd, {
-        env: startupEnv,
+        ownChild: ownStartupChild,
+        env: webServeEnvironment(plan.kind, startupEnv),
         signal: interruptions.signal,
         traceId,
       });

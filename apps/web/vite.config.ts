@@ -12,6 +12,8 @@ import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
 import { ensureMessagesReady } from './scripts/messages-ready.ts';
+import { messageImports } from './scripts/message-imports.ts';
+import { generatedMessageSourceMaps } from './scripts/generated-message-source-maps.ts';
 import { traceWebVitePlugins, webStartupLog, webStartupMode, webStartupTraceId } from './scripts/web-startup.ts';
 import {
   alignViteLockfileHashes,
@@ -311,8 +313,11 @@ function workerDeniedDependencies(): Plugin {
 }
 
 function webStartupEvidencePlugin(): Plugin {
+  const startedAt = performance.now();
+  const modules = new Map<string, number>();
   return {
     name: 'web-startup-evidence',
+    enforce: 'post',
     configResolved(config) {
       const workerIncludes = config.environments?.ssr?.optimizeDeps?.include?.length ?? 0;
       webStartupLog('config-resolved', {
@@ -326,6 +331,21 @@ function webStartupEvidencePlugin(): Plugin {
         workerIncludes,
       });
       webStartupLog('server-initialization-start', { stage: 'optimizer-and-listen' });
+    },
+    transform(_code, id) {
+      if (!webStartupTraceId()) return;
+      const environment = this.environment.name;
+      const count = (modules.get(environment) ?? 0) + 1;
+      modules.set(environment, count);
+      if (count % 250 !== 0) return;
+      webStartupLog('module-graph', {
+        environment,
+        modules: count,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        rssMiB: Math.round(process.memoryUsage().rss / 1024 / 1024),
+        heapMiB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        module: relative(appRoot, filePathOf(id)),
+      });
     },
     configureServer(server) {
       webStartupLog('server-initialization-configured', { stage: 'listen-next' });
@@ -497,8 +517,26 @@ export default defineConfig((context) => {
       },
       // Finite checks prepare the complete locale tree before importing tests. Starting another compiler here
       // rewrites that shared tree while Bun and the Worker optimizer are reading it.
-      ...(process.env.REZICS_TEST_RUNTIME === '1' ? [] : [paraglideVitePlugin({ project: './project.inlang' })]),
-      tanstackStart(),
+      ...(process.env.REZICS_TEST_RUNTIME === '1'
+        ? []
+        : [paraglideVitePlugin({ project: './project.inlang', outputStructure: 'message-modules' })]),
+      messageImports(appRoot),
+      generatedMessageSourceMaps(appRoot),
+      // Export inspection imports every route reference before Cloudflare opens the listener. Keep each route's
+      // feature reads with its visited loader instead of loading every feature while discovering Worker exports.
+      tanstackStart({
+        router: {
+          codeSplittingOptions: {
+            defaultBehavior: [
+              ['loader'],
+              ['component'],
+              ['pendingComponent'],
+              ['errorComponent'],
+              ['notFoundComponent'],
+            ],
+          },
+        },
+      }),
       react(),
       tailwindcss(),
       elysiaWorkerdTypebox(),
@@ -528,10 +566,27 @@ export default defineConfig((context) => {
           };
         },
         configResolved(config: {
+          optimizeDeps: Record<string, unknown>;
           resolve: { alias?: unknown };
           ssr: { resolve?: { alias?: unknown }; optimizeDeps?: Record<string, unknown> };
           environments?: Record<string, { resolve: { alias?: unknown }; optimizeDeps?: Record<string, unknown> }>;
         }) {
+          // TanStack adds the server entry to the client optimizer during configEnvironment. Vite concatenates
+          // entries across plugins, so the earlier empty array cannot remove it. Finish the interactive serve
+          // selection after those merges: visiting a page discovers its client dependencies, while the independent
+          // Worker optimizer retains its explicit CommonJS includes below.
+          if (context.command === 'serve' && !testRuntime) {
+            config.optimizeDeps.entries = [];
+            config.optimizeDeps.holdUntilCrawlEnd = false;
+            const client = config.environments?.client;
+            if (client) {
+              client.optimizeDeps = {
+                ...client.optimizeDeps,
+                entries: [],
+                holdUntilCrawlEnd: false,
+              };
+            }
+          }
           pinWorkerResolveAliases(config.resolve);
           if (!config.ssr.resolve) config.ssr.resolve = {};
           pinWorkerResolveAliases(config.ssr.resolve);

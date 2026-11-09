@@ -1,16 +1,9 @@
-import { createFileRoute, useLoaderData, useSearch } from '@tanstack/react-router';
-import {
-  editionContentId,
-  editionCreateNavigationContext,
-  editionCreateSearch,
-  type EditionCreateApi,
-  type EditionPublicationController,
-} from '../../content-editions/edition-create';
+import { createFileRoute } from '@tanstack/react-router';
+import { editionContentId, editionCreateSearch } from '../../content-editions/edition-create';
 import { readEditionResume } from '../../content-editions/edition-create-actions';
-import { EditionPublicationPanel } from '../../content-editions/edition-create-view';
-import { AuthoringDepartureProvider } from '../../threads/authoring-departure';
 import { m } from '../../paraglide/messages.js';
 import { requireSignedIn } from '../../session/guard';
+import { EditionCreateRoute } from '../../content-editions/edition-create-route';
 
 export const Route = createFileRoute('/editions/new')({
   beforeLoad: requireSignedIn,
@@ -29,35 +22,3 @@ export const Route = createFileRoute('/editions/new')({
   head: () => ({ meta: [{ title: m.edition_publication_heading() }, { name: 'robots', content: 'noindex, follow' }] }),
   component: EditionCreateRoute,
 });
-
-export function EditionCreateRoute({
-  api,
-  controller,
-}: {
-  api?: EditionCreateApi;
-  controller?: EditionPublicationController;
-}) {
-  const { editionId, postId, revisionId, editionOrigin } = useSearch({ from: '/editions/new' });
-  const resumed = useLoaderData({ from: '/editions/new' });
-  return (
-    <AuthoringDepartureProvider
-      navigationContext={editionCreateNavigationContext}
-      navigationMessages={{
-        title: m.edition_publication_leave_title(),
-        unsaved: m.edition_publication_leave_unsaved(),
-        pending: m.edition_publication_leave_pending(),
-      }}
-      sessionBound
-    >
-      <EditionPublicationPanel
-        key={JSON.stringify([editionId ?? `${postId}:${revisionId}`, editionOrigin])}
-        initialEditionId={editionId}
-        initialResume={resumed}
-        initialOriginToken={editionOrigin}
-        api={api}
-        controller={controller}
-        initialSource={postId && revisionId ? { postId, revisionId } : undefined}
-      />
-    </AuthoringDepartureProvider>
-  );
-}

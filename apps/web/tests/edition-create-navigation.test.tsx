@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act } from 'react';
+import { act, useLayoutEffect } from 'react';
 import * as start from '../.storybook/react-start';
 
 mock.module('@tanstack/react-start', () => start);
@@ -34,13 +34,23 @@ const globals = {
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+// The shared server preload imports Base UI before this fixture installs its DOM.
+// Restore its browser layout effect so the real dialog can mount its portal.
+mock.module(
+  Bun.resolveSync(
+    '@base-ui/utils/useIsoLayoutEffect',
+    dirname(Bun.resolveSync('@base-ui/react/alert-dialog', import.meta.dir)),
+  ),
+  () => ({ useIsoLayoutEffect: useLayoutEffect }),
+);
 const { createRoot } = await import('react-dom/client');
 const { creatorId, identity, publicationFixture } =
   await import('../src/stories/patterns/edition-publication/edition-publication-fixtures');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useLocation } =
   await import('@tanstack/react-router');
-const { EditionCreateRoute } = await import('../src/routes/editions/new');
+const { EditionCreateRoute } = await import('../src/content-editions/edition-create-route');
+const { creatorSaleEditionReview } = await import('../src/content-editions/sale-review');
 const { CreatorEditionsOriginView } = await import('../src/content-editions/creator-editions-view');
 const { CreatorOfferOriginAddressPanel, CreatorOfferOriginScope } =
   await import('../src/checkout/creator-offer-editor');
@@ -50,13 +60,13 @@ const { creatorEditionSearch } = await import('../src/checkout/creator-offer-add
 const { creatorEditionsRouteSearch } = await import('../src/content-editions/creator-editions');
 const { createCreatorEditionOrigin } = await import('../src/content-editions/creator-edition-origin');
 const { m } = await import('../src/paraglide/messages.js');
-const { deLocalizeUrl, getLocale, localizeUrl, setLocale } = await import('../src/paraglide/runtime.js');
-const previousLocale = getLocale();
-setLocale('ja', { reload: false });
+const { deLocalizeUrl, getLocale, localizeUrl, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
+const previousLocale = getLocale;
+overwriteGetLocale(() => 'ja');
 
 afterAll(async () => {
   mock.restore();
-  setLocale(previousLocale, { reload: false });
+  overwriteGetLocale(previousLocale);
   await window.happyDOM.close();
   for (const [key, descriptor] of previous) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
@@ -113,6 +123,7 @@ test('Stay preserves the uncertain publication intent; Discard returns to the or
     },
   });
   const router = createRouter({
+    isServer: false,
     routeTree: rootRoute.addChildren([createEditionRoute, inventoryRoute]),
     history: createMemoryHistory({ initialEntries: [entry] }),
     rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
@@ -195,13 +206,18 @@ test('published Edition hands off its exact current identity and locale without 
     component: function OfferRoute() {
       const search = creatorEditionSearch(useLocation({ select: (location) => location.search }));
       return (
-        <CreatorOfferOriginScope token={search.editionOrigin} editionId={search.contentEditionId}>
+        <CreatorOfferOriginScope
+          token={search.editionOrigin}
+          editionId={search.contentEditionId}
+          review={creatorSaleEditionReview}
+        >
           <CreatorOfferOriginAddressPanel />
         </CreatorOfferOriginScope>
       );
     },
   });
   const router = createRouter({
+    isServer: false,
     routeTree: rootRoute.addChildren([createEditionRoute, offerRoute]),
     history: createMemoryHistory({ initialEntries: [entry] }),
     rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },

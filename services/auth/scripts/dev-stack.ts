@@ -1011,12 +1011,21 @@ export function webLaunchEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv 
   return child;
 }
 
-async function launch(action: 'pages' | 'web', args: string[]) {
+/** Trusted launch inputs captured before runtime DDL changes the native analysis schema. */
+export function developmentFrontendProcess(
+  action: 'pages' | 'web',
+  args: readonly string[],
+  inputs: {
+    environment: NodeJS.ProcessEnv;
+    kernelEnvironment: Readonly<Record<string, string | undefined>>;
+    website: Awaited<ReturnType<typeof developmentWebsiteConfiguration>>;
+    keys: DevelopmentKeys;
+  },
+): { command: string[]; environment: NodeJS.ProcessEnv } {
   const pages = action === 'pages';
-  const website = await developmentWebsiteConfiguration();
-  const keys = await developmentKeys();
-  const child = Bun.spawn(
-    [
+  const { environment, website, keys } = inputs;
+  return {
+    command: [
       'bun',
       'run',
       '--cwd',
@@ -1029,23 +1038,36 @@ async function launch(action: 'pages' | 'web', args: string[]) {
       '--strictPort',
       ...args,
     ],
-    {
-      cwd: root,
-      env: {
-        ...(pages ? process.env : webLaunchEnvironment(process.env)),
-        AUTH_ORIGIN: origins.native,
-        ...developmentWebsiteBindings(keys, website),
-        ...developmentMediaBindings(await kernelEnvironment(), keys),
-        ...(pages ? developmentAuthPageBindings(website) : {}),
-        PUBLIC_ORIGIN: origins.web,
-        TURNSTILE_SITE_KEY: 'local',
-        TURNSTILE_SCRIPT_URL: `${origins.issuer}/local-turnstile.js`,
-      },
-      stdin: 'inherit',
-      stdout: 'inherit',
-      stderr: 'inherit',
+    environment: {
+      ...(pages ? environment : webLaunchEnvironment(environment)),
+      AUTH_ORIGIN: origins.native,
+      ...developmentWebsiteBindings(keys, website, {
+        AUTH_MANAGEMENT_PAGE_ROUTES: environment.AUTH_MANAGEMENT_PAGE_ROUTES,
+      }),
+      ...developmentMediaBindings(inputs.kernelEnvironment, keys),
+      ...(pages ? developmentAuthPageBindings(website) : {}),
+      PUBLIC_ORIGIN: origins.web,
+      TURNSTILE_SITE_KEY: 'local',
+      TURNSTILE_SCRIPT_URL: `${origins.issuer}/local-turnstile.js`,
     },
-  );
+  };
+}
+
+async function launch(action: 'pages' | 'web', args: string[]) {
+  const kernel = await kernelEnvironment();
+  const launch = developmentFrontendProcess(action, args, {
+    environment: process.env,
+    kernelEnvironment: kernel,
+    website: await developmentWebsiteConfiguration(kernel),
+    keys: await developmentKeys(),
+  });
+  const child = Bun.spawn(launch.command, {
+    cwd: root,
+    env: launch.environment,
+    stdin: 'inherit',
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
   const stop = () => child.kill('SIGTERM');
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
@@ -1088,16 +1110,56 @@ export function walkSetupScripts(env: Record<string, string | undefined> = proce
   ];
 }
 
-/**
- * Starts native Auth, Kernel, then the worker. Kernel bootstraps the bundled release before worker discovery
- * reads it. Kernel reads issuer JWKS from native Auth, so Auth pages and Web can wait until seeding finishes on
- * an admitted walk. Local `task dev` still starts pages after Kernel.
- * Explicit deferred account walks serve Kernel HTTP from the Auth host and omit the worker and OpenSearch.
- */
+type DevelopmentService = 'identity' | 'kernel' | 'worker' | 'pages' | 'web';
+
+/** Web compiles independently; readiness still requires the original native dependency order. */
+export async function startDevelopmentServices<Child>(
+  mode: 'complete' | 'walk' | 'native',
+  host: {
+    launch(service: DevelopmentService): Child;
+    ready(service: DevelopmentService, children: Child[]): Promise<void>;
+    stopping(): boolean;
+  },
+): Promise<void> {
+  const children: Child[] = [];
+  const launch = (service: DevelopmentService) => {
+    const child = host.launch(service);
+    children.push(child);
+    return child;
+  };
+  // Each gate monitors every started child, including Web while native services are still booting.
+  const ready = (service: DevelopmentService, child: Child) =>
+    host.ready(service, [child, ...children.filter((other) => other !== child)]);
+  const identity = launch('identity');
+  // The mounted bindings have already been captured. Web does no native discovery during its cold compilation.
+  const web = mode === 'complete' ? launch('web') : undefined;
+  await ready('identity', identity);
+  if (host.stopping() || mode === 'native') return;
+  if (mode === 'walk') {
+    const pages = launch('pages');
+    await ready('pages', pages);
+    if (host.stopping()) return;
+  }
+  const kernel = launch('kernel');
+  await ready('kernel', kernel);
+  if (host.stopping()) return;
+  const worker = launch('worker');
+  await ready('worker', worker);
+  if (host.stopping()) return;
+  if (mode === 'complete') {
+    const pages = launch('pages');
+    await ready('pages', pages);
+    if (host.stopping()) return;
+    await ready('web', web!);
+  }
+}
+
+/** Starts and owns the documented stack; deferred walks keep their existing smaller service set. */
 async function start() {
+  const kernelEnvironmentValues = await kernelEnvironment();
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    ...(await kernelEnvironment()),
+    ...kernelEnvironmentValues,
     ...developmentKernelBindings(),
   };
   // Walk fixture keys survive kernel .env, which can contain a developer's Stripe bindings.
@@ -1116,12 +1178,14 @@ async function start() {
   console.info(stackPhaseLine('owner', identityLine));
   const children: ReturnType<typeof Bun.spawn>[] = [];
   const commands: string[][] = [];
-  const spawnChild = (command: string[], stdout: 'inherit' | 'pipe' = 'inherit') =>
-    Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout, stderr: 'inherit' });
-  const launch = (command: string[], stdout: 'inherit' | 'pipe' = 'inherit') => {
-    const child = spawnChild(command, stdout);
+  const environments: NodeJS.ProcessEnv[] = [];
+  const spawnChild = (command: string[], environment: NodeJS.ProcessEnv, stdout: 'inherit' | 'pipe' = 'inherit') =>
+    Bun.spawn(command, { cwd: root, env: environment, stdin: 'inherit', stdout, stderr: 'inherit' });
+  const launch = (command: string[], stdout: 'inherit' | 'pipe' = 'inherit', environment = env) => {
+    const child = spawnChild(command, environment, stdout);
     children.push(child);
     commands.push(command);
+    environments.push(environment);
     return child;
   };
   let stopping = false;
@@ -1136,7 +1200,7 @@ async function start() {
       await Bun.sleep(1_000);
       if (stopping) return;
       console.error(`walk: ${commands[index]!.slice(-2).join(' ')} exited; restarting`);
-      const child = spawnChild(commands[index]!);
+      const child = spawnChild(commands[index]!, environments[index]!);
       children[index] = child;
       if (stopping) {
         await stopSpawned(child);
@@ -1154,32 +1218,68 @@ async function start() {
   try {
     Object.assign(env, await phase('runtime-native-preparation', () => prepareDevelopmentNative(env)));
     if (stopping) return;
-    const identity = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host']);
-    if (env.REZICS_WALK_DEFER_FRONTENDS === '1') {
-      await phase('identity', untilReady([...plan.nativeReady, `${origins.kernel}/health`], [identity]));
-    } else {
-      await phase('identity', untilReady(plan.nativeReady, [identity]));
-      if (stopping) return;
-      if (plan.deferPages) {
-        const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
-        await phase('pages', untilReady([issuerJwksUrl(origins.issuer)], [pages, identity]));
-        if (stopping) return;
-      }
-      const kernel = launch(plan.kernel);
-      await phase('kernel', untilReady(plan.kernelReady, [kernel, identity]));
-      if (stopping) return;
-      const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
-      await phase('worker', untilOutput(worker, 'Worker ready'));
-      if (stopping) return;
-      if (!plan.deferPages) {
-        const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
-        await phase('pages', untilReady([`${origins.issuer}/.well-known/openid-configuration`], [pages]));
-        if (stopping) return;
-        const web = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'web']);
-        await phase('web', untilReady([`${origins.web}${SEEDED_WEB_READY_PATH}`], [web]));
-        if (stopping) return;
-      }
-    }
+    // Native runtime startup creates physical schema objects. Capture the mounted declarations before that DDL;
+    // pages and Web use these bindings throughout this owned run, including supervised restarts.
+    const frontendInputs =
+      env.REZICS_WALK_DEFER_FRONTENDS === '1'
+        ? undefined
+        : await phase('frontend-bindings', async () => ({
+            environment: env,
+            kernelEnvironment: kernelEnvironmentValues,
+            website: await developmentWebsiteConfiguration(kernelEnvironmentValues),
+            keys: await developmentKeys(),
+          }));
+    const launchFrontend = (action: 'pages' | 'web') => {
+      const prepared = developmentFrontendProcess(action, [], frontendInputs!);
+      return launch(prepared.command, 'inherit', prepared.environment);
+    };
+    if (stopping) return;
+    const nativeOnly = env.REZICS_WALK_DEFER_FRONTENDS === '1';
+    await startDevelopmentServices(nativeOnly ? 'native' : plan.deferPages ? 'walk' : 'complete', {
+      stopping: () => stopping,
+      launch(service) {
+        switch (service) {
+          case 'identity':
+            return launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host']);
+          case 'kernel':
+            return launch(plan.kernel);
+          case 'worker':
+            return launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
+          case 'pages':
+            return launchFrontend('pages');
+          case 'web': {
+            const child = launchFrontend('web');
+            console.info(stackPhaseLine('web-launched', `pid=${child.pid}`));
+            return child;
+          }
+        }
+      },
+      async ready(service, children) {
+        if (service === 'worker') {
+          await phase(
+            'worker',
+            Promise.race([
+              untilOutput(children[0]!, 'Worker ready'),
+              ...children.slice(1).map(async (child) => {
+                const code = await child.exited;
+                throw new Error(`walk: process exited (${code}) before Worker readiness`);
+              }),
+            ]),
+          );
+          return;
+        }
+        const urls = {
+          identity: nativeOnly ? [...plan.nativeReady, `${origins.kernel}/health`] : plan.nativeReady,
+          kernel: plan.kernelReady,
+          pages: [
+            plan.deferPages ? issuerJwksUrl(origins.issuer) : `${origins.issuer}/.well-known/openid-configuration`,
+          ],
+          web: [`${origins.web}${SEEDED_WEB_READY_PATH}`],
+        };
+        await phase(service, untilReady(urls[service], children));
+      },
+    });
+    if (stopping) return;
     await Promise.race([stopped, ...children.map((_, index) => supervise(index))]);
     process.exitCode = 0;
   } finally {
@@ -1196,19 +1296,30 @@ async function phase<T>(name: string, work: Promise<T> | (() => T | Promise<T>))
   return await nativePhase(name, () => (typeof work === 'function' ? work() : work));
 }
 
+/** Search the whole arriving chunk; retain only enough text to recognize a split marker. */
+export function outputMarker(marker: string): (chunk: string) => boolean {
+  let suffix = '';
+  let seen = false;
+  return (chunk) => {
+    if (!seen) {
+      const text = suffix + chunk;
+      seen = text.includes(marker);
+      suffix = text.slice(text.length - marker.length + 1);
+    }
+    return seen;
+  };
+}
+
 /** Resolves once `child` prints `marker`; its output keeps flowing to this process's stdout for the child's lifetime. */
 async function untilOutput(child: ReturnType<typeof Bun.spawn>, marker: string): Promise<void> {
   const decoder = new TextDecoder();
-  let recent = '';
+  const containsMarker = outputMarker(marker);
   let seen = false;
   const pump = (async () => {
     for await (const chunk of child.stdout as ReadableStream<Uint8Array>) {
       const text = decoder.decode(chunk, { stream: true });
       process.stdout.write(text);
-      if (!seen) {
-        recent = (recent + text).slice(-(marker.length + 256));
-        seen = recent.includes(marker);
-      }
+      seen = containsMarker(text);
     }
   })();
   pump.catch(() => {});

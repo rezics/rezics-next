@@ -120,7 +120,8 @@ test('owned fixed native edition route reads exact document version through prot
   const route = await Bun.file(new URL('../src/routes/editions/$id.tsx', import.meta.url)).text();
   expect(route).toContain("createFileRoute('/editions/$id')");
   expect(route).toContain('readContentEdition');
-  expect(route).toContain('router.invalidate()');
+  const view = await Bun.file(new URL('../src/content-editions/edition-route.tsx', import.meta.url)).text();
+  expect(view).toContain('router.invalidate()');
   expect(route).toContain('gcTime: 0');
   expect(route).not.toContain('publicCache: true');
 });
@@ -426,6 +427,7 @@ test('edition image decoration uses one bounded batch of exact current document 
         ...body.doc.content!,
         {
           type: 'blockquote',
+          attrs: { id: 'nested-illustrations' },
           content: [
             { type: 'image', attrs: { id: 'nested-image', src: creatorId, alt: 'Repeated image' } },
             { type: 'image', attrs: { id: 'missing-image', src: revisionId, alt: 'Unavailable image' } },

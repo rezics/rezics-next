@@ -110,6 +110,7 @@ test('cancellation settles the Web startup child and descendants through the exi
   const pidFile = join(directory, 'descendant.pid');
   const abort = new AbortController();
   const startupRunner = new URL('../scripts/web-startup.ts', import.meta.url).href;
+  const startupOwner = new URL('./support/server-custody.ts', import.meta.url).href;
   const childScript = `
     import { spawn } from 'node:child_process';
     import { writeFileSync } from 'node:fs';
@@ -120,9 +121,11 @@ test('cancellation settles the Web startup child and descendants through the exi
   `;
   const script = `
     import { runWebStartupChild } from ${JSON.stringify(startupRunner)};
+    import { ownBunProcess } from ${JSON.stringify(startupOwner)};
     const interruption = new AbortController();
     process.on('SIGTERM', () => interruption.abort('SIGTERM'));
     await runWebStartupChild(process.execPath, ['-e', ${JSON.stringify(childScript)}], process.cwd(), {
+      ownChild: (child) => ownBunProcess(child),
       env: process.env,
       signal: interruption.signal,
     });

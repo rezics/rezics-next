@@ -599,7 +599,7 @@ test('mounted paired buyer windows survive exact receipt/Edition return and comm
   const { OrderPage } = await import('../src/checkout/order-page');
   const { subjectCover } = await import('../src/checkout/subject-cover');
   const { purchaseHistorySearch } = await import('../src/checkout/purchase-return');
-  const { EditionRoute } = await import('../src/routes/editions/$id');
+  const { EditionRoute } = await import('../src/content-editions/edition-route');
   const { fromPlainText } = await import('@rezics/document');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const { checkoutCurrentVisit } = await import('../src/session/index');
