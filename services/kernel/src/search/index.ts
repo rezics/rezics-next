@@ -1,5 +1,6 @@
 /** The public Search service entry. Implementation modules stay private behind this surface. */
 export { CollectionDiscoverySummarySchema } from './collection-discovery-schema.ts';
+export { DiscoveryPopulationCutChangedError, DiscoveryProducerCoverageError } from './operation-outcomes.ts';
 export { readAccountContextBindings } from './account-context-native.ts';
 export type {
   AccountDiscoverySource,

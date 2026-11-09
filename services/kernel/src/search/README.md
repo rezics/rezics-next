@@ -1,5 +1,7 @@
 # Search
 
+Decision: `search/index.ts` re-exports `DiscoveryProducerCoverageError` and `DiscoveryPopulationCutChangedError` from their native `operation-outcomes.ts` leaf to preserve canonical constructor identity in composition.
+
 Decision: `adapters/library-preparation.ts` implements Library's native preparation and scope-work capabilities.
 It uses the worker's existing Search runtime, original same-client work definition admission and definition/body
 meters. The ordered Source prepare/prefix/evaluate algorithm retains its exact cursor and partial-evaluation
