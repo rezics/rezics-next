@@ -37,6 +37,15 @@ const taxonomyGroups: Record<keyof typeof schemes, string> = {
 };
 type Taxonomy = keyof typeof schemes;
 
+// Leave capacity for other requests sharing the normal Subject read lane.
+const FIDELITY_READ_WIDTH = 4;
+async function readFidelitySubjects<T, R>(items: readonly T[], read: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+  for (let offset = 0; offset < items.length; offset += FIDELITY_READ_WIDTH)
+    results.push(...(await Promise.all(items.slice(offset, offset + FIDELITY_READ_WIDTH).map(read))));
+  return results;
+}
+
 export type BangumiCharacterFidelityResult = {
   run: ImportRunResult;
   gaps: SourceVocabularyGap[];
@@ -179,16 +188,14 @@ export async function currentBangumiCharacterVocabularyBindings(
       : [];
   });
   const currentConcepts = (
-    await Promise.all(
-      conceptBindings.map(async ({ binding, schemeId, expected }) => {
-        const subject = await publicSubject(port, binding.id);
-        return subject?.type === 'skos:Concept' &&
-          hasCurrentValue(subject, 'schema:url', expected) &&
-          hasCurrentValue(subject, 'skos:inScheme', schemeId)
-          ? binding
-          : null;
-      }),
-    )
+    await readFidelitySubjects(conceptBindings, async ({ binding, schemeId, expected }) => {
+      const subject = await publicSubject(port, binding.id);
+      return subject?.type === 'skos:Concept' &&
+        hasCurrentValue(subject, 'schema:url', expected) &&
+        hasCurrentValue(subject, 'skos:inScheme', schemeId)
+        ? binding
+        : null;
+    })
   ).filter((binding): binding is SourceVocabularyBindings['concepts'][number] => binding !== null);
   return { releaseDigest: input.releaseDigest, schemes: currentSchemes, concepts: currentConcepts };
 }
@@ -263,20 +270,15 @@ export async function runBangumiCharacterFidelity(input: {
     if ((payload as Record<string, unknown>).type === 4) return 'schema:VideoGame';
     return undefined;
   };
-  const jobs = [...relevant];
-  for (let offset = 0; offset < jobs.length; offset += 16) {
-    const page = await Promise.all(
-      jobs.slice(offset, offset + 16).map(async (key) => {
-        const isCharacter = key.startsWith('character:');
-        const id = isCharacter ? key.slice('character:'.length) : key;
-        const nativeType = expectedType(key);
-        if (!nativeType) return null;
-        const identity = await nativeIdentity(input.importer, input.port, input.sourceAlias, key, id, nativeType);
-        return identity ? ([key, identity] as const) : null;
-      }),
-    );
-    for (const item of page) if (item) identities.set(item[0], item[1]);
-  }
+  const readings = await readFidelitySubjects([...relevant], async (key) => {
+    const isCharacter = key.startsWith('character:');
+    const id = isCharacter ? key.slice('character:'.length) : key;
+    const nativeType = expectedType(key);
+    if (!nativeType) return null;
+    const identity = await nativeIdentity(input.importer, input.port, input.sourceAlias, key, id, nativeType);
+    return identity ? ([key, identity] as const) : null;
+  });
+  for (const item of readings) if (item) identities.set(item[0], item[1]);
 
   const requests = new Map<string, SourceVocabularyRequest>();
   const inputGaps: SourceVocabularyGap[] = [];
