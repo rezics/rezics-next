@@ -299,9 +299,10 @@ function rollback() {
   );
 }
 
-function binder() {
-  return memoizedValue(binder, () =>
+function ownerFilterReauthorization() {
+  return memoizedValue(ownerFilterReauthorization, () =>
     sumBounds(
+      CANONICAL_SOURCE_RECEIVING_COST().metadata,
       sourcePrepare(),
       privateAuthority(),
       MEMBERS_PREPARATION_SOURCE_COST(),
@@ -310,14 +311,13 @@ function binder() {
     ),
   );
 }
+function binder() {
+  // Initial binding and its mandatory final revalidation each perform this native prefix.
+  return memoizedValue(binder, () => repeatBound(ownerFilterReauthorization(), 2));
+}
 function preparationFixed() {
   return memoizedValue(preparationFixed, () =>
-    sumBounds(
-      repeatBound(sourcePrepare(), 2),
-      repeatBound(scopeCurrentness(), 2),
-      MEMBERS_PREPARATION_SOURCE_COST(),
-      privateAuthority(),
-    ),
+    sumBounds(repeatBound(sourcePrepare(), 2), repeatBound(scopeCurrentness(), 2), ownerFilterReauthorization()),
   );
 }
 function preReceipt() {
@@ -409,7 +409,7 @@ export function collectionSelectedPublicationPlan(selectionCount: number): Colle
       scopeCurrentness: scopeCurrentness(),
       sourcePreparation: sourcePrepare(),
       canonicalDeduplication,
-      ownerFilterReauthorization: sumBounds(MEMBERS_PREPARATION_SOURCE_COST(), privateAuthority()),
+      ownerFilterReauthorization: ownerFilterReauthorization(),
       preparation,
       preReceipt: preReceipt(),
       compareHeaderRule: compareHeaderRule(),
