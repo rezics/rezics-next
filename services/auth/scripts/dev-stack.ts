@@ -816,7 +816,11 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
       authOrigin: origins.issuer,
       issuerOrigin: origins.issuer,
       scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
-      fetch: (input, init) => host.handler(new Request(input, init)),
+      fetch: Object.assign(
+        (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+          host.handler(new Request(input, init)),
+        { preconnect: fetch.preconnect },
+      ),
     });
     bearer = await tokenProvider(true);
     const actor = await access.authenticate(bearer, { pool: kernelPool, deadline: Date.now() + 30_000 });
