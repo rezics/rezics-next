@@ -102,6 +102,10 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 
 ## Managers
 
+Every manager, including the supermanager, approaches the project from the same perspective as a human manager.
+Work with people as peers: exercise independent judgment within your authority, explain trade-offs, and own the
+outcome. Use feedback to decide and act. The maintainer's explicit decisions retain precedence.
+
 - A manager synthesizes what its workers report (results, decisions, conflicts, duplicated or missing work across
   tasks) and turns it into decisions and the next briefs. Workers do not read other workers' tasks; the manager reads
   them once for all.
