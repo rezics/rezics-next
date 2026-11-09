@@ -337,71 +337,100 @@ test('selected anime staff and cast use the default acknowledged role adapter an
   }
 }, 30_000);
 
-test('staff vocabulary creates use small envelopes and resume only missing acknowledgements', async () => {
-  const journal = new ShowcaseJournal(':memory:');
-  try {
-    const commands: BatchCommand[] = Array.from({ length: 9 }, (_, index) => ({
-      op: 'create',
-      key: `staff-role-fixture:${index}`,
-      source: {
-        source: 'bangumi_cross_media',
-        external_id: `vocabulary:bangumi.staff:${index}`,
-        record_revision: 'unversioned',
-        digest: 'a'.repeat(64),
-        converter_revision: 'bangumi-vocabulary@3:staff-role@1',
-        field_group: 'facts',
-      },
-      subject: { type: 'skos:Concept', labels: { en: `Role ${index}` } },
-    }));
-    const id = (index: number) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
-    const sent: BatchCommand[][] = [];
-    let exhausted = true;
-    const port = captureShowcaseCommands(
-      {
-        async batch({ commands: page }: BatchWriteRequest): Promise<BatchWriteResult> {
-          sent.push(page);
-          if (page.length > 4) throw new Error('unbounded staff create envelope');
-          return {
-            results: page.map((command) => {
-              const index = commands.findIndex(({ key }) => command.key === key);
-              return exhausted && index === 4
-                ? {
-                    key: command.key,
-                    status: 503,
-                    problem: {
-                      type: 'https://rezics.com/problems/transaction_retry_exhausted',
-                      title: 'Transaction retry exhausted',
-                      status: 503,
-                      code: 'transaction_retry_exhausted',
-                      retryable: true,
-                    },
-                  }
-                : { key: command.key, status: 201, value: { id: id(index), revision: 1 } };
-            }),
-          };
-        },
-      } as CrossMediaPort,
-      journal,
-    );
-    const write = () =>
-      writeBangumiStaffVocabularyCommands({
-        port,
-        journal,
-        commands,
-        async read(subjectId) {
-          return { subject: { id: subjectId, type: 'skos:Concept' } } as unknown as ReviewedSubjectRead;
-        },
+for (const operation of ['create', 'propose'] as const)
+  test(`staff vocabulary ${operation} uses small envelopes and resumes only missing acknowledgements`, async () => {
+    const journal = new ShowcaseJournal(':memory:');
+    try {
+      const id = (index: number) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
+      const commands: BatchCommand[] = Array.from({ length: 9 }, (_, index) => {
+        const key = `staff-role-fixture:${index}`;
+        const source = {
+          source: 'bangumi_cross_media',
+          external_id: `vocabulary:bangumi.staff:${index}`,
+          record_revision: 'unversioned',
+          digest: 'a'.repeat(64),
+          converter_revision: 'bangumi-vocabulary@3:staff-role@1',
+          field_group: 'facts' as const,
+        };
+        return operation === 'create'
+          ? { op: operation, key, source, subject: { type: 'skos:Concept', labels: { en: `Role ${index}` } } }
+          : {
+              op: operation,
+              key,
+              source,
+              subject: id(index),
+              statement: {
+                property: { id: 'skos:inScheme' },
+                value: { type: 'value', content: id(100) },
+                references: [
+                  {
+                    parts: [
+                      {
+                        property: { id: 'schema:url' },
+                        value: { type: 'value', content: `https://bgm.tv/person/1#role-${index}` },
+                      },
+                    ],
+                  },
+                ],
+              },
+            };
       });
-    await expect(write()).rejects.toThrow('Bangumi staff vocabulary write failed: 503');
-    expect(sent).toEqual([commands.slice(0, 4), commands.slice(4, 8)]);
-    expect(journal.preparedCommands().map(({ command }) => command)).toEqual([commands[4]!]);
-    expect(journal.acknowledgedCommands()).toHaveLength(7);
-    exhausted = false;
-    const ids = await write();
-    expect(sent.slice(2)).toEqual([[commands[4]!, commands[8]!]]);
-    expect(commands.map(({ key }) => ids.get(key))).toEqual(commands.map((_, index) => id(index)));
-    expect(journal.preparedCommands()).toEqual([]);
-  } finally {
-    journal.close();
-  }
-});
+      const sent: BatchCommand[][] = [];
+      let exhausted = true;
+      const port = captureShowcaseCommands(
+        {
+          async batch({ commands: page }: BatchWriteRequest): Promise<BatchWriteResult> {
+            sent.push(page);
+            if (page.length > 4) throw new Error('unbounded staff vocabulary envelope');
+            return {
+              results: page.map((command) => {
+                const index = commands.findIndex(({ key }) => command.key === key);
+                return exhausted && index === 4
+                  ? {
+                      key: command.key,
+                      status: 503,
+                      problem: {
+                        type: 'https://rezics.com/problems/transaction_retry_exhausted',
+                        title: 'Transaction retry exhausted',
+                        status: 503,
+                        code: 'transaction_retry_exhausted',
+                        retryable: true,
+                      },
+                    }
+                  : {
+                      key: command.key,
+                      status: 201,
+                      value:
+                        operation === 'create' ? { id: id(index), revision: 1 } : { candidate: id(index), revision: 1 },
+                    };
+              }),
+            };
+          },
+        } as CrossMediaPort,
+        journal,
+      );
+      const write = () =>
+        writeBangumiStaffVocabularyCommands({
+          port,
+          journal,
+          commands,
+          async read(subjectId) {
+            return { subject: { id: subjectId, type: 'skos:Concept' } } as unknown as ReviewedSubjectRead;
+          },
+        });
+      await expect(write()).rejects.toThrow('Bangumi staff vocabulary write failed: 503');
+      expect(sent).toEqual([commands.slice(0, 4), commands.slice(4, 8)]);
+      expect(journal.preparedCommands().map(({ command }) => command)).toEqual([commands[4]!]);
+      expect(journal.acknowledgedCommands()).toHaveLength(7);
+      exhausted = false;
+      const ids = await write();
+      expect(sent.slice(2)).toEqual([[commands[4]!, commands[8]!]]);
+      if (operation === 'create')
+        expect(commands.map(({ key }) => ids.get(key))).toEqual(commands.map((_, index) => id(index)));
+      else expect(ids.size).toBe(0);
+      expect(journal.acknowledgedCommands()).toHaveLength(9);
+      expect(journal.preparedCommands()).toEqual([]);
+    } finally {
+      journal.close();
+    }
+  });

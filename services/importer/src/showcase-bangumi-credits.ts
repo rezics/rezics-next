@@ -1,5 +1,5 @@
 import { bundledDigest } from '@rezics/definitions/bundled';
-import { BATCH_LIMIT, type BatchCommand, type BatchStatement, type Source } from '@rezics/definitions/bulk';
+import { type BatchCommand, type BatchStatement, type Source } from '@rezics/definitions/bulk';
 import {
   bangumiStaffRoleMapping,
   bangumiStaffSchemeUri,
@@ -38,7 +38,7 @@ const roleVocabularyRevision = `${bangumiVocabularyRevision}:staff-role@1`;
 const schemeSourceKey = 'bangumi.staff';
 const roleSourceKey = (code: string) => `bangumi.staff:${code}`;
 const roleRequirementLimit = 64;
-const STAFF_VOCABULARY_CREATE_PAGE = 4;
+const STAFF_VOCABULARY_PAGE = 4;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 export type BangumiStaffWorkType = 1 | 2 | 4;
@@ -248,10 +248,9 @@ export async function writeBangumiStaffVocabularyCommands(input: {
       ids.set(command.key, id);
     }
   }
-  // Limit the native identity transactions a create envelope can start together.
-  const pageSize = pending.some((command) => command.op === 'create') ? STAFF_VOCABULARY_CREATE_PAGE : BATCH_LIMIT;
-  for (let offset = 0; offset < pending.length; offset += pageSize) {
-    const page = pending.slice(offset, offset + pageSize);
+  // Keep native write pressure and citation-bearing request bodies bounded in both vocabulary stages.
+  for (let offset = 0; offset < pending.length; offset += STAFF_VOCABULARY_PAGE) {
+    const page = pending.slice(offset, offset + STAFF_VOCABULARY_PAGE);
     const result = await input.port.batch({ commands: [...page] });
     const byKey = new Map(result.results.map((entry) => [entry.key, entry]));
     for (const command of page) {
