@@ -10,6 +10,7 @@ import {
 import { exportJWK, generateKeyPair, decodeJwt, type JWK } from 'jose';
 import { Client, Pool } from 'pg';
 import { createAuthDatabase } from '../support/auth-database.ts';
+import { configureTestReceiptKeys, testReceiptKeysEnv } from '../support/receipt-keys.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
@@ -35,6 +36,7 @@ async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void
 }
 
 const pool = createPool(process.env.DATABASE_URL!);
+configureTestReceiptKeys(pool);
 const issuer = 'https://recovery.auth.test';
 const password = 'original native recovery password';
 const nextPassword = 'replacement native recovery password';
@@ -276,6 +278,7 @@ if (crashProcess) {
             cwd: import.meta.dir + '/../..',
             env: {
               ...process.env,
+              ...testReceiptKeysEnv(),
               RECOVERY_CRASH_PHASE: phase,
               RECOVERY_CRASH_DATABASE: database.url,
               RECOVERY_CRASH_KEY: JSON.stringify(key),

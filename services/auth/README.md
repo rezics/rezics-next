@@ -854,7 +854,10 @@ Auth exposes no fence-clearing effect and never upgrades an old session.
 
 The Kernel `test/access/recovery-completion.test.ts` fixture raises its initial
 fence through private `internalLifecycle.raiseFence` before actual delivery and
-completion. It retains old cookie, bearer and password denial, new-password
+completion. It binds the dedicated native test receipt ring to its command pool
+before registration and supplies the same ring to both crash/restart children;
+missing receipt configuration must not be hidden behind a registration timeout.
+It retains old cookie, bearer and password denial, new-password
 sign-in and current Access readback. Its native workflow/password cases have an
 individual 60-second test budget; the two-crash restart case has 120 seconds.
 Fixed-name phase timings separate database/host setup, registration, HTTP calls,

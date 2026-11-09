@@ -48,6 +48,8 @@ Decision: reuse the existing actual Auth/Access recovery fixture and its asserti
 including private initial fencing and actual delivery. Measure its named setup,
 registration, request, delivery and restart phases under the individual fixture
 budgets owned by [guarded recovery](../../services/auth/README.md#guarded-human-recovery).
+Bind its command pool and restart children to the same dedicated native receipt
+ring before registration, following the [Kernel fixture owner](../../services/kernel/README.md).
 Run the affected Kernel file through its owning check to collect independent
 failures; a default five-second timeout alone supplies no recovery assertion verdict.
 
