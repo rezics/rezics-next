@@ -147,7 +147,7 @@ an unreachable run is left for stale-run cleanup, and `NOT_STARTED` keeps its st
 logs the host and elapsed time. Existing remote-check tests pin recorded-exit 255, reconnect through status-loss, and
 startup `NOT_STARTED` retry; no extra suite. Status probes use a separate counter from the recorded-exit file so a command's own 255 stays 255. Host cache garbage deletion keeps parent directory streams open while descending, skips empty names and a child equal to the current path, and so a sweep drains large deep trees without looping.
 Decision: ordinary worker-check filesystem/record interpretation (result/run precedence, nested envelopes, exit aliases, local-runner liveness, owned terminal-log evidence) lives in `worker-check-observation.ts`. `WorkerJob` consumes its pending-or-terminal observation and resume text, and retains proof observation, final-report recovery, waiting/resume transitions and process launch. Tests pin identity/security and wake/resume journeys at the public check-wake and resume-check-protocol entries; the observation entry has one disposable-file witness.
-Decision: an owner decision that does not fit the prompt points to a worktree file; check logs are named by check id and copied whole into the worktree; worker temporary directories are short `/tmp` paths that settlement removes.
+Decision: an owner decision that does not fit the prompt can use a bounded pointer to a worktree file; check logs are named by check id and copied whole into the worktree; worker temporary directories are short `/tmp` paths that settlement removes.
 
 A task whose paths touch `apps/web` or `packages/ui`, or an interface task without either, works against Storybook
 served from its own worktree (`storybook.ts`). Each catalogue gets a loopback port derived from the worktree path, so
@@ -2308,9 +2308,10 @@ Delivery accumulates across generations: an already delivered summary or availab
 missing, unreadable or omitted references stay pending. Document availability is refreshed in the receiving worktree.
 The event command does not sweep or resume workers. Acceptance, delivery and supersession events are controller-owned.
 
-The decision shares the existing 20,000-character total prompt limit and process input byte limit with the ordinary
-prompt. References that do not fit remain pending. A summary that does not fit is replaced by a pointer to a worktree file
-holding the whole decision; the pointer is appended even past the limits, so no decision refuses a launch. Projection
+The decision shares the ordinary prompt's existing character and total-byte limits. The separate brief byte limit
+only admits the decision event and brief. References that do not fit remain pending. A summary that does not fit
+can use a bounded pointer to a worktree file holding the whole decision. If even the pointer cannot fit, leave
+the decision pending without a delivery acknowledgement. Projection
 parses decisions and deliveries in one traversal, keeps the earliest sequence per decision identity, selects by controller
 timestamp then event sequence, and reads each referenced path once. No projection cache or watcher is added.
 

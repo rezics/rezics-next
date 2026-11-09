@@ -303,9 +303,10 @@ export function prepareOwnerDecisionPrompt(
   );
   if (delivered.summaryDelivered && pendingDocuments.length === 0) return { prompt };
 
-  const fits = (block: string) =>
-    `${prompt}\n\n${block}`.length <= policy.workerPrompt.characters &&
-    Buffer.byteLength(`${prompt}\n\n${block}`) <= policy.brief.bytes;
+  // The brief limit admits the decision event; the assembled worker input has its own budget.
+  const remainingCharacters = policy.workerPrompt.characters - prompt.length - 2;
+  const remainingBytes = policy.prompt.workerTotalBytes - Buffer.byteLength(prompt) - 2;
+  const fits = (block: string) => block.length <= remainingCharacters && Buffer.byteLength(block) <= remainingBytes;
   const header = `Owner decision ${decision.id} from authenticated manager ${decision.managerId}: this prompt carries the decision.`;
   const summary = `Decision: ${decision.summary}`;
   // A summary that does not fit becomes a pointer to the decision file, so no decision refuses a launch.
@@ -320,6 +321,8 @@ export function prepareOwnerDecisionPrompt(
     ];
     file = { path: pointer, content: decisionFileContent(decision) };
   }
+  // Do not acknowledge a decision the worker did not receive, or exceed either existing input limit.
+  if (!fits(lines.join('\n'))) return { prompt };
   const fixed = lines.length;
   const documentRefs: OwnerDecisionDelivery['documentRefs'] = [];
   let omitted = 0;
@@ -338,7 +341,6 @@ export function prepareOwnerDecisionPrompt(
     documentRefs.push({ path: reference.path, status });
   }
   if (omitted) {
-    // The notice is one bounded line; it may pass the limit where the fixed decision lines already filled it.
     const notice = () =>
       `- ${omitted} document reference(s) remain pending because this prompt reached its total input limit.`;
     while (lines.length > fixed && !fits([...lines, notice()].join('\n'))) {
@@ -346,7 +348,7 @@ export function prepareOwnerDecisionPrompt(
       documentRefs.pop();
       omitted++;
     }
-    lines.push(notice());
+    if (fits([...lines, notice()].join('\n'))) lines.push(notice());
   }
   const receipt: OwnerDecisionDelivery = {
     decisionId: decision.id,
