@@ -1,3 +1,4 @@
+import { importCommandPages } from './import-client.ts';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { type BatchCommand, type BatchStatement, type Source } from '@rezics/definitions/bulk';
 import {
@@ -248,9 +249,8 @@ export async function writeBangumiStaffVocabularyCommands(input: {
       ids.set(command.key, id);
     }
   }
-  // Keep native write pressure and citation-bearing request bodies bounded in both vocabulary stages.
-  for (let offset = 0; offset < pending.length; offset += STAFF_VOCABULARY_PAGE) {
-    const page = pending.slice(offset, offset + STAFF_VOCABULARY_PAGE);
+  // Await singleton identity creates; retain smaller byte/count pages for citation-bearing proposals.
+  for (const page of importCommandPages(pending, (command) => command, STAFF_VOCABULARY_PAGE)) {
     const result = await input.port.batch({ commands: [...page] });
     const byKey = new Map(result.results.map((entry) => [entry.key, entry]));
     for (const command of page) {

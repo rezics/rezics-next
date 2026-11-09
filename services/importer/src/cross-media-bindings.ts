@@ -1,12 +1,7 @@
+import { importCommandPages } from './import-client.ts';
 import type { Database } from 'bun:sqlite';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import {
-  BATCH_LIMIT,
-  checkBatchWrite,
-  type BatchCommand,
-  type BatchWriteResult,
-  type Source,
-} from '@rezics/definitions/bulk';
+import { checkBatchWrite, type BatchCommand, type BatchWriteResult, type Source } from '@rezics/definitions/bulk';
 import { mapBangumiVocabulary, bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { mapVndbVocabulary, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import type { SourceVocabularyGap, SourceVocabularyRequest } from '@rezics/conversion';
@@ -990,8 +985,7 @@ export class CrossMediaGraph {
       commands.filter((entry) => Boolean(entry.draft.producerParent)),
     ];
     for (const group of groups) {
-      for (let offset = 0; offset < group.length; offset += GRAPH_PROPOSAL_PAGE) {
-        const page = group.slice(offset, offset + GRAPH_PROPOSAL_PAGE);
+      for (const page of importCommandPages(group, (entry) => entry.command, GRAPH_PROPOSAL_PAGE)) {
         if (checkBatchWrite({ commands: page.map((entry) => entry.command) }).length)
           throw new TypeError('Cross-media relation proposals failed portable validation');
         const result = await input.batch({ commands: page.map((entry) => entry.command) });
@@ -1253,8 +1247,7 @@ export class CrossMediaGraph {
         .immediate();
       pending.push({ edgeKey: row.edge_key, ...retained });
     }
-    for (let offset = 0; offset < pending.length; offset += BATCH_LIMIT) {
-      const page = pending.slice(offset, offset + BATCH_LIMIT);
+    for (const page of importCommandPages(pending, (entry) => entry.command)) {
       if (checkBatchWrite({ commands: page.map((entry) => entry.command) }, bundledRelease).length)
         throw new TypeError('Cross-media relation retractions failed portable validation');
       const result = await input.batch({ commands: page.map((entry) => entry.command) });

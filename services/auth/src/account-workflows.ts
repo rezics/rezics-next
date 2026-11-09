@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import { AUTH_CURSOR_VERSION, requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
 import type { AuthService, InvalidationReceipt, TrustedAccessPorts } from './index.ts';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createKindConsentParticipant } from './kind-consent.ts';
 import type { KindConsentWriter } from './kind-consent.ts';
 
@@ -209,9 +209,22 @@ export function clientAuthority(
         [accountId, clientId],
       );
       if (current.rows[0] && sameScopes(current.rows[0].scopes, granted)) return;
-      const transitionKey = `kind-consent:materialize:${createHash('sha256')
+      const keyPrefix = `kind-consent:materialize:${createHash('sha256')
         .update(JSON.stringify([accountId, clientId, granted]))
         .digest('hex')}`;
+      // A completed write cannot restore a subsequently removed consent. Reuse
+      // only unfinished work for this target; each new materialization is a new
+      // operation. The pending-pair index excludes completed history.
+      const pending = (
+        await database.query<{ transition_key: string }>(
+          `SELECT transition_key FROM auth_kind_consent_transition
+           WHERE client_id=$1 AND account_id=$2 AND state<>'applied'
+             AND starts_with(transition_key,$3)
+           ORDER BY transition_id LIMIT 1`,
+          [clientId, accountId, keyPrefix],
+        )
+      ).rows[0];
+      const transitionKey = pending?.transition_key ?? `${keyPrefix}:${randomUUID()}`;
       await afterIssuance(async () => {
         const changed = await kindConsentWriter.change({
           transitionKey,

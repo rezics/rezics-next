@@ -151,6 +151,27 @@ export function websiteRoutes(input: {
   const issuance = new AsyncLocalStorage<{ session: Session; scopes: string[] }>();
   const assertionAdmission = new AsyncLocalStorage<() => Promise<void>>();
   const logoutAdmission = new AsyncLocalStorage<boolean>();
+  async function nativeToken(
+    request: Request,
+    fields: URLSearchParams,
+    selected?: { session: Session; scopes: string[] },
+  ) {
+    return input.withIssuance(WEBSITE_CLIENT_ID, async () => {
+      const code = fields.get('grant_type') === 'authorization_code' ? fields.get('code') : null;
+      const lock = code ? `auth-website-code:${hash(code)}` : null;
+      // The provider establishes a family before consuming the code. Serialize
+      // that whole native operation so a replay observes the consumed code and
+      // revokes the family instead of colliding on its PostgreSQL primary key.
+      // The issuance connection holds this lock across native transactions.
+      if (lock) await database.query('SELECT pg_advisory_lock(hashtextextended($1,0))', [lock]);
+      try {
+        const run = () => input.native().handler(nativeRequest(request, '/oauth2/token', fields));
+        return await (selected ? issuance.run(selected, run) : run());
+      } finally {
+        if (lock) await database.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', [lock]);
+      }
+    });
+  }
   async function client(): Promise<Client> {
     const row = (
       await database.query<Client>(
@@ -350,6 +371,41 @@ export function websiteRoutes(input: {
       [session.id, session.userId],
     );
   }
+  async function prepareRegistration(registration: WebsiteClientRegistration) {
+    const scopes = [...new Set(registration.scopes)].sort();
+    if (
+      scopes.length > input.scopeLimit ||
+      scopes.some((s) => typeof s !== 'string' || s.length > 128 || !/^[\x21\x23-\x5b\x5d-\x7e]+$/.test(s)) ||
+      ![...protocolScopes, 'media:complete'].every((s) => scopes.includes(s))
+    )
+      deny('invalid_request');
+    if (options.siteActions && scopes.some((s) => !protocolScopes.includes(s) && !options.siteActions!.has(s)))
+      deny('invalid_request');
+    const keys = registration.publicJwks?.keys;
+    if (!Array.isArray(keys) || !keys.length || keys.length > 3 || new Set(keys.map((k) => k.kid)).size !== keys.length)
+      deny('invalid_request');
+    const publicKeys = [];
+    for (const key of keys) {
+      if (typeof key.kid !== 'string' || !key.kid || key.kid.length > 128 || key.alg !== 'ES256' || key.use !== 'sig')
+        deny('invalid_request');
+      publicKeys.push(await publicCredential(key, key.kid));
+    }
+    function uris(values: string[]) {
+      if (!Array.isArray(values) || !values.length || values.length > 8 || new Set(values).size !== values.length)
+        deny('invalid_request');
+      for (const value of values) {
+        const url = new URL(value);
+        if (url.hash || url.username || url.password || url.search || url.href !== value) deny('invalid_request');
+        const origin = issuerOrigin(url.origin);
+        if (new URL(options.issuer).protocol === 'https:' && new URL(origin).protocol !== 'https:')
+          deny('invalid_request');
+      }
+      return values;
+    }
+    const redirects = uris(registration.redirectUris),
+      logout = uris(registration.postLogoutRedirectUris);
+    return { scopes, publicKeys, redirects, logout };
+  }
   return {
     plugin: {
       id: 'website-native-boundaries',
@@ -403,44 +459,9 @@ export function websiteRoutes(input: {
         amr: selected.session.authMethods.split(' '),
       };
     },
-    async register(registration: WebsiteClientRegistration, suppliedConnection?: PoolClient) {
-      const scopes = [...new Set(registration.scopes)].sort();
-      if (
-        scopes.length > input.scopeLimit ||
-        scopes.some((s) => typeof s !== 'string' || s.length > 128 || !/^[\x21\x23-\x5b\x5d-\x7e]+$/.test(s)) ||
-        ![...protocolScopes, 'media:complete'].every((s) => scopes.includes(s))
-      )
-        deny('invalid_request');
-      if (options.siteActions && scopes.some((s) => !protocolScopes.includes(s) && !options.siteActions!.has(s)))
-        deny('invalid_request');
-      const keys = registration.publicJwks?.keys;
-      if (
-        !Array.isArray(keys) ||
-        !keys.length ||
-        keys.length > 3 ||
-        new Set(keys.map((k) => k.kid)).size !== keys.length
-      )
-        deny('invalid_request');
-      const publicKeys = [];
-      for (const key of keys) {
-        if (typeof key.kid !== 'string' || !key.kid || key.kid.length > 128 || key.alg !== 'ES256' || key.use !== 'sig')
-          deny('invalid_request');
-        publicKeys.push(await publicCredential(key, key.kid));
-      }
-      function uris(values: string[]) {
-        if (!Array.isArray(values) || !values.length || values.length > 8 || new Set(values).size !== values.length)
-          deny('invalid_request');
-        for (const value of values) {
-          const url = new URL(value);
-          if (url.hash || url.username || url.password || url.search || url.href !== value) deny('invalid_request');
-          const origin = issuerOrigin(url.origin);
-          if (new URL(options.issuer).protocol === 'https:' && new URL(origin).protocol !== 'https:')
-            deny('invalid_request');
-        }
-        return values;
-      }
-      const redirects = uris(registration.redirectUris),
-        logout = uris(registration.postLogoutRedirectUris);
+    prepareRegistration,
+    async register(registration: Awaited<ReturnType<typeof prepareRegistration>>, suppliedConnection?: PoolClient) {
+      const { scopes, publicKeys, redirects, logout } = registration;
       const connection = suppliedConnection ?? (await database.connect());
       const ownsTransaction = suppliedConnection === undefined;
       try {
@@ -492,10 +513,14 @@ export function websiteRoutes(input: {
           `INSERT INTO "oauthClientResource" (id,"clientId","resourceId") VALUES ($1,$2,$3) ON CONFLICT ("clientId","resourceId") DO NOTHING`,
           [hash(`${WEBSITE_CLIENT_ID}:${options.audience}`), WEBSITE_CLIENT_ID, options.audience],
         );
-        await connection.query(
-          'INSERT INTO auth_client_coverage (client_id,ready,ready_after) VALUES ($1,true,CURRENT_TIMESTAMP) ON CONFLICT (client_id) DO NOTHING',
-          [WEBSITE_CLIENT_ID],
-        );
+        const coverage = await connection.query('SELECT 1 FROM auth_client_coverage WHERE client_id=$1', [
+          WEBSITE_CLIENT_ID,
+        ]);
+        if (!coverage.rowCount)
+          await connection.query(
+            'INSERT INTO auth_client_coverage (client_id,ready,ready_after) VALUES ($1,true,CURRENT_TIMESTAMP)',
+            [WEBSITE_CLIENT_ID],
+          );
         if (ownsTransaction) await connection.query('COMMIT');
       } catch (error) {
         if (ownsTransaction) await connection.query('ROLLBACK');
@@ -612,6 +637,7 @@ export function websiteRoutes(input: {
           if (url.pathname === '/revoke') {
             only(fields, [...base, 'token', 'token_type_hint']);
             await assertion(fields);
+            resource(fields);
             let row = (
               await database.query<{ sessionId: string; clientId: string }>(
                 'SELECT "sessionId","clientId" FROM "oauthRefreshToken" WHERE token=$1',
@@ -687,10 +713,7 @@ export function websiteRoutes(input: {
                 [hash(fields.get('code') ?? '')],
               )
             ).rows[0];
-            if (!record)
-              return input.withIssuance(WEBSITE_CLIENT_ID, () =>
-                input.native().handler(nativeRequest(request, '/oauth2/token', fields)),
-              );
+            if (!record) return nativeToken(request, fields);
             const verification = JSON.parse(record.value);
             sessionId = verification.sessionId;
             scopes = verification.query.scope.split(' ');
@@ -715,11 +738,7 @@ export function websiteRoutes(input: {
             family = record.authorizationCodeId;
           } else deny('unsupported_grant_type');
           const session = await proof(await nativeSession(sessionId), scopes);
-          const response = await input.withIssuance(WEBSITE_CLIENT_ID, () =>
-            issuance.run({ session, scopes }, () =>
-              input.native().handler(nativeRequest(request, '/oauth2/token', fields)),
-            ),
-          );
+          const response = await nativeToken(request, fields, { session, scopes });
           // The native guard revokes a family on reuse, including a replay that
           // raced a rotation. That transition also ends minted JWT authority.
           if (family && response.status !== 200 && !(await familyActive(family))) {

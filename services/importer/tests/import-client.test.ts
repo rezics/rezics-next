@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { KernelClient, ReviewedPersonMerge } from '@rezics/client';
-import { createImportTransport, ImportTransportError } from '../src/import-client.ts';
+import { createImportTransport, importCommandPages, ImportTransportError } from '../src/import-client.ts';
 import { CredentialServiceError } from '../src/credentials.ts';
 import { formatSeedError } from '../src/seed-cli.ts';
 import type {
@@ -35,14 +35,38 @@ const commands = [1, 2, 3, 4].map((n) => ({
   },
   subject: { type: 'schema:Book', labels: { en: 'Book' } },
 }));
+
+test('seed pages isolate identity creates and retain proposal batching, order and exact objects', () => {
+  const proposal = {
+    op: 'propose' as const,
+    key: 'fixture:proposal',
+    source: commands[0]!.source,
+    subject: subjectId,
+    statement: {
+      property: { id: 'schema:inLanguage' },
+      value: { type: 'value' as const, content: 'en' },
+      references: [
+        {
+          parts: [
+            { property: { id: 'schema:url' }, value: { type: 'value' as const, content: 'https://example.test' } },
+          ],
+        },
+      ],
+    },
+  };
+  const input = [proposal, { ...proposal, key: 'fixture:proposal:2' }, ...commands, proposal];
+  const pages = importCommandPages(input, (command) => command, 2);
+  expect(pages.map((page) => page.length)).toEqual([2, 1, 1, 1, 1, 1]);
+  expect(pages.flat()).toEqual(input);
+  pages.flat().forEach((command, index) => expect(command).toBe(input[index]!));
+});
 for (const status of [429, 503]) {
-  for (const limits of [{}, { maxWaitMs: 0 }, { maxTotalWaitMs: 0 }, { deadlineMs: 100 }]) {
+  for (const limits of [{}, { maxAttempts: 1 }, { maxWaitMs: 0 }, { maxTotalWaitMs: 0 }, { deadlineMs: 100 }]) {
     test(`bulk transport retains original commands and bounds explicit ${status} overloads: ${JSON.stringify(limits)}`, async () => {
       const requests: unknown[] = [];
       const transport = createImportTransport({
         origin: 'https://api.importer.test',
         tokenProvider: async () => 'test-token',
-        maxAttempts: 1,
         ...limits,
         sleep: async () => {},
         fetch: (async (request: Request) => {

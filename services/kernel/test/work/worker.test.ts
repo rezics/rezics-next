@@ -58,9 +58,9 @@ test('worker configuration names invalid variables without revealing values', ()
       KERNEL_EXECUTOR_ID: 'dedicated',
       NOMAD_JOB_NAME: 'kernel',
       NOMAD_ALLOC_INDEX: '3',
-      KERNEL_WORKER_POOL_SIZE: '4',
+      KERNEL_WORKER_POOL_SIZE: '3',
     }),
-  ).toMatchObject({ executorId: 'dedicated', poolSize: 4 });
+  ).toMatchObject({ executorId: 'dedicated', poolSize: 3 });
   for (const [variable, value] of [
     ['DATABASE_URL', undefined],
     ['DATABASE_URL', 'https://secret.invalid'],
@@ -68,6 +68,8 @@ test('worker configuration names invalid variables without revealing values', ()
     ['NOMAD_JOB_NAME', ''],
     ['NOMAD_ALLOC_INDEX', 'private-invalid-index'],
     ['KERNEL_WORKER_POOL_SIZE', '0'],
+    ['KERNEL_WORKER_POOL_SIZE', '1'],
+    ['KERNEL_WORKER_POOL_SIZE', '2'],
     ['KERNEL_WORKER_POOL_SIZE', '101'],
     ['KERNEL_WORKER_POOL_SIZE', '2.5'],
   ] as const) {
@@ -202,16 +204,15 @@ test('API enqueue before startup survives, duplicate IDs execute once, and SIGTE
 }, 30_000);
 
 test('stop is idempotent and releases module pools, and the direct entrypoint handles SIGINT', async () => {
+  // These hosts have independent runtimes. Start both cold imports together within the original deadline;
+  // each still proves its own readiness and full settlement before this test returns.
   const runtime = fixture('stop');
-  try {
-    expect(await runtime.finish()).toContain('stop-ok');
-  } finally {
-    runtime.child.kill();
-  }
+  const stopped = runtime.finish();
   const direct = Bun.spawn([process.execPath, `${import.meta.dir}/../../src/worker.ts`], {
     env: {
       ...process.env,
       ...workerEnvironment,
+      KERNEL_WORKER_POOL_SIZE: '3',
       STRIPE_SECRET_KEY: 'sk_test_worker_entrypoint',
       STRIPE_MANAGED_PAYMENTS: 'false',
       CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
@@ -220,6 +221,15 @@ test('stop is idempotent and releases module pools, and the direct entrypoint ha
     stdout: 'pipe',
     stderr: 'pipe',
   });
+  const errors = (async () => {
+    let output = '';
+    for await (const chunk of direct.stderr) {
+      const text = new TextDecoder().decode(chunk);
+      output += text;
+      process.stderr.write(text);
+    }
+    return output;
+  })();
   try {
     const reader = direct.stdout.getReader();
     let output = '';
@@ -229,9 +239,23 @@ test('stop is idempotent and releases module pools, and the direct entrypoint ha
       output += new TextDecoder().decode(next.value);
     }
     expect(output).toContain('Worker ready');
+    expect(await stopped).toContain('stop-ok');
     direct.kill('SIGINT');
     expect(await direct.exited).toBe(0);
+    const phases = (await errors)
+      .split('\n')
+      .filter((line) => line.startsWith('worker: startup '))
+      .map((line) => JSON.parse(line.slice('worker: startup '.length)) as { phase: string; state: string });
+    expect(phases.filter(({ state }) => state === 'failed')).toEqual([]);
+    expect(
+      phases.filter(({ state, phase }) => state === 'ready' && phase.startsWith('shutdown.')).map(({ phase }) => phase),
+    ).toEqual(['shutdown.relays', 'shutdown.work', 'shutdown.client', 'shutdown.content', 'shutdown.pool']);
   } finally {
-    direct.kill();
+    runtime.child.kill('SIGKILL');
+    direct.kill('SIGKILL');
+    await runtime.child.exited;
+    await stopped.catch(() => {});
+    await direct.exited;
+    await errors;
   }
 }, 30_000);

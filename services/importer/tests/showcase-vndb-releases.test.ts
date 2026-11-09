@@ -354,6 +354,7 @@ test('default seed without binding files rereads catalogue state and exposes sel
       {
         ...basePort,
         async batch(request) {
+          if (request.commands.some((command) => command.op === 'create')) expect(request.commands).toHaveLength(1);
           attempted.push(...request.commands);
           if (loseFirstDelivery) {
             loseFirstDelivery = false;

@@ -1,4 +1,5 @@
-import { BATCH_LIMIT, checkBatchWrite, type BatchCommand, type BatchWriteResult } from '@rezics/definitions/bulk';
+import { importCommandPages } from './import-client.ts';
+import { checkBatchWrite, type BatchCommand, type BatchWriteResult } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { SourceRecord } from '@rezics/conversion';
 import type { ReviewedSubjectRead } from './import-client.ts';
@@ -320,8 +321,7 @@ export async function deliverBangumiCreatorCredits(input: {
       proposals.push(...mapped.proposals);
     }
   }
-  for (let offset = 0; offset < proposals.length; offset += BATCH_LIMIT) {
-    const page = proposals.slice(offset, offset + BATCH_LIMIT);
+  for (const page of importCommandPages(proposals, (command) => command)) {
     if (checkBatchWrite({ commands: page }).length)
       throw new TypeError('Bangumi creator credit proposals failed portable validation');
     const result = await input.batch({ commands: page });

@@ -497,6 +497,43 @@ function wait(ms: number, signal?: AbortSignal, sleep?: (ms: number) => Promise<
   });
 }
 
+/** Plan sequential requests, retaining item order and identity. Identity-terminal creates
+ * each get one request: native bulk otherwise executes different partitions concurrently,
+ * while create intentionally has no automatic transaction retry. Other commands retain
+ * byte/count batching and callers' smaller pressure limits. Transport still owns retries.
+ */
+export function importCommandPages<T>(
+  input: readonly T[],
+  commandFor: (item: T) => BatchCommand,
+  maxCommands = BATCH_LIMIT,
+  maxBodyBytes = BODY_BYTES,
+): T[][] {
+  const pages: T[][] = [];
+  let page: T[] = [];
+  let bytes = WRAPPER_BYTES;
+  for (const item of input) {
+    const command = commandFor(item);
+    const size = Buffer.byteLength(JSON.stringify(command));
+    ensure(WRAPPER_BYTES + size <= maxBodyBytes);
+    if (command.op === 'create') {
+      if (page.length) pages.push(page);
+      pages.push([item]);
+      page = [];
+      bytes = WRAPPER_BYTES;
+      continue;
+    }
+    if (page.length === maxCommands || bytes + size + (page.length ? 1 : 0) > maxBodyBytes) {
+      pages.push(page);
+      page = [];
+      bytes = WRAPPER_BYTES;
+    }
+    bytes += size + (page.length ? 1 : 0);
+    page.push(item);
+  }
+  if (page.length) pages.push(page);
+  return pages;
+}
+
 /** Stateless public import operations. The generated client alone owns session propagation. */
 export function createImportTransport(options: ImportTransportOptions) {
   const pollAttempts = setting(options.pollAttempts, 5, 5, 1);
@@ -769,30 +806,20 @@ export function createImportTransport(options: ImportTransportOptions) {
     ensure(Array.isArray(input) && !types.isProxy(input) && Object.getPrototypeOf(input) === Array.prototype);
     const keys = Reflect.ownKeys(input);
     ensure(keys.length === input.length + 1);
-    const chunks: BatchWriteRequest[] = [];
+    const commands: BatchCommand[] = [];
     const seen = new Set<string>();
-    let commands: BatchCommand[] = [];
-    let bytes = WRAPPER_BYTES;
-    // Admit every individual command before the first send. Each serialization is bounded;
-    // byte accounting adds a comma and a wrapper without serializing growing prefixes.
+    // Admit every individual command before the first send, retaining immutable snapshots.
     for (let index = 0; index < input.length; index++) {
       const descriptor = Object.getOwnPropertyDescriptor(input, String(index));
       ensure(descriptor && 'value' in descriptor && descriptor.enumerable);
       const command = requestBody({ commands: [descriptor.value] }, bodyLimit).commands[0]!;
       ensure(!seen.has(command.key));
       seen.add(command.key);
-      const size = Buffer.byteLength(JSON.stringify(command));
-      if (commands.length === BATCH_LIMIT || bytes + size + (commands.length ? 1 : 0) > bodyLimit) {
-        chunks.push({ commands });
-        commands = [];
-        bytes = WRAPPER_BYTES;
-      }
-      bytes += size + (commands.length ? 1 : 0);
       commands.push(command);
     }
-    if (commands.length) chunks.push({ commands });
+    const chunks = importCommandPages(commands, (command) => command, BATCH_LIMIT, bodyLimit);
     const results: BatchWriteResult[] = [];
-    for (const chunk of chunks) results.push(await sendBatch(chunk, signal));
+    for (const commands of chunks) results.push(await sendBatch({ commands }, signal));
     return results;
   }
   async function fence(

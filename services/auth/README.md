@@ -852,6 +852,18 @@ Successful reset retains a fence. Only a later trusted Access lifecycle workflow
 may clear it using fresh recovery/establishment evidence at the exact new epoch;
 Auth exposes no fence-clearing effect and never upgrades an old session.
 
+The Kernel `test/access/recovery-completion.test.ts` fixture raises its initial
+fence through private `internalLifecycle.raiseFence` before actual delivery and
+completion. It binds the dedicated native test receipt ring to its command pool
+before registration and supplies the same ring to both crash/restart children;
+missing receipt configuration must not be hidden behind a registration timeout.
+It retains old cookie, bearer and password denial, new-password
+sign-in and current Access readback. Its native workflow/password cases have an
+individual 60-second test budget; the two-crash restart case has 120 seconds.
+Fixed-name phase timings separate database/host setup, registration, HTTP calls,
+delivery and host restarts without recording credentials or proof values. These
+fixture budgets do not change product or global test deadlines.
+
 The original operator, recovery and invalidation fixtures establish the Auth
 boundary using real Better Auth, PostgreSQL and JOSE. They are not final Goal
 proof. The workflow suites below add native Access command bindings and durable
@@ -2237,7 +2249,9 @@ Access epochs and caller timestamps do not replace this current fact.
 
 First-party consent materialization reuses an identical current consent under the native issuance barrier. It reads
 one exact account/client consent and the indexed pending-transition range; only an absent or changed consent enters
-the existing writer after release. Pending transitions still require that writer. Repeated live-proof signing during
+the existing writer after release. It reuses an unfinished materialization for the same target, while a new operation
+restores consent removed after a completed write; completed transition history is not searched. Pending transitions
+still require that writer. Repeated live-proof signing during
 a credential transaction therefore does not request an exclusive client lock against its own shared lock.
 
 `@rezics/auth/internal-consent` exports `createInternalConsentHandler` with the
@@ -2360,6 +2374,17 @@ Auth's official `@better-auth/oauth-provider` behind `service.handler`, with
 native models mapped onto the existing single client registry (`auth_client`)
 and consent authority (`auth_consent`). No second client store, consent store,
 session system or grant engine exists.
+
+Decision: Website registration validates deployment input and refuses direct scope reductions before opening a
+durable authority transition; rejected configuration must not leave a transition that blocks later grants.
+Registration reuses existing coverage without replaying its guarded insert. Revocation validates
+the exact API resource before native assertion consumption or Access invalidation; the six-field refresh request
+retains native family revocation and Access-first denial of previously issued API JWTs. Focused security coverage
+keeps the original grant assertions, rejects a wrong resource without effects and verifies the family cannot refresh.
+Code redemption serializes the native family-create/code-consume operation by code identity across service instances;
+the replay still passes confidential admission and native family revocation and returns `invalid_grant`.
+Lazy native initialization installs producer leases on the original pool and supplies the issuance proxy only as the
+native query database. Initializing during a token request must not capture its held socket as the pool connector.
 
 ### Registration and key rotation
 

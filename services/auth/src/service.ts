@@ -542,7 +542,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   });
   function nativeAuth() {
     return betterAuth({
-      ...betterAuthOptions(database, options.issuer, options.secret),
+      // Producer installation belongs to the original pool. Lazy native init
+      // may run inside issuance, where the proxy's connect is a held lease;
+      // capturing it would make subsequent requests share that same socket.
+      ...betterAuthOptions(database, options.issuer, options.secret, options.database),
       emailAndPassword: {
         enabled: true,
         disableSignUp: true,
@@ -1939,15 +1942,18 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         await (await getContext()).internalAdapter.deleteUserSessions(accountId);
       },
       async registerWebsiteClient(registration: WebsiteClientRegistration) {
-        const granted = scopes(registration.scopes);
+        // Reject deployment input before opening a durable authority transition.
+        const prepared = await website.prepareRegistration(registration);
+        const granted = prepared.scopes;
         const previous = (
           await database.query<{ scopes: string[]; first_party: boolean }>(
             'SELECT scopes,first_party FROM auth_client WHERE client_id=$1',
             [WEBSITE_CLIENT_ID],
           )
         ).rows[0];
+        if (previous?.scopes.some((scope) => !granted.includes(scope))) throw new Denied(400);
         if (previous && previous.first_party && JSON.stringify(previous.scopes) === JSON.stringify(granted)) {
-          await website.register({ ...registration, scopes: granted });
+          await website.register(prepared);
           return;
         }
         const desired = { operation: 'client-config', scopes: granted, firstParty: true };
@@ -1991,7 +1997,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           kind: 'client',
           clientId: WEBSITE_CLIENT_ID,
           target: desired,
-          apply: (connection) => website.register({ ...registration, scopes: granted }, connection),
+          apply: (connection) => website.register(prepared, connection),
         });
         if (changed.status !== 'applied') throw new Denied(503);
       },
