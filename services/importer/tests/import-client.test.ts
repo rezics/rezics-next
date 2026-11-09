@@ -660,12 +660,13 @@ test('served-variant reads accept only the admitted image decision for the reque
 });
 
 test('transport fetch throws retain the cause', async () => {
+  const cause = new TypeError('connect ECONNREFUSED');
   const transport = createImportTransport({
     origin: 'https://api.importer.test',
     tokenProvider: async () => 'test-token',
     maxAttempts: 1,
     fetch: (async () => {
-      throw new TypeError('connect ECONNREFUSED');
+      throw cause;
     }) as unknown as typeof fetch,
   });
   try {
@@ -677,7 +678,12 @@ test('transport fetch throws retain the cause', async () => {
     throw new Error('expected transport failure');
   } catch (error) {
     expect(error).toBeInstanceOf(ImportTransportError);
-    expect((error as ImportTransportError).status).toBe(503);
-    expect((error as Error).cause).toBeInstanceOf(Error);
+    const transportError = error as ImportTransportError;
+    expect(transportError.status).toBeUndefined();
+    expect(transportError.failurePhase).toBe('network');
+    expect(transportError.method).toBe('GET');
+    expect(transportError.origin).toBe('https://api.importer.test');
+    expect(transportError.path).toBe('/v1/sourceFences:check');
+    expect(transportError.cause).toBe(cause);
   }
 });
