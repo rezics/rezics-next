@@ -169,7 +169,7 @@ candidate reservation is released; mismatched identities or duplicate 201 receip
 acknowledgements name the same candidate, showcase prefers the one matching its exact current native source and
 statement, reusing the bounded read page for normal validation. Other request receipts stay in the journal.
 
-Bangumi staff vocabulary creates use ordered envelopes of at most four commands. Successful receipts keep their
+Bangumi staff vocabulary creates and citation-bearing proposals use ordered envelopes of at most four commands. Successful receipts keep their
 original keys and bodies; a resumed writer sends only commands not acknowledged in the showcase journal. The
 existing transport owns retries and deadlines, and dependent proposals wait for the acknowledged Concept IDs.
 
