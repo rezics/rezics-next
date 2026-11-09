@@ -770,10 +770,13 @@ test('full base enrichment excludes late book creators but the first source impo
     base.members.push({ source: 'bangumi', key, kind: 'person', membership: 'referenced' });
   }
   let requests = 0;
-  const fetch = (async () => {
-    requests++;
-    throw new Error('Unexpected network request');
-  }) as typeof globalThis.fetch;
+  const fetch: typeof globalThis.fetch = Object.assign(
+    async () => {
+      requests++;
+      throw new Error('Unexpected network request');
+    },
+    { preconnect: globalThis.fetch.preconnect },
+  );
   const generation = await prepareShowcaseBookGeneration(base, planned, async (selection) => {
     const careers = await acquireBangumiPersonCareerSources(selection, { fetch });
     return acquireBangumiCoverSources(careers, { fetch, sleep: async () => {} });
