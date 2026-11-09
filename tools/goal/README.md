@@ -64,7 +64,9 @@ supermanager, or a manager holding its urgent grant, may dispatch urgent work. T
 The automatic backlog sweep submits an urgent brief as the manager named in its front matter when that manager's
 live session owns the Goal directory, so a grant covers backlog dispatch as well as the CLI. Without a confirmed
 owner or an active grant, the sweep returns the brief with the grant reason instead of dispatching it as a host
-session. Non-urgent backlog dispatch still submits no manager.
+session. Ordinary product backlog dispatch still submits no manager. A verification brief in its declared Goal
+directory may carry that Goal's confirmed live owner through the normal proof registration checks. A proof from
+a mismatched directory or without a confirmed owner is refused; the sweep does not substitute operations authority.
 Decision: urgent grants are manager-scoped and reusable until revoked; a task's urgent lane is fixed at dispatch.
 Revocation prevents new urgent dispatches; existing tasks retain their lane across retries and session resumes.
 Decision: backlog sweeps authenticate urgent dispatch as the confirmed Goal-directory owner; missing grants return

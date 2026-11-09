@@ -472,16 +472,18 @@ function returnUrgentBrief(
   return entry;
 }
 
-function urgentBacklogActor(
+function backlogDispatchActor(
   runtime: BacklogRuntime,
   goal: string,
   markdown: string,
 ): { urgent: boolean; actor: AuthenticatedManager | null; manager: string } {
   const snapshot = readBriefSizeSnapshot(markdown);
-  if (!snapshot?.urgent) return { urgent: false, actor: null, manager: snapshot?.manager ?? goal };
+  if (!snapshot) return { urgent: false, actor: null, manager: goal };
+  // A proof may use only the live owner of its declared Goal's backlog, never the host or an operations fallback.
+  const authenticate = snapshot.kind === 'verification' ? snapshot.goal === goal : snapshot.urgent;
   return {
-    urgent: true,
-    actor: confirmedBacklogOwner(runtime.db, goal, snapshot.manager) ?? null,
+    urgent: snapshot.urgent,
+    actor: authenticate ? (confirmedBacklogOwner(runtime.db, goal, snapshot.manager) ?? null) : null,
     manager: snapshot.manager,
   };
 }
@@ -956,7 +958,7 @@ async function dispatchReady(
           if (group.complete) recordGoalDispatch(runtime, pick.goal, group.writtenMs);
           continue;
         }
-        const provenance = urgentBacklogActor(runtime, pick.goal, markdown);
+        const provenance = backlogDispatchActor(runtime, pick.goal, markdown);
         if (provenance.urgent && runtime.supermanager) {
           try {
             requireUrgentDispatch(runtime.db, runtime.supermanager, provenance.actor);

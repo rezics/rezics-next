@@ -41,6 +41,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join, resolve } from 'node:path';
 import { harness, brief } from './test-support.ts';
 import { git } from './tasks.ts';
+import { backlogDirectory, sweepBacklog } from './backlog.ts';
+import { SqliteManagerInbox } from './inbox.ts';
 import {
   authorizeProof,
   newProofBinding,
@@ -791,6 +793,66 @@ function submittedProof(h: ReturnType<typeof registeredFixture>, changes: Partia
   writeFileSync(path, markdown);
   return { path, brief: parseBrief(markdown, readRiskOwnership(h.settings.riskAreasFile)) };
 }
+
+test('backlog verification registers only for its confirmed Goal owner and retains the exact original gate', async () => {
+  const h = registeredFixture(true);
+  try {
+    h.store.db.query('UPDATE manager_sessions SET state=? WHERE id=?').run(
+      JSON.stringify({
+        kind: 'managed',
+        engine: 'claude',
+        status: 'running',
+        threadId: h.actor.sessionId,
+        goals: [h.proofBrief.goal, 'other'],
+      }),
+      h.actor.id,
+    );
+    const root = backlogDirectory(h.settings.stateDirectory);
+    const ready = (goal: string, name: string, path: string) => {
+      const directory = join(root, goal);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, name), readFileSync(path, 'utf8'));
+    };
+    const exact = submittedProof(h).path;
+    ready(h.proofBrief.goal, 'exact.md', exact);
+    ready('other', 'wrong-directory.md', exact);
+    ready(
+      h.proofBrief.goal,
+      'changed-argv.md',
+      submittedProof(h, {
+        acceptance: { ...h.proofBrief.acceptance, command: ['bun', 'test', 'different.test.ts'] },
+      }).path,
+    );
+    const sweep = await sweepBacklog({
+      db: h.store.db,
+      stateDirectory: h.settings.stateDirectory,
+      inbox: new SqliteManagerInbox(h.store.db, h.settings.stateDirectory),
+      workerCap: 16,
+      perSweep: 3,
+      now: () => Date.now() + 60_000,
+      async dispatch(path, actor) {
+        return h.tasks.dispatch(path, actor ?? null).id;
+      },
+      async continueTask() {},
+      async cancel() {},
+    });
+    expect(
+      sweep.dispatched.map(({ brief }) => brief),
+      JSON.stringify(sweep.refused),
+    ).toEqual(['exact.md']);
+    const registered = h.store.task(sweep.dispatched[0]!.taskId);
+    expect(registered.proofAuthorization).toMatchObject({ manager: h.actor.id, sessionId: h.actor.sessionId });
+    expect(registered.currentAttempt).toBe(0);
+    expect(sweep.refused).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ goal: 'other', reason: expect.stringContaining('authenticated owning') }),
+        expect.objectContaining({ goal: h.proofBrief.goal, reason: expect.stringContaining('whole original argv') }),
+      ]),
+    );
+  } finally {
+    h.dispose();
+  }
+});
 
 test('Exact whole original Auth workspace check and complete homogeneous helper-plus-test file union authorize without relaxing root/gate prohibition', () => {
   const h = registeredFixture();
