@@ -140,6 +140,7 @@ afterAll(async () => {
 export async function openApiRuntime(
   options: DriverOptions & {
     readonly additionalAccounts?: ImportIdentityOptions['additionalAccounts'];
+    readonly workerStartup?: 'eager' | 'on-demand';
     readonly sourceStatistics?: 'vndb';
     readonly classificationAdmission?: ClassificationAdmission;
   },
@@ -181,6 +182,7 @@ export async function openApiRuntime(
   let namespace: Namespace | undefined;
   let boundary: Awaited<ReturnType<typeof createMediaBoundary>> | undefined;
   let workerStart: Promise<void> | undefined;
+  const startWorker = () => (workerStart ??= time('media worker start', () => boundary!.start()));
   let importer: Importer | undefined;
   let work: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   let directory: string | undefined;
@@ -268,8 +270,7 @@ export async function openApiRuntime(
     // Auth already quiesced its process-wide executor. Launch the isolated
     // worker against the settled application database and wait until it prints
     // MEDIA_READY so later CLI work does not overlap a stalled child.
-    workerStart = time('media worker start', () => boundary!.start());
-    await workerStart;
+    if (options.workerStartup !== 'on-demand') await startWorker();
     // Request the registered client's complete import scopes through the native account-key flow.
     let bulk = await time('importer account-key sign-in', () =>
       identitySupport(identity).issue(identity.bulk.accountId, identity.client.scopes),
@@ -750,7 +751,7 @@ export async function openApiRuntime(
                 readFence: (tuple, signal) => transport.fence(tuple, signal),
                 importFromUrl: (bytes, key, signal) => transport.requestMedia(bytes, key, signal),
                 async importStatus(id, signal) {
-                  await (workerStart ??= time('media worker start', () => mediaBoundary.start()));
+                  await startWorker();
                   await time('media drain', () => mediaBoundary.drain({ mediaIds: [id], maxJobs: 16, signal }));
                   return transport.mediaStatus(id, signal);
                 },
@@ -775,11 +776,10 @@ export async function openApiRuntime(
       return next;
     }
     importer = timeSync('importer state', openImporter);
-    // A deployment's worker is already running when imports reach its API.
-    // Compile and launch this isolated native worker before request deadlines start.
-    await (workerStart ??= time('media worker start', () => mediaBoundary.start()));
     async function run(dump: Dump, controls: Controls = {}): Promise<Run> {
       if (current) throw new Error('Concurrent fixture run');
+      // Imports use the actual isolated worker, launched before request deadlines start.
+      await startWorker();
       if (controls.loseCommittedResponse) {
         await importer!.close();
         importer = openImporter(true);
@@ -910,6 +910,7 @@ export async function openApiRuntime(
       },
       database,
       mediaBoundary,
+      startWorker,
       measurement,
       async measureGrowth<T>(operation: () => Promise<T>) {
         if (!growthSqlite) throw new Error('Growth SQLite capture was not configured');

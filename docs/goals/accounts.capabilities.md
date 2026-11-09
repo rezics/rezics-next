@@ -443,6 +443,8 @@ producer fixtures do not establish whole-graph execution, mounted surfaces or pr
 
 **Collection Source setup:** Finite publication cases explicitly advance the existing native canonical Source worker before publishing a newly saved rule, and again after changing its private facts. The fixture binds the native Work and History execution contract to its real Work client, supplies that client to the mounted kernel and closes that client before closing its database. Capture, canonical readiness and membership remain products of the native worker; no fixture row establishes a positive result.
 
+**Collection worker ownership:** Finite Source setup owns its executor without starting an unrelated background worker. The isolated native worker starts on demand before an import's request deadlines or a member-page preparation request; ordinary import fixtures retain eager startup. Both paths retain actual work execution and close ownership.
+
 **Collection fixture scopes:** An owner-presence rule reads the native Entry, session and holding populations, so the rules fixture requests `library_entry:list`, `progress_session:list` and `copy:list` alongside the existing read scopes. Reduced credentials still omit `library_entry:read`; publication and replay assertions remain unchanged, with the first publication response body included in failure diagnostics.
 
 **Personas:** Deleting owner; old-token owner; anonymous reader; Bob or other affected user; owner-specific data producers; ordinary restore attempt.

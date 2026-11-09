@@ -64,6 +64,7 @@ export async function createCollectionPresentationFixture() {
     maxFields: 64,
     maxRecordBytes: 65_536,
     additionalAccounts: [{ handle: 'collection_other', email: 'another@identity.test' }],
+    workerStartup: 'on-demand',
   });
   async function close() {
     try {
