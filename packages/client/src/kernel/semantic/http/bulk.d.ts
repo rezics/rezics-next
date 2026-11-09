@@ -5222,6 +5222,7 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
                     type: import("typebox").TString;
                     title: import("typebox").TString;
                     status: import("typebox").TInteger;
+                    retryable: import("typebox").TBoolean;
                     detail: import("typebox").TOptional<import("typebox").TString>;
                     errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TUnknown>>;
                 }>;
@@ -5335,6 +5336,7 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
                     type: string;
                     title: string;
                     status: number;
+                    retryable: boolean;
                     detail?: string;
                     errors?: unknown[];
                 };
@@ -5406,6 +5408,7 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
                     type: string;
                     title: string;
                     status: number;
+                    retryable: boolean;
                     detail?: string;
                     errors?: unknown[];
                 };
@@ -5600,6 +5603,7 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
                         type: import("typebox").TString;
                         title: import("typebox").TString;
                         status: import("typebox").TInteger;
+                        retryable: import("typebox").TBoolean;
                         detail: import("typebox").TOptional<import("typebox").TString>;
                         errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TUnknown>>;
                     }>;
@@ -5867,6 +5871,7 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
             type: string;
             title: string;
             status: number;
+            retryable: boolean;
             detail?: string;
             errors?: unknown[];
         };
@@ -6014,6 +6019,7 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
                     type: import("typebox").TString;
                     title: import("typebox").TString;
                     status: import("typebox").TInteger;
+                    retryable: import("typebox").TBoolean;
                     detail: import("typebox").TOptional<import("typebox").TString>;
                     errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TUnknown>>;
                 }>;
