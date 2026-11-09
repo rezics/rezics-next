@@ -492,10 +492,14 @@ export function websiteRoutes(input: {
           `INSERT INTO "oauthClientResource" (id,"clientId","resourceId") VALUES ($1,$2,$3) ON CONFLICT ("clientId","resourceId") DO NOTHING`,
           [hash(`${WEBSITE_CLIENT_ID}:${options.audience}`), WEBSITE_CLIENT_ID, options.audience],
         );
-        await connection.query(
-          'INSERT INTO auth_client_coverage (client_id,ready,ready_after) VALUES ($1,true,CURRENT_TIMESTAMP) ON CONFLICT (client_id) DO NOTHING',
-          [WEBSITE_CLIENT_ID],
-        );
+        const coverage = await connection.query('SELECT 1 FROM auth_client_coverage WHERE client_id=$1', [
+          WEBSITE_CLIENT_ID,
+        ]);
+        if (!coverage.rowCount)
+          await connection.query(
+            'INSERT INTO auth_client_coverage (client_id,ready,ready_after) VALUES ($1,true,CURRENT_TIMESTAMP)',
+            [WEBSITE_CLIENT_ID],
+          );
         if (ownsTransaction) await connection.query('COMMIT');
       } catch (error) {
         if (ownsTransaction) await connection.query('ROLLBACK');
@@ -612,6 +616,7 @@ export function websiteRoutes(input: {
           if (url.pathname === '/revoke') {
             only(fields, [...base, 'token', 'token_type_hint']);
             await assertion(fields);
+            resource(fields);
             let row = (
               await database.query<{ sessionId: string; clientId: string }>(
                 'SELECT "sessionId","clientId" FROM "oauthRefreshToken" WHERE token=$1',

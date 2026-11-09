@@ -131,6 +131,26 @@ function authorization(cookie: string, overrides: Record<string, string | null> 
 async function grant(cookie: string) {
   const auth = authorization(cookie);
   const response = await auth.response();
+  if (response.status !== 302) {
+    const [body, transitions, dependencies, consent] = await Promise.all([
+      response.clone().json() as Promise<{ error?: unknown }>,
+      pool.query<{ state: string }>(
+        'SELECT state FROM auth_kind_consent_transition WHERE client_id=$1 ORDER BY updated_at DESC LIMIT 3',
+        [WEBSITE_CLIENT_ID],
+      ),
+      pool.query<{ count: string }>(
+        'SELECT count(*)::text AS count FROM auth_kind_consent_dependency WHERE client_id=$1 AND active',
+        [WEBSITE_CLIENT_ID],
+      ),
+      pool.query<{ count: string }>('SELECT count(*)::text AS count FROM auth_consent WHERE client_id=$1', [
+        WEBSITE_CLIENT_ID,
+      ]),
+    ]);
+    const code = typeof body.error === 'string' ? body.error : 'absent';
+    throw new Error(
+      `website authorize expected 302, received ${response.status} (${code}); consent rows=${consent.rows[0]?.count}; transitions=${transitions.rows.map((row) => row.state).join(',')}; active dependencies=${dependencies.rows[0]?.count}`,
+    );
+  }
   expect(response.status).toBe(302);
   return { code: new URL(response.headers.get('location')!).searchParams.get('code')!, verifier: auth.verifier };
 }
@@ -320,6 +340,32 @@ test('revoking an API JWT commits Access invalidation and leaves the old refresh
     (await post('/revoke', await fields({ token: issued.access_token, token_type_hint: 'access_token' }))).status,
   ).toBe(200);
   expect(accounts.get(id)!.authnEpoch).toBeGreaterThan(Number(old.payload.authn_epoch));
+  expect((await refresh(issued.refresh_token)).status).toBe(400);
+});
+
+test('website refresh revocation validates its resource before invalidating the family', async () => {
+  const { id, cookie } = await login(),
+    issued = await issue(cookie),
+    account = accounts.get(id)!,
+    epoch = account.authnEpoch;
+  const wrongResource = await fields({
+    token: issued.refresh_token,
+    token_type_hint: 'refresh_token',
+    resource: `${audience}/`,
+  });
+  expect([...wrongResource.keys()].sort()).toEqual(
+    ['client_assertion', 'client_assertion_type', 'client_id', 'resource', 'token', 'token_type_hint'].sort(),
+  );
+  const refused = await post('/revoke', wrongResource);
+  expect([refused.status, await refused.json(), account.authnEpoch]).toEqual([
+    400,
+    { error: 'invalid_request' },
+    epoch,
+  ]);
+  expect(
+    (await post('/revoke', await fields({ token: issued.refresh_token, token_type_hint: 'refresh_token' }))).status,
+  ).toBe(200);
+  expect(account.authnEpoch).toBeGreaterThan(epoch);
   expect((await refresh(issued.refresh_token)).status).toBe(400);
 });
 
