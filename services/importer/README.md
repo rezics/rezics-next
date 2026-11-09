@@ -167,6 +167,10 @@ candidate reservation is released; mismatched identities or duplicate 201 receip
 acknowledgements name the same candidate, showcase prefers the one matching its exact current native source and
 statement, reusing the bounded read page for normal validation. Other request receipts stay in the journal.
 
+Bangumi staff vocabulary creates use ordered envelopes of at most four commands. Successful receipts keep their
+original keys and bodies; a resumed writer sends only commands not acknowledged in the showcase journal. The
+existing transport owns retries and deadlines, and dependent proposals wait for the acknowledged Concept IDs.
+
 Decision: reconcile typed Bangumi and VNDB work relations against separate complete selected-source snapshots. A newly resolved endpoint cannot publish an absent edge without a sealed command; sealed proposal and retraction intent replays exactly through current endpoint and facts fences. Incomplete snapshots retire no additional candidates. VNDB relation snapshots retain at most 32 rows per selected owner and one ordered digest; they do not change provider identity or infer a cross-provider merge. Complete selected link snapshots retire only managed counterpart candidates, through current endpoint/facts fences and exact sealed replay.
 
 ## Cost

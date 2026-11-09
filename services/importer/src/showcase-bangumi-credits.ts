@@ -38,6 +38,7 @@ const roleVocabularyRevision = `${bangumiVocabularyRevision}:staff-role@1`;
 const schemeSourceKey = 'bangumi.staff';
 const roleSourceKey = (code: string) => `bangumi.staff:${code}`;
 const roleRequirementLimit = 64;
+const STAFF_VOCABULARY_CREATE_PAGE = 4;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 export type BangumiStaffWorkType = 1 | 2 | 4;
@@ -220,7 +221,7 @@ function proposeCommand(input: {
   };
 }
 
-async function writeCommands(input: {
+export async function writeBangumiStaffVocabularyCommands(input: {
   port: CrossMediaPort;
   journal: ShowcaseJournal;
   commands: readonly BatchCommand[];
@@ -247,8 +248,10 @@ async function writeCommands(input: {
       ids.set(command.key, id);
     }
   }
-  for (let offset = 0; offset < pending.length; offset += BATCH_LIMIT) {
-    const page = pending.slice(offset, offset + BATCH_LIMIT);
+  // Limit the native identity transactions a create envelope can start together.
+  const pageSize = pending.some((command) => command.op === 'create') ? STAFF_VOCABULARY_CREATE_PAGE : BATCH_LIMIT;
+  for (let offset = 0; offset < pending.length; offset += pageSize) {
+    const page = pending.slice(offset, offset + pageSize);
     const result = await input.port.batch({ commands: [...page] });
     const byKey = new Map(result.results.map((entry) => [entry.key, entry]));
     for (const command of page) {
@@ -498,7 +501,12 @@ export async function prepareBangumiCreatorCreditBindings(input: {
       key: commandKeyFor(schemeSource, 'scheme:create'),
       label: 'Bangumi staff roles',
     });
-    const written = await writeCommands({ port, journal: input.journal, commands: [create], read });
+    const written = await writeBangumiStaffVocabularyCommands({
+      port,
+      journal: input.journal,
+      commands: [create],
+      read,
+    });
     const schemeId = written.get(create.key);
     if (!schemeId) throw new TypeError('Bangumi staff scheme create was not acknowledged');
     const createdScheme = await read(schemeId);
@@ -523,7 +531,7 @@ export async function prepareBangumiCreatorCreditBindings(input: {
         citation: schemeRequirement.sourceUri,
       }),
     ];
-    await writeCommands({ port, journal: input.journal, commands: candidates, read });
+    await writeBangumiStaffVocabularyCommands({ port, journal: input.journal, commands: candidates, read });
     const publication = await publishShowcase({
       plan: input.plan,
       result: input.result,
@@ -629,7 +637,12 @@ export async function prepareBangumiCreatorCreditBindings(input: {
       // The create is acknowledged first so dependent inScheme proposals use its real UUID.
       missingCommands.push(create);
     }
-    const createdIds = await writeCommands({ port, journal: input.journal, commands: missingCommands, read });
+    const createdIds = await writeBangumiStaffVocabularyCommands({
+      port,
+      journal: input.journal,
+      commands: missingCommands,
+      read,
+    });
     const candidates: BatchCommand[] = [];
     for (const [index, role] of missing.entries()) {
       const requirement = newRequirements[index]!;
@@ -655,7 +668,7 @@ export async function prepareBangumiCreatorCreditBindings(input: {
           }),
         );
     }
-    await writeCommands({ port, journal: input.journal, commands: candidates, read });
+    await writeBangumiStaffVocabularyCommands({ port, journal: input.journal, commands: candidates, read });
     allRequirements = [...allRequirements, ...existingRoleRequirements, ...newRequirements];
     const publication = await publishShowcase({
       plan: input.plan,
