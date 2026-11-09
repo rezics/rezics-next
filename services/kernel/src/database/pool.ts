@@ -26,8 +26,47 @@ export class NestedPoolCheckoutError extends Error {
 }
 
 const heldPools = new AsyncLocalStorage<ReadonlySet<Pool>>();
+export type PoolCheckoutObserver = Readonly<{ started(): void; completed(waitMs: number, acquired: boolean): void }>;
+const poolCheckoutObservers = new AsyncLocalStorage<PoolCheckoutObserver>();
 const brokenClients = new WeakMap<PoolClient, Error>();
 type Connect = Pool['connect'];
+
+/** Observe checkout timing for one caller without exposing pool/query contents. */
+export function withPoolCheckoutObservation<T>(observer: PoolCheckoutObserver, run: () => Promise<T>): Promise<T> {
+  return poolCheckoutObservers.run(observer, run);
+}
+
+/** Driver seam for focused timing proofs; production invokes the captured observer from Pool.connect. */
+export function recordPoolCheckoutStart(): void {
+  reportPoolCheckoutStart(poolCheckoutObservers.getStore());
+}
+
+/** Driver seam for focused timing proofs; production invokes the captured observer from Pool.connect. */
+export function recordPoolCheckoutComplete(waitMs: number, acquired: boolean): void {
+  reportPoolCheckoutComplete(poolCheckoutObservers.getStore(), waitMs, acquired);
+}
+
+function reportPoolCheckoutStart(observer: PoolCheckoutObserver | undefined): void {
+  if (!observer) return;
+  try {
+    observer.started();
+  } catch {
+    // Diagnostics must not change pool checkout behaviour.
+  }
+}
+
+function reportPoolCheckoutComplete(
+  observer: PoolCheckoutObserver | undefined,
+  waitMs: number,
+  acquired: boolean,
+): void {
+  if (!observer) return;
+  try {
+    observer.completed(waitMs, acquired);
+  } catch {
+    // Diagnostics must not change pool checkout behaviour.
+  }
+}
 
 export function createPool(
   url: string,
@@ -53,15 +92,48 @@ export function createPool(
 
   const connect = pool.connect.bind(pool) as Connect;
   (pool as Pool & { connect: Connect }).connect = ((callback?: Parameters<Connect>[0]) => {
+    const observer = poolCheckoutObservers.getStore();
+    const started = observer ? performance.now() : 0;
+    reportPoolCheckoutStart(observer);
     if (heldPools.getStore()?.has(pool)) {
       const error = new NestedPoolCheckoutError();
       if (callback) {
-        queueMicrotask(() => callback(error, undefined as never, undefined as never));
+        queueMicrotask(() => {
+          reportPoolCheckoutComplete(observer, 0, false);
+          callback(error, undefined as never, undefined as never);
+        });
         return undefined as never;
       }
-      return Promise.reject(error) as never;
+      const rejected = Promise.reject(error);
+      return (
+        observer
+          ? rejected.catch((reason: unknown) => {
+              reportPoolCheckoutComplete(observer, 0, false);
+              throw reason;
+            })
+          : rejected
+      ) as never;
     }
-    return callback ? connect(callback) : connect();
+    if (callback)
+      return connect((error, client, release) => {
+        reportPoolCheckoutComplete(observer, observer ? performance.now() - started : 0, !error && !!client);
+        callback(error, client, release);
+      });
+    const pending = connect();
+    return (
+      observer
+        ? pending.then(
+            (client) => {
+              reportPoolCheckoutComplete(observer, performance.now() - started, true);
+              return client;
+            },
+            (error: unknown) => {
+              reportPoolCheckoutComplete(observer, performance.now() - started, false);
+              throw error;
+            },
+          )
+        : pending
+    ) as never;
   }) as Connect;
   const originalQuery = pool.query;
   pool.query = ((...args: unknown[]) => {

@@ -32,6 +32,7 @@ import {
   hasLiveCommandTransaction,
   type AuthoritativeTime,
 } from '../command/command.ts';
+import { recordAccessClockTiming } from '../command/timing.ts';
 import {
   accessCheck,
   installPreparedAccessCheckWork,
@@ -57,7 +58,7 @@ import {
   type Resource,
 } from './check.ts';
 import { resolveResourceRoles, installResourceRoleCatalogue, type ResourceRoleCatalogue } from './resource-roles.ts';
-import { withConnection } from '../database/pool.ts';
+import { withConnection, withPoolCheckoutObservation } from '../database/pool.ts';
 import { MEMBERSHIP_LIMIT, type MembershipPrincipal } from './membership-inverse.ts';
 import { routeOf as readRoute } from '../route/route.ts';
 import { deadlineClient, within } from './deadline.ts';
@@ -242,7 +243,43 @@ async function readPermissionTime(
   if (configured && !Number.isFinite(configured.getTime())) throw new TypeError('Invalid command clock');
   const observedAt = Date.now();
   const input = { at: configured?.toISOString() ?? '' };
-  const row = await accessNativeWork(work, 'time', input, {}, () => timeRead.run(client, input));
+  const pool = client as unknown as { connect?: unknown; release?: unknown };
+  const usesPoolCheckout = typeof pool.connect === 'function' && typeof pool.release !== 'function';
+  let checkoutStarted = false;
+  let checkoutCompleted = false;
+  let checkoutAcquired = false;
+  let checkoutWaitMs = 0;
+  let queryStartedAt: number | undefined;
+  let row: Awaited<ReturnType<typeof timeRead.run>> | undefined;
+  try {
+    row = await accessNativeWork(work, 'time', input, {}, () => {
+      queryStartedAt = performance.now();
+      return withPoolCheckoutObservation(
+        {
+          started() {
+            checkoutStarted = true;
+          },
+          completed(waitMs, acquired) {
+            checkoutCompleted = true;
+            checkoutWaitMs = waitMs;
+            checkoutAcquired = acquired;
+          },
+        },
+        () => timeRead.run(client, input),
+      );
+    });
+  } finally {
+    if (queryStartedAt !== undefined) {
+      const elapsed = performance.now() - queryStartedAt;
+      let poolCheckoutMs = 0;
+      let clockQueryMs = elapsed;
+      if (usesPoolCheckout && checkoutStarted) {
+        poolCheckoutMs = checkoutCompleted ? checkoutWaitMs : elapsed;
+        clockQueryMs = checkoutAcquired ? Math.max(0, elapsed - checkoutWaitMs) : 0;
+      }
+      recordAccessClockTiming(poolCheckoutMs, clockQueryMs);
+    }
+  }
   if (!row?.at) return undefined;
   return { at: row.at, databaseAt: row.databaseAt, observedAt };
 }

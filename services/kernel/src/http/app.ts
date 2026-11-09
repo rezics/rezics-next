@@ -36,7 +36,7 @@ import {
 import healthCheck from './health.sql';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from '../access/write-rate-stage.ts';
-import { withCommandTiming } from '../command/timing.ts';
+import { withAccessPreparationTiming, withCommandTiming } from '../command/timing.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import {
   bodyLimitOf,
@@ -284,7 +284,9 @@ export function createApp({
             ? {
                 prepare: (preparedActor, preparedAction, preparedResource, received) =>
                   admission.run('normal', job, () =>
-                    prepare.call(currentAccess, preparedActor, preparedAction, preparedResource, received),
+                    withAccessPreparationTiming(() =>
+                      prepare.call(currentAccess, preparedActor, preparedAction, preparedResource, received),
+                    ),
                   ),
               }
             : {}),
