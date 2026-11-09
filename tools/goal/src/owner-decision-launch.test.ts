@@ -5,7 +5,7 @@ import { openDb } from './db.ts';
 import { launch } from './launch.ts';
 import { prepareOwnerDecisionPrompt, submitOwnerDecision } from './owner-decisions.ts';
 import { readControlPolicy } from './policy.ts';
-import { waitForWorkerExit } from './process.ts';
+import { waitForWorkerExit, workerExitPath } from './process.ts';
 import { WorkerStore } from './store.ts';
 import { WorkerTasks } from './tasks.ts';
 import { harness, reading } from './test-support.ts';
@@ -288,5 +288,33 @@ test('legacy unbound intent stays superseded after an already-retained canonical
     expect(prepareOwnerDecisionPrompt(h.store, h.store.task(task.id), fourth, 'Continue.').delivery).toBeUndefined();
   } finally {
     h.dispose();
+  }
+});
+
+test('failed resume preparation preserves the preceding run PID and exit evidence', async () => {
+  const h = harness(captureCli);
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const attempt = next(h, task);
+    const pool = h.settings.pools[0]!;
+    const prior = await launch(h.store, h.store.task(task.id), attempt, pool, 'Start.');
+    expect(await prior.exited).toMatchObject({ code: 0 });
+    const sidecars = [`${attempt.logPath}.pid`, workerExitPath(attempt.logPath)];
+    const evidence = sidecars.map((path) => readFileSync(path, 'utf8'));
+    await expect(
+      launch(
+        h.store,
+        h.store.task(task.id),
+        h.store.attempt(attempt),
+        { ...pool, command: '/missing/worker-cli' },
+        'Continue.',
+        h.settings.codex,
+        attempt.session!,
+      ),
+    ).rejects.toThrow('Worker CLI not found');
+    expect(sidecars.map((path) => readFileSync(path, 'utf8'))).toEqual(evidence);
+    expect(h.store.events(task.id).filter((event) => event.kind === 'worker-run-started')).toHaveLength(1);
+  } finally {
+    await h.disposeAsync();
   }
 });

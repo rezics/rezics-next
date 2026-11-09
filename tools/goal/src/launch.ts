@@ -311,7 +311,6 @@ export async function launch(
     pidPath = `${attempt.logPath}.pid`;
   const ownership = getProcessOwnershipAdapter();
   ownership.assertWorkerLaunchAllowed(attempt.logPath);
-  for (const path of [exitPath, `${exitPath}.tmp`, pidPath]) rmSync(path, { force: true });
   const resuming = Boolean(resumeSession);
   // The branch head at this prompt; the first prompt's head tells whether the attempt made a new commit.
   const startHead = branchHead(task);
@@ -363,6 +362,8 @@ export async function launch(
         stdio: ['ignore', out, err],
         env,
       };
+      // Retain the preceding run's termination evidence until preparation succeeds.
+      for (const path of [exitPath, `${exitPath}.tmp`, pidPath]) rmSync(path, { force: true });
       const started = launchWorkerProcess(
         task.id,
         attempt.attempt,
