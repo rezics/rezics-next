@@ -1094,6 +1094,7 @@ async function withSshControl<T>(workspace: string, work: () => Promise<T>): Pro
 
 /** Reports the resources the next check would share with, falling back to host memory when the slice is unreadable. */
 function probeScript(host: Host): string {
+  const pressureProbe = `${checkHostPressureProgram}\nimport sys\npaused, _, _ = update_host_pressure(sys.argv[1])\nprint(int(paused))`;
   return `set -eu
 mkdir -p ${ROOT}/slots
 marker_open_live() {
@@ -1159,6 +1160,9 @@ else
   [ -n "$available" ] || exit 1
   printf 'MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM %s\\nMEMORY_RECLAIMABLE 0\\n' "$available"
 fi
+pressure_paused=$(python3 -c ${quote(pressureProbe)} ${ROOT}/slots) || exit 1
+case "$pressure_paused" in 0|1) ;; *) exit 1 ;; esac
+printf 'PRESSURE_PAUSED %s\\n' "$pressure_paused"
 printf 'AVAILABLE %s\\nTMP_BYTES %s\\nTMP_INODES %s\\nDISK_FREE %s\\n' "\${available:--}" "\${tmp_bytes:--}" "\${tmp_inodes:--}" "\${disk_bytes:--}"
 slice_processors=
 set -- $cpu_max
@@ -4658,6 +4662,7 @@ type HostProbe = {
   processors: number;
   sliceProcessors: number;
   load: number;
+  pressurePaused: boolean;
   availableMemory: number;
   tmpBytes: number;
   tmpInodes: number;
@@ -4838,6 +4843,8 @@ function parseProbe(output: string): HostProbe | null {
   const processorValue = value('PROCESSORS');
   const sliceProcessorValue = value('SLICE_PROCESSORS');
   const loadValue = value('LOAD');
+  const pressurePausedValue = value('PRESSURE_PAUSED');
+  const pressurePaused = pressurePausedValue === '1';
   const availableValue = value('AVAILABLE');
   const tmpBytesValue = value('TMP_BYTES');
   const tmpInodesValue = value('TMP_INODES');
@@ -4883,6 +4890,7 @@ function parseProbe(output: string): HostProbe | null {
     processorValue === null ||
     sliceProcessorValue === null ||
     loadValue === null ||
+    (pressurePausedValue !== '0' && pressurePausedValue !== '1') ||
     availableValue === null ||
     tmpBytesValue === null ||
     tmpInodesValue === null ||
@@ -4946,6 +4954,7 @@ function parseProbe(output: string): HostProbe | null {
     processors,
     sliceProcessors,
     load,
+    pressurePaused,
     availableMemory,
     tmpBytes,
     tmpInodes,
@@ -5316,7 +5325,9 @@ async function rankedHosts(
     }
     const limit = probe.sliceProcessors * CHECK_HOST_MAX_LOAD_PER_PROCESSOR;
     const reason =
-      probe.load > limit
+      probe.pressurePaused
+        ? `${entry.host.name}: host pressure paused`
+        : probe.load > limit
         ? `${entry.host.name}: load ${probe.load} exceeds limit ${limit}`
         : probe.availableMemory < CHECK_HOST_MIN_AVAILABLE_BYTES
           ? `${entry.host.name}: MemAvailable ${probe.availableMemory} bytes is under ${CHECK_HOST_MIN_AVAILABLE_BYTES} bytes`
@@ -5681,8 +5692,9 @@ async function acquire(
       : 'no responding hosts';
     const reasons = [...skippedHosts.values()];
     const reservationGiB = (slots * memoryReservationBytes) / 2 ** 30;
+    const pinnedPlacement = placement ? `; pinned placement ${placement.name}` : '';
     console.error(
-      `remote-check: every check slot is busy; waiting for a free one (${state}); configured ${waitingConfiguration}; priority ${priorityClass}; reservation ${reservationGiB} GiB${reasons.length ? `; skipped ${reasons.join('; ')}` : ''}`,
+      `remote-check: every check slot is busy; waiting for a free one (${state}); configured ${waitingConfiguration}; priority ${priorityClass}${pinnedPlacement}; reservation ${reservationGiB} GiB${reasons.length ? `; skipped ${reasons.join('; ')}` : ''}`,
     );
   };
   const announceWait = (ranked: RankedHost[]): void => {
@@ -5705,13 +5717,16 @@ async function acquire(
       }
       const currentHosts = hostsForRound();
       waitingConfiguration = placementConfig(currentHosts);
-      const placementHost = placement
-        ? currentHosts.find(
-            ({ name, address, identity }) =>
-              name === placement.name && address === placement.address && identity === placement.identity,
-          )
-        : undefined;
-      if (placement && !placementHost) return null;
+      const placementStillConfigured =
+        !placement ||
+        currentHosts.some(
+          ({ name, address, identity }) =>
+            name === placement.name && address === placement.address && identity === placement.identity,
+        );
+      if (placement && !placementStillConfigured) {
+        console.error(`remote-check: rehoming before command start from ${placement.name}; placement removed`);
+        return null;
+      }
       const currentSkippedHosts = new Map<string, string>();
       const allRanked = await rankedHosts(
         currentHosts,
@@ -5733,6 +5748,9 @@ async function acquire(
       reclaim = false;
       skippedHosts.clear();
       for (const [hostName, reason] of currentSkippedHosts) skippedHosts.set(hostName, reason);
+      const pressurePausedPlacement = Boolean(
+        placement && currentSkippedHosts.get(placement.name) === `${placement.name}: host pressure paused`,
+      );
       const ranked = placement
         ? allRanked.filter(
             ({ host }) =>
@@ -5741,9 +5759,28 @@ async function acquire(
               host.identity === placement.identity,
           )
         : allRanked;
-      if (placement && ranked.length === 0) return null;
-      if (placement) {
-        const target = ranked[0]!;
+      const alternatives = placement
+        ? startableHosts(
+            allRanked.filter(
+              ({ host }) =>
+                host.name !== placement.name || host.address !== placement.address || host.identity !== placement.identity,
+            ),
+            slots,
+            gate,
+          ).filter(({ freeSlots }) => freeSlots >= slots)
+        : [];
+      const rehomeBeforeCommand = (host: RankedHost, reason: string) => {
+        console.error(
+          `remote-check: rehoming before command start from ${placement!.name} to ${host.host.name}; ${reason}; ${host.freeSlots}/${host.slotLimit} slots free`,
+        );
+        return null;
+      };
+      const pinnedTarget = ranked[0];
+      if (placement && pressurePausedPlacement && alternatives.length > 0)
+        return rehomeBeforeCommand(alternatives[0]!, 'host pressure paused');
+      if (placement && ranked.length === 0 && !pressurePausedPlacement) return null;
+      if (placement && ranked.length > 0) {
+        const target = pinnedTarget!;
         const shortRun = priority === undefined && isShortRun(slots, estimateMs, gate);
         if (gate ? target.gateCapacity < slots : shortRun ? target.capacity < slots : target.ordinaryCapacity < slots)
           return null;

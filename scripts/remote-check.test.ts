@@ -629,12 +629,20 @@ if (script.includes('/proc/loadavg')) {
   const landingOpportunityMs = Math.max(1, Math.min(landingPollMs, landingEstimate ?? 3 * 60 * 60 * 1000));
   const landingOpportunityActive = Boolean(landingMarkers[0] && Date.now() - Number(landingMarkers[0].arrivalOrder) < landingOpportunityMs);
   const probeScriptFile = dir + '/' + hostKey + '.probe-script-recorded';
+  const pinnedProbe = script.includes('Keep this uploaded placement alive');
+  if (config.pressurePausedOnPinnedProbe && pinnedProbe) {
+    updateConfig({ pressurePaused: true });
+    config.pressurePaused = true;
+  }
+  const pressurePaused = Boolean(config.pressurePaused);
   const probeEvent = {
     kind: 'probe',
+    uploadedPlacement: pinnedProbe,
     ...(existsSync(probeScriptFile) ? {} : { script }),
     processors,
     sliceProcessors,
     load,
+    pressurePaused,
     tmpBytes: config.tmpBytes ?? 16 * 2 ** 30,
     tmpInodes: config.tmpInodes ?? 1_000_000,
     diskFree: config.diskFree ?? 512 * 2 ** 30,
@@ -668,6 +676,7 @@ if (script.includes('/proc/loadavg')) {
   console.log('PROCESSORS ' + processors);
   console.log('SLICE_PROCESSORS ' + sliceProcessors);
   console.log('LOAD ' + load);
+  console.log('PRESSURE_PAUSED ' + (pressurePaused ? 1 : 0));
   console.log('AVAILABLE ' + available);
   if (!config.omitTmpBytes) console.log('TMP_BYTES ' + (config.tmpBytes ?? 16 * 2 ** 30));
   if (!config.omitTmpInodes) console.log('TMP_INODES ' + (config.tmpInodes ?? 1_000_000));
@@ -1201,6 +1210,8 @@ type HostConfig = {
   memoryHeadroomOnHang?: number;
   memoryHeadroomAfterHang?: number;
   load?: number;
+  pressurePaused?: boolean;
+  pressurePausedOnPinnedProbe?: boolean;
   cpuQuotaPercent?: number;
   memoryMaxGiB?: number;
   memoryPerRunGiB?: number;
@@ -3221,6 +3232,79 @@ test('non-gate runs prefer any startable non-fallback host over a fallback host'
     expect(result.code).toBe(0);
     expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@a.test');
   } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('placement probes exclude pressure-paused hosts before upload', async () => {
+  const { env, events } = scenario({
+    a: { pressurePaused: true },
+    b: { pressurePaused: true },
+    c: { available: 8e9, slots: 3 },
+  });
+  const directory = workspace();
+  try {
+    const result = await remote(env, directory, ['echo', 'pressure-aware placement']);
+    expect(result.code).toBe(0);
+    const upload = events().find((event) => event.kind === 'rsync' && event.step === 'workspace upload');
+    expect(String(upload?.destination)).toStartWith('ops@c.test:');
+    const pausedProbe = events().find((event) => event.kind === 'probe' && event.address === 'ops@a.test');
+    expect(pausedProbe?.pressurePaused).toBe(true);
+    expect(String(pausedProbe?.script)).toContain('update_host_pressure');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('a pinned placement rehomes only after a healthy alternative can take its pre-command request', async () => {
+  const { env, events } = scenario({
+    a: { pressurePaused: true },
+    b: { pressurePausedOnPinnedProbe: true, slots: 2 },
+    c: { slots: 2, ordinaryBusy: 1 },
+  });
+  const directory = workspace();
+  const run = startRemote(env, directory, ['echo', 'rehome before command']);
+  let exited = false;
+  try {
+    await waitFor(() =>
+      events().some(
+        (event) =>
+          event.kind === 'probe' &&
+          event.address === 'ops@b.test' &&
+          event.uploadedPlacement === true &&
+          event.pressurePaused === true,
+      ),
+    );
+    await Bun.sleep(60);
+    expect(
+      events()
+        .filter((event) => event.kind === 'rsync' && event.step === 'workspace upload')
+        .map((event) => String(event.destination).split(':')[0]),
+    ).toEqual(['ops@b.test']);
+    expect(events().filter((event) => event.kind === 'run')).toHaveLength(0);
+
+    rmSync(join(env.FAKE_DIR!, `${hostKey('c')}.slot.0`), { recursive: true, force: true });
+    rmSync(join(env.FAKE_DIR!, `${hostKey('c')}.slot.0.memory`), { force: true });
+    expect(await run.child.exited).toBe(0);
+    exited = true;
+    const stderr = await run.stderr;
+    await run.stdout;
+    const pinned = stderr.indexOf('pinned placement b');
+    const rehomed = stderr.indexOf('rehoming before command start from b to c');
+    expect(pinned).toBeGreaterThanOrEqual(0);
+    expect(rehomed).toBeGreaterThan(pinned);
+    expect(
+      events()
+        .filter((event) => event.kind === 'rsync' && event.step === 'workspace upload')
+        .map((event) => String(event.destination).split(':')[0]),
+    ).toEqual(['ops@b.test', 'ops@c.test']);
+    expect(events().filter((event) => event.kind === 'run').map((event) => event.address)).toEqual(['ops@c.test']);
+  } finally {
+    if (!exited) {
+      run.child.kill('SIGTERM');
+      await run.child.exited;
+      await Promise.all([run.stdout, run.stderr]);
+    }
     rmSync(directory, { recursive: true, force: true });
   }
 });
