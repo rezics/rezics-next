@@ -2536,7 +2536,9 @@ release checks belong to the native controller after source integration; typing 
 
 The independent manager-host sweep checks worker width every minute from the same `worker_current_attempts` projection
 used by host admission and delivers at most one wakeable width event per Goal in each UTC 15-minute bucket when fewer
-than ten current attempts have live process identities and known ready, pending-start, held or actionable stopped work exists. The
+than ten current attempts have live process identities and known ready work without a durable start, held work, or
+actionable stopped work exists. A ready task with an existing start request stays visible but does not trigger a wake
+by itself; its wait belongs to queue admission. The
 event reports the current running and Codex counts, unknown process evidence, and known work counts. Ready, held, waiting
 and stale-identity attempts do not count as running. The manager
 is alerted based on confirmed live workers only; unknown process identities remain explicit evidence and do not
