@@ -2533,18 +2533,26 @@ release checks belong to the native controller after source integration; typing 
 
 The independent manager-host sweep checks worker width every minute from the same `worker_current_attempts` projection
 used by host admission and delivers at most one wakeable width event per Goal in each UTC 15-minute bucket when fewer
-than ten current attempts have live process identities and known ready, pending-start, held or stopped work exists. The
+than ten current attempts have live process identities and known ready, pending-start, held or actionable stopped work exists. The
 event reports the current running and Codex counts, unknown process evidence, and known work counts. Ready, held, waiting
 and stale-identity attempts do not count as running. The manager
 is alerted based on confirmed live workers only; unknown process identities remain explicit evidence and do not
 suppress a low-width notice. Events retain their Goal metadata for shared inbox queries. The event tells the manager
-to recover, reshape or dispatch real work, to act on each stopped task within an hour (retry with a rewritten brief,
+to recover, reshape or dispatch real work, to act on each actionable stopped task within an hour (retry with a rewritten brief,
 split or cancel) and to keep at least eight ready briefs in its backlog. Runtime metadata cannot observe unsubmitted
 work, so Markdown files outside the task inventory are not counted. The notice uses the existing manager turn
 allowance, with at most one width event per Goal per 15-minute bucket; an identical event within the hour folds into
 the earlier one (see [shared inbox](#shared-inbox)). Paused, budget-limited and completed managers are protected.
 The single host-scheduled daily step audit stays visible in counts but has no backlog to refill, so it does not send
 a width event. Its dispatch failures and queue delays still use the existing flow notices.
+
+Total stopped counts include preserved stops. Width and backlog expiry share a stopped-action classifier: unresolved
+cancellation stays with its existing controller custody, and a terminal original proof already routed to its owner
+requires no repeat action. If a driver stopped before proof settlement, the current authenticated, contract-bound
+owner decision `preserved-terminal-native-proof` (optionally suffixed by a date as `-YYYYMMDD`) can preserve the
+stop only when its exact owned original check is terminal. Neither classification claims acceptance or changes
+process identity, original results, or cancellation. Ordinary stops and unproved preservation requests remain actionable.
+
 
 #### Goal backlogs
 

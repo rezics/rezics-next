@@ -131,7 +131,7 @@ test('a low-width active Goal receives accurate, durable wakeable counts once pe
   expect(pending[0]?.event.summary).toContain('Codex subset 1 confirmed live');
   expect(pending[0]?.event.summary).toContain('ready 2, durable pending starts 1, held 1, stopped 1, waiting 1');
   expect(pending[0]?.event.summary).toContain('Recover, reshape, or dispatch real work');
-  expect(pending[0]?.event.summary).toContain('Act on each stopped task within an hour');
+  expect(pending[0]?.event.summary).toContain('Act on each actionable stopped task within an hour');
   expect(pending[0]?.event.summary).not.toContain('do not restart stopped work');
   expect(pending[0]?.event.summary).toContain('Unsubmitted work is not observable');
 
@@ -237,6 +237,7 @@ test('width policy overrides preserve paged counts, threshold boundaries and buc
   addTask(f.db, 'live', 1, 'running', 1);
   addAttempt(f.db, 'live', 1, 'running', 'codex', identity(123));
   addTask(f.db, 'ready', 2, 'ready', 0);
+  addTask(f.db, 'ordinary-stop', 3, 'stopped', 0);
   const low = readControlPolicy({ width: { workerThreshold: 1, pageSize: 1, bucketMs: 100, sweepYieldItems: 1 } });
   const high = readControlPolicy({
     width: { ...low.width, workerThreshold: 2 },

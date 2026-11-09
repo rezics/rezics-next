@@ -1,3 +1,4 @@
+import { isActionableStop, stoppedActionHint, type StoppedActionHint } from './stopped-action.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import { Buffer } from 'node:buffer';
@@ -1023,7 +1024,7 @@ async function dispatchReady(
   return { dispatched, continued, refused, returned, chained };
 }
 
-type StoppedRow = { id: string; current_attempt: number; body: string };
+type StoppedRow = { id: string; current_attempt: number; body: string; stopped_action: StoppedActionHint | null };
 type StoppedTask = {
   id: string;
   state?: string;
@@ -1091,7 +1092,8 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
   if (!tableExists(db, 'worker_tasks') || !tableExists(db, 'worker_events')) return [];
   const rows = db
     .query(
-      "SELECT id, current_attempt, body FROM worker_tasks WHERE json_extract(body, '$.state')='stopped' ORDER BY sequence",
+      `SELECT t.id, t.current_attempt, t.body, ${stoppedActionHint('t.id', 't.current_attempt')} AS stopped_action
+       FROM worker_tasks t WHERE json_extract(t.body, '$.state')='stopped' ORDER BY t.sequence`,
     )
     .all() as StoppedRow[];
   const expired: BacklogSweep['expired'] = [];
@@ -1109,6 +1111,8 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
     if (!goal || !manager || goal === 'control-plane' || task.brief?.target === 'stabilize') continue;
     // Original proofs hold check custody that cancellation does not release; their owner decides.
     if (task.brief?.kind === 'verification') continue;
+    if (!isActionableStop(db, task.id, row.current_attempt, row.stopped_action, runtime.policy ?? defaultPolicy))
+      continue;
     if (hasPendingRetry(db, task.id, row.current_attempt)) continue;
     const since = lastActivity(db, task, row.current_attempt);
     if (since === null || now - since <= (runtime.policy ?? defaultPolicy).backlog.stoppedTaskLimitMs) continue;
