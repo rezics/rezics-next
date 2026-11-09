@@ -298,6 +298,7 @@ async function sendReleaseClassificationPages(
   port: Pick<CrossMediaPort, 'batch'>,
   commands: readonly BatchCommand[],
 ): Promise<void> {
+  // Await each page so identity creates cannot contend across native partition workers.
   for (const page of importCommandPages(commands, (command) => command)) {
     if (checkBatchWrite({ commands: [...page] }, bundledRelease).length)
       throw new TypeError('VNDB release classification commands failed portable validation');

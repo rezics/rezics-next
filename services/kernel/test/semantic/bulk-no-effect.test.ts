@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import pg, { type PoolClient, type QueryConfig } from 'pg';
+import { createImportTransport, importCommandPages } from '../../../importer/src/import-client.ts';
+import { captureShowcaseCommands, ShowcaseJournal } from '../../../importer/src/showcase-journal.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
 import {
@@ -374,3 +376,77 @@ test('a facts proposal retries native contention and lands once under the origin
     for (const [client, query] of originals) client.query = query;
   }
 });
+
+test('seed creates across sixteen partitions retry native contention and acknowledge each exact key once', async () => {
+  const partitions = new Set<number>();
+  const commands: BatchCommand[] = [];
+  while (commands.length < 16) {
+    const command: BatchCommand = {
+      op: 'create',
+      key: randomUUID(),
+      source: {
+        source: 'openlibrary',
+        external_id: randomUUID(),
+        record_revision: '1',
+        digest: 'e'.repeat(64),
+        converter_revision: 'fixture@1',
+        field_group: 'facts',
+      },
+      subject: { type: 'skos:Concept', labels: { en: 'Seed identity contention' } },
+    };
+    const partition = partitionOf(batchRoute(routeKey, command)!);
+    if (partitions.has(partition)) continue;
+    partitions.add(partition);
+    commands.push(command);
+  }
+  const sent: BatchCommand[][] = [];
+  const transport = createImportTransport({
+    origin: 'http://kernel.test',
+    tokenProvider: async () => real.bearer('importer'),
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      sent.push((await request.clone().json()).commands);
+      return kernel.handle(request);
+    }) as typeof fetch,
+  });
+  const journal = new ShowcaseJournal(':memory:');
+  const port = captureShowcaseCommands(transport, journal);
+  const originals = new Map<PoolClient, PoolClient['query']>();
+  let contended = false;
+  const intercept = (client: PoolClient) => {
+    if (originals.has(client)) return;
+    const query = client.query;
+    originals.set(client, query);
+    client.query = ((statement: QueryConfig | string, ...args: unknown[]) => {
+      const text = typeof statement === 'string' ? statement : statement.text;
+      if (!contended && /INSERT\s+INTO semantic.identity_epoch_mapping/.test(text)) {
+        contended = true;
+        throw Object.assign(new Error('Concurrent identity creation'), { code: '40001' });
+      }
+      return Reflect.apply(query, client, [statement, ...args]);
+    }) as PoolClient['query'];
+  };
+  pool.on('acquire', intercept);
+  try {
+    for (const command of commands) journal.prepareCommand(command);
+    for (const page of importCommandPages(journal.preparedCommands(), (row) => row.command)) {
+      const result = await port.batch({ commands: page.map((row) => row.command) });
+      expect(result.results.every((row) => row.status === 201)).toBe(true);
+    }
+    expect(contended).toBe(true);
+    expect(sent.every((page) => page.length === 1)).toBe(true);
+    expect(sent[0]).toEqual(sent[1]);
+    expect(new Set(sent.flat().map((command) => command.key)).size).toBe(16);
+    expect(journal.preparedCommands()).toEqual([]);
+    const acknowledgements = journal.acknowledgedCommands();
+    expect(acknowledgements).toHaveLength(16);
+    const ack = acknowledgements[0]!;
+    const replay = await port.batch({ commands: [ack.command] });
+    expect(replay.results[0]).toMatchObject({ key: ack.command.key, status: 201, value: { id: ack.subjectId } });
+    expect(journal.acknowledgedCommands()).toEqual(acknowledgements);
+  } finally {
+    pool.off('acquire', intercept);
+    for (const [client, query] of originals) client.query = query;
+    journal.close();
+  }
+}, 120_000);

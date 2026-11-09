@@ -497,8 +497,10 @@ function wait(ms: number, signal?: AbortSignal, sleep?: (ms: number) => Promise<
   });
 }
 
-/** Partition a logical write group by its actual UTF-8 envelope, retaining item order and identity.
- * Callers keep their own smaller pressure/dependency limits; transport owns validation and retries.
+/** Plan sequential requests, retaining item order and identity. Identity-terminal creates
+ * each get one request: native bulk otherwise executes different partitions concurrently,
+ * while create intentionally has no automatic transaction retry. Other commands retain
+ * byte/count batching and callers' smaller pressure limits. Transport still owns retries.
  */
 export function importCommandPages<T>(
   input: readonly T[],
@@ -510,8 +512,16 @@ export function importCommandPages<T>(
   let page: T[] = [];
   let bytes = WRAPPER_BYTES;
   for (const item of input) {
-    const size = Buffer.byteLength(JSON.stringify(commandFor(item)));
+    const command = commandFor(item);
+    const size = Buffer.byteLength(JSON.stringify(command));
     ensure(WRAPPER_BYTES + size <= maxBodyBytes);
+    if (command.op === 'create') {
+      if (page.length) pages.push(page);
+      pages.push([item]);
+      page = [];
+      bytes = WRAPPER_BYTES;
+      continue;
+    }
     if (page.length === maxCommands || bytes + size + (page.length ? 1 : 0) > maxBodyBytes) {
       pages.push(page);
       page = [];

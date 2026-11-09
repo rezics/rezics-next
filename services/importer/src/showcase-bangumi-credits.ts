@@ -249,7 +249,7 @@ export async function writeBangumiStaffVocabularyCommands(input: {
       ids.set(command.key, id);
     }
   }
-  // Keep native write pressure and citation-bearing request bodies bounded in both vocabulary stages.
+  // Await singleton identity creates; retain smaller byte/count pages for citation-bearing proposals.
   for (const page of importCommandPages(pending, (command) => command, STAFF_VOCABULARY_PAGE)) {
     const result = await input.port.batch({ commands: [...page] });
     const byKey = new Map(result.results.map((entry) => [entry.key, entry]));
