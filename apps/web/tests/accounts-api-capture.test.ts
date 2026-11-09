@@ -3,6 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import {
   API_CAPTURE_DIRECTORY,
+  API_CAPTURE_CREDENTIAL_STEP_UP,
   API_CAPTURE_JOURNEYS,
   assertAuthorityDenial,
   captureResponse,
@@ -120,26 +121,34 @@ test('authority loss requires the owning denial code and classifies overload as 
     'not-denial',
   );
   expect(classifyAuthorityDenial('auth', { status: 503, value: { error: 'overloaded' } })).toBe('unknown');
+  expect(classifyAuthorityDenial('auth', { status: 503, value: { error: 'authentication_denied' } })).toBe('unknown');
+  expect(API_CAPTURE_CREDENTIAL_STEP_UP).toEqual({
+    clientId: 'rezics-auth-account-management',
+    scopes: ['account:manage'],
+  });
 
   const called: string[] = [];
-  const cases = await collectApiCapture(
-    {
-      J03: async () => {
-        called.push('J03');
-        assertAuthorityDenial('auth', { status: 503, value: { error: 'overloaded' } }, 'old password');
-      },
-      J04: async () => {
-        called.push('J04');
-      },
-      J10: async () => {
-        called.push('J10');
-      },
+  let denial: { status: number; value: { error: string } } = { status: 503, value: { error: 'overloaded' } };
+  const operations = {
+    J03: async () => {
+      called.push('J03');
+      assertAuthorityDenial('auth', denial, 'old password');
     },
-    async () => {},
-  );
+    J04: async () => void called.push('J04'),
+    J10: async () => void called.push('J10'),
+  };
+  const collect = () => collectApiCapture(operations, async () => {});
+  const cases = await collect();
   expect(called).toEqual([...API_CAPTURE_JOURNEYS]);
   expect(cases.map((entry) => entry.result)).toEqual(['unknown', 'PASS', 'PASS']);
   expect(cases[0]?.phases).toMatchObject([{ classification: 'unknown', unknownKind: 'overload' }]);
+
+  called.length = 0;
+  denial = { status: 503, value: { error: 'authentication_denied' } };
+  const genericFailure = await collect();
+  expect(called).toEqual([...API_CAPTURE_JOURNEYS]);
+  expect(genericFailure.map((entry) => entry.result)).toEqual(['unknown', 'PASS', 'PASS']);
+  expect(genericFailure[0]?.phases).toMatchObject([{ classification: 'unknown', unknownKind: 'unclassified' }]);
 });
 
 test('API capture requires the registered native task attempt', () => {

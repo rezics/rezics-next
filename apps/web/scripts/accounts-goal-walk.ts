@@ -24,6 +24,10 @@ const AUTH_MANAGEMENT_SCOPES = {
   'transfer-acceptance': ['account:manage'] as const,
   opening: ['account:manage'] as const,
 };
+export const API_CAPTURE_CREDENTIAL_STEP_UP = {
+  clientId: AUTH_MANAGEMENT_CLIENT_ID,
+  scopes: AUTH_MANAGEMENT_SCOPES.opening,
+};
 const WEBSITE_CLIENT_ID = 'rezics-website';
 const WEBSITE_AUDIENCE = 'https://api.rezics.test';
 const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
@@ -140,7 +144,7 @@ const journeyPersonas = new Set<string>();
 type Json = Record<string, unknown>;
 type Origins = { web: string; issuer: string; native: string; kernel: string };
 type Person = { handle: string; email: string; accountId: string };
-type CaptureUnknownKind = 'transport' | 'overload' | 'setup';
+type CaptureUnknownKind = 'transport' | 'overload' | 'setup' | 'unclassified';
 class UnknownCaptureOutcome extends Error {
   constructor(readonly kind: CaptureUnknownKind) {
     super(`capture outcome unknown: ${kind}`);
@@ -683,6 +687,7 @@ async function signIn(
       ...activeCapture.authority,
       sameSubject: activeCapture.authority?.subjectAccountId === accountId,
       client: clientId,
+      scopes: [...scopes],
     };
   return {
     accountId,
@@ -1029,9 +1034,16 @@ function unknownHttpResponse(result: CaptureHttpResult): boolean {
 }
 
 function unknownResponseKind(result: CaptureHttpResult): CaptureUnknownKind {
-  if (result.status === 408 || result.status === 425 || result.status === 429 || result.status >= 500) return 'overload';
   const value = result.value && typeof result.value === 'object' && !Array.isArray(result.value) ? (result.value as Json) : {};
-  const codes = [value.code, value.error];
+  const codes = [value.code, value.error].filter((code): code is string => typeof code === 'string');
+  if (
+    codes.some((code) =>
+      ['overloaded', 'deadline_exceeded', 'transaction_retry_exhausted', 'partition_unavailable', 'contention'].includes(
+        code,
+      ),
+    )
+  )
+    return 'overload';
   if (
     codes.some((code) =>
       [
@@ -1043,11 +1055,11 @@ function unknownResponseKind(result: CaptureHttpResult): CaptureUnknownKind {
         'unsupported_response_type',
         'invalid_scope',
         'access_denied',
-      ].includes(String(code)),
+      ].includes(code),
     )
   )
     return 'setup';
-  return 'overload';
+  return 'unclassified';
 }
 
 export function classifyAuthorityDenial(
@@ -1126,7 +1138,13 @@ function beginCaptureRequest(url: string, init: Parameters<typeof send>[1]): Jso
     ),
     origin: init?.origin ?? init?.headers?.origin ?? null,
     client:
-      fields.client_id === WEBSITE_CLIENT_ID ? WEBSITE_CLIENT_ID : fields.client_id === 'login' ? 'login' : undefined,
+      fields.client_id === WEBSITE_CLIENT_ID
+        ? WEBSITE_CLIENT_ID
+        : fields.client_id === AUTH_MANAGEMENT_CLIENT_ID
+          ? AUTH_MANAGEMENT_CLIENT_ID
+          : fields.client_id === 'login'
+            ? 'login'
+            : undefined,
     resource:
       typeof fields.resource === 'string' && fields.resource.startsWith('https://') ? fields.resource : undefined,
     tokenKind: fields.token_type_hint === 'refresh_token' ? 'refresh_token' : undefined,
@@ -1189,14 +1207,16 @@ export async function collectApiCapture(
       if (unknownPhase) {
         current.result = 'unknown';
         current.unknownOperation = `${String(unknownPhase.phase ?? 'setup')}: ${String(unknownPhase.operation)}`;
-        current.unknownKind = (unknownPhase.unknownKind as CaptureUnknownKind | undefined) ?? 'overload';
+        current.unknownKind = (unknownPhase.unknownKind as CaptureUnknownKind | undefined) ?? 'unclassified';
       } else current.result = 'PASS';
     } catch (error) {
       const last = current.phases.at(-1);
       const unknownPhase = current.phases.filter((phase) => phase.classification === 'unknown').at(-1);
       const observedUnknownKind = unknownPhase?.unknownKind as CaptureUnknownKind | undefined;
       const unknownKind =
-        error instanceof UnknownCaptureOutcome ? error.kind : observedUnknownKind ?? (unknownPhase ? 'overload' : undefined);
+        error instanceof UnknownCaptureOutcome
+          ? error.kind
+          : observedUnknownKind ?? (unknownPhase ? 'unclassified' : undefined);
       if (unknownKind) {
         current.unknownOperation = `${String(unknownPhase?.phase ?? current.phase ?? 'setup')}: ${String(unknownPhase?.operation ?? current.operation)}`;
         current.unknownKind = unknownKind;
@@ -2435,9 +2455,14 @@ async function originalJ03(stack: Origins): Promise<string> {
 async function originalJ04(stack: Origins): Promise<string> {
   capturePhase('independent persona signup');
   const person = await signup(stack, 'j04');
-  // Security uses the login client; a just-established session is the fresh step-up for this HTTP walk.
-  capturePhase('fresh same-subject login step-up');
-  const session = await signIn(stack, person, 'login', []);
+  // The registered management client carries only the action scope required by native credential approval.
+  capturePhase('fresh same-subject account-management step-up');
+  const session = await signIn(
+    stack,
+    person,
+    API_CAPTURE_CREDENTIAL_STEP_UP.clientId,
+    API_CAPTURE_CREDENTIAL_STEP_UP.scopes,
+  );
   capturePhase('credential replacement');
   const changed = await credentialEffect(stack, session, session.accountId, {
     kind: 'password',

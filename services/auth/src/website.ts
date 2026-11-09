@@ -612,6 +612,7 @@ export function websiteRoutes(input: {
           if (url.pathname === '/revoke') {
             only(fields, [...base, 'token', 'token_type_hint']);
             await assertion(fields);
+            resource(fields);
             let row = (
               await database.query<{ sessionId: string; clientId: string }>(
                 'SELECT "sessionId","clientId" FROM "oauthRefreshToken" WHERE token=$1',

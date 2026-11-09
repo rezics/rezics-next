@@ -323,6 +323,17 @@ test('revoking an API JWT commits Access invalidation and leaves the old refresh
   expect((await refresh(issued.refresh_token)).status).toBe(400);
 });
 
+test('website refresh revocation validates its resource before invalidating the family', async () => {
+  const { id, cookie } = await login(), issued = await issue(cookie), account = accounts.get(id)!, epoch = account.authnEpoch;
+  const wrongResource = await fields({ token: issued.refresh_token, token_type_hint: 'refresh_token', resource: `${audience}/` });
+  expect([...wrongResource.keys()].sort()).toEqual(['client_assertion', 'client_assertion_type', 'client_id', 'resource', 'token', 'token_type_hint'].sort());
+  const refused = await post('/revoke', wrongResource);
+  expect([refused.status, await refused.json(), account.authnEpoch]).toEqual([400, { error: 'invalid_request' }, epoch]);
+  expect((await post('/revoke', await fields({ token: issued.refresh_token, token_type_hint: 'refresh_token' }))).status).toBe(200);
+  expect(account.authnEpoch).toBeGreaterThan(epoch);
+  expect((await refresh(issued.refresh_token)).status).toBe(400);
+});
+
 test('browser confirmation uses the public alias and signed cookie before ending the native session', async () => {
   const { cookie } = await login();
   const url = new URL(`${issuer}/logout`);
