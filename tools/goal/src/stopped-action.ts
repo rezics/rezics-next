@@ -15,6 +15,8 @@ export function stoppedActionHint(
   attempt: 'c.current_attempt' | 't.current_attempt',
 ): string {
   return `(SELECT CASE
+    WHEN json_extract(a.body, '$.terminationIntent.operation')='stop'
+      AND coalesce(json_extract(a.body, '$.terminationIntent.requestedAt'), '')!='' THEN 'preserved'
     WHEN json_extract(a.body, '$.terminationIntent.operation')='cancel' AND (
       coalesce(json_extract(a.body, '$.terminationIntent.state'), '')!='complete' OR
       coalesce(json_extract(a.body, '$.terminationIntent.settledAt'), '')=''
