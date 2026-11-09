@@ -3,6 +3,7 @@ import { memoizedValue } from '../memoized.ts';
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST } from './collection-source-probe-bounds.ts';
 import { CANONICAL_SOURCE_RECEIVING_COST } from './canonical-source-bounds.ts';
+import { collectionAuthorizationPreparationWork } from './access-port.ts';
 import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
 import { OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT, OWNER_FILTER_CLOSURE_REFERENCE_LIMIT } from './contract/index.ts';
 import { MEMBERS_PREPARATION_SOURCE_COST } from './members-preparation-source-declaration.ts';
@@ -95,7 +96,15 @@ function compareHeaderRule() {
 }
 
 function sourcePrepare() {
-  return memoizedValue(sourcePrepare, () => CANONICAL_SOURCE_RECEIVING_COST().state);
+  return memoizedValue(sourcePrepare, () =>
+    sumBounds(
+      CANONICAL_SOURCE_RECEIVING_COST().state,
+      // Source.prepare observes metadata before authorization and again for public eligibility.
+      // The canonical state declaration pays only its own metadata observation.
+      repeatBound(CANONICAL_SOURCE_RECEIVING_COST().metadata, 2),
+      declareBound(collectionAuthorizationPreparationWork()),
+    ),
+  );
 }
 function sourceMembership() {
   return memoizedValue(sourceMembership, () =>
@@ -290,9 +299,10 @@ function rollback() {
   );
 }
 
-function binder() {
-  return memoizedValue(binder, () =>
+function ownerFilterReauthorization() {
+  return memoizedValue(ownerFilterReauthorization, () =>
     sumBounds(
+      CANONICAL_SOURCE_RECEIVING_COST().metadata,
       sourcePrepare(),
       privateAuthority(),
       MEMBERS_PREPARATION_SOURCE_COST(),
@@ -301,14 +311,13 @@ function binder() {
     ),
   );
 }
+function binder() {
+  // Initial binding and its mandatory final revalidation each perform this native prefix.
+  return memoizedValue(binder, () => repeatBound(ownerFilterReauthorization(), 2));
+}
 function preparationFixed() {
   return memoizedValue(preparationFixed, () =>
-    sumBounds(
-      repeatBound(sourcePrepare(), 2),
-      repeatBound(scopeCurrentness(), 2),
-      MEMBERS_PREPARATION_SOURCE_COST(),
-      privateAuthority(),
-    ),
+    sumBounds(repeatBound(sourcePrepare(), 2), repeatBound(scopeCurrentness(), 2), ownerFilterReauthorization()),
   );
 }
 function preReceipt() {
@@ -400,7 +409,7 @@ export function collectionSelectedPublicationPlan(selectionCount: number): Colle
       scopeCurrentness: scopeCurrentness(),
       sourcePreparation: sourcePrepare(),
       canonicalDeduplication,
-      ownerFilterReauthorization: sumBounds(MEMBERS_PREPARATION_SOURCE_COST(), privateAuthority()),
+      ownerFilterReauthorization: ownerFilterReauthorization(),
       preparation,
       preReceipt: preReceipt(),
       compareHeaderRule: compareHeaderRule(),

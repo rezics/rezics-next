@@ -6,10 +6,27 @@ import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { newId, routeOf, partitionOf } from '../../../src/route/route.ts';
 import { tupleRoute } from '../../../src/content/imported-contract.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
+import {
+  bindLibraryDomain,
+  composeLibraryDomain,
+  peekLibraryDomain,
+  unbindLibraryDomain,
+} from '../../../src/composition/library.ts';
+import { bindLibraryPresentation, peekLibraryPresentation } from '../../../src/library/domain-binding.ts';
 import type { CollectionView } from '../../../src/library/collection-reads.ts';
 import { openApiRuntime } from '../../imports/api-runtime.ts';
 import { identitySupport } from '../../imports/identity-fixture.ts';
 import { testReceiptKeys } from '../../support/receipt-keys.ts';
+import { workerTestEnv } from '../../support/worker-env.ts';
+import { createWorkClient } from '../../../src/work/client.ts';
+import { bindExecutionContract } from '../../../src/command/execution-contract.ts';
+import { historyExecutionPort } from '../../../src/history/application/index.ts';
+import { workExecutionPort } from '../../../src/work/selected-runtime.ts';
+import { WORK_QUEUES } from '../../../src/work/queues.ts';
+import type { WorkContext } from '../../../src/work/registry.ts';
+import { bindCanonicalSourceWork } from '../../../src/library/canonical-source-store.ts';
+import { advanceCollectionSourceWork } from '../../../src/library/collection-source-work.ts';
+import { createCurrentConsentReader } from '../../../../auth/src/current-consent.ts';
 
 export const collectionScopes = [
   'collection:create',
@@ -38,25 +55,76 @@ const managementScopes = [
 
 /** Real Auth issuance, Access governance and Content import/jobs; only HTTPS and object storage are external fixtures. */
 export async function createCollectionPresentationFixture() {
-  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });
+  const previousDomain = peekLibraryDomain();
+  const previousPresentation = peekLibraryPresentation();
+  let sourceClient: Awaited<ReturnType<typeof createWorkClient>> | undefined;
+  let composedDomain: ReturnType<typeof composeLibraryDomain> | undefined;
+  const runtime = await openApiRuntime({
+    batchRecords: 8,
+    maxFields: 64,
+    maxRecordBytes: 65_536,
+    additionalAccounts: [{ handle: 'collection_other', email: 'another@identity.test' }],
+    workerStartup: 'on-demand',
+  });
+  async function close() {
+    try {
+      if (composedDomain && peekLibraryDomain() === composedDomain) {
+        if (previousDomain) bindLibraryDomain(previousDomain);
+        else {
+          unbindLibraryDomain();
+          if (previousPresentation) bindLibraryPresentation(previousPresentation);
+        }
+        composedDomain = undefined;
+      }
+    } finally {
+      try {
+        await sourceClient?.close();
+      } finally {
+        await runtime.close();
+      }
+    }
+  }
   try {
     const { identity, database } = runtime;
     const support = identitySupport(identity);
+    sourceClient = bindExecutionContract(
+      await createWorkClient(database.url, database.pool),
+      workExecutionPort(),
+      historyExecutionPort,
+    );
+    await sourceClient.registerQueue('maintenance', WORK_QUEUES.maintenance);
+    const consent = createCurrentConsentReader({ database: support.authDatabase.pool });
+    let nativeAccess!: ReturnType<typeof createAccess>;
+    const sourceContext: WorkContext = {
+      pool: database.pool,
+      client: sourceClient,
+      queues: WORK_QUEUES,
+      env: workerTestEnv(),
+      clock: () => new Date(),
+      getAuthorization: () => ({
+        access: nativeAccess,
+        readConsent: ({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId }),
+      }),
+      addEffects() {},
+      addService() {},
+    };
+    bindCanonicalSourceWork(sourceContext);
+    async function prepareSource(collectionId: string) {
+      // Run the existing native worker step explicitly before a finite command case.
+      // No ready head, capture or membership evidence is supplied by the fixture.
+      for (let step = 0; step < 100; step++) {
+        const result = await advanceCollectionSourceWork(sourceContext, {
+          accounts: [identity.ordinary.accountId],
+          collectionId,
+        });
+        if (result === 'ready') return;
+        if (result === 'unavailable') throw new Error(`Collection fixture native Source unavailable: ${collectionId}`);
+      }
+      throw new Error(`Collection fixture native Source preparation did not complete: ${collectionId}`);
+    }
     const clientId = `collection-presentation-${randomUUID()}`;
     await identity.auth.internal.registerClient({ clientId, firstParty: true, scopes: managementScopes });
-    await support.host.workflows.start();
-    const another = await (async () => {
-      try {
-        return await support.host.workflows.register({
-          key: randomUUID(),
-          handle: 'collection_other',
-          email: 'another@identity.test',
-          password: 'private native identity fixture password',
-        });
-      } finally {
-        await support.host.workflows.close();
-      }
-    })();
+    const anotherAccountId = support.additionalAccountIds.get('another@identity.test')!;
     async function credential(person: 'ordinary' | 'governance' | 'another', scopes = collectionScopes) {
       const signed = await support.request('/signin', {
         email: `${person}@identity.test`,
@@ -74,19 +142,22 @@ export async function createCollectionPresentationFixture() {
       const issued = await support.request('/token', {}, headers);
       expect(issued.status).toBe(200);
       const { access_token: bearer } = (await issued.json()) as { access_token: string };
-      return { bearer, accountId: person === 'another' ? another.accountId : identity[person].accountId };
+      return { bearer, accountId: person === 'another' ? anotherAccountId : identity[person].accountId };
     }
     const owner = await credential('ordinary');
     const other = await credential('another', collectionScopes);
     const manager = await credential('governance', managementScopes);
-    // One connection suffices for the owner path. Any foreign checkout while it is held fails natively.
-    database.pool.options.max = 1;
     const app = createKernel({
       pool: database.pool,
+      workClient: sourceClient,
       receiptKeys: testReceiptKeys(),
       routeKey: identity.routeKey,
       tokens: identity.tokenKeys,
       access: (configuration) => createAccess({ ...configuration, auth: identity.accessConfig.auth! }),
+      onAccessReady(access) {
+        nativeAccess = access;
+        composedDomain = composeLibraryDomain({ pool: database.pool, access, routeKey: identity.routeKey });
+      },
       content: { fetchConfig: { allowedHosts: ['lain.bgm.tv', 'covers.openlibrary.org'] } },
       writeRate: createWriteRateLimiter({
         secret: randomUUID(),
@@ -118,7 +189,11 @@ export async function createCollectionPresentationFixture() {
           `Collection fixture grant ${actions.join(',')}: HTTP ${response.status}: ${await response.text()}`,
         );
     };
-    await grant(owner.accountId, ['subject:create', 'offer:create']);
+    // Import identity already grants COMMON_ACTIONS, including subject:create.
+    await grant(owner.accountId, ['offer:create']);
+    // Setup grants finish before limiting the owner path to one connection.
+    // Any foreign checkout while the owner holds it fails natively.
+    database.pool.options.max = 1;
     async function refresh() {
       owner.bearer = (await credential('ordinary')).bearer;
       other.bearer = (await credential('another')).bearer;
@@ -230,10 +305,11 @@ export async function createCollectionPresentationFixture() {
       send,
       collection,
       importedCover,
-      close: runtime.close,
+      prepareSource,
+      close,
     };
   } catch (error) {
-    await runtime.close();
+    await close();
     throw error;
   }
 }

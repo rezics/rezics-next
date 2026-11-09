@@ -3794,6 +3794,17 @@ Curated and private owner captures carry null publication provenance. Custody st
 null publication position; a supplied position remains a positive signed-bigint value. Activated output identity
 continues to require its native publication transaction and position before custody dispatch.
 
+The native capture regression also invokes selected publication through its command entry after real Source
+preparation, preserving the internal failure phase separately from the HTTP problem response.
+
+Selected publication composes Source preparation from canonical state reads, the two additional metadata
+observations before and during eligibility, and Access's declared Collection authorization preparation including
+its permission transaction. A canonical state read alone cannot fund the native permission queries. Every repeated
+Source preparation uses this same declaration; no additional ledger or authorization shortcut is introduced.
+Binding declares both its initial native prefix and its mandatory final revalidation. The later preparation
+revalidation uses that same full prefix, including command admission, private authority, metadata, Source and scope
+currentness; it cannot borrow only the private-authority and Members execution terms.
+
 Decision: one immutable Library-owned custody operation plan is authoritative for capture, finish, hold, retained
 revalidation and release; it is shared by the native adapter and original-work composition, with request SQL/binds
 and schema-derived serialized projections priced separately and explicit translation to eight-axis native receipts
