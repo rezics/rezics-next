@@ -36,6 +36,7 @@ export type WidthCounts = {
   /** Current running attempts whose profile does not identify a recognized CLI. */
   unknownCodexClassification: number;
   ready: number;
+  actionableReady: number;
   pendingStarts: number;
   held: number;
   stopped: number;
@@ -94,6 +95,7 @@ function emptyCounts(): MutableCounts {
     unknownCodexRunning: 0,
     unknownCodexClassification: 0,
     ready: 0,
+    actionableReady: 0,
     pendingStarts: 0,
     held: 0,
     stopped: 0,
@@ -194,8 +196,10 @@ function addRow(
     }
   }
 
-  if (taskState === 'ready') increment('ready');
-  else if (taskState === 'held') increment('held');
+  if (taskState === 'ready') {
+    increment('ready');
+    if (row.pending_start !== 1) increment('actionableReady');
+  } else if (taskState === 'held') increment('held');
   else if (taskState === 'stopped') {
     increment('stopped');
     if (isActionableStop(db, row.task_id, row.current_attempt, row.stopped_action, policy))
@@ -305,7 +309,7 @@ function noLongerActiveManager(db: Database, managerId: string): boolean {
 }
 
 function hasUndispatchedWork(goal: WidthGoalSnapshot): boolean {
-  return goal.ready > 0 || goal.pendingStarts > 0 || goal.held > 0 || goal.actionableStopped > 0;
+  return goal.actionableReady > 0 || goal.held > 0 || goal.actionableStopped > 0;
 }
 
 function widthEventSummary(goal: WidthGoalSnapshot, policy: ControlPolicy): string {
