@@ -2441,8 +2441,9 @@ reserve, registration, sign-in, sign-out and resource-removal assertions. The re
 whole incoming chunk before retaining a marker-sized suffix, including coalesced logs after `Worker ready`.
 The fixture's live startup journal captures both stdout and stderr, including native readiness phase markers,
 while continuing to forward stderr progress. Startup-order assertions read this complete journal before shutdown.
-Its private check budget includes both Vite graphs, native services and Chromium; two allocator arenas limit
-fragmentation while retaining the ordinary app's default heap and caller Node options. The browser selects the
+Its private 6 GiB check budget includes both Vite graphs, native services and Chromium; two allocator arenas limit
+fragmentation, with a 1,792 MiB old generation above the observed 1.5 GiB live graph and a 4 MiB semi-space. Other
+caller Node options remain in effect. The browser selects the
 visible sign-in link so a hidden responsive navigation copy cannot capture the desktop journey's locator.
 
 ### Cost: complete-stack startup coordination

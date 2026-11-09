@@ -60,9 +60,10 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
       // Hold the port lease directly while exercising ordinary setup/start, including pages and the default worker.
       REZICS_WALK_STACK_SLOT: undefined,
       REZICS_WALK_DEFER_FRONTENDS: undefined,
-      // The private run also holds native services, both Vite graphs and Chromium. Bound allocator
-      // fragmentation while retaining the ordinary app's heap and any explicit caller Node options.
+      // The private run holds native services, both Vite graphs and Chromium within 6 GiB.
+      // Leave room above the observed 1.5 GiB live Web graph without retaining a large young generation.
       MALLOC_ARENA_MAX: '2',
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=1792 --max-semi-space-size=4`.trim(),
       // Fresh setup must read the database it just provisioned, without an inherited compiler URL or SQL cache.
       DATABASE_URL: undefined,
       REYLO_CONFIG: undefined,
