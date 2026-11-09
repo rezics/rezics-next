@@ -107,7 +107,7 @@ test('uploads through the generated VNDB route and resumes exact intents after u
   }
 }, 120000);
 
-test('reopen preserves the original response, current authority and terminal refusals without changing private custody', async () => {
+test('reopen preserves the original response and retries current authority failures without changing private custody', async () => {
   await mkdir(tempRoot, { recursive: true });
   const directory = await mkdtemp(join(tempRoot, 'personal-list-custody-'));
   const path = join(directory, 'showcase.sqlite');
@@ -168,11 +168,14 @@ test('reopen preserves the original response, current authority and terminal ref
       expect(await run()).toEqual({ state: 'unknown-delivery', code: 'invalid-response' });
     }
     response = () => Response.json({ code: 'forbidden', detail: xml }, { status: 403 });
-    expect(await run()).toEqual({ state: 'refused', code: 'http-403' });
+    expect(await run()).toEqual({ state: 'unavailable', code: 'http-403' });
     const sent = calls;
     reopen();
-    expect(await run()).toEqual({ state: 'refused', code: 'http-403' });
-    expect(calls).toBe(sent);
+    expect(await run()).toEqual({ state: 'unavailable', code: 'http-403' });
+    expect(calls).toBe(sent + 1);
+    response = () => Response.json({ uploadId, rows: 1 });
+    expect(await run()).toEqual({ state: 'uploaded', uploadId, rows: 1 });
+    expect(calls).toBe(sent + 2);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
   } finally {
     journal.close();
@@ -323,10 +326,14 @@ test('explicit review and confirmation keep original operands across reopen, par
     expect(await readShowcasePersonalLibrary({ client, language: 'ja' })).toEqual({ state: 'current', value: current });
     expect(calls.at(-1)?.language).toBe('ja');
     reply = () => Response.json({ detail: 'private response must not enter a journal failure' }, { status: 403 });
-    expect(await review('paused')).toEqual({ state: 'refused', code: 'http-403' });
+    expect(await review('paused')).toEqual({ state: 'unavailable', code: 'http-403' });
     const denied = calls.length;
-    expect(await review('paused')).toEqual({ state: 'refused', code: 'http-403' });
-    expect(calls).toHaveLength(denied);
+    expect(await review('paused')).toEqual({ state: 'unavailable', code: 'http-403' });
+    expect(calls).toHaveLength(denied + 1);
+    reply = () => Response.json(acknowledged);
+    expect(await review('paused')).toEqual({ state: 'acknowledged', value: acknowledged });
+    expect(calls).toHaveLength(denied + 2);
+    expect(calls.at(-1)).toEqual(calls[0]);
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
