@@ -2983,6 +2983,8 @@ produce no duplicate adoption commit, and unrelated dev advances survive. A genu
 and sends the supplied owner one native inbox question per main revision, with paths in `watch/cp-fast-conflict.json`.
 Only fast publication waits: reconcile the hotfix onto dev and retry; product work continues. This helper belongs to
 the existing publisher and introduces no timer, model loop, or separate release gate.
+When dev already contains main through an explicit merge, the helper verifies both refs and records that adoption
+without replaying the old conflict.
 
 Control-plane changes iterate on `dev` with the products: a `control-plane` brief without a `target` lands there
 mechanically, like product work. `cp-sync` is their release gate; it makes dev's `tools/goal` live on `main` without the
