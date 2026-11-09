@@ -42,7 +42,17 @@ test('seed pages isolate identity creates and retain proposal batching, order an
     key: 'fixture:proposal',
     source: commands[0]!.source,
     subject: subjectId,
-    statement: { property: { id: 'schema:inLanguage' }, value: { type: 'value' as const, content: 'en' } },
+    statement: {
+      property: { id: 'schema:inLanguage' },
+      value: { type: 'value' as const, content: 'en' },
+      references: [
+        {
+          parts: [
+            { property: { id: 'schema:url' }, value: { type: 'value' as const, content: 'https://example.test' } },
+          ],
+        },
+      ],
+    },
   };
   const input = [proposal, { ...proposal, key: 'fixture:proposal:2' }, ...commands, proposal];
   const pages = importCommandPages(input, (command) => command, 2);
