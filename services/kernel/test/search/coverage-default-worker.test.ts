@@ -9,6 +9,7 @@ import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.t
 import { subjectConsumer } from '../../src/search/runner.ts';
 import { searchSubjects } from '../../src/search/query.ts';
 import { createDriverClient, type DriverClient } from './support/driver-client.ts';
+import { subjectSourceRevision } from './support/native-generation.ts';
 
 const search = createOpenSearch(process.env.OPENSEARCH_URL!);
 const compiled = compileFilter(admitFilter(parseFilter({ type: { in: ['schema:Book'] } }), bundledRelease), {
@@ -311,8 +312,14 @@ test('real default worker reconciles a native replacement across interruption an
         )
       ).rows,
       counts: (await pool!.query('SELECT * FROM semantic.partition_subjects ORDER BY partition_no')).rows,
+      heads: (
+        await pool!.query<{ partition: number; epoch: number; position: string }>(
+          'SELECT partition_no AS partition,epoch,position::text FROM core.partition ORDER BY partition_no',
+        )
+      ).rows,
     });
     const sourceBefore = await facts();
+    const sourceRevisionBefore = subjectSourceRevision(sourceBefore.heads);
     const oldCheckpoint = await checkpoints(pool, ready.incarnation.consumer);
     // Observe actual alias publication while the production call owns replay/reconciliation.
     // Every sampled alias must carry the completed native job and complete final pass.
@@ -378,6 +385,7 @@ test('real default worker reconciles a native replacement across interruption an
     expect(nativeCoverage.homes).toBe(4096);
     expect(nativeCoverage.engineKeys).toBe(nativeCoverage.nativeKeys);
     expect(nativeCoverage.nativeKeys).toBeGreaterThanOrEqual(2);
+    expect(nativeCoverage.sourceRevision).toBe(sourceRevisionBefore);
     expect(await facts()).toEqual(sourceBefore);
     const drained = await checkpoints(pool, ready.incarnation.consumer);
     for (const previous of oldCheckpoint) {

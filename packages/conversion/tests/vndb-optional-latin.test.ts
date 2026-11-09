@@ -123,3 +123,24 @@ test('native alias lines remain undetermined alternate names with source citatio
   }));
   expect(convertVndb(bounded, { subjectId }).proposals).toHaveLength(130);
 });
+
+test('native alias cells retain null, exact empty, missing and original line endings in the digest', () => {
+  const missing = convertVndb(input());
+  const nullCell = convertVndb(input(null, '港の物語', null));
+  const emptyCell = convertVndb(input(null, '港の物語', ''));
+  const windowsLines = convertVndb(input(null, '港の物語', 'Writer Alias\r\nVoice Alias\r\n'));
+  const unixLines = convertVndb(input(null, '港の物語', 'Writer Alias\nVoice Alias\n'));
+
+  expect(missing.normalizedRecord.vn).not.toHaveProperty('alias');
+  expect(nullCell.normalizedRecord.vn.alias).toBeNull();
+  expect(emptyCell.normalizedRecord.vn.alias).toBe('');
+  expect(new Set([missing.digest, nullCell.digest, emptyCell.digest]).size).toBe(3);
+  expect(windowsLines.normalizedRecord.vn.alias).toBe('Writer Alias\r\nVoice Alias\r\n');
+  expect(windowsLines.digest).not.toBe(unixLines.digest);
+  for (const output of [missing, nullCell, emptyCell])
+    expect(output.proposals[0]?.op === 'create' && output.proposals[0].subject).not.toHaveProperty('aliases');
+  expect(windowsLines.proposals[0]).toMatchObject({
+    op: 'create',
+    subject: { aliases: { und: ['Writer Alias', 'Voice Alias'] } },
+  });
+});

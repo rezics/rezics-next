@@ -767,6 +767,11 @@ replay all selected facts for every request. Typed parameterized range/qualifier
 same semantics. Samples, witness hints and overflow markers do not establish complete negative coverage. Missing
 essential coverage stays unknown under NOT and produces preparation/readiness until a complete admitted plan exists.
 
+Decision: Search remains the sole predicate interpreter. Semantic supplies the selected native `Statement`, its
+disclosure dependencies and a lossless `indexed` form when available; `indexed: null` remains unresolved evidence,
+including under NOT. Collection members preparation uses the existing `FacetPopulationRequest` capture and verified
+Source binding, so it shares the admitted predicate and population identity instead of defining another contract.
+
 ### Selective current native evidence
 
 `readScopeLeafEvidence` reads a known live source and one admitted Search leaf. It prepares viewer Access before

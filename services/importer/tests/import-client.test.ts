@@ -147,7 +147,7 @@ test('reviewed Subject reads resume one remaining typed overload wait inside the
           { status: 503, headers: { 'retry-after': '1' } },
         );
       return Response.json({ subject: { id: subjectId } });
-    }) as typeof fetch,
+    }) as unknown as typeof fetch,
   });
 
   await expect(transport.readReviewedSubject(subjectId)).resolves.toMatchObject({ subject: { id: subjectId } });
@@ -173,7 +173,7 @@ test('reviewed Subject reads resume one remaining typed overload wait inside the
         },
         { status: 503, headers: { 'retry-after': '1' } },
       );
-    }) as typeof fetch,
+    }) as unknown as typeof fetch,
   });
   await expect(refused.readReviewedSubject(subjectId)).rejects.toMatchObject({
     status: 503,

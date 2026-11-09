@@ -75,7 +75,7 @@ owned child.
 
 The [frozen Search API suites](../../../../specs/search-outcomes.test.ts) and [relation-facet API suite](../../../../specs/search-relation-facets.test.ts) must execute unchanged against this driver with every declared case run, zero skipped/todo cases and the real default registrations active. Verification must also confirm registration names/order/count, one launch per SDK-owning process, real post-launch starter execution, and a real Semantic command whose relation witness is observed through Search.
 
-The [existing Search wrapper](outcomes.test.ts) and [relation-facet wrapper](relation-facet-outcomes.test.ts) currently use `outcome-driver.ts`, which invokes a captured starter outside `startWorker` and the full default module composition. The [Semantic source fixture](../semantic/relation-facet-source.test.ts) and other controlled source/unit fixtures prove only their own layer. None of those alone proves the real-worker claim.
+The Search and relation-facet wrappers use `outcome-driver.ts` and the private `DriverClient` supervisor. Its child decorates the live `createKernelWorkModules` list supplied by `startWorker`, invokes each original registration once, and captures Search only through the real post-launch starter. The [Semantic source fixture](../semantic/relation-facet-source.test.ts) and other controlled source/unit fixtures prove only their own layer. The wrappers still require native execution; composition and typing alone do not prove the real-worker claim.
 
 The final proof must include Search-only pause/resume, replacement-runner stop, worker drain, restart recovery, real node-proxy outage and recovery, real rebuild with cursor/generation behavior, and finite witness convergence using actual API responses and real elapsed-time deadlines. It must exercise startup failure and sequential and concurrent fixtures, proving one fixture can close without affecting another and that owned resources are gone only after drain. Rebuild and restart must use production paths, not injected engine/source results or direct index writes.
 
@@ -88,7 +88,12 @@ retains its job and physical UUID, drains and restarts the owned worker against 
 prefix, and loses one real alias response after OpenSearch has applied it. Each child launches the complete
 default registrations once. Serving reads continue during replacement. Final observations require the
 native final pass for all homes and complete engine identities and settled external versions, including
-engine extras; legacy coverage certificates and equal counts do not stand in for native publication.
+engine extras; legacy coverage certificates and equal counts do not stand in for native publication. Its
+read-only receiving oracle records a digest of all 4096 native home epochs and positions, verifies that digest
+against `core.partition`, and compares it with the Source revision captured before rebuild. Current projection,
+checkpoint convergence, native receiving and recovery therefore refer to one unchanged Source cut. The digest
+supplements those real-worker assertions; it does not certify worker convergence, generation activation or current
+public output by itself.
 The publication suite separately pins filtered/terminal native cursors and maintenance resumption, and
 the metadata suite pins released calendar metadata under an applied-but-lost write response.
 

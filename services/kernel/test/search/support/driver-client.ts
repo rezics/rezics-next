@@ -44,7 +44,7 @@ export interface DriverClient {
   requestRebuild(): Promise<{ generation: number }>;
   restartWorker(): Promise<SupervisorObservation>;
   loseActivationResponse(): Promise<void>;
-  nativeCoverage(): Promise<{ nativeKeys: number; engineKeys: number; homes: number }>;
+  nativeCoverage(): Promise<{ nativeKeys: number; engineKeys: number; homes: number; sourceRevision: string }>;
   init(): Promise<SearchDriver>;
   inspect(): Promise<SupervisorObservation>;
   ledger(): DriverLedger;
