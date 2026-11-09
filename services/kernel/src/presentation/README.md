@@ -272,6 +272,9 @@ and limits; planning intersects it with `props.types` without replacing the conf
 composition schema and editor expose this same document, including saved catalogue filters. Publication admits
 TypeList filters against the active semantic release, including saved expansion, and refuses private OwnerLeaf
 operands. Runtime resolution admits the selected document again against the current release.
+Decision: native Home receiving uses the bundled launch profile with receipt-key fixture composition and installed Search,
+then compares all four anonymous/member TypeList results with the same standalone Search requests under the same locale
+and current visibility, pinning released types and each declared limit in one focused cell.
 Serialized JSON configuration is also accepted through that same public parser and admission; it cannot introduce
 private operands or replace the configured Types.
 
