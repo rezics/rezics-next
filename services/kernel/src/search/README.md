@@ -45,6 +45,11 @@ denied, restart, index-not-ready, source-not-ready, unavailable and ready. `503 
 generation/identity changes restart execution. Suggest documents that 503. `searchHttpExecute` applies these families
 to HTTP search, releases, facets, typeahead and discovery, omitting absent optional fields.
 
+Decision: Search admits filter, order and resource scope once, then binds continuations to that request, the current
+HTTP principal, native generation and identity epoch. Preparation/source unavailability keeps the submitted request
+available for a deliberate retry after `Retry-After`; generation, identity, principal or resource changes cannot
+continue a stale cursor.
+
 `contract/index.ts` owns scope dimensions, axes and zero values. `adapters/index.ts` exports the existing `ScopeWork`
 and `withRealmDisclosureWork`, the native Access-to-Search bridge. It keeps reservations, settlement on failure,
 bounds, caller deadline and root unchanged. Content consumes a port; its native sparse cursor and allowance stay
