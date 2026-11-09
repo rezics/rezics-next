@@ -475589,6 +475589,9 @@
                                     "items": {},
                                     "type": "array"
                                   },
+                                  "retryable": {
+                                    "type": "boolean"
+                                  },
                                   "status": {
                                     "maximum": 599,
                                     "minimum": 400,
@@ -475604,7 +475607,8 @@
                                 "required": [
                                   "type",
                                   "title",
-                                  "status"
+                                  "status",
+                                  "retryable"
                                 ],
                                 "type": "object"
                               },
