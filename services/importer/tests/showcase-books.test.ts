@@ -787,7 +787,7 @@ test('pinned real light-novel families publish through the reviewed world and re
     const first = await importShowcaseBooks(input);
     expect(first.runs.bangumi).toMatchObject({ status: 'committed', counts: { vanished: 0 } });
     expect(first.identities['1851']?.type).toBe('schema:TVSeries');
-    expect(first.selected).toMatchObject({
+    expect(structuredClone(first.selected)).toMatchObject({
       series: ['499', '2815'],
       volumes: expect.arrayContaining(['26', '5329', '10862']),
       authors: ['person:6023', 'person:1466'],
