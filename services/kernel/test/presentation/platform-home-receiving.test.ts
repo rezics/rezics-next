@@ -105,16 +105,12 @@ async function observeHome(persona: DiscoveryPersona, hidden?: HomeRecord): Prom
   expect(lists.map(({ props }) => props.id)).toEqual(['books', 'anime', 'visual-novels', 'recipes']);
   expect(Object.keys(plan.reads)).toHaveLength(lists.length);
   expect(Object.keys(plan.reads).length).toBeLessThanOrEqual(MAX_PAGE_READS);
-  expect(Object.values(plan.reads).reduce((sum, read) => sum + readCost(read), 0)).toBeLessThanOrEqual(
-    MAX_PAGE_COST,
-  );
+  expect(Object.values(plan.reads).reduce((sum, read) => sum + readCost(read), 0)).toBeLessThanOrEqual(MAX_PAGE_COST);
 
-  const response = await fixture.request(
-    persona,
-    'POST',
-    '/v1/pages:read',
-    { target: { route: '/' }, languages: [...languageChain] },
-  );
+  const response = await fixture.request(persona, 'POST', '/v1/pages:read', {
+    target: { route: '/' },
+    languages: [...languageChain],
+  });
   expect(response.status, `${persona} bundled Home: ${JSON.stringify(response.body)}`).toBe(200);
   const page = response.body as unknown as HomePage;
   expect(page).toMatchObject({
