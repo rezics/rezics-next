@@ -109,7 +109,8 @@ export async function createCollectionPresentationFixture() {
           `Collection fixture grant ${actions.join(',')}: HTTP ${response.status}: ${await response.text()}`,
         );
     };
-    await grant(owner.accountId, ['subject:create', 'offer:create']);
+    // Import identity already grants COMMON_ACTIONS, including subject:create.
+    await grant(owner.accountId, ['offer:create']);
     // Setup grants finish before limiting the owner path to one connection.
     // Any foreign checkout while the owner holds it fails natively.
     database.pool.options.max = 1;
