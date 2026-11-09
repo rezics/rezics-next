@@ -18,7 +18,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'vndb@8';
+export const converter_revision = 'vndb@9';
 export const vndbLimits = Object.freeze({
   maxTitles: 64,
   maxTitleCandidates: 64,
@@ -32,7 +32,7 @@ export const vndbLimits = Object.freeze({
 
 type Title = { id: string; lang: string; official: boolean; title: string; latin: string | null };
 type NormalizedRecord = {
-  vn: { id: string; olang?: string; c_votecount?: number; c_average?: number | null; alias?: string };
+  vn: { id: string; olang?: string; c_votecount?: number; c_average?: number | null; alias?: string | null };
   entry_meta: { id: string; revision: number; lastmod?: string };
   vn_titles: Title[];
   vn_extlinks: { id: string; link: number }[];
@@ -165,8 +165,13 @@ function project(input: ConversionInput): NormalizedRecord {
   const olangValue = field(vn, 'olang', '/vn/olang');
   const projectedVn: NormalizedRecord['vn'] = { id };
   if (olangValue !== undefined) projectedVn.olang = text(olangValue, '/vn/olang');
-  const nativeAliases = aliasLines(field(vn, 'alias', '/vn/alias'), '/vn/alias');
-  if (nativeAliases.length) projectedVn.alias = nativeAliases.join('\n');
+  const aliasValue = field(vn, 'alias', '/vn/alias');
+  const nativeAliases = aliasLines(aliasValue, '/vn/alias');
+  // Keep the native cell in the normalized digest. NULL, an exact empty value,
+  // and a missing optional field are different source observations even when
+  // none of them produces an alternate name.
+  if (aliasValue === null) projectedVn.alias = null;
+  else if (typeof aliasValue === 'string') projectedVn.alias = aliasValue;
   const voteCount = field(vn, 'c_votecount', '/vn/c_votecount');
   const average = field(vn, 'c_average', '/vn/c_average');
   if ((voteCount === undefined) !== (average === undefined))

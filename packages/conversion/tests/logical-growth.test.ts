@@ -239,7 +239,7 @@ for (const source of sources) {
 
 test('growth seeds retain VNDB native aliases and Wikidata dish classification', () => {
   const vndb = convertVndb(vndbSeed(1, 1000), context, { converterRevision: vndbRevision });
-  expect(vndb.converter_revision).toBe('vndb@8');
+  expect(vndb.converter_revision).toBe('vndb@9');
   expect(vndb.proposals).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
