@@ -17,6 +17,13 @@ import type { CollectionView } from '../../../src/library/collection-reads.ts';
 import { openApiRuntime } from '../../imports/api-runtime.ts';
 import { identitySupport } from '../../imports/identity-fixture.ts';
 import { testReceiptKeys } from '../../support/receipt-keys.ts';
+import { workerTestEnv } from '../../support/worker-env.ts';
+import { createWorkClient } from '../../../src/work/client.ts';
+import { WORK_QUEUES } from '../../../src/work/queues.ts';
+import type { WorkContext } from '../../../src/work/registry.ts';
+import { bindCanonicalSourceWork } from '../../../src/library/canonical-source-store.ts';
+import { advanceCollectionSourceWork } from '../../../src/library/collection-source-work.ts';
+import { createCurrentConsentReader } from '../../../../auth/src/current-consent.ts';
 
 export const collectionScopes = [
   'collection:create',
@@ -47,6 +54,7 @@ const managementScopes = [
 export async function createCollectionPresentationFixture() {
   const previousDomain = peekLibraryDomain();
   const previousPresentation = peekLibraryPresentation();
+  let sourceClient: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   let composedDomain: ReturnType<typeof composeLibraryDomain> | undefined;
   const runtime = await openApiRuntime({
     batchRecords: 8,
@@ -65,12 +73,47 @@ export async function createCollectionPresentationFixture() {
         composedDomain = undefined;
       }
     } finally {
-      await runtime.close();
+      try {
+        await sourceClient?.close();
+      } finally {
+        await runtime.close();
+      }
     }
   }
   try {
     const { identity, database } = runtime;
     const support = identitySupport(identity);
+    sourceClient = await createWorkClient(database.url, database.pool);
+    await sourceClient.registerQueue('maintenance', WORK_QUEUES.maintenance);
+    const consent = createCurrentConsentReader({ database: support.authDatabase.pool });
+    let nativeAccess!: ReturnType<typeof createAccess>;
+    const sourceContext: WorkContext = {
+      pool: database.pool,
+      client: sourceClient,
+      queues: WORK_QUEUES,
+      env: workerTestEnv(),
+      clock: () => new Date(),
+      getAuthorization: () => ({
+        access: nativeAccess,
+        readConsent: ({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId }),
+      }),
+      addEffects() {},
+      addService() {},
+    };
+    bindCanonicalSourceWork(sourceContext);
+    async function prepareSource(collectionId: string) {
+      // Run the existing native worker step explicitly before a finite command case.
+      // No ready head, capture or membership evidence is supplied by the fixture.
+      for (let step = 0; step < 100; step++) {
+        const result = await advanceCollectionSourceWork(sourceContext, {
+          accounts: [identity.ordinary.accountId],
+          collectionId,
+        });
+        if (result === 'ready') return;
+        if (result === 'unavailable') throw new Error(`Collection fixture native Source unavailable: ${collectionId}`);
+      }
+      throw new Error(`Collection fixture native Source preparation did not complete: ${collectionId}`);
+    }
     const clientId = `collection-presentation-${randomUUID()}`;
     await identity.auth.internal.registerClient({ clientId, firstParty: true, scopes: managementScopes });
     const anotherAccountId = support.additionalAccountIds.get('another@identity.test')!;
@@ -98,11 +141,13 @@ export async function createCollectionPresentationFixture() {
     const manager = await credential('governance', managementScopes);
     const app = createKernel({
       pool: database.pool,
+      workClient: sourceClient,
       receiptKeys: testReceiptKeys(),
       routeKey: identity.routeKey,
       tokens: identity.tokenKeys,
       access: (configuration) => createAccess({ ...configuration, auth: identity.accessConfig.auth! }),
       onAccessReady(access) {
+        nativeAccess = access;
         composedDomain = composeLibraryDomain({ pool: database.pool, access, routeKey: identity.routeKey });
       },
       content: { fetchConfig: { allowedHosts: ['lain.bgm.tv', 'covers.openlibrary.org'] } },
@@ -252,6 +297,7 @@ export async function createCollectionPresentationFixture() {
       send,
       collection,
       importedCover,
+      prepareSource,
       close,
     };
   } catch (error) {

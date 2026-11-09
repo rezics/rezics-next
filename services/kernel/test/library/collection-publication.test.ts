@@ -49,7 +49,9 @@ async function saved() {
     rule: { filter: { owner: { presence: true } } },
   });
   expect(response.status).toBe(201);
-  return (await response.json()).collection as { id: string; revision: number };
+  const collection = (await response.json()).collection as { id: string; revision: number };
+  await f.prepareSource(collection.id);
+  return collection;
 }
 async function native(id: string) {
   const keys = [routeOf(id), id];
@@ -267,6 +269,7 @@ test('A real owner prepares and republishes an explicit selection after public a
   // This ordinary private write occurs AFTER activation. A cannot certify its private membership.
   const b = await f.subject('New private working selection B');
   await f.entry(b);
+  await f.prepareSource(collection.id);
   expect(await native(collection.id)).toEqual(before);
   const query = new URLSearchParams({ filter: JSON.stringify({ owner: { presence: true } }), sort: 'id' });
   const working = await f.send('GET', `/v1/collections/${collection.id}/members?${query}`);
