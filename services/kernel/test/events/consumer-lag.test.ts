@@ -75,6 +75,9 @@ test('relay ticks record the oldest pending envelope across partitions and a cau
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
   let running = false;
+  let relayCheckouts = 0;
+  const countRelayCheckout = () => relayCheckouts++;
+  pool.on('acquire', countRelayCheckout);
   const errorSpy = spyOn(console, 'error').mockImplementation((...args: unknown[]) => errors.push(args));
   const relay = startRelays(
     pool,
@@ -92,15 +95,55 @@ test('relay ticks record the oldest pending envelope across partitions and a cau
   );
   try {
     await until(
-      async () => (await withConnection(pool, (client) => readConsumerLag(client, consumer))) !== null,
+      async () => (await readConsumerLag(admin, consumer)) !== null,
       10_000,
       errors,
       'relay did not record its first lag observation',
     );
-    const caughtUp = await withConnection(pool, (client) => readConsumerLag(client, consumer));
+    const caughtUp = await readConsumerLag(admin, consumer);
     expect(caughtUp?.oldestPendingAt).toBeNull();
     expect(caughtUp?.observedAt).toBeInstanceOf(Date);
     expect(consumerReady(caughtUp, { maxLagMs: 5_000, now: new Date() })).toBe(true);
+    const idleCheckouts = relayCheckouts;
+    await Bun.sleep(120);
+    expect(relayCheckouts - idleCheckouts).toBeGreaterThan(1);
+    expect((await readConsumerLag(admin, consumer))?.observedAt).toEqual(caughtUp?.observedAt);
+
+    // A separate relay process can update the shared row; the next scan must repair from DB state, not a local cache.
+    await relay.pause();
+    const externalLag = new Date('2000-01-01T00:00:00.000Z');
+    await admin.query(
+      'UPDATE core.consumer_lag SET oldest_pending_at=$2, observed_at=clock_timestamp() WHERE consumer=$1',
+      [consumer, externalLag],
+    );
+    expect((await readConsumerLag(admin, consumer))?.oldestPendingAt).toEqual(externalLag);
+    relay.resume();
+    await until(
+      async () => (await readConsumerLag(admin, consumer))?.oldestPendingAt === null,
+      10_000,
+      errors,
+      'relay did not repair shared lag state',
+    );
+
+    // An unchanged observation still gets a bounded heartbeat inside the existing freshness window.
+    await relay.pause();
+    const beforeHeartbeat = await readConsumerLag(admin, consumer);
+    await admin.query(
+      "UPDATE core.consumer_lag SET observed_at=clock_timestamp()-interval '61 seconds' WHERE consumer=$1",
+      [consumer],
+    );
+    const staleHeartbeat = await readConsumerLag(admin, consumer);
+    relay.resume();
+    await until(
+      async () => {
+        const lag = await readConsumerLag(admin, consumer);
+        return lag !== null && lag.observedAt.getTime() > staleHeartbeat!.observedAt.getTime();
+      },
+      10_000,
+      errors,
+      'relay did not refresh the lag heartbeat',
+    );
+    expect(beforeHeartbeat?.oldestPendingAt).toBeNull();
 
     await append(partitions[0]!);
     await Bun.sleep(10);
@@ -112,14 +155,14 @@ test('relay ticks record the oldest pending envelope across partitions and a cau
     await until(() => running, 10_000, errors, 'relay did not start pending work');
     await until(
       async () => {
-        const lag = await withConnection(pool, (client) => readConsumerLag(client, consumer));
+        const lag = await readConsumerLag(admin, consumer);
         return lag?.oldestPendingAt?.getTime() === expected.rows[0]?.oldest.getTime();
       },
       10_000,
       errors,
       'relay did not record the oldest pending envelope',
     );
-    const pending = await withConnection(pool, (client) => readConsumerLag(client, consumer));
+    const pending = await readConsumerLag(admin, consumer);
     expect(pending?.oldestPendingAt).toEqual(expected.rows[0]?.oldest);
     expect(pending?.observedAt).toBeInstanceOf(Date);
 
@@ -133,14 +176,14 @@ test('relay ticks record the oldest pending envelope across partitions and a cau
       [consumer],
     );
     await until(
-      async () => (await withConnection(pool, (client) => readConsumerLag(client, consumer)))?.oldestPendingAt === null,
+      async () => (await readConsumerLag(admin, consumer))?.oldestPendingAt === null,
       10_000,
       errors,
       'relay did not record that pending work was caught up',
     );
     await relay.stop();
     expect(errors).toEqual([]);
-    const stopped = await withConnection(pool, (client) => readConsumerLag(client, consumer));
+    const stopped = await readConsumerLag(admin, consumer);
     expect(stopped).not.toBeNull();
     const maxLagMs = 5 * 60_000;
     const expiresAt = stopped!.observedAt.getTime() + maxLagMs;
@@ -149,6 +192,7 @@ test('relay ticks record the oldest pending envelope across partitions and a cau
   } finally {
     release();
     await relay.stop();
+    pool.off('acquire', countRelayCheckout);
     errorSpy.mockRestore();
   }
 }, 50_000);
