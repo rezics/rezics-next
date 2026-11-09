@@ -1,3 +1,4 @@
+import { SeedFinalization, seedImportRunFailure } from './seed-cli.ts';
 import { createHash } from 'node:crypto';
 import { showcaseFranchiseSelection } from './showcase-franchise.ts';
 import type { DevelopmentShowcaseContext, DevelopmentShowcaseResult } from './showcase-persona.ts';
@@ -94,7 +95,7 @@ import {
 } from './vndb-character-profile.ts';
 import { createImportTransport, ImportTransportError, type ReviewedSubjectRead } from './import-client.ts';
 import { createPublicBulkClient } from './public-bulk-client.ts';
-import { publishShowcase } from './showcase-publication.ts';
+import { publishShowcase, publishShowcaseVocabulary } from './showcase-publication.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from './showcase-journal.ts';
 import type { ShowcasePublicationResult } from './showcase-publication-contract.ts';
 import {
@@ -2842,10 +2843,8 @@ export async function seedCrossMedia(
         }
       }
       const run = await importer.runRecords(registration, records());
-      ensure(
-        run.status === 'committed' || onlyPendingBangumiCovers(provider, run),
-        `Cross-media ${provider} import failed: ${run.status}${run.diagnostic ? ` (${run.diagnostic})` : ''}`,
-      );
+      if (run.status !== 'committed' && !onlyPendingBangumiCovers(provider, run))
+        throw seedImportRunFailure(provider, run);
       runs[provider] = run;
     }
     const bangumiFidelityRecords = [...plan.records.bangumi, ...plan.entities.bangumi];
@@ -3706,7 +3705,13 @@ export async function runCrossMediaSeedCli(
   };
   let selectedReleaseContext: ReturnType<typeof composeShowcaseVndbReleaseContext> | undefined;
   let creditResolution: BangumiCreditVocabularyResolution | undefined;
+  const finalization = new SeedFinalization('seed');
   try {
+    finalization.enter('vocabulary-preparation');
+    const { planShowcaseBooks, prepareShowcaseBookGeneration, importShowcaseBooks, showcaseBooksToCrossMediaPlan } =
+      await import('./showcase-books.ts');
+    const plannedBooks =
+      options.selection && !options.includeBooks ? undefined : await planShowcaseBooks({ tables: input });
     if (journal && publicClient)
       releaseClassificationPreparation = await prepareShowcaseVndbReleaseClassifications({
         plan,
@@ -3819,10 +3824,11 @@ export async function runCrossMediaSeedCli(
     }
     const episodeCatalogueSubjects = options.reviewedCatalogueSubjects ?? options.episodeCatalogueSubjects;
 
-    if (journal) {
-      plan = await acquireBangumiPersonCareerSources(plan, { journal });
-      plan = await acquireBangumiCoverSources(plan, { journal });
-    }
+    plan = await prepareShowcaseBookGeneration(plan, plannedBooks, async (base) => {
+      if (!journal) return base;
+      const careers = await acquireBangumiPersonCareerSources(base, { journal });
+      return acquireBangumiCoverSources(careers, { journal });
+    });
     const seedExtras = (references = vndbCreditReferences): CrossMediaSeedExtras => ({
       ...(options.sourceSnapshotAsOf === undefined ? {} : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
       ...(references ? { vndbCreditReferences: references } : {}),
@@ -3854,6 +3860,7 @@ export async function runCrossMediaSeedCli(
           }
         : {}),
     });
+    finalization.enter('record-import');
     let publicationPlan = structuredClone(plan);
     let result = await seedShowcaseVndbReleases({
       seed: seedCrossMedia,
@@ -3870,20 +3877,18 @@ export async function runCrossMediaSeedCli(
       extras: seedExtras(),
       ...(characterBindings === undefined ? {} : { characterBindings }),
     });
+    finalization.enter('release-publication');
     let releaseClassificationRequirements = releaseClassificationPreparation.requirements;
     if (journal && publicClient) {
       if (releaseClassificationRequirements.length)
-        await publishShowcase({
+        await publishShowcaseVocabulary({
           plan: publicationPlan,
           result,
           aliases: crossMediaAliases,
           journal,
           review: importPort,
           publicClient,
-          vocabularyRequirements: [
-            ...(result.creditVocabularyRequirements ?? []),
-            ...releaseClassificationRequirements,
-          ],
+          vocabularyRequirements: releaseClassificationRequirements,
         });
       releaseClassificationPreparation = await prepareShowcaseVndbReleaseClassifications({
         plan: publicationPlan,
@@ -3893,17 +3898,14 @@ export async function runCrossMediaSeedCli(
       });
       releaseClassificationRequirements = releaseClassificationPreparation.requirements;
       if (releaseClassificationRequirements.length)
-        await publishShowcase({
+        await publishShowcaseVocabulary({
           plan: publicationPlan,
           result,
           aliases: crossMediaAliases,
           journal,
           review: importPort,
           publicClient,
-          vocabularyRequirements: [
-            ...(result.creditVocabularyRequirements ?? []),
-            ...releaseClassificationRequirements,
-          ],
+          vocabularyRequirements: releaseClassificationRequirements,
         });
       const currentReleaseClassifications = await prepareShowcaseVndbReleaseClassifications({
         plan: publicationPlan,
@@ -3945,6 +3947,7 @@ export async function runCrossMediaSeedCli(
         ...(vndbReleaseStateBindings ? { configuredGroups: vndbReleaseStateBindings.groups } : {}),
       });
     }
+    finalization.enter('tag-publication');
     let publicTags: Awaited<ReturnType<typeof importShowcaseTags>> | Awaited<ReturnType<typeof prepareShowcaseTags>>;
     if (preparedPublicTags) {
       publicTags = preparedPublicTags;
@@ -3964,18 +3967,14 @@ export async function runCrossMediaSeedCli(
           stage: 'schemes',
         });
         if (schemes.requirements.length)
-          await publishShowcase({
+          await publishShowcaseVocabulary({
             plan: publicationPlan,
             result,
             aliases: crossMediaAliases,
             journal,
             review: importPort,
             publicClient,
-            vocabularyRequirements: [
-              ...(result.creditVocabularyRequirements ?? []),
-              ...releaseClassificationRequirements,
-              ...schemes.requirements,
-            ],
+            vocabularyRequirements: schemes.requirements,
           });
         const concepts = await prepareShowcaseVndbPublicTagVocabulary({
           tables: input,
@@ -3986,18 +3985,14 @@ export async function runCrossMediaSeedCli(
           stage: 'concepts',
         });
         if (concepts.requirements.length)
-          await publishShowcase({
+          await publishShowcaseVocabulary({
             plan: publicationPlan,
             result,
             aliases: crossMediaAliases,
             journal,
             review: importPort,
             publicClient,
-            vocabularyRequirements: [
-              ...(result.creditVocabularyRequirements ?? []),
-              ...releaseClassificationRequirements,
-              ...concepts.requirements,
-            ],
+            vocabularyRequirements: concepts.requirements,
           });
         tagVocabularyRequirements = concepts.requirements;
         knownTagBindings = knownShowcaseTagBindings(
@@ -4054,6 +4049,7 @@ export async function runCrossMediaSeedCli(
         };
       }
     }
+    finalization.enter('credit-vocabulary');
     if (journal && publicClient && !explicitCreditBindingsPath) {
       const schemes = await prepareShowcaseVndbCreditVocabulary({
         plan: publicationPlan,
@@ -4063,18 +4059,14 @@ export async function runCrossMediaSeedCli(
       });
       vndbCreditVocabularyIssues.push(...schemes.issues);
       if (schemes.requirements.length)
-        await publishShowcase({
+        await publishShowcaseVocabulary({
           plan: publicationPlan,
           result,
           aliases: crossMediaAliases,
           journal,
           review: importPort,
           publicClient,
-          vocabularyRequirements: [
-            ...(result.creditVocabularyRequirements ?? []),
-            ...tagVocabularyRequirements,
-            ...schemes.requirements,
-          ],
+          vocabularyRequirements: schemes.requirements,
         });
       const concepts = await prepareShowcaseVndbCreditVocabulary({
         plan: publicationPlan,
@@ -4086,18 +4078,14 @@ export async function runCrossMediaSeedCli(
       vndbCreditVocabularyIssues.push(...concepts.issues);
       let creditVocabularyPublication: ShowcasePublicationResult | undefined;
       if (concepts.requirements.length)
-        creditVocabularyPublication = await publishShowcase({
+        creditVocabularyPublication = await publishShowcaseVocabulary({
           plan: publicationPlan,
           result,
           aliases: crossMediaAliases,
           journal,
           review: importPort,
           publicClient,
-          vocabularyRequirements: [
-            ...(result.creditVocabularyRequirements ?? []),
-            ...tagVocabularyRequirements,
-            ...concepts.requirements,
-          ],
+          vocabularyRequirements: concepts.requirements,
         });
       if (creditVocabularyPublication)
         autoVndbCreditReferences = publishedShowcaseVndbCreditReferences(
@@ -4106,6 +4094,7 @@ export async function runCrossMediaSeedCli(
           concepts.requirements,
         );
     }
+    finalization.enter('character-profile-vocabulary');
     if (journal && publicClient && !explicitProfileBindingsPath) {
       const schemes = await prepareShowcaseVndbCharacterProfileVocabulary({
         plan: publicationPlan,
@@ -4114,20 +4103,14 @@ export async function runCrossMediaSeedCli(
         stage: 'schemes',
       });
       if (schemes.requirements.length)
-        await publishShowcase({
+        await publishShowcaseVocabulary({
           plan: publicationPlan,
           result,
           aliases: crossMediaAliases,
           journal,
           review: importPort,
           publicClient,
-          vocabularyRequirements: [
-            ...(result.creditVocabularyRequirements ?? []),
-            ...releaseClassificationRequirements,
-            ...tagVocabularyRequirements,
-            ...vndbCreditVocabularyRequirements,
-            ...schemes.requirements,
-          ],
+          vocabularyRequirements: schemes.requirements,
         });
       const concepts = await prepareShowcaseVndbCharacterProfileVocabulary({
         plan: publicationPlan,
@@ -4137,20 +4120,14 @@ export async function runCrossMediaSeedCli(
       });
       vndbCharacterProfileVocabularyRequirements = concepts.requirements;
       if (concepts.requirements.length)
-        await publishShowcase({
+        await publishShowcaseVocabulary({
           plan: publicationPlan,
           result,
           aliases: crossMediaAliases,
           journal,
           review: importPort,
           publicClient,
-          vocabularyRequirements: [
-            ...(result.creditVocabularyRequirements ?? []),
-            ...releaseClassificationRequirements,
-            ...tagVocabularyRequirements,
-            ...vndbCreditVocabularyRequirements,
-            ...concepts.requirements,
-          ],
+          vocabularyRequirements: concepts.requirements,
         });
       characterProfileBindings = await readShowcaseVndbCharacterProfileVocabulary({
         plan: publicationPlan,
@@ -4158,6 +4135,7 @@ export async function runCrossMediaSeedCli(
         journal,
       });
     }
+    finalization.enter('character-role-vocabulary');
     if (reviewedSelection && !vocabularyPath && journal && publicClient) {
       const { appearanceRoleTaxonomy } = await import('./vndb-character-traits.ts');
       const schemes = await prepareShowcaseCharacterVocabulary({
@@ -4169,21 +4147,14 @@ export async function runCrossMediaSeedCli(
         taxonomies: [appearanceRoleTaxonomy],
       });
       if (schemes.requirements.length)
-        await publishShowcase({
+        await publishShowcaseVocabulary({
           plan: publicationPlan,
           result,
           aliases: crossMediaAliases,
           journal,
           review: importPort,
           publicClient,
-          vocabularyRequirements: [
-            ...(result.creditVocabularyRequirements ?? []),
-            ...releaseClassificationRequirements,
-            ...tagVocabularyRequirements,
-            ...vndbCreditVocabularyRequirements,
-            ...vndbCharacterProfileVocabularyRequirements,
-            ...schemes.requirements,
-          ],
+          vocabularyRequirements: schemes.requirements,
         });
       const concepts = await prepareShowcaseCharacterVocabulary({
         tables: input,
@@ -4195,21 +4166,14 @@ export async function runCrossMediaSeedCli(
       });
       characterVocabularyRequirements = concepts.requirements;
       if (concepts.requirements.length)
-        await publishShowcase({
+        await publishShowcaseVocabulary({
           plan: publicationPlan,
           result,
           aliases: crossMediaAliases,
           journal,
           review: importPort,
           publicClient,
-          vocabularyRequirements: [
-            ...(result.creditVocabularyRequirements ?? []),
-            ...releaseClassificationRequirements,
-            ...tagVocabularyRequirements,
-            ...vndbCreditVocabularyRequirements,
-            ...vndbCharacterProfileVocabularyRequirements,
-            ...concepts.requirements,
-          ],
+          vocabularyRequirements: concepts.requirements,
         });
       vndbVocabularyProfile = profileFromCharacterVocabularyBindings(
         await readShowcaseCharacterVocabulary({ tables: input, selectedPlan: publicationPlan, port, journal }),
@@ -4239,6 +4203,7 @@ export async function runCrossMediaSeedCli(
         characterBindings: nextCharacterBindings,
       });
     };
+    finalization.enter('bangumi-character-vocabulary');
     if (journal && publicClient && !characterBindingsPath) {
       const schemes = await prepareShowcaseBangumiSelectedCharacterVocabulary({
         plan: publicationPlan,
@@ -4246,21 +4211,14 @@ export async function runCrossMediaSeedCli(
         journal,
         stage: 'schemes',
       });
-      await publishShowcase({
+      await publishShowcaseVocabulary({
         plan: publicationPlan,
         result,
         aliases: crossMediaAliases,
         journal,
         review: importPort,
         publicClient,
-        vocabularyRequirements: [
-          ...(result.creditVocabularyRequirements ?? []),
-          ...releaseClassificationRequirements,
-          ...tagVocabularyRequirements,
-          ...vndbCreditVocabularyRequirements,
-          ...vndbCharacterProfileVocabularyRequirements,
-          ...schemes.requirements,
-        ],
+        vocabularyRequirements: schemes.requirements,
       });
       const concepts = await prepareShowcaseBangumiSelectedCharacterVocabulary({
         plan: publicationPlan,
@@ -4268,21 +4226,14 @@ export async function runCrossMediaSeedCli(
         journal,
         stage: 'concepts',
       });
-      await publishShowcase({
+      await publishShowcaseVocabulary({
         plan: publicationPlan,
         result,
         aliases: crossMediaAliases,
         journal,
         review: importPort,
         publicClient,
-        vocabularyRequirements: [
-          ...(result.creditVocabularyRequirements ?? []),
-          ...releaseClassificationRequirements,
-          ...tagVocabularyRequirements,
-          ...vndbCreditVocabularyRequirements,
-          ...vndbCharacterProfileVocabularyRequirements,
-          ...concepts.requirements,
-        ],
+        vocabularyRequirements: concepts.requirements,
       });
       bangumiVocabularyRequirements = concepts.requirements;
       const currentCharacterBindings = await readShowcaseBangumiSelectedCharacterVocabulary({
@@ -4303,6 +4254,7 @@ export async function runCrossMediaSeedCli(
         characterBindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
       );
     }
+    finalization.enter('creator-current-reads');
     if (journal && publicClient && creditResolution) {
       const current = await currentBangumiCreatorCreditBindings({
         resolution: creditResolution,
@@ -4333,6 +4285,7 @@ export async function runCrossMediaSeedCli(
       result.creditVocabularyRequirements = current.requirements;
       if (result.creditGaps.length) result.status = 'imported-with-gaps';
     }
+    finalization.enter('character-traits');
     let characterResult: Awaited<ReturnType<typeof importVndbCharacterTraits>> | undefined;
     if (!reviewedSelection) {
       if (!vocabularyPath && journal && publicClient) {
@@ -4344,22 +4297,14 @@ export async function runCrossMediaSeedCli(
           stage: 'schemes',
         });
         if (schemes.requirements.length)
-          await publishShowcase({
+          await publishShowcaseVocabulary({
             plan: publicationPlan,
             result,
             aliases: crossMediaAliases,
             journal,
             review: importPort,
             publicClient,
-            vocabularyRequirements: [
-              ...(result.creditVocabularyRequirements ?? []),
-              ...releaseClassificationRequirements,
-              ...(bangumiVocabularyRequirements ?? []),
-              ...tagVocabularyRequirements,
-              ...vndbCreditVocabularyRequirements,
-              ...vndbCharacterProfileVocabularyRequirements,
-              ...schemes.requirements,
-            ],
+            vocabularyRequirements: schemes.requirements,
           });
         const concepts = await prepareShowcaseCharacterVocabulary({
           tables: input,
@@ -4369,22 +4314,14 @@ export async function runCrossMediaSeedCli(
           stage: 'concepts',
         });
         if (concepts.requirements.length)
-          await publishShowcase({
+          await publishShowcaseVocabulary({
             plan: publicationPlan,
             result,
             aliases: crossMediaAliases,
             journal,
             review: importPort,
             publicClient,
-            vocabularyRequirements: [
-              ...(result.creditVocabularyRequirements ?? []),
-              ...releaseClassificationRequirements,
-              ...(bangumiVocabularyRequirements ?? []),
-              ...tagVocabularyRequirements,
-              ...vndbCreditVocabularyRequirements,
-              ...vndbCharacterProfileVocabularyRequirements,
-              ...concepts.requirements,
-            ],
+            vocabularyRequirements: concepts.requirements,
           });
         characterVocabularyRequirements = concepts.requirements;
         vndbVocabularyProfile = profileFromCharacterVocabularyBindings(
@@ -4479,30 +4416,33 @@ export async function runCrossMediaSeedCli(
           .sort(),
       },
     };
-    const { importShowcaseBooks, showcaseBooksToCrossMediaPlan } = await import('./showcase-books.ts');
-    const books =
-      options.selection && !options.includeBooks
-        ? undefined
-        : await importShowcaseBooks({
-            seed: seedCrossMedia,
-            tables: input,
-            path: statePath,
-            port,
-            destination: { origin: api },
-            ...(journal && publicClient
-              ? {
-                  journal,
-                  review: importPort,
-                  publicClient,
-                  ...(creditResolution?.publication
-                    ? { prior: creditResolution.publication }
-                    : priorShowcase
-                      ? { prior: priorShowcase }
-                      : {}),
-                  readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
-                }
-              : {}),
-          });
+    finalization.enter('books');
+    const books = !plannedBooks
+      ? undefined
+      : await importShowcaseBooks({
+          seed: seedCrossMedia,
+          planned: plannedBooks,
+          basePlan: publicationPlan,
+          extras: seedExtras(),
+          ...(characterBindings === undefined ? {} : { characterBindings }),
+          tables: input,
+          path: statePath,
+          port,
+          destination: { origin: api },
+          ...(journal && publicClient
+            ? {
+                journal,
+                review: importPort,
+                publicClient,
+                ...(creditResolution?.publication
+                  ? { prior: creditResolution.publication }
+                  : priorShowcase
+                    ? { prior: priorShowcase }
+                    : {}),
+                readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
+              }
+            : {}),
+        });
     if (books) {
       const bookCross = showcaseBooksToCrossMediaPlan(books.planned);
       for (const target of [plan, publicationPlan]) {
@@ -4554,6 +4494,7 @@ export async function runCrossMediaSeedCli(
       ...vndbCreditVocabularyRequirements,
       ...vndbCharacterProfileVocabularyRequirements,
     ];
+    finalization.enter('showcase-publication');
     if (journal && publicClient)
       showcase = await publishShowcase({
         plan: publicationPlan,
@@ -4579,6 +4520,7 @@ export async function runCrossMediaSeedCli(
         tagParentRefreshes,
       });
     // The reviewed endpoints exist only after the preceding showcase adoption has committed.
+    finalization.enter('person-merge');
     const personMerge =
       journal && publicClient && combinedResult.personReview?.pair.state === 'selected'
         ? await publishReviewedPersonMerge({
@@ -4588,6 +4530,7 @@ export async function runCrossMediaSeedCli(
             journal,
           })
         : undefined;
+    finalization.enter('person-current-reads');
     const afterMerge =
       personMerge?.state === 'published' && publicClient
         ? await rereadCanonicalPersonIdentities({
@@ -4606,6 +4549,7 @@ export async function runCrossMediaSeedCli(
           return identity ? [{ identity, boundSubjectId: bound }] : [];
         })
       : [];
+    finalization.enter('character-current-reads');
     const characterCurrents =
       publicClient && adoptedCharacters.length
         ? await readAdoptedCharacters({
@@ -4624,6 +4568,7 @@ export async function runCrossMediaSeedCli(
             : [],
         )
       : [];
+    finalization.enter('credit-current-reads');
     const combinedCredits =
       publicClient && canonicalPersonId && creditWorks.length
         ? await readCombinedPersonCredits({
@@ -4655,6 +4600,7 @@ export async function runCrossMediaSeedCli(
         : {}),
       ...(combinedCredits && !('state' in combinedCredits) ? { combinedCredits } : {}),
     };
+    finalization.enter('persona');
     const persona =
       options.composePersona && journal && options.selection
         ? await options.composePersona({ result: publicCombinedResult, selection: options.selection, journal })
@@ -4694,6 +4640,7 @@ export async function runCrossMediaSeedCli(
         : {}),
       sourceDigests: Object.fromEntries(input.digests),
     };
+    finalization.enter('result-write');
     await mkdir(dirname(resultPath), { recursive: true });
     await writeFile(resultPath, JSON.stringify(report, null, 2) + '\n');
     process.stdout.write(
@@ -4724,7 +4671,11 @@ export async function runCrossMediaSeedCli(
       !showcase || showcase.status === 'published',
       'Showcase publication is incomplete; rerun task seed:dev after resolving the listed gaps',
     );
+    finalization.complete();
     return report;
+  } catch (error) {
+    finalization.failed(error);
+    throw error;
   } finally {
     journal?.close();
   }

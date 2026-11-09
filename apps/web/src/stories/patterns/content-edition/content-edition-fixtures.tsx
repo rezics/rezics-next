@@ -18,7 +18,7 @@ import {
 import { ContentEditionPage } from '../../../content-editions/edition-view';
 import type { DocumentImagePresentation } from '../../../content-editions/edition-media';
 import { AppShell } from '../../../shell/shell';
-import { EditionRoute } from '../../../routes/editions/$id';
+import { EditionRoute } from '../../../content-editions/edition-route';
 import { deLocalizeUrl, localizeUrl } from '../../../paraglide/runtime.js';
 import { setStoryRequestContext } from '../../../../.storybook/react-start';
 

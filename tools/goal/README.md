@@ -1740,6 +1740,17 @@ instrumentation and startup repair; page-data owns child/readiness capture. Logs
 
 Decision: persist each bounded page-data boot/check transcript in a run-scoped state-directory log, name that path in the supermanager notice, retain the pre-teardown cause alongside cleanup and the final origin-specific readiness probe, and redact recognized credentials.
 
+Decision: before a dedicated page-data seed or resume, compare the live active Definitions digest with the bundled
+release. A mismatch stops before importer writes and reports the active head, both digests and the operator command.
+From the controller checkout run `bun tools/goal/src/page-data.ts reconcile-definitions` once after integration.
+It takes the page-data lease, refreshes the existing dedicated checkout to `dev` with the usual dependency reuse,
+and invokes its local Definitions operator. The operator requires development mode, the dedicated container marker
+and its exact loopback database port. It uses the existing developer key, a separate local client requesting only
+`definitions:publish` and `definitions:activate`, and ordinary native HTTP authorization and validation. Activation
+uses the observed exact head; a concurrent change is refused. An already-current pointer makes no publication or
+activation request. Historical releases, database state and seed journals are retained; no seed is run by this command.
+Production startup keeps bootstrap's existing-pointer behaviour.
+
 A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and tells the manager to
 split them into a dev task. Without a `target` line it starts from `dev` and lands there mechanically, with unlimited
 retries in the same session; [cp-sync](#control-plane-on-dev-cp-sync) is its release gate to `main`. `target: main` or

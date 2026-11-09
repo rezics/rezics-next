@@ -24,8 +24,8 @@ this is generation, not native service startup.
 The startup trace correlates message readiness and the Vite child with a per-launch ID. It records the effective
 test/walk/cache flags, resolved executable and package identity, Node/Vite identity, Vite config and environment
 plugin-hook entry/exit, and the actual listener event. It omits environment values and command arguments. Signals are
-installed before message preparation so its owned compiler can settle; the Vite child receives the same signal, while
-the existing local-stack wrapper remains the owner of descendant cleanup.
+installed before message preparation so its owned compiler can settle; each Vite or preparation child uses the
+existing process-tree owner, forwarding interruption, escalating ignored termination and awaiting descendants.
 
 Causal record: retained boot `1794067367118-boot.log` reached Vite SSR dependency re-optimization and logged
 `bundling dependencies...` without completion. Later boot `1794074596302-boot.log` recorded the second message-readiness
@@ -35,10 +35,24 @@ through its crawl. This is an installed dependency risk and proposed repair, not
 earlier optimizer log belongs to its own attempt. The producer correction below removes that startup crawl; the new
 trace identifies the first unfinished Vite hook or listener phase on the retained native receiving run.
 
-Decision: keep the integrated native fixture's existing 270-second budget and do not repeat this unchanged launch
-until Performance supplies the first Worker boot failure or readiness trace and integrates a supported repair. Then
-evaluate Web only after the real Worker reports ready, requiring the installed Vite child to listen and return useful
-`/en` HTML after both fresh and reused message preparation. Cancellation must settle the attempt-owned child tree.
+Decision: reuse the retained startup source to overlap Web with native identity, prepare live messages and Worker
+dependencies in disposable processes, and load visited message modules while retaining the 180-second listener and
+300-second integrated native deadlines, actual readiness and owned settlement. The integrated fixture reserves its
+last 30 seconds for cleanup and accepts Web readiness after Worker and Auth pages. Its original account journey
+remains separate from the focused listener check; cancellation settles the attempt-owned child tree.
+
+The installed live Paraglide plugin validates its own content cache, primed under the existing message lock with
+`message-modules` output. Direct imports preserve explicit locales and computed message families; unrestricted
+namespace uses retain the full namespace. Plain property names such as the shelf density key `m` do not
+count as namespace references; passing `{ m }` still retains all exports. Generated SSR catalogues omit redundant source maps; authored maps remain.
+The ordinary app defaults to a 2 GiB V8 heap, retaining an explicit caller limit and other Node options. Its Worker
+optimizer includes the UI's icon and primitive packages and finishes in a disposable process before Cloudflare loads
+the application. Final merged client options keep on-demand discovery and no startup route crawl. The ordinary route scan keeps loaders and components in separate lazy groups. Home and creator edition views
+live in their existing owner modules so reusable exports do not force their rendering graphs into discovery;
+ThreadPage remains private to its route. Their existing callers import the moved views directly. Edition fixtures provide the document format
+required block ID and explicitly establish their isolated browser router, locale, browser layout effect and offer review
+capability, retaining existing assertions. The focused
+installed-plugin test proves that discovery omits each view and a visit loads it, preserving route behavior.
 
 The public shell needs no invented credentials or copied test keys. Configure real services and registered website
 credentials only for the journeys that need them, as described below. Auth and Kernel availability remain separate

@@ -1,3 +1,4 @@
+import { SeedFinalization } from './seed-cli.ts';
 import { showcaseFranchiseFence } from './showcase-franchise.ts';
 import { showcaseTagParentSourceFence } from './showcase-cross-provider-tags.ts';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
@@ -864,8 +865,7 @@ async function publicationTargetReadings(input: {
   return readings;
 }
 
-/** Accept exact acknowledged candidates, adopt only those selections, then check them as a public viewer. */
-export async function publishShowcase(input: {
+type ShowcasePublicationInput = {
   plan: CrossMediaPlan;
   result: CrossMediaSeedResult;
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
@@ -882,25 +882,90 @@ export async function publishShowcase(input: {
   tagParentGaps?: ShowcaseManifest['tagParentGaps'];
   tagParentAcknowledgements?: readonly ShowcaseAcknowledgement[];
   tagParentRefreshes?: readonly ShowcaseTagParentRefresh[];
-}): Promise<ShowcasePublicationResult> {
+  /** Defaults to bounded stderr phase diagnostics. */
+  onProgress?: (line: string) => void;
+};
+
+/** Intermediate stages publish only their dependency vocabulary. Every invocation
+ * still performs current review and public reads through the ordinary owner. */
+export function publishShowcaseVocabulary(
+  input: Pick<
+    ShowcasePublicationInput,
+    'plan' | 'result' | 'aliases' | 'journal' | 'review' | 'publicClient' | 'vocabularyRequirements' | 'onProgress'
+  >,
+): Promise<ShowcasePublicationResult> {
+  const result: CrossMediaSeedResult = {
+    ...input.result,
+    status: 'imported',
+    readings: [],
+    mediaOutcomes: [],
+    gaps: [],
+    unresolved: [],
+    creditGaps: [],
+    characterDiagnostics: [],
+    vndbWorkRelations: [],
+  };
+  delete result.workRelations;
+  delete result.vndbCreditCandidateDigests;
+  delete result.bangumiGenrePublication;
+  delete result.bangumiGameGenrePublication;
+  return runShowcasePublication({ ...input, result }, true);
+}
+
+/** Accept exact acknowledged candidates, adopt only those selections, then check them as a public viewer. */
+export function publishShowcase(input: ShowcasePublicationInput): Promise<ShowcasePublicationResult> {
+  return runShowcasePublication(input, false);
+}
+
+async function runShowcasePublication(
+  input: ShowcasePublicationInput,
+  vocabularyOnly: boolean,
+): Promise<ShowcasePublicationResult> {
+  const progress = new SeedFinalization('publication', input.onProgress);
+  try {
+    const result = await publishShowcasePhases(input, progress, vocabularyOnly);
+    progress.complete();
+    return result;
+  } catch (error) {
+    progress.failed(error);
+    throw error;
+  }
+}
+
+async function publishShowcasePhases(
+  input: ShowcasePublicationInput,
+  progress: SeedFinalization<'publication'>,
+  vocabularyOnly: boolean,
+): Promise<ShowcasePublicationResult> {
+  progress.enter('cover-current-reads');
   const mediaOutcomes = await currentCoverOutcomes(input.result, input.review);
-  const readings = await publicationTargetReadings({
-    ...input,
-    acknowledgements: input.journal.acknowledgedCommands(),
-  });
+  progress.enter('target-current-reads');
+  const acknowledgements = input.journal.acknowledgedCommands(
+    vocabularyOnly ? (input.vocabularyRequirements ?? []).map((requirement) => requirement.source) : undefined,
+  );
+  const readings = vocabularyOnly
+    ? []
+    : await publicationTargetReadings({
+        ...input,
+        acknowledgements,
+      });
   const result = { ...input.result, readings, mediaOutcomes };
   const pageCache = new Map<string, CandidatePage>();
-  const recovered = await resolveLegacyCandidates({
-    plan: input.plan,
-    result,
-    aliases: input.aliases,
-    review: input.review,
-    existing: input.journal.acknowledgedCommands(),
-  });
+  progress.enter('candidate-recovery');
+  const recovered = vocabularyOnly
+    ? { acknowledgements, omissions: [] }
+    : await resolveLegacyCandidates({
+        plan: input.plan,
+        result,
+        aliases: input.aliases,
+        review: input.review,
+        existing: acknowledgements,
+      });
   const genre = input.result.bangumiGenrePublication;
   const gameGenre = input.result.bangumiGameGenrePublication;
   const tagParentCommandKeys = new Set((input.tagParentAcknowledgements ?? []).map((entry) => entry.command.key));
   let parentPublicationOutcomes: ShowcaseTagParentPublication[] = [];
+  progress.enter('candidate-current-reads');
   let manifestAcknowledgements = await preferCurrentCandidateAcknowledgements(
     [
       ...recovered.acknowledgements,
@@ -918,6 +983,7 @@ export async function publishShowcase(input: {
   ) =>
     buildShowcaseManifest({
       plan: input.plan,
+      vocabularyOnly,
       readings: result.readings,
       acknowledgements,
       aliases: input.aliases,
@@ -955,6 +1021,7 @@ export async function publishShowcase(input: {
           }
         : {}),
     });
+  progress.enter('manifest-validation');
   let manifest = buildManifest(manifestAcknowledgements);
 
   const omissions = [
@@ -1356,6 +1423,7 @@ export async function publishShowcase(input: {
     if (!record.subjectId || !recordHasSourceIdentity(record))
       if (record.subjectId) blockedSubjects.add(record.subjectId);
 
+  progress.enter('acceptance');
   const blockedTagSubjects = new Set<string>();
   const tagFenceWorkIds = [
     ...new Set([
@@ -1451,6 +1519,7 @@ export async function publishShowcase(input: {
     }
   }
 
+  progress.enter('tag-parent-publication');
   const grouped = new Map<string, { record: ShowcaseRecord; property: string; ids: Set<string> }>();
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
@@ -1900,6 +1969,7 @@ export async function publishShowcase(input: {
     if (!grouped.has(key)) grouped.set(key, { record, property: 'schema:genre', ids: new Set<string>() });
   }
 
+  progress.enter('membership-acceptance');
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
     if (
@@ -1950,6 +2020,7 @@ export async function publishShowcase(input: {
         group.ids.delete(candidateId);
     if (group.property === 'skos:broader' && group.ids.size === 0) grouped.delete(key);
   }
+  progress.enter('adoption');
   for (const [key, group] of grouped) {
     const [id] = key.split('\0');
     const refreshWeights =
@@ -2164,6 +2235,7 @@ export async function publishShowcase(input: {
     }
   }
 
+  progress.enter('public-readback');
   const published: {
     provider: 'bangumi' | 'vndb';
     sourceKey: string;
@@ -2438,6 +2510,7 @@ export async function publishShowcase(input: {
     });
   }
 
+  progress.enter('manifest-finalization');
   const finalManifest = buildManifest(manifestAcknowledgements, finalMediaOutcomes);
   const finalMedia = finalManifest.media.map((item) => {
     const handoff = readHandoffs.get(`${item.sourceAlias}\0${item.sourceKey}`);

@@ -150,14 +150,15 @@ export type WebStartupChildOptions = {
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
   traceId?: string;
+  ownChild(child: Bun.Subprocess): { close(): Promise<void> };
 };
 
-/** Spawn one Vite or Storybook executable and settle its direct child before returning its status. */
+/** Own one executable and its descendants through normal exit or interrupted startup. */
 export async function runWebStartupChild(
   command: string,
   args: string[],
   cwd: string,
-  options: WebStartupChildOptions = {},
+  options: WebStartupChildOptions,
 ): Promise<number> {
   const env = { ...(options.env ?? process.env) };
   const traceId = options.traceId ?? webStartupTraceId(env);
@@ -175,6 +176,7 @@ export async function runWebStartupChild(
       stdin: 'inherit',
       stdout: 'inherit',
       stderr: 'inherit',
+      detached: process.platform !== 'win32',
     });
   } catch (error) {
     webStartupLog(
@@ -192,6 +194,7 @@ export async function runWebStartupChild(
   }
 
   const childPid = child.pid;
+  const owner = options.ownChild(child);
   webStartupLog(
     'child-start',
     {
@@ -209,6 +212,7 @@ export async function runWebStartupChild(
     const stopSignal = signal ? webStartupSignalName(signal) : 'SIGTERM';
     webStartupLog('child-signal', { childPid: childPid ?? 'unknown', signal: stopSignal }, env);
     child.kill(stopSignal);
+    void owner.close().catch(() => {});
   };
   signal?.addEventListener('abort', onAbort, { once: true });
   if (signal?.aborted) onAbort();
@@ -219,6 +223,7 @@ export async function runWebStartupChild(
     return signal?.aborted ? webStartupSignalExitCode(signal) : status;
   } finally {
     signal?.removeEventListener('abort', onAbort);
+    await owner.close();
     webStartupLog(
       'child-exit',
       {

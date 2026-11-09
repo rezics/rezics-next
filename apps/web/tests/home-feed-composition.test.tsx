@@ -112,7 +112,7 @@ mock.module('@tanstack/react-start/server', () => ({
 const { HomeFeed, HomeFeedConsumer } = await import('../src/features/pages/home-feed');
 const { homePageQuery, readPrivateHomePage, readPublicHomePage, readHomeQuestions } =
   await import('../src/features/pages/home-queries');
-const { Home } = await import('../src/routes/index');
+const { Home } = await import('../src/routes/-home');
 const liveFetch = globalThis.fetch;
 afterAll(() => {
   globalThis.fetch = liveFetch;

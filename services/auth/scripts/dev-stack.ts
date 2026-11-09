@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { securityScopeLimit } from '@rezics/auth-contract';
+import { bundledRelease, bundledDigest } from '@rezics/definitions/bundled';
 import { migrate } from './database.ts';
 import { mountedWebsiteConfiguration } from './website-composition.ts';
 import { websiteWorkerScopes } from '../../../apps/web/scripts/website-configuration.ts';
@@ -940,6 +941,97 @@ function printPersona(keys: DevelopmentKeys, accountId: string) {
   console.log(`Local persona: developer@rezics.test\nPassword: ${keys.password}\nAccount: ${accountId}`);
 }
 
+/** Refuse a concrete misbinding before the local operator can obtain a publication credential. */
+export function pageDataDefinitionsEnvironment(env: NodeJS.ProcessEnv, databaseUrl: string): void {
+  const database = localDatabase(databaseUrl);
+  if (
+    env.NODE_ENV !== 'development' ||
+    !/^rezics-pagecheck-[0-9a-f]{10}$/.test(env.KERNEL_DATABASE_CONTAINER ?? '') ||
+    env.REZICS_PAGE_DATA_STACK !== env.KERNEL_DATABASE_CONTAINER ||
+    database.port !== env.KERNEL_DATABASE_PORT
+  )
+    throw new Error('Definitions reconciliation requires the dedicated development page-data database');
+}
+
+/** Use only the native Definitions HTTP owner; the current-pointer path issues no writes or credentials. */
+export async function reconcilePageDataDefinitions(options: {
+  handle: (request: Request) => Response | Promise<Response>;
+  activate: boolean;
+  bearer: () => Promise<string>;
+}): Promise<{ digest: string; head: number }> {
+  const request = async (path: string, init?: RequestInit) => {
+    const response = await options.handle(new Request(`${origins.kernel}/v1/definitions${path}`, init));
+    if (!response.ok)
+      throw new Error(`Page-data Definitions ${init?.method ?? 'GET'} ${path}: HTTP ${response.status}`);
+    return response;
+  };
+  // These responses come from the mounted native owner, whose declared types are authoritative.
+  const current = (await (await request('/active')).json()) as { digest: string; head: number };
+  if (current.digest === bundledDigest) return current;
+  if (!options.activate)
+    throw new Error(
+      `Page-data Definitions mismatch: active head=${current.head} digest=${current.digest}; intended=${bundledDigest}. ` +
+        'Run bun tools/goal/src/page-data.ts reconcile-definitions before resuming seed.',
+    );
+  const bearer = await options.bearer();
+  const headers = (key: string) => ({
+    authorization: `Bearer ${bearer}`,
+    'content-type': 'application/json',
+    'idempotency-key': JSON.stringify(key),
+  });
+  await request('/releases', {
+    method: 'POST',
+    headers: headers(`page-data:publish:${bundledDigest}`),
+    body: JSON.stringify({ release: bundledRelease }),
+  });
+  await request(`/releases/${bundledDigest}:activate`, {
+    method: 'POST',
+    headers: headers(`page-data:activate:${bundledDigest}:${current.head}`),
+    body: JSON.stringify({ expected_head: current.head }),
+  });
+  const active = (await (await request('/active')).json()) as { digest: string; head: number };
+  if (active.digest !== bundledDigest)
+    throw new Error(`Page-data Definitions changed after activation: head=${active.head} digest=${active.digest}`);
+  return active;
+}
+
+async function pageDataDefinitions(activate: boolean) {
+  const env = await kernelEnvironment();
+  pageDataDefinitionsEnvironment(process.env, env.DATABASE_URL!);
+  const composition = await assemble();
+  try {
+    const active = await reconcilePageDataDefinitions({
+      handle: (request) => composition.kernel.fetch(request),
+      activate,
+      async bearer() {
+        const account = await readLocalDeveloperAccountId(state);
+        if (!account) throw new Error('Provision the dedicated page-data persona before reconciling Definitions');
+        // A separate local operator client requests existing owner scopes. Importer clients and grants are unchanged.
+        const client = 'rezics-page-data-definitions';
+        const scopes = ['definitions:publish', 'definitions:activate'];
+        await composition.host.service.internal.registerClient({ clientId: client, firstParty: true, scopes });
+        const provider = await createAccountTokenProvider({
+          accountKeyPath: resolve(state, 'importer.jwk'),
+          account,
+          client,
+          authOrigin: origins.issuer,
+          issuerOrigin: origins.issuer,
+          scopes,
+          fetch: Object.assign(
+            (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+              composition.host.handler(new Request(input, init)),
+            { preconnect: fetch.preconnect },
+          ),
+        });
+        return provider(true);
+      },
+    });
+    console.log(`Page-data Definitions current: head=${active.head} digest=${active.digest}`);
+  } finally {
+    await composition.stop();
+  }
+}
+
 /** Native transport is private; Auth still validates requests at its public issuer. */
 export function issuerRequest(request: Request): Request {
   const url = new URL(request.url);
@@ -1011,12 +1103,21 @@ export function webLaunchEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv 
   return child;
 }
 
-async function launch(action: 'pages' | 'web', args: string[]) {
+/** Trusted launch inputs captured before runtime DDL changes the native analysis schema. */
+export function developmentFrontendProcess(
+  action: 'pages' | 'web',
+  args: readonly string[],
+  inputs: {
+    environment: NodeJS.ProcessEnv;
+    kernelEnvironment: Readonly<Record<string, string | undefined>>;
+    website: Awaited<ReturnType<typeof developmentWebsiteConfiguration>>;
+    keys: DevelopmentKeys;
+  },
+): { command: string[]; environment: NodeJS.ProcessEnv } {
   const pages = action === 'pages';
-  const website = await developmentWebsiteConfiguration();
-  const keys = await developmentKeys();
-  const child = Bun.spawn(
-    [
+  const { environment, website, keys } = inputs;
+  return {
+    command: [
       'bun',
       'run',
       '--cwd',
@@ -1029,23 +1130,36 @@ async function launch(action: 'pages' | 'web', args: string[]) {
       '--strictPort',
       ...args,
     ],
-    {
-      cwd: root,
-      env: {
-        ...(pages ? process.env : webLaunchEnvironment(process.env)),
-        AUTH_ORIGIN: origins.native,
-        ...developmentWebsiteBindings(keys, website),
-        ...developmentMediaBindings(await kernelEnvironment(), keys),
-        ...(pages ? developmentAuthPageBindings(website) : {}),
-        PUBLIC_ORIGIN: origins.web,
-        TURNSTILE_SITE_KEY: 'local',
-        TURNSTILE_SCRIPT_URL: `${origins.issuer}/local-turnstile.js`,
-      },
-      stdin: 'inherit',
-      stdout: 'inherit',
-      stderr: 'inherit',
+    environment: {
+      ...(pages ? environment : webLaunchEnvironment(environment)),
+      AUTH_ORIGIN: origins.native,
+      ...developmentWebsiteBindings(keys, website, {
+        AUTH_MANAGEMENT_PAGE_ROUTES: environment.AUTH_MANAGEMENT_PAGE_ROUTES,
+      }),
+      ...developmentMediaBindings(inputs.kernelEnvironment, keys),
+      ...(pages ? developmentAuthPageBindings(website) : {}),
+      PUBLIC_ORIGIN: origins.web,
+      TURNSTILE_SITE_KEY: 'local',
+      TURNSTILE_SCRIPT_URL: `${origins.issuer}/local-turnstile.js`,
     },
-  );
+  };
+}
+
+async function launch(action: 'pages' | 'web', args: string[]) {
+  const kernel = await kernelEnvironment();
+  const launch = developmentFrontendProcess(action, args, {
+    environment: process.env,
+    kernelEnvironment: kernel,
+    website: await developmentWebsiteConfiguration(kernel),
+    keys: await developmentKeys(),
+  });
+  const child = Bun.spawn(launch.command, {
+    cwd: root,
+    env: launch.environment,
+    stdin: 'inherit',
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
   const stop = () => child.kill('SIGTERM');
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
@@ -1088,16 +1202,56 @@ export function walkSetupScripts(env: Record<string, string | undefined> = proce
   ];
 }
 
-/**
- * Starts native Auth, Kernel, then the worker. Kernel bootstraps the bundled release before worker discovery
- * reads it. Kernel reads issuer JWKS from native Auth, so Auth pages and Web can wait until seeding finishes on
- * an admitted walk. Local `task dev` still starts pages after Kernel.
- * Explicit deferred account walks serve Kernel HTTP from the Auth host and omit the worker and OpenSearch.
- */
+type DevelopmentService = 'identity' | 'kernel' | 'worker' | 'pages' | 'web';
+
+/** Web compiles independently; readiness still requires the original native dependency order. */
+export async function startDevelopmentServices<Child>(
+  mode: 'complete' | 'walk' | 'native',
+  host: {
+    launch(service: DevelopmentService): Child;
+    ready(service: DevelopmentService, children: Child[]): Promise<void>;
+    stopping(): boolean;
+  },
+): Promise<void> {
+  const children: Child[] = [];
+  const launch = (service: DevelopmentService) => {
+    const child = host.launch(service);
+    children.push(child);
+    return child;
+  };
+  // Each gate monitors every started child, including Web while native services are still booting.
+  const ready = (service: DevelopmentService, child: Child) =>
+    host.ready(service, [child, ...children.filter((other) => other !== child)]);
+  const identity = launch('identity');
+  // The mounted bindings have already been captured. Web does no native discovery during its cold compilation.
+  const web = mode === 'complete' ? launch('web') : undefined;
+  await ready('identity', identity);
+  if (host.stopping() || mode === 'native') return;
+  if (mode === 'walk') {
+    const pages = launch('pages');
+    await ready('pages', pages);
+    if (host.stopping()) return;
+  }
+  const kernel = launch('kernel');
+  await ready('kernel', kernel);
+  if (host.stopping()) return;
+  const worker = launch('worker');
+  await ready('worker', worker);
+  if (host.stopping()) return;
+  if (mode === 'complete') {
+    const pages = launch('pages');
+    await ready('pages', pages);
+    if (host.stopping()) return;
+    await ready('web', web!);
+  }
+}
+
+/** Starts and owns the documented stack; deferred walks keep their existing smaller service set. */
 async function start() {
+  const kernelEnvironmentValues = await kernelEnvironment();
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    ...(await kernelEnvironment()),
+    ...kernelEnvironmentValues,
     ...developmentKernelBindings(),
   };
   // Walk fixture keys survive kernel .env, which can contain a developer's Stripe bindings.
@@ -1116,12 +1270,14 @@ async function start() {
   console.info(stackPhaseLine('owner', identityLine));
   const children: ReturnType<typeof Bun.spawn>[] = [];
   const commands: string[][] = [];
-  const spawnChild = (command: string[], stdout: 'inherit' | 'pipe' = 'inherit') =>
-    Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout, stderr: 'inherit' });
-  const launch = (command: string[], stdout: 'inherit' | 'pipe' = 'inherit') => {
-    const child = spawnChild(command, stdout);
+  const environments: NodeJS.ProcessEnv[] = [];
+  const spawnChild = (command: string[], environment: NodeJS.ProcessEnv, stdout: 'inherit' | 'pipe' = 'inherit') =>
+    Bun.spawn(command, { cwd: root, env: environment, stdin: 'inherit', stdout, stderr: 'inherit' });
+  const launch = (command: string[], stdout: 'inherit' | 'pipe' = 'inherit', environment = env) => {
+    const child = spawnChild(command, environment, stdout);
     children.push(child);
     commands.push(command);
+    environments.push(environment);
     return child;
   };
   let stopping = false;
@@ -1136,7 +1292,7 @@ async function start() {
       await Bun.sleep(1_000);
       if (stopping) return;
       console.error(`walk: ${commands[index]!.slice(-2).join(' ')} exited; restarting`);
-      const child = spawnChild(commands[index]!);
+      const child = spawnChild(commands[index]!, environments[index]!);
       children[index] = child;
       if (stopping) {
         await stopSpawned(child);
@@ -1154,32 +1310,68 @@ async function start() {
   try {
     Object.assign(env, await phase('runtime-native-preparation', () => prepareDevelopmentNative(env)));
     if (stopping) return;
-    const identity = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host']);
-    if (env.REZICS_WALK_DEFER_FRONTENDS === '1') {
-      await phase('identity', untilReady([...plan.nativeReady, `${origins.kernel}/health`], [identity]));
-    } else {
-      await phase('identity', untilReady(plan.nativeReady, [identity]));
-      if (stopping) return;
-      if (plan.deferPages) {
-        const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
-        await phase('pages', untilReady([issuerJwksUrl(origins.issuer)], [pages, identity]));
-        if (stopping) return;
-      }
-      const kernel = launch(plan.kernel);
-      await phase('kernel', untilReady(plan.kernelReady, [kernel, identity]));
-      if (stopping) return;
-      const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
-      await phase('worker', untilOutput(worker, 'Worker ready'));
-      if (stopping) return;
-      if (!plan.deferPages) {
-        const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
-        await phase('pages', untilReady([`${origins.issuer}/.well-known/openid-configuration`], [pages]));
-        if (stopping) return;
-        const web = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'web']);
-        await phase('web', untilReady([`${origins.web}${SEEDED_WEB_READY_PATH}`], [web]));
-        if (stopping) return;
-      }
-    }
+    // Native runtime startup creates physical schema objects. Capture the mounted declarations before that DDL;
+    // pages and Web use these bindings throughout this owned run, including supervised restarts.
+    const frontendInputs =
+      env.REZICS_WALK_DEFER_FRONTENDS === '1'
+        ? undefined
+        : await phase('frontend-bindings', async () => ({
+            environment: env,
+            kernelEnvironment: kernelEnvironmentValues,
+            website: await developmentWebsiteConfiguration(kernelEnvironmentValues),
+            keys: await developmentKeys(),
+          }));
+    const launchFrontend = (action: 'pages' | 'web') => {
+      const prepared = developmentFrontendProcess(action, [], frontendInputs!);
+      return launch(prepared.command, 'inherit', prepared.environment);
+    };
+    if (stopping) return;
+    const nativeOnly = env.REZICS_WALK_DEFER_FRONTENDS === '1';
+    await startDevelopmentServices(nativeOnly ? 'native' : plan.deferPages ? 'walk' : 'complete', {
+      stopping: () => stopping,
+      launch(service) {
+        switch (service) {
+          case 'identity':
+            return launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host']);
+          case 'kernel':
+            return launch(plan.kernel);
+          case 'worker':
+            return launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
+          case 'pages':
+            return launchFrontend('pages');
+          case 'web': {
+            const child = launchFrontend('web');
+            console.info(stackPhaseLine('web-launched', `pid=${child.pid}`));
+            return child;
+          }
+        }
+      },
+      async ready(service, children) {
+        if (service === 'worker') {
+          await phase(
+            'worker',
+            Promise.race([
+              untilOutput(children[0]!, 'Worker ready'),
+              ...children.slice(1).map(async (child) => {
+                const code = await child.exited;
+                throw new Error(`walk: process exited (${code}) before Worker readiness`);
+              }),
+            ]),
+          );
+          return;
+        }
+        const urls = {
+          identity: nativeOnly ? [...plan.nativeReady, `${origins.kernel}/health`] : plan.nativeReady,
+          kernel: plan.kernelReady,
+          pages: [
+            plan.deferPages ? issuerJwksUrl(origins.issuer) : `${origins.issuer}/.well-known/openid-configuration`,
+          ],
+          web: [`${origins.web}${SEEDED_WEB_READY_PATH}`],
+        };
+        await phase(service, untilReady(urls[service], children));
+      },
+    });
+    if (stopping) return;
     await Promise.race([stopped, ...children.map((_, index) => supervise(index))]);
     process.exitCode = 0;
   } finally {
@@ -1196,19 +1388,30 @@ async function phase<T>(name: string, work: Promise<T> | (() => T | Promise<T>))
   return await nativePhase(name, () => (typeof work === 'function' ? work() : work));
 }
 
+/** Search the whole arriving chunk; retain only enough text to recognize a split marker. */
+export function outputMarker(marker: string): (chunk: string) => boolean {
+  let suffix = '';
+  let seen = false;
+  return (chunk) => {
+    if (!seen) {
+      const text = suffix + chunk;
+      seen = text.includes(marker);
+      suffix = text.slice(text.length - marker.length + 1);
+    }
+    return seen;
+  };
+}
+
 /** Resolves once `child` prints `marker`; its output keeps flowing to this process's stdout for the child's lifetime. */
 async function untilOutput(child: ReturnType<typeof Bun.spawn>, marker: string): Promise<void> {
   const decoder = new TextDecoder();
-  let recent = '';
+  const containsMarker = outputMarker(marker);
   let seen = false;
   const pump = (async () => {
     for await (const chunk of child.stdout as ReadableStream<Uint8Array>) {
       const text = decoder.decode(chunk, { stream: true });
       process.stdout.write(text);
-      if (!seen) {
-        recent = (recent + text).slice(-(marker.length + 256));
-        seen = recent.includes(marker);
-      }
+      seen = containsMarker(text);
     }
   })();
   pump.catch(() => {});
@@ -1529,6 +1732,10 @@ if (import.meta.main) {
         await privateFile(resolve(state, 'keys.json'), JSON.stringify(keys));
       }
       await setup();
+    } else if (action === 'page-data-definitions') {
+      const mode = process.argv[3];
+      if (mode !== '--check' && mode !== '--activate') throw new Error('Use page-data-definitions --check|--activate');
+      await pageDataDefinitions(mode === '--activate');
     } else if (action === 'host') await serveHost();
     else if (action === 'persona') {
       const composition = await assemble();

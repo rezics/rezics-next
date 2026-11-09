@@ -13,7 +13,7 @@ import { editionCreateSearch, EditionPublicationController } from '../../../cont
 import { createNativeEditionCreateApi } from '../../../content-editions/edition-create-native';
 import { editionDocumentDigest } from '../../../content-editions/edition-model';
 import { EditionPublication } from '../../../content-editions/edition-create-view';
-import { EditionCreateRoute } from '../../../routes/editions/new';
+import { EditionCreateRoute } from '../../../content-editions/edition-create-route';
 import { AppShell } from '../../../shell/shell';
 import { deLocalizeUrl, localizeUrl } from '../../../paraglide/runtime.js';
 import { setStoryRequestContext } from '../../../../.storybook/react-start';

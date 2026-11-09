@@ -8,6 +8,8 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { createRealAccess } from './real-access.ts';
+import { bundledDigest } from '@rezics/definitions/bundled';
+import { reconcilePageDataDefinitions } from '../../../auth/scripts/dev-stack.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { activeRelease } from '../../src/semantic/definition-release-read.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from '../../src/semantic/contract/subject-values.ts';
@@ -246,4 +248,22 @@ test('the kernel contract documents the definition operations', () => {
   const activation = paths['/v1/definitions/releases/{digest}:activate']!.post!;
   expect(activation).toMatchObject({ operationId: 'definitions.activate', 'x-action': 'definitions:activate' });
   expect(Object.keys(activation.responses!).sort()).toEqual(['200', '400', '401', '403', '404', '409', '422', '503']);
+});
+
+test('dedicated page-data reconciliation retains the historical release and does not reactivate a current pointer', async () => {
+  const before = (await activeRelease(pool))!;
+  const reconcile = () =>
+    reconcilePageDataDefinitions({
+      activate: true,
+      handle: (request) => kernel.handle(request),
+      bearer: async () => realAccess.bearer('steward'),
+    });
+  const active = await reconcile();
+  expect(active).toEqual({ digest: bundledDigest, head: before.head + 1 });
+  expect((await call('GET', `/v1/definitions/releases/${before.digest}`)).body.release).toEqual(before.release);
+  const count = await admin.query('SELECT count(*)::integer AS n FROM semantic.definition_activation');
+  expect(await reconcile()).toEqual(active);
+  expect((await admin.query('SELECT count(*)::integer AS n FROM semantic.definition_activation')).rows).toEqual(
+    count.rows,
+  );
 });

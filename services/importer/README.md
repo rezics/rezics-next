@@ -23,9 +23,23 @@ Decision: admitted provider registrations are declared typed values (`registrati
 
 Decision: Keep showcase-publication.ts as the composition facade; durable journal storage and replay belong to showcase-journal.ts, sealed adoption and recovery to showcase-adoption.ts, current candidate and public-read normalization to showcase-current-reads.ts, and shared publication shapes to showcase-publication-contract.ts. Seed, tag, credit and profile callers import those owner entries directly; replacement selection is built only from a terminal served candidate page.
 
+Decision: intermediate seed publication uses `publishShowcaseVocabulary` with only that stage's requirements, including its Scheme dependencies. Indexed alias/external-ID journal reads retain every matching sealed command; the manifest checks selected owner membership without reconverting owner records. Repeated completed inputs still require fresh candidate, review and public reads for that vocabulary, while newly supplied requirements retain all publication work. An acknowledged action never certifies current publication. The final `publishShowcase` retains whole-selection recovery, capability checks and validation. `tests/showcase-publication.test.ts` pins scoped journal/read work on repeat, expanded requirements and missing public readback; the existing full-publication assertions remain unchanged.
+
 The durable source tuple is configured alias plus exact external ID. The alias is bound to one normalized API origin before effects; destination placement is not authorization. Source records cannot choose providers or converter revisions. Importer validates external records and provider responses at entry, then trusts internal types, callers and modules. Current permission and exact source/facts fences are checked before effects. No SQL writer, extra scope or grant is introduced.
 
 Decision: cross-media seed stderr formats only locally registered operation diagnostics; generic error text and source URL credentials, query and fragment stay private ([diagnostic contract](seed-diagnostics.md)).
+
+Decision: expose fixed seed/publication phases and their remaining eligible work on stderr through the existing
+[diagnostic owner](seed-diagnostics.md). Acknowledged writes still require current publication reads and the result
+handoff; a timeout alone does not justify replaying or changing completed journal work.
+
+Decision: plan the book selection once before the first shared Bangumi generation and include its records and
+members before source acquisition and sealing. The book stage retains the complete enriched Bangumi selection,
+its admission options and Character bindings, while graph and creator-credit publication remain book-scoped.
+A book-only replacement of that shared generation is correctly refused as mass disappearance; never raise the
+threshold or replace journal keys to admit it. Reopen keeps exact identities and requires fresh current reads.
+The pinned book case covers a preceding committed non-book generation, complete admission and journal reopen;
+the failure case pins the retained disappearance refusal and private-cause redaction.
 
 Conversion maps one selected normalized record with current bindings and exact released descriptors. It does not acquire, resolve identities, authorize, accept, adopt or read public results. Importer records source and request journals, prepares ordinary create/propose commands and retains exact actor, destination, body, key and response through retry. A run stages and validates one complete generation, checks mass disappearance, then seals before writes. Unknown delivery resumes the same sealed intent before source reacquisition; changed terminal receipts remain distinct. Retryable 429/503 stays bounded; authorization and fence refusals remain refusals.
 

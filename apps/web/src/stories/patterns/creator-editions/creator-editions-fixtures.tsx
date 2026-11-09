@@ -15,7 +15,7 @@ import {
   type CreatorEditionsPage,
 } from '../../../content-editions/creator-editions';
 import { CreatorEditionsView } from '../../../content-editions/creator-editions-view';
-import { CreatorEditionsRoute } from '../../../routes/editions/index';
+import { CreatorEditionsRoute } from '../../../content-editions/creator-editions-route';
 import { AppShell } from '../../../shell/shell';
 import { deLocalizeUrl, localizeUrl } from '../../../paraglide/runtime.js';
 import { setStoryRequestContext } from '../../../../.storybook/react-start';

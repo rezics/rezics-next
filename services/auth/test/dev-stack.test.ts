@@ -153,6 +153,16 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
         `${origins.web}/`,
       ])
         expect(await waitForFixtureResponse(url, lifetime.signal)).toBe(200);
+      const startupLog = await Bun.file(resolve(checkout, '.temp/stack.log')).text();
+      expect(startupLog).toContain('Worker ready');
+      expect(startupLog.indexOf('stack: web-launched')).toBeGreaterThan(-1);
+      expect(startupLog.indexOf('stack: web-launched')).toBeLessThan(startupLog.indexOf('stack: identity ready'));
+      expect(startupLog.indexOf('stack: frontend-bindings ready')).toBeGreaterThan(-1);
+      expect(startupLog.indexOf('stack: frontend-bindings ready')).toBeLessThan(
+        startupLog.indexOf('stack: identity ready'),
+      );
+      expect(startupLog.slice(startupLog.indexOf('stack: worker ready'))).not.toContain('native-sql-generate starting');
+      console.error(`stack: fixture-worker ready utc=${new Date().toISOString()}`);
       await page.goto(`${origins.web}/`);
       await page.locator('a[href^="/auth/sign-in"]').first().click();
       await page.waitForURL('**/login?**');

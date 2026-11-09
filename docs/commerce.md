@@ -15,6 +15,11 @@ the recorded paid total. Exclusive tax is named only when that mode was captured
 not presented as a settlement date.
 Missing currency has its own unavailable label in every supported locale; it is not described as a missing amount.
 
+Decision: Orders history preserves the prepared-session `502 session_unavailable` failure before any native history
+read. Both current-reader and legacy page APIs retain that failure. A recorded integer and currency with missing
+unit facts render as the exact raw amount with an explicit unknown-unit explanation, rather than an unavailable
+amount or an inferred currency exponent. Current-viewer provenance and receipt reconciliation remain unchanged.
+
 `recordedCharge` is nullable. A historically paid order exposes the retained Checkout integration observation's
 actual `amount_total` and optional tax, with its own recorded currency and unit. This is the integration currency
 total, not a derived local presentment or balance transaction amount. The Session, order, currency and captured

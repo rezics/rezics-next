@@ -23,6 +23,15 @@ type JournalCommandRow = {
   subject_id: string | null;
   candidate_id: string | null;
 };
+
+function commandAcknowledgement(row: JournalCommandRow): ShowcaseAcknowledgement {
+  return {
+    command: JSON.parse(row.command_json) as BatchCommand,
+    commandDigest: row.command_digest,
+    ...(row.subject_id ? { subjectId: row.subject_id } : {}),
+    ...(row.candidate_id ? { candidateId: row.candidate_id } : {}),
+  };
+}
 export type ShowcaseJournalActionRow = {
   action_key: string;
   body_digest: string;
@@ -92,6 +101,9 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         subject_id TEXT,
         candidate_id TEXT
       ) STRICT;
+      CREATE INDEX IF NOT EXISTS showcase_command_source
+        ON showcase_command(json_extract(command_json,'$.source.source'),
+          json_extract(command_json,'$.source.external_id'),state,command_key);
       CREATE TABLE IF NOT EXISTS showcase_intent (
         intent_digest TEXT PRIMARY KEY,
         intent_json TEXT NOT NULL
@@ -254,7 +266,31 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       .run(subjectId, candidateId, command.key);
   }
 
-  acknowledgedCommands(): ShowcaseAcknowledgement[] {
+  acknowledgedCommands(sources?: readonly BatchCommand['source'][]): ShowcaseAcknowledgement[] {
+    if (sources) {
+      const bound = showcaseLimits.candidates + showcaseLimits.records + showcaseLimits.vocabulary;
+      const rows = new Map<string, JournalCommandRow>();
+      const selected = this.#db.query<JournalCommandRow, [string, string, number]>(
+        `SELECT command_key,command_digest,command_json,state,subject_id,candidate_id
+         FROM showcase_command
+         WHERE json_extract(command_json,'$.source.source')=?
+           AND json_extract(command_json,'$.source.external_id')=? AND state='acknowledged'
+         ORDER BY command_key LIMIT ?`,
+      );
+      const identities = new Set<string>();
+      for (const source of sources) {
+        const identity = JSON.stringify([source.source, source.external_id]);
+        if (identities.has(identity)) continue;
+        identities.add(identity);
+        for (const row of selected.all(source.source, source.external_id, bound)) rows.set(row.command_key, row);
+      }
+      return [...rows.values()]
+        .sort((left, right) =>
+          left.command_key < right.command_key ? -1 : left.command_key > right.command_key ? 1 : 0,
+        )
+        .slice(0, bound)
+        .map(commandAcknowledgement);
+    }
     return this.#commands('acknowledged');
   }
 
@@ -268,12 +304,7 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         'SELECT command_key,command_digest,command_json,state,subject_id,candidate_id FROM showcase_command WHERE state=? ORDER BY command_key LIMIT ?',
       )
       .all(state, showcaseLimits.candidates + showcaseLimits.records + showcaseLimits.vocabulary)
-      .map((row) => ({
-        command: JSON.parse(row.command_json) as BatchCommand,
-        commandDigest: row.command_digest,
-        ...(row.subject_id ? { subjectId: row.subject_id } : {}),
-        ...(row.candidate_id ? { candidateId: row.candidate_id } : {}),
-      }));
+      .map(commandAcknowledgement);
   }
 
   prepareAction(actionKey: string, body: unknown, idempotencyKey: string): unknown {

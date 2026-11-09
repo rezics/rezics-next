@@ -307,10 +307,11 @@ async function runGenerator(
   env: NodeJS.ProcessEnv,
   signal: AbortSignal | undefined,
   onStart: (pid: number | undefined) => void,
+  script = 'scripts/generate.ts',
 ): Promise<number> {
   throwIfAborted(signal);
   // Run the generator through this process's pinned Bun; cancellation must settle its compiler descendants too.
-  const child = spawn(process.execPath, ['scripts/generate.ts'], {
+  const child = spawn(process.execPath, [script], {
     cwd: appDirectory,
     env,
     detached: process.platform !== 'win32',
@@ -347,6 +348,34 @@ async function runGenerator(
     signal?.removeEventListener('abort', onAbort);
     if (settling) await settling;
   }
+}
+
+/** Prime the live plugin's cache in a disposable Bun process before starting the long-lived Node/Vite child. */
+export async function prepareLiveMessages(
+  appDirectory: string,
+  env: NodeJS.ProcessEnv = process.env,
+  options: MessagePreparationOptions = {},
+): Promise<number> {
+  return withParaglideMessagesLock(
+    appDirectory,
+    async () => {
+      const started = performance.now();
+      const code = await runGenerator(
+        appDirectory,
+        env,
+        options.signal,
+        (pid) => {
+          process.stderr.write(`[paraglide] stage=live-cache pid=${pid ?? 'unknown'} start\n`);
+        },
+        'scripts/prepare-live-messages.ts',
+      );
+      process.stderr.write(
+        `[paraglide] stage=live-cache exit=${code} elapsed-ms=${Math.round(performance.now() - started)}\n`,
+      );
+      return code;
+    },
+    options.signal,
+  );
 }
 
 function stateSummary(state: MessageOutputState): string {

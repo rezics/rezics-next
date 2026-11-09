@@ -1,21 +1,110 @@
 import { expect, test } from 'bun:test';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { withThrowawayDatabase } from '../../kernel/scripts/derived.ts';
 import {
   developmentWebsiteBindings,
+  developmentFrontendProcess,
   type developmentWebsiteConfiguration,
   type DevelopmentKeys,
   developmentMediaBindings,
   origins,
+  outputMarker,
+  startDevelopmentServices,
   importerScopes,
   readLocalDeveloperAccountId,
   reusableCompletedExpiredPersonaId,
   root,
+  reconcilePageDataDefinitions,
+  pageDataDefinitionsEnvironment,
 } from './dev-stack.ts';
 import { StackFixtureLifetime } from './dev-stack-lifetime.ts';
 import { websiteRequestedScopes } from '../../../apps/web/src/session/website-scopes.ts';
+
+test('Worker readiness survives split writes and a coalesced trailing log chunk', () => {
+  const receive = outputMarker('Worker ready');
+  expect(receive('earlier log\nWor')).toBe(false);
+  expect(receive('ker ready\n' + 'next log\n'.repeat(1000))).toBe(true);
+  expect(receive('')).toBe(true);
+});
+
+test('cold Web starts before native readiness while every dependency gate still precedes final readiness', async () => {
+  const events: string[] = [];
+  let releaseIdentity!: () => void;
+  const identityReady = new Promise<void>((resolve) => {
+    releaseIdentity = resolve;
+  });
+  const started = startDevelopmentServices('complete', {
+    launch(service) {
+      events.push(`launch:${service}`);
+      return service;
+    },
+    async ready(service, children) {
+      expect(children[0]).toBe(service);
+      expect(children).toContain('identity');
+      expect(children).toContain('web');
+      if (service === 'identity') await identityReady;
+      events.push(`ready:${service}`);
+    },
+    stopping: () => false,
+  });
+  expect(events).toEqual(['launch:identity', 'launch:web']);
+  releaseIdentity();
+  await started;
+  expect(events).toEqual([
+    'launch:identity',
+    'launch:web',
+    'ready:identity',
+    'launch:kernel',
+    'ready:kernel',
+    'launch:worker',
+    'ready:worker',
+    'launch:pages',
+    'ready:pages',
+    'ready:web',
+  ]);
+});
+
+test('deferred walks omit Web and cancellation prevents further native launches', async () => {
+  for (const mode of ['walk', 'native'] as const) {
+    const launched: string[] = [];
+    await startDevelopmentServices(mode, {
+      launch(service) {
+        launched.push(service);
+        return service;
+      },
+      async ready() {},
+      stopping: () => false,
+    });
+    expect(launched).toEqual(mode === 'walk' ? ['identity', 'pages', 'kernel', 'worker'] : ['identity']);
+  }
+  const launched: string[] = [];
+  await expect(
+    startDevelopmentServices('complete', {
+      launch(service) {
+        launched.push(service);
+        return service;
+      },
+      async ready() {
+        throw new Error('native boot failed');
+      },
+      stopping: () => false,
+    }),
+  ).rejects.toThrow('native boot failed');
+  expect(launched).toEqual(['identity', 'web']);
+  launched.length = 0;
+  await startDevelopmentServices('complete', {
+    launch(service) {
+      launched.push(service);
+      return service;
+    },
+    async ready() {},
+    stopping: () => true,
+  });
+  expect(launched).toEqual(['identity', 'web']);
+});
 
 test('the local importer can request subject merging required by showcase seeding', () => {
   expect(importerScopes).toContain('subject:merge');
@@ -121,6 +210,34 @@ test('local setup and launch carry the complete real mounted host scope composit
   );
   const bindings = developmentWebsiteBindings({ website: {} } as DevelopmentKeys, website);
   expect(bindings.WEBSITE_SCOPES).toBe(website.scopes.join(' '));
+  for (const action of ['pages', 'web'] as const) {
+    const launch = developmentFrontendProcess(action, ['--clearScreen', 'false'], {
+      environment: { REZICS_TEST_RUNTIME: '1' },
+      kernelEnvironment: {},
+      website,
+      keys: { website: {} } as DevelopmentKeys,
+    });
+    expect(launch.command).toEqual([
+      'bun',
+      'run',
+      '--cwd',
+      action === 'pages' ? 'apps/auth' : 'apps/web',
+      'dev',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      new URL(action === 'pages' ? origins.issuer : origins.web).port,
+      '--strictPort',
+      '--clearScreen',
+      'false',
+    ]);
+    expect(launch.environment.WEBSITE_SCOPES).toBe(bindings.WEBSITE_SCOPES);
+    expect(launch.environment.AUTH_ORIGIN).toBe(origins.native);
+    if (action === 'pages')
+      expect(launch.environment.AUTH_SECURITY_SCOPE_CONFIGURATION).toBe(website.AUTH_SECURITY_SCOPE_CONFIGURATION);
+    else expect(launch.environment.REZICS_TEST_RUNTIME).toBeUndefined();
+  }
+
   expect(websiteRequestedScopes(bindings.WEBSITE_SCOPES)).toBe(bindings.WEBSITE_SCOPES);
   expect(website.scopes).toEqual(
     expect.arrayContaining([
@@ -194,4 +311,75 @@ test('the native Semantic walk client has explicit journey scopes and leaves imp
   expect(client.scopes).not.toContain('*');
   expect(client.scopes).not.toContain('gate:any');
   expect(importerScopes).not.toContain('zone:configure');
+});
+
+test('page-data Definitions mismatch stops seed, reconciles the exact head, then becomes a read-only no-op', async () => {
+  const before = { digest: `sha256:${'d'.repeat(64)}`, head: 1 };
+  let active = before;
+  const requests: Request[] = [];
+  let credentials = 0;
+  const options = {
+    activate: false,
+    bearer: async () => {
+      credentials++;
+      return 'operator';
+    },
+    async handle(request: Request) {
+      requests.push(request);
+      if (request.method === 'GET') return Response.json(active);
+      expect(request.headers.get('authorization')).toBe('Bearer operator');
+      if (request.url.endsWith(':activate')) {
+        expect(await request.json()).toEqual({ expected_head: before.head });
+        active = { digest: bundledDigest, head: before.head + 1 };
+        return Response.json(active);
+      }
+      expect(await request.json()).toEqual({ release: bundledRelease });
+      return Response.json({ digest: bundledDigest }, { status: 201 });
+    },
+  };
+  await expect(reconcilePageDataDefinitions(options)).rejects.toThrow('reconcile-definitions before resuming seed');
+  expect(credentials).toBe(0);
+  expect(requests.map((r) => r.method)).toEqual(['GET']);
+  requests.length = 0;
+  expect(await reconcilePageDataDefinitions({ ...options, activate: true })).toEqual({
+    digest: bundledDigest,
+    head: 2,
+  });
+  expect(requests.map((r) => r.method)).toEqual(['GET', 'POST', 'POST', 'GET']);
+  requests.length = 0;
+  expect(await reconcilePageDataDefinitions({ ...options, activate: true })).toEqual(active);
+  expect(credentials).toBe(1);
+  expect(requests.map((r) => r.method)).toEqual(['GET']);
+});
+
+test('page-data Definitions leaves a concurrent activation conflict to the native owner', async () => {
+  let calls = 0;
+  await expect(
+    reconcilePageDataDefinitions({
+      activate: true,
+      bearer: async () => 'operator',
+      async handle() {
+        calls++;
+        return calls === 1
+          ? Response.json({ digest: 'old', head: 3 })
+          : calls === 2
+            ? Response.json({ digest: bundledDigest })
+            : new Response(null, { status: 409 });
+      },
+    }),
+  ).rejects.toThrow('HTTP 409');
+  expect(calls).toBe(3);
+});
+
+test('page-data Definitions rejects production, ordinary local stacks and a different database port', () => {
+  const env = {
+    NODE_ENV: 'development',
+    KERNEL_DATABASE_CONTAINER: 'rezics-pagecheck-0123456789',
+    REZICS_PAGE_DATA_STACK: 'rezics-pagecheck-0123456789',
+    KERNEL_DATABASE_PORT: '5433',
+  };
+  const url = 'postgres://127.0.0.1:5433/rezics';
+  expect(() => pageDataDefinitionsEnvironment(env, url)).not.toThrow();
+  for (const change of [{ NODE_ENV: 'production' }, { REZICS_PAGE_DATA_STACK: '' }, { KERNEL_DATABASE_PORT: '5434' }])
+    expect(() => pageDataDefinitionsEnvironment({ ...env, ...change }, url)).toThrow('dedicated development');
 });

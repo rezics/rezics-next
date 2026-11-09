@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -14,11 +14,17 @@ import {
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
-import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.ts';
+import {
+  buildShowcaseManifest,
+  showcaseDigest,
+  showcaseVocabularyExternalId,
+  type ShowcaseVocabularyRequirement,
+} from '../src/showcase-manifest.ts';
 import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion/support';
 import {
   captureShowcaseCommands,
   publishShowcase,
+  publishShowcaseVocabulary,
   adoptResumeKeys,
   sendDurableAdopt,
   servedCoverVariants,
@@ -27,6 +33,7 @@ import {
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
 import { prepareShowcaseTags } from '../src/showcase-tags.ts';
+import { formatSeedError, SeedFinalization } from '../src/seed-cli.ts';
 
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
@@ -556,7 +563,39 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     const tagAcceptanceCallsBeforeReplay = acceptanceCalls.filter(
       (call) => call.candidateId === membershipCandidateId,
     ).length;
+    const retainedCommands = journal.acknowledgedCommands();
+    const failure = new Error(
+      'SQLITE_IOERR private response token=secret https://user:password@fixture.test/?key=secret',
+    );
+    const failedPhases: string[] = [];
+    const journalRead = spyOn(journal, 'acknowledgedCommands').mockImplementationOnce(() => {
+      throw failure;
+    });
+    try {
+      await expect(
+        publishShowcase({
+          plan,
+          result,
+          aliases: crossMediaAliases,
+          journal,
+          review,
+          publicClient,
+          onProgress: (line) => failedPhases.push(line),
+        }),
+      ).rejects.toBe(failure);
+    } finally {
+      journalRead.mockRestore();
+    }
+    expect(failedPhases.at(-1)).toContain('state=failed scope=publication phase=target-current-reads');
+    expect(failedPhases.at(-1)).toContain('remaining=target-current-reads,candidate-recovery');
+    expect(failedPhases.some((line) => line.includes('state=completed'))).toBe(false);
+    expect(formatSeedError(failure)).toStartWith('Cross-media seed failed finalization{scope=publication');
+    expect(formatSeedError(failure)).not.toMatch(/secret|password|private response|fixture\.test/u);
+    expect(journal.acknowledgedCommands()).toEqual(retainedCommands);
+    expect(journal.preparedCommands()).toEqual([]);
+    const publicationPhases: string[] = [];
     const replayed = await publishShowcase({
+      onProgress: (line) => publicationPhases.push(line),
       plan,
       result,
       aliases: crossMediaAliases,
@@ -566,6 +605,11 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       ...tagOptions,
     });
     expect(replayed.status).toBe('published');
+    expect(publicationPhases).toHaveLength(12);
+    expect(publicationPhases.at(-2)).toContain('phase=manifest-finalization remaining=manifest-finalization');
+    expect(publicationPhases.at(-1)).toBe(
+      'Cross-media seed finalization state=completed scope=publication remaining=none',
+    );
     // Equal acceptance bodies for distinct targets must never share a receipt key.
     const candidateKeys = new Map<string, string>();
     for (const call of acceptanceCalls) {
@@ -988,6 +1032,116 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       code: 'review-http-403',
     });
     expect(acceptanceCalls.filter((call) => call.candidateId === refusedCandidate.id)).toHaveLength(refusedCallsBefore);
+    // Dependency stages must not revisit the whole selected family or its journal on resume.
+    const requirements: ShowcaseVocabularyRequirement[] = [];
+    for (const sourceKey of ['vndb.stage-one', 'vndb.stage-two']) {
+      const sourceUri = `https://vndb.org/${sourceKey}`;
+      const source: BatchCommand['source'] = {
+        source: crossMediaAliases.vndb,
+        external_id: showcaseVocabularyExternalId(sourceKey),
+        record_revision: 'unversioned',
+        digest: 'a'.repeat(64),
+        converter_revision: 'stage-vocabulary@1',
+        field_group: 'facts',
+      };
+      const created = await captureShowcaseCommands(port, journal).batch({
+        commands: [
+          {
+            op: 'create',
+            key: `${sourceKey}:create`,
+            source,
+            subject: { type: 'skos:ConceptScheme', labels: { en: sourceKey } },
+          },
+        ],
+      });
+      const receipt = created.results[0]!;
+      if (!('value' in receipt)) throw new Error('Vocabulary create failed');
+      const subjectId = (receipt.value as { id: string }).id;
+      await captureShowcaseCommands(port, journal).batch({
+        commands: [
+          {
+            op: 'propose',
+            key: `${sourceKey}:url`,
+            source,
+            subject: subjectId,
+            statement: {
+              property: { id: 'schema:url' },
+              value: { type: 'value', content: sourceUri },
+              references: [
+                { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: sourceUri } }] },
+              ],
+            },
+          },
+        ],
+      });
+      requirements.push({
+        provider: 'vndb',
+        ownerKey: 'v1',
+        sourceKey,
+        source,
+        sourceUri,
+        nativeType: 'skos:ConceptScheme',
+      });
+    }
+    const stage = (selected: ShowcaseVocabularyRequirement[]) =>
+      publishShowcaseVocabulary({
+        plan,
+        result: initialResult,
+        aliases: crossMediaAliases,
+        journal,
+        review,
+        publicClient,
+        vocabularyRequirements: selected,
+        onProgress() {},
+      });
+    const journalReads = spyOn(journal, 'acknowledgedCommands');
+    const candidateReads = spyOn(review, 'reviewedCandidates');
+    try {
+      publicReadIds.clear();
+      const firstStage = await stage(requirements.slice(0, 1));
+      expect(firstStage.status).toBe('published');
+      expect(firstStage.manifest.records).toEqual([]);
+      expect(firstStage.published.map((row) => row.sourceKey)).toEqual(['vndb.stage-one']);
+      const stageId = firstStage.published[0]!.subjectId;
+      expect([...publicReadIds]).toEqual([stageId]);
+      const calls = candidateReads.mock.calls.length;
+      const writes = acceptanceCalls.length;
+      candidateReads.mockClear();
+      publicReadIds.clear();
+      const repeated = await stage(requirements.slice(0, 1));
+      expect(repeated.status).toBe('published');
+      expect(candidateReads.mock.calls.length).toBeGreaterThan(0);
+      expect(candidateReads.mock.calls.length).toBeLessThanOrEqual(calls);
+      expect(candidateReads.mock.calls.every(([id]) => id === stageId)).toBe(true);
+      expect([...publicReadIds]).toEqual([stageId]);
+      expect(acceptanceCalls).toHaveLength(writes);
+      expect(journalReads.mock.calls).toEqual([[[requirements[0]!.source]], [[requirements[0]!.source]]]);
+      for (const entry of journalReads.mock.results) expect(entry.value).toHaveLength(2);
+      const expanded = await stage(requirements);
+      expect(expanded.status).toBe('published');
+      expect(expanded.published.map((row) => row.sourceKey)).toEqual(requirements.map((row) => row.sourceKey));
+      expect(acceptanceCalls).toHaveLength(writes + 1);
+      const hidden = await publishShowcaseVocabulary({
+        plan,
+        result: initialResult,
+        aliases: crossMediaAliases,
+        journal,
+        review,
+        publicClient: {
+          ...publicClient,
+          async readSubject() {
+            throw new Error('unavailable');
+          },
+        },
+        vocabularyRequirements: requirements,
+        onProgress() {},
+      });
+      expect(hidden.status).toBe('incomplete');
+      expect(hidden.published).toEqual([]);
+    } finally {
+      journalReads.mockRestore();
+      candidateReads.mockRestore();
+    }
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
@@ -1390,4 +1544,20 @@ test('durable adopt recovers identity-bound generation 32 after close, a later r
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('result-write failure retains its original error and reports only fixed remaining phases', () => {
+  const lines: string[] = [];
+  const progress = new SeedFinalization('seed', (line) => lines.push(line));
+  const failure = new Error('ENOSPC /private/secret-result.json');
+  progress.enter('result-write');
+  progress.failed(failure);
+  expect(lines).toEqual([
+    'Cross-media seed finalization state=started scope=seed phase=result-write remaining=result-write',
+    'Cross-media seed finalization state=failed scope=seed phase=result-write remaining=result-write',
+  ]);
+  expect(formatSeedError(failure)).toBe(
+    'Cross-media seed failed finalization{scope=seed phase=result-write remaining=result-write}',
+  );
+  expect(formatSeedError(new Error('phase=result-write secret'))).toBe('Cross-media seed failed');
 });

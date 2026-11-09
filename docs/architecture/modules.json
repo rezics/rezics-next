@@ -1448,7 +1448,8 @@
         "apps/web/src/features/pages/view-cursor.ts",
         "apps/web/src/search/search-window/focus.ts",
         "apps/web/src/features/pages/home-feed-questions.ts",
-        "apps/web/src/features/pages/source-concept-reading/works-route.ts"
+        "apps/web/src/features/pages/source-concept-reading/works-route.ts",
+        "apps/web/src/features/pages/home-route-view.tsx"
       ],
       "allowedDependencies": [
         "client",
@@ -1851,6 +1852,9 @@
       "publicEntries": [
         "apps/web/src/session/community-application.tsx",
         "apps/web/src/content-editions/sale-review.tsx",
+        "apps/web/src/content-editions/edition-create-route.tsx",
+        "apps/web/src/content-editions/creator-editions-route.tsx",
+        "apps/web/src/content-editions/edition-route.tsx",
         "apps/web/src/content-editions/edition-api.ts",
         "apps/web/src/session/state.ts",
         "apps/web/src/kernel/client.ts",

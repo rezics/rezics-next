@@ -255,7 +255,7 @@ type ActiveThreadRefresh = {
   retire(): void;
 };
 
-export function ThreadPage() {
+function ThreadPage() {
   const loadedPage = Route.useLoaderData();
   const [refreshed, setRefreshed] = useState<{
     source: typeof loadedPage;

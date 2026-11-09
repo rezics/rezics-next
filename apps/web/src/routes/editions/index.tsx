@@ -6,6 +6,7 @@ import { m } from '../../paraglide/messages.js';
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
+import { CreatorEditionsRoute } from '../../content-editions/creator-editions-route';
 
 export const Route = createFileRoute('/editions/')({
   beforeLoad: requireSignedIn,
@@ -31,9 +32,4 @@ function CreatorEditionsPendingRoute() {
 function CreatorEditionsErrorRoute() {
   const { cursor } = Route.useSearch();
   return <CreatorEditionsOriginView page={{ kind: 'unavailable' }} {...(cursor ? { cursor } : {})} />;
-}
-
-export function CreatorEditionsRoute() {
-  const { cursor } = Route.useSearch();
-  return <CreatorEditionsOriginView page={Route.useLoaderData()} {...(cursor ? { cursor } : {})} />;
 }
