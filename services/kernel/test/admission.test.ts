@@ -112,13 +112,15 @@ test('subject freshness polling yields its normal permit between database checks
   const caughtUp = await admission.run('normal', later(), async (yieldPermit) => {
     expect(admission.running.normal).toBe(1);
     const ready = await linksCaughtUp(pool, seen, subject, Date.now() + 1000, [], async (wait) => {
-      await yieldPermit(async () => {
+      const result = await yieldPermit(async () => {
         expect(admission.running.normal).toBe(0);
-        await wait();
+        const waited = await wait();
         expect(admission.running.normal).toBe(0);
         yielded += 1;
+        return waited;
       });
       expect(admission.running.normal).toBe(1);
+      return result;
     });
     expect(admission.running.normal).toBe(1);
     return ready;
