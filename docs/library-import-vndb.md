@@ -81,6 +81,9 @@ Decision: HTTP 401, 403 or 404 for current authority or visibility remains `unav
 the prepared journal intent retryable across reopen and replay its original body and idempotency key after authority
 or visibility returns; record only terminal input refusals.
 
+Choice: recovery fixtures use a fresh prepared upload or review intent, then reopen and replay its original sealed
+identity, operands and key after authority returns.
+
 Refreshing a source review retires its metadata tokens rather than carrying them into a corrected match. An
 unresolved state, metadata or date dispatch must settle before review replacement.
 Corrected matches may explicitly adopt labels on the chosen readable target. New label operands bind both the
