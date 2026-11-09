@@ -293,18 +293,18 @@ test('VNDB table materialization preserves SQL NULL and exact empty aliases acro
     const nullRecord = f.facade.page(nullRun, null, 16).records.find((record) => record.key === 'v123')!;
     expect(nullRecord.record.vn.alias).toBeNull();
     expect(nullRecord.output.normalizedRecord.vn.alias).toBeNull();
-    expect(nullRecord.output.proposals[0]?.op === 'create' && nullRecord.output.proposals[0].subject).not.toHaveProperty(
-      'aliases',
-    );
+    expect(
+      nullRecord.output.proposals[0]?.op === 'create' && nullRecord.output.proposals[0].subject,
+    ).not.toHaveProperty('aliases');
 
     const emptyRun = await f.stage(false, '');
     const emptyRecord = f.facade.page(emptyRun, null, 16).records.find((record) => record.key === 'v123')!;
     expect(emptyRecord.record.vn.alias).toBe('');
     expect(emptyRecord.output.normalizedRecord.vn.alias).toBe('');
     expect(emptyRecord.output.digest).not.toBe(nullRecord.output.digest);
-    expect(emptyRecord.output.proposals[0]?.op === 'create' && emptyRecord.output.proposals[0].subject).not.toHaveProperty(
-      'aliases',
-    );
+    expect(
+      emptyRecord.output.proposals[0]?.op === 'create' && emptyRecord.output.proposals[0].subject,
+    ).not.toHaveProperty('aliases');
 
     await f.reopen();
     const reopened = f.facade.page(emptyRun, null, 16).records.find((record) => record.key === 'v123')!;
