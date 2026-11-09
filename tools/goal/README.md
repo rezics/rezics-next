@@ -1239,6 +1239,8 @@ another alarm; the same task entering a waiting queue again still rearms it. Act
 alarms keep their configured periodic escalation, and hourly flow reports continue to record the same metrics. Flow
 alarms, daily audit notices, check-result reuse alerts and shared environment incidents go to the configured
 supermanager; priority grants and scope decisions remain with the supermanager.
+The historical attempts-per-integrated ratio rearms only when its displayed value changes or it recovers and breaches
+again. Waiting task rotation does not change that history; actual queue age keeps its own alert.
 
 Once per UTC day the manager host dispatches the research brief at
 [`templates/daily-step-audit.md`](templates/daily-step-audit.md), unless a daily audit task is already open. It

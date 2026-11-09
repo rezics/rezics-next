@@ -777,19 +777,20 @@ export function checkFlowAlarms(
       active: number;
     } | null;
     const measurementFingerprint = flowAlarmMeasurementFingerprint(key, measurement);
-    const fingerprint = `${measurementFingerprint}:${queueFingerprint}`;
+    const historicalRatio = key === 'attempts-per-integrated';
+    const fingerprint = `${measurementFingerprint}:${historicalRatio ? 'history' : queueFingerprint}`;
     const isRecent = old !== null && now.getTime() - Date.parse(old.sent_at) < policy.flow.alertEveryMs;
     const legacyCooldown = isRecent && (old?.fingerprint === null || old?.fingerprint?.startsWith('v1:'));
     const globalMetric = !key.startsWith('queue-');
     const changedGlobal = globalMetric && old !== null && old.fingerprint !== null && old.fingerprint !== fingerprint;
     const recovered = old?.active === 0;
-    const unchangedEmptyGlobal =
+    const unchangedGlobal =
       globalMetric &&
-      !hasWaitingTasks &&
+      (historicalRatio || !hasWaitingTasks) &&
       old?.active === 1 &&
       old.fingerprint?.startsWith(`${measurementFingerprint}:`);
-    if (unchangedEmptyGlobal) {
-      // Remember the drained queue so a task that starts waiting again can rearm the alarm.
+    if (unchangedGlobal) {
+      // Remember a drained queue for live metrics; a historical ratio ignores queue churn.
       if (old.fingerprint !== fingerprint)
         db.query('UPDATE flow_alarm_sends SET fingerprint=? WHERE threshold=?').run(fingerprint, key);
       continue;
