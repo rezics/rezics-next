@@ -894,27 +894,22 @@ export function publishShowcaseVocabulary(
     'plan' | 'result' | 'aliases' | 'journal' | 'review' | 'publicClient' | 'vocabularyRequirements' | 'onProgress'
   >,
 ): Promise<ShowcasePublicationResult> {
-  return runShowcasePublication(
-    {
-      ...input,
-      result: {
-        ...input.result,
-        status: 'imported',
-        readings: [],
-        mediaOutcomes: [],
-        gaps: [],
-        unresolved: [],
-        creditGaps: [],
-        characterDiagnostics: [],
-        vndbWorkRelations: [],
-        workRelations: undefined,
-        vndbCreditCandidateDigests: undefined,
-        bangumiGenrePublication: undefined,
-        bangumiGameGenrePublication: undefined,
-      },
-    },
-    true,
-  );
+  const result: CrossMediaSeedResult = {
+    ...input.result,
+    status: 'imported',
+    readings: [],
+    mediaOutcomes: [],
+    gaps: [],
+    unresolved: [],
+    creditGaps: [],
+    characterDiagnostics: [],
+    vndbWorkRelations: [],
+  };
+  delete result.workRelations;
+  delete result.vndbCreditCandidateDigests;
+  delete result.bangumiGenrePublication;
+  delete result.bangumiGameGenrePublication;
+  return runShowcasePublication({ ...input, result }, true);
 }
 
 /** Accept exact acknowledged candidates, adopt only those selections, then check them as a public viewer. */

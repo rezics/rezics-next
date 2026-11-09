@@ -1036,7 +1036,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     const requirements: ShowcaseVocabularyRequirement[] = [];
     for (const sourceKey of ['vndb.stage-one', 'vndb.stage-two']) {
       const sourceUri = `https://vndb.org/${sourceKey}`;
-      const source = {
+      const source: BatchCommand['source'] = {
         source: crossMediaAliases.vndb,
         external_id: showcaseVocabularyExternalId(sourceKey),
         record_revision: 'unversioned',
@@ -1055,7 +1055,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         ],
       });
       const receipt = created.results[0]!;
-      if (receipt.status !== 200 && receipt.status !== 201) throw new Error('Vocabulary create failed');
+      if (!('value' in receipt)) throw new Error('Vocabulary create failed');
       const subjectId = (receipt.value as { id: string }).id;
       await captureShowcaseCommands(port, journal).batch({
         commands: [
@@ -1116,7 +1116,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       expect([...publicReadIds]).toEqual([stageId]);
       expect(acceptanceCalls).toHaveLength(writes);
       expect(journalReads.mock.calls).toEqual([[[requirements[0]!.source]], [[requirements[0]!.source]]]);
-      expect(journalReads.mock.results.every((entry) => entry.value.length === 2)).toBe(true);
+      for (const entry of journalReads.mock.results) expect(entry.value).toHaveLength(2);
       const expanded = await stage(requirements);
       expect(expanded.status).toBe('published');
       expect(expanded.published.map((row) => row.sourceKey)).toEqual(requirements.map((row) => row.sourceKey));
