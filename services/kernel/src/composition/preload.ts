@@ -8,6 +8,7 @@ import { composeZones } from './zones.ts';
 import { composeSemanticAdapters } from './semantic.ts';
 import { composeSearchNativePorts } from './search-native.ts';
 import { composePresentationApplication } from './presentation.ts';
+import { installSemanticCopyWork } from './semantic-copy-work.ts';
 
 /**
  * Test and command preloads use the same Rating, Access, Content reading, History, Zone Collection, Zone resource,
@@ -26,6 +27,7 @@ export function installNativeHistoryPreload(): void {
   composeZones();
   composeSemanticAdapters();
   composeSearchNativePorts();
+  installSemanticCopyWork();
   composePresentationApplication();
   composeLibraryPresentation();
 }

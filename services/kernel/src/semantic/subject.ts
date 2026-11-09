@@ -352,15 +352,9 @@ export async function writeSubject(
     events,
   );
   await sealSemanticRecordSourceSet(tx, sourceSet);
-  const relationCounts = Object.fromEntries(
-    (options.release.release.types[type]?.properties ?? [])
-      .filter((property) => isRelationProperty(options.release.release, property))
-      .map((property) => [
-        property,
-        facts.filter((fact) => fact.kind === 'statement' && fact.property === property && fact.operation === 'assert')
-          .length,
-      ]),
-  );
+  // A create command has the submitted facts but not the bounded, current
+  // source/target disclosure proof required for public relation totals.
+  const relationCounts: Record<string, number> = {};
   const metadata = { revision: 1, release: options.release.digest, context: CONTEXT, relationCounts };
   return {
     value:

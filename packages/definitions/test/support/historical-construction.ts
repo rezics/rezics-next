@@ -111,7 +111,9 @@ export function mountHistoricalConstruction() {
         ({ path }) => {
           const contents = pinned.get(path);
           if (contents === undefined) throw new Error(`Unexpected historical dependency: ${path}`);
-          return { contents, loader: path.endsWith('.json') ? 'json' : 'ts' };
+          if (path.endsWith('.json'))
+            return { contents: `export default ${JSON.stringify(JSON.parse(contents))};`, loader: 'ts' };
+          return { contents, loader: 'ts' };
         },
       );
       build.onLoad(

@@ -34,6 +34,7 @@ import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-ke
 import { actionCatalogue } from '../../src/http/request.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
 import { routeOf } from '../../src/route/route.ts';
+import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { setupSemantic } from '../../src/semantic/setup.ts';
@@ -53,6 +54,7 @@ export type ReleasedDiscoveryFeature = (typeof releasedDiscoveryFeatures)[number
 
 const password = 'semantic outcome registration password with enough entropy';
 const clientId = 'semantic-outcomes';
+let nativePreloadInstalled = false;
 
 function required<T>(value: T | null | undefined, message: string): T {
   if (value == null) throw new Error(message);
@@ -247,6 +249,11 @@ async function startDriver(
     configureTestReceiptKeys(pool);
     if (runtimePool !== pool) configureTestReceiptKeys(runtimePool);
     timer.mark('kernel database');
+
+    if (!nativePreloadInstalled) {
+      installNativeHistoryPreload();
+      nativePreloadInstalled = true;
+    }
 
     const routeKey = randomBytes(32);
     const sessionKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };

@@ -4,6 +4,7 @@ import pg from 'pg';
 import { releaseDigest, valueSchema, type Release } from '@rezics/definitions';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection, listSubjectLinks, listSubjectRelations } from '../../src/semantic/links.ts';
@@ -31,6 +32,7 @@ const actions = [
 ];
 const access = await createRealAccess(admin, { editor }, actions);
 const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(49)]]) };
+installNativeHistoryPreload();
 const kernel = createKernel({
   pool,
   access: access.access,
@@ -218,6 +220,7 @@ beforeAll(async () => {
       'ex:credit': [statement('ex:credit', people[1]!, 1)],
     },
   });
+  expect(created.subject.relationCounts).toEqual({});
   work = created.subject.id;
   partitions.add(partitionOf(routeOf(work)!));
   await access.grant({ route: routeOf(work)!, id: work }, 'editor', 'subject:read');
