@@ -48,8 +48,8 @@ lookahead cannot certify exhaustion or an exact aggregate. Public totals remain 
 extends the original query-privacy cell with hidden/taken-down useful pages, independent current Recipe
 reads while Book predicates prepare, Collection public-to-private disclosure and ordinary relay recovery.
 The worker observes both original tombstone handlers without replacing effects or stopping other services.
-The original serial erasure cases remain required. This attempt runs scoped typing only; native, browser
-and aggregate execution evidence remain open until the controller executes their owning suites.
+The original serial erasure cases remain required. Typing alone leaves native, browser and aggregate
+execution evidence open until their owning suites pass.
 
 Subject search, public hit bases and bounded kind metadata require `search` grants; advanced filters/scopes,
 facets and ratings require `search_advanced`. Population/privacy, incarnation, erasure and native growth proofs remain

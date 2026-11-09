@@ -285,7 +285,13 @@ test('primary membership reobserves the live Subject owner after hydration inste
     return reads === 1 ? snapshot : { ...snapshot, position: snapshot.position + 1n, subjects: [] };
   };
   await expect(
-    currentDiscoveryPrimaryCandidates(owner, [hit(1).key], undefined, bundledRelease, context),
+    currentDiscoveryPrimaryCandidates(
+      owner,
+      [{ owner: 'semantic', kind: row.type, route: routeOf(row.id)!, id: row.id }],
+      undefined,
+      bundledRelease,
+      context,
+    ),
   ).rejects.toMatchObject({ code: 'search_restart_required' });
   expect(reads).toBe(2);
 });
