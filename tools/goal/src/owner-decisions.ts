@@ -280,6 +280,22 @@ function projectOwnerDecision(
   };
 }
 
+/** A current authenticated owner can preserve an already terminal proof without requesting another run. */
+export function preservesTerminalProof(
+  events: readonly WorkerEvent[],
+  task: Task,
+  ref: AttemptRef,
+  policy: ControlPolicy,
+): boolean {
+  const { decision } = projectOwnerDecision(events, task, ref, policy);
+  return Boolean(
+    decision &&
+    decision.originatingAttempt === ref.attempt &&
+    decision.contractSha256 &&
+    /^preserved-terminal-native-proof(?:-\d{8})?$/.test(decision.id.slice(decision.managerId.length + 1)),
+  );
+}
+
 export function prepareOwnerDecisionPrompt(
   store: Pick<WorkerStore, 'ownerDecisionEvents'>,
   task: Task,
