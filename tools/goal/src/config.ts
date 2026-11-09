@@ -429,7 +429,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         async dispatch(brief, actor) {
           // The `goal dispatch` path. Its first start is a durable request that the host's sweep runs and follows,
           // so this short-lived process never waits for host capacity or a worker.
-          // Urgent briefs carry the Goal directory's confirmed manager so an active grant is honoured; others stay null.
+          // Urgent and verification briefs may carry the confirmed Goal owner; ordinary product briefs stay null.
           const task = tasks.dispatch(brief, actor ?? null);
           if (task.state !== 'held') store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
           return { taskId: task.id, lintWarnings: task.brief.lintWarnings ?? [] };
