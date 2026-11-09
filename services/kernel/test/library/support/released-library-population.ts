@@ -23,7 +23,7 @@ export const releasedLibraryPopulationVersion = 1 as const;
 type Owner = 'alice' | 'bob';
 export type NativeCall = Readonly<{
   persona: DiscoveryPersona;
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   body: unknown;
   headers: Readonly<Record<string, string>>;

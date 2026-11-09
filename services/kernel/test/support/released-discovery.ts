@@ -64,7 +64,7 @@ export type ReleasedDiscoveryClock = Readonly<{
 export type DiscoveryScopedTransport = Readonly<{
   accountId: string;
   request(
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     path: string,
     body?: unknown,
     headers?: Record<string, string>,
@@ -185,7 +185,7 @@ export interface ReleasedDiscoveryFixture {
   ): Promise<QueryResult<Row>>;
   request(
     persona: DiscoveryPersona,
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     path: string,
     body?: unknown,
     headers?: Record<string, string>,

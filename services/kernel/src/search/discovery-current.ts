@@ -33,6 +33,7 @@ import { SearchOperationError } from './operation-outcomes.ts';
 import { projectMatchEvidence } from './match-evidence.ts';
 import type { CreditSearchWitness } from './credit-search.ts';
 import { creditMatchView, verifyCreditedHit } from './credit-hit.ts';
+import { createCurrentSourceReader } from './disclosure/current-source.ts';
 
 function unavailable(): never {
   throw new SearchUnavailableError('Current discovery owner evidence is unavailable or malformed');
@@ -191,12 +192,15 @@ export async function currentDiscoveryPrimaryCandidates(
             ...(entry.source.matchRelationFacets
               ? { matchRelationFacets: entry.source.matchRelationFacets.bind(entry.source) }
               : {}),
-            async read(partition, ids) {
-              const snapshot = subjects.get(partition);
-              if (!snapshot || ids.some((id) => !saved.some((key) => key.owner === 'semantic' && key.id === id)))
-                unavailable();
-              return { ...snapshot, subjects: snapshot.subjects.filter((row) => ids.includes(row.id)) };
-            },
+            read: createCurrentSourceReader({
+              current: entry.source.read.bind(entry.source),
+              initial(partition, ids) {
+                const snapshot = subjects.get(partition);
+                if (!snapshot || ids.some((id) => !saved.some((key) => key.owner === 'semantic' && key.id === id)))
+                  unavailable();
+                return { ...snapshot, subjects: snapshot.subjects.filter((row) => ids.includes(row.id)) };
+              },
+            }),
           },
         }
       : {
@@ -204,12 +208,15 @@ export async function currentDiscoveryPrimaryCandidates(
           source: {
             count: entry.source.count.bind(entry.source),
             page: entry.source.page.bind(entry.source),
-            async read(partition, ids) {
-              const snapshot = accounts.get(partition);
-              if (!snapshot || ids.some((id) => !saved.some((key) => key.owner === 'accounts' && key.id === id)))
-                unavailable();
-              return { ...snapshot, accounts: snapshot.accounts.filter((row) => ids.includes(row.id)) };
-            },
+            read: createCurrentSourceReader({
+              current: entry.source.read.bind(entry.source),
+              initial(partition, ids) {
+                const snapshot = accounts.get(partition);
+                if (!snapshot || ids.some((id) => !saved.some((key) => key.owner === 'accounts' && key.id === id)))
+                  unavailable();
+                return { ...snapshot, accounts: snapshot.accounts.filter((row) => ids.includes(row.id)) };
+              },
+            }),
           },
         },
   );
@@ -305,16 +312,19 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
         unavailable();
       snapshots.set(partition, { partition, position: position!, subjects });
     }
-    const cached: SubjectSource = {
+    const initialSource = (): SubjectSource => ({
       count: source.count.bind(source),
       ...(source.prepareRelationFacets ? { prepareRelationFacets: source.prepareRelationFacets.bind(source) } : {}),
       ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
-      async read(partition, ids) {
-        const snapshot = snapshots.get(partition);
-        if (!snapshot) unavailable();
-        return { ...snapshot, subjects: snapshot.subjects.filter((subject) => ids.includes(subject.id)) };
-      },
-    };
+      read: createCurrentSourceReader({
+        current: source.read.bind(source),
+        initial(partition, ids) {
+          const snapshot = snapshots.get(partition);
+          if (!snapshot) unavailable();
+          return { ...snapshot, subjects: snapshot.subjects.filter((subject) => ids.includes(subject.id)) };
+        },
+      }),
+    });
     const selectedSemantic: Candidate[] = [];
     const checkedSubjects = new Map<string, IndexedSubject>();
     for (const entry of registry.entries) {
@@ -338,7 +348,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           matched: [],
         };
       });
-      const checked = await disclosure.checkHits(cached, hits, new Map(), {
+      const checked = await disclosure.checkHits(initialSource(), hits, new Map(), {
         ...(currentFilter === true ? {} : { filter: currentFilter }),
         ...(context.textField === 'credited_creator'
           ? { currentText: creditedText }

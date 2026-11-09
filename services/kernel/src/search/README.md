@@ -38,6 +38,19 @@ Search and erasure. Receipt keys are resolved and bound at the server entry befo
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index
 generations.
 
+Decision: retained primary observations seed only the first read of each identity. Revalidation reads
+through the same live Subject or Account owner; request-local snapshots cannot certify their own currentness.
+Each catalogue kind gets its own initial reader so another kind cannot consume its initial observation.
+Owner summaries are detached before nested hydration to detect replacement and in-place reductions alike.
+The disclosed candidate map alone supplies page membership; attached indexed rows cannot revive refusals.
+Final page selection, facet identities and kind witnesses share the surviving sequence, and unconsumed
+lookahead cannot certify exhaustion or an exact aggregate. Public totals remain omitted. Native acceptance
+extends the original query-privacy cell with hidden/taken-down useful pages, independent current Recipe
+reads while Book predicates prepare, Collection public-to-private disclosure and ordinary relay recovery.
+The worker observes both original tombstone handlers without replacing effects or stopping other services.
+The original serial erasure cases remain required. This attempt runs scoped typing only; native, browser
+and aggregate execution evidence remain open until the controller executes their owning suites.
+
 Subject search, public hit bases and bounded kind metadata require `search` grants; advanced filters/scopes,
 facets and ratings require `search_advanced`. Population/privacy, incarnation, erasure and native growth proofs remain
 Goal acceptance. Search, suggest and facets use one typed problem family: invalid, invalid-cursor, session, closed,

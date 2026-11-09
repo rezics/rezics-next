@@ -20,6 +20,7 @@ import type {
 } from '../../../../specs/dynamic-collections-driver.ts';
 import type { SearchRequest } from '../../src/search/service.ts';
 import type { SearchHit } from '../../src/search/hits.ts';
+import type { DiscoveryHttpPage } from '../../src/search/discovery-http.ts';
 import type { FacetDiscovery200Response } from '../../src/search/facet-discovery-contract.ts';
 import type {
   PublicFilterConsumerCaptureInput,
@@ -59,7 +60,7 @@ beforeAll(async () => {
   expect(fixture.release.digest).toBe(bundledDigest);
   assert(fixture.search);
   await fixture.setup.openFeatures(['search', 'search_advanced', 'personal_library']);
-  await fixture.grant('editor', ['moderation:hide', 'moderation:restore'], GLOBAL_CONTEXT);
+  await fixture.grant('editor', ['moderation:hide', 'moderation:restore', 'moderation:takedown'], GLOBAL_CONTEXT);
   classification = await fixture.classification();
   books = await fixture.books();
   filters = fixture.filters(classification, await fixture.diet());
@@ -287,6 +288,8 @@ test('native pre-suspension revoked bearer returns invalid_credentials with the 
 }, 30_000);
 
 test('withholding a real harem candidate while Search is paused blocks positive negative order fields and facets', async () => {
+  const independent = await fixture.authoredRecipe(`Independentprivacy${crypto.randomUUID().replaceAll('-', '')}`, 10);
+  await fixture.catchUp([independent]);
   const subject = books.subjects['B-long'];
   const fact = books.facts.find((fact) => fact.subject === subject.id && fact.property === 'schema:keywords');
   assert(fact);
@@ -308,7 +311,19 @@ test('withholding a real harem candidate while Search is paused blocks positive 
     hidden = true;
     const readable = status(await fixture.read(subject), 200).body.subject as Subject;
     expect(readable.statements['schema:keywords'] ?? []).toEqual([]);
+    status(await fixture.read(independent), 200);
     for (const persona of ['anonymous', 'editor', 'alice'] as const) {
+      const safe = status(
+        await fixture.request(persona, 'POST', '/v1/subjects:search', {
+          text: JSON.stringify((status(await fixture.read(independent), 200).body.subject as Subject).labels.en),
+          filter: { type: { in: ['schema:Recipe'] } },
+          sort: 'id',
+          languages: ['en'],
+        }),
+        200,
+      );
+      countFreeList(safe.body);
+      expect((safe.body.subjects as SearchHit[]).map(({ id }) => id)).toEqual([independent.id]);
       for (const request of [
         { filter: harem, sort: 'id' },
         { filter: notHarem, sort: 'id' },
@@ -1954,3 +1969,121 @@ for (const reduction of ['imported-source-fence', 'statement-consent-retraction'
     }
   }, 300_000);
 }
+
+for (const reduction of ['hide', 'takedown'] as const) {
+  test(`native ${reduction}: useful current pages survive delayed indexing and ordinary relay recovery`, async () => {
+    const marker = `Disclosure${crypto.randomUUID().replaceAll('-', '').replace(/[0-9]/g, 'a')}`;
+    const rows = [];
+    for (const suffix of ['A', 'B', 'C']) rows.push(await fixture.createSubject('schema:Book', `${marker} ${suffix}`));
+    await fixture.catchUp(rows);
+    const request = { text: marker, sort: 'name', limit: 2, languages: ['en'] } satisfies SearchRequest;
+    await pages(
+      'anonymous',
+      request,
+      rows.map(({ id }) => id),
+    );
+    const before = await fixture.search!.workerStats();
+    expect(before.registeredModules).toEqual(before.defaultModules);
+    expect(before.registrationCounts).toEqual(Object.fromEntries(before.defaultModules.map((name) => [name, 1])));
+    expect(
+      before.registeredEffects
+        .search!.filter(({ types }) => types.includes('com.rezics.access.account-tombstoned.v1'))
+        .map(({ name }) => name)
+        .sort(),
+    ).toEqual(['search_account_erasure', 'search_erasure']);
+    await fixture.search!.indexing('paused');
+    try {
+      status(
+        await fixture.request(
+          'editor',
+          'POST',
+          `/v1/subjects/${rows[1]!.id}:${reduction}`,
+          reduction === 'hide'
+            ? { reason: 'Delayed-index disclosure control' }
+            : {
+                notice: { complaint: 'Delayed-index disclosure control', received_at: new Date().toISOString() },
+              },
+          discoveryKey(),
+        ),
+        200,
+      );
+      // Independent owner reads establish the reduction and the surviving public row.
+      status(await fixture.read(rows[1]!), 404);
+      status(await fixture.read(rows[0]!), 200);
+      for (const persona of ['anonymous', 'editor'] as const) await pages(persona, request, [rows[0]!.id, rows[2]!.id]);
+      const denied = status(await fixture.request('suspended', 'POST', '/v1/subjects:search', request), 401);
+      expect(denied.body.code).toBe('invalid_credentials');
+      expect(denied.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+      const paused = await fixture.search!.workerStats();
+      expect(paused.startedServices).toEqual(before.startedServices);
+      expect(paused.registeredEffects).toEqual(before.registeredEffects);
+      await fixture.search!.indexing('running');
+      await fixture.catchUp([rows[0]!, rows[2]!]);
+      for (const persona of ['anonymous', 'editor'] as const) await pages(persona, request, [rows[0]!.id, rows[2]!.id]);
+      const resumed = await fixture.search!.workerStats();
+      expect(resumed.registeredModules).toEqual(before.registeredModules);
+      expect(resumed.searchStarterInvocations).toBe(before.searchStarterInvocations + 1);
+    } finally {
+      await fixture.search!.indexing('running');
+    }
+  }, 240_000);
+}
+
+test('native public-to-private Collection disclosure leaves current catalogue kinds useful during indexing pause', async () => {
+  const marker = `Ownermetadata${crypto.randomUUID().replaceAll('-', '').replace(/[0-9]/g, 'a')}`;
+  const book = await fixture.createSubject('schema:Book', marker);
+  await fixture.catchUp([book]);
+  const made = status(
+    await fixture.request('alice', 'POST', '/v1/collections', { title: marker, visibility: 'public' }, discoveryKey()),
+    201,
+  ).body.collection as CollectionView;
+  const request = { representation: 'discovery-v1', text: marker, sort: 'name', limit: 10, languages: ['en'] };
+  const mixed = async (persona: 'anonymous' | 'editor') => {
+    const response = await current(persona, '/v1/subjects:search', request);
+    for (const key of ['total', 'totals', 'count', 'estimate']) expect(response.body).not.toHaveProperty(key);
+    return response.body as DiscoveryHttpPage;
+  };
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    const page = await mixed('anonymous');
+    if (page.hits.some(({ key }) => key.id === made.id)) break;
+    assert(Date.now() < deadline, 'The ordinary relay did not publish the public Collection');
+    await Bun.sleep(25);
+  }
+  await fixture.search!.indexing('paused');
+  try {
+    const live = status(await fixture.request('alice', 'GET', `/v1/collections/${made.id}`), 200).body
+      .collection as CollectionView;
+    status(
+      await fixture.request(
+        'alice',
+        'PATCH',
+        `/v1/collections/${made.id}`,
+        { revision: live.revision, visibility: 'private' },
+        discoveryKey(),
+      ),
+      200,
+    );
+    status(await fixture.request('anonymous', 'GET', `/v1/collections/${made.id}`), 404);
+    expect(
+      (
+        status(await fixture.request('alice', 'GET', `/v1/collections/${made.id}`), 200).body
+          .collection as CollectionView
+      ).visibility,
+    ).toBe('private');
+    for (const persona of ['anonymous', 'editor'] as const) {
+      const page = await mixed(persona);
+      expect(page.hits.map(({ key }) => key.id)).toEqual([book.id]);
+      expect(page.next).toBeNull();
+      expect(JSON.stringify(page.hits)).not.toContain(made.id);
+      const kind = page.kinds.values.find(({ id }) => id === 'collection');
+      if (kind?.count) expect(kind.count).toEqual({ kind: 'collection', unavailable: true });
+    }
+    status(await fixture.request('suspended', 'POST', '/v1/subjects:search', request), 401);
+    await fixture.search!.indexing('running');
+    for (const persona of ['anonymous', 'editor'] as const)
+      expect((await mixed(persona)).hits.map(({ key }) => key.id)).toEqual([book.id]);
+  } finally {
+    await fixture.search!.indexing('running');
+  }
+}, 240_000);

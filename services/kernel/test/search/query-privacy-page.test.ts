@@ -85,6 +85,29 @@ test('a public-to-private change between candidate read and hydration drops the 
   });
   expect(page.order).toEqual([id(1)]);
   expect(page.hits[0]!.projected.id).toBe(id(1));
+  expect([...page.selection!.witnesses.get('schema:Book')!]).toEqual([id(1)]);
+  expect(page.selection!.dropped).toBe(page.dropped);
+});
+
+test('a refused current candidate cannot be revived by its attached indexed row or certify exhaustion', async () => {
+  const rows = [subject(1), subject(2), subject(3)];
+  const examined = rows.map((row, index) => hit(index + 1, row));
+  const page = await discloseQueryPrivacyPage({
+    currentness: queryPrivacyCurrentness(privacyHeads()),
+    examined,
+    subjects: new Map([
+      [examined[1]!, rows[1]!],
+      [examined[2]!, rows[2]!],
+    ]),
+    limit: 1,
+    exhausted: true,
+    aggregateProof: true,
+  });
+  expect(page.order).toEqual([id(2)]);
+  expect(page.consumed).toBe(2);
+  expect(page.exhausted).toBe(false);
+  expect(page.selection!.exhausted).toBe(false);
+  expect(page.proofs.aggregates.size).toBe(0);
 });
 
 test('nested label reads revalidate displayed fields from the current snapshot', async () => {

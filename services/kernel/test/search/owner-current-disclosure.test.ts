@@ -154,44 +154,48 @@ test('a full owner window keeps current cards through bounded initial and final 
   expect(reads).toBe(4);
 });
 
-test('a changed owner revision during nested hydration restarts instead of publishing the stale card', async () => {
-  const rows = [collection('Public shelf', '1'), collection('Public shelf', '2')];
-  let reads = 0;
-  const registry = createDiscoveryRegistry({
-    release: bundledRelease,
-    semantic: {
-      source: { read: unused, count: unused },
-      hydrate: unused,
-      icons: Object.fromEntries(Object.keys(bundledRelease.types).map((kind) => [kind, 'catalogue'])),
-    },
-    accounts: {
-      source: { read: unused, count: unused, page: unused },
-      hydrate: unused,
-      labels: { en: 'Accounts' },
-      icon: 'account',
-    },
-    ownerAdapters: {
-      collection: {
-        readiness: 'ready',
-        adapter: {
-          owner: 'commerce',
-          kind: 'collection',
-          metadata: { id: 'collection', labels: { en: 'Collections' }, icon: 'library' },
-          async readCurrent(ids) {
-            reads++;
-            return new Map(ids.map((currentId) => [currentId, rows[reads - 1]!] as const));
+test.each(['replacement', 'in-place'] as const)(
+  'a changed owner revision (%s) during nested hydration restarts instead of publishing the stale card',
+  async (mode) => {
+    const rows = [collection('Public shelf', '1'), collection('Public shelf', '2')];
+    let reads = 0;
+    const registry = createDiscoveryRegistry({
+      release: bundledRelease,
+      semantic: {
+        source: { read: unused, count: unused },
+        hydrate: unused,
+        icons: Object.fromEntries(Object.keys(bundledRelease.types).map((kind) => [kind, 'catalogue'])),
+      },
+      accounts: {
+        source: { read: unused, count: unused, page: unused },
+        hydrate: unused,
+        labels: { en: 'Accounts' },
+        icon: 'account',
+      },
+      ownerAdapters: {
+        collection: {
+          readiness: 'ready',
+          adapter: {
+            owner: 'commerce',
+            kind: 'collection',
+            metadata: { id: 'collection', labels: { en: 'Collections' }, icon: 'library' },
+            async readCurrent(ids) {
+              reads++;
+              if (mode === 'in-place' && reads === 2) Object.assign(rows[0]!, rows[1]);
+              return new Map(ids.map((currentId) => [currentId, rows[mode === 'in-place' ? 0 : reads - 1]!] as const));
+            },
           },
         },
+        review: { readiness: 'unavailable' },
+        space: { readiness: 'unavailable' },
       },
-      review: { readiness: 'unavailable' },
-      space: { readiness: 'unavailable' },
-    },
-  });
-  const candidates: DiscoveryOwnerCandidate[] = [
-    { key: { owner: 'commerce', kind: 'collection', route, id }, revision: '1', sourcePosition: '4' },
-  ];
-  await expect(hydrateOwnerDiscoveryHits(registry, candidates, context)).rejects.toMatchObject({
-    code: 'search_restart_required',
-  });
-  expect(reads).toBe(2);
-});
+    });
+    const candidates: DiscoveryOwnerCandidate[] = [
+      { key: { owner: 'commerce', kind: 'collection', route, id }, revision: '1', sourcePosition: '4' },
+    ];
+    await expect(hydrateOwnerDiscoveryHits(registry, candidates, context)).rejects.toMatchObject({
+      code: 'search_restart_required',
+    });
+    expect(reads).toBe(2);
+  },
+);
