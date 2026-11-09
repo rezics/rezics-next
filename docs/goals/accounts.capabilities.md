@@ -445,6 +445,8 @@ producer fixtures do not establish whole-graph execution, mounted surfaces or pr
 
 **Collection worker ownership:** Finite Source setup owns its executor without starting an unrelated background worker. The isolated native worker starts on demand before an import's request deadlines or a member-page preparation request; ordinary import fixtures retain eager startup. Both paths retain actual work execution and close ownership.
 
+**Collection evidence boundary:** Native capture now passes all three cases, including explicit empty publication and fixture teardown. Earlier selected publication returned success and persisted exactly the selected member before exact replay failed with dependency unavailable. Publication advances the Source generation; the current canonical readiness and scoped registration still require generation replacement and retirement coordination. Preserve these assertions and the fixture repair. Root coordinates that producer remainder separately; an interrupted later collection process supplies no new collection or teardown result. The continuation is `.temp/continuation/accounts-collection-generation.md`; no erasure outcome follows from this evidence.
+
 **Collection fixture scopes:** An owner-presence rule reads the native Entry, session and holding populations, so the rules fixture requests `library_entry:list`, `progress_session:list` and `copy:list` alongside the existing read scopes. Reduced credentials still omit `library_entry:read`; publication and replay assertions remain unchanged, with the first publication response body included in failure diagnostics.
 
 **Personas:** Deleting owner; old-token owner; anonymous reader; Bob or other affected user; owner-specific data producers; ordinary restore attempt.
