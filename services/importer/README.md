@@ -27,6 +27,10 @@ The durable source tuple is configured alias plus exact external ID. The alias i
 
 Decision: cross-media seed stderr formats only locally registered operation diagnostics; generic error text and source URL credentials, query and fragment stay private ([diagnostic contract](seed-diagnostics.md)).
 
+Decision: expose fixed seed/publication phases and their remaining eligible work on stderr through the existing
+[diagnostic owner](seed-diagnostics.md). Acknowledged writes still require current publication reads and the result
+handoff; a timeout alone does not justify replaying or changing completed journal work.
+
 Conversion maps one selected normalized record with current bindings and exact released descriptors. It does not acquire, resolve identities, authorize, accept, adopt or read public results. Importer records source and request journals, prepares ordinary create/propose commands and retains exact actor, destination, body, key and response through retry. A run stages and validates one complete generation, checks mass disappearance, then seals before writes. Unknown delivery resumes the same sealed intent before source reacquisition; changed terminal receipts remain distinct. Retryable 429/503 stays bounded; authorization and fence refusals remain refusals.
 
 Decision: a waiter for a staged same-run dependency owned by another active record yields its parent's write-admission slot and reacquires through the adaptive scheduler before continuing; a failed dependency leaves its parent unclassified for sealed replay. This keeps earlier effects and exact pending bytes intact at width one.

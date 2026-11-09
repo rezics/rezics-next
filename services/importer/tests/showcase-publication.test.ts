@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -27,6 +27,7 @@ import {
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
 import { prepareShowcaseTags } from '../src/showcase-tags.ts';
+import { formatSeedError, SeedFinalization } from '../src/seed-cli.ts';
 
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
@@ -556,7 +557,39 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     const tagAcceptanceCallsBeforeReplay = acceptanceCalls.filter(
       (call) => call.candidateId === membershipCandidateId,
     ).length;
+    const retainedCommands = journal.acknowledgedCommands();
+    const failure = new Error(
+      'SQLITE_IOERR private response token=secret https://user:password@fixture.test/?key=secret',
+    );
+    const failedPhases: string[] = [];
+    const journalRead = spyOn(journal, 'acknowledgedCommands').mockImplementationOnce(() => {
+      throw failure;
+    });
+    try {
+      await expect(
+        publishShowcase({
+          plan,
+          result,
+          aliases: crossMediaAliases,
+          journal,
+          review,
+          publicClient,
+          onProgress: (line) => failedPhases.push(line),
+        }),
+      ).rejects.toBe(failure);
+    } finally {
+      journalRead.mockRestore();
+    }
+    expect(failedPhases.at(-1)).toContain('state=failed scope=publication phase=target-current-reads');
+    expect(failedPhases.at(-1)).toContain('remaining=target-current-reads,candidate-recovery');
+    expect(failedPhases.some((line) => line.includes('state=completed'))).toBe(false);
+    expect(formatSeedError(failure)).toStartWith('Cross-media seed failed finalization{scope=publication');
+    expect(formatSeedError(failure)).not.toMatch(/secret|password|private response|fixture\.test/u);
+    expect(journal.acknowledgedCommands()).toEqual(retainedCommands);
+    expect(journal.preparedCommands()).toEqual([]);
+    const publicationPhases: string[] = [];
     const replayed = await publishShowcase({
+      onProgress: (line) => publicationPhases.push(line),
       plan,
       result,
       aliases: crossMediaAliases,
@@ -566,6 +599,11 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       ...tagOptions,
     });
     expect(replayed.status).toBe('published');
+    expect(publicationPhases).toHaveLength(12);
+    expect(publicationPhases.at(-2)).toContain('phase=manifest-finalization remaining=manifest-finalization');
+    expect(publicationPhases.at(-1)).toBe(
+      'Cross-media seed finalization state=completed scope=publication remaining=none',
+    );
     // Equal acceptance bodies for distinct targets must never share a receipt key.
     const candidateKeys = new Map<string, string>();
     for (const call of acceptanceCalls) {
@@ -1390,4 +1428,20 @@ test('durable adopt recovers identity-bound generation 32 after close, a later r
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('result-write failure retains its original error and reports only fixed remaining phases', () => {
+  const lines: string[] = [];
+  const progress = new SeedFinalization('seed', (line) => lines.push(line));
+  const failure = new Error('ENOSPC /private/secret-result.json');
+  progress.enter('result-write');
+  progress.failed(failure);
+  expect(lines).toEqual([
+    'Cross-media seed finalization state=started scope=seed phase=result-write remaining=result-write',
+    'Cross-media seed finalization state=failed scope=seed phase=result-write remaining=result-write',
+  ]);
+  expect(formatSeedError(failure)).toBe(
+    'Cross-media seed failed finalization{scope=seed phase=result-write remaining=result-write}',
+  );
+  expect(formatSeedError(new Error('phase=result-write secret'))).toBe('Cross-media seed failed');
 });

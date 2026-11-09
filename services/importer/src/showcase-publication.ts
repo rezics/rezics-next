@@ -1,3 +1,4 @@
+import { SeedFinalization } from './seed-cli.ts';
 import { showcaseFranchiseFence } from './showcase-franchise.ts';
 import { showcaseTagParentSourceFence } from './showcase-cross-provider-tags.ts';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
@@ -864,8 +865,7 @@ async function publicationTargetReadings(input: {
   return readings;
 }
 
-/** Accept exact acknowledged candidates, adopt only those selections, then check them as a public viewer. */
-export async function publishShowcase(input: {
+type ShowcasePublicationInput = {
   plan: CrossMediaPlan;
   result: CrossMediaSeedResult;
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
@@ -882,14 +882,37 @@ export async function publishShowcase(input: {
   tagParentGaps?: ShowcaseManifest['tagParentGaps'];
   tagParentAcknowledgements?: readonly ShowcaseAcknowledgement[];
   tagParentRefreshes?: readonly ShowcaseTagParentRefresh[];
-}): Promise<ShowcasePublicationResult> {
+  /** Defaults to bounded stderr phase diagnostics. */
+  onProgress?: (line: string) => void;
+};
+
+/** Accept exact acknowledged candidates, adopt only those selections, then check them as a public viewer. */
+export async function publishShowcase(input: ShowcasePublicationInput): Promise<ShowcasePublicationResult> {
+  const progress = new SeedFinalization('publication', input.onProgress);
+  try {
+    const result = await publishShowcasePhases(input, progress);
+    progress.complete();
+    return result;
+  } catch (error) {
+    progress.failed(error);
+    throw error;
+  }
+}
+
+async function publishShowcasePhases(
+  input: ShowcasePublicationInput,
+  progress: SeedFinalization<'publication'>,
+): Promise<ShowcasePublicationResult> {
+  progress.enter('cover-current-reads');
   const mediaOutcomes = await currentCoverOutcomes(input.result, input.review);
+  progress.enter('target-current-reads');
   const readings = await publicationTargetReadings({
     ...input,
     acknowledgements: input.journal.acknowledgedCommands(),
   });
   const result = { ...input.result, readings, mediaOutcomes };
   const pageCache = new Map<string, CandidatePage>();
+  progress.enter('candidate-recovery');
   const recovered = await resolveLegacyCandidates({
     plan: input.plan,
     result,
@@ -901,6 +924,7 @@ export async function publishShowcase(input: {
   const gameGenre = input.result.bangumiGameGenrePublication;
   const tagParentCommandKeys = new Set((input.tagParentAcknowledgements ?? []).map((entry) => entry.command.key));
   let parentPublicationOutcomes: ShowcaseTagParentPublication[] = [];
+  progress.enter('candidate-current-reads');
   let manifestAcknowledgements = await preferCurrentCandidateAcknowledgements(
     [
       ...recovered.acknowledgements,
@@ -955,6 +979,7 @@ export async function publishShowcase(input: {
           }
         : {}),
     });
+  progress.enter('manifest-validation');
   let manifest = buildManifest(manifestAcknowledgements);
 
   const omissions = [
@@ -1356,6 +1381,7 @@ export async function publishShowcase(input: {
     if (!record.subjectId || !recordHasSourceIdentity(record))
       if (record.subjectId) blockedSubjects.add(record.subjectId);
 
+  progress.enter('acceptance');
   const blockedTagSubjects = new Set<string>();
   const tagFenceWorkIds = [
     ...new Set([
@@ -1451,6 +1477,7 @@ export async function publishShowcase(input: {
     }
   }
 
+  progress.enter('tag-parent-publication');
   const grouped = new Map<string, { record: ShowcaseRecord; property: string; ids: Set<string> }>();
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
@@ -1900,6 +1927,7 @@ export async function publishShowcase(input: {
     if (!grouped.has(key)) grouped.set(key, { record, property: 'schema:genre', ids: new Set<string>() });
   }
 
+  progress.enter('membership-acceptance');
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
     if (
@@ -1950,6 +1978,7 @@ export async function publishShowcase(input: {
         group.ids.delete(candidateId);
     if (group.property === 'skos:broader' && group.ids.size === 0) grouped.delete(key);
   }
+  progress.enter('adoption');
   for (const [key, group] of grouped) {
     const [id] = key.split('\0');
     const refreshWeights =
@@ -2164,6 +2193,7 @@ export async function publishShowcase(input: {
     }
   }
 
+  progress.enter('public-readback');
   const published: {
     provider: 'bangumi' | 'vndb';
     sourceKey: string;
@@ -2438,6 +2468,7 @@ export async function publishShowcase(input: {
     });
   }
 
+  progress.enter('manifest-finalization');
   const finalManifest = buildManifest(manifestAcknowledgements, finalMediaOutcomes);
   const finalMedia = finalManifest.media.map((item) => {
     const handoff = readHandoffs.get(`${item.sourceAlias}\0${item.sourceKey}`);
