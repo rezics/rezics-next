@@ -639,7 +639,7 @@ function safeGapKey(value: Record<string, unknown>): string {
 }
 
 async function candidatePage(
-  input: { review: ShowcaseReviewPort; id: string; property: string },
+  input: { review: Pick<ShowcaseReviewPort, 'reviewedCandidates'>; id: string; property: string },
   cache: Map<string, CandidatePage>,
 ): Promise<CandidatePage> {
   const key = groupKey(input.id, input.property);
@@ -657,6 +657,52 @@ async function candidatePage(
   if (cache.size >= showcaseLimits.reviewPage) cache.delete(cache.keys().next().value!);
   cache.set(key, page);
   return page;
+}
+
+/** Conflicting request receipts do not decide which citation the native candidate actually owns. */
+export async function preferCurrentCandidateAcknowledgements(
+  acknowledgements: readonly ShowcaseAcknowledgement[],
+  review: Pick<ShowcaseReviewPort, 'reviewedCandidates'>,
+  pageCache: Map<string, CandidatePage>,
+): Promise<ShowcaseAcknowledgement[]> {
+  const groups = new Map<string, ShowcaseAcknowledgement[]>();
+  for (const acknowledgement of acknowledgements) {
+    const key = acknowledgement.candidateId ?? acknowledgement.command.key;
+    const group = groups.get(key);
+    if (group) group.push(acknowledgement);
+    else groups.set(key, [acknowledgement]);
+  }
+  const selected: ShowcaseAcknowledgement[] = [];
+  for (const group of groups.values()) {
+    const fallback = group.at(-1)!;
+    const { candidateId, command } = fallback;
+    let exact: ShowcaseAcknowledgement | undefined;
+    if (
+      candidateId &&
+      command.op === 'propose' &&
+      group.some((entry) => entry.commandDigest !== fallback.commandDigest)
+    ) {
+      try {
+        const page = await candidatePage(
+          { review, id: command.subject, property: command.statement.property.id },
+          pageCache,
+        );
+        const current = page.candidates.find((candidate) => candidate.id === candidateId);
+        if (current)
+          exact = group.find(
+            ({ command: proposed }) =>
+              proposed.op === 'propose' &&
+              proposed.subject === command.subject &&
+              showcaseSourceMatches(current.source, proposed.source) &&
+              showcaseStatementMatches(current.statement, proposed.statement),
+          );
+      } catch {
+        // The normal publication validation below still owns unavailable/mismatched readback diagnostics.
+      }
+    }
+    selected.push(exact ?? fallback);
+  }
+  return selected;
 }
 
 async function resolveLegacyCandidates(input: {
@@ -842,6 +888,7 @@ export async function publishShowcase(input: {
     acknowledgements: input.journal.acknowledgedCommands(),
   });
   const result = { ...input.result, readings, mediaOutcomes };
+  const pageCache = new Map<string, CandidatePage>();
   const recovered = await resolveLegacyCandidates({
     plan: input.plan,
     result,
@@ -853,16 +900,16 @@ export async function publishShowcase(input: {
   const gameGenre = input.result.bangumiGameGenrePublication;
   const tagParentCommandKeys = new Set((input.tagParentAcknowledgements ?? []).map((entry) => entry.command.key));
   let parentPublicationOutcomes: ShowcaseTagParentPublication[] = [];
-  const acknowledgementByCandidate = new Map<string, ShowcaseAcknowledgement>();
-  for (const acknowledgement of [
-    ...recovered.acknowledgements,
-    ...(genre?.acknowledgements ?? []),
-    ...(gameGenre?.acknowledgements ?? []),
-    ...(input.tagParentAcknowledgements ?? []),
-  ]) {
-    const key = acknowledgement.candidateId ?? acknowledgement.command.key;
-    acknowledgementByCandidate.set(key, acknowledgement);
-  }
+  let manifestAcknowledgements = await preferCurrentCandidateAcknowledgements(
+    [
+      ...recovered.acknowledgements,
+      ...(genre?.acknowledgements ?? []),
+      ...(gameGenre?.acknowledgements ?? []),
+      ...(input.tagParentAcknowledgements ?? []),
+    ],
+    input.review,
+    pageCache,
+  );
   const buildManifest = (
     acknowledgements: readonly ShowcaseAcknowledgement[],
     outcomes: readonly CrossMediaMediaOutcome[] = mediaOutcomes,
@@ -906,7 +953,6 @@ export async function publishShowcase(input: {
           }
         : {}),
     });
-  let manifestAcknowledgements = [...acknowledgementByCandidate.values()];
   let manifest = buildManifest(manifestAcknowledgements);
 
   const omissions = [
@@ -956,7 +1002,6 @@ export async function publishShowcase(input: {
     );
   let assertions = assertionsFor(manifest);
   const currentSubjectCache = new Map<string, ReviewedSubjectRead | null>();
-  const pageCache = new Map<string, CandidatePage>();
   const validated = new Map<string, CandidateRead>();
   const currentTagMembershipCandidateDigests = new Set<string>();
   const blockedSubjects = new Set<string>();
