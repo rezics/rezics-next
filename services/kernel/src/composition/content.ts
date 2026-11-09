@@ -12,6 +12,9 @@ import {
   bindFeedCapabilities,
   tryFeedCapabilities,
   readRealmSubjectIdentityMappings,
+  prepareFeedContentContext,
+  composeFeedViewerPersonalActions,
+  type FeedEnrichmentPorts,
   type FeedProducerCapabilities,
 } from '../content/adapters/index.ts';
 import {
@@ -29,11 +32,8 @@ import { createNativeAccessReadingPorts } from '../access/adapters/reading.ts';
 import { createRealmScopeEvidence } from '../community/adapters/index.ts';
 import { createSubjectScopeEvidence } from '../semantic/adapters/index.ts';
 import { withRealmDisclosureWork } from '../search/adapters/index.ts';
-import { prepareFeedContentContext } from '../content/feed-context.ts';
-import { composeFeedViewerPersonalActions } from '../content/feed-viewer.ts';
 import { readSubjectSummaries, readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { readVisibleRatingQuestion, STANDARD_QUESTION_ID } from '../rating/index.ts';
-import type { FeedEnrichmentPorts } from '../content/feed-enrichment-ports.ts';
 import type { ContentAmbient, ContentApplication } from '../content/contract/index.ts';
 
 /** This process root chooses each foreign supplier. No supplier performs I/O at installation. */
