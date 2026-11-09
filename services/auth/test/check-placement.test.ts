@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runPlacedTests } from '../scripts/placed-tests.ts';
-import { checkPlan } from '../scripts/check.ts';
+import { checkPlan, runAuthCheckStages } from '../scripts/check.ts';
 import type { withTestDatabaseLane } from '../scripts/database.ts';
 
 function lane(events: string[]): typeof withTestDatabaseLane {
@@ -31,6 +31,24 @@ test('Auth tests-only check requires explicit test files and preserves the defau
     files: ['test/recovery-completion.test.ts'],
     tests: ['test/recovery-completion.test.ts'],
   });
+});
+
+test('one Auth pass retains independent failures and skips only missing prerequisites', async () => {
+  const ran: string[] = [];
+  const fail = (name: string) => () => {
+    ran.push(name);
+    throw new Error(`${name} detail`);
+  };
+  const result = await runAuthCheckStages([
+    { name: 'typecheck', run: fail('typecheck') },
+    { name: 'generated client', after: ['typecheck'], run: () => ran.push('generated client') },
+    { name: 'lint', run: fail('lint') },
+    { name: 'native fixtures', run: () => ran.push('native fixtures') },
+  ]).catch((error: Error) => error.message);
+  expect(ran).toEqual(['typecheck', 'lint', 'native fixtures']);
+  expect(result).toContain('typecheck: typecheck detail');
+  expect(result).toContain('generated client: unrun (requires typecheck)');
+  expect(result).toContain('lint: lint detail');
 });
 
 test('placed runner preserves executable, caller cwd, production environment, reference and exact test filter', async () => {

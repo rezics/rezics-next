@@ -117,6 +117,27 @@ export function checkPlan(args: string[], moduleDirectory: string, options: { te
   return plan;
 }
 
+type CheckStage = { name: string; after?: readonly string[]; run: () => unknown };
+
+export async function runAuthCheckStages(stages: readonly CheckStage[]): Promise<void> {
+  const passed = new Set<string>();
+  const issues: string[] = [];
+  for (const stage of stages) {
+    const blocked = stage.after?.filter((name) => !passed.has(name)) ?? [];
+    if (blocked.length) {
+      issues.push(`${stage.name}: unrun (requires ${blocked.join(', ')})`);
+      continue;
+    }
+    try {
+      await stage.run();
+      passed.add(stage.name);
+    } catch (error) {
+      issues.push(`${stage.name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (issues.length) throw new Error(`Auth check results:\n${issues.join('\n')}`);
+}
+
 if (import.meta.main) {
   const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const originalArgs = process.argv.slice(2);
@@ -127,39 +148,70 @@ if (import.meta.main) {
   process.exitCode = await databaseCheck(['bun', 'scripts/check.ts', ...originalArgs], async () => {
     const database = ownDatabase();
     try {
-      migrate(database.url);
-      if (schemaDump(database.url, database) !== (await Bun.file('db/schema.sql').text())) {
-        throw new Error('Auth schema dump differs; run db dump against a freshly migrated separate database');
-      }
-      const pool = new Pool({ connectionString: database.url });
-      try {
-        const plan = await getMigrations(
-          betterAuthSchemaOptions(pool, 'https://auth.invalid', 'schema-verification-only-secret-32-bytes'),
-        );
-        if (
-          plan.toBeCreated.length ||
-          plan.toBeAdded.length ||
-          plan.toBeAddedIndexes.length ||
-          plan.unsafeChanges.length ||
-          plan.schemaProblems.length
-        ) {
-          throw new Error('Committed schema differs from the installed Better Auth schema');
-        }
-      } finally {
-        await pool.end();
-      }
       const env = { ...process.env, AUTH_TEST_DATABASE_URL: database.url };
+      const migration = 'Auth migration';
+      const stages: CheckStage[] = [
+        { name: migration, run: () => migrate(database.url) },
+        {
+          name: 'schema dump',
+          after: [migration],
+          run: async () => {
+            if (schemaDump(database.url, database) !== (await Bun.file('db/schema.sql').text()))
+              throw new Error('Auth schema dump differs; run db dump against a freshly migrated separate database');
+          },
+        },
+        {
+          name: 'installed Better Auth schema',
+          after: [migration],
+          run: async () => {
+            const pool = new Pool({ connectionString: database.url });
+            try {
+              const shape = await getMigrations(
+                betterAuthSchemaOptions(pool, 'https://auth.invalid', 'schema-verification-only-secret-32-bytes'),
+              );
+              if (
+                shape.toBeCreated.length ||
+                shape.toBeAdded.length ||
+                shape.toBeAddedIndexes.length ||
+                shape.unsafeChanges.length ||
+                shape.schemaProblems.length
+              )
+                throw new Error('Committed schema differs from the installed Better Auth schema');
+            } finally {
+              await pool.end();
+            }
+          },
+        },
+      ];
       if (!testsOnly) {
-        await withCompilerSchema(database, async (compilerUrl) => {
-          run(
-            resolve('../../node_modules/.bin/tsc'),
-            ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
-            { ...env, DATABASE_URL: compilerUrl },
-            { timeout: 600_000 },
-          );
-        });
-        run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...(plan.files ?? ['.'])], env);
-        run(resolve('../../node_modules/.bin/oxfmt'), ['--check', ...(plan.files ?? ['.'])], env);
+        stages.push(
+          {
+            name: 'typecheck',
+            after: [migration],
+            run: () =>
+              withCompilerSchema(database, async (compilerUrl) => {
+                run(
+                  resolve('../../node_modules/.bin/tsc'),
+                  ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
+                  { ...env, DATABASE_URL: compilerUrl },
+                  { timeout: 600_000 },
+                );
+              }),
+          },
+          {
+            name: 'lint',
+            run: () =>
+              run(
+                process.execPath,
+                ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...(plan.files ?? ['.'])],
+                env,
+              ),
+          },
+          {
+            name: 'format',
+            run: () => run(resolve('../../node_modules/.bin/oxfmt'), ['--check', ...(plan.files ?? ['.'])], env),
+          },
+        );
       }
       if (plan.tests.length > 0) {
         const psql = async (sql: string): Promise<void> => {
@@ -173,29 +225,37 @@ if (import.meta.main) {
         };
         // The template is migrated and dump-checked and never used by a test; each file runs on its own copy.
         // Native fixtures copy this kernel template; migrating it here replaces one replay per fixture.
-        migrateKernelTemplate(database.url);
-        const { failed } = await runLaneSuite({
-          service: 'auth',
-          directory,
-          files: plan.tests,
-          ...(plan.testArguments ? { testArguments: plan.testArguments } : {}),
-          partial: plan.files !== null,
-          createDatabase: (name) => psql(`CREATE DATABASE ${name} TEMPLATE ${TEMPLATE_DATABASE}`),
-          dropDatabase: (name) => psql(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`),
-          environment: (name) => {
-            const url = database.url.replace(`/${TEMPLATE_DATABASE}?`, `/${name}?`);
-            return {
-              ...env,
-              AUTH_CHECK_CONTAINER: database.container,
-              AUTH_CHECK_LANE_OWNER: String(process.pid),
-              AUTH_CHECK_KERNEL_TEMPLATE: KERNEL_TEMPLATE_DATABASE,
-              DATABASE_URL: url,
-              AUTH_TEST_DATABASE_URL: url,
-            };
+        const template = 'Kernel test template';
+        stages.push({ name: template, after: [migration], run: () => migrateKernelTemplate(database.url) });
+        stages.push({
+          name: 'native test files',
+          after: [template],
+          run: async () => {
+            const { failed } = await runLaneSuite({
+              service: 'auth',
+              directory,
+              files: plan.tests,
+              ...(plan.testArguments ? { testArguments: plan.testArguments } : {}),
+              partial: plan.files !== null,
+              createDatabase: (name) => psql(`CREATE DATABASE ${name} TEMPLATE ${TEMPLATE_DATABASE}`),
+              dropDatabase: (name) => psql(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`),
+              environment: (name) => {
+                const url = database.url.replace(`/${TEMPLATE_DATABASE}?`, `/${name}?`);
+                return {
+                  ...env,
+                  AUTH_CHECK_CONTAINER: database.container,
+                  AUTH_CHECK_LANE_OWNER: String(process.pid),
+                  AUTH_CHECK_KERNEL_TEMPLATE: KERNEL_TEMPLATE_DATABASE,
+                  DATABASE_URL: url,
+                  AUTH_TEST_DATABASE_URL: url,
+                };
+              },
+            });
+            if (failed.length) throw new Error(`${failed.length} file(s) failed:\n${failed.join('\n')}`);
           },
         });
-        if (failed.length) throw new Error(`Auth tests failed for ${failed.length} file(s):\n${failed.join('\n')}`);
       }
+      await runAuthCheckStages(stages);
     } finally {
       database.close();
     }
