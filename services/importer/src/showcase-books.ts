@@ -951,12 +951,12 @@ async function seedShowcaseBooks(
     includeShowcaseBookRecords(selection, planned);
     plan.records.bangumi = selection.records.bangumi;
     plan.entities.bangumi = selection.entities.bangumi;
-    plan.coverSources = selection.coverSources;
-    plan.creatorImageSources = selection.creatorImageSources;
-    plan.personCareerSources = selection.personCareerSources;
-    plan.personSources = selection.personSources;
-    plan.characterAppearances = selection.characterAppearances;
-    plan.gameCharacterAppearances = selection.gameCharacterAppearances;
+    plan.coverSources = selection.coverSources ?? [];
+    plan.creatorImageSources = selection.creatorImageSources ?? [];
+    plan.personCareerSources = selection.personCareerSources ?? [];
+    plan.personSources = selection.personSources ?? [];
+    plan.characterAppearances = selection.characterAppearances ?? [];
+    plan.gameCharacterAppearances = selection.gameCharacterAppearances ?? [];
   }
   const showcase =
     input.journal && input.review && input.publicClient

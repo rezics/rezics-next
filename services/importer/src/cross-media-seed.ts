@@ -4426,7 +4426,7 @@ export async function runCrossMediaSeedCli(
           planned: plannedBooks,
           basePlan: publicationPlan,
           extras: seedExtras(),
-          characterBindings,
+          ...(characterBindings === undefined ? {} : { characterBindings }),
           tables: input,
           path: statePath,
           port,
