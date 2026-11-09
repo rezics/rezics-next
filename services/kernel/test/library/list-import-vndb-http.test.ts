@@ -577,12 +577,12 @@ async function sameHomeScoreCaller() {
         [scorer.actor.accountId, id],
       )
     ).rows[0].score;
+  const client = createKernelClient('http://kernel.test', {
+    headers: { authorization: `Bearer ${scorer.bearer}` },
+    fetch: ((input, init) => f.handle(new Request(input, init))) as typeof fetch,
+  });
   async function importUpload(source: string) {
     const journal = new ShowcaseJournal(':memory:');
-    const client = createKernelClient('http://kernel.test', {
-      headers: { authorization: `Bearer ${scorer.bearer}` },
-      fetch: ((input, init) => f.handle(new Request(input, init))) as typeof fetch,
-    });
     try {
       const input = {
         client,
@@ -599,7 +599,7 @@ async function sameHomeScoreCaller() {
       journal.close();
     }
   }
-  return { ...scorer, target, send, votes, service, scoreReview, stored, importUpload };
+  return { ...scorer, target, send, votes, service, scoreReview, stored, importUpload, client };
 }
 
 test('VNDB explicit unmatched score choice commits chosen units, zero and clear with counted current readback and independent Entry state', async () => {
@@ -682,6 +682,22 @@ test('VNDB explicit unmatched score choice commits chosen units, zero and clear 
     state: 'counted',
     units: 15,
   });
+  const ownerLibrary = await readShowcasePersonalLibrary({ client: c.client });
+  if (ownerLibrary.state !== 'current') throw new Error(ownerLibrary.code);
+  expect(ownerLibrary.value.libraryEntries.find((item) => item.subjectId === c.target)).toMatchObject({
+    subjectId: c.target,
+    state: 'playing',
+  });
+  expect(ownerLibrary.value.viewerFacts).toMatchObject({
+    state: 'current',
+    rows: [
+      expect.objectContaining({
+        subjectId: c.target,
+        entry: { state: 'present', entryState: 'playing' },
+        vote: { state: 'present', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 15 },
+      }),
+    ],
+  });
   const frozen = await c.stored(uploadId);
   expect(frozen).toMatchObject({ status: 'applied', nativeGuard: reviewed.nativeGuard, commandActor: c.actor });
   expect(frozen.sourceDigest).toHaveLength(64);
@@ -708,6 +724,20 @@ test('VNDB explicit unmatched score choice commits chosen units, zero and clear 
     });
     const current = (await c.votes.readVoteReview(c.actor, STANDARD_QUESTION_ID, c.target)).currentVote;
     expect(current).toMatchObject(units === null ? { state: 'clear', units: null } : { state: 'counted', units: 0 });
+    const ownerCurrent = await readShowcasePersonalLibrary({ client: c.client });
+    if (ownerCurrent.state !== 'current') throw new Error(ownerCurrent.code);
+    expect(ownerCurrent.value.viewerFacts).toMatchObject({
+      state: 'current',
+      rows: [
+        expect.objectContaining({
+          subjectId: c.target,
+          vote:
+            units === null
+              ? { state: 'absent', questionId: STANDARD_QUESTION_ID, questionRevision: 1 }
+              : { state: 'present', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 0 },
+        }),
+      ],
+    });
     expect((await c.send('POST', `${base}/${next.uploadId}:apply`, selection)).outcomes[0].currentVote).toMatchObject(
       expected,
     );

@@ -77,6 +77,9 @@ account authority, chosen identity, readability, release, cancellation and nativ
 An unknown failure retries that original command; it cannot be re-reviewed into different operands. Exact native
 receipt replay remains possible after an acknowledgement is lost. Applied rows are never applied again.
 
+Decision: current authority or visibility failures (HTTP 401, 403 or 404) keep the prepared journal intent retryable;
+restored authority replays the same body and key, while terminal input refusals stay recorded.
+
 Refreshing a source review retires its metadata tokens rather than carrying them into a corrected match. An
 unresolved state, metadata or date dispatch must settle before review replacement.
 Corrected matches may explicitly adopt labels on the chosen readable target. New label operands bind both the
