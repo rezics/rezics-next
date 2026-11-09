@@ -128,6 +128,32 @@ test('a genuine overlap holds only publication, leaves current main/dev intact, 
   } finally { f.dispose(); }
 });
 
+test('an explicit merge preserves a manual resolution without replaying the old conflict', async () => {
+  const f = fixture();
+  try {
+    f.commit('main', 'resident.ts', 'const hotfix = true;\n');
+    f.commit('dev', 'resident.ts', 'const feature = true;\n');
+    const main = git(f.checkout, 'rev-parse', 'main');
+    expect((await preserveMainHotfixes(f.options)).status).toBe('conflict');
+    git(f.checkout, 'checkout', '-q', 'dev');
+    expect(spawnSync('git', ['merge', '--no-commit', 'main'], { cwd: f.checkout }).status).toBe(1);
+    writeFileSync(join(f.checkout, 'resident.ts'), 'const hotfix = true;\nconst feature = true;\n');
+    git(f.checkout, 'add', 'resident.ts');
+    git(f.checkout, 'commit', '-qm', 'Resolve overlap');
+    const dev = git(f.checkout, 'rev-parse', 'dev');
+    git(f.checkout, 'checkout', '-q', 'main');
+    writeFileSync(join(f.checkout, '.git/hooks/reference-transaction'), `#!/bin/sh
+[ "$1" = prepared ] || exit 0
+while read -r old new ref; do
+  [ "$ref" != refs/heads/main ] || [ "$old" = "$new" ] || exit 1
+done
+`, { mode: 0o755 });
+    expect(await preserveMainHotfixes(f.options)).toEqual({ status: 'ready', main, dev });
+    expect(JSON.parse(readFileSync(f.stateFile, 'utf8')).adoptedMain).toBe(main);
+    expect(f.notices).toHaveLength(1);
+  } finally { f.dispose(); }
+});
+
 test('checkpoint verifies the entire source tree and bootstrap rejects forged snapshot metadata', async () => {
   const f = fixture();
   try {

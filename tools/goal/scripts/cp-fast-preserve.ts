@@ -70,6 +70,14 @@ export async function preserveMainHotfixes(options: PreservationOptions): Promis
       throw new Error('Main no longer contains the retained adoption anchor.');
     if (main === state.adoptedMain || tree(checkout, main) === tree(checkout, state.adoptedMain))
       return { status: 'ready', main, dev };
+    // An explicit merge into dev already received main, including any manual conflict resolution.
+    if (run(checkout, ['merge-base', '--is-ancestor', main, dev]).status === 0) {
+      const verified = run(checkout, ['update-ref', '--stdin'],
+        `update refs/heads/main ${main} ${main}\nupdate refs/heads/dev ${dev} ${dev}\n`);
+      if (verified.status !== 0) continue;
+      writeState(options.stateFile, { publication: state.publication, adoptedMain: main });
+      return { status: 'ready', main, dev };
+    }
     const merged = run(checkout, [
       'merge-tree', '--write-tree', '--name-only', '-z', `--merge-base=${state.adoptedMain}`, dev, main,
     ]);
