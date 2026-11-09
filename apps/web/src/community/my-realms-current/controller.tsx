@@ -13,7 +13,7 @@ import {
 } from '../realm-membership-lifetime';
 import { classifyRealmLeaveFailure } from '../realm-leave-recovery';
 import type { MyRealmsPage } from '../space';
-import type { MyRealmsViewOwner } from '../my-realms-caller';
+import type { MyRealmsViewOwner } from '../my-realms-lifetime';
 import type {
   MyRealmsCurrentController,
   MyRealmsCurrentRow,

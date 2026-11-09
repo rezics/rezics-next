@@ -6,7 +6,7 @@ import {
   type RealmMembershipCaller,
 } from './realm-membership-lifetime';
 import type { loadRealmMembership } from './space';
-import { beginMyRealmsRead, captureMyRealmsCaller, type MyRealmsCaller } from './my-realms-caller';
+import { beginMyRealmsRead, captureMyRealmsCaller, type MyRealmsCaller } from './my-realms-lifetime';
 import { getLocale } from '../paraglide/runtime.js';
 
 export type RealmViewer = Awaited<ReturnType<typeof loadRealmMembership>>;
