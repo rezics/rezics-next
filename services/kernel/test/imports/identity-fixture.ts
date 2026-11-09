@@ -84,6 +84,8 @@ export function importActionCatalogue(database: GrowthDatabase, routeKey: Uint8A
 }
 
 export interface ImportIdentityOptions {
+  /** Real human accounts registered before the owned workflow executor quiesces. */
+  readonly additionalAccounts?: readonly { readonly handle: string; readonly email: string }[];
   /** Full proposal/publication composition; minimal identity acceptance keeps its narrow grant. */
   readonly publication?: true;
   /** Explicit VNDB composition; other sources retain their existing authority. */
@@ -271,6 +273,7 @@ export function identitySupport(f: ImportIdentity): IdentitySupport {
   return result;
 }
 export type IdentitySupport = {
+  readonly additionalAccountIds: ReadonlyMap<string, string>;
   authDatabase: GrowthDatabase;
   bindings: ReturnType<typeof createNativeAccountBindings>;
   host: Awaited<ReturnType<typeof createAuthHost>>;
@@ -532,6 +535,11 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       };
       enter('auth-registration');
       const [human, comparison] = await Promise.all([person('governance'), person('ordinary')]);
+      const additionalAccountIds = new Map<string, string>();
+      for (const account of options.additionalAccounts ?? []) {
+        const registered = await host.workflows.register({ key: randomUUID(), ...account, password });
+        additionalAccountIds.set(account.email, registered.accountId);
+      }
       await options.afterStage?.('auth-registration');
       // The deployment CLI owns a fresh connection. No HTTP bootstrap or actor bypass.
       const beforeBootstrap = String(
@@ -1007,6 +1015,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         );
       }
       support.set(result, {
+        additionalAccountIds,
         authDatabase,
         bindings,
         host,

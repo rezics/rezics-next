@@ -38,25 +38,18 @@ const managementScopes = [
 
 /** Real Auth issuance, Access governance and Content import/jobs; only HTTPS and object storage are external fixtures. */
 export async function createCollectionPresentationFixture() {
-  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });
+  const runtime = await openApiRuntime({
+    batchRecords: 8,
+    maxFields: 64,
+    maxRecordBytes: 65_536,
+    additionalAccounts: [{ handle: 'collection_other', email: 'another@identity.test' }],
+  });
   try {
     const { identity, database } = runtime;
     const support = identitySupport(identity);
     const clientId = `collection-presentation-${randomUUID()}`;
     await identity.auth.internal.registerClient({ clientId, firstParty: true, scopes: managementScopes });
-    await support.host.workflows.start();
-    const another = await (async () => {
-      try {
-        return await support.host.workflows.register({
-          key: randomUUID(),
-          handle: 'collection_other',
-          email: 'another@identity.test',
-          password: 'private native identity fixture password',
-        });
-      } finally {
-        await support.host.workflows.close();
-      }
-    })();
+    const anotherAccountId = support.additionalAccountIds.get('another@identity.test')!;
     async function credential(person: 'ordinary' | 'governance' | 'another', scopes = collectionScopes) {
       const signed = await support.request('/signin', {
         email: `${person}@identity.test`,
@@ -74,7 +67,7 @@ export async function createCollectionPresentationFixture() {
       const issued = await support.request('/token', {}, headers);
       expect(issued.status).toBe(200);
       const { access_token: bearer } = (await issued.json()) as { access_token: string };
-      return { bearer, accountId: person === 'another' ? another.accountId : identity[person].accountId };
+      return { bearer, accountId: person === 'another' ? anotherAccountId : identity[person].accountId };
     }
     const owner = await credential('ordinary');
     const other = await credential('another', collectionScopes);

@@ -33,6 +33,7 @@ import {
   identitySupport,
   openImportIdentity,
   type ImportIdentity,
+  type ImportIdentityOptions,
 } from './identity-fixture.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
@@ -138,6 +139,7 @@ afterAll(async () => {
 /** One owner of credentials, public transport, worker, durable journal and cleanup. */
 export async function openApiRuntime(
   options: DriverOptions & {
+    readonly additionalAccounts?: ImportIdentityOptions['additionalAccounts'];
     readonly sourceStatistics?: 'vndb';
     readonly classificationAdmission?: ClassificationAdmission;
   },
@@ -224,6 +226,7 @@ export async function openApiRuntime(
     const identity = await time('identity and Auth setup', () =>
       openImportIdentity({
         publication: true,
+        additionalAccounts: options.additionalAccounts,
         database: ownedDatabase!,
         authTemplate: prepared.auth.name,
         clock: () => new Date(),
