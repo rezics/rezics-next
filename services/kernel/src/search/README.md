@@ -2030,18 +2030,21 @@ that cursor. The publication's finite passes own population, repair, reconciliat
 the same worker. CLI rebuild waits for that worker-owned alias publication. Retirement
 still requires actual retained-copy and writer evidence. Live physical generations remain capped at three.
 
-The consumer, Source binding and Source key-page adapters remain provisional where owner runtime evidence
-is missing. They create no Source identity, permission, coverage, ACK, grant or ready output. Their absence
-returns typed unavailable while the independent native reconciliation/publication implementation remains installed.
+The installed Semantic Source binding and Source key-page adapters supply the default worker's population,
+completion and current-definition reads. Composition does not certify native readiness or receiving acceptance;
+those outcomes still require the real worker journeys below.
 
-Decision: recovery consumes the existing native publication job and released analyzer/calendar metadata;
-native Source observations, original drain and completion remain Source-owned prerequisites, including
-retirement after readers drain. Activation preserves the entire released mapping metadata on write and
-exact readback after an ambiguous response. No readiness flag or equal-count comparison replaces the
-complete native identity/body/version and engine-extra reconciliation. The default-worker receiving suite
-uses the native job and final home pass instead of legacy coverage certificates. Integrated native recovery
-and declared-scale growth acceptance remain pending until those Source prerequisites are delivered and
-the receiving suites pass.
+Decision: the all-home epoch/position digest binds reconciliation evidence to its Source revision. It complements
+the actual default-worker convergence, generation-switch and current public-rating receiving assertions; by itself
+it certifies none of those outcomes and is not a readiness or switch criterion. The receiving oracle compares the
+4096 native key-page homes with the current partition-head vector before reporting coverage. Recovery consumes the
+existing native publication job and released analyzer/calendar metadata; native Source observations, original
+drain and completion remain Source-owned prerequisites, including retirement after readers drain. Activation
+preserves the entire released mapping metadata on write and exact readback after an ambiguous response. No readiness
+flag or equal-count comparison replaces the complete native identity/body/version and engine-extra reconciliation.
+The default-worker receiving suite uses the native job and final home pass instead of legacy coverage certificates.
+Integrated native recovery and declared-scale growth acceptance remain pending until the receiving suites pass;
+receiving and growth results must name the same Source revision.
 
 The adopted runtime plan and end-to-end research distinguish immutable engine observations from current disclosure,
 retain request-owned PIT lifetime, and place summaries inside the last privacy boundary. Reference source reads
