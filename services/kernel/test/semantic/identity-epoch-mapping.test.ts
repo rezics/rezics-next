@@ -57,7 +57,7 @@ test('account-agent verify mapping drains from original Access source for linked
     expect(job!.receipt).toEqual(input.receipt);
     const intent = input.source.input.intent;
     if (intent.kind !== 'merge') throw new Error('Account verification must retain its merge identity');
-    const sourceRoute = routeOf(intent.original);
+    const sourceRoute = routeOf(intent.redirected);
     if (sourceRoute === null) throw new Error('Account verification original must retain its native route');
     const committed = await f.admin.query<{
       original: string;
@@ -71,11 +71,11 @@ test('account-agent verify mapping drains from original Access source for linked
          ON c.partition_no=$2 AND c.transaction_id=m.recorded_transaction_id
         AND c.purpose='mapping' AND c.xmin=m.xmin
        WHERE m.route=$1 AND m.original=$3`,
-      [sourceRoute, partitionOf(sourceRoute), intent.original],
+      [sourceRoute, partitionOf(sourceRoute), intent.redirected],
     );
     expect(committed.rows).toEqual([
       {
-        original: intent.original,
+        original: intent.redirected,
         terminal: intent.survivor,
         epoch: input.job.epoch.toString(),
         transaction_id: expect.any(String),
