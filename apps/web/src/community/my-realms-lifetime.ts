@@ -402,7 +402,7 @@ class MyRealmsSessionSource {
     const filters = expected
       ? { queryKey: key, exact: true, predicate: (candidate: unknown) => candidate === expected }
       : { queryKey: key, exact: true };
-    void this.client.cancelQueries(filters as never);
+    void this.client.cancelQueries(filters as never, { silent: true });
     this.client.removeQueries(filters as never);
   }
 
@@ -991,4 +991,3 @@ export function useMyRealmsInventoryVisit() {
 export function retireMyRealmsNavigation(client: QueryClient) {
   sourceFor(client).clearNavigation();
 }
-
