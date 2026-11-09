@@ -2441,6 +2441,8 @@ reserve, registration, sign-in, sign-out and resource-removal assertions. The re
 whole incoming chunk before retaining a marker-sized suffix, including coalesced logs after `Worker ready`.
 The fixture's live startup journal captures both stdout and stderr, including native readiness phase markers,
 while continuing to forward stderr progress. Startup-order assertions read this complete journal before shutdown.
+Its private 6 GiB check budget includes both Vite graphs, native services and Chromium; the fixture selects a
+1280 MiB Node heap and two allocator arenas without changing the ordinary app's default heap or its deadline.
 
 ### Cost: complete-stack startup coordination
 
