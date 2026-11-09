@@ -132,7 +132,8 @@ async function grant(cookie: string) {
   const auth = authorization(cookie);
   const response = await auth.response();
   if (response.status !== 302) {
-    const [transitions, dependencies] = await Promise.all([
+    const [body, transitions, dependencies, consent] = await Promise.all([
+      response.clone().json().catch(() => undefined) as Promise<{ error?: unknown } | undefined>,
       pool.query<{ state: string }>(
         'SELECT state FROM auth_kind_consent_transition WHERE client_id=$1 ORDER BY updated_at DESC LIMIT 3',
         [WEBSITE_CLIENT_ID],
@@ -141,9 +142,13 @@ async function grant(cookie: string) {
         'SELECT count(*)::text AS count FROM auth_kind_consent_dependency WHERE client_id=$1 AND active',
         [WEBSITE_CLIENT_ID],
       ),
+      pool.query<{ count: string }>('SELECT count(*)::text AS count FROM auth_consent WHERE client_id=$1', [
+        WEBSITE_CLIENT_ID,
+      ]),
     ]);
+    const code = typeof body?.error === 'string' ? body.error : 'absent';
     throw new Error(
-      `website authorize expected 302, received ${response.status}; consent transitions=${transitions.rows
+      `website authorize expected 302, received ${response.status} (${code}); consent rows=${consent.rows[0]?.count ?? '0'}; transitions=${transitions.rows
         .map((row) => row.state)
         .join(',')}; active dependencies=${dependencies.rows[0]?.count ?? '0'}`,
     );
