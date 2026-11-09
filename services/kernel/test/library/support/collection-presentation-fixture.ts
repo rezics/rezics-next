@@ -19,6 +19,9 @@ import { identitySupport } from '../../imports/identity-fixture.ts';
 import { testReceiptKeys } from '../../support/receipt-keys.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
+import { bindExecutionContract } from '../../../src/command/execution-contract.ts';
+import { historyExecutionPort } from '../../../src/history/application/index.ts';
+import { workExecutionPort } from '../../../src/work/selected-runtime.ts';
 import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import type { WorkContext } from '../../../src/work/registry.ts';
 import { bindCanonicalSourceWork } from '../../../src/library/canonical-source-store.ts';
@@ -83,7 +86,11 @@ export async function createCollectionPresentationFixture() {
   try {
     const { identity, database } = runtime;
     const support = identitySupport(identity);
-    sourceClient = await createWorkClient(database.url, database.pool);
+    sourceClient = bindExecutionContract(
+      await createWorkClient(database.url, database.pool),
+      workExecutionPort(),
+      historyExecutionPort,
+    );
     await sourceClient.registerQueue('maintenance', WORK_QUEUES.maintenance);
     const consent = createCurrentConsentReader({ database: support.authDatabase.pool });
     let nativeAccess!: ReturnType<typeof createAccess>;
