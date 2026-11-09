@@ -123,7 +123,7 @@ test('one selected native member publishes exactly that set and exact replay rea
   const input = { revision: collection.revision, subjectIds: [a] };
   const key = randomUUID();
   const first = await f.send('POST', path(collection.id), input, f.owner, key);
-  expect(first.status).toBe(200);
+  expect(first.status, await first.clone().text()).toBe(200);
   expect(first.headers.get('cache-control')).toBe('private, no-store');
   const body = await first.json();
   expect(body.publication.itemCount).toBe(1);

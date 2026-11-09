@@ -441,6 +441,8 @@ producer fixtures do not establish whole-graph execution, mounted surfaces or pr
 
 **Fixture ownership:** Collection presentation requests its additional real account during the identity fixture's live registration window, before the executor closes; subsequent sign-in and token issuance use its existing password and separate account ID. Setup adds only the missing `offer:create` grant, reusing identity's existing `subject:create` authority, before limiting the owner path to one connection. The fixture composes the native Library domain with its actual Access instance and restores prior process bindings on close. The existing selected-native-member publication and replay case pins this setup and account isolation without changing assertions. A later publication failure retains its own phase and cause and does not establish the cause of erasure-fixture 503s.
 
+**Collection fixture scopes:** An owner-presence rule reads the native Entry, session and holding populations, so the rules fixture requests `library_entry:list`, `progress_session:list` and `copy:list` alongside the existing read scopes. Reduced credentials still omit `library_entry:read`; publication and replay assertions remain unchanged, with the first publication response body included in failure diagnostics.
+
 **Personas:** Deleting owner; old-token owner; anonymous reader; Bob or other affected user; owner-specific data producers; ordinary restore attempt.
 
 **Released fixture data:** `privacy` and `lifecycle/commerce` (accounts plus each owner); private and public data graph and terminal account records are produced by their owning stores.
