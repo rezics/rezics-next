@@ -158,6 +158,11 @@ Decision: shared reviewed Bangumi/VNDB tags finish as one journaled flow with se
 
 Vanished source fields retract only matching importer-owned candidates through ordinary APIs. Subjects, adoption and unrelated statements survive. Current source/media fences prevent refresh from restoring withdrawn facts; see [deletion](../../docs/deletion.md).
 
+Graph proposal delivery sends ordered pages of at most 32 under the existing native request deadline. A native
+200 receipt that reuses an already owned candidate with the same semantic statement identity seals the new exact
+request without allocating a second candidate or changing the original attachment and citation. The extra pending
+candidate reservation is released; mismatched identities or duplicate 201 receipts still fail.
+
 Decision: reconcile typed Bangumi and VNDB work relations against separate complete selected-source snapshots. A newly resolved endpoint cannot publish an absent edge without a sealed command; sealed proposal and retraction intent replays exactly through current endpoint and facts fences. Incomplete snapshots retire no additional candidates. VNDB relation snapshots retain at most 32 rows per selected owner and one ordered digest; they do not change provider identity or infer a cross-provider merge. Complete selected link snapshots retire only managed counterpart candidates, through current endpoint/facts fences and exact sealed replay.
 
 ## Cost
