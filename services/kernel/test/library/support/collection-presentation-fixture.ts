@@ -6,6 +6,13 @@ import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { newId, routeOf, partitionOf } from '../../../src/route/route.ts';
 import { tupleRoute } from '../../../src/content/imported-contract.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
+import {
+  bindLibraryDomain,
+  composeLibraryDomain,
+  peekLibraryDomain,
+  unbindLibraryDomain,
+} from '../../../src/composition/library.ts';
+import { bindLibraryPresentation, peekLibraryPresentation } from '../../../src/library/domain-binding.ts';
 import type { CollectionView } from '../../../src/library/collection-reads.ts';
 import { openApiRuntime } from '../../imports/api-runtime.ts';
 import { identitySupport } from '../../imports/identity-fixture.ts';
@@ -38,12 +45,29 @@ const managementScopes = [
 
 /** Real Auth issuance, Access governance and Content import/jobs; only HTTPS and object storage are external fixtures. */
 export async function createCollectionPresentationFixture() {
+  const previousDomain = peekLibraryDomain();
+  const previousPresentation = peekLibraryPresentation();
+  let composedDomain: ReturnType<typeof composeLibraryDomain> | undefined;
   const runtime = await openApiRuntime({
     batchRecords: 8,
     maxFields: 64,
     maxRecordBytes: 65_536,
     additionalAccounts: [{ handle: 'collection_other', email: 'another@identity.test' }],
   });
+  async function close() {
+    try {
+      if (composedDomain && peekLibraryDomain() === composedDomain) {
+        if (previousDomain) bindLibraryDomain(previousDomain);
+        else {
+          unbindLibraryDomain();
+          if (previousPresentation) bindLibraryPresentation(previousPresentation);
+        }
+        composedDomain = undefined;
+      }
+    } finally {
+      await runtime.close();
+    }
+  }
   try {
     const { identity, database } = runtime;
     const support = identitySupport(identity);
@@ -78,6 +102,9 @@ export async function createCollectionPresentationFixture() {
       routeKey: identity.routeKey,
       tokens: identity.tokenKeys,
       access: (configuration) => createAccess({ ...configuration, auth: identity.accessConfig.auth! }),
+      onAccessReady(access) {
+        composedDomain = composeLibraryDomain({ pool: database.pool, access, routeKey: identity.routeKey });
+      },
       content: { fetchConfig: { allowedHosts: ['lain.bgm.tv', 'covers.openlibrary.org'] } },
       writeRate: createWriteRateLimiter({
         secret: randomUUID(),
@@ -225,10 +252,10 @@ export async function createCollectionPresentationFixture() {
       send,
       collection,
       importedCover,
-      close: runtime.close,
+      close,
     };
   } catch (error) {
-    await runtime.close();
+    await close();
     throw error;
   }
 }
