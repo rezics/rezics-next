@@ -20,7 +20,8 @@ import {
   type CrossMediaTableScanLimits,
   type CrossMediaTables,
 } from './showcase-contract.ts';
-import type { seedCrossMedia, CrossMediaSeedResult } from './cross-media-seed.ts';
+import type { seedCrossMedia, CrossMediaSeedResult, CrossMediaSeedExtras } from './cross-media-seed.ts';
+import { SeedFinalization } from './seed-cli.ts';
 import type { ReviewedSubjectRead } from './import-client.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
 import {
@@ -789,6 +790,16 @@ export function showcaseBooksToCrossMediaPlan(plan: ShowcaseBookPlan): CrossMedi
   return next;
 }
 
+/** Admit later book records before sealing the shared source's first complete generation. */
+export function includeShowcaseBookRecords(target: CrossMediaPlan, books: ShowcaseBookPlan): void {
+  const selected = showcaseBooksToCrossMediaPlan(books);
+  const keys = new Set([...target.records.bangumi, ...target.entities.bangumi].map((row) => row.key));
+  target.records.bangumi.push(...selected.records.bangumi.filter((row) => !keys.has(row.key)));
+  target.entities.bangumi.push(...selected.entities.bangumi.filter((row) => !keys.has(row.key)));
+  const members = new Set(target.members.map((row) => `${row.source}\0${row.key}`));
+  target.members.push(...selected.members.filter((row) => !members.has(`${row.source}\0${row.key}`)));
+}
+
 function readingIdentity(reading: CrossMediaReading): { id: string; type: string } | undefined {
   const subject =
     (reading.subject as { subject?: { id?: string; type?: string }; id?: string; type?: string }).subject ??
@@ -833,10 +844,13 @@ async function rereadBookCreatorBindings(input: {
   };
 }
 
-/** Default book adapter: documented families, ordinary conversion, then the shared seed/credit/graph path. */
-export async function importShowcaseBooks(input: {
+export type ShowcaseBooksInput = {
   seed: typeof seedCrossMedia;
-
+  /** The composing seed plans once and admits these records into its initial generation. */
+  planned?: ShowcaseBookPlan;
+  basePlan?: CrossMediaPlan;
+  extras?: CrossMediaSeedExtras;
+  characterBindings?: SourceVocabularyBindings;
   tables: CrossMediaTables;
   path: string;
   port: CrossMediaPort;
@@ -855,11 +869,32 @@ export async function importShowcaseBooks(input: {
       conversions: readonly ShowcaseBookConversion[];
     }): void;
   };
-}): Promise<ShowcaseBooksResult> {
-  const planned = await planShowcaseBooks({
-    tables: input.tables,
-    ...(input.bindings ? { bindings: input.bindings } : {}),
-  });
+};
+
+/** Default book adapter: documented families, ordinary conversion, then the shared seed/credit/graph path. */
+export async function importShowcaseBooks(input: ShowcaseBooksInput): Promise<ShowcaseBooksResult> {
+  const progress = new SeedFinalization('books');
+  try {
+    progress.enter('planning');
+    const result = await seedShowcaseBooks(input, progress);
+    progress.complete();
+    return result;
+  } catch (error) {
+    progress.failed(error);
+    throw error;
+  }
+}
+
+async function seedShowcaseBooks(
+  input: ShowcaseBooksInput,
+  progress: SeedFinalization<'books'>,
+): Promise<ShowcaseBooksResult> {
+  const planned =
+    input.planned ??
+    (await planShowcaseBooks({
+      tables: input.tables,
+      ...(input.bindings ? { bindings: input.bindings } : {}),
+    }));
   if (!planned.selected.series.length || !planned.selected.volumes.length) {
     return {
       status: 'imported-with-gaps',
@@ -905,6 +940,24 @@ export async function importShowcaseBooks(input: {
     conversions: planned.conversions,
   });
   const plan = showcaseBooksToCrossMediaPlan(planned);
+  if (input.basePlan) {
+    // Keep enriched source payloads and the complete generation. Graph/credit work stays book-scoped.
+    const selection = {
+      ...input.basePlan,
+      records: { ...input.basePlan.records, bangumi: [...input.basePlan.records.bangumi] },
+      entities: { ...input.basePlan.entities, bangumi: [...input.basePlan.entities.bangumi] },
+      members: [...input.basePlan.members],
+    };
+    includeShowcaseBookRecords(selection, planned);
+    plan.records.bangumi = selection.records.bangumi;
+    plan.entities.bangumi = selection.entities.bangumi;
+    plan.coverSources = selection.coverSources;
+    plan.creatorImageSources = selection.creatorImageSources;
+    plan.personCareerSources = selection.personCareerSources;
+    plan.personSources = selection.personSources;
+    plan.characterAppearances = selection.characterAppearances;
+    plan.gameCharacterAppearances = selection.gameCharacterAppearances;
+  }
   const showcase =
     input.journal && input.review && input.publicClient
       ? { journal: input.journal, review: input.review, publicClient: input.publicClient }
@@ -916,32 +969,43 @@ export async function importShowcaseBooks(input: {
       : showcase
         ? showcase.publicClient.readSubject(subjectId)
         : input.port.readReviewedSubject(subjectId);
-  const seeded = await input.seed(plan, input.path, input.port, input.destination, {
-    providers: ['bangumi'],
-    entitiesFirst: true,
-    mediaDeadlineMs: 120_000,
-    sourceVocabulary: input.bindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
-    ...(showcase
-      ? {
-          readPublicSubject: readPublic,
-          prepareBangumiCreatorCreditBindings: async ({ result, drafts, read }) => {
-            resolution = await prepareBangumiCreatorCreditBindings({
-              plan,
-              result,
-              drafts,
-              port: input.port,
-              journal: showcase.journal,
-              review: showcase.review,
-              publicClient: showcase.publicClient,
-              ...(input.prior ? { prior: input.prior } : {}),
-              subjectTypes: [1],
-              read,
-            });
-            return resolution;
-          },
-        }
-      : {}),
-  });
+  progress.enter('record-import');
+  const seeded = await input.seed(
+    plan,
+    input.path,
+    input.port,
+    input.destination,
+    {
+      ...input.extras,
+      providers: ['bangumi'],
+      entitiesFirst: true,
+      mediaDeadlineMs: 120_000,
+      sourceVocabulary: input.bindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+      ...(showcase
+        ? {
+            readPublicSubject: readPublic,
+            prepareBangumiCreatorCreditBindings: async ({ result, drafts, read }) => {
+              progress.enter('credit-vocabulary');
+              resolution = await prepareBangumiCreatorCreditBindings({
+                plan,
+                result,
+                drafts,
+                port: input.port,
+                journal: showcase.journal,
+                review: showcase.review,
+                publicClient: showcase.publicClient,
+                ...(input.prior ? { prior: input.prior } : {}),
+                subjectTypes: [1],
+                read,
+              });
+              return resolution;
+            },
+          }
+        : {}),
+    },
+    input.characterBindings,
+  );
+  progress.enter('creator-current-reads');
   const current =
     resolution && showcase
       ? await rereadBookCreatorBindings({
@@ -958,6 +1022,7 @@ export async function importShowcaseBooks(input: {
     if (!identity) continue;
     identities[reading.externalId] = { ...identity, route: reading.route };
   }
+  progress.enter('result');
   return {
     ...seeded,
     ...(current ?? {}),

@@ -1,4 +1,4 @@
-import { SeedFinalization } from './seed-cli.ts';
+import { SeedFinalization, seedImportRunFailure } from './seed-cli.ts';
 import { createHash } from 'node:crypto';
 import { showcaseFranchiseSelection } from './showcase-franchise.ts';
 import type { DevelopmentShowcaseContext, DevelopmentShowcaseResult } from './showcase-persona.ts';
@@ -2843,10 +2843,8 @@ export async function seedCrossMedia(
         }
       }
       const run = await importer.runRecords(registration, records());
-      ensure(
-        run.status === 'committed' || onlyPendingBangumiCovers(provider, run),
-        `Cross-media ${provider} import failed: ${run.status}${run.diagnostic ? ` (${run.diagnostic})` : ''}`,
-      );
+      if (run.status !== 'committed' && !onlyPendingBangumiCovers(provider, run))
+        throw seedImportRunFailure(provider, run);
       runs[provider] = run;
     }
     const bangumiFidelityRecords = [...plan.records.bangumi, ...plan.entities.bangumi];
@@ -3710,6 +3708,13 @@ export async function runCrossMediaSeedCli(
   const finalization = new SeedFinalization('seed');
   try {
     finalization.enter('vocabulary-preparation');
+    const { planShowcaseBooks, includeShowcaseBookRecords, importShowcaseBooks, showcaseBooksToCrossMediaPlan } =
+      await import('./showcase-books.ts');
+    const plannedBooks =
+      options.selection && !options.includeBooks ? undefined : await planShowcaseBooks({ tables: input });
+    // One source alias has one complete generation, including records used by later publication stages.
+    if (plannedBooks?.selected.series.length && plannedBooks.selected.volumes.length)
+      includeShowcaseBookRecords(plan, plannedBooks);
     if (journal && publicClient)
       releaseClassificationPreparation = await prepareShowcaseVndbReleaseClassifications({
         plan,
@@ -4414,30 +4419,32 @@ export async function runCrossMediaSeedCli(
       },
     };
     finalization.enter('books');
-    const { importShowcaseBooks, showcaseBooksToCrossMediaPlan } = await import('./showcase-books.ts');
-    const books =
-      options.selection && !options.includeBooks
-        ? undefined
-        : await importShowcaseBooks({
-            seed: seedCrossMedia,
-            tables: input,
-            path: statePath,
-            port,
-            destination: { origin: api },
-            ...(journal && publicClient
-              ? {
-                  journal,
-                  review: importPort,
-                  publicClient,
-                  ...(creditResolution?.publication
-                    ? { prior: creditResolution.publication }
-                    : priorShowcase
-                      ? { prior: priorShowcase }
-                      : {}),
-                  readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
-                }
-              : {}),
-          });
+    const books = !plannedBooks
+      ? undefined
+      : await importShowcaseBooks({
+          seed: seedCrossMedia,
+          planned: plannedBooks,
+          basePlan: publicationPlan,
+          extras: seedExtras(),
+          characterBindings,
+          tables: input,
+          path: statePath,
+          port,
+          destination: { origin: api },
+          ...(journal && publicClient
+            ? {
+                journal,
+                review: importPort,
+                publicClient,
+                ...(creditResolution?.publication
+                  ? { prior: creditResolution.publication }
+                  : priorShowcase
+                    ? { prior: priorShowcase }
+                    : {}),
+                readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
+              }
+            : {}),
+        });
     if (books) {
       const bookCross = showcaseBooksToCrossMediaPlan(books.planned);
       for (const target of [plan, publicationPlan]) {

@@ -1,6 +1,7 @@
 import { CredentialDeniedError, CredentialServiceError } from './credentials.ts';
 import { formatImportTransportError, ImportTransportError } from './import-client.ts';
 import { importRequestFailure, type ImportRequestDiagnostics } from './import-fetch.ts';
+import type { ImportRunResult } from './importer.ts';
 
 /** Fixed local phases only: never derive diagnostic text from source records or remote errors. */
 const finalizationPhases = {
@@ -37,11 +38,20 @@ const finalizationPhases = {
     'public-readback',
     'manifest-finalization',
   ],
+  books: ['planning', 'record-import', 'credit-vocabulary', 'creator-current-reads', 'result'],
 } as const;
 
 type FinalizationScope = keyof typeof finalizationPhases;
 type FinalizationDiagnostic = { scope: FinalizationScope; phase: string; remaining: readonly string[] };
 const finalizationFailures = new WeakMap<object, readonly FinalizationDiagnostic[]>();
+const importRunFailures = new WeakMap<object, { provider: 'bangumi' | 'vndb'; kind: ImportRunResult['status'] }>();
+
+/** Register only the local run classification; its diagnostic may contain private source or response text. */
+export function seedImportRunFailure(provider: 'bangumi' | 'vndb', result: ImportRunResult): Error {
+  const error = new TypeError(`Cross-media ${provider} import failed: ${result.status} (${result.diagnostic})`);
+  importRunFailures.set(error, { provider, kind: result.status });
+  return error;
+}
 
 function finalizationDetail(value: FinalizationDiagnostic): string {
   return `scope=${value.scope} phase=${value.phase} remaining=${value.remaining.join(',') || 'none'}`;
@@ -122,6 +132,10 @@ export function formatSeedError(error: unknown): string {
 }
 
 function formatSeedCause(error: unknown): string {
+  if (typeof error === 'object' && error !== null) {
+    const run = importRunFailures.get(error);
+    if (run) return `Cross-media seed import failed provider=${run.provider} kind=${run.kind}`;
+  }
   if (error instanceof ImportTransportError) {
     const cause = credentialCause(error.cause);
     return `${formatImportTransportError(error)}${cause ? ` auth{${details(cause.diagnostics ?? {}, 'credential')}}` : ''}`;

@@ -21,3 +21,8 @@ means the operation returned, not that all publication claims were available. No
 text, source identity or credential is logged. A stopped process leaves its last started phase in the boot log.
 Unexpected errors retain their original identity and private cause; the existing CLI formatter adds registered
 phase metadata. Diagnostics add no journal state and never alter sealed keys, bodies or acknowledged work.
+
+Book subphases distinguish planning, record import, credit vocabulary, creator current reads and result assembly.
+An unsuccessful source generation registers only its local provider and run-status kind (including
+`mass-disappearance`); its diagnostic text stays private. These fields identify a pre-write generation refusal
+separately from native transport failures without exposing dump rows or remote responses.

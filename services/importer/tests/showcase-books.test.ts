@@ -8,7 +8,7 @@ import { convertBangumi, converter_revision } from '@rezics/conversion/bangumi';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import type { CrossMediaPort, CrossMediaTables } from '../src/cross-media-seed.ts';
-import { crossMediaAliases } from '../src/cross-media-seed.ts';
+import { crossMediaAliases, emptyCrossMediaPlan, seedCrossMedia } from '../src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
 import {
   captureShowcaseCommands,
@@ -17,7 +17,13 @@ import {
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
-import { planShowcaseBooks, showcaseBookFamily, showcaseBooksToCrossMediaPlan } from '../src/showcase-books.ts';
+import {
+  includeShowcaseBookRecords,
+  planShowcaseBooks,
+  showcaseBookFamily,
+  showcaseBooksToCrossMediaPlan,
+} from '../src/showcase-books.ts';
+import { formatSeedError, SeedFinalization } from '../src/seed-cli.ts';
 import pinned from '../../kernel/test/imports/showcase-books-source.json';
 import { importShowcaseBooks } from '../src/selected-import.ts';
 
@@ -742,7 +748,31 @@ test('pinned real light-novel families publish through the reviewed world and re
   let journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   try {
     const world = reviewWorld(journal);
+    const basePlan = emptyCrossMediaPlan();
+    basePlan.records.bangumi = [
+      {
+        source: 'bangumi',
+        key: '1851',
+        revision: null,
+        payload: { id: 1851, type: 2, name: 'Angel Beats!' },
+      },
+    ];
+    basePlan.members = [{ source: 'bangumi', key: '1851', kind: 'work', membership: 'family' }];
+    const path = join(directory, 'state.sqlite');
+    await seedCrossMedia(basePlan, path, world.port, undefined, { providers: ['bangumi'] });
+    const planned = await planShowcaseBooks({
+      tables: {
+        async *rows(provider, table) {
+          if (provider === 'bangumi') yield* rows[table] ?? [];
+        },
+      },
+    });
+    includeShowcaseBookRecords(basePlan, planned);
+    const admitted = await seedCrossMedia(basePlan, path, world.port, undefined, { providers: ['bangumi'] });
+    expect(admitted.runs.bangumi).toMatchObject({ status: 'committed', counts: { vanished: 0 } });
     const input = {
+      basePlan,
+      planned,
       tables: {
         async *rows(provider: 'bangumi' | 'vndb', table: string) {
           if (provider === 'bangumi') yield* rows[table] ?? [];
@@ -755,6 +785,8 @@ test('pinned real light-novel families publish through the reviewed world and re
       publicClient: world.publicClient,
     };
     const first = await importShowcaseBooks(input);
+    expect(first.runs.bangumi).toMatchObject({ status: 'committed', counts: { vanished: 0 } });
+    expect(first.identities['1851']?.type).toBe('schema:TVSeries');
     expect(first.selected).toMatchObject({
       series: ['499', '2815'],
       volumes: expect.arrayContaining(['26', '5329', '10862']),
@@ -764,7 +796,7 @@ test('pinned real light-novel families publish through the reviewed world and re
       anime: ['233'],
     });
     const publication = await publishShowcase({
-      plan: showcaseBooksToCrossMediaPlan(first.planned),
+      plan: { ...basePlan, edges: first.planned.edges, credits: first.planned.credits },
       result: first,
       aliases: crossMediaAliases,
       journal,
@@ -854,3 +886,49 @@ test('pinned real light-novel families publish through the reviewed world and re
     await rm(directory, { recursive: true, force: true });
   }
 }, 180_000);
+
+test('book failures identify planning and the native handoff without exposing private causes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-book-failure-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  try {
+    const world = reviewWorld(journal);
+    const path = join(directory, 'state.sqlite');
+    const base = emptyCrossMediaPlan();
+    base.records.bangumi = [
+      { source: 'bangumi', key: '1851', revision: null, payload: { id: 1851, type: 2, name: 'Angel Beats!' } },
+    ];
+    await seedCrossMedia(base, path, world.port, undefined, { providers: ['bangumi'] });
+    let failure: unknown;
+    try {
+      await importShowcaseBooks({ tables: tables(), path, port: world.port });
+    } catch (error) {
+      failure = error;
+    }
+    expect(formatSeedError(failure)).toContain('provider=bangumi kind=mass-disappearance');
+    expect(formatSeedError(failure)).toContain('scope=books phase=record-import');
+    const privateError = new Error('private response https://user:credential@fixture.test?token=secret');
+    try {
+      await importShowcaseBooks({
+        tables: {
+          async *rows() {
+            throw privateError;
+          },
+        },
+        path,
+        port: world.port,
+      });
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBe(privateError);
+    const outer = new SeedFinalization('seed', () => {});
+    outer.enter('books');
+    outer.failed(failure);
+    expect(formatSeedError(failure)).toContain('scope=books phase=planning');
+    expect(formatSeedError(failure)).toContain('scope=seed phase=books');
+    expect(formatSeedError(failure)).not.toMatch(/private|credential|token|fixture/u);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
