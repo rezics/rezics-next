@@ -3794,6 +3794,9 @@ Curated and private owner captures carry null publication provenance. Custody st
 null publication position; a supplied position remains a positive signed-bigint value. Activated output identity
 continues to require its native publication transaction and position before custody dispatch.
 
+The native capture regression also invokes selected publication through its command entry after real Source
+preparation, preserving the internal failure phase separately from the HTTP problem response.
+
 Decision: one immutable Library-owned custody operation plan is authoritative for capture, finish, hold, retained
 revalidation and release; it is shared by the native adapter and original-work composition, with request SQL/binds
 and schema-derived serialized projections priced separately and explicit translation to eight-axis native receipts

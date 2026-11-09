@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { routeOf } from '../../src/route/route.ts';
 import { canonicalSourceCallAllowance } from '../../src/library/canonical-source-bounds.ts';
 import { advanceCanonicalSourceCapture } from '../../src/library/canonical-source-store.ts';
+import { createCollectionPublications } from '../../src/library/collection-publication.ts';
 import {
   createNativeLibrarySourceCustody,
   type NativeSourceIdentity,
@@ -66,3 +67,15 @@ test('native capture admits the saved owner source under its independently decla
   });
   expect(result.status, JSON.stringify(result)).toBe('pending');
 });
+
+test('completed native capture admits an explicit empty publication through the native command', async () => {
+  await f.prepareSource(collectionId);
+  const identity = f.runtime.identity;
+  const actor = await identity.access.authenticate(f.owner, { pool: f.database.pool, deadline: Date.now() + 30_000 });
+  const result = await createCollectionPublications({
+    pool: f.database.pool,
+    access: identity.access,
+    tokens: identity.tokenKeys,
+  }).publishSelected(actor, collectionId, { revision: 1, subjectIds: [] }, randomUUID());
+  expect(result.value.publication).toMatchObject({ state: 'complete', itemCount: 0 });
+}, 30_000);

@@ -171,6 +171,8 @@ test('native custody statements share one closed nine-axis operation plan and re
     owner_epoch: 1,
     receiving_epoch: '1',
     effect_key: 'effect',
+    collection_fence: '1',
+    account_fence: '1',
     output_generation: null,
     publication_transaction_id: null,
     publication_position: null,
