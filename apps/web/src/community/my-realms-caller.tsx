@@ -23,12 +23,7 @@ export {
   retireMyRealmsNavigation,
   useMyRealmsInventoryVisit,
 } from './my-realms-lifetime';
-export type {
-  MyRealmsMovement,
-  MyRealmsNavigation,
-  MyRealmsViewOwner,
-  MyRealmsVisit,
-} from './my-realms-lifetime';
+export type { MyRealmsMovement, MyRealmsNavigation, MyRealmsViewOwner, MyRealmsVisit } from './my-realms-lifetime';
 
 const browserHydration = { subscribe: () => () => {}, getSnapshot: () => true, getServerSnapshot: () => false };
 
@@ -103,7 +98,9 @@ export function MyRealmsCallerHost({
       </div>
     );
   if (hydrated && caller.adoptionPending()) return null;
-  if (hydrated && (session.state !== 'signed-in' || !caller.isCurrent())) throw new Error('Realm list is unavailable');
+  if (hydrated && session.state !== 'signed-in') throw new Error('Realm list is unavailable');
+  // A signed-in route match may briefly outlive its visit while the router admits the next one.
+  if (hydrated && !caller.isCurrent()) return null;
   return (
     <MyRealmsAdmittedPage
       caller={caller}

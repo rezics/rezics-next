@@ -7,7 +7,14 @@ import { m } from '../src/paraglide/messages.js';
 import { deLocalizeUrl, localizeUrl, setLocale } from '../src/paraglide/runtime.js';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import type { MyRealmsNativeItem } from '../src/community/my-realms-current/contract';
 import { createMyRealmsLeaveIntent, sameLeaveAdmission } from '../src/community/my-realms-current/selection';
 import { realmLeaveReadResolves } from '../src/community/realm-leave-recovery';
@@ -132,9 +139,14 @@ async function render(items: MyRealmsNativeItem[], next: string | null, locale: 
   const { data } = await client.me.realms.get();
   if (!data) throw new Error('Expected the supplied native page.');
   const page = { signedIn: true, ...formatMyRealmsCurrent(data) };
-  const root = createRootRoute({ component: () => createElement(MyRealmsPageView, { page }) });
+  const root = createRootRoute({ component: Outlet });
+  const route = createRoute({
+    getParentRoute: () => root,
+    path: '/realms',
+    component: () => createElement(MyRealmsPageView, { page }),
+  });
   const router = createRouter({
-    routeTree: root,
+    routeTree: root.addChildren([route]),
     history: createMemoryHistory({ initialEntries: [`/${locale}/realms`] }),
     rewrite: {
       input: ({ url }) => deLocalizeUrl(url).href,
@@ -167,9 +179,7 @@ test('rendered current rows expose only admitted destinations and retain supplie
         if (realm.current.avatar.state === 'unavailable')
           expect(row).toContain(m.realm_appearance_image_unavailable({}, { locale }));
       });
-      const continuation = markup
-        .match(/<a\b([^>]*)>([\s\S]*?)<\/a>/gu)
-        ?.find((anchor) => anchor.includes(m.realms_more({}, { locale })));
+      const continuation = markup.match(/<a\b([^>]*)>([\s\S]*?)<\/a>/gu)?.find((anchor) => /[?&]cursor=/u.test(anchor));
       expect(continuation).toBeDefined();
       expect(
         new URL(continuation!.match(/href="([^"]+)"/)![1]!, 'https://site.example').searchParams.get('cursor'),
