@@ -983,7 +983,12 @@ export function createImportTransport(options: ImportTransportOptions) {
             throw error;
           }
         }
-        const redirected = snapshot(reply.error?.value ?? reply.data, RESPONSE_BYTES) as {
+        const wrapper = reply.error;
+        const redirectBody =
+          wrapper !== null && typeof wrapper === 'object' && !types.isProxy(wrapper)
+            ? Object.getOwnPropertyDescriptor(wrapper, 'value')?.value
+            : undefined;
+        const redirected = snapshot(redirectBody ?? reply.data, RESPONSE_BYTES) as {
           redirect?: { from?: unknown; to?: unknown };
         };
         ensure(redirected.redirect?.from === current && typeof redirected.redirect.to === 'string');
