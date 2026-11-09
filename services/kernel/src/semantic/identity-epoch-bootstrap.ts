@@ -46,6 +46,7 @@ import bootstrapSelectBootstrapHome3 from './identity-epoch-bootstrap-select-boo
 import bootstrapSelectBootstrapTopology3 from './identity-epoch-bootstrap-select-bootstrap-topology-3.sql';
 import bootstrapInsertTopologyCustody from './identity-epoch-bootstrap-insert-topology-custody.sql';
 import bootstrapUpdateBootstrapTopology from './identity-epoch-bootstrap-update-bootstrap-topology.sql';
+import { bootstrapFrontierHasPendingWork } from './identity-epoch-bootstrap-frontier.ts';
 import closeHome from './identity-epoch-bootstrap-close-home.sql';
 import closureReceipt from './identity-epoch-bootstrap-closure-receipt.sql';
 import advanceCursor from './identity-epoch-bootstrap-advance-cursor.sql';
@@ -873,6 +874,26 @@ async function scheduleBootstrapContinuation(pool: Pool): Promise<BootstrapConti
  * Selection and custody are amortized over the bounded frontier, never over foreign source rows.
  */
 export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> {
+  // Bootstrap is event-driven, not polled. A no-work wake must not enter the native no-effect
+  // command path; subscribed domain events remain the wake source for any later work.
+  const hasPendingWork = await bootstrapOperation(
+    {
+      partition: 0,
+      frontier: bootstrapFrontier([]),
+      phase: 'topology-frontier',
+      operation: 'read-pending-native-work',
+    },
+    () =>
+      withReadTransaction(pool, async (tx) => {
+        const state = (await tx.query(bootstrapSelectBootstrapTopology2.sql)).rows[0];
+        if (!state) throw fail();
+        return bootstrapFrontierHasPendingWork(state.remaining, async () =>
+          (await tx.query(bootstrapSelectBootstrapHome3.sql, [state.repair_partition])).rows[0]?.partition_no ?? null,
+        );
+      }),
+  );
+  if (!hasPendingWork) return;
+
   const fullFrontier = { startPartition: 0, endPartition: 4095, homes: 4096 } as const;
   const selected = await bootstrapOperation(
     {
