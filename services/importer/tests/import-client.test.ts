@@ -130,7 +130,7 @@ test('batch retries keep the exact pending command through the configured attemp
               },
         ],
       });
-    }) as typeof fetch,
+    }) as unknown as typeof fetch,
   });
 
   await expect(transport.batch({ commands: [commands[0]!] })).resolves.toMatchObject({
@@ -156,7 +156,7 @@ test('batch response validation requires a retryability classification for every
             problem: { type: 'about:blank', title: 'Unavailable', status: 503 },
           },
         ],
-      })) as typeof fetch,
+      })) as unknown as typeof fetch,
   });
 
   await expect(transport.batch({ commands: [commands[0]!] })).rejects.toThrow();

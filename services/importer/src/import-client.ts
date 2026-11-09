@@ -624,7 +624,7 @@ export function createImportTransport(options: ImportTransportOptions) {
         // Retain successful receipts; retry only explicit overloads with unchanged keys and bodies.
         scheduledWait += delay;
         await wait(delay, controller.signal, options.sleep);
-        if (now() >= deadline) return { results };
+        if (deadline !== undefined && now() >= deadline) return { results };
       }
     } finally {
       clearDeadline?.();
