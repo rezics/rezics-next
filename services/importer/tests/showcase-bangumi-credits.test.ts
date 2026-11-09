@@ -473,6 +473,7 @@ test('mixed Bangumi proposal envelopes fit native bytes and resume without ackno
   let interrupt = false;
   const transport = createImportTransport({
     origin: 'https://api.importer.test',
+    tokenProvider: async () => 'fixture-token',
     importFetch: (async (request: Request) => {
       const body = await request.text();
       const { commands } = JSON.parse(body) as BatchWriteRequest;
