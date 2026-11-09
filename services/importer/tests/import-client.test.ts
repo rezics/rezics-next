@@ -36,13 +36,12 @@ const commands = [1, 2, 3, 4].map((n) => ({
   subject: { type: 'schema:Book', labels: { en: 'Book' } },
 }));
 for (const status of [429, 503]) {
-  for (const limits of [{}, { maxWaitMs: 0 }, { maxTotalWaitMs: 0 }, { deadlineMs: 100 }]) {
+  for (const limits of [{}, { maxAttempts: 1 }, { maxWaitMs: 0 }, { maxTotalWaitMs: 0 }, { deadlineMs: 100 }]) {
     test(`bulk transport retains original commands and bounds explicit ${status} overloads: ${JSON.stringify(limits)}`, async () => {
       const requests: unknown[] = [];
       const transport = createImportTransport({
         origin: 'https://api.importer.test',
         tokenProvider: async () => 'test-token',
-        maxAttempts: 1,
         ...limits,
         sleep: async () => {},
         fetch: (async (request: Request) => {
