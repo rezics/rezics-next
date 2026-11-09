@@ -2904,8 +2904,9 @@ release/native/browser/money acceptance keeps its own evidence, and promotion ga
 
 ### Development verification
 
-Landing on `dev` is a mechanical integration step. The leased verifier runs one round per
-`policy.verifier.roundIntervalMs` on the newest captured `dev` head; a round already running causes another invocation
+Landing on `dev` is a mechanical integration step. The leased verifier can check changed Dev after at most a ten-minute
+minimum interval between rounds, bounded by `policy.verifier.roundIntervalMs`. A settled unchanged head does not
+repeat; pending or infrastructure results retain the normal interval. A round already running causes another invocation
 to skip. Heads that arrive during a round are coalesced into the next round, so intermediate heads are not queued. Each
 round starts with the repository boot smoke named in `bootSmoke.tests` (Kernel and Web client-graph tests by default;
 a missing file is skipped until it lands), then runs at most three selected checks at once. The first round and any
@@ -2922,7 +2923,9 @@ how many landings `dev` is ahead, and whether verification is pending, running o
 
 Control-plane briefs run their declared acceptance command in the worker attempt before exit, including under minimal
 verification. Product attempts retain the typing-only rule; their other acceptance tests run in a verifier round.
-Decision: verifier rounds run the newest captured `dev` head on an hourly policy interval, start with boot smoke, select changed checks from the previous round head, carry deadline backlog, report current-head failures in one urgent batch per owning Goal, and always advance `dev-verified` at round end.
+Decision: verifier rounds coalesce changed Dev into the newest captured head, start with boot smoke, select affected
+checks from the previous round head, carry deadline backlog, report current-head failures in one urgent batch per
+owning Goal, and always advance `dev-verified` at round end.
 
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to replace
 `.temp/goal/<manager>/CONTINUATION.md` with at most 8,000 characters (live task IDs, decisions in force as links to
@@ -3199,8 +3202,8 @@ public allowance functions re-exported from `claude.ts`.
 ## Verifier rounds and release gates
 
 dev-verified records round progress and current-head findings; it is not a green release gate. The resident verifier
-polls at policy.verifier.residentPollMs and starts a round only when policy.verifier.roundIntervalMs has elapsed
-since its latest round record. A round captures the newest dev head after acquiring the lease. It runs boot smoke
+polls at policy.verifier.residentPollMs and uses the changed-head and pending-result intervals above.
+A round captures the newest dev head after acquiring the lease. It runs boot smoke
 first under policy.verifier.bootSmokeTimeoutMs, then uses the shared dev-verifier-plan.ts changed-path selection
 from the previous round head. The first round after this policy is introduced and ranges above
 policy.verifier.maxSelectionCommits run the complete configured test set. At most three checks run concurrently.

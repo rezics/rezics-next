@@ -309,6 +309,33 @@ test('the first round runs boot smoke then the full suite, batches current-head 
   expect([...ctx.runs.values()].filter((run) => run.round)).toHaveLength(1);
 });
 
+test('changed Dev starts a focused round before the normal interval; a settled head is not rechecked', async () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev');
+  const ctx = setup(root);
+  seedRound(ctx, base);
+  const previous = ctx.store.devVerifierLatestRound()!.round!;
+  previous.completedAt = new Date(Date.now() - 11 * 60_000).toISOString();
+  const target = commit(root, 'services/kernel/change.ts', 'export const changed = true;\n', 'landing');
+  git(root, 'branch', '-f', 'dev', target);
+  ctx.store.tasks().push(landedTask(base, target, 'ready-change'));
+  const checks: string[][] = [];
+  const options = {
+    ...ctx.options,
+    runGate: async (command: readonly string[]) => {
+      checks.push([...command]);
+      return { passed: true, output: '', timedOut: false };
+    },
+  };
+  await verifyDev(options);
+  expect(ctx.store.devVerifierLatestRound()!.round).toMatchObject({ headCommit: target, fullSuite: false });
+  expect(checks.some((command) => command.join(' ').includes('acceptance ready-change'))).toBe(true);
+  const before = checks.length;
+  makeRoundDue(ctx);
+  await verifyDev(options);
+  expect(checks).toHaveLength(before);
+});
+
 test('a due round selects changes since the last round head and skips intermediate dev heads', async () => {
   const root = repo();
   const base = git(root, 'rev-parse', 'dev');
