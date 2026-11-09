@@ -763,11 +763,12 @@ function validParameter(name: string, value: unknown): boolean {
       return boundedText(value, 256, false);
     case 'generation':
     case 'receiving_epoch':
-    case 'publication_position':
     case 'collection_fence':
     case 'account_fence':
     case 'scanned':
-      return isBigint(value, name === 'receiving_epoch' || name === 'publication_position');
+      return isBigint(value, name === 'receiving_epoch');
+    case 'publication_position':
+      return value === null || isBigint(value, true);
     case 'scope':
       return value === 'curated' || value === 'private_builtin' || value === maxScope;
     case 'driver':

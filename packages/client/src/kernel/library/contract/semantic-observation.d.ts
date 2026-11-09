@@ -63,6 +63,11 @@ export type LibrarySemanticObservationResult<T> = Readonly<{
 }>;
 export type LibrarySemanticScopeRegistration = Readonly<{
     key: LibrarySemanticScopeKey;
+    /** Retained predecessor at this stable address; never permission to replace another registration. */
+    replaces?: Readonly<{
+        key: LibrarySemanticScopeKey;
+        captureId: string | null;
+    }>;
     deadline: number;
     capture: Readonly<{
         kind: 'library';

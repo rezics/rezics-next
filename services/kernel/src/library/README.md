@@ -946,6 +946,20 @@ participant or independent ACK. Consume the semantic scoped concurrent closure t
 [owner plan](../../../../docs/library-owner-queries.md#shared-operational-identity-and-disclosure-producers);
 actual native participant, whole-query Source2a and custody proofs remain required pending.
 
+### Working Source generation replacement
+
+Decision: keep the stable `collection-source` scope. The canonical producer names its retained predecessor's
+identity and committed capture, when available, when registering a successor. Semantic retires only that predecessor registration,
+under the successor's complete current native capture fence, through its existing bounded attempt, directory-ticket
+and native-hold release protocol. Registration waits for retirement; neither a different scope key nor overwriting
+an active registration supplies custody. Old canonical rows and completed public output remain retained under their
+existing capacity and disposition rules.
+
+Output activation advances the working Source fence. Finite publication fixtures explicitly complete the existing
+Source worker before replay or another publication that needs the new working generation. Replay still performs
+current authorization before returning its receipt. `collection-publication.test.ts` retains the exact replay and
+refusal assertions and covers actual old-hold release plus a delayed predecessor retirement after replacement.
+
 ### Native identity participant prerequisites
 
 The [Semantic contract](../semantic/identity-epoch-contract.md#complete-library-canonical-coverage-under-the-fixed-participant)
@@ -3785,6 +3799,25 @@ Source declaration, binding-consumer coverage and positive receiving-hold operan
 transfer continues to refuse before I/O.
 
 ### Native Collection Source capture and custody execution bounds
+
+Canonical Source SQL writes that return no rows consume zero result bytes. The query adapter checks nonempty
+serialized result arrays against their declared byte ceiling; an empty driver result does not charge JSON framing
+against a zero-result write declaration.
+
+Curated and private owner captures carry null publication provenance. Custody statement admission accepts that
+null publication position; a supplied position remains a positive signed-bigint value. Activated output identity
+continues to require its native publication transaction and position before custody dispatch.
+
+The native capture regression also invokes selected publication through its command entry after real Source
+preparation, preserving the internal failure phase separately from the HTTP problem response.
+
+Selected publication composes Source preparation from canonical state reads, the two additional metadata
+observations before and during eligibility, and Access's declared Collection authorization preparation including
+its permission transaction. A canonical state read alone cannot fund the native permission queries. Every repeated
+Source preparation uses this same declaration; no additional ledger or authorization shortcut is introduced.
+Binding declares both its initial native prefix and its mandatory final revalidation. The later preparation
+revalidation uses that same full prefix, including command admission, private authority, metadata, Source and scope
+currentness; it cannot borrow only the private-authority and Members execution terms.
 
 Decision: one immutable Library-owned custody operation plan is authoritative for capture, finish, hold, retained
 revalidation and release; it is shared by the native adapter and original-work composition, with request SQL/binds

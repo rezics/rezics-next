@@ -1,4 +1,5 @@
 /** Process ownership for the real local-stack fixture; no authority or substitute services. */
+import { appendFileSync, closeSync, openSync } from 'node:fs';
 import {
   detachedGroupTerminal,
   processIdentity,
@@ -72,19 +73,41 @@ export class StackFixtureLifetime {
     const started = performance.now();
     // Keep the boot/start lower bound if a very short-lived leader exits before procfs admission.
     const parent = processIdentity()!;
-    const child = Bun.spawn(args, {
-      cwd: options.cwd,
-      env: options.env,
-      stdin: 'ignore',
-      stdout: options.outputFile ? Bun.file(options.outputFile) : 'pipe',
-      stderr: options.progress ? 'inherit' : 'pipe',
-      detached: true,
-    });
+    const log = options.outputFile ? openSync(options.outputFile, 'w') : undefined;
+    const child = (() => {
+      try {
+        return Bun.spawn(args, {
+          cwd: options.cwd,
+          env: options.env,
+          stdin: 'ignore',
+          stdout: 'pipe',
+          stderr: options.progress && log === undefined ? 'inherit' : 'pipe',
+          detached: true,
+        });
+      } catch (error) {
+        if (log !== undefined) closeSync(log);
+        throw error;
+      }
+    })();
     const identity = processIdentity(child.pid) ?? { ...parent, pid: child.pid, group: child.pid };
+    const read = async (stream: ReadableStream<Uint8Array>, progress = false): Promise<string> => {
+      if (log === undefined) return new Response(stream).text();
+      // The live startup journal includes stdout and stderr; phase markers use stderr. Flush each chunk so
+      // readiness assertions can read the journal before the long-running stack exits. Retain console progress.
+      for await (const chunk of stream) {
+        appendFileSync(log, chunk);
+        if (progress) process.stderr.write(chunk);
+      }
+      return '';
+    };
     const output = Promise.all([
-      options.outputFile ? '' : new Response(child.stdout as ReadableStream<Uint8Array>).text(),
-      options.progress ? '' : new Response(child.stderr as ReadableStream<Uint8Array>).text(),
-    ]).then(([stdout, stderr]) => ({ stdout, stderr }));
+      read(child.stdout as ReadableStream<Uint8Array>),
+      options.progress && log === undefined ? '' : read(child.stderr as ReadableStream<Uint8Array>, options.progress),
+    ])
+      .then(([stdout, stderr]) => ({ stdout, stderr }))
+      .finally(() => {
+        if (log !== undefined) closeSync(log);
+      });
     // Observe rejected readers immediately, retaining the original promise for settlement.
     void output.catch(() => {});
     const owned = { name, child, identity, output };

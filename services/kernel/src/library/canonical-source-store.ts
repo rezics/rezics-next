@@ -387,8 +387,8 @@ async function query<R extends QueryResultRow>(
       const config = { text: declared.sql, values: [...values], query_timeout: Math.max(1, l.deadline - Date.now()) };
       const rows = (await client.query<R>(config)).rows;
       if (rows.length > declared.rows) throw new ProblemError('dependency_unavailable');
-      if (Buffer.byteLength(JSON.stringify(rows) ?? '') > declared.resultBytes)
-        throw new ProblemError('dependency_unavailable');
+      const resultBytes = rows.length === 0 ? 0 : Buffer.byteLength(JSON.stringify(rows));
+      if (resultBytes > declared.resultBytes) throw new ProblemError('dependency_unavailable');
       return rows;
     },
     (rows) => ({
@@ -946,9 +946,24 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
       custody.finishCapture({ identity: row.identity, frontier: row.frontier!, deadline: input.deadline, allowance }),
     );
     if (completed.status !== 'complete') return notReady(l, 'identity');
+    const [predecessor] = await withConnection(pool, (client) =>
+      query<ScopeRow>(client, l, CANONICAL_SOURCE_STATEMENTS().predecessorScope, [
+        input.route,
+        input.collectionId,
+        fence,
+      ]),
+    );
     const observations = semanticObservations(input);
     const registered = await observations.canonical.registerScope(pool, {
       key: scopeKey(row.identity),
+      ...(predecessor?.frontier
+        ? {
+            replaces: {
+              key: scopeKey(predecessor.identity),
+              captureId: predecessor.capture,
+            },
+          }
+        : {}),
       deadline: input.deadline,
       capture: { kind: 'library', capture: completed.capture, frontier: row.frontier, allowance: l.allowance() },
     });

@@ -11,12 +11,15 @@ const scopes = [
   'collection:update',
   'collection:delete',
   'library_entry:read',
+  'library_entry:list',
   'library_entry:update',
   'library_entry:delete',
   'progress_session:read',
+  'progress_session:list',
   'progress_session:create',
   'progress_session:update',
   'copy:read',
+  'copy:list',
   'copy:create',
   'copy:update',
   'subject:read',
@@ -83,6 +86,7 @@ export async function createCollectionRulesFixture(additionalScopes: readonly st
     }
     async function page(collectionId: string) {
       // A finite fixture must complete through the actual default preparation worker, if preparation is needed.
+      await base.runtime.startWorker();
       for (let attempt = 0; attempt < 100; attempt++) {
         const response = await send('GET', `/v1/collections/${collectionId}/members`);
         if (response.status !== 202) {

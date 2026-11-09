@@ -751,9 +751,10 @@ export function createNativeLibraryObservationAdapter(): SemanticObservationNati
         return (await readIdentityMappings(pool, originals)).map(publicMapping);
       },
       async registerScope(pool, input) {
-        const registration = input as unknown as Parameters<
-          ReturnType<typeof createIdentityScopedObservations>['register']
-        >[0];
+        const registration = {
+          ...input,
+          ...(input.replaces ? { replaces: { ...input.replaces, key: semanticScopeKey(input.replaces.key) } } : {}),
+        } as unknown as Parameters<ReturnType<typeof createIdentityScopedObservations>['register']>[0];
         const registered = await createIdentityScopedObservations(pool).register(registration);
         if (registered.status === 'registered')
           return {

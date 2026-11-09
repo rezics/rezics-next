@@ -57,6 +57,8 @@ export type LibrarySemanticObservationResult<T> = Readonly<{
 
 export type LibrarySemanticScopeRegistration = Readonly<{
   key: LibrarySemanticScopeKey;
+  /** Retained predecessor at this stable address; never permission to replace another registration. */
+  replaces?: Readonly<{ key: LibrarySemanticScopeKey; captureId: string | null }>;
   deadline: number;
   capture: Readonly<{
     kind: 'library';
@@ -96,8 +98,14 @@ export interface LibrarySemanticObservationCapability {
       pool: LibrarySemanticDatabase,
       originals: readonly string[],
     ): Promise<LibrarySemanticObservationResult<readonly LibrarySemanticMapping[]>>;
-    registerScope(pool: LibrarySemanticDatabase, input: LibrarySemanticScopeRegistration): Promise<LibrarySemanticScopeResult>;
-    revalidateScope(pool: LibrarySemanticDatabase, input: LibrarySemanticScopeRevalidation): Promise<LibrarySemanticScopeResult>;
+    registerScope(
+      pool: LibrarySemanticDatabase,
+      input: LibrarySemanticScopeRegistration,
+    ): Promise<LibrarySemanticScopeResult>;
+    revalidateScope(
+      pool: LibrarySemanticDatabase,
+      input: LibrarySemanticScopeRevalidation,
+    ): Promise<LibrarySemanticScopeResult>;
     commitScopeCapture(
       client: LibrarySemanticQueryClient,
       input: Readonly<{
@@ -113,7 +121,10 @@ export interface LibrarySemanticObservationCapability {
     subjectReferenceWork(subjectId: string): WorkDimensions;
     subjectSummaryWork(subjectIds: readonly string[]): WorkDimensions;
     subjectSummaryCurrentWork(subjectIds: readonly string[]): WorkDimensions;
-    readMapping(pool: LibrarySemanticDatabase, original: string): Promise<LibrarySemanticObservationResult<LibrarySemanticMapping>>;
+    readMapping(
+      pool: LibrarySemanticDatabase,
+      original: string,
+    ): Promise<LibrarySemanticObservationResult<LibrarySemanticMapping>>;
     readMappings(
       pool: LibrarySemanticDatabase,
       originals: readonly string[],

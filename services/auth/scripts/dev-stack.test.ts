@@ -30,6 +30,39 @@ test('Worker readiness survives split writes and a coalesced trailing log chunk'
   expect(receive('')).toBe(true);
 });
 
+test('the live fixture journal retains stdout and stderr phase markers before process exit', async () => {
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  const directory = mkdtempSync(join(root, '.temp/stack-journal-'));
+  const lifetime = new StackFixtureLifetime(10_000);
+  const log = join(directory, 'stack.log');
+  try {
+    lifetime.start(
+      'journal',
+      [
+        process.execPath,
+        '--eval',
+        `
+      console.log('stack: web-launched');
+      await Bun.sleep(100);
+      console.error('stack: identity ready');
+      setInterval(() => {}, 1000);
+    `,
+      ],
+      { cwd: root, env: process.env, progress: true, outputFile: log },
+    );
+    while (!(await Bun.file(log).text()).includes('stack: identity ready')) {
+      lifetime.signal.throwIfAborted();
+      await Bun.sleep(10);
+    }
+    const journal = await Bun.file(log).text();
+    expect(journal.indexOf('stack: web-launched')).toBeGreaterThanOrEqual(0);
+    expect(journal.indexOf('stack: web-launched')).toBeLessThan(journal.indexOf('stack: identity ready'));
+  } finally {
+    await lifetime.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('cold Web starts before native readiness while every dependency gate still precedes final readiness', async () => {
   const events: string[] = [];
   let releaseIdentity!: () => void;

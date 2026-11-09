@@ -2439,6 +2439,12 @@ and drains the early Web process with every other child. Every readiness gate wa
 early Web exit ends native startup too. Keep the original 300-second total and 30-second settlement
 reserve, registration, sign-in, sign-out and resource-removal assertions. The readiness marker reader searches each
 whole incoming chunk before retaining a marker-sized suffix, including coalesced logs after `Worker ready`.
+The fixture's live startup journal captures both stdout and stderr, including native readiness phase markers,
+while continuing to forward stderr progress. Startup-order assertions read this complete journal before shutdown.
+Its private 6 GiB check budget includes both Vite graphs, native services and Chromium; two allocator arenas limit
+fragmentation, with a 1,792 MiB old generation above the observed 1.5 GiB live graph and a 4 MiB semi-space. Other
+caller Node options remain in effect. The browser selects the
+visible sign-in link so a hidden responsive navigation copy cannot capture the desktop journey's locator.
 
 ### Cost: complete-stack startup coordination
 

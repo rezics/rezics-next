@@ -60,6 +60,10 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
       // Hold the port lease directly while exercising ordinary setup/start, including pages and the default worker.
       REZICS_WALK_STACK_SLOT: undefined,
       REZICS_WALK_DEFER_FRONTENDS: undefined,
+      // The private run holds native services, both Vite graphs and Chromium within 6 GiB.
+      // Leave room above the observed 1.5 GiB live Web graph without retaining a large young generation.
+      MALLOC_ARENA_MAX: '2',
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=1792 --max-semi-space-size=4`.trim(),
       // Fresh setup must read the database it just provisioned, without an inherited compiler URL or SQL cache.
       DATABASE_URL: undefined,
       REYLO_CONFIG: undefined,
@@ -164,7 +168,7 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
       expect(startupLog.slice(startupLog.indexOf('stack: worker ready'))).not.toContain('native-sql-generate starting');
       console.error(`stack: fixture-worker ready utc=${new Date().toISOString()}`);
       await page.goto(`${origins.web}/`);
-      await page.locator('a[href^="/auth/sign-in"]').first().click();
+      await page.locator('a[href^="/auth/sign-in"]:visible').first().click();
       await page.waitForURL('**/login?**');
       await page.locator('a[href^="/signup"]').click();
       const handle = `local_${suffix.replaceAll('-', '').slice(0, 12)}`;
@@ -185,7 +189,7 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
       await page.locator('#account-menu-button').click();
       await page.locator('form[action="/auth/sign-out"] button[type="submit"]').click();
       await page.waitForURL(`${origins.web}/**`);
-      await browserExpect(page.locator('a[href^="/auth/sign-in"]').first()).toBeVisible();
+      await browserExpect(page.locator('a[href^="/auth/sign-in"]:visible').first()).toBeVisible();
       expect(
         (await page.context().cookies()).some((cookie: { name: string }) => cookie.name === '__Host-rezics_session'),
       ).toBe(false);
