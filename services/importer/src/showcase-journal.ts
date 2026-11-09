@@ -45,6 +45,24 @@ type ShowcaseActionDecisionRow = {
   idempotency_key: string;
 };
 
+export type CandidateListingPage<Row> = Readonly<{
+  candidates: readonly Row[];
+  tombstones: readonly string[];
+}>;
+
+export type CandidateListingCheckpoint<Row> = Readonly<{
+  version: 1;
+  mode: 'inherit' | 'replace' | 'suppress' | null;
+  head: number | null;
+  firstPageDigest: string;
+  cursor: string | null;
+  seenCursors: readonly string[];
+  restartRequired: boolean;
+  pages: readonly CandidateListingPage<Row>[];
+}>;
+
+type CandidateListingMetadata = Omit<CandidateListingCheckpoint<never>, 'pages'>;
+
 function json(value: unknown): string {
   return JSON.stringify(value);
 }
@@ -134,6 +152,16 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         identity TEXT NOT NULL,
         action_key TEXT NOT NULL,
         PRIMARY KEY (identity, action_key)
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS showcase_candidate_listing (
+        listing_key TEXT PRIMARY KEY,
+        checkpoint_json TEXT NOT NULL
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS showcase_candidate_listing_page (
+        listing_key TEXT NOT NULL REFERENCES showcase_candidate_listing(listing_key) ON DELETE CASCADE,
+        page_index INTEGER NOT NULL,
+        page_json TEXT NOT NULL,
+        PRIMARY KEY(listing_key,page_index)
       ) STRICT;
     `);
     // Native fixture creates need their acknowledged UUID alongside the sealed action.
@@ -355,6 +383,59 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         'INSERT INTO showcase_adopt_generation(identity,generation) VALUES(?,?) ON CONFLICT(identity) DO UPDATE SET generation=excluded.generation',
       )
       .run(identity, generation);
+  }
+
+  candidateListing<Row>(listingKey: string): CandidateListingCheckpoint<Row> | null {
+    const row = this.#db
+      .query<{ checkpoint_json: string }, [string]>(
+        'SELECT checkpoint_json FROM showcase_candidate_listing WHERE listing_key=?',
+      )
+      .get(listingKey);
+    if (!row) return null;
+    const pages = this.#db
+      .query<{ page_json: string }, [string]>(
+        'SELECT page_json FROM showcase_candidate_listing_page WHERE listing_key=? ORDER BY page_index',
+      )
+      .all(listingKey)
+      .map((page) => JSON.parse(page.page_json) as CandidateListingPage<Row>);
+    return { ...(JSON.parse(row.checkpoint_json) as CandidateListingMetadata), pages };
+  }
+
+  saveCandidateListingPage<Row>(
+    listingKey: string,
+    checkpoint: CandidateListingMetadata,
+    pageIndex: number,
+    page: CandidateListingPage<Row>,
+  ): void {
+    this.#db.transaction(() => {
+      this.#db
+        .query(
+          'INSERT INTO showcase_candidate_listing(listing_key,checkpoint_json) VALUES(?,?) ON CONFLICT(listing_key) DO UPDATE SET checkpoint_json=excluded.checkpoint_json',
+        )
+        .run(listingKey, json(checkpoint));
+      if (pageIndex === 0)
+        this.#db.query('DELETE FROM showcase_candidate_listing_page WHERE listing_key=?').run(listingKey);
+      this.#db
+        .query(
+          'INSERT INTO showcase_candidate_listing_page(listing_key,page_index,page_json) VALUES(?,?,?) ON CONFLICT(listing_key,page_index) DO UPDATE SET page_json=excluded.page_json',
+        )
+        .run(listingKey, pageIndex, json(page));
+    })();
+  }
+
+  saveCandidateListingRestart(listingKey: string, checkpoint: CandidateListingMetadata): void {
+    this.#db.transaction(() => {
+      this.#db
+        .query(
+          'INSERT INTO showcase_candidate_listing(listing_key,checkpoint_json) VALUES(?,?) ON CONFLICT(listing_key) DO UPDATE SET checkpoint_json=excluded.checkpoint_json',
+        )
+        .run(listingKey, json(checkpoint));
+      this.#db.query('DELETE FROM showcase_candidate_listing_page WHERE listing_key=?').run(listingKey);
+    })();
+  }
+
+  clearCandidateListing(listingKey: string): void {
+    this.#db.query('DELETE FROM showcase_candidate_listing WHERE listing_key=?').run(listingKey);
   }
 
   /** Recorded replacements of refused actions, oldest first; each names the refusal it superseded. */

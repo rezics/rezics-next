@@ -224,7 +224,11 @@ export async function sendDurableAdopt(input: {
     if (!found) {
       for (const candidate of keys) {
         const prior = input.journal.action(candidate);
-        if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code))
+        if (
+          prior?.state === 'refused' &&
+          permanentReviewRefusal(prior.error_code) &&
+          !staleAdoptionHead(prior.error_code)
+        )
           return { status: 'refused', code: prior.error_code! };
         if (prior?.state !== 'acknowledged') continue;
         const sealed = sealedAdoptBody(JSON.parse(prior.body_json));
@@ -252,7 +256,8 @@ export async function sendDurableAdopt(input: {
         journal: input.journal,
         action,
         body,
-        refusalDisposition: (code) => (permanentReviewRefusal(code) ? 'refused' : 'retry'),
+        refusalDisposition: (code) =>
+          staleAdoptionHead(code) ? 'stale' : permanentReviewRefusal(code) ? 'refused' : 'retry',
         send: (sealedBody, sealedKey) =>
           input.review.adoptReviewedCandidates(input.subjectId, sealedBody as AdoptBody, sealedKey),
       });
@@ -293,4 +298,8 @@ export function permanentReviewRefusal(code: string | null | undefined): boolean
   return ['review-http-401', 'review-http-403', 'review-http-409', 'review-http-412', 'review-http-423'].includes(
     code ?? '',
   );
+}
+
+function staleAdoptionHead(code: string | null | undefined): boolean {
+  return code === 'review-http-409' || code === 'review-http-412';
 }

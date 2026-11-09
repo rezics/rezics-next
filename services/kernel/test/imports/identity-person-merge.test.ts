@@ -84,6 +84,10 @@ test('a reviewed Person pair merges once through the native contract and both or
       published.survivor,
       published.survivor,
     ]);
+    expect(published.identities.map((entry) => entry.boundSubjectId)).toEqual(
+      pair.sources.map((source) => source.boundSubjectId),
+    );
+    expect(published.identities.map((entry) => entry.identity.externalId)).toEqual(['person:1916', 's224']);
     expect([published.survivor, published.redirected].sort()).toEqual(
       pair.sources.map((source) => source.boundSubjectId).sort(),
     );
