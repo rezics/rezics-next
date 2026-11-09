@@ -89,6 +89,8 @@ async function native(id: string) {
 }
 
 test('explicit [] completes a real empty output and public metadata in one revision, never an absent-source empty', async () => {
+  const unselected = await f.subject('Unselected owner member');
+  await f.entry(unselected);
   const collection = await saved();
   const before = await native(collection.id);
   expect(before.selected).toBeNull();

@@ -3786,6 +3786,10 @@ transfer continues to refuse before I/O.
 
 ### Native Collection Source capture and custody execution bounds
 
+Canonical Source SQL writes that return no rows consume zero result bytes. The query adapter checks nonempty
+serialized result arrays against their declared byte ceiling; an empty driver result does not charge JSON framing
+against a zero-result write declaration.
+
 Decision: one immutable Library-owned custody operation plan is authoritative for capture, finish, hold, retained
 revalidation and release; it is shared by the native adapter and original-work composition, with request SQL/binds
 and schema-derived serialized projections priced separately and explicit translation to eight-axis native receipts
