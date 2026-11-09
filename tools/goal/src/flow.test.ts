@@ -734,7 +734,7 @@ test('unchanged global alarms with no waiting tasks stay quiet after delivery, w
   }
 });
 
-test('draining a queue does not repeat a global alarm, and the same task waiting again rearms it', () => {
+test('an unchanged historical attempt ratio does not rearm as waiting tasks rotate', () => {
   const db = openDb(':memory:');
   const policy = readControlPolicy({ flow: { alertEveryMs: 10_000 } });
   const now = Date.parse(date(0));
@@ -750,15 +750,15 @@ test('draining a queue does not repeat a global alarm, and the same task waiting
     expect(run(0)).toEqual(['attempts-per-integrated']);
     report.queues[1] = empty;
     expect(run(1)).toEqual([]);
-    report.queues[1] = waiting;
-    expect(run(2)).toEqual(['attempts-per-integrated']);
-    report.queues[1] = empty;
-    expect(run(3)).toEqual([]);
+    report.queues[1] = { ...waiting, tasks: ['next-task'] };
+    expect(run(2)).toEqual([]);
     const changes = db.query('SELECT total_changes() AS changes').get();
     expect(run(10_002)).toEqual([]);
     expect(db.query('SELECT total_changes() AS changes').get()).toEqual(changes);
-    expect(sent).toHaveLength(2);
+    expect(sent).toHaveLength(1);
     expect(report.attemptsPerIntegrated).toBe(3.67);
+    report.attemptsPerIntegrated = 3.68;
+    expect(run(10_003)).toEqual(['attempts-per-integrated']);
   } finally {
     db.close();
   }
