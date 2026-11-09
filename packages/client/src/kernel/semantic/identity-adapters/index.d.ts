@@ -9,7 +9,6 @@ import { type IdentityEpochStore, type IdentityJobRef, type IdentityChange } fro
 export declare const IDENTITY_EPOCH_CONTROL_PARTITION = 0;
 /** Fixed initial production capacity, charged once per native (home,job). */
 export declare const IDENTITY_EPOCH_HOME_CAPACITY = 1;
-export { authorizeIdentityAdmission } from './identity-epoch-binding.ts';
 export { recordIdentityEpochNativeCommit } from './native-commit.ts';
 export { identityEpochRemainderTerminal, identityHomeAvailable, identityJobPartition, identityReceiptKey, identityReceiptValue, } from './identity-epoch-contract.ts';
 export { selectIdentityEpochRemainder } from './identity-epoch-read.ts';

@@ -20,7 +20,7 @@ export declare function initializeCollectionMetadataHistory(client: Client, inpu
         transaction_id: string;
         updated_at: string;
     }>;
-    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+    total: import("./access-capabilities.ts").WorkDimensions & Readonly<{
         engineRequests: number;
     }>;
     withinExistingCeiling: boolean;
@@ -51,7 +51,7 @@ export declare function captureCollectionMetadataHistory(client: Client, input: 
         prune?: import("./collection-history-bounds.ts").CollectionMetadataHistorySqlPlan;
         pruned?: import("./collection-history-bounds.ts").CollectionMetadataHistorySqlPlan;
     }>;
-    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+    total: import("./access-capabilities.ts").WorkDimensions & Readonly<{
         engineRequests: number;
     }>;
     withinExistingCeiling: boolean;
@@ -67,7 +67,7 @@ export declare function readCollectionMetadataHistoryState(client: Client, input
         collection_id: string;
         curator_account_id: string;
     }>;
-    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+    total: import("./access-capabilities.ts").WorkDimensions & Readonly<{
         engineRequests: number;
     }>;
     withinExistingCeiling: boolean;
@@ -87,7 +87,7 @@ export declare function pageCollectionMetadataHistory(client: Client, input: {
         after_revision: number | null;
         page_limit: number;
     }>;
-    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+    total: import("./access-capabilities.ts").WorkDimensions & Readonly<{
         engineRequests: number;
     }>;
     withinExistingCeiling: boolean;
@@ -111,7 +111,7 @@ export declare function readCollectionMetadataHistoryEntry(client: Client, input
         curator_account_id: string;
         revision: number;
     }>;
-    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+    total: import("./access-capabilities.ts").WorkDimensions & Readonly<{
         engineRequests: number;
     }>;
     withinExistingCeiling: boolean;

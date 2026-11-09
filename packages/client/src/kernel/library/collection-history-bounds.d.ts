@@ -15,7 +15,7 @@ export declare function collectionMetadataHistoryInitializePlan(input: Parameter
         transaction_id: string;
         updated_at: string;
     }>;
-    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+    total: import("./access-capabilities.ts").WorkDimensions & Readonly<{
         engineRequests: number;
     }>;
     withinExistingCeiling: boolean;
@@ -39,7 +39,7 @@ export declare function collectionMetadataHistoryCapturePlan(input: Parameters<R
         prune?: CollectionMetadataHistorySqlPlan;
         pruned?: CollectionMetadataHistorySqlPlan;
     }>;
-    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+    total: import("./access-capabilities.ts").WorkDimensions & Readonly<{
         engineRequests: number;
     }>;
     withinExistingCeiling: boolean;
@@ -51,7 +51,7 @@ export declare function collectionMetadataHistoryStatePlan(input: Parameters<Ret
         collection_id: string;
         curator_account_id: string;
     }>;
-    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+    total: import("./access-capabilities.ts").WorkDimensions & Readonly<{
         engineRequests: number;
     }>;
     withinExistingCeiling: boolean;
@@ -65,7 +65,7 @@ export declare function collectionMetadataHistoryPagePlan(input: Parameters<Retu
         after_revision: number | null;
         page_limit: number;
     }>;
-    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+    total: import("./access-capabilities.ts").WorkDimensions & Readonly<{
         engineRequests: number;
     }>;
     withinExistingCeiling: boolean;
@@ -78,7 +78,7 @@ export declare function collectionMetadataHistoryEntryPlan(input: Parameters<Ret
         curator_account_id: string;
         revision: number;
     }>;
-    total: import("./collection-source.ts").WorkDimensions & Readonly<{
+    total: import("./access-capabilities.ts").WorkDimensions & Readonly<{
         engineRequests: number;
     }>;
     withinExistingCeiling: boolean;

@@ -135,6 +135,6 @@ export declare function admitSavedCollectionMemberQuery(deps: Dependencies, view
  */
 export declare function prepareCollectionMemberFilter(deps: Dependencies, options: CollectionMemberQuery, input: PrepareCollectionSource): Promise<{
     source: import("./collection-source.ts").PreparedCollectionSource;
-    work: import("./collection-source.ts").WorkReceipt;
+    work: import("./access-capabilities.ts").WorkReceipt;
     admission: CollectionMemberAdmission;
 }>;
