@@ -2043,7 +2043,9 @@ export class WorkerJob implements GateOutcomeSink {
             previous?.failureKind === 'tool' &&
             !reranFailingCommand(task, attempt, previous, this.policy.worker);
           const idle = !repeated && !unrerun && devProductBrief(task.brief) && noProgressTwice(store, task, ref);
-          if ((repeated || unrerun || idle) && !hasSharedIncident) {
+          // A shared incident deduplicates and holds peers, but it must not reset the same-task blocker limit.
+          // Otherwise its one probe can fail, advance to a new task attempt, and repeat its transport budget forever.
+          if (repeated || ((unrerun || idle) && !hasSharedIncident)) {
             const firstLine = (
               silence
                 ? attempt.result
@@ -2061,6 +2063,12 @@ export class WorkerJob implements GateOutcomeSink {
             store.updateAttempt(ref, (a) => {
               a.escalation = 'stalled';
             });
+            const pendingRetry = store.retryIntent(ref);
+            if (pendingRetry?.status === 'pending')
+              store.updateRetryIntent(ref, (intent) => {
+                intent.status = 'abandoned';
+                delete intent.nextAttempt;
+              });
             record.escalation = 'stalled';
             store.putRecord(record);
             const event =

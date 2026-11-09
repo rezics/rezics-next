@@ -1977,8 +1977,11 @@ supermanager with the line, count, example tasks and the first tracked source ma
 affected task every 10 minutes. An affected launch recorded after the incident's trigger failure becomes its probe;
 the first provider output appended beyond that launch's saved log offset resolves the incident and releases pending
 retries immediately. The resolved state event names the probe and records the failure sequence, run sequence and
-observed log range. A probe that fails again with the same fingerprint keeps the incident open and moves its next
-probe time. Incident notices are one line; an undelivered notice is retried during the existing recovery sweep without
+observed log range. If a probe task ends a consecutive attempt with the same fingerprint, the existing repeated-
+blocker guard parks it and abandons its pending retry even while the incident remains open. This prevents an incident
+probe from resetting its six-resume transport budget on every new attempt. The incident continues to hold peer retries;
+an operator can retry the probe after the cause is addressed and its existing cooldown has elapsed. Incident notices
+are one line; an undelivered notice is retried during the existing recovery sweep without
 reopening the incident or moving its probe cadence. `status` lists open incidents and identifies affected pending
 retries. Without a shared incident, the same
 tool blocker in two consecutive attempts parks the task and sends its manager one `environment` event, whether or not
