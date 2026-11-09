@@ -1098,20 +1098,41 @@ export async function historicalProofTerminal(check: HistoricalProofCheck): Prom
   }
 }
 
-/** Passing evidence belongs only to this exact source and integration ref, never a later source. */
-export function proofSourceUnchanged(task: Task, integrationBranch: string, policy = defaultPolicy.proof): boolean {
+/** An admitted execution is bound to its registered immutable capture, not a moving integration ref. */
+export function proofCaptureUnchanged(task: Task, policy = defaultPolicy.proof): boolean {
   if (!registeredProof(task.brief, task.proofAuthorization)) return false;
   try {
     return (
       proofGit(task.worktree, ['rev-parse', 'HEAD'], policy) === task.brief.proof!.sourceCommit &&
       proofGit(task.worktree, ['rev-parse', 'HEAD^{tree}'], policy) === task.proofAuthorization!.sourceTree &&
-      proofGit(task.worktree, ['rev-parse', `refs/heads/${integrationBranch}`], policy) ===
-        task.brief.proof!.sourceCommit &&
       proofGit(task.worktree, ['status', '--porcelain', '--untracked-files=all'], policy) === ''
     );
   } catch {
     return false;
   }
+}
+
+/** Current acceptance separately requires that the unchanged capture still names integration. */
+export function proofSourceStatus(
+  task: Task,
+  integrationBranch: string,
+  policy = defaultPolicy.proof,
+): 'capture-changed' | 'integration-not-current' | 'current' {
+  if (!proofCaptureUnchanged(task, policy)) return 'capture-changed';
+  try {
+    if (
+      proofGit(task.worktree, ['rev-parse', `refs/heads/${integrationBranch}`], policy) ===
+      task.brief.proof!.sourceCommit
+    )
+      return 'current';
+  } catch {
+    // An unreadable integration ref cannot establish current acceptance.
+  }
+  return 'integration-not-current';
+}
+
+export function proofSourceUnchanged(task: Task, integrationBranch: string, policy = defaultPolicy.proof): boolean {
+  return proofSourceStatus(task, integrationBranch, policy) === 'current';
 }
 
 export class ProofCapacityQueuedError extends Error {

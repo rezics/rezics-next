@@ -1897,6 +1897,8 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (task.brief.kind === 'verification') {
         if (store.events(task.id, ref.attempt).some((event) => event.kind === 'proof-failure-routed')) return;
+        const proof = store.record(ref)?.proof;
+        const captureOnly = task.state === 'stopped' && kind === null && proof?.status === 'terminal' && proof.passed;
         store.updateTask(ref, (current) => {
           current.state = 'stopped';
         });
@@ -1904,11 +1906,10 @@ export class WorkerJob implements GateOutcomeSink {
           managerId: task.brief.manager,
           taskId: task.id,
           kind: 'instruction' as const,
-          summary:
-            `Original proof stopped; create a separate minimal product fix. ${attempt.result} ${attempt.blocker ?? ''}`.slice(
-              0,
-              1000,
-            ),
+          summary: (captureOnly
+            ? `Original proof passed on its captured source; current integration requires a fresh authenticated proof registration. ${attempt.result}`
+            : `Original proof stopped; create a separate minimal product fix. ${attempt.result} ${attempt.blocker ?? ''}`
+          ).slice(0, 1000),
           evidencePath: attempt.evidencePath,
         };
         store.event(ref, 'proof-failure-routed', event);

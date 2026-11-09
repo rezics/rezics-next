@@ -1,7 +1,7 @@
 import { localWorkerHost } from './worker-host-custody.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import {
-  proofSourceUnchanged,
+  proofCaptureUnchanged,
   registeredProof,
   type ProofAuthorization,
   type ProofReservation,
@@ -293,12 +293,12 @@ export async function launch(
       policy.pacing.burnSpanMs,
     );
   }
-  if (
-    task.brief.kind === 'verification' &&
-    (!registeredProof(task.brief, task.proofAuthorization) ||
-      !proofSourceUnchanged(task, task.proofAuthorization?.integrationBranch ?? '', policy.proof))
-  )
-    throw new Error('Proof execution unavailable: authenticated exact read-only source registration required');
+  if (task.brief.kind === 'verification') {
+    if (!registeredProof(task.brief, task.proofAuthorization))
+      throw new Error('Proof execution unavailable: authenticated exact read-only source registration required');
+    if (!proofCaptureUnchanged(task, policy.proof))
+      throw new Error('Proof execution unavailable: captured worktree HEAD, tree or contents changed');
+  }
   recordFlow(store.db, {
     taskId: attempt.taskId,
     attempt: attempt.attempt,
