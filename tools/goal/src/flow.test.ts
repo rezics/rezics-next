@@ -526,6 +526,8 @@ test('real daily audit template passes risk validation for tomorrow without broa
   const brief = parseBrief(auditTemplate(), ownership());
   expect(brief.riskAreas).toEqual([]);
   expect(brief.paths).toEqual(['tools/goal/reports/daily-step-audit-*.md']);
+  expect(brief.acceptance.command).toEqual([]);
+  expect(brief.acceptance.tests).toEqual([]);
   const db = openDb(':memory:');
   try {
     const tomorrow = new Date(Date.parse(date(0)) + 86400_000);
