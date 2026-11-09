@@ -32,6 +32,8 @@ No extra session read, authentication preflight, polling, per-row hydration or n
 
 Decision: offer first-page recovery only for cursor failures without an HTTP status or with status 408 or 5xx; other HTTP failures, including admission denial and platform-closed, keep their existing retry or closed handling. The localized action targets `/realms` with empty search so the route guard and a fresh caller own the visit.
 
+Decision: My Realms capture, admission, query ownership and navigation state live in `my-realms-lifetime.ts`, a community-owned leaf with no composing-host imports. `my-realms-caller.tsx` keeps route presentation and compatibility exports; the membership query and current-standing controller consume the leaf directly.
+
 ## Current-entry envelope boundary
 
 `GET /v1/me/realms` and the installed `KernelClient.me.realms.get` response now include the bounded `current` projection: description, optional avatar/banner states, canonical Realm destination, carrying Space identity, Account membership episode, participation and independent `enter`, `manage` and `leave` advice. `my-realms-native.ts` formats only those supplied fields, in supplied order, and keeps the supplied opaque continuation. It does not hydrate rows or infer authority from `role: 'member'`.

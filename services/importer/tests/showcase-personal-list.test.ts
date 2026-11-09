@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { createHash } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ShowcaseJournal } from '../src/showcase-publication.ts';
@@ -107,22 +108,28 @@ test('uploads through the generated VNDB route and resumes exact intents after u
   }
 }, 120000);
 
-test('reopen preserves the original response, current authority and terminal refusals without changing private custody', async () => {
+test('reopen resumes the exact private upload after authority restoration and preserves response custody', async () => {
   await mkdir(tempRoot, { recursive: true });
   const directory = await mkdtemp(join(tempRoot, 'personal-list-custody-'));
   const path = join(directory, 'showcase.sqlite');
   let journal = new ShowcaseJournal(path);
   const xml = '<vndb-export version="1.0"><vns><vn id="v4" /></vns></vndb-export>';
+  const recoveryXml = xml.replace('vn id="v4"', 'vn id="v5"');
   const uploadId = '01900000-0000-4000-8000-000000000001';
+  const recoveredUploadId = '01900000-0000-4000-8000-000000000002';
   let calls = 0;
+  const requests: { body: string; key: string | null }[] = [];
   let response = () => Response.json({ uploadId, rows: 1 });
   const client = createKernelClient(identity.origin, {
-    fetch: (async (_input, _init) => {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
       calls++;
+      requests.push({ body: await request.clone().text(), key: request.headers.get('idempotency-key') });
       return response();
     }) as typeof fetch,
   });
-  const run = (current = identity) => seedShowcasePersonalList({ client, journal, identity: current, xml });
+  const run = (current = identity, source = xml) =>
+    seedShowcasePersonalList({ client, journal, identity: current, xml: source });
   const reopen = () => {
     journal.close();
     journal = new ShowcaseJournal(path);
@@ -167,12 +174,31 @@ test('reopen preserves the original response, current authority and terminal ref
       response = invalid;
       expect(await run()).toEqual({ state: 'unknown-delivery', code: 'invalid-response' });
     }
-    response = () => Response.json({ code: 'forbidden', detail: xml }, { status: 403 });
-    expect(await run()).toEqual({ state: 'refused', code: 'http-403' });
+    const privateDetail = 'private response detail must stay out of the journal';
+    response = () => Response.json({ code: 'forbidden', detail: privateDetail }, { status: 403 });
+    expect(await run(identity, recoveryXml)).toEqual({ state: 'unavailable', code: 'http-403' });
+    const denied = requests.at(-1)!;
+    expect(JSON.parse(denied.body)).toEqual({ xml: recoveryXml });
+    const recoveryKey = `personal-list:vndb:upload:${createHash('sha256').update(recoveryXml, 'utf8').digest('hex')}`;
+    const pending = journal.action(recoveryKey)!;
+    expect(pending.state).toBe('prepared');
+    expect(pending.body_json).not.toContain(privateDetail);
     const sent = calls;
     reopen();
-    expect(await run()).toEqual({ state: 'refused', code: 'http-403' });
+    for (const current of [
+      { ...identity, actor: { ...identity.actor, accountId: 'other-person' } },
+      { ...identity, actor: { ...identity.actor, clientId: 'other-client' } },
+    ])
+      expect(await run(current, recoveryXml)).toEqual({ state: 'unavailable', code: 'sealed-identity-changed' });
     expect(calls).toBe(sent);
+    expect(await run(identity, recoveryXml)).toEqual({ state: 'unavailable', code: 'http-403' });
+    expect(calls).toBe(sent + 1);
+    expect(requests.at(-1)).toEqual(denied);
+    response = () => Response.json({ uploadId: recoveredUploadId, rows: 1 });
+    expect(await run(identity, recoveryXml)).toEqual({ state: 'uploaded', uploadId: recoveredUploadId, rows: 1 });
+    expect(calls).toBe(sent + 2);
+    expect(requests.at(-1)).toEqual(denied);
+    expect(journal.action(recoveryKey)?.state).toBe('acknowledged');
     expect((await stat(path)).mode & 0o777).toBe(0o600);
   } finally {
     journal.close();
@@ -227,13 +253,13 @@ test('explicit review and confirmation keep original operands across reopen, par
       return reply();
     }) as typeof fetch,
   });
-  const review = (state: string) =>
+  const review = (state: string, intentId = 'chosen-state', current = identity) =>
     reviewShowcasePersonalList({
       client,
       journal,
-      identity,
+      identity: current,
       uploadId,
-      intentId: 'chosen-state',
+      intentId,
       body: { ordinal: 0, action: 'state', targetId, state, replace: false },
     });
   try {
@@ -322,11 +348,37 @@ test('explicit review and confirmation keep original operands across reopen, par
     reply = () => Response.json(current);
     expect(await readShowcasePersonalLibrary({ client, language: 'ja' })).toEqual({ state: 'current', value: current });
     expect(calls.at(-1)?.language).toBe('ja');
-    reply = () => Response.json({ detail: 'private response must not enter a journal failure' }, { status: 403 });
-    expect(await review('paused')).toEqual({ state: 'refused', code: 'http-403' });
-    const denied = calls.length;
-    expect(await review('paused')).toEqual({ state: 'refused', code: 'http-403' });
-    expect(calls).toHaveLength(denied);
+    const recoveryIntent = 'restored-authority-review';
+    const privateDetail = 'private response detail must stay out of the journal';
+    reply = () => Response.json({ detail: privateDetail }, { status: 403 });
+    expect(await review('paused', recoveryIntent)).toEqual({ state: 'unavailable', code: 'http-403' });
+    const denied = calls.at(-1)!;
+    expect(denied.body).toEqual({ ordinal: 0, action: 'state', targetId, state: 'paused', replace: false });
+    const recoveryActionKey = `personal-list:vndb:command:${recoveryIntent}`;
+    const pending = journal.action(recoveryActionKey)!;
+    expect(pending.state).toBe('prepared');
+    expect(pending.body_json).not.toContain(privateDetail);
+    const recoverySent = calls.length;
+    journal.close();
+    journal = new ShowcaseJournal(path);
+    for (const current of [
+      { ...identity, actor: { ...identity.actor, accountId: 'other-person' } },
+      { ...identity, actor: { ...identity.actor, clientId: 'other-client' } },
+    ])
+      expect(await review('completed', recoveryIntent, current)).toEqual({
+        state: 'unavailable',
+        code: 'sealed-identity-changed',
+      });
+    expect(calls).toHaveLength(recoverySent);
+    expect(await review('completed', recoveryIntent)).toEqual({ state: 'unavailable', code: 'http-403' });
+    expect(calls).toHaveLength(recoverySent + 1);
+    expect(calls.at(-1)).toEqual(denied);
+    const restoredReview = { ...acknowledged, state: 'paused' as const };
+    reply = () => Response.json(restoredReview);
+    expect(await review('completed', recoveryIntent)).toEqual({ state: 'acknowledged', value: restoredReview });
+    expect(calls).toHaveLength(recoverySent + 2);
+    expect(calls.at(-1)).toEqual(denied);
+    expect(journal.action(recoveryActionKey)?.state).toBe('acknowledged');
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });

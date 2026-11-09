@@ -77,8 +77,12 @@ account authority, chosen identity, readability, release, cancellation and nativ
 An unknown failure retries that original command; it cannot be re-reviewed into different operands. Exact native
 receipt replay remains possible after an acknowledgement is lost. Applied rows are never applied again.
 
-Decision: current authority or visibility failures (HTTP 401, 403 or 404) keep the prepared journal intent retryable;
-restored authority replays the same body and key, while terminal input refusals stay recorded.
+Decision: HTTP 401, 403 or 404 for current authority or visibility remains `unavailable`, not a terminal refusal. Keep
+the prepared journal intent retryable across reopen and replay its original body and idempotency key after authority
+or visibility returns; record only terminal input refusals.
+
+Choice: recovery fixtures use a fresh prepared upload or review intent, then reopen and replay its original sealed
+identity, operands and key after authority returns.
 
 Refreshing a source review retires its metadata tokens rather than carrying them into a corrected match. An
 unresolved state, metadata or date dispatch must settle before review replacement.

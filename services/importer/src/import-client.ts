@@ -32,6 +32,7 @@ import { checkBatch, checkRequest, checkResult } from './accepted-checks.ts';
 import { isImportSourceRecord, isImportSourceRecordMetadataResult } from './source-record-runtime.ts';
 import {
   createImportFetch,
+  forwardImportRequestStart,
   importRetryState,
   MAX_IMPORT_BODY_BYTES,
   MAX_IMPORT_DEADLINE_MS,
@@ -41,6 +42,8 @@ import {
   importCorrelationId,
   importRequestFailure,
   importResponseDiagnostics,
+  notifyImportRequestStart,
+  observeImportRequestStart,
   type ImportRequestDiagnostics,
   type ImportRetryState,
 } from './import-fetch.ts';
@@ -520,12 +523,15 @@ export function createImportTransport(options: ImportTransportOptions) {
   const observedFetch: typeof fetch = Object.assign(
     async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       const request = new Request(input, init);
+      const callerSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
       const path = requestPath(request.url);
       lastRequest = {
         method: request.method,
         path: path ?? '/v1/subjects:batchWrite',
       };
+      const stopForwarding = options.importFetch ? () => {} : forwardImportRequestStart(callerSignal, request.signal);
       try {
+        if (options.importFetch) notifyImportRequestStart(callerSignal, now());
         const reply = await importFetch(request);
         if (options.onDeniedResponse && (reply.status === 401 || reply.status === 403)) {
           await options.onDeniedResponse({
@@ -546,6 +552,8 @@ export function createImportTransport(options: ImportTransportOptions) {
           ...diagnostics,
           cause: error,
         });
+      } finally {
+        stopForwarding();
       }
     },
     { preconnect: importFetch.preconnect },
@@ -568,19 +576,26 @@ export function createImportTransport(options: ImportTransportOptions) {
     const aborted = () => controller.abort(signal?.reason);
     signal?.throwIfAborted();
     signal?.addEventListener('abort', aborted, { once: true });
-    const deadline = now() + deadlineMs;
+    let deadline: number | undefined;
     let clearDeadline: (() => void) | undefined;
     let scheduledWait = 0;
-    try {
+    const startDeadline = (startedAt: number) => {
+      if (deadline !== undefined) return;
+      deadline = startedAt + deadlineMs;
       const expire = () => controller.abort(new DOMException('Import batch deadline exceeded', 'TimeoutError'));
+      const remaining = Math.max(0, deadline - now());
       clearDeadline = options.schedule
-        ? options.schedule(expire, deadlineMs)
+        ? options.schedule(expire, remaining)
         : (() => {
-            const timer = setTimeout(expire, deadlineMs);
+            const timer = setTimeout(expire, remaining);
             return () => clearTimeout(timer);
           })();
+    };
+    const stopObserving = observeImportRequestStart(controller.signal, startDeadline);
+    try {
       for (let attempt = 0; ; attempt++) {
         const request = { commands: indices.map((index) => body.commands[index]!) };
+        if (options.client) startDeadline(now());
         const reply = await exchange(
           () => client.subjects.$batchWrite.post(request, fetchOptions(controller.signal)),
           200,
@@ -595,28 +610,25 @@ export function createImportTransport(options: ImportTransportOptions) {
         });
         indices = indices.filter((index) => {
           const item = results[index]!;
-          return (
-            (item.status === 503 || item.status === 429) &&
-            'problem' in item &&
-            (item.problem as { retryable?: unknown }).retryable === true
-          );
+          return (item.status === 503 || item.status === 429) && 'problem' in item && item.problem.retryable === true;
         });
         const delay = 100 * 2 ** attempt;
         if (
           !indices.length ||
-          attempt >= 2 ||
+          attempt + 1 >= maxAttempts ||
           delay > maxWaitMs ||
           delay > maxTotalWaitMs - scheduledWait ||
-          now() + delay >= deadline
+          (deadline !== undefined && now() + delay >= deadline)
         )
           return { results };
         // Retain successful receipts; retry only explicit overloads with unchanged keys and bodies.
         scheduledWait += delay;
         await wait(delay, controller.signal, options.sleep);
-        if (now() >= deadline) return { results };
+        if (deadline !== undefined && now() >= deadline) return { results };
       }
     } finally {
       clearDeadline?.();
+      stopObserving();
       signal?.removeEventListener('abort', aborted);
     }
   }
@@ -988,7 +1000,7 @@ export function createImportTransport(options: ImportTransportOptions) {
           wrapper !== null && typeof wrapper === 'object' && !types.isProxy(wrapper)
             ? Object.getOwnPropertyDescriptor(wrapper, 'value')?.value
             : undefined;
-        const redirected = snapshot(redirectBody ?? wrapper ?? reply.data, RESPONSE_BYTES) as {
+        const redirected = snapshot(redirectBody ?? reply.data, RESPONSE_BYTES) as {
           redirect?: { from?: unknown; to?: unknown };
         };
         ensure(redirected.redirect?.from === current && typeof redirected.redirect.to === 'string');

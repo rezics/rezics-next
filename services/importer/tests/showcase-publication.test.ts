@@ -19,6 +19,7 @@ import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion
 import {
   captureShowcaseCommands,
   publishShowcase,
+  adoptResumeKeys,
   sendDurableAdopt,
   servedCoverVariants,
   servedVariantDecisionCurrent,
@@ -1077,6 +1078,71 @@ test('a served cover is named by its public summary in normalized order, and eac
   } as const;
   expect(servedVariantDecisionCurrent(decision, { format: 'avif', width: 320 })).toBe(true);
   expect(servedVariantDecisionCurrent(decision, { format: 'webp', width: 320 })).toBe(false);
+});
+
+test('stale adoption heads keep their sealed body and resume on a fresh journal generation', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'durable-adopt-stale-head-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  const subjectId = randomUUID();
+  const candidate = randomUUID();
+  const intent = 'manifest-digest';
+  const planned = {
+    context: globalContext,
+    property: 'schema:abstract',
+    mode: 'replace' as const,
+    expected_head: 1,
+    selection: [{ candidate, rank: 'normal' as const }],
+  };
+  const calls: {
+    body: { expected_head: number | null; selection: { candidate: string; rank: string }[] };
+    key: string;
+  }[] = [];
+  let stale = true;
+  const review = {
+    async adoptReviewedCandidates(
+      _id: string,
+      body: { expected_head: number | null; selection: { candidate: string; rank: string }[] },
+      key: string,
+    ) {
+      calls.push({ body, key });
+      if (stale) {
+        stale = false;
+        throw Object.assign(new Error('adoption head changed'), { status: 412 });
+      }
+      return { adoption: { head: 2, selection: body.selection } };
+    },
+  } as Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'>;
+  try {
+    const first = await sendDurableAdopt({
+      journal,
+      review,
+      subjectId,
+      intent,
+      planned,
+      current: { selection: [] },
+    });
+    expect(first).toEqual({ status: 'interrupted', code: 'review-http-412' });
+    const keys = adoptResumeKeys(journal, subjectId, planned.property, intent, planned);
+    expect(keys.map((key) => journal.action(key)?.state)).toContain('refused');
+
+    const resumed = await sendDurableAdopt({
+      journal,
+      review,
+      subjectId,
+      intent,
+      planned: { ...planned, expected_head: 2 },
+      current: { selection: [] },
+    });
+    expect(resumed).toEqual({
+      status: 'complete',
+      snapshot: { head: 2, selection: planned.selection },
+    });
+    expect(calls.map(({ body }) => body.expected_head)).toEqual([1, 2]);
+    expect(calls[0]?.key).not.toBe(calls[1]?.key);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('durable adopt resumes previous keys and later prepared actions before matching acknowledgements, then continues past 32 generations', async () => {

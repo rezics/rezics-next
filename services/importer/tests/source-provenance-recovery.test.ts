@@ -35,7 +35,7 @@ test('source provenance refresh preserves acknowledged proposals through partial
             return {
               key: command.key,
               status: 409,
-              problem: { type: 'conflict', title: 'Synthetic partial receipt', status: 409 },
+              problem: { type: 'conflict', title: 'Synthetic partial receipt', status: 409, retryable: false },
             };
           }
           const result: Result =

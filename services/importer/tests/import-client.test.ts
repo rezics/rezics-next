@@ -93,6 +93,75 @@ for (const status of [429, 503]) {
   }
 }
 
+test('batch retries keep the exact pending command through the configured attempts and start deadlines after token preparation', async () => {
+  let clock = 0;
+  let sends = 0;
+  const requestBodies: string[] = [];
+  const requestStarts: number[] = [];
+  const timerStarts: number[] = [];
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => {
+      clock += 450;
+      return 'test-token';
+    },
+    maxAttempts: 4,
+    now: () => clock,
+    schedule: (_callback, _delay) => {
+      timerStarts.push(clock);
+      return () => {};
+    },
+    sleep: async (ms) => {
+      clock += ms;
+    },
+    fetch: (async (request: Request) => {
+      sends++;
+      requestStarts.push(clock);
+      requestBodies.push(await request.text());
+      const status = sends < 4 ? 503 : 201;
+      return Response.json({
+        results: [
+          status === 201
+            ? { key: commands[0]!.key, status, value: { id: subjectId, revision: 1 } }
+            : {
+                key: commands[0]!.key,
+                status,
+                problem: { type: 'about:blank', title: 'Unavailable', status, retryable: true },
+              },
+        ],
+      });
+    }) as unknown as typeof fetch,
+  });
+
+  await expect(transport.batch({ commands: [commands[0]!] })).resolves.toMatchObject({
+    results: [{ key: commands[0]!.key, status: 201 }],
+  });
+  const exactBody = JSON.stringify({ commands: [commands[0]] });
+  expect(sends).toBe(4);
+  expect(requestBodies).toEqual([exactBody, exactBody, exactBody, exactBody]);
+  expect(requestStarts).toEqual([450, 1000, 1650, 2500]);
+  expect(timerStarts[0]).toBe(450);
+});
+
+test('batch response validation requires a retryability classification for every command problem', async () => {
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    fetch: (async () =>
+      Response.json({
+        results: [
+          {
+            key: commands[0]!.key,
+            status: 503,
+            problem: { type: 'about:blank', title: 'Unavailable', status: 503 },
+          },
+        ],
+      })) as unknown as typeof fetch,
+  });
+
+  await expect(transport.batch({ commands: [commands[0]!] })).rejects.toThrow();
+});
+
 test('candidate listing keeps the kernel status when the Treaty reply has no Response', async () => {
   const transport = createImportTransport({
     origin: 'https://api.importer.test',

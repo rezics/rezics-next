@@ -15,6 +15,31 @@ export type ImportRetryState = Readonly<{
 }>;
 const retryStates = new WeakMap<Response, ImportRetryState>();
 export const importRetryState = (response: Response): ImportRetryState | undefined => retryStates.get(response);
+const requestStartObservers = new WeakMap<AbortSignal, (startedAt: number) => void>();
+
+export function observeImportRequestStart(signal: AbortSignal, observer: (startedAt: number) => void): () => void {
+  requestStartObservers.set(signal, observer);
+  return () => {
+    if (requestStartObservers.get(signal) === observer) requestStartObservers.delete(signal);
+  };
+}
+
+export function forwardImportRequestStart(
+  source: AbortSignal | undefined,
+  target: AbortSignal | undefined,
+): () => void {
+  if (!source || !target) return () => {};
+  const observer = requestStartObservers.get(source);
+  if (!observer) return () => {};
+  requestStartObservers.set(target, observer);
+  return () => {
+    if (requestStartObservers.get(target) === observer) requestStartObservers.delete(target);
+  };
+}
+
+export function notifyImportRequestStart(signal: AbortSignal | undefined, startedAt: number): void {
+  if (signal) requestStartObservers.get(signal)?.(startedAt);
+}
 
 export type ImportFailurePhase = 'network' | 'token' | 'deadline' | 'http' | 'response' | 'integrity';
 export type ImportOperation = 'dump-download' | 'dump-index';
@@ -554,14 +579,11 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
     const signal = controller.signal;
     const aborted = () => controller.abort(caller?.reason);
     caller?.addEventListener('abort', aborted, { once: true });
-    const deadline = now() + deadlineMs;
+    let deadline = 0;
+    let requestStarted = false;
     let clearDeadline: (() => void) | undefined;
     let activeRequest: Request | undefined;
     try {
-      clearDeadline = schedule(
-        () => controller.abort(new DOMException('Import request deadline exceeded', 'TimeoutError')),
-        deadlineMs,
-      );
       signal.throwIfAborted();
       checkBodySize(init?.body, maxBodyBytes);
       // Copy metadata without cloning/teeing a supplied Request's stream: teeing can
@@ -611,6 +633,16 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
         let response: Response;
         try {
           response = await abortable(request.signal, async () => {
+            if (!requestStarted) {
+              requestStarted = true;
+              const startedAt = now();
+              deadline = startedAt + deadlineMs;
+              clearDeadline = schedule(
+                () => controller.abort(new DOMException('Import request deadline exceeded', 'TimeoutError')),
+                Math.max(0, deadline - now()),
+              );
+              notifyImportRequestStart(caller ?? signal, startedAt);
+            }
             const result = await upstream(next);
             if (request.signal.aborted) {
               void cancel(result.body);

@@ -1,12 +1,15 @@
 import { Type, type Static } from 'typebox';
 import { Check } from 'typebox/schema';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
-import type { MediaVariantDecision, ReviewedSubjectRead } from './import-client.ts';
+import { ImportTransportError, type MediaVariantDecision, type ReviewedSubjectRead } from './import-client.ts';
+import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
 import { observePersonIdentity, personIdentityForSource } from './showcase-person-identity.ts';
 import { sameStatementProvenance } from './statement-provenance.ts';
-import { showcaseDigest, showcaseLimits, type ShowcaseRecord } from './showcase-contract.ts';
+import { showcaseDigest, showcaseLimits, type ShowcaseRecord, type ShowcaseReviewPort } from './showcase-contract.ts';
+import type { CandidateListingCheckpoint, ShowcaseJournal } from './showcase-journal.ts';
 
 export type CandidateRank = 'normal' | 'preferred' | 'deprecated';
+export type AdoptionMode = 'inherit' | 'replace' | 'suppress';
 export type CandidateRead = {
   id: string;
   source: BatchCommand['source'] | null;
@@ -17,9 +20,12 @@ export type CandidateRead = {
 };
 export type CandidatePage = {
   candidates: CandidateRead[];
-  next: unknown;
+  tombstones: string[];
+  next: string | null;
+  complete: boolean;
   adoption: {
-    head?: number | null;
+    mode: AdoptionMode;
+    head: number;
     selection?: { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[];
   } | null;
 };
@@ -53,7 +59,7 @@ export function currentCandidateSelection(
 
 export function adoptionSnapshot(adoption: CandidatePage['adoption']): AdoptionSnapshot | null {
   return adoption && Number.isSafeInteger(adoption.head) && Array.isArray(adoption.selection)
-    ? { head: adoption.head!, selection: adoption.selection }
+    ? { head: adoption.head, selection: adoption.selection }
     : null;
 }
 
@@ -114,11 +120,17 @@ export function safeCandidatePage(value: unknown): CandidatePage {
   )
     throw new TypeError('Invalid current candidate page');
   const candidates = page.candidates.filter((candidate) => candidate.deleted !== true);
+  const tombstones = page.candidates.flatMap((candidate) =>
+    candidate.deleted === true ? [{ candidate: candidate.id }] : [],
+  );
   return {
     candidates,
+    tombstones: tombstones.map(({ candidate }) => candidate),
     next: page.next,
+    complete: page.next === null,
     adoption: page.adoption
       ? {
+          mode: page.adoption.mode as AdoptionMode,
           head: page.adoption.head as number,
           // The served page carries current ranks on candidates, not an adoption selection array.
           // A continuation cannot certify the complete selection for a replacement write.
@@ -130,6 +142,229 @@ export function safeCandidatePage(value: unknown): CandidatePage {
         }
       : null,
   };
+}
+
+const candidateListingRestartBound = 3;
+
+function adoptionHead(adoption: CandidatePage['adoption']): { mode: AdoptionMode | null; head: number | null } {
+  return adoption ? { mode: adoption.mode, head: adoption.head } : { mode: null, head: null };
+}
+
+function sameAdoptionHead(left: CandidatePage['adoption'], right: CandidatePage['adoption']): boolean {
+  return left?.mode === right?.mode && (left?.head ?? null) === (right?.head ?? null);
+}
+
+function cursorInvalid(error: unknown): boolean {
+  return (
+    error instanceof ImportTransportError &&
+    error.status === 400 &&
+    error.type === 'https://rezics.com/problems/invalid_request'
+  );
+}
+
+/**
+ * Read one stable candidate listing before deriving a replacement selection. Each accepted page is
+ * checkpointed in the publication journal, so an interrupted or bounded scan resumes from its
+ * cursor after the first-page digest and adoption head are rechecked on the next seed run.
+ */
+export async function readCurrentCandidatePages(
+  review: Pick<ShowcaseReviewPort, 'reviewedCandidates'>,
+  subjectId: string,
+  property: string,
+  options: {
+    journal?: Pick<
+      ShowcaseJournal,
+      'candidateListing' | 'saveCandidateListingPage' | 'saveCandidateListingRestart' | 'clearCandidateListing'
+    >;
+    intent?: string;
+  } = {},
+): Promise<CandidatePage> {
+  const pageCount = Math.ceil(showcaseLimits.candidates / showcaseLimits.reviewPage);
+  const listingKey = options.journal
+    ? showcaseDigest({ subjectId, property, intent: options.intent ?? 'current-candidate-list' })
+    : null;
+  const journal = options.journal;
+  let saved = listingKey ? journal!.candidateListing<CandidateRead>(listingKey) : null;
+
+  const checkpoint = (
+    adoption: CandidatePage['adoption'],
+    firstPageDigest: string,
+    cursor: string | null,
+    seenCursors: ReadonlySet<string>,
+    restartRequired = false,
+  ): Omit<CandidateListingCheckpoint<CandidateRead>, 'pages'> => ({
+    version: 1,
+    ...adoptionHead(adoption),
+    firstPageDigest,
+    cursor,
+    seenCursors: [...seenCursors],
+    restartRequired,
+  });
+
+  const saveRestart = (adoption: CandidatePage['adoption']) => {
+    if (listingKey && journal)
+      journal.saveCandidateListingRestart(listingKey, checkpoint(adoption, '', null, new Set(), true));
+  };
+
+  for (let restart = 0; restart < candidateListingRestartBound; restart += 1) {
+    const candidates = new Map<string, CandidateRead>();
+    const tombstones = new Set<string>();
+    const seenIds = new Set<string>();
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+    let adoption: CandidatePage['adoption'] = null;
+    let headChanged = false;
+    let invalidatedCursor = false;
+    let firstPageDigest = '';
+    let pagesRead = 0;
+    let pageIndex = 0;
+    let pendingFirstPage: CandidatePage | null = null;
+    let resumed = false;
+
+    if (restart === 0 && saved && !saved.restartRequired && saved.cursor !== null) {
+      pendingFirstPage = safeCandidatePage(
+        await review.reviewedCandidates(subjectId, {
+          property,
+          context: GLOBAL_CONTEXT,
+          limit: showcaseLimits.reviewPage,
+        }),
+      );
+      pagesRead += 1;
+      const savedHeadMatches =
+        saved.mode === pendingFirstPage.adoption?.mode && saved.head === (pendingFirstPage.adoption?.head ?? null);
+      if (
+        savedHeadMatches &&
+        pendingFirstPage.next !== null &&
+        saved.firstPageDigest === showcaseDigest(pendingFirstPage)
+      ) {
+        adoption = pendingFirstPage.adoption
+          ? { mode: pendingFirstPage.adoption.mode, head: pendingFirstPage.adoption.head }
+          : null;
+        firstPageDigest = saved.firstPageDigest;
+        for (const savedPage of saved.pages) {
+          for (const candidate of savedPage.candidates) {
+            candidates.set(candidate.id, candidate);
+            seenIds.add(candidate.id);
+          }
+          for (const id of savedPage.tombstones) {
+            tombstones.add(id);
+            seenIds.add(id);
+          }
+        }
+        for (const value of saved.seenCursors) seenCursors.add(value);
+        cursor = saved.cursor;
+        pageIndex = saved.pages.length;
+        resumed = true;
+        pendingFirstPage = null;
+      } else {
+        if (listingKey && journal) journal.clearCandidateListing(listingKey);
+        saved = null;
+      }
+    } else if (restart === 0 && saved?.restartRequired) {
+      // The previous bounded restart invalidated every accumulated page; begin a fresh list.
+      saved = null;
+    }
+
+    while (pagesRead < pageCount) {
+      let page: CandidatePage;
+      if (pendingFirstPage) {
+        page = pendingFirstPage;
+        pendingFirstPage = null;
+      } else {
+        try {
+          page = safeCandidatePage(
+            await review.reviewedCandidates(subjectId, {
+              property,
+              context: GLOBAL_CONTEXT,
+              limit: showcaseLimits.reviewPage,
+              ...(cursor === undefined ? {} : { cursor }),
+            }),
+          );
+        } catch (error) {
+          // Candidate cursors are partition-epoch bound. An epoch change makes a saved cursor stale;
+          // discard that partial snapshot and spend the same bounded restart budget from page one.
+          if (cursor !== undefined && cursorInvalid(error)) {
+            invalidatedCursor = true;
+            break;
+          }
+          throw error;
+        }
+        pagesRead += 1;
+      }
+      const pageAdoption = page.adoption ? { mode: page.adoption.mode, head: page.adoption.head } : null;
+      if (!resumed && !firstPageDigest) {
+        adoption = pageAdoption;
+        firstPageDigest = showcaseDigest(page);
+      } else if (!sameAdoptionHead(adoption, pageAdoption)) {
+        headChanged = true;
+        break;
+      }
+
+      const pageIds = [...page.candidates.map((candidate) => candidate.id), ...page.tombstones];
+      for (const id of pageIds) {
+        if (seenIds.has(id)) throw new TypeError('Current candidate listing repeated an identity');
+      }
+      if (seenIds.size + pageIds.length > showcaseLimits.candidates)
+        return {
+          candidates: [...candidates.values()],
+          tombstones: [...tombstones],
+          next: page.next,
+          complete: false,
+          adoption,
+        };
+      for (const id of pageIds) seenIds.add(id);
+      for (const id of page.tombstones) tombstones.add(id);
+      for (const candidate of page.candidates) candidates.set(candidate.id, candidate);
+
+      if (page.next === null) {
+        const currentCandidates = [...candidates.values()];
+        if (listingKey && journal) journal.clearCandidateListing(listingKey);
+        return {
+          candidates: currentCandidates,
+          tombstones: [...tombstones],
+          next: null,
+          complete: true,
+          adoption: adoption
+            ? {
+                mode: adoption.mode,
+                head: adoption.head,
+                selection: currentCandidateSelection(currentCandidates),
+              }
+            : null,
+        };
+      }
+      if (seenCursors.has(page.next)) throw new TypeError('Current candidate listing repeated a cursor');
+      seenCursors.add(page.next);
+      cursor = page.next;
+      if (listingKey && journal)
+        journal.saveCandidateListingPage(
+          listingKey,
+          checkpoint(adoption, firstPageDigest, cursor, seenCursors),
+          pageIndex,
+          { candidates: page.candidates, tombstones: page.tombstones },
+        );
+      pageIndex += 1;
+    }
+
+    if (headChanged || invalidatedCursor) {
+      saveRestart(adoption);
+      if (restart + 1 < candidateListingRestartBound) {
+        saved = null;
+        continue;
+      }
+      return { candidates: [], tombstones: [], next: null, complete: false, adoption: null };
+    }
+
+    return {
+      candidates: [...candidates.values()],
+      tombstones: [...tombstones],
+      next: cursor ?? null,
+      complete: false,
+      adoption,
+    };
+  }
+
+  return { candidates: [], tombstones: [], next: null, complete: false, adoption: null };
 }
 
 export function statementOnPublicRead(value: unknown, expected: BatchStatement): boolean {

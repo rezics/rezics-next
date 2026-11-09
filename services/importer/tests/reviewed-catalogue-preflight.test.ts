@@ -110,7 +110,7 @@ test('reviewed inventory exposes the native proposal refusal before acknowledgin
           : {
               key: command.key,
               status: 422,
-              problem: { type: 'urn:test:refused', title: 'Native proposal refused', status: 422 },
+              problem: { type: 'urn:test:refused', title: 'Native proposal refused', status: 422, retryable: false },
             },
       ),
     }),
@@ -155,7 +155,7 @@ test('reviewed bootstrap refusal names its seed and sends no proposal', async ()
         results: commands.map((command) => ({
           key: command.key,
           status: 422 as const,
-          problem: { type: 'urn:test:refused', title: 'Native bootstrap refused', status: 422 },
+          problem: { type: 'urn:test:refused', title: 'Native bootstrap refused', status: 422, retryable: false },
         })),
       };
     },

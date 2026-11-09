@@ -1,7 +1,11 @@
 import { expect, test } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { BatchStatement } from '@rezics/definitions/bulk';
 import { createImportTransport } from '../src/import-client.ts';
-import { safeCandidatePage } from '../src/showcase-current-reads.ts';
+import { readCurrentCandidatePages, safeCandidatePage } from '../src/showcase-current-reads.ts';
+import { ShowcaseJournal } from '../src/showcase-journal.ts';
 import {
   admitSelectedSynopsisSupport,
   createPublicBulkClient,
@@ -27,7 +31,8 @@ test('candidate page normalization drops tombstones and builds selection only at
     adoption: { mode: 'replace', head: 7 },
   });
   expect(continuation.candidates).toEqual([preferred]);
-  expect(continuation.adoption).toEqual({ head: 7 });
+  expect(continuation.adoption).toEqual({ mode: 'replace', head: 7 });
+  expect(continuation.tombstones).toEqual(['019a1b2c-3d4e-7f00-8a00-000000000003']);
 
   const terminal = safeCandidatePage({
     candidates: [preferred, normal, tombstone],
@@ -35,12 +40,177 @@ test('candidate page normalization drops tombstones and builds selection only at
     adoption: { mode: 'replace', head: 7 },
   });
   expect(terminal.adoption).toEqual({
+    mode: 'replace',
     head: 7,
     selection: [
       { candidate: original, rank: 'preferred' },
       { candidate: canonical, rank: 'normal' },
     ],
   });
+});
+
+test('replacement selection uses every live rank from one stable terminal listing', async () => {
+  const statement: BatchStatement = {
+    property: { id: 'schema:name' },
+    value: { type: 'novalue' },
+    references: [],
+  };
+  const second = '019a1b2c-3d4e-7f00-8a00-000000000004';
+  const tombstone = '019a1b2c-3d4e-7f00-8a00-000000000005';
+  const cursors: (string | null)[] = [];
+  const review = {
+    async reviewedCandidates(_id: string, query: { cursor?: string }) {
+      cursors.push(query.cursor ?? null);
+      return query.cursor
+        ? {
+            candidates: [{ id: second, source: null, statement, head: null, rank: 'preferred' }],
+            next: null,
+            adoption: { mode: 'replace', head: 7 },
+          }
+        : {
+            candidates: [
+              { id: original, source: null, statement, head: null, rank: 'normal' },
+              { id: tombstone, deleted: true },
+            ],
+            next: 'next-page',
+            adoption: { mode: 'replace', head: 7 },
+          };
+    },
+  };
+  const current = await readCurrentCandidatePages(review as never, canonical, 'schema:name');
+  expect(cursors).toEqual([null, 'next-page']);
+  expect(current).toMatchObject({
+    complete: true,
+    next: null,
+    adoption: {
+      mode: 'replace',
+      head: 7,
+      selection: [
+        { candidate: original, rank: 'normal' },
+        { candidate: second, rank: 'preferred' },
+      ],
+    },
+  });
+  expect(current.candidates.map((candidate) => candidate.id)).toEqual([original, second]);
+  expect(current.tombstones).toEqual([tombstone]);
+
+  let changedHeadCalls = 0;
+  const changedHeadReview = {
+    async reviewedCandidates(_id: string, query: { cursor?: string }) {
+      changedHeadCalls += 1;
+      return query.cursor
+        ? {
+            candidates: [{ id: second, source: null, statement, head: null, rank: 'preferred' }],
+            next: null,
+            adoption: { mode: 'replace', head: 8 },
+          }
+        : {
+            candidates: [{ id: original, source: null, statement, head: null, rank: 'normal' }],
+            next: 'next-page',
+            adoption: { mode: 'replace', head: changedHeadCalls === 1 ? 7 : 8 },
+          };
+    },
+  };
+  const restarted = await readCurrentCandidatePages(changedHeadReview as never, canonical, 'schema:name');
+  expect(changedHeadCalls).toBe(4);
+  expect(restarted).toMatchObject({
+    complete: true,
+    adoption: {
+      mode: 'replace',
+      head: 8,
+      selection: [
+        { candidate: original, rank: 'normal' },
+        { candidate: second, rank: 'preferred' },
+      ],
+    },
+  });
+
+  let unstableCalls = 0;
+  const unstableReview = {
+    async reviewedCandidates(_id: string, query: { cursor?: string }) {
+      unstableCalls += 1;
+      const scan = Math.floor((unstableCalls - 1) / 2);
+      return query.cursor
+        ? {
+            candidates: [{ id: second, source: null, statement, head: null, rank: 'preferred' }],
+            next: null,
+            adoption: { mode: 'replace', head: scan * 2 + 2 },
+          }
+        : {
+            candidates: [{ id: original, source: null, statement, head: null, rank: 'normal' }],
+            next: 'next-page',
+            adoption: { mode: 'replace', head: scan * 2 + 1 },
+          };
+    },
+  };
+  const bounded = await readCurrentCandidatePages(unstableReview as never, canonical, 'schema:name');
+  expect(unstableCalls).toBe(6);
+  expect(bounded).toMatchObject({ complete: false, candidates: [], adoption: null });
+});
+
+test('candidate listing resumes a journaled cursor after an interrupted seed run', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'rezics-candidate-list-'));
+  const journalPath = join(directory, 'showcase.sqlite');
+  let journal = new ShowcaseJournal(journalPath);
+  const statement: BatchStatement = {
+    property: { id: 'schema:name' },
+    value: { type: 'novalue' },
+    references: [],
+  };
+  const terminal = '019a1b2c-3d4e-7f00-8a00-000000000006';
+  const cursors: (string | null)[] = [];
+  let interrupt = true;
+  const review = {
+    async reviewedCandidates(_id: string, query: { cursor?: string }) {
+      cursors.push(query.cursor ?? null);
+      if (query.cursor && interrupt) {
+        interrupt = false;
+        throw new Error('simulated interrupted candidate read');
+      }
+      return query.cursor
+        ? {
+            candidates: [{ id: terminal, source: null, statement, head: null, rank: 'preferred' }],
+            next: null,
+            adoption: { mode: 'replace', head: 11 },
+          }
+        : {
+            candidates: [{ id: original, source: null, statement, head: null, rank: 'normal' }],
+            next: 'next-page',
+            adoption: { mode: 'replace', head: 11 },
+          };
+    },
+  };
+
+  try {
+    await expect(
+      readCurrentCandidatePages(review as never, canonical, 'schema:name', {
+        journal,
+        intent: 'candidate-resume-test',
+      }),
+    ).rejects.toThrow('simulated interrupted candidate read');
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
+    const current = await readCurrentCandidatePages(review as never, canonical, 'schema:name', {
+      journal,
+      intent: 'candidate-resume-test',
+    });
+
+    expect(cursors).toEqual([null, 'next-page', null, 'next-page']);
+    expect(current).toMatchObject({
+      complete: true,
+      adoption: {
+        mode: 'replace',
+        head: 11,
+        selection: [
+          { candidate: original, rank: 'normal' },
+          { candidate: terminal, rank: 'preferred' },
+        ],
+      },
+    });
+  } finally {
+    journal.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('review and independent public publication reads bypass caches through current canonical redirects', async () => {

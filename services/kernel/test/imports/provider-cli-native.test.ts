@@ -63,8 +63,11 @@ function commands(run: Awaited<ReturnType<ProviderCli['invoke']>>): BatchCommand
 function committed(run: Awaited<ReturnType<ProviderCli['invoke']>>, counts: string) {
   expect(run.code, JSON.stringify(run)).toBe(0);
   expect(run.stderr).toBe('');
-  expect(run.stdout).toBe(`Import complete: ${counts}\n`);
+  const summary = /^Import complete: (.+) committedPrefix=(\d+)\n$/.exec(run.stdout);
+  expect(summary).not.toBeNull();
+  expect(summary![1]).toBe(counts);
   expect(run.seals).toHaveLength(1);
+  expect(Number(summary![2])).toBe(run.seals[0]!.result.supplied);
   expect(run.seals[0]!.complete).toBe(true);
   expect(run.seals[0]!.result.status).toBe('ready');
   for (const exchange of run.captured) expect(exchange.status, exchange.responseBytes).toBe(200);

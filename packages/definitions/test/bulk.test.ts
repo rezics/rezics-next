@@ -148,11 +148,22 @@ test('results are one per command, either a value or a problem', () => {
       {
         key: 'bangumi:12:3',
         status: 409,
-        problem: { type: 'https://rezics.com/problems/fenced', title: 'Fenced', status: 409 },
+        problem: { type: 'https://rezics.com/problems/fenced', title: 'Fenced', status: 409, retryable: false },
       },
     ],
   };
   expect(checkBatchWriteResult(result)).toEqual([]);
+  expect(
+    checkBatchWriteResult({
+      results: [
+        {
+          key: 'bangumi:12:3',
+          status: 409,
+          problem: { type: 'https://rezics.com/problems/fenced', title: 'Fenced', status: 409 },
+        },
+      ],
+    }),
+  ).not.toEqual([]);
   expect(checkBatchWriteResult({ results: [{ key: 'k', status: 201 }] })).not.toEqual([]);
   expect(checkBatchWriteResult({ results: [{ key: 'k', status: 409, value: { revision: 1 } }] })).not.toEqual([]);
 });

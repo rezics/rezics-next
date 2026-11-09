@@ -60,7 +60,7 @@ import {
   currentSourceRead,
   publicHasValue,
   publicStatements,
-  safeCandidatePage,
+  readCurrentCandidatePages,
   sameAdoptionSelection,
   selectedSynopsisOnPublicRead,
   servedCoverVariants,
@@ -639,21 +639,21 @@ function safeGapKey(value: Record<string, unknown>): string {
 }
 
 async function candidatePage(
-  input: { review: Pick<ShowcaseReviewPort, 'reviewedCandidates'>; id: string; property: string },
+  input: {
+    review: Pick<ShowcaseReviewPort, 'reviewedCandidates'>;
+    id: string;
+    property: string;
+    journal?: ShowcaseJournal;
+  },
   cache: Map<string, CandidatePage>,
 ): Promise<CandidatePage> {
   const key = groupKey(input.id, input.property);
   const cached = cache.get(key);
   if (cached) return cached;
-  const page = safeCandidatePage(
-    await input.review.reviewedCandidates(input.id, {
-      property: input.property,
-      context: GLOBAL_CONTEXT,
-      limit: showcaseLimits.reviewPage,
-    }),
-  );
-  if (page.candidates.length > showcaseLimits.reviewPage)
-    throw new RangeError('Current candidate page exceeded its bound');
+  const page = await readCurrentCandidatePages(input.review, input.id, input.property, {
+    ...(input.journal ? { journal: input.journal } : {}),
+    intent: 'showcase-publication-current-candidates-v1',
+  });
   if (cache.size >= showcaseLimits.reviewPage) cache.delete(cache.keys().next().value!);
   cache.set(key, page);
   return page;
@@ -664,6 +664,7 @@ export async function preferCurrentCandidateAcknowledgements(
   acknowledgements: readonly ShowcaseAcknowledgement[],
   review: Pick<ShowcaseReviewPort, 'reviewedCandidates'>,
   pageCache: Map<string, CandidatePage>,
+  journal?: ShowcaseJournal,
 ): Promise<ShowcaseAcknowledgement[]> {
   const groups = new Map<string, ShowcaseAcknowledgement[]>();
   for (const acknowledgement of acknowledgements) {
@@ -684,7 +685,7 @@ export async function preferCurrentCandidateAcknowledgements(
     ) {
       try {
         const page = await candidatePage(
-          { review, id: command.subject, property: command.statement.property.id },
+          { review, id: command.subject, property: command.statement.property.id, ...(journal ? { journal } : {}) },
           pageCache,
         );
         const current = page.candidates.find((candidate) => candidate.id === candidateId);
@@ -775,7 +776,7 @@ async function resolveLegacyCandidates(input: {
         candidateId: candidate.id,
       });
       known.add(command.key);
-      if (page.next !== null && page.next !== undefined) omissions.push({ provider, sourceKey: row.key });
+      if (!page.complete) omissions.push({ provider, sourceKey: row.key });
     }
   }
   return { acknowledgements, omissions };
@@ -909,6 +910,7 @@ export async function publishShowcase(input: {
     ],
     input.review,
     pageCache,
+    input.journal,
   );
   const buildManifest = (
     acknowledgements: readonly ShowcaseAcknowledgement[],
@@ -1311,7 +1313,10 @@ export async function publishShowcase(input: {
     }
     let page: CandidatePage;
     try {
-      page = await candidatePage({ review: input.review, id, property: assertion.property }, pageCache);
+      page = await candidatePage(
+        { review: input.review, id, property: assertion.property, journal: input.journal },
+        pageCache,
+      );
     } catch {
       omissions.push({
         provider: record.provider,
@@ -1330,7 +1335,7 @@ export async function publishShowcase(input: {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-digest-changed' });
       continue;
     }
-    if (page.next !== null && page.next !== undefined && !candidate) {
+    if (!page.complete && !candidate) {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-page-bounded' });
       continue;
     }
@@ -1720,14 +1725,17 @@ export async function publishShowcase(input: {
     const edges = group.edges.filter(({ assertion }) => parentAccepted.has(assertion.candidateId));
     let page: CandidatePage;
     try {
-      page = await candidatePage({ review: input.review, id: childId, property: 'skos:broader' }, pageCache);
+      page = await candidatePage(
+        { review: input.review, id: childId, property: 'skos:broader', journal: input.journal },
+        pageCache,
+      );
     } catch {
       for (const { binding, assertion } of group.edges)
         setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent adoption read is unavailable');
       if (refresh) withheldParentTags.add(refresh.tagId);
       continue;
     }
-    if ((page.next !== null && page.next !== undefined) || (page.adoption && !Array.isArray(page.adoption.selection))) {
+    if (!page.complete || (page.adoption && !Array.isArray(page.adoption.selection))) {
       for (const { binding, assertion } of group.edges)
         setParentOutcome(binding, 'withheld', assertion.candidateId, 'current parent selection is incomplete');
       if (refresh) withheldParentTags.add(refresh.tagId);
@@ -1981,12 +1989,24 @@ export async function publishShowcase(input: {
     }
     let page: CandidatePage;
     try {
-      page = await candidatePage({ review: input.review, id, property: group.property }, pageCache);
+      page = await candidatePage(
+        { review: input.review, id, property: group.property, journal: input.journal },
+        pageCache,
+      );
     } catch {
       omissions.push({
         provider: group.record.provider,
         sourceKey: group.record.sourceKey,
         code: 'adoption-current-read-unavailable',
+      });
+      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
+      continue;
+    }
+    if (!page.complete) {
+      omissions.push({
+        provider: group.record.provider,
+        sourceKey: group.record.sourceKey,
+        code: 'adoption-selection-bounded',
       });
       if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
       continue;
@@ -2004,22 +2024,6 @@ export async function publishShowcase(input: {
     }
     const currentAdoption = adoptionSnapshot(previous);
     adoptionSnapshots.set(key, currentAdoption);
-    if (refreshWeights && page.next !== null && page.next !== undefined) {
-      omissions.push({
-        provider: group.record.provider,
-        sourceKey: group.record.sourceKey,
-        code: 'adoption-selection-bounded',
-      });
-      continue;
-    }
-    if (refreshMemberships && page.next !== null && page.next !== undefined) {
-      omissions.push({
-        provider: group.record.provider,
-        sourceKey: group.record.sourceKey,
-        code: 'adoption-selection-bounded',
-      });
-      continue;
-    }
     if (refreshWeights || refreshMemberships) {
       const state = await currentFactsFence(input.review, input.aliases.vndb, group.record.sourceKey);
       if (state !== 'open') {

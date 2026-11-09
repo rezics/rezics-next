@@ -1019,7 +1019,9 @@ key and `subject.batch_<op>`, with a digest covering the whole command. Commands
 the same partition run in request order; at most eight partitions run concurrently.
 A batch is not atomic. The 200 response contains `{ results }` in request order,
 one `{ key, status, value }` or `{ key, status, problem }` per command. Problems carry
-the single-request body without `instance`. The session header merges command
+the single-request body without `instance`, including its required `retryable` boolean.
+Callers preserve successful receipts and retry only commands explicitly marked retryable.
+The session header merges command
 positions in request order, keeping the latest 32 partitions. The shared write-rate
 stage charges the request once, using its command count.
 

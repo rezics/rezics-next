@@ -409,11 +409,11 @@ export function currentAnimeCharacterIds(
   return ids;
 }
 
-export function selectPublished(
-  published: readonly JourneyPublishedRow[],
+export function selectPublished<Row extends JourneyPublishedRow>(
+  published: readonly Row[],
   provider: string,
   sourceKey: string,
-): JourneyPublishedRow {
+): Row {
   const rows = published.filter((row) => row.provider === provider && row.sourceKey === sourceKey);
   if (rows.length !== 1) throw new Error(`published ${provider}:${sourceKey} has ${rows.length} rows`);
   return rows[0]!;
@@ -513,6 +513,7 @@ async function currentSubject(api: string, id: string) {
       throw new TypeError(`Current Subject ${id} has an invalid response shape`);
     return body as {
       subject: { id: string; type: string; release?: string; context?: string; statements: Record<string, unknown[]> };
+      summary?: unknown;
     };
   }
   throw new Error(`anonymous Subject ${id} returned ${last}`);
@@ -896,10 +897,80 @@ export function assertCurrentOperatorFact(
   );
 }
 
+function assertCurrentPublishedProperty(
+  read: { subject: { statements: Record<string, unknown[]> } },
+  record: ShowcasePublicationResult['published'][number],
+  property: string,
+): void {
+  const assertions = record.assertions.filter((assertion) => assertion.property === property);
+  assert.ok(assertions.length, `${record.provider}:${record.sourceKey} has no published ${property} assertion`);
+  for (const assertion of assertions) {
+    assert.ok(assertion.citations?.length, `${record.provider}:${record.sourceKey} ${property} has no source citation`);
+    assertCurrentOperatorFact(read, property, assertion.readback);
+  }
+}
+
+function assertBookSeriesSlots(record: ShowcasePublicationResult['published'][number]): void {
+  assert.ok(
+    record.assertions.every(
+      (assertion) => assertion.property !== 'schema:author' && assertion.property !== 'schema:illustrator',
+    ),
+    'BookSeries publication included an unadmitted author or illustrator slot',
+  );
+}
+
+function assertNoBookVolumeCredits(record: ShowcasePublicationResult['published'][number]): void {
+  assert.ok(
+    record.assertions.every(
+      (assertion) =>
+        assertion.property !== 'schema:author' &&
+        assertion.property !== 'schema:illustrator' &&
+        assertion.property !== 'schema:publisher',
+    ),
+    'Book volume publication included a creator credit slot',
+  );
+}
+
 function statementContents(read: { subject: { statements: Record<string, unknown[]> } }, property: string): unknown[] {
   return (read.subject.statements[property] ?? []).map((row) =>
     isRecord(row) && isRecord(row.value) ? row.value.content : undefined,
   );
+}
+
+function currentStringValues(read: { subject: { statements: Record<string, unknown[]> } }, property: string): string[] {
+  return (read.subject.statements[property] ?? []).flatMap((row) => {
+    if (!isRecord(row) || row.rank === 'deprecated' || !isRecord(row.value) || row.value.type !== 'value') return [];
+    const content = row.value.content;
+    if (typeof content === 'string') return [content];
+    if (!isRecord(content)) return [];
+    if (typeof content.text === 'string') return [content.text];
+    return typeof content.amount === 'string' ? [content.amount] : [];
+  });
+}
+
+function assertCurrentValues(label: string, expected: readonly string[], current: readonly string[]): void {
+  for (const value of expected) assert.ok(current.includes(value), `${label} is missing current value ${value}`);
+}
+
+function samePublishedIdentities(publication: ShowcasePublicationResult): string[] {
+  return publication.published
+    .map((row) => `${row.provider}\0${row.sourceKey}\0${row.nativeType}\0${row.subjectId}`)
+    .sort();
+}
+
+function assertUnchangedSeedReopen(first: ShowcasePublicationResult, reopened: ShowcasePublicationResult): void {
+  assert.equal(reopened.status, 'published', 'unchanged seed reopen did not finish publication');
+  assert.equal(reopened.manifest.digest, first.manifest.digest, 'unchanged seed reopen changed its manifest');
+  const firstIdentities = samePublishedIdentities(first);
+  const reopenedIdentities = samePublishedIdentities(reopened);
+  if (first.status === 'published') assert.deepEqual(reopenedIdentities, firstIdentities);
+  else {
+    for (const identity of firstIdentities)
+      assert.ok(
+        reopenedIdentities.includes(identity),
+        `seed continuation dropped prior published identity ${identity}`,
+      );
+  }
 }
 
 async function walkGameReleaseCounterpart(api: string, publication: ShowcasePublicationResult) {
@@ -949,7 +1020,49 @@ async function walkPersonCredits(api: string, report: CrossMediaSeedReport, publ
   const merge = report.personMerge;
   if (merge?.state !== 'published') throw new Error('reviewed Person pair is not one current canonical Person');
   const canonical = merge.survivor;
-  assert.ok(left.subject.id === canonical || right.subject.id === canonical);
+  assert.equal(left.subject.id, canonical, 'Bangumi original does not read as the canonical Person');
+  assert.equal(right.subject.id, canonical, 'VNDB original does not read as the canonical Person');
+  assert.equal(left.subject.id, right.subject.id);
+  assert.ok(merge.operation, 'reviewed Person merge operation was not observed');
+  assert.ok(
+    Number.isSafeInteger(merge.revision) && merge.revision > 0,
+    'reviewed Person operation has no completed revision',
+  );
+  for (const externalId of ['person:1916', 's224']) {
+    const identity = report.personIdentities.find((entry) => entry.identity.externalId === externalId);
+    assert.ok(identity, `seed omitted current identity ${externalId}`);
+    assert.equal(identity.currentSubjectId, canonical, `${externalId} was not reread after merge`);
+    assert.equal(identity.boundSubjectId, externalId === 'person:1916' ? bangumi.subjectId : vndb.subjectId);
+  }
+  const combined = report.combinedCredits;
+  assert.ok(combined, 'seed omitted independently reread combined Person credits');
+  assert.equal(combined.canonicalPersonId, canonical);
+  const originalEndpoints = new Set([bangumi.subjectId, vndb.subjectId]);
+  assert.ok(originalEndpoints.has(merge.redirected), 'completed Person merge did not redirect an original endpoint');
+  const creditWorks = [
+    { externalId: '1851', row: selectPublished(publication.published, 'bangumi', '1851') },
+    { externalId: 'v4', row: selectPublished(publication.published, 'vndb', 'v4') },
+  ];
+  for (const work of creditWorks) {
+    const currentCredits: NonNullable<CrossMediaSeedReport['combinedCredits']>['credits'] = combined.credits.filter(
+      (credit) => credit.workExternalId === work.externalId,
+    );
+    assert.ok(currentCredits.length, `${work.externalId} has no independently reread Person credit`);
+    const currentWork = await currentSubject(api, work.row.subjectId);
+    assert.equal(currentWork.subject.id, work.row.subjectId);
+    for (const credit of currentCredits) {
+      assert.equal(credit.workSubjectId, work.row.subjectId);
+      assert.ok(
+        originalEndpoints.has(credit.boundPersonId),
+        `${work.externalId} credit lost its original Person endpoint`,
+      );
+      assert.equal(credit.canonicalPersonId, canonical);
+      assert.ok(
+        statementContents(currentWork, credit.property).includes(credit.boundPersonId),
+        `${work.externalId} current credit no longer names its original Person endpoint`,
+      );
+    }
+  }
   const credits = publication.published.filter((row) =>
     row.assertions.some((assertion) =>
       ['schema:author', 'schema:contributor', 'wdt:P725', 'schema:creator'].includes(assertion.property),
@@ -960,8 +1073,69 @@ async function walkPersonCredits(api: string, report: CrossMediaSeedReport, publ
     vndb: vndb.subjectId,
     canonical,
     operation: merge.operation,
+    completedRevision: merge.revision,
+    redirected: merge.redirected,
+    rereadCredits: combined.credits.length,
     creditedWorks: credits.map((row) => ({ sourceKey: row.sourceKey, type: row.nativeType })),
   };
+}
+
+async function walkAdoptedCharacters(api: string, report: CrossMediaSeedReport) {
+  const currents = report.characterCurrents ?? [];
+  assert.ok(currents.length, 'seed omitted independent adopted Character reads');
+  let rightsCreditedMedia = 0;
+  for (const current of currents) {
+    const read = await currentSubject(api, current.currentSubjectId);
+    assert.equal(read.subject.type, 'wd:Q95074');
+    assertCurrentValues(
+      `${current.identity.externalId} identity`,
+      [current.identity.value],
+      currentStringValues(read, current.identity.property),
+    );
+    assertCurrentValues(`${current.identity.externalId} names`, current.names, [
+      ...currentStringValues(read, 'schema:name'),
+      ...currentStringValues(read, 'schema:alternateName'),
+    ]);
+    assertCurrentValues(`${current.identity.externalId} traits`, current.traits, [
+      ...currentStringValues(read, 'schema:gender'),
+      ...currentStringValues(read, 'schema:keywords'),
+      ...currentStringValues(read, 'wdt:P1853'),
+    ]);
+    assertCurrentValues(`${current.identity.externalId} measurements`, current.measurements, [
+      ...currentStringValues(read, 'schema:height'),
+      ...currentStringValues(read, 'schema:weight'),
+      ...currentStringValues(read, 'schema:birthDate'),
+    ]);
+    assertCurrentValues(`${current.identity.externalId} source links`, current.sourceLinks, [
+      ...currentStringValues(read, 'schema:url'),
+      ...currentStringValues(read, 'schema:sameAs'),
+    ]);
+
+    if (current.image.state !== 'served') continue;
+    assert.ok(
+      isRecord(read.summary) && isRecord(read.summary.cover),
+      'Character current read omitted its cover summary',
+    );
+    const cover = read.summary.cover;
+    assert.equal(cover.media, current.image.mediaId);
+    assert.ok(isRecord(cover.credit), 'served Character image has no rights credit');
+    assert.ok(typeof cover.credit.rightsHolder === 'string' && cover.credit.rightsHolder.trim());
+    assert.ok(isRecord(cover.credit.via));
+    assert.equal(cover.credit.via.name, 'Bangumi');
+    assert.equal(cover.credit.via.url, bangumiRecordUrl(current.identity.externalId));
+    assert.equal(cover.credit.license, 'LicenseRef-unknown');
+    assert.ok(Array.isArray(cover.variants), 'served Character image has no current variants');
+    for (const expected of current.image.variants)
+      assert.ok(
+        cover.variants.some(
+          (variant) => isRecord(variant) && variant.format === expected.format && variant.width === expected.width,
+        ),
+        `${current.identity.externalId} current media omitted ${expected.format}-${expected.width}`,
+      );
+    rightsCreditedMedia += 1;
+  }
+  assert.ok(rightsCreditedMedia > 0, 'no adopted Character image is currently served with rights credit');
+  return { characters: currents.length, rightsCreditedMedia };
 }
 
 async function walkFranchise(api: string, publication: ShowcasePublicationResult) {
@@ -972,15 +1146,40 @@ async function walkFranchise(api: string, publication: ShowcasePublicationResult
   await currentSubject(api, clannad.subjectId);
   await currentSubject(api, vn.subjectId);
   const relations = publication.vndbWorkRelations ?? [];
+  const relation = relations.find((entry) => entry.publication === 'published');
+  assert.ok(relation, 'typed franchise relations have no current published edge');
+  assert.ok(relation.holderSubjectId && relation.targetSubjectId);
+  assert.ok(relation.citation && relation.fields.length, 'typed franchise relation has no exact source provenance');
+  const links = await currentLinks(api, relation.holderSubjectId, relation.property);
   assert.ok(
-    relations.length > 0 || publication.published.some((row) => row.sourceKey === 'v17102'),
-    'typed franchise relations are missing',
+    links.some((link) => link.summary.id === relation.targetSubjectId),
+    'published typed franchise edge is missing from current links',
+  );
+  const holder = publication.published.find(
+    (row) =>
+      row.provider === 'vndb' && row.sourceKey === relation.holderKey && row.subjectId === relation.holderSubjectId,
+  );
+  assert.ok(holder, 'typed franchise holder is missing from the published seed');
+  assert.ok(
+    holder.assertions.some(
+      (assertion) =>
+        assertion.candidateId === relation.candidateId &&
+        assertion.property === relation.property &&
+        assertion.target?.subjectId === relation.targetSubjectId &&
+        assertion.citations?.includes(relation.citation!),
+    ),
+    'published typed franchise edge lost its supported citation or endpoint',
   );
   return {
     steins: steins.subjectId,
     clannad: clannad.subjectId,
     vn: vn.subjectId,
     relationCount: relations.length,
+    currentRelation: {
+      property: relation.property,
+      holder: relation.holderSubjectId,
+      target: relation.targetSubjectId,
+    },
   };
 }
 
@@ -998,6 +1197,7 @@ async function walkTags(api: string, publication: ShowcasePublicationResult) {
   const again = await currentSubject(api, tagged.subjectId);
   assert.equal(again.subject.id, first.subject.id);
   assert.deepEqual(statementContents(again, 'schema:genre'), genres);
+  assert.deepEqual(statementContents(again, 'schema:keywords'), keywords);
   return {
     sourceKey: tagged.sourceKey,
     id: tagged.subjectId,
@@ -1098,16 +1298,24 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
   let seedCause: string | null = sharedStartup;
   let publication: ShowcasePublicationResult | undefined;
   let report: CrossMediaSeedReport | undefined;
+  let seedReopenEvidence: Record<string, unknown> | undefined;
   if (!seedCause) {
     try {
-      await command(
-        'seed',
-        ['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'],
-        walkSeedChildEnv(origins, persona?.file ?? {}),
-      );
-      const loaded = await loadSeedReport();
-      report = loaded.report;
-      publication = loaded.publication;
+      const seedArgs = ['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'];
+      const seedEnv = walkSeedChildEnv(origins, persona?.file ?? {});
+      await command('seed', seedArgs, seedEnv);
+      const first = await loadSeedReport();
+      await command('seed-reopen', seedArgs, seedEnv);
+      const reopened = await loadSeedReport();
+      assertUnchangedSeedReopen(first.publication, reopened.publication);
+      seedReopenEvidence = {
+        identityStable: true,
+        priorComplete: first.publication.status === 'published',
+        manifest: reopened.publication.manifest.digest,
+        publishedIdentities: reopened.publication.published.length,
+      };
+      report = reopened.report;
+      publication = reopened.publication;
       selectJourneyWorks(publication.published);
     } catch (error) {
       const directory = resolve(root, '.temp/cross-media-seed');
@@ -1154,12 +1362,14 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
           const character = await currentSubject(api, id);
           assert.equal(character.subject.type, 'wd:Q95074', `Character ${id} current type`);
         }
+        const characterCurrent = await walkAdoptedCharacters(api, seeded);
         return {
           id: anime.row.subjectId,
           episodes: episodes.length,
           cast: cast.length,
           staff: staff.length,
           characters: characters.length,
+          characterCurrent,
           citation: bangumiRecordUrl('233'),
         };
       }),
@@ -1167,7 +1377,12 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     rows.push(await walkRow('I06', () => walkGameReleaseCounterpart(api, published)));
     rows.push(await walkRow('I07', () => walkPersonCredits(api, seeded, published)));
     rows.push(await walkRow('I08', () => walkFranchise(api, published)));
-    rows.push(await walkRow('I09', () => walkTags(api, published)));
+    rows.push(
+      await walkRow('I09', async () => ({
+        ...(await walkTags(api, published)),
+        seedReopen: seedReopenEvidence,
+      })),
+    );
     rows.push(await walkRow('I10', () => walkSelectedSynopsis(api, published)));
     rows.push(
       await walkRow('I11', async () => {
@@ -1177,8 +1392,10 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
         const volumeRead = await currentSubject(api, volume.subjectId);
         assert.equal(seriesRead.subject.type, 'schema:BookSeries');
         assert.equal(volumeRead.subject.type, 'schema:Book');
-        assert.ok(statementContents(volumeRead, 'wdt:P179').includes(series.subjectId));
-        assert.ok(statementContents(seriesRead, 'schema:publisher').length > 0);
+        assertCurrentPublishedProperty(seriesRead, series, 'schema:publisher');
+        assertCurrentPublishedProperty(volumeRead, volume, 'wdt:P179');
+        assertBookSeriesSlots(series);
+        assertNoBookVolumeCredits(volume);
         return { series: series.subjectId, volume: volume.subjectId, type: seriesRead.subject.type };
       }),
     );
@@ -1189,10 +1406,13 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
         const second = selectPublished(published.published, 'bangumi', '10862');
         const seriesRead = await currentSubject(api, series.subjectId);
         assert.equal(seriesRead.subject.type, 'schema:BookSeries');
+        assertCurrentPublishedProperty(seriesRead, series, 'schema:publisher');
+        assertBookSeriesSlots(series);
         for (const volume of [first, second]) {
           const read = await currentSubject(api, volume.subjectId);
           assert.equal(read.subject.type, 'schema:Book');
-          assert.ok(statementContents(read, 'wdt:P179').includes(series.subjectId));
+          assertCurrentPublishedProperty(read, volume, 'wdt:P179');
+          assertNoBookVolumeCredits(volume);
         }
         const counterpart = await currentLinks(api, series.subjectId, 'rezics:crossMediaCounterpart');
         assert.ok(counterpart.length > 0, '2815 has no current anime counterpart');

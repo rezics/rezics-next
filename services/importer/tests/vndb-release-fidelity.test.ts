@@ -378,7 +378,7 @@ test('default selected-family traversal acquires directed release endpoints and 
                   return {
                     key: command.key,
                     status: 503 as const,
-                    problem: { type: 'about:blank', title: 'Unavailable', status: 503 },
+                    problem: { type: 'about:blank', title: 'Unavailable', status: 503, retryable: true },
                   };
               }
               const prior = successful.get(command.key);

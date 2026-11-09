@@ -55,9 +55,9 @@ test('a later reciprocal receipt cannot displace the current native candidate ci
         } as never;
       },
     };
-    const selected = await preferCurrentCandidateAcknowledgements(acks, review, cache);
+    const selected = await preferCurrentCandidateAcknowledgements(acks, review, cache, journal);
     expect(selected.map(({ command }) => command)).toEqual([original]);
-    expect(await preferCurrentCandidateAcknowledgements(acks, review, cache)).toEqual(selected);
+    expect(await preferCurrentCandidateAcknowledgements(acks, review, cache, journal)).toEqual(selected);
     expect(reads).toBe(1);
     expect(journal.acknowledgedCommands()).toEqual(acks);
   } finally {

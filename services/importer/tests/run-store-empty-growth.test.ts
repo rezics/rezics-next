@@ -73,7 +73,7 @@ const success = (key: string): BatchWriteResult => ({
   results: [{ key, status: 200, value: { candidate: '00000000-0000-4000-8000-000000000002', revision: 1 } }],
 });
 const failure = (key: string): BatchWriteResult => ({
-  results: [{ key, status: 409, problem: { type: 'conflict', title: 'Conflict', status: 409 } }],
+  results: [{ key, status: 409, problem: { type: 'conflict', title: 'Conflict', status: 409, retryable: false } }],
 });
 
 test('original prepared commands cannot be bypassed pending, partially failed, acknowledged or fenced', () => {
