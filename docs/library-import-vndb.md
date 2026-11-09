@@ -80,6 +80,9 @@ receipt replay remains possible after an acknowledgement is lost. Applied rows a
 Decision: current authority or visibility failures (HTTP 401, 403 or 404) keep the prepared journal intent retryable;
 restored authority replays the same body and key, while terminal input refusals stay recorded.
 
+Choice: recovery fixtures use a fresh prepared upload or review intent, then reopen and replay its original sealed
+identity, operands and key after authority returns.
+
 Refreshing a source review retires its metadata tokens rather than carrying them into a corrected match. An
 unresolved state, metadata or date dispatch must settle before review replacement.
 Corrected matches may explicitly adopt labels on the chosen readable target. New label operands bind both the
