@@ -1,11 +1,6 @@
+import { importCommandPages } from './import-client.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import {
-  BATCH_LIMIT,
-  checkBatchWrite,
-  type BatchCommand,
-  type BatchReference,
-  type BatchStatement,
-} from '@rezics/definitions/bulk';
+import { checkBatchWrite, type BatchCommand, type BatchReference, type BatchStatement } from '@rezics/definitions/bulk';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
 import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { vndbAppearanceRoleCodes } from '@rezics/conversion/vndb-vocabulary';
@@ -525,8 +520,7 @@ async function sendMissing(input: {
       throw new TypeError('VNDB character vocabulary ACK changed its command body');
     return false;
   });
-  for (let offset = 0; offset < commands.length; offset += BATCH_LIMIT) {
-    const page = commands.slice(offset, offset + BATCH_LIMIT);
+  for (const page of importCommandPages(commands, (command) => command)) {
     if (checkBatchWrite({ commands: [...page] }, bundledRelease).length)
       throw new TypeError('VNDB character vocabulary commands failed portable validation');
     await input.port.batch({ commands: [...page] });

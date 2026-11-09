@@ -1,11 +1,6 @@
+import { importCommandPages } from './import-client.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import {
-  BATCH_LIMIT,
-  checkBatchWrite,
-  type BatchCommand,
-  type BatchReference,
-  type BatchStatement,
-} from '@rezics/definitions/bulk';
+import { checkBatchWrite, type BatchCommand, type BatchReference, type BatchStatement } from '@rezics/definitions/bulk';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
 import { vndbPublicTagParentRevision } from '@rezics/conversion/vndb-vocabulary';
 import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
@@ -1007,8 +1002,7 @@ async function sendTagCommandPages(
   port: Pick<CrossMediaPort, 'batch'>,
   commands: readonly BatchCommand[],
 ): Promise<void> {
-  for (let offset = 0; offset < commands.length; offset += BATCH_LIMIT) {
-    const page = commands.slice(offset, offset + BATCH_LIMIT);
+  for (const page of importCommandPages(commands, (command) => command)) {
     if (checkBatchWrite({ commands: [...page] }, bundledRelease).length)
       throw new TypeError('VNDB public tag vocabulary commands failed portable validation');
     await port.batch({ commands: [...page] });

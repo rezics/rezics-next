@@ -1,3 +1,4 @@
+import { importCommandPages } from './import-client.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import {
   BATCH_LIMIT,
@@ -296,8 +297,7 @@ async function sendMissingVocabularyCommands(input: {
         throw new TypeError('VNDB credit vocabulary acknowledgement changed its sealed command');
       return false;
     });
-    for (let offset = 0; offset < pending.length; offset += BATCH_LIMIT) {
-      const page = pending.slice(offset, offset + BATCH_LIMIT);
+    for (const page of importCommandPages(pending, (command) => command)) {
       if (checkBatchWrite({ commands: page }, bundledRelease).length)
         throw new TypeError('VNDB credit vocabulary commands failed portable validation');
       const result = await captured.batch({ commands: page });

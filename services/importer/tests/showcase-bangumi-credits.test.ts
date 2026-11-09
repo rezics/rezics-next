@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchStatement, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
-import type { ReviewedSubjectRead } from '../src/import-client.ts';
+import { createImportTransport, type ReviewedSubjectRead } from '../src/import-client.ts';
 import {
   crossMediaAliases,
   planCrossMediaSeed,
@@ -434,3 +434,90 @@ for (const operation of ['create', 'propose'] as const)
       journal.close();
     }
   });
+
+test('mixed Bangumi proposal envelopes fit native bytes and resume without acknowledged commands', async () => {
+  // Retained ordered proposal sizes: 87,463 stored bytes, 87,576 including the wire envelope.
+  const sizes = [
+    866, 867, 867, 878, 878, 878, 875, 878, 874, 874, 874, 874, 878, 878, 878, 878, 878, 875, 873, 878, 878, 884, 884,
+    882, 876, 883, 878, 878, 878, 878, 878, 878, 878, 878, 882, 882, 874, 882, 880, 882, 874, 886, 884, 887, 887, 887,
+    884, 893, 893, 887, 893, 882, 887, 883, 886, 886, 886, 883, 886, 886, 881, 882, 887, 887, 887, 887, 884, 887, 892,
+    887, 893, 887, 882, 882, 879, 879, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 888, 891,
+    891, 896, 890, 890, 889, 884, 895,
+  ];
+  const proposal = (size: number, index: number): BatchCommand => {
+    const citation = { type: 'value' as const, content: 'https://bgm.tv/subject/1#麻' };
+    const command: BatchCommand = {
+      op: 'propose',
+      key: String(index).padStart(64, '0'),
+      subject: globalContext,
+      source: {
+        source: 'bangumi_cross_media',
+        external_id: String(index + 1),
+        record_revision: 'unversioned',
+        converter_revision: 'cross-media-entities@15+bangumi@17',
+        digest: 'a'.repeat(64),
+        field_group: 'facts',
+      },
+      statement: {
+        property: { id: 'wdt:P725' },
+        value: { type: 'value', content: globalContext },
+        qualifiers: [{ property: { id: 'wdt:P453' }, value: { type: 'value', content: globalContext } }],
+        references: [{ parts: [{ property: { id: 'schema:url' }, value: citation }] }],
+      },
+    };
+    citation.content += 'x'.repeat(size - Buffer.byteLength(JSON.stringify(command)));
+    return command;
+  };
+  let sent: BatchCommand[][] = [];
+  let bytes: number[] = [];
+  let interrupt = false;
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    importFetch: (async (request: Request) => {
+      const body = await request.text();
+      const { commands } = JSON.parse(body) as BatchWriteRequest;
+      bytes.push(Buffer.byteLength(body));
+      sent.push(commands);
+      expect(Buffer.byteLength(body)).toBeLessThanOrEqual(65_536);
+      expect(commands.length).toBeLessThanOrEqual(100);
+      if (interrupt && sent.length === 2) throw new Error('fixture interruption');
+      return Response.json({
+        results: commands.map(({ key }) => ({
+          key,
+          status: 201,
+          value: { candidate: globalContext, revision: 1 },
+        })),
+      });
+    }) as unknown as typeof fetch,
+  });
+  const commands = sizes.map(proposal);
+  expect(Buffer.byteLength(JSON.stringify({ commands }))).toBe(87_576);
+  await expect(transport.batch({ commands })).rejects.toThrow('Invalid import transport data');
+  expect(sent).toEqual([]);
+  await transport.batches(commands);
+  expect(sent).toEqual([commands.slice(0, 74), commands.slice(74)]);
+  expect(bytes).toEqual([65_305, 22_285]);
+
+  // The same fixture forces bytes to split before the staff writer's smaller four-command cap.
+  commands.splice(0, 2, proposal(32_760, 0), proposal(32_760, 1));
+  sent = [];
+  bytes = [];
+  interrupt = true;
+  const journal = new ShowcaseJournal(':memory:');
+  try {
+    const port = captureShowcaseCommands(transport, journal);
+    const write = () => writeBangumiStaffVocabularyCommands({ port, journal, commands, read: async () => null });
+    await expect(write()).rejects.toThrow();
+    expect(bytes[0]).toBe(65_536);
+    expect(journal.acknowledgedCommands()).toHaveLength(2);
+    sent = [];
+    interrupt = false;
+    await write();
+    expect(sent.flat()).toEqual(commands.slice(2));
+    expect(sent.every((page) => page.length <= 4)).toBe(true);
+    expect(journal.acknowledgedCommands()).toHaveLength(99);
+    expect(journal.preparedCommands()).toEqual([]);
+  } finally {
+    journal.close();
+  }
+});
