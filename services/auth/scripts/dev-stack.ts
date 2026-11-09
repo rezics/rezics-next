@@ -955,7 +955,7 @@ export function pageDataDefinitionsEnvironment(env: NodeJS.ProcessEnv, databaseU
 
 /** Use only the native Definitions HTTP owner; the current-pointer path issues no writes or credentials. */
 export async function reconcilePageDataDefinitions(options: {
-  handle: (request: Request) => Promise<Response>;
+  handle: (request: Request) => Response | Promise<Response>;
   activate: boolean;
   bearer: () => Promise<string>;
 }): Promise<{ digest: string; head: number }> {

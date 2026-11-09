@@ -1119,7 +1119,7 @@ async function prepareDedicatedPageDataStack(settings: Settings, head: string) {
     writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
     env = stackEnvironment(worktree, config, names, settings.mainCheckout);
   }
-  return { policy, worktree, config, env };
+  return { policy, worktree, config, env, names };
 }
 
 async function runDedicatedPageDataStack(
@@ -1131,7 +1131,7 @@ async function runDedicatedPageDataStack(
   registry: ReadonlyMap<string, SectionConfig>;
   stackOutput: string;
 }> {
-  const { policy, worktree, config, env: preparedEnv } = await prepareDedicatedPageDataStack(settings, head);
+  const { policy, worktree, config, names, env: preparedEnv } = await prepareDedicatedPageDataStack(settings, head);
   const bun = process.execPath;
   let env = preparedEnv;
   const seeded = join(settings.stateDirectory, 'page-data-seeded');
