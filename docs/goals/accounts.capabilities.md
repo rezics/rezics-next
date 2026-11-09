@@ -19,10 +19,10 @@ runtime revision, completed seed result and matching private key, binding and lo
 Capture records the source revision, runtime revision and seed-result hash together. A failed startup or absent
 handoff establishes only an unmet prerequisite; it supplies no result for an unreached API phase.
 
-| Original journey | Required reached phases and independent readback |
-| --- | --- |
-| Recovery | Sign up and sign in; start recovery; receive the actual private local delivery; complete recovery; try both old and new passwords; read with the original session. |
-| Credential replacement | Sign up and sign in; stage, approve and apply the original effect with the same subject/session binding; read back password and current-session consequences independently. |
+| Original journey                  | Required reached phases and independent readback                                                                                                                                                                                                                      |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Recovery                          | Sign up and sign in; start recovery; receive the actual private local delivery; complete recovery; try both old and new passwords; read with the original session.                                                                                                    |
+| Credential replacement            | Sign up and sign in; stage, approve and apply the original effect with the same subject/session binding; read back password and current-session consequences independently.                                                                                           |
 | Website refresh-family revocation | Sign up and obtain website OAuth authority; prove a Kernel read with the original bearer; send the original six form fields with their client, resource, issuer and token-kind bindings; independently repeat the Kernel read with that same bearer after revocation. |
 
 Record elapsed time, reached phase, first failing operation, allowlisted public response codes/shapes, request-field
@@ -43,6 +43,13 @@ Auth implementation or permission exception.
 
 Focused fixtures, source integration and preflight records do not complete these API journeys. Actual API capture,
 original browser receiving, whole Auth acceptance and whole-Goal completion remain distinct evidence stages.
+
+Decision: reuse the existing actual Auth/Access recovery fixture and its assertions,
+including private initial fencing and actual delivery. Measure its named setup,
+registration, request, delivery and restart phases under the individual fixture
+budgets owned by [guarded recovery](../../services/auth/README.md#guarded-human-recovery).
+Run the affected Kernel file through its owning check to collect independent
+failures; a default five-second timeout alone supplies no recovery assertion verdict.
 
 ### Original journey census
 

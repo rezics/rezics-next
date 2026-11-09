@@ -852,6 +852,15 @@ Successful reset retains a fence. Only a later trusted Access lifecycle workflow
 may clear it using fresh recovery/establishment evidence at the exact new epoch;
 Auth exposes no fence-clearing effect and never upgrades an old session.
 
+The Kernel `test/access/recovery-completion.test.ts` fixture raises its initial
+fence through private `internalLifecycle.raiseFence` before actual delivery and
+completion. It retains old cookie, bearer and password denial, new-password
+sign-in and current Access readback. Its native workflow/password cases have an
+individual 60-second test budget; the two-crash restart case has 120 seconds.
+Fixed-name phase timings separate database/host setup, registration, HTTP calls,
+delivery and host restarts without recording credentials or proof values. These
+fixture budgets do not change product or global test deadlines.
+
 The original operator, recovery and invalidation fixtures establish the Auth
 boundary using real Better Auth, PostgreSQL and JOSE. They are not final Goal
 proof. The workflow suites below add native Access command bindings and durable

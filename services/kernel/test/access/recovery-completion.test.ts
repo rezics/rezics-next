@@ -38,6 +38,21 @@ const pool = createPool(process.env.DATABASE_URL!);
 const issuer = 'https://recovery.auth.test';
 const password = 'original native recovery password';
 const nextPassword = 'replacement native recovery password';
+// These cases include native workflow registration and multiple real password
+// hashes/readbacks. Restart coverage also boots two deliberately crashed hosts.
+const recoveryCaseBudget = 60_000;
+const recoveryRestartBudget = 120_000;
+const fixturePhases: Record<string, number> = {};
+async function fixturePhase<T>(name: string, work: () => Promise<T>): Promise<T> {
+  const started = performance.now();
+  process.stdout.write(`Recovery fixture phase: ${name}\n`);
+  try {
+    return await work();
+  } finally {
+    fixturePhases[name] = (fixturePhases[name] ?? 0) + (performance.now() - started) / 1000;
+    process.stdout.write(`REZICS_KERNEL_FIXTURE_PHASES=${JSON.stringify(fixturePhases)}\n`);
+  }
+}
 let database: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let service: AuthService;
@@ -120,12 +135,14 @@ async function build() {
   await host.start();
 }
 const request = (path: string, body: unknown, cookie = '') =>
-  service.handler(
-    new Request(issuer + path, {
-      method: 'POST',
-      headers: { origin: issuer, 'content-type': 'application/json', cookie },
-      body: JSON.stringify(body),
-    }),
+  fixturePhase(`request${path.replaceAll('/', '')}`, () =>
+    service.handler(
+      new Request(issuer + path, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json', cookie },
+        body: JSON.stringify(body),
+      }),
+    ),
   );
 async function signin(name: string, selectedPassword: string) {
   return request('/signin', {
@@ -146,19 +163,16 @@ async function startRecovery(accountId: string, email: string) {
   try {
     expect((await request('/recovery/start', { email })).status).toBe(200);
     // The non-disclosing response deliberately precedes lookup and delivery.
-    delivery = await pending.promise;
+    delivery = await fixturePhase('delivery', () => pending.promise);
   } finally {
     deliveries.delete(accountId);
   }
 }
 async function person(name: string) {
   const email = `${name}@recovery.test`;
-  const { accountId } = await host.workflows.register({
-    key: name,
-    handle: name,
-    email,
-    password,
-  });
+  const { accountId } = await fixturePhase('registration', () =>
+    host.workflows.register({ key: name, handle: name, email, password }),
+  );
   const signed = await signin(name, password);
   expect(signed.status).toBe(200);
   const cookie = cookieOf(signed);
@@ -186,9 +200,11 @@ async function snapshot(accountId: string) {
   };
 }
 beforeAll(async () => {
-  database = crashProcess ? { url: process.env.RECOVERY_CRASH_DATABASE!, async close() {} } : await cloneAuthDatabase();
+  database = crashProcess
+    ? { url: process.env.RECOVERY_CRASH_DATABASE!, async close() {} }
+    : await fixturePhase('databaseSetup', cloneAuthDatabase);
   if (crashProcess === 'before' || crashProcess === 'after') fault = crashProcess;
-  await build();
+  await fixturePhase('hostSetup', build);
 });
 afterAll(async () => {
   await host?.stop();
@@ -201,178 +217,200 @@ if (crashProcess) {
     await request('/recovery/complete', JSON.parse(process.env.RECOVERY_CRASH_BODY!));
   });
 } else {
-  test('actual Auth recovery commits credential witness then clears exact Access fence', async () => {
-    const human = await person('native_recovery');
-    const other = await person('unrelated_recovery');
-    await bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:initial` });
-    await startRecovery(human.accountId, human.email);
-    const body = { account_id: human.accountId, token: delivery, new_password: nextPassword };
-    expect((await request('/recovery/complete', { ...body, token: 'wrong' })).status).toBe(401);
-    expect((await request('/recovery/complete', { ...body, account_id: other.accountId })).status).toBe(401);
-    expect((await signin('native_recovery', 'wrong password')).status).toBe(401);
-    expect((await request('/recovery/complete', body)).status).toBe(200);
-    const saved = await snapshot(human.accountId);
-    expect(saved.fence).toMatchObject({ fenced: false, minimumAuthnEpoch: '3' });
-    expect(saved.witness).toHaveLength(1);
-    expect(saved.effects).toHaveLength(1);
-    expect(saved.clears).toHaveLength(1);
-    const witness = saved.witness[0]!;
-    expect(witness.receipt_id).toBe(saved.fence!.receiptId);
-    await expect(bindings.trustedAccess.completeRecovery!(JSON.stringify(witness))).rejects.toThrow();
-    await expect(access.authenticate(human.bearer, { pool, deadline: Date.now() + 10000 })).rejects.toThrow();
-    expect((await request('/token', {}, human.cookie)).status).toBe(401);
-    expect((await signin('native_recovery', password)).status).toBe(401);
-    const signed = await signin('native_recovery', nextPassword);
-    expect(signed.status).toBe(200);
-    const token = ((await (await request('/token', {}, cookieOf(signed))).json()) as { access_token: string })
-      .access_token;
-    const claims = decodeJwt(token);
-    expect(claims.exp! - claims.iat!).toBe(300);
-    expect((await access.authenticate(token, { pool, deadline: Date.now() + 10000 })).accountId).toBe(human.accountId);
-    expect((await request('/recovery/complete', body)).status).toBe(200);
-    expect(await snapshot(human.accountId)).toEqual(saved);
-    expect((await request('/recovery/complete', { ...body, new_password: 'changed intended password' })).status).toBe(
-      401,
-    );
-  });
-
-  test('lost acknowledgement resumes one exact receipt and usable new session across both adapter restarts', async () => {
-    for (const phase of ['before', 'after'] as const) {
-      const name = `resume_${phase}`;
-      const human = await person(name);
-      await bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:initial` });
+  test(
+    'actual Auth recovery commits credential witness then clears exact Access fence',
+    async () => {
+      const human = await person('native_recovery');
+      const other = await person('unrelated_recovery');
+      await fixturePhase('initialFence', () =>
+        bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:initial` }),
+      );
       await startRecovery(human.accountId, human.email);
       const body = { account_id: human.accountId, token: delivery, new_password: nextPassword };
-      await host.stop();
-      const child = Bun.spawn(
-        [process.execPath, 'test', '--timeout', '60000', 'test/access/recovery-completion.test.ts'],
-        {
-          cwd: import.meta.dir + '/../..',
-          env: {
-            ...process.env,
-            RECOVERY_CRASH_PHASE: phase,
-            RECOVERY_CRASH_DATABASE: database.url,
-            RECOVERY_CRASH_KEY: JSON.stringify(key),
-            RECOVERY_CRASH_BODY: JSON.stringify(body),
-          },
-          stdout: 'pipe',
-          stderr: 'pipe',
-        },
-      );
-      try {
-        const reader = child.stdout.getReader();
-        let output = '';
-        while (!output.includes('RECOVERY_CRASH_READY')) {
-          const next = await reader.read();
-          if (next.done)
-            throw new Error(
-              `Recovery host exited before crash boundary: ${output}\n${await new Response(child.stderr).text()}`,
-            );
-          output += new TextDecoder().decode(next.value);
-        }
-      } finally {
-        child.kill('SIGKILL');
-        await child.exited;
-      }
-      await build();
-      const saved = await snapshot(human.accountId);
-      expect(saved.witness).toHaveLength(1);
-      expect(saved.fence!.fenced).toBe(phase === 'before');
-      expect(await bindings.trustedAccess.readRecoveryAccount!(human.accountId)).not.toBeNull();
-      if (phase === 'before') {
-        expect(await bindings.trustedAccess.readAccount(human.accountId)).toBeNull();
-        expect((await signin(name, nextPassword)).status).toBe(401);
-      }
-      await expect(access.authenticate(human.bearer, { pool, deadline: Date.now() + 10000 })).rejects.toThrow();
-      await host.stop();
-      fault = undefined;
-      await build();
+      expect((await request('/recovery/complete', { ...body, token: 'wrong' })).status).toBe(401);
+      expect((await request('/recovery/complete', { ...body, account_id: other.accountId })).status).toBe(401);
+      expect((await signin('native_recovery', 'wrong password')).status).toBe(401);
       expect((await request('/recovery/complete', body)).status).toBe(200);
-      const recovered = await snapshot(human.accountId);
-      expect(recovered.witness).toEqual(saved.witness);
-      expect(recovered.credential).toEqual(saved.credential);
-      expect(recovered.proof).toEqual(saved.proof);
-      expect(recovered.effects).toEqual(saved.effects);
-      expect(recovered.effects).toHaveLength(1);
-      expect(recovered.clears).toHaveLength(1);
-      if (phase === 'after') expect(recovered.clears).toEqual(saved.clears);
-      expect(recovered.fence).toEqual({ ...saved.fence!, fenced: false });
-      const signed = await signin(name, nextPassword);
+      const saved = await snapshot(human.accountId);
+      expect(saved.fence).toMatchObject({ fenced: false, minimumAuthnEpoch: '3' });
+      expect(saved.witness).toHaveLength(1);
+      expect(saved.effects).toHaveLength(1);
+      expect(saved.clears).toHaveLength(1);
+      const witness = saved.witness[0]!;
+      expect(witness.receipt_id).toBe(saved.fence!.receiptId);
+      await expect(bindings.trustedAccess.completeRecovery!(JSON.stringify(witness))).rejects.toThrow();
+      await expect(access.authenticate(human.bearer, { pool, deadline: Date.now() + 10000 })).rejects.toThrow();
+      expect((await request('/token', {}, human.cookie)).status).toBe(401);
+      expect((await signin('native_recovery', password)).status).toBe(401);
+      const signed = await signin('native_recovery', nextPassword);
       expect(signed.status).toBe(200);
       const token = ((await (await request('/token', {}, cookieOf(signed))).json()) as { access_token: string })
         .access_token;
+      const claims = decodeJwt(token);
+      expect(claims.exp! - claims.iat!).toBe(300);
       expect((await access.authenticate(token, { pool, deadline: Date.now() + 10000 })).accountId).toBe(
         human.accountId,
       );
       expect((await request('/recovery/complete', body)).status).toBe(200);
-      expect(await snapshot(human.accountId)).toEqual(recovered);
-      const completion = createRecoveryCompletion({ pool, routeKey: new Uint8Array(32).fill(71), auth: () => service });
-      await bindings.internalLifecycle.raiseFence({
-        accountId: human.accountId,
-        key: `${human.accountId}:later-floor`,
-      });
-      await expect(completion.completeRecovery(saved.witness[0]!.reference)).rejects.toThrow();
-      expect((await request('/recovery/complete', body)).status).toBe(401);
-    }
-  });
+      expect(await snapshot(human.accountId)).toEqual(saved);
+      expect((await request('/recovery/complete', { ...body, new_password: 'changed intended password' })).status).toBe(
+        401,
+      );
+    },
+    recoveryCaseBudget,
+  );
 
-  test('failed or superseded Auth success cannot clear later floor or changed current authority', async () => {
-    const human = await person('failed_native_recovery');
-    await bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:initial` });
-    await startRecovery(human.accountId, human.email);
-    const body = { account_id: human.accountId, token: delivery, new_password: nextPassword };
-    const before = await snapshot(human.accountId);
-    await authPool.query(`ALTER TABLE auth_recovery_establishment ADD CONSTRAINT test_fail_establishment
+  test(
+    'lost acknowledgement resumes one exact receipt and usable new session across both adapter restarts',
+    async () => {
+      for (const phase of ['before', 'after'] as const) {
+        const name = `resume_${phase}`;
+        const human = await person(name);
+        await bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:initial` });
+        await startRecovery(human.accountId, human.email);
+        const body = { account_id: human.accountId, token: delivery, new_password: nextPassword };
+        await host.stop();
+        const child = Bun.spawn(
+          [process.execPath, 'test', '--timeout', '60000', 'test/access/recovery-completion.test.ts'],
+          {
+            cwd: import.meta.dir + '/../..',
+            env: {
+              ...process.env,
+              RECOVERY_CRASH_PHASE: phase,
+              RECOVERY_CRASH_DATABASE: database.url,
+              RECOVERY_CRASH_KEY: JSON.stringify(key),
+              RECOVERY_CRASH_BODY: JSON.stringify(body),
+            },
+            stdout: 'pipe',
+            stderr: 'pipe',
+          },
+        );
+        try {
+          const reader = child.stdout.getReader();
+          let output = '';
+          while (!output.includes('RECOVERY_CRASH_READY')) {
+            const next = await reader.read();
+            if (next.done)
+              throw new Error(
+                `Recovery host exited before crash boundary: ${output}\n${await new Response(child.stderr).text()}`,
+              );
+            output += new TextDecoder().decode(next.value);
+          }
+        } finally {
+          child.kill('SIGKILL');
+          await child.exited;
+        }
+        await fixturePhase('hostRestart', build);
+        const saved = await snapshot(human.accountId);
+        expect(saved.witness).toHaveLength(1);
+        expect(saved.fence!.fenced).toBe(phase === 'before');
+        expect(await bindings.trustedAccess.readRecoveryAccount!(human.accountId)).not.toBeNull();
+        if (phase === 'before') {
+          expect(await bindings.trustedAccess.readAccount(human.accountId)).toBeNull();
+          expect((await signin(name, nextPassword)).status).toBe(401);
+        }
+        await expect(access.authenticate(human.bearer, { pool, deadline: Date.now() + 10000 })).rejects.toThrow();
+        await host.stop();
+        fault = undefined;
+        await fixturePhase('hostRestart', build);
+        expect((await request('/recovery/complete', body)).status).toBe(200);
+        const recovered = await snapshot(human.accountId);
+        expect(recovered.witness).toEqual(saved.witness);
+        expect(recovered.credential).toEqual(saved.credential);
+        expect(recovered.proof).toEqual(saved.proof);
+        expect(recovered.effects).toEqual(saved.effects);
+        expect(recovered.effects).toHaveLength(1);
+        expect(recovered.clears).toHaveLength(1);
+        if (phase === 'after') expect(recovered.clears).toEqual(saved.clears);
+        expect(recovered.fence).toEqual({ ...saved.fence!, fenced: false });
+        const signed = await signin(name, nextPassword);
+        expect(signed.status).toBe(200);
+        const token = ((await (await request('/token', {}, cookieOf(signed))).json()) as { access_token: string })
+          .access_token;
+        expect((await access.authenticate(token, { pool, deadline: Date.now() + 10000 })).accountId).toBe(
+          human.accountId,
+        );
+        expect((await request('/recovery/complete', body)).status).toBe(200);
+        expect(await snapshot(human.accountId)).toEqual(recovered);
+        const completion = createRecoveryCompletion({
+          pool,
+          routeKey: new Uint8Array(32).fill(71),
+          auth: () => service,
+        });
+        await bindings.internalLifecycle.raiseFence({
+          accountId: human.accountId,
+          key: `${human.accountId}:later-floor`,
+        });
+        await expect(completion.completeRecovery(saved.witness[0]!.reference)).rejects.toThrow();
+        expect((await request('/recovery/complete', body)).status).toBe(401);
+      }
+    },
+    recoveryRestartBudget,
+  );
+
+  test(
+    'failed or superseded Auth success cannot clear later floor or changed current authority',
+    async () => {
+      const human = await person('failed_native_recovery');
+      await fixturePhase('initialFence', () =>
+        bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:initial` }),
+      );
+      await startRecovery(human.accountId, human.email);
+      const body = { account_id: human.accountId, token: delivery, new_password: nextPassword };
+      const before = await snapshot(human.accountId);
+      await authPool.query(`ALTER TABLE auth_recovery_establishment ADD CONSTRAINT test_fail_establishment
     CHECK (account_id <> '${human.accountId}') NOT VALID`);
-    try {
-      expect((await request('/recovery/complete', body)).status).toBe(503);
-    } finally {
-      await authPool.query('ALTER TABLE auth_recovery_establishment DROP CONSTRAINT test_fail_establishment');
-    }
-    const failed = await snapshot(human.accountId);
-    expect(failed.credential).toEqual(before.credential);
-    expect(failed.witness).toHaveLength(0);
-    expect(failed.fence!.fenced).toBe(true);
-    expect(await service.internal.resolveRecoveryEstablishment('a'.repeat(64))).toBeNull();
-    fault = 'before';
-    expect((await request('/recovery/complete', body)).status).toBe(503);
-    fault = undefined;
-    const committed = await snapshot(human.accountId);
-    expect(committed.witness).toHaveLength(1);
-    const reference = committed.witness[0]!.reference;
-    const witness = await service.internal.resolveRecoveryEstablishment(reference);
-    expect(witness).not.toBeNull();
-    const expiredClock = createRecoveryCompletion({
-      pool,
-      routeKey: new Uint8Array(32).fill(71),
-      auth: () => service,
-      clock: () => new Date(witness!.expiresAt),
-    });
-    await expect(expiredClock.completeRecovery(reference)).rejects.toThrow();
-    expect((await bindings.internalLifecycle.readFenceState(human.accountId))!.fenced).toBe(true);
-    await bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:superseded` });
-    await expect(bindings.trustedAccess.completeRecovery!(reference)).rejects.toThrow();
-    expect((await request('/recovery/complete', body)).status).toBe(401);
-    expect((await snapshot(human.accountId)).credential).toEqual(committed.credential);
-    for (const change of ['suspended', 'operator'] as const) {
-      const id = (await person(`authority_${change}`)).accountId;
-      await bindings.internalLifecycle.raiseFence({ accountId: id, key: `${id}:initial` });
-      await startRecovery(id, `authority_${change}@recovery.test`);
+      try {
+        expect((await request('/recovery/complete', body)).status).toBe(503);
+      } finally {
+        await authPool.query('ALTER TABLE auth_recovery_establishment DROP CONSTRAINT test_fail_establishment');
+      }
+      const failed = await snapshot(human.accountId);
+      expect(failed.credential).toEqual(before.credential);
+      expect(failed.witness).toHaveLength(0);
+      expect(failed.fence!.fenced).toBe(true);
+      expect(await service.internal.resolveRecoveryEstablishment('a'.repeat(64))).toBeNull();
       fault = 'before';
-      expect(
-        (await request('/recovery/complete', { account_id: id, token: delivery, new_password: nextPassword })).status,
-      ).toBe(503);
+      expect((await request('/recovery/complete', body)).status).toBe(503);
       fault = undefined;
-      const saved = await snapshot(id);
-      if (change === 'suspended') await suspendAccount(pool, id);
-      else
-        await pool.query(`UPDATE access.account SET state=$2,operator_account_id=$3 WHERE account_id=$1`, [
-          id,
-          'active',
-          change === 'operator' ? human.accountId : null,
-        ]);
-      await expect(bindings.trustedAccess.completeRecovery!(saved.witness[0]!.reference)).rejects.toThrow();
-      expect((await bindings.internalLifecycle.readFenceState(id))!.fenced).toBe(true);
-    }
-  });
+      const committed = await snapshot(human.accountId);
+      expect(committed.witness).toHaveLength(1);
+      const reference = committed.witness[0]!.reference;
+      const witness = await service.internal.resolveRecoveryEstablishment(reference);
+      expect(witness).not.toBeNull();
+      const expiredClock = createRecoveryCompletion({
+        pool,
+        routeKey: new Uint8Array(32).fill(71),
+        auth: () => service,
+        clock: () => new Date(witness!.expiresAt),
+      });
+      await expect(expiredClock.completeRecovery(reference)).rejects.toThrow();
+      expect((await bindings.internalLifecycle.readFenceState(human.accountId))!.fenced).toBe(true);
+      await bindings.internalLifecycle.raiseFence({ accountId: human.accountId, key: `${human.accountId}:superseded` });
+      await expect(bindings.trustedAccess.completeRecovery!(reference)).rejects.toThrow();
+      expect((await request('/recovery/complete', body)).status).toBe(401);
+      expect((await snapshot(human.accountId)).credential).toEqual(committed.credential);
+      for (const change of ['suspended', 'operator'] as const) {
+        const id = (await person(`authority_${change}`)).accountId;
+        await bindings.internalLifecycle.raiseFence({ accountId: id, key: `${id}:initial` });
+        await startRecovery(id, `authority_${change}@recovery.test`);
+        fault = 'before';
+        expect(
+          (await request('/recovery/complete', { account_id: id, token: delivery, new_password: nextPassword })).status,
+        ).toBe(503);
+        fault = undefined;
+        const saved = await snapshot(id);
+        if (change === 'suspended') await suspendAccount(pool, id);
+        else
+          await pool.query(`UPDATE access.account SET state=$2,operator_account_id=$3 WHERE account_id=$1`, [
+            id,
+            'active',
+            change === 'operator' ? human.accountId : null,
+          ]);
+        await expect(bindings.trustedAccess.completeRecovery!(saved.witness[0]!.reference)).rejects.toThrow();
+        expect((await bindings.internalLifecycle.readFenceState(id))!.fenced).toBe(true);
+      }
+    },
+    recoveryCaseBudget,
+  );
 }
