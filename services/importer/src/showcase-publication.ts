@@ -35,7 +35,7 @@ import {
   crossMediaCoverDigest,
   mapSourceEnumeration,
 } from '@rezics/conversion/cross-media-entities';
-import { createSelectedFamilySourceRegistration } from './source-registry.ts';
+import { admitBoundProposals, createSelectedFamilySourceRegistration } from './source-registry.ts';
 import { subjectSlug } from '@rezics/definitions/slug';
 import { safeSourceUrl } from '@rezics/conversion/support';
 import type { CrossMediaMediaOutcome } from './showcase-media.ts';
@@ -707,18 +707,30 @@ export async function preferCurrentCandidateAcknowledgements(
   return selected;
 }
 
-async function resolveLegacyCandidates(input: {
+/** Receipt keys are transport-scoped by the importer; proposal identity retains every other operand. */
+function proposalIdentity(command: BatchCommand): string {
+  const { key: _key, ...proposal } = command;
+  return showcaseDigest(proposal);
+}
+
+export async function resolveLegacyCandidates(input: {
   plan: CrossMediaPlan;
-  result: CrossMediaSeedResult;
+  result: Pick<CrossMediaSeedResult, 'readings' | 'mediaOutcomes'>;
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
-  review: ShowcaseReviewPort;
+  review: Pick<ShowcaseReviewPort, 'reviewedCandidates'>;
   existing: readonly ShowcaseAcknowledgement[];
 }): Promise<{
   acknowledgements: ShowcaseAcknowledgement[];
   omissions: { provider: 'bangumi' | 'vndb'; sourceKey: string }[];
 }> {
   const acknowledgements = [...input.existing];
-  const known = new Set(acknowledgements.flatMap((ack) => (ack.candidateId ? [ack.command.key] : [])));
+  const known = new Set(
+    acknowledgements.flatMap((ack) =>
+      ack.candidateId && ack.command.op === 'propose' && ack.commandDigest === showcaseDigest(ack.command)
+        ? [proposalIdentity(ack.command)]
+        : [],
+    ),
+  );
   const readings = new Map(
     input.result.readings.map((reading) => [`${reading.source}\0${reading.externalId}`, reading]),
   );
@@ -736,7 +748,9 @@ async function resolveLegacyCandidates(input: {
     const id = reading && (reading.boundSubjectId ?? subjectId(reading.subject));
     if (!id) continue;
     const alias = input.aliases[provider];
-    const registration = createSelectedFamilySourceRegistration(provider, alias);
+    const created = createSelectedFamilySourceRegistration(provider, alias);
+    const registration =
+      provider === 'bangumi' ? admitBoundProposals(created, () => subjectType(reading!.subject) ?? undefined) : created;
     const mediaContext =
       provider === 'bangumi'
         ? showcaseMediaContext({
@@ -752,7 +766,7 @@ async function resolveLegacyCandidates(input: {
       { source: alias, subjectId: id, ...(mediaContext ?? {}) },
     );
     for (const command of converted.proposals) {
-      if (command.op !== 'propose' || known.has(command.key)) continue;
+      if (command.op !== 'propose' || known.has(proposalIdentity(command))) continue;
       if (visited >= showcaseLimits.candidates) {
         omissions.push({ provider, sourceKey: row.key });
         break rowLoop;
@@ -765,7 +779,7 @@ async function resolveLegacyCandidates(input: {
           showcaseSourceMatches(candidate.source, command.source) &&
           showcaseStatementMatches(candidate.statement, command.statement),
       );
-      if (exact.length !== 1) {
+      if (!page.complete || exact.length !== 1) {
         omissions.push({ provider, sourceKey: row.key });
         continue;
       }
@@ -776,8 +790,7 @@ async function resolveLegacyCandidates(input: {
         subjectId: id,
         candidateId: candidate.id,
       });
-      known.add(command.key);
-      if (!page.complete) omissions.push({ provider, sourceKey: row.key });
+      known.add(proposalIdentity(command));
     }
   }
   return { acknowledgements, omissions };

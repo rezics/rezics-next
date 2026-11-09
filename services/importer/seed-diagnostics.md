@@ -37,3 +37,15 @@ Decision: a stale dedicated page-data Definitions release is a pre-seed admissio
 The [page-data operator contract](../../tools/goal/README.md) owns explicit publication and exact-head activation of
 the intended bundled release. Reconciliation preserves prepared proposal keys and all acknowledged journal work;
 ordinary resume follows only after the live digest matches. Importer scopes and field validation are unchanged.
+
+Legacy publication recovery compares an acknowledged proposal's full body independently of its request key:
+Importer scopes that key before sending. Source alias, external ID, revision, digest, field group, native subject,
+statement and rights remain exact. Sealed enriched proposals retain their original current bindings; recovery does
+not replace them with context-free variants. Bangumi reconstruction uses the same bound native-type admission as
+import. Missing receipts still require exactly one matching candidate in a complete current listing; incomplete or
+ambiguous evidence cannot produce a recovered receipt. The ordinary publication pass independently checks every
+retained candidate before acceptance, adoption and public readback.
+
+Result persistence ends before `publication-completion` begins. An incomplete publication fails that strict final
+check with the written artifact path and bounded omission count, while preserving the usable report. A write failure
+retains its original error and `result-write` phase; neither outcome implies that omitted claims were published.

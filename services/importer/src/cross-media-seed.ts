@@ -1,10 +1,10 @@
-import { SeedFinalization, seedImportRunFailure } from './seed-cli.ts';
+import { SeedFinalization, finalizeSeedResult, seedImportRunFailure } from './seed-cli.ts';
 import { createHash } from 'node:crypto';
 import { showcaseFranchiseSelection } from './showcase-franchise.ts';
 import type { DevelopmentShowcaseContext, DevelopmentShowcaseResult } from './showcase-persona.ts';
 import { createReadStream } from 'node:fs';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
 import { sourceVocabularyLimits } from '@rezics/conversion/source-vocabulary';
@@ -4640,38 +4640,38 @@ export async function runCrossMediaSeedCli(
         : {}),
       sourceDigests: Object.fromEntries(input.digests),
     };
-    finalization.enter('result-write');
-    await mkdir(dirname(resultPath), { recursive: true });
-    await writeFile(resultPath, JSON.stringify(report, null, 2) + '\n');
-    process.stdout.write(
-      showcase
-        ? 'Imported ' +
-            (combinedResult.readings.length + (books?.readings.length ?? 0)) +
-            ' records; publication ' +
-            showcase.status +
-            '; ' +
-            showcase.omissions.length +
-            ' bounded omissions. Result: ' +
-            resultPath +
-            '\n'
-        : 'Imported ' +
-            (combinedResult.readings.length + (books?.readings.length ?? 0)) +
-            ' records; ' +
-            (combinedResult.gaps.length +
-              combinedResult.characterDiagnostics.length +
-              combinedResult.vndbCreditDiagnostics.length +
-              combinedResult.episodeDiagnostics.length +
-              publicTags.gaps.length +
-              (books?.gaps.length ?? 0)) +
-            ' review gaps. Result: ' +
-            resultPath +
-            '\n',
-    );
-    ensure(
-      !showcase || showcase.status === 'published',
-      'Showcase publication is incomplete; rerun task seed:dev after resolving the listed gaps',
-    );
-    finalization.complete();
+    await finalizeSeedResult({
+      resultPath,
+      report,
+      ...(showcase ? { publication: showcase } : {}),
+      progress: finalization,
+      onWritten: () => {
+        process.stdout.write(
+          showcase
+            ? 'Imported ' +
+                (combinedResult.readings.length + (books?.readings.length ?? 0)) +
+                ' records; publication ' +
+                showcase.status +
+                '; ' +
+                showcase.omissions.length +
+                ' bounded omissions. Result: ' +
+                resultPath +
+                '\n'
+            : 'Imported ' +
+                (combinedResult.readings.length + (books?.readings.length ?? 0)) +
+                ' records; ' +
+                (combinedResult.gaps.length +
+                  combinedResult.characterDiagnostics.length +
+                  combinedResult.vndbCreditDiagnostics.length +
+                  combinedResult.episodeDiagnostics.length +
+                  publicTags.gaps.length +
+                  (books?.gaps.length ?? 0)) +
+                ' review gaps. Result: ' +
+                resultPath +
+                '\n',
+        );
+      },
+    });
     return report;
   } catch (error) {
     finalization.failed(error);

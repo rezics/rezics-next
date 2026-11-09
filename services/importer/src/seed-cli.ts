@@ -2,6 +2,8 @@ import { CredentialDeniedError, CredentialServiceError } from './credentials.ts'
 import { formatImportTransportError, ImportTransportError } from './import-client.ts';
 import { importRequestFailure, type ImportRequestDiagnostics } from './import-fetch.ts';
 import type { ImportRunResult } from './importer.ts';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
 /** Fixed local phases only: never derive diagnostic text from source records or remote errors. */
 const finalizationPhases = {
@@ -24,6 +26,7 @@ const finalizationPhases = {
     'credit-current-reads',
     'persona',
     'result-write',
+    'publication-completion',
   ],
   publication: [
     'cover-current-reads',
@@ -95,6 +98,35 @@ export class SeedFinalization<Scope extends FinalizationScope> {
 
 type CredentialFailure = CredentialDeniedError | CredentialServiceError;
 
+/** A usable result exists, but its independently checked publication is still incomplete. */
+export class SeedPublicationIncompleteError extends Error {
+  constructor(
+    readonly resultPath: string,
+    readonly omissions: number,
+  ) {
+    super('Showcase publication is incomplete');
+    this.name = 'SeedPublicationIncompleteError';
+  }
+}
+
+/** Persist the report before enforcing strict publication completion. A publication refusal never removes it. */
+export async function finalizeSeedResult(input: {
+  resultPath: string;
+  report: unknown;
+  publication?: { status: 'published' | 'incomplete'; omissions: readonly unknown[] };
+  progress: SeedFinalization<'seed'>;
+  onWritten: () => void;
+}): Promise<void> {
+  input.progress.enter('result-write');
+  await mkdir(dirname(input.resultPath), { recursive: true });
+  await writeFile(input.resultPath, JSON.stringify(input.report, null, 2) + '\n');
+  input.onWritten();
+  input.progress.enter('publication-completion');
+  if (input.publication && input.publication.status !== 'published')
+    throw new SeedPublicationIncompleteError(input.resultPath, input.publication.omissions.length);
+  input.progress.complete();
+}
+
 function safeField(value: unknown, pattern: RegExp, limit: number): string | undefined {
   return typeof value === 'string' && value.length <= limit && pattern.test(value) ? value : undefined;
 }
@@ -132,6 +164,8 @@ export function formatSeedError(error: unknown): string {
 }
 
 function formatSeedCause(error: unknown): string {
+  if (error instanceof SeedPublicationIncompleteError)
+    return `Cross-media seed publication incomplete result-write=completed artifact=${JSON.stringify(error.resultPath)} bounded-omissions=${error.omissions}`;
   if (typeof error === 'object' && error !== null) {
     const run = importRunFailures.get(error);
     if (run) return `Cross-media seed import failed provider=${run.provider} kind=${run.kind}`;
