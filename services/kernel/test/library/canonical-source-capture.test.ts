@@ -21,6 +21,13 @@ let scope: { identity: NativeSourceIdentity; frontier: NativeSourceFrontier | nu
 beforeAll(async () => {
   f = await createCollectionRulesFixture();
   await f.entry(await f.subject('Native capture accounting member'));
+  collectionId = await saved();
+}, 120_000);
+afterAll(async () => {
+  await f?.close();
+});
+
+async function saved(): Promise<string> {
   const created = await f.send('POST', '/v1/collections', {
     membershipKind: 'dynamic',
     title: 'Native capture accounting',
@@ -28,11 +35,8 @@ beforeAll(async () => {
     rule: { filter: { owner: { presence: true } } },
   });
   expect(created.status).toBe(201);
-  collectionId = (await created.json()).collection.id;
-}, 120_000);
-afterAll(async () => {
-  await f?.close();
-});
+  return (await created.json()).collection.id;
+}
 
 test('canonical capture persists its zero-result scope write without spending result bytes on JSON framing', async () => {
   await advanceCanonicalSourceCapture(f.database.pool, {
@@ -69,6 +73,7 @@ test('native capture admits the saved owner source under its independently decla
 });
 
 test('completed native capture admits an explicit empty publication through the native command', async () => {
+  const collectionId = await saved();
   await f.prepareSource(collectionId);
   const identity = f.runtime.identity;
   const actor = await identity.access.authenticate(f.owner, { pool: f.database.pool, deadline: Date.now() + 30_000 });
