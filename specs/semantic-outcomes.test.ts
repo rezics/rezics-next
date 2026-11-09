@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { fromPlainText } from '@rezics/document';
 import type {
   Candidate,
   HttpResponse,
@@ -169,6 +170,29 @@ async function candidates(id: string, property: string, context = driver.globalC
   expect(response.status).toBe(200);
   expect(response.body.next).toBeNull();
   return response.body.candidates as Candidate[];
+}
+type SourcedCandidate = Candidate & {
+  source: {
+    source: string;
+    external_id: string;
+    record_revision: string;
+    digest: string;
+    converter_revision: string;
+    field_group: 'facts' | 'summary' | 'cover';
+  } | null;
+};
+type SourcedCandidatePage = {
+  candidates: SourcedCandidate[];
+  adoption: { mode: 'replace' | 'inherit' | 'suppress'; head: number } | null;
+  next: string | null;
+};
+async function candidatePage(id: string, property: string, context: string, target?: string) {
+  const query = new URLSearchParams({ property, context });
+  if (target) query.set('target', target);
+  const response = await get(`${subjectPath(id)}/candidates?${query}`);
+  expect(response.status).toBe(200);
+  expect(response.body.next).toBeNull();
+  return response.body as unknown as SourcedCandidatePage;
 }
 async function propose(id: string, property: string, content: Json) {
   const input = { ...statement(property, content), references: [reference()] };
@@ -741,6 +765,382 @@ test('Editor proposes a pending author then acceptor accepts and adopts with one
     ],
     next: null,
   });
+});
+
+test('Sourced claims stay distinct through Context decisions, stale adoption recovery, and current public reads', async () => {
+  const { digest } = await active();
+  const { book, original } = await authoredBook();
+  const sourcedAuthor = await create('schema:Organization', 'Kokoro editorial collective');
+  const competingAuthor = await create('schema:Organization', 'Kokoro archive');
+  const context = await community('Kokoro readers');
+  await driver.grant('editor', ['subject:batch_write'], driver.globalContext);
+  await driver.grant('acceptor', ['context:accept', 'context:adopt'], context);
+
+  const externalId = `OL${randomUUID().replaceAll('-', '').toUpperCase()}W`;
+  const source = (field_group: 'facts' | 'summary', external_id = externalId) => ({
+    source: 'openlibrary',
+    external_id,
+    record_revision: '1',
+    digest: 'a'.repeat(64),
+    converter_revision: 'openlibrary@1',
+    field_group,
+  });
+  const factSource = source('facts');
+  const competingSource = source('facts', `${externalId}-alternate`);
+  const summarySource = source('summary');
+  const factReference = reference(`https://openlibrary.org/authors/${externalId}`);
+  const competingReference = reference(`https://openlibrary.org/authors/${externalId}-alternate`);
+  const summaryReference = reference(`https://openlibrary.org/works/${externalId}`);
+  const creditedAs = (name: string) => [part('schema:creditedAs', name)];
+  const sourcedFact = {
+    ...statement('schema:author', sourcedAuthor.id),
+    qualifiers: creditedAs('Natsume Sōseki'),
+    references: [factReference],
+  };
+  const competingFact = {
+    ...statement('schema:author', competingAuthor.id),
+    qualifiers: creditedAs('Sōseki Natsume'),
+    references: [competingReference],
+  };
+  const summaryText = 'A student leaves Tokyo and returns to a changing hometown.';
+  const summaryBody = fromPlainText(summaryText);
+  const summaryStatement = {
+    ...statement('schema:abstract', { language: 'en', document: summaryBody }),
+    references: [summaryReference],
+  };
+  const commands = [
+    {
+      op: 'propose',
+      key: randomUUID(),
+      source: factSource,
+      subject: book.id,
+      statement: sourcedFact,
+    },
+    {
+      op: 'propose',
+      key: randomUUID(),
+      source: competingSource,
+      subject: book.id,
+      statement: competingFact,
+    },
+    {
+      op: 'propose',
+      key: randomUUID(),
+      source: summarySource,
+      subject: book.id,
+      statement: summaryStatement,
+      rights: {
+        license: 'CC-BY-SA-3.0',
+        obligations: ['cc:Attribution', 'cc:ShareAlike'],
+        attribution: 'Open Library contributors',
+      },
+    },
+  ];
+  const batchKey = key();
+  const received = await write('editor', 'POST', '/v1/subjects:batchWrite', { commands }, batchKey);
+  expect(received.status).toBe(200);
+  expect(received.body.results).toMatchObject([
+    { key: commands[0]!.key, status: 201, value: { candidate: expect.any(String), revision: 2 } },
+    { key: commands[1]!.key, status: 201, value: { candidate: expect.any(String), revision: 3 } },
+    { key: commands[2]!.key, status: 201, value: { candidate: expect.any(String), revision: 4 } },
+  ]);
+  const sourceCandidates = received.body.results as {
+    value: { candidate: string; revision: number };
+  }[];
+  const sourcedCandidate = sourceCandidates[0]!.value.candidate;
+  const competingCandidate = sourceCandidates[1]!.value.candidate;
+  const summaryCandidate = sourceCandidates[2]!.value.candidate;
+  const receiptReplay = await write('editor', 'POST', '/v1/subjects:batchWrite', { commands }, batchKey);
+  expect(receiptReplay.body).toEqual(received.body);
+
+  const beforeGlobal = (await read(book.id, undefined, 'anonymous')).subject;
+  const beforeContext = (await read(book.id, context, 'anonymous')).subject;
+  const pendingSourced = (await candidatePage(book.id, 'schema:author', context, sourcedAuthor.id)).candidates.find(
+    (candidate) => candidate.id === sourcedCandidate,
+  )!;
+  const pendingCompeting = (await candidatePage(book.id, 'schema:author', context, competingAuthor.id)).candidates.find(
+    (candidate) => candidate.id === competingCandidate,
+  )!;
+  const pendingSummary = (await candidatePage(book.id, 'schema:abstract', context)).candidates.find(
+    (candidate) => candidate.id === summaryCandidate,
+  )!;
+  expect(pendingSourced).toMatchObject({
+    source: factSource,
+    revision: 2,
+    decision: null,
+    head: null,
+    rank: null,
+    statement: {
+      property: { id: 'schema:author' },
+      value: value(sourcedAuthor.id),
+      qualifiers: creditedAs('Natsume Sōseki'),
+      references: [{ hash: expect.any(String), parts: factReference.parts }],
+      rezics: { release: digest, revision: 2 },
+    },
+  });
+  expect(pendingCompeting).toMatchObject({
+    source: competingSource,
+    revision: 3,
+    decision: null,
+    rank: null,
+    statement: {
+      value: value(competingAuthor.id),
+      qualifiers: creditedAs('Sōseki Natsume'),
+      references: [{ hash: expect.any(String), parts: competingReference.parts }],
+    },
+  });
+  expect(pendingSummary).toMatchObject({
+    source: summarySource,
+    revision: 4,
+    decision: null,
+    rank: null,
+    statement: {
+      property: { id: 'schema:abstract' },
+      references: [{ hash: expect.any(String), parts: summaryReference.parts }],
+      rezics: { release: digest, revision: 4 },
+    },
+  });
+  expect(pendingSummary.statement.value.content).toMatchObject({
+    language: 'en',
+    document: expect.any(String),
+    digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+  });
+  expect(JSON.stringify(pendingSummary)).not.toContain(summaryText);
+  expect(beforeContext.statements['schema:author']).toEqual(beforeGlobal.statements['schema:author']);
+  expect(beforeContext.statements['schema:abstract'] ?? []).toEqual([]);
+
+  const docReference = pendingSummary.statement.value.content as {
+    language: string;
+    document: string;
+    digest: string;
+  };
+  const decisionBody = { context, expected_head: null };
+  const acceptancePath = (candidate: string, decision: 'accept' | 'reject' = 'accept') =>
+    `${subjectPath(book.id)}/candidates/${candidate}:${decision}`;
+  for (const [persona, status, code] of [
+    ['anonymous', 401, 'authentication_required'],
+    ['suspended', 401, 'invalid_credentials'],
+    ['outsider', 403, 'forbidden'],
+  ] as const) {
+    problem(await write(persona, 'POST', acceptancePath(sourcedCandidate), decisionBody), status, code);
+    problem(
+      await write(persona, 'POST', adoptionPath(book.id), {
+        context,
+        property: 'schema:author',
+        target: sourcedAuthor.id,
+        mode: 'replace',
+        selection: [selection(sourcedCandidate)],
+        expected_head: null,
+      }),
+      status,
+      code,
+    );
+  }
+  const beforeDecisions = await driver.inspect.revisions(book.id);
+  expect(beforeDecisions.map((row) => row.revision)).toEqual([1, 2, 3, 4]);
+
+  const acceptanceKey = key();
+  const accepted = await write('acceptor', 'POST', acceptancePath(sourcedCandidate), decisionBody, acceptanceKey);
+  expect(accepted.status).toBe(200);
+  expect(accepted.body.revision).toBe(5);
+  expect(await write('acceptor', 'POST', acceptancePath(sourcedCandidate), decisionBody, acceptanceKey)).toMatchObject({
+    body: accepted.body,
+  });
+  const rejected = await accept(book.id, competingCandidate, 'reject', context);
+  expect(rejected.body.revision).toBe(6);
+  const acceptedSummary = await accept(book.id, summaryCandidate, 'accept', context);
+  expect(acceptedSummary.body.revision).toBe(7);
+
+  const afterDecisions = await read(book.id, context, 'anonymous');
+  expect(afterDecisions.subject.statements['schema:author']).toEqual(beforeContext.statements['schema:author']);
+  expect(afterDecisions.subject.statements['schema:abstract'] ?? []).toEqual([]);
+  expect((await candidatePage(book.id, 'schema:author', context, sourcedAuthor.id)).candidates).toContainEqual(
+    expect.objectContaining({
+      id: sourcedCandidate,
+      source: factSource,
+      decision: 'accepted',
+      head: expect.any(Number),
+      rank: null,
+      statement: pendingSourced.statement,
+    }),
+  );
+  expect((await candidatePage(book.id, 'schema:author', context, competingAuthor.id)).candidates).toContainEqual(
+    expect.objectContaining({ id: competingCandidate, source: competingSource, decision: 'rejected', rank: null }),
+  );
+  expect(
+    (await candidatePage(book.id, 'schema:author', driver.globalContext, sourcedAuthor.id)).candidates,
+  ).toContainEqual(expect.objectContaining({ id: sourcedCandidate, decision: null, rank: null }));
+  expect((await candidatePage(book.id, 'schema:abstract', context)).candidates).toContainEqual(
+    expect.objectContaining({
+      id: summaryCandidate,
+      source: summarySource,
+      decision: 'accepted',
+      rank: null,
+      statement: pendingSummary.statement,
+    }),
+  );
+
+  const adoptionPathForBook = adoptionPath(book.id);
+  const initialAdoption = {
+    context,
+    property: 'schema:author',
+    target: sourcedAuthor.id,
+    mode: 'replace',
+    selection: [selection(sourcedCandidate)],
+    expected_head: null,
+  };
+  const competingAdoption = await write('acceptor', 'POST', adoptionPathForBook, initialAdoption);
+  expect(competingAdoption.status).toBe(200);
+  const intendedAdoption = {
+    ...initialAdoption,
+    selection: [selection(sourcedCandidate, 'preferred')],
+  };
+  problem(await write('acceptor', 'POST', adoptionPathForBook, intendedAdoption), 409, 'stale_editorial_head');
+  const currentSelection = (await read(book.id, context, 'acceptor')).subject.statements['schema:author']!.filter(
+    (candidate) => candidate.value.type === 'value' && candidate.value.content === sourcedAuthor.id,
+  );
+  expect(currentSelection.map((candidate) => [candidate.id, candidate.rank])).toEqual([[sourcedCandidate, 'normal']]);
+  const currentSlot = await candidatePage(book.id, 'schema:author', context, sourcedAuthor.id);
+  expect(currentSlot.adoption).toMatchObject({ mode: 'replace', head: expect.any(Number) });
+  const rebasedIntent = {
+    ...intendedAdoption,
+    selection: currentSelection.map((candidate) => ({ candidate: candidate.id, rank: 'preferred' as const })),
+    expected_head: currentSlot.adoption!.head,
+  };
+  const finalAdoptionKey = key();
+  const adopted = await write('acceptor', 'POST', adoptionPathForBook, rebasedIntent, finalAdoptionKey);
+  expect(adopted.status).toBe(200);
+  expect(adopted.body.revision).toBe(9);
+  const adoptionReplay = await write('acceptor', 'POST', adoptionPathForBook, rebasedIntent, finalAdoptionKey);
+  expect(adoptionReplay.body).toEqual(adopted.body);
+
+  const summaryAdoption = await write('acceptor', 'POST', adoptionPathForBook, {
+    context,
+    property: 'schema:abstract',
+    mode: 'replace',
+    selection: [selection(summaryCandidate)],
+    expected_head: null,
+  });
+  expect(summaryAdoption.status).toBe(200);
+  expect(summaryAdoption.body.revision).toBe(10);
+  const selectedAuthor = (await candidatePage(book.id, 'schema:author', context, sourcedAuthor.id)).candidates.find(
+    (candidate) => candidate.id === sourcedCandidate,
+  )!;
+  expect(selectedAuthor).toMatchObject({
+    source: factSource,
+    decision: 'accepted',
+    rank: 'preferred',
+    statement: pendingSourced.statement,
+  });
+  expect((await candidatePage(book.id, 'schema:author', context, competingAuthor.id)).candidates).toContainEqual(
+    expect.objectContaining({
+      id: competingCandidate,
+      decision: 'rejected',
+      rank: null,
+      statement: pendingCompeting.statement,
+    }),
+  );
+
+  const current = await read(book.id, context, 'anonymous');
+  const currentFact = current.subject.statements['schema:author']!.find(
+    (candidate) => candidate.id === sourcedCandidate,
+  )!;
+  const currentSummary = current.subject.statements['schema:abstract']!.find(
+    (candidate) => candidate.id === summaryCandidate,
+  )!;
+  expect(currentFact).toMatchObject({
+    rank: 'preferred',
+    value: value(sourcedAuthor.id),
+    qualifiers: creditedAs('Natsume Sōseki'),
+    references: [{ hash: expect.any(String), parts: factReference.parts }],
+    rezics: { release: digest, revision: 2 },
+  });
+  expect(currentFact.references).toEqual(pendingSourced.statement.references);
+  expect(current.subject.statements['schema:author']).not.toContainEqual(
+    expect.objectContaining({ id: competingCandidate }),
+  );
+  expect(currentSummary).toMatchObject({
+    value: { type: 'value', content: docReference },
+    references: [{ hash: expect.any(String), parts: summaryReference.parts }],
+    rezics: { release: digest, revision: 4 },
+  });
+  expect(currentSummary.references).toEqual(pendingSummary.statement.references);
+  expect(current.related[sourcedAuthor.id]?.labels.en).toBe('Kokoro editorial collective');
+  expect((await read(book.id, context, 'outsider')).subject).toEqual(current.subject);
+
+  const document = await get(`/v1/documents/${docReference.document}`, 'anonymous');
+  expect(document.status).toBe(200);
+  expect(document.body.document).toMatchObject({
+    source: { ...summarySource, references: [summaryReference] },
+    rights: {
+      license: 'CC-BY-SA-3.0',
+      obligations: ['cc:Attribution', 'cc:ShareAlike'],
+      attribution: 'Open Library contributors',
+    },
+    language: 'en',
+    digest: docReference.digest,
+    availability: 'available',
+    body: summaryBody,
+  });
+
+  const inversePath = `${subjectPath(sourcedAuthor.id)}/links?property=schema:author&context=${encodeURIComponent(context)}`;
+  const inverseDeadline = performance.now() + 15_000;
+  let inverse: HttpResponse | undefined;
+  do {
+    inverse = await get(inversePath, 'anonymous');
+    expect(inverse.status).toBe(200);
+    expect(inverse.body.freshness).toMatchObject({
+      consistency: 'eventual',
+      target_seconds: 10,
+      caught_up: expect.any(Boolean),
+    });
+    const linked = (inverse.body.links as { subject: string; statement: string }[]).find(
+      (row) => row.subject === book.id && row.statement === sourcedCandidate,
+    );
+    if (linked) {
+      expect(inverse.body.freshness).toMatchObject({ caught_up: true });
+      break;
+    }
+  } while (performance.now() < inverseDeadline);
+  expect(inverse?.body.links).toContainEqual(
+    expect.objectContaining({ subject: book.id, property: 'schema:author', statement: sourcedCandidate }),
+  );
+  const relationPage = await get(
+    `${subjectPath(book.id)}/relations?property=schema%3Aauthor&context=${encodeURIComponent(context)}&language=en`,
+    'anonymous',
+  );
+  expect(relationPage.status).toBe(200);
+  expect(relationPage.body.freshness).toMatchObject({ consistency: 'eventual', target_seconds: 10, caught_up: true });
+  expect(relationPage.body.relations).toContainEqual(
+    expect.objectContaining({ statement: currentFact, target: sourcedAuthor.id }),
+  );
+
+  const globalAfter = (await read(book.id, undefined, 'anonymous')).subject;
+  expect(globalAfter.statements).toEqual(beforeGlobal.statements);
+  const history = await get(`${subjectPath(book.id)}/revisions`, 'anonymous');
+  expect(history.status).toBe(200);
+  expect(
+    (history.body.revisions as { revision: number; kind: string; source: unknown }[]).map((row) => [
+      row.revision,
+      row.kind,
+      row.source,
+    ]),
+  ).toEqual([
+    [10, 'adopt', null],
+    [9, 'adopt', null],
+    [8, 'adopt', null],
+    [7, 'accept', null],
+    [6, 'reject', null],
+    [5, 'accept', null],
+    [4, 'propose', summarySource],
+    [3, 'propose', competingSource],
+    [2, 'propose', factSource],
+    [1, 'create', null],
+  ]);
+  const revisions = await driver.inspect.revisions(book.id);
+  expect(revisions.map((row) => row.revision)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  expect(new Set(revisions.map((row) => row.partition)).size).toBe(1);
+  expect(new Set(revisions.map((row) => row.transactionId)).size).toBe(10);
 });
 
 test('Rejected date candidates remain deprecated and relation adoptions stay within their target slots', async () => {

@@ -550,14 +550,18 @@ async function startDriver(
       return variant;
     }
 
-    const [governor, editor, acceptor, steward, suspended] = await Promise.all([
+    const [governor, editor, acceptor, steward, suspended, outsider] = await Promise.all([
       person('governor', { scopes: governanceScopes }),
       person('editor'),
       person('acceptor'),
       person('steward'),
       person('suspended'),
+      person('outsider'),
     ]);
-    const accounts = { editor, acceptor, steward, suspended } satisfies Record<Exclude<Persona, 'anonymous'>, Account>;
+    const accounts = { editor, acceptor, steward, suspended, outsider } satisfies Record<
+      Exclude<Persona, 'anonymous'>,
+      Account
+    >;
 
     const kernelPool = runtimePool;
     await setupSemantic(kernelPool, bundledRelease);

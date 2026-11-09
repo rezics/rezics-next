@@ -233,7 +233,7 @@ Released fixture: Public created Concepts/schemes and fact receipts; competing/r
 | Mounted Zone             | Source Context and subject eligibility apply independently of Zone grants.                                                                |
 | Configured TypeList      | Related labels, rank/pin/reference and Context suppression are visible with current authority; one command writes one partition revision. |
 
-Scenarios and binding: Existing original semantic proposal/acceptance/adoption/Context/replay/no-effect scenarios; TO-FREEZE released competing-claims provenance.
+Scenarios and binding: Existing original semantic proposal/acceptance/adoption/Context/replay/no-effect scenarios plus the installed sourced fact and summary journey in `specs/semantic-outcomes.test.ts`, which distinguishes pending, accepted, rejected and adopted claims, replays receipts, resolves a stale adoption from current readback, reads the imported Content document, and verifies Context-local public selection and inverse freshness.
 
 Stages: Declared: yes. Partial bound/exposed: native editorial APIs; full released claims/history traversal open. API-passed: unrecorded; promoted: no.
 
