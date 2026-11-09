@@ -4,6 +4,8 @@ import {
   analyzeInstalled,
   CJK_ANALYZER,
   ENGINE_ANALYSIS_LIMITS,
+  NAME_KEY_NORMALIZER,
+  NAME_PREFIX_ANALYZER,
   installedAnalysisPlugins,
   requireDevelopmentAnalyzer,
   sourceSpan,
@@ -53,6 +55,27 @@ test('malformed analyzer replies are unavailable without retaining engine bodies
   await unavailable(() => analyze({ tokens: 'rust' }));
   await unavailable(() => analyze({ tokens: Array.from({ length: ENGINE_ANALYSIS_LIMITS.tokens + 1 }, token) }));
   await unavailable(() => analyze({ tokens: [token({ token: 1 })] }));
+  for (const analyzer of [CJK_ANALYZER, NAME_PREFIX_ANALYZER])
+    await unavailable(() =>
+      analyzeInstalled(
+        client(async () => ({ status: 200, body: { tokens: [token({ token: '' })] } })),
+        undefined,
+        {
+          analyzer,
+          text: 'rust',
+        },
+      ),
+    );
+  expect(
+    await analyzeInstalled(
+      client(async () => ({ status: 200, body: { tokens: [token({ token: '' })] } })),
+      undefined,
+      {
+        normalizer: NAME_KEY_NORMALIZER,
+        text: '\u200B'.repeat(4),
+      },
+    ),
+  ).toEqual([{ token: '', position: 0, startOffset: 0, endOffset: 4 }]);
   await unavailable(() => analyze({ tokens: [token({ token: '\uD800' })] }));
   await unavailable(() => analyze({ tokens: [token({ position: -1 })] }));
   await unavailable(() => analyze({ tokens: [token({ start_offset: 2, end_offset: 2 })] }));

@@ -75,6 +75,20 @@ test('malformed analyzer replies stay unavailable, and native scan truncation ke
   expect(error).not.toHaveProperty('body');
   expect(JSON.stringify(error)).not.toContain('generation-internal');
 
+  const emptyToken = createCurrentTextDisclosure(
+    client(async () => ({
+      status: 200,
+      body: { tokens: [{ token: '', position: 0, start_offset: 0, end_offset: 1 }] },
+    })),
+    'subjects-test-1',
+  );
+  await expect(emptyToken.matchesPrefix(releasedMultilingualSubject(), 'absent')).rejects.toBeInstanceOf(
+    SearchUnavailableError,
+  );
+  await expect(emptyToken.matchesText(releasedMultilingualSubject(), parseText('absent'))).rejects.toBeInstanceOf(
+    SearchUnavailableError,
+  );
+
   const analyzed: string[] = [];
   const bounded = createCurrentTextDisclosure(
     analyzing((_analyzer, text) => analyzed.push(text)),

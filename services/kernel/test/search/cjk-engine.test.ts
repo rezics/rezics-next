@@ -4,7 +4,12 @@ import { applySubjectKeys } from '../../src/search/indexer.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
 import { compileMatchEvidence, projectMatchEvidence } from '../../src/search/match-evidence.ts';
 import { projectHit } from '../../src/search/hits.ts';
-import { analyzeInstalled, CJK_ANALYZER, requireDevelopmentAnalyzer } from '../../src/search/engine-analysis.ts';
+import {
+  analyzeInstalled,
+  CJK_ANALYZER,
+  requireDevelopmentAnalyzer,
+  sourceSpan,
+} from '../../src/search/engine-analysis.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import {
   EVIDENCE_HIT_TEMPLATE,
@@ -76,6 +81,19 @@ test('the documented development analyzer is OpenSearch 3.x with analysis-icu an
   expect(mapping.body[index]!.mappings.properties.names.index_options).toBe('offsets');
   expect(await tokens(index, '魔法禁書目錄')).toEqual(['魔法', '法禁', '禁书', '书目', '目录']);
   expect(await tokens(index, '命運石之門')).toEqual(await tokens(index, '命运石之门'));
+  const originalName = '命運石之門';
+  expect(
+    (await analyzeInstalled(search, index, { analyzer: CJK_ANALYZER, text: originalName })).map((token) => ({
+      token: token.token,
+      position: token.position,
+      source: sourceSpan(originalName, token),
+    })),
+  ).toEqual([
+    { token: '命运', position: 0, source: '命運' },
+    { token: '运石', position: 1, source: '運石' },
+    { token: '石之', position: 2, source: '石之' },
+    { token: '之门', position: 3, source: '之門' },
+  ]);
   expect(await tokens(index, 'ｶﾞﾗｽ')).toEqual(['ガラ', 'ラス']);
   expect(await tokens(index, ' Shutage ')).toEqual(['shutage']);
   expect(await tokens(index, 'シュタインズ・ゲート')).toEqual(await tokens(index, 'しゅたいんず・げーと'));
@@ -137,7 +155,13 @@ test('released names go through the ordinary writer into the physical index and 
   });
   const traditional = await evidence('命運石之門');
   expect(traditional.ids).toEqual([RELEASED_NAME_ID]);
-  expect(traditional.evidence).toMatchObject({ state: 'current', source: { revision: 7 } });
+  expect(traditional.evidence).toMatchObject({
+    state: 'current',
+    source: { revision: 7 },
+    reasons: expect.arrayContaining([
+      expect.objectContaining({ field: 'title', language: 'zh-Hant', text: '命運石之門' }),
+    ]),
+  });
   const kana = await evidence('シュタインズ・ゲート');
   expect(kana.ids).toEqual([RELEASED_NAME_ID]);
   expect(kana.evidence).toMatchObject({
@@ -174,6 +198,10 @@ test('released names go through the ordinary writer into the physical index and 
       state: 'current',
       reasons: [{ field: 'alias', language: 'und', text: 'Shutage' }],
     });
+    expect(
+      projectHit(original, { descriptions: false, languages: [language], matchEvidence: traditional.evidence })
+        .matchEvidence,
+    ).toEqual(traditional.evidence);
   }
 
   const prefixHits = await suggestSubjects(search, prefix, { text: '命运', size: 10 });
@@ -183,15 +211,31 @@ test('released names go through the ordinary writer into the physical index and 
   const latinPrefix = await suggestSubjects(search, prefix, { text: 'Shut', size: 10 });
   expect(latinPrefix.map((hit) => hit.id)).toEqual([RELEASED_NAME_ID]);
   const disclosure = createCurrentTextDisclosure(search, index);
+  for (const query of ['命运石之门', '命運石之門', 'しゅたいんず・げーと', 'Mingyun Shi zhi Men', '石头门'])
+    expect(await disclosure.matchesText(original, parseText(query))).toBe(true);
+  for (const prefixText of ['命運', 'しゅた', 'Mingyun Sh', 'Absent']) {
+    const hits = await suggestSubjects(search, prefix, { text: prefixText, size: 10 });
+    expect(hits.map((hit) => hit.id)).toEqual(prefixText === 'Absent' ? [] : [RELEASED_NAME_ID]);
+    expect(await disclosure.matchesPrefix(original, prefixText)).toBe(prefixText !== 'Absent');
+  }
   expect(await disclosure.matchesPrefix(original, '命运')).toBe(true);
   expect(await disclosure.matchesPrefix(original, 'Shut')).toBe(true);
   expect(await disclosure.matchesText(original, parseText('shutage'))).toBe(true);
   expect(await disclosure.matchesText(original, parseText('魔法禁書目錄外伝'))).toBe(false);
 
   source.put(RELEASED_CURRENT_PUBLICATION);
+  // The source changes first: a stale physical hit cannot certify retired text while indexing catches up.
+  const current = (await source.read(10, [RELEASED_NAME_ID])).subjects[0]!;
+  expect(current.securityRevision).toBe(8);
+  const lagging = await evidence('shutage');
+  expect(lagging.ids).toEqual([RELEASED_NAME_ID]);
+  expect(lagging.evidence).toEqual({ state: 'unavailable' });
+  expect(await disclosure.matchesText(current, parseText('shutage'))).toBe(false);
+  expect(await disclosure.matchesPrefix(current, 'Shut')).toBe(false);
   await publish(prefix, source, 1n);
   const retired = await evidence('shutage');
   expect(retired.ids).toEqual([]);
+  expect((await suggestSubjects(search, prefix, { text: 'Shut', size: 10 })).map((hit) => hit.id)).toEqual([]);
   const elite = await evidence('命运石之门 Elite');
   expect(elite.ids).toEqual([RELEASED_NAME_ID]);
   expect(elite.evidence).toMatchObject({
