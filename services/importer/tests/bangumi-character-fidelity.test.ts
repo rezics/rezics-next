@@ -4,7 +4,10 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
-import type { NativeIdentity, SourceVocabularyBindings, SourceVocabularyRow } from '@rezics/conversion';
+import type { NativeIdentity, SourceRecord, SourceVocabularyBindings, SourceVocabularyRow } from '@rezics/conversion';
+import { runBangumiCharacterFidelity } from '../src/bangumi-character-fidelity.ts';
+import { ImportTransportError, type ReviewedSubjectRead } from '../src/import-client.ts';
+import type { Importer } from '../src/importer.ts';
 import { crossMediaAliases } from '../src/cross-media-seed.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 
@@ -192,4 +195,70 @@ test('Bangumi character facts retain source identities, concepts, citation, and 
       property: 'schema:position',
     }),
   );
+});
+
+test('Character fidelity bounds the identity read burst before importing and preserves source order and native errors', async () => {
+  const records: SourceRecord[] = Array.from({ length: 16 }, (_, i) => ({
+    source: 'bangumi',
+    key: `character:${i + 1}`,
+    revision: null,
+    payload: { type: 1 },
+  }));
+  const subjects = new Map(records.map(({ key }, i) => [key, uuid(i + 100)]));
+  const requested: string[] = [];
+  const imported: string[] = [];
+  const importer = {
+    session: {
+      bindings: {
+        claim: ({ external_id }: { external_id: string }) => ({ state: 'bound', subject: subjects.get(external_id) }),
+      },
+    },
+    async runRecords(_registration: unknown, input: AsyncIterable<SourceRecord>) {
+      for await (const record of input) imported.push(record.key);
+      return { status: 'committed' };
+    },
+  } as unknown as Importer;
+  let active = 0,
+    peak = 0,
+    failure: Error | undefined;
+  const port = {
+    async readReviewedSubject(id: string): Promise<ReviewedSubjectRead> {
+      requested.push(id);
+      peak = Math.max(peak, ++active);
+      await Promise.resolve();
+      active--;
+      if (failure && id === uuid(100)) throw failure;
+      return {
+        subject: {
+          id,
+          type: 'wd:Q95074',
+          statements: { 'wdt:P6296': [{ value: { type: 'value', content: String(Number(id.slice(-12)) - 99) } }] },
+        },
+      } as unknown as ReviewedSubjectRead;
+    },
+  };
+  const run = () =>
+    runBangumiCharacterFidelity({
+      importer,
+      port,
+      sourceAlias: crossMediaAliases.bangumi,
+      records,
+      appearances: records.map((_, i) => ({ subjectId: '1', characterId: i + 1, sourceIndex: i, roleCode: 1 })),
+    });
+  await run();
+  expect(peak).toBe(4);
+  expect(requested).toEqual([...subjects.values()]);
+  expect(imported).toEqual(records.map(({ key }) => key));
+  requested.length = imported.length = 0;
+  failure = new ImportTransportError(
+    503,
+    'https://rezics.com/problems/overloaded',
+    'overloaded',
+    true,
+    undefined,
+    'SubjectGET503',
+  );
+  await expect(run()).rejects.toBe(failure);
+  expect(requested).toEqual([...subjects.values()].slice(0, 4));
+  expect(imported).toEqual([]);
 });
