@@ -387,8 +387,8 @@ async function query<R extends QueryResultRow>(
       const config = { text: declared.sql, values: [...values], query_timeout: Math.max(1, l.deadline - Date.now()) };
       const rows = (await client.query<R>(config)).rows;
       if (rows.length > declared.rows) throw new ProblemError('dependency_unavailable');
-      if (Buffer.byteLength(JSON.stringify(rows) ?? '') > declared.resultBytes)
-        throw new ProblemError('dependency_unavailable');
+      const resultBytes = rows.length === 0 ? 0 : Buffer.byteLength(JSON.stringify(rows));
+      if (resultBytes > declared.resultBytes) throw new ProblemError('dependency_unavailable');
       return rows;
     },
     (rows) => ({

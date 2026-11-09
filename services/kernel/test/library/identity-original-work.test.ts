@@ -171,6 +171,8 @@ test('native custody statements share one closed nine-axis operation plan and re
     owner_epoch: 1,
     receiving_epoch: '1',
     effect_key: 'effect',
+    collection_fence: '1',
+    account_fence: '1',
     output_generation: null,
     publication_transaction_id: null,
     publication_position: null,
@@ -185,6 +187,15 @@ test('native custody statements share one closed nine-axis operation plan and re
     hold_id: id,
   };
   const values = query.params.map((name) => valid[name]);
+  const start = nativeSourceCustodyQueries().start;
+  const startValues = (overrides: Readonly<Record<string, unknown>>) => {
+    const operands = { ...valid, ...overrides };
+    return start.params.map((name) => operands[name]);
+  };
+  for (const scope of ['curated', 'private_builtin'])
+    expect(nativeSourceCustodyStatementBound(start.sql, startValues({ scope }))).toBeDefined();
+  for (const publication_position of ['0', '-1', '9223372036854775808'])
+    expect(nativeSourceCustodyStatementBound(start.sql, startValues({ publication_position }))).toBeUndefined();
   const bound = nativeSourceCustodyStatementBound(query.sql, values);
   expect(bound).toBeDefined();
   expect(Object.keys(bound!).sort()).toEqual([...BOUND_AXES].sort());
