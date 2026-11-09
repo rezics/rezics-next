@@ -381,7 +381,7 @@ for (const operation of ['create', 'propose'] as const)
         {
           async batch({ commands: page }: BatchWriteRequest): Promise<BatchWriteResult> {
             sent.push(page);
-            if (page.length > 4) throw new Error('unbounded staff vocabulary envelope');
+            if (page.length > (operation === 'create' ? 1 : 4)) throw new Error('unbounded staff vocabulary envelope');
             return {
               results: page.map((command) => {
                 const index = commands.findIndex(({ key }) => command.key === key);
@@ -419,12 +419,18 @@ for (const operation of ['create', 'propose'] as const)
           },
         });
       await expect(write()).rejects.toThrow('Bangumi staff vocabulary write failed: 503');
-      expect(sent).toEqual([commands.slice(0, 4), commands.slice(4, 8)]);
+      expect(sent).toEqual(
+        operation === 'create'
+          ? commands.slice(0, 5).map((command) => [command])
+          : [commands.slice(0, 4), commands.slice(4, 8)],
+      );
       expect(journal.preparedCommands().map(({ command }) => command)).toEqual([commands[4]!]);
-      expect(journal.acknowledgedCommands()).toHaveLength(7);
+      expect(journal.acknowledgedCommands()).toHaveLength(operation === 'create' ? 4 : 7);
       exhausted = false;
       const ids = await write();
-      expect(sent.slice(2)).toEqual([[commands[4]!, commands[8]!]]);
+      expect(sent.slice(operation === 'create' ? 5 : 2)).toEqual(
+        operation === 'create' ? commands.slice(4).map((command) => [command]) : [[commands[4]!, commands[8]!]],
+      );
       if (operation === 'create')
         expect(commands.map(({ key }) => ids.get(key))).toEqual(commands.map((_, index) => id(index)));
       else expect(ids.size).toBe(0);
