@@ -282,7 +282,7 @@ test('manager renew accepts budget-limited and blocked Codex Goals without a sep
   for (const status of ['budgetLimited', 'blocked'] as const) {
     const s = await setup();
     try {
-      const started = await s.managers.start(s.spec);
+      const started = await s.managers.start({ ...s.spec, goals: [s.spec.goal, 'search'] });
       await s.managers.flush();
       const state = s.managers.get(started.id);
       state.goalState = { status, tokensUsed: 950, timeUsedSeconds: 10, tokenBudget: s.spec.budget };
@@ -291,6 +291,7 @@ test('manager renew accepts budget-limited and blocked Codex Goals without a sep
       const renewed = await s.managers.renew(started.id, s.spec);
       expect(renewed.status).toBe('running');
       expect(renewed.threadId).not.toBe(started.threadId);
+      expect(renewed.goals).toEqual([s.spec.goal, 'search']);
       expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(2);
     } finally {
       await s.close();
