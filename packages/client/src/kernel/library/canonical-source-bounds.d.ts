@@ -38,6 +38,7 @@ export type CanonicalSourceRawKey = Readonly<{
 }>;
 export declare const CANONICAL_SOURCE_SQL: Readonly<{
     scope: "SELECT identity,frontier,capture_id::text AS capture,committed_revision::text AS revision\n  FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence=$3";
+    predecessorScope: "SELECT identity,frontier,capture_id::text AS capture,committed_revision::text AS revision\n  FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence<>$3 ORDER BY source_fence LIMIT 1";
     head: "SELECT generation::text FROM library.canonical_source_head WHERE route=$1 AND collection_id=$2";
     generation: "SELECT generation::text,basis,driver,after_subject::text,after_fact::text,source_exhausted,state,version::text\n  FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 AND generation=$3";
     workingGeneration: "SELECT generation::text,basis,driver,after_subject::text,after_fact::text,source_exhausted,state,version::text\n  FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 AND state='working' FOR UPDATE";
@@ -59,6 +60,15 @@ export declare const CANONICAL_SOURCE_SQL: Readonly<{
 }>;
 export declare function CANONICAL_SOURCE_STATEMENTS(): Readonly<{
     scope: Readonly<{
+        name: string;
+        sql: string;
+        requestBytes: number;
+        resultBytes: number;
+        rows: number;
+        raw: boolean;
+        bound: CanonicalSourceSqlBound;
+    }>;
+    predecessorScope: Readonly<{
         name: string;
         sql: string;
         requestBytes: number;
@@ -263,6 +273,15 @@ export declare function CANONICAL_SOURCE_DECLARATION(observations?: LibrarySeman
     }>;
     statements: Readonly<{
         scope: Readonly<{
+            name: string;
+            sql: string;
+            requestBytes: number;
+            resultBytes: number;
+            rows: number;
+            raw: boolean;
+            bound: CanonicalSourceSqlBound;
+        }>;
+        predecessorScope: Readonly<{
             name: string;
             sql: string;
             requestBytes: number;
