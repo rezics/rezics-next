@@ -492,3 +492,54 @@ test('a later acknowledgement is visible only on a new invocation', async () => 
     state.close();
   }
 });
+
+test('a reciprocal proposal can acknowledge native candidate reuse without replacing its ownership or reserving twice', () => {
+  const f = fixture();
+  try {
+    const record = owner('vndb_cross_media', 'p24');
+    const subject = uuid(1),
+      candidate = uuid(2),
+      bootstrap = key(record, 'create');
+    f.bindings.prepare(record, 'create', createRequest(record, bootstrap));
+    f.bindings.acknowledge(record, bootstrap, createAck(bootstrap, subject));
+    const originalKey = key(record, 'sub'),
+      reusedKey = key(record, 'par');
+    const request = proposeRequest(record, originalKey, subject);
+    const original = request.commands[0]!;
+    if (original.op !== 'propose') throw new Error('fixture proposal expected');
+    original.statement.property.id = 'wdt:P749';
+    original.statement.value = { type: 'value', content: uuid(3) };
+    const attachment = f.bindings.prepare(record, 'original', request);
+    f.bindings.acknowledge(record, originalKey, proposeAck(originalKey, candidate));
+    const reused = structuredClone(original);
+    reused.key = reusedKey;
+    reused.source.digest = 'b'.repeat(64);
+    reused.statement.references![0]!.parts[0]!.value = {
+      type: 'value',
+      content: 'https://vndb.org/p24#/producers_relations/p24/p993',
+    };
+    f.bindings.prepare(record, 'reciprocal', { commands: [reused] });
+    expect(() => f.bindings.acknowledge(record, reusedKey, proposeAck(reusedKey, candidate))).toThrow();
+    const receipt: BatchWriteResult = { results: [{ key: reusedKey, status: 200, value: { candidate, revision: 2 } }] };
+    f.bindings.acknowledge(record, reusedKey, receipt);
+    f.bindings.acknowledge(record, reusedKey, receipt);
+    expect(f.snapshot().candidates).toEqual([
+      expect.objectContaining({ candidate, key: originalKey, bytes: attachment.bytes }),
+    ]);
+    expect(f.snapshot().records).toEqual([expect.objectContaining({ candidate_count: 1 })]);
+    expect(f.snapshot().journals).toContainEqual(
+      expect.objectContaining({ key: reusedKey, acknowledgement: JSON.stringify(receipt) }),
+    );
+    const different = {
+      ...reused,
+      key: key(record, 'different'),
+      statement: { ...reused.statement, value: { type: 'value' as const, content: uuid(4) } },
+    };
+    f.bindings.prepare(record, 'different', { commands: [different] });
+    expect(() =>
+      f.bindings.acknowledge(record, different.key, { results: [{ ...receipt.results[0]!, key: different.key }] }),
+    ).toThrow();
+  } finally {
+    f.close();
+  }
+});

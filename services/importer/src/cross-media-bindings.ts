@@ -21,6 +21,9 @@ import {
 import type { Claim } from './record-bindings.ts';
 import type { VndbWorkRelationEvidence } from './showcase-vndb-relations.ts';
 
+// The public batch maximum is a schema bound, not a deadline budget for graph proposals.
+const GRAPH_PROPOSAL_PAGE = 32;
+
 export type Provider = 'bangumi' | 'vndb';
 export type GraphMembership = 'family' | 'referenced';
 export type GraphEdgeDraft = {
@@ -987,8 +990,8 @@ export class CrossMediaGraph {
       commands.filter((entry) => Boolean(entry.draft.producerParent)),
     ];
     for (const group of groups) {
-      for (let offset = 0; offset < group.length; offset += BATCH_LIMIT) {
-        const page = group.slice(offset, offset + BATCH_LIMIT);
+      for (let offset = 0; offset < group.length; offset += GRAPH_PROPOSAL_PAGE) {
+        const page = group.slice(offset, offset + GRAPH_PROPOSAL_PAGE);
         if (checkBatchWrite({ commands: page.map((entry) => entry.command) }).length)
           throw new TypeError('Cross-media relation proposals failed portable validation');
         const result = await input.batch({ commands: page.map((entry) => entry.command) });

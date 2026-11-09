@@ -486,18 +486,34 @@ export class RecordBindings {
         ensure(binding.state === 'bound' && binding.subject === command.subject);
         const group = command.source.field_group;
         if (command.op === 'propose') {
-          ensure('candidate' in returned && !this.candidate(o, group, returned.candidate));
-          this.run(
-            'INSERT INTO binding_candidates (source, external_id, field_group, candidate, subject, key, bytes, signature) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            o.source,
-            o.external_id,
-            group,
-            returned.candidate,
-            command.subject,
-            key,
-            entry.bytes,
-            entry.signature,
-          );
+          ensure('candidate' in returned);
+          const existing = this.candidate(o, group, returned.candidate);
+          if (existing) {
+            const original = (JSON.parse(existing.bytes) as BatchWriteRequest).commands[0];
+            // Native proposal identity excludes citations and rank. A reuse receipt seals this request without
+            // changing the canonical candidate attachment or keeping its second capacity reservation.
+            ensure(
+              response.status === 200 &&
+                existing.subject === command.subject &&
+                original?.op === 'propose' &&
+                isDeepStrictEqual(original.statement.property, command.statement.property) &&
+                isDeepStrictEqual(original.statement.value, command.statement.value) &&
+                isDeepStrictEqual(original.statement.qualifiers ?? [], command.statement.qualifiers ?? []),
+            );
+            this.changeCapacity(o, group, -1);
+          } else {
+            this.run(
+              'INSERT INTO binding_candidates (source, external_id, field_group, candidate, subject, key, bytes, signature) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+              o.source,
+              o.external_id,
+              group,
+              returned.candidate,
+              command.subject,
+              key,
+              entry.bytes,
+              entry.signature,
+            );
+          }
         } else {
           const current = this.candidate(o, group, command.candidate);
           ensure(current && current.subject === command.subject);
