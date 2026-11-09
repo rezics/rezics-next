@@ -152,10 +152,10 @@ test('Actual history provenance belongs to its one prepared native dispatch, pre
     expect(calls).toHaveLength(count);
     preparation = 'unavailable';
     await expect(orders.readBuyerOrdersCurrent({ data: { locale: 'en' } })).rejects.toMatchObject({
-      problem: { status: 502, code: 'dependency_unavailable' },
+      problem: { status: 502, code: 'session_unavailable' },
     });
     await expect(orders.readBuyerOrders({ data: {} })).rejects.toMatchObject({
-      problem: { status: 502, code: 'dependency_unavailable' },
+      problem: { status: 502, code: 'session_unavailable' },
     });
     expect(calls).toHaveLength(count);
 
@@ -265,7 +265,7 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     m.orders_entitlement_pending(),
   );
   expect(historical.querySelector('[data-settlement="failed"]')!.textContent).toContain(
-    m.statements_amount_unavailable(),
+    m.money_raw_minor_unknown_unit({ amount: '78901', currency: 'USD' }),
   );
   expect(historical.querySelector('[data-settlement="failed"]')!.textContent).toContain(m.commerce_tax_unknown());
   expect(historical.querySelector('[data-settlement="failed"]')!.textContent).toContain(m.orders_entitlement_none());
