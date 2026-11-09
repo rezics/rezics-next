@@ -256,15 +256,22 @@ afterAll(async () => {
 
 test("a community Context's relation pages show its accepted, replaced and suppressed relations over Global's", async () => {
   const appearances = await forward('ex:appearance');
+  expect(appearances.freshness).toMatchObject({ consistency: 'eventual', target_seconds: 10, caught_up: true });
   expect(appearances.relations.map((row: any) => [row.statement.id, row.target, row.label])).toEqual([
     [newAppearance, people[2], '人物2'],
   ]);
   expect(appearances.next).toBeNull();
   const credits = await forward('ex:credit');
+  expect(credits.freshness).toMatchObject({ consistency: 'eventual', target_seconds: 10, caught_up: true });
   expect(credits.relations.map((row: any) => row.statement.id)).toEqual([newCredit]);
-  expect((await inverse(people[0]!, 'ex:appearance')).links).toEqual([]);
-  expect((await inverse(people[2]!, 'ex:appearance')).links.map((row: any) => row.statement)).toEqual([newAppearance]);
-  expect((await inverse(people[1]!, 'ex:credit')).links.map((row: any) => row.statement)).toEqual([newCredit]);
+  const oldAppearanceLinks = await inverse(people[0]!, 'ex:appearance');
+  const newAppearanceLinks = await inverse(people[2]!, 'ex:appearance');
+  const creditLinks = await inverse(people[1]!, 'ex:credit');
+  for (const page of [oldAppearanceLinks, newAppearanceLinks, creditLinks])
+    expect(page.freshness).toMatchObject({ consistency: 'eventual', target_seconds: 10, caught_up: true });
+  expect(oldAppearanceLinks.links).toEqual([]);
+  expect(newAppearanceLinks.links.map((row: any) => row.statement)).toEqual([newAppearance]);
+  expect(creditLinks.links.map((row: any) => row.statement)).toEqual([newCredit]);
   const preview = (await call('GET', `/v1/subjects/${work}?context=${context}`)).subject;
   expect(preview.statements['ex:appearance'].map((row: any) => row.id)).toEqual([newAppearance]);
   expect(preview.statements['ex:credit'].map((row: any) => row.id)).toEqual([newCredit]);

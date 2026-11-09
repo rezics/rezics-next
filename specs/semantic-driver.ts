@@ -24,7 +24,7 @@
  * definitions:activate. Suspended has editor's and acceptor's grants but its
  * account is suspended. No other allow grants exist initially.
  */
-export type Persona = 'anonymous' | 'editor' | 'acceptor' | 'steward' | 'suspended';
+export type Persona = 'anonymous' | 'editor' | 'acceptor' | 'steward' | 'suspended' | 'outsider';
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Release = { [key: string]: Json };
 export type Labels = Record<string, string>;

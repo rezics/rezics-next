@@ -2,6 +2,8 @@
 
 Decision: `candidate-proposal.ts`, `candidate-decision.ts`, `candidate-adoption.ts` and `candidate-read.ts` own proposal writes, acceptance/rejection, adoption, and paged current readback. `candidate-contract.ts`, `candidate-command.ts`, `candidate-authored.ts` and `candidate-pagination.ts` own shared contracts and collaborators. HTTP and bulk bind directly to these owners; `candidates.ts` remains a re-export compatibility facade.
 
+Decision: a sourced correction enters through the bulk receipt, receives Context-local acceptance or rejection, and is adopted independently; stale adoption is rebuilt from current selected readback, while imported summary bodies remain Content-owned immutable documents and both forward and inverse reads report current freshness.
+
 Integration decision: retain current Search and Library producer bindings and the completed Kernel action catalogue; worker authorization uses its native Access callback. Workspace typing is the worker gate; original native and browser assertions run after integration.
 
 Decision: disclosed Subject and cover summaries live in `contract/summaries.ts`. Transport schemas re-export those same pure schemas through
