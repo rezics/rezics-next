@@ -43,7 +43,8 @@ remains separate from the focused listener check; cancellation settles the attem
 
 The installed live Paraglide plugin validates its own content cache, primed under the existing message lock with
 `message-modules` output. Direct imports preserve explicit locales and computed message families; unrestricted
-namespace uses retain the full namespace. Plain property names such as the shelf density key `m` do not
+namespace uses retain the full namespace. Rules-authoring labels call their declared message functions directly;
+an unrestricted fallback lookup had loaded every catalogue module before the integrated stack could listen. Plain property names such as the shelf density key `m` do not
 count as namespace references; passing `{ m }` still retains all exports. Generated SSR catalogues omit redundant source maps; authored maps remain.
 The ordinary app defaults to a 2 GiB V8 heap, retaining an explicit caller limit and other Node options. Its Worker
 optimizer includes the UI's icon and primitive packages and finishes in a disposable process before Cloudflare loads

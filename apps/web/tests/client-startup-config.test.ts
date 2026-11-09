@@ -37,7 +37,7 @@ test('installed serve composition discovers client dependencies on visits withou
         assert.ok(worker.include.includes('@base-ui/react/*'));
         const routes = await createServer({
           configFile: false, logLevel: 'silent',
-          plugins: [tanstackRouter({
+          plugins: [messageImports(process.cwd()), tanstackRouter({
             autoCodeSplitting: true,
             codeSplittingOptions: { defaultBehavior: [['loader'], ['component'], ['pendingComponent'], ['errorComponent'], ['notFoundComponent']] },
           })],
@@ -58,6 +58,9 @@ test('installed serve composition discovers client dependencies on visits withou
             const visited = await routes.environments.ssr.transformRequest(path + '?tsr-split=component');
             assert.ok(visited.code.includes(view), file + ': visiting loads the unchanged view');
           }
+          const rules = await routes.environments.ssr.transformRequest('/src/community/realm-rules-authoring/panel.tsx');
+          assert.ok(rules.code.includes('/paraglide/messages/realm_rules_authoring_open.js'));
+          assert.ok(!rules.code.includes('/paraglide/messages.js'), 'rules labels do not load the full catalogue');
         } finally { await routes.close(); }
         const root = await mkdtemp(resolve('../../.temp/generated-message-map-'));
         await mkdir(resolve(root, 'src/paraglide/messages'), { recursive: true });
