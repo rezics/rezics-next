@@ -218,6 +218,13 @@ test('registry rejects hostile identities and key material and remains one durab
   await expect(
     service.internal.registerClient({ clientId: WEBSITE_CLIENT_ID, firstParty: true, scopes: [] }),
   ).rejects.toThrow();
+  expect(
+    (
+      await pool.query("SELECT 1 FROM auth_kind_consent_transition WHERE client_id=$1 AND state<>'applied'", [
+        WEBSITE_CLIENT_ID,
+      ])
+    ).rowCount,
+  ).toBe(0);
   await register();
   service = await createAuthService(options);
   const metadata = await (await fetch(`${issuer}/.well-known/openid-configuration`)).json();

@@ -2361,7 +2361,9 @@ native models mapped onto the existing single client registry (`auth_client`)
 and consent authority (`auth_consent`). No second client store, consent store,
 session system or grant engine exists.
 
-Decision: Website registration reuses existing coverage without replaying its guarded insert. Revocation validates
+Decision: Website registration validates deployment input and refuses direct scope reductions before opening a
+durable authority transition; rejected configuration must not leave a transition that blocks later grants.
+Registration reuses existing coverage without replaying its guarded insert. Revocation validates
 the exact API resource before native assertion consumption or Access invalidation; the six-field refresh request
 retains native family revocation and Access-first denial of previously issued API JWTs. Focused security coverage
 keeps the original grant assertions, rejects a wrong resource without effects and verifies the family cannot refresh.

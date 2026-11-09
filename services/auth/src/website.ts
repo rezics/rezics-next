@@ -350,6 +350,41 @@ export function websiteRoutes(input: {
       [session.id, session.userId],
     );
   }
+  async function prepareRegistration(registration: WebsiteClientRegistration) {
+    const scopes = [...new Set(registration.scopes)].sort();
+    if (
+      scopes.length > input.scopeLimit ||
+      scopes.some((s) => typeof s !== 'string' || s.length > 128 || !/^[\x21\x23-\x5b\x5d-\x7e]+$/.test(s)) ||
+      ![...protocolScopes, 'media:complete'].every((s) => scopes.includes(s))
+    )
+      deny('invalid_request');
+    if (options.siteActions && scopes.some((s) => !protocolScopes.includes(s) && !options.siteActions!.has(s)))
+      deny('invalid_request');
+    const keys = registration.publicJwks?.keys;
+    if (!Array.isArray(keys) || !keys.length || keys.length > 3 || new Set(keys.map((k) => k.kid)).size !== keys.length)
+      deny('invalid_request');
+    const publicKeys = [];
+    for (const key of keys) {
+      if (typeof key.kid !== 'string' || !key.kid || key.kid.length > 128 || key.alg !== 'ES256' || key.use !== 'sig')
+        deny('invalid_request');
+      publicKeys.push(await publicCredential(key, key.kid));
+    }
+    function uris(values: string[]) {
+      if (!Array.isArray(values) || !values.length || values.length > 8 || new Set(values).size !== values.length)
+        deny('invalid_request');
+      for (const value of values) {
+        const url = new URL(value);
+        if (url.hash || url.username || url.password || url.search || url.href !== value) deny('invalid_request');
+        const origin = issuerOrigin(url.origin);
+        if (new URL(options.issuer).protocol === 'https:' && new URL(origin).protocol !== 'https:')
+          deny('invalid_request');
+      }
+      return values;
+    }
+    const redirects = uris(registration.redirectUris),
+      logout = uris(registration.postLogoutRedirectUris);
+    return { scopes, publicKeys, redirects, logout };
+  }
   return {
     plugin: {
       id: 'website-native-boundaries',
@@ -403,44 +438,9 @@ export function websiteRoutes(input: {
         amr: selected.session.authMethods.split(' '),
       };
     },
-    async register(registration: WebsiteClientRegistration, suppliedConnection?: PoolClient) {
-      const scopes = [...new Set(registration.scopes)].sort();
-      if (
-        scopes.length > input.scopeLimit ||
-        scopes.some((s) => typeof s !== 'string' || s.length > 128 || !/^[\x21\x23-\x5b\x5d-\x7e]+$/.test(s)) ||
-        ![...protocolScopes, 'media:complete'].every((s) => scopes.includes(s))
-      )
-        deny('invalid_request');
-      if (options.siteActions && scopes.some((s) => !protocolScopes.includes(s) && !options.siteActions!.has(s)))
-        deny('invalid_request');
-      const keys = registration.publicJwks?.keys;
-      if (
-        !Array.isArray(keys) ||
-        !keys.length ||
-        keys.length > 3 ||
-        new Set(keys.map((k) => k.kid)).size !== keys.length
-      )
-        deny('invalid_request');
-      const publicKeys = [];
-      for (const key of keys) {
-        if (typeof key.kid !== 'string' || !key.kid || key.kid.length > 128 || key.alg !== 'ES256' || key.use !== 'sig')
-          deny('invalid_request');
-        publicKeys.push(await publicCredential(key, key.kid));
-      }
-      function uris(values: string[]) {
-        if (!Array.isArray(values) || !values.length || values.length > 8 || new Set(values).size !== values.length)
-          deny('invalid_request');
-        for (const value of values) {
-          const url = new URL(value);
-          if (url.hash || url.username || url.password || url.search || url.href !== value) deny('invalid_request');
-          const origin = issuerOrigin(url.origin);
-          if (new URL(options.issuer).protocol === 'https:' && new URL(origin).protocol !== 'https:')
-            deny('invalid_request');
-        }
-        return values;
-      }
-      const redirects = uris(registration.redirectUris),
-        logout = uris(registration.postLogoutRedirectUris);
+    prepareRegistration,
+    async register(registration: Awaited<ReturnType<typeof prepareRegistration>>, suppliedConnection?: PoolClient) {
+      const { scopes, publicKeys, redirects, logout } = registration;
       const connection = suppliedConnection ?? (await database.connect());
       const ownsTransaction = suppliedConnection === undefined;
       try {
