@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { stepLibraryIdentityEpoch } from '../../src/library/identity-epoch-participant.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
 import { createIdentityMappingFixture } from './support/identity-epoch-mapping.ts';
 
@@ -54,6 +55,32 @@ test('account-agent verify mapping drains from original Access source for linked
     const job = await f.readJob(input.job);
     expect(job!.mapping!.state).toBe('complete');
     expect(job!.receipt).toEqual(input.receipt);
+    const intent = input.source.input.intent;
+    if (intent.kind !== 'merge') throw new Error('Account verification must retain its merge identity');
+    const sourceRoute = routeOf(intent.original);
+    if (sourceRoute === null) throw new Error('Account verification original must retain its native route');
+    const committed = await f.admin.query<{
+      original: string;
+      terminal: string;
+      epoch: string;
+      transaction_id: string;
+    }>(
+      `SELECT m.original::text, m.terminal::text, m.epoch::text, m.recorded_transaction_id::text AS transaction_id
+       FROM semantic.identity_epoch_mapping m
+       JOIN semantic.identity_epoch_native_commit c
+         ON c.partition_no=$2 AND c.transaction_id=m.recorded_transaction_id
+        AND c.purpose='mapping' AND c.xmin=m.xmin
+       WHERE m.route=$1 AND m.original=$3`,
+      [sourceRoute, partitionOf(sourceRoute), intent.original],
+    );
+    expect(committed.rows).toEqual([
+      {
+        original: intent.original,
+        terminal: intent.survivor,
+        epoch: input.job.epoch.toString(),
+        transaction_id: expect.any(String),
+      },
+    ]);
     await expect(f.publish(input.job)).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
   } finally {
     await f.close();

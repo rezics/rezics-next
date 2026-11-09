@@ -64,6 +64,10 @@ Retained preparation retries reuse the immutable definition already loaded from 
 reads bounded per call rather than multiplying them for every home. The first raw subject, Account or outbox event
 still becomes ordinary repair owner work, and terminal proof remains separate.
 
+Decision: native identity mapping resumes from its admitted original selector. Each accepted mapping row carries the
+transaction ID of its actual native mapping commit. Receiving keeps one persisted page cursor, and terminal custody is
+independently re-read after the committed transition.
+
 The installed WorkModule journey streams actual authorization, registration, SDK launch and service phases before
 startup cleanup. A failure retains the first producer error alongside its last phase; readiness, native convergence
 and shutdown still require the original assertions and deadlines.
