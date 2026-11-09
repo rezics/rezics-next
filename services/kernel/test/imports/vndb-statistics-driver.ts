@@ -352,16 +352,21 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
           return { outcome: result.status, exchanges, sourceRecords };
         if (exchanges.some((exchange) => exchange.status === 403))
           return { outcome: 'denied', exchanges, sourceRecords };
+        const activeRun = importer!.session.store.activeRun('vndb');
+        const pending = activeRun ? importer!.session.store.pagePending(activeRun, { limit: 100 }) : [];
         throw new Error(
           `Native VNDB import failed: ${JSON.stringify({
             result,
-            exchanges: exchanges.map(({ method, path, status, responseLost, receipt }) => ({
+            exchanges: exchanges.map(({ method, path, status, responseLost, receipt, body, response }) => ({
               method,
               path,
               status,
               responseLost,
               receipt,
+              body,
+              response,
             })),
+            pending: pending.map(({ recordKey, keys, bytes }) => ({ recordKey, keys, bytes })),
           })}`,
         );
       },

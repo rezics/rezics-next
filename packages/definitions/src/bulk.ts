@@ -94,6 +94,7 @@ const problem = Type.Object(
     type: Type.String(),
     title: Type.String(),
     status: Type.Integer({ minimum: 400, maximum: 599 }),
+    retryable: Type.Boolean(),
     detail: Type.Optional(Type.String()),
     errors: Type.Optional(Type.Array(Type.Unknown())),
   },
