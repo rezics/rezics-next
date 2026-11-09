@@ -78,7 +78,7 @@ async function claims(driver: SemanticOutcomeDriver) {
     if (ordinaryScopes) expect(actor.scopes).toEqual(ordinaryScopes);
     ordinaryScopes = actor.scopes;
   }
-  const governor = await driver.fixtures.person('governor', { scopes: [...ordinaryScopes!, 'gate:any'] });
+  const governor = await driver.fixtures.person('capability-governor', { scopes: [...ordinaryScopes!, 'gate:any'] });
   const actor = await authenticator.authenticate(governor.bearer, {
     pool: driver.fixtures.pool,
     deadline: Date.now() + 10_000,
@@ -168,12 +168,22 @@ test('original binding grants only named native gates, preserves resource denial
     expect(await effectsSnapshot(driver.fixtures.pool)).toEqual(denied);
     expect(await Promise.all(subjects.map((id) => driver.inspect.revisions(id)))).toEqual(revisions);
     const merged = await write(driver, 'acceptor', merge);
-    expect(merged.status, JSON.stringify(merged.body)).toBe(200);
-    expect(merged.body).toMatchObject({
-      survivor: [...subjects].sort()[0],
-      redirected: [...subjects].sort()[1],
-      revision: 2,
-    });
+    expect(merged.status, JSON.stringify(merged.body)).toBe(202);
+    expect(merged.body).toEqual({ operation: { id: expect.any(String) } });
+    const operationId = (merged.body.operation as { id: string }).id;
+    expect(merged.headers.get('location')).toBe(`/v1/subjectIdentityOperations/${operationId}`);
+    const pending = await driver.request('acceptor', 'GET', `/v1/subjectIdentityOperations/${operationId}`);
+    expect(pending.status).toBe(200);
+    expect(pending.body).toEqual({ operation: { id: operationId, done: false } });
+    const [survivorId, redirected] = [...subjects].sort() as [string, string];
+    const redirect = await driver.request('anonymous', 'GET', `/v1/subjects/${redirected}`);
+    expect(redirect.status).toBe(308);
+    const terminalPath = redirect.headers.get('location');
+    expect(terminalPath).toBe(`/v1/subjects/${survivorId}`);
+    if (!terminalPath) throw new Error('Native merge redirect omitted its terminal location');
+    const terminal = await driver.request('anonymous', 'GET', terminalPath);
+    expect(terminal.status).toBe(200);
+    expect((terminal.body.subject as { id: string }).id).toBe(survivorId);
     await closedDiscovery(driver);
     console.log(
       'original native capability receipt',

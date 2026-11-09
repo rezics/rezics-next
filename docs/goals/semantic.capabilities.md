@@ -235,6 +235,8 @@ Released fixture: Public created Concepts/schemes and fact receipts; competing/r
 
 Scenarios and binding: Existing original semantic proposal/acceptance/adoption/Context/replay/no-effect scenarios plus the installed sourced fact and summary journey in `specs/semantic-outcomes.test.ts`, which distinguishes pending, accepted, rejected and adopted claims, replays receipts, resolves a stale adoption from current readback, reads the imported Content document, and verifies Context-local public selection and inverse freshness.
 
+Source-only boundary: this repair preserves those journey assertions and adds release-backed fixtures; it does not establish current-Dev acceptance or promotion. Current-Dev and promoted-revision native, browser and growth evidence remain required.
+
 Stages: Declared: yes. Partial bound/exposed: native editorial APIs; full released claims/history traversal open. API-passed: unrecorded; promoted: no.
 
 Native acceptance for the existing bound slice (full pending job is not claimed by this command):

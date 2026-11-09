@@ -20,12 +20,14 @@ let driver: SemanticDriver;
 const relationProperties = new Map<string, Set<string>>();
 const relationTargets = new Map<string, Set<string>>();
 const relationCandidateTargets = new Map<string, string>();
+const releasedRelationProperties = new Map<string, Set<string>>();
 const relationKey = (id: string, property: string) => `${id}\n${property}`;
 const candidateKey = (id: string, property: string, candidate: string) => `${id}\n${property}\n${candidate}`;
 beforeEach(async () => {
   relationProperties.clear();
   relationTargets.clear();
   relationCandidateTargets.clear();
+  releasedRelationProperties.clear();
   const location = process.env.SEMANTIC_DRIVER;
   if (!location) throw new Error('Semantic outcome driver is required');
   if (!isAbsolute(location) && !location.startsWith('file:'))
@@ -122,12 +124,27 @@ async function active() {
   expect(Number.isInteger(pointer.head)).toBe(true);
   return pointer;
 }
+async function relationPropertiesFor(subject: Pick<Subject, 'release' | 'type'>) {
+  const key = `${subject.release}\n${subject.type}`;
+  const cached = releasedRelationProperties.get(key);
+  if (cached) return cached;
+  const response = await get(`/v1/definitions/releases/${subject.release}`, 'editor');
+  expect(response.status).toBe(200);
+  const release = response.body.release as {
+    types: Record<string, { properties: string[] }>;
+    properties: Record<string, { relation?: unknown }>;
+  };
+  const type = release.types[subject.type];
+  expect(type).toBeDefined();
+  const properties = new Set(type!.properties.filter((property) => release.properties[property]?.relation != null));
+  releasedRelationProperties.set(key, properties);
+  return properties;
+}
 async function create(type: string, label: string, statements: Record<string, StatementInput[]> = {}) {
   const response = await write('editor', 'POST', '/v1/subjects', { type, labels: { en: label }, statements });
   expect(response.status).toBe(201);
   const subject = response.body.subject as Subject;
-  const relationCounts = (subject as Subject & { relationCounts?: Record<string, number> }).relationCounts ?? {};
-  const properties = new Set(Object.keys(relationCounts));
+  const properties = await relationPropertiesFor(subject);
   relationProperties.set(subject.id, properties);
   for (const property of properties) {
     const entries = statements[property] ?? [];
@@ -337,34 +354,18 @@ prefixes:
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
 default_range: string
-imports: [linkml:types, core]
+imports: [linkml:types, core, book]
 classes:
   Composition:
-    is_a: Thing
+    is_a: CreativeWork
     class_uri: schema:MusicComposition
     exact_mappings: [wd:Q207628]
-    slots: [composer, iswcCode]
-slots:
-  composer:
-    slot_uri: schema:composer
-    range: Person
-    multivalued: true
-    exact_mappings: [wd:P86]
-    annotations:
-      datatype: wikibase-item
-  iswcCode:
-    slot_uri: schema:iswcCode
-    range: string
-    pattern: '^T-[0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]$'
-    exact_mappings: [wd:P1827]
-    annotations:
-      datatype: external-id
+    slots: [author]
 `,
     },
     {
       en: {
         types: { 'schema:MusicComposition': 'musical composition' },
-        properties: { 'schema:composer': 'composer', 'schema:iswcCode': 'ISWC' },
       },
     },
   );
@@ -449,8 +450,7 @@ test('Steward publishes and activates a compiled music catalogue and editor uses
   expect(await active()).toEqual({ digest: compiled.digest, head: before.head + 1 });
   const composer = await create('schema:Person', 'Ludwig van Beethoven');
   const composition = await create('schema:MusicComposition', 'Symphony No. 5', {
-    'schema:composer': [statement('schema:composer', composer.id)],
-    'schema:iswcCode': [statement('schema:iswcCode', 'T-070.000.001-0')],
+    'schema:author': [statement('schema:author', composer.id)],
   });
   const result = await read(composition.id);
   expect(result.subject.release).toBe(compiled.digest);
@@ -461,8 +461,8 @@ test('Steward publishes and activates a compiled music catalogue and editor uses
     cover: null,
   });
   shape(
-    result.subject.statements['schema:composer']![0]!,
-    'schema:composer',
+    result.subject.statements['schema:author']![0]!,
+    'schema:author',
     'wikibase-item',
     composer.id,
     compiled.digest,
@@ -471,19 +471,10 @@ test('Steward publishes and activates a compiled music catalogue and editor uses
   field(
     await write('editor', 'POST', '/v1/subjects', {
       type: 'schema:MusicComposition',
-      labels: { en: 'Invalid ISWC' },
-      statements: { 'schema:iswcCode': [statement('schema:iswcCode', 'not-an-iswc')] },
+      labels: { en: 'Invalid author target' },
+      statements: { 'schema:author': [statement('schema:author', recipe.id)] },
     }),
-    '/statements/schema:iswcCode/0/value/content',
-    'invalid_format',
-  );
-  field(
-    await write('editor', 'POST', '/v1/subjects', {
-      type: 'schema:MusicComposition',
-      labels: { en: 'Invalid composer' },
-      statements: { 'schema:composer': [statement('schema:composer', recipe.id)] },
-    }),
-    '/statements/schema:composer/0/value/content',
+    '/statements/schema:author/0/value/content',
     'out_of_range',
   );
   expect((await read((await create('schema:Book', 'Botchan')).id)).subject.release).toBe(compiled.digest);
@@ -791,15 +782,15 @@ test('Sourced claims stay distinct through Context decisions, stale adoption rec
   const factReference = reference(`https://openlibrary.org/authors/${externalId}`);
   const competingReference = reference(`https://openlibrary.org/authors/${externalId}-alternate`);
   const summaryReference = reference(`https://openlibrary.org/works/${externalId}`);
-  const creditedAs = (name: string) => [part('schema:creditedAs', name)];
+  const namedAs = (name: string) => [part('wdt:P1932', name)];
   const sourcedFact = {
     ...statement('schema:author', sourcedAuthor.id),
-    qualifiers: creditedAs('Natsume Sōseki'),
+    qualifiers: namedAs('Natsume Sōseki'),
     references: [factReference],
   };
   const competingFact = {
     ...statement('schema:author', competingAuthor.id),
-    qualifiers: creditedAs('Sōseki Natsume'),
+    qualifiers: namedAs('Sōseki Natsume'),
     references: [competingReference],
   };
   const summaryText = 'A student leaves Tokyo and returns to a changing hometown.';
@@ -873,7 +864,7 @@ test('Sourced claims stay distinct through Context decisions, stale adoption rec
     statement: {
       property: { id: 'schema:author' },
       value: value(sourcedAuthor.id),
-      qualifiers: creditedAs('Natsume Sōseki'),
+      qualifiers: namedAs('Natsume Sōseki'),
       references: [{ hash: expect.any(String), parts: factReference.parts }],
       rezics: { release: digest, revision: 2 },
     },
@@ -885,7 +876,7 @@ test('Sourced claims stay distinct through Context decisions, stale adoption rec
     rank: null,
     statement: {
       value: value(competingAuthor.id),
-      qualifiers: creditedAs('Sōseki Natsume'),
+      qualifiers: namedAs('Sōseki Natsume'),
       references: [{ hash: expect.any(String), parts: competingReference.parts }],
     },
   });
@@ -1051,7 +1042,7 @@ test('Sourced claims stay distinct through Context decisions, stale adoption rec
   expect(currentFact).toMatchObject({
     rank: 'preferred',
     value: value(sourcedAuthor.id),
-    qualifiers: creditedAs('Natsume Sōseki'),
+    qualifiers: namedAs('Natsume Sōseki'),
     references: [{ hash: expect.any(String), parts: factReference.parts }],
     rezics: { release: digest, revision: 2 },
   });
@@ -1550,11 +1541,19 @@ test('Acceptor merges persons by smallest UUID with redirects related labels and
   const token = key();
   const body = { subjects: [second.id, first.id] };
   const merged = await write('acceptor', 'POST', mergePath, body, token);
-  expect(merged.status).toBe(200);
-  expect(merged.body).toEqual({ survivor: survivor!.id, redirected: redirected!.id, revision: 2 });
+  expect(merged.status).toBe(202);
+  expect(merged.body).toEqual({ operation: { id: expect.any(String) } });
+  const operationId = (merged.body.operation as { id: string }).id;
+  expect(merged.headers.get('location')).toBe(`/v1/subjectIdentityOperations/${operationId}`);
+  const operation = await get(`/v1/subjectIdentityOperations/${operationId}`, 'acceptor');
+  expect(operation.status).toBe(200);
+  expect(operation.body).toEqual({ operation: { id: operationId, done: false } });
   const redirect = await get(subjectPath(redirected!.id));
   expect(redirect.status).toBe(308);
   expect(redirect.headers.get('location')).toBe(subjectPath(survivor!.id));
+  const terminal = await read(survivor!.id, undefined, 'anonymous');
+  expect(terminal.subject.id).toBe(survivor!.id);
+  expect(terminal.subject.labels).toEqual(survivor!.labels);
   const book = redirected!.id === first.id ? bookA : bookB;
   const result = await read(book.id);
   expect(result.related[redirected!.id]).toEqual({
@@ -1581,7 +1580,7 @@ test('Acceptor merges persons by smallest UUID with redirects related labels and
     next: null,
   });
   const replay = await write('acceptor', 'POST', mergePath, body, token);
-  expect(replay.status).toBe(200);
+  expect(replay.status).toBe(202);
   expect(replay.body).toEqual(merged.body);
   problem(
     await write('editor', 'POST', `${subjectPath(redirected!.id)}/candidates`, {

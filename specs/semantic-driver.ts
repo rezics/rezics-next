@@ -62,6 +62,8 @@ export interface Subject {
   descriptions: Labels;
   aliases: Record<string, string[]>;
   statements: Record<string, Statement[]>;
+  /** Only relation totals with current source-safe disclosure proof are present. */
+  relationCounts: Record<string, number>;
   resolution: Record<string, 'unresolved' | 'suppressed'>;
 }
 export interface Candidate {
