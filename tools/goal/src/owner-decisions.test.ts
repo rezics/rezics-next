@@ -164,7 +164,13 @@ test('the decision shares the total prompt budget and omitted references remain 
       { taskId: 'task-a', attempt: 2 },
       prompt,
     );
-  const availableBudget = Math.min(MAX_WORKER_PROMPT_CHARACTERS, defaultPolicy.brief.bytes);
+  // A retained resume can legitimately be larger than the accepted brief.
+  const resumed = prepare('x'.repeat(15_961));
+  expect(resumed.prompt).toContain('Decision: Use the current rule.');
+  expect(resumed.file).toBeUndefined();
+  expect(resumed.delivery?.summaryDelivered).toBe(true);
+  expect(Buffer.byteLength(resumed.prompt)).toBeLessThanOrEqual(defaultPolicy.prompt.workerTotalBytes);
+  const availableBudget = Math.min(MAX_WORKER_PROMPT_CHARACTERS, defaultPolicy.prompt.workerTotalBytes);
   const prepared = prepare('x'.repeat(availableBudget - 400));
   expect(prepared.prompt.length).toBeLessThanOrEqual(MAX_WORKER_PROMPT_CHARACTERS);
   expect(prepared.prompt).toContain('1 document reference(s) remain pending');
@@ -176,13 +182,14 @@ test('a decision that does not fit the prompt is delivered as a pointer to its f
   try {
     const worktree = join(directory.path, 'worker');
     mkdirSync(worktree);
-    const body = decision('bounded', 'Use the current rule.', '2026-11-03T09:00:00.000Z');
-    const prepare = (events: WorkerEvent[]) =>
+    const body = decision('bounded', `Use the current rule. ${'x'.repeat(250)}`, '2026-11-03T09:00:00.000Z');
+    const nearLimit = 'é'.repeat((defaultPolicy.prompt.workerTotalBytes - 160) / 2);
+    const prepare = (events: WorkerEvent[], prompt = nearLimit) =>
       prepareOwnerDecisionPrompt(
         { ownerDecisionEvents: () => events },
         task(worktree),
         { taskId: 'task-a', attempt: 2 },
-        'x'.repeat(MAX_WORKER_PROMPT_CHARACTERS - 10),
+        prompt,
       );
     const accepted = event(1, body, body.createdAt);
     const prepared = prepare([accepted]);
@@ -197,7 +204,10 @@ test('a decision that does not fit the prompt is delivered as a pointer to its f
       body.createdAt,
       'owner-contract-decision-delivery',
     );
-    expect(prepare([accepted, delivery]).prompt).toBe('x'.repeat(MAX_WORKER_PROMPT_CHARACTERS - 10));
+    expect(prepare([accepted, delivery]).prompt).toBe(nearLimit);
+    expect(Buffer.byteLength(prepared.prompt)).toBeLessThanOrEqual(defaultPolicy.prompt.workerTotalBytes);
+    const full = 'é'.repeat(defaultPolicy.prompt.workerTotalBytes / 2);
+    expect(prepare([accepted], full)).toEqual({ prompt: full });
   } finally {
     directory.close();
   }
@@ -241,7 +251,7 @@ test('an omitted reference stays pending across attempts while delivered context
       { ownerDecisionEvents: () => [accepted] },
       task(directory.path),
       { taskId: 'task-a', attempt: 2 },
-      'x'.repeat(Math.min(MAX_WORKER_PROMPT_CHARACTERS, defaultPolicy.brief.bytes) - 400),
+      'x'.repeat(Math.min(MAX_WORKER_PROMPT_CHARACTERS, defaultPolicy.prompt.workerTotalBytes) - 400),
     );
     expect(first.delivery?.documentRefs).toEqual([]);
     const delivered = event(2, first.delivery, body.createdAt, 'owner-contract-decision-delivery');
