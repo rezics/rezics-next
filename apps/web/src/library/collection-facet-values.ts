@@ -4,7 +4,7 @@ import * as v from 'valibot';
 import { admitFilter, FilterError, parseFilter, type FilterDocument } from '@rezics/filter';
 import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
-import { readScopedSearchReader } from '../search/search-reader';
+import { readScopedSearchReader } from '../search/scoped-search-reader';
 import { readRelease } from '../subject/definitions';
 import { refinementProperties } from '../search/refinement/model';
 import { facetRequest, readFacetPage, type FacetState, type RequestedFacet } from '../search/refinement/request';
