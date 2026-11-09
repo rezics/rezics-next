@@ -163,6 +163,8 @@ test('concurrent and restarted sweeps deduplicate a bucket; high width and prote
   addManager(f.db, 'completed-goal', 'complete');
   addTask(f.db, 'budget-limited-ready', 14, 'ready', 0, 'budget-goal');
   addManager(f.db, 'budget-goal', 'running', 'budgetLimited');
+  addTask(f.db, 'audit', 15, 'ready', 0, 'daily-step-audit', 'supermanager');
+  addPendingStart(f.db, 'audit', 0);
 
   const at = Date.UTC(2026, 9, 31, 13, 0);
   const options = { processIsLive: (process: ProcessIdentity) => live.has(process.pid) };
@@ -171,12 +173,14 @@ test('concurrent and restarted sweeps deduplicate a bucket; high width and prote
     sweepWidthGovernor(f.db, f.inbox, at, options),
   ]);
   expect(first.snapshot.goals.find((goal) => goal.goal === 'wide-goal')?.running).toBe(10);
+  expect(first.snapshot.goals.find((goal) => goal.goal === 'daily-step-audit')?.pendingStarts).toBe(1);
   expect(first.deliveredGoals).toEqual([]);
   expect(second.deliveredGoals).toEqual([]);
   expect(f.inbox.pending('wide-goal')).toHaveLength(0);
   expect(f.inbox.pending('paused-goal')).toHaveLength(0);
   expect(f.inbox.pending('completed-goal')).toHaveLength(0);
   expect(f.inbox.pending('budget-goal')).toHaveLength(0);
+  expect(f.inbox.pending('supermanager')).toHaveLength(0);
 
   const low = fixture();
   addTask(low.db, 'stopped-low', 1, 'stopped', 0, 'low-goal');
