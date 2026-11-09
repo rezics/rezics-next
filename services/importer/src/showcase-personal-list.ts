@@ -112,12 +112,9 @@ export async function seedShowcasePersonalList(input: {
   }
 
   if (response.error) {
-    const code = `http-${response.status}`;
-    if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429) {
-      input.journal.refuseAction(actionKey, code);
-      return { state: 'refused', code };
-    }
-    return { state: 'unknown-delivery', code };
+    const failure = httpFailure(response.status);
+    if (failure.state === 'refused') input.journal.refuseAction(actionKey, failure.code);
+    return failure;
   }
 
   const uploaded = response.status === 200 ? preview(response.data) : null;
@@ -162,6 +159,9 @@ function sameIdentity(left: ShowcasePersonalListIdentity, right: ShowcasePersona
 }
 
 function httpFailure(status: number): ShowcasePersonalListFailure {
+  // These responses can change when the same owner regains current authority or visibility.
+  // Keep the prepared intent available so a retry replays its original body and key.
+  if (status === 401 || status === 403 || status === 404) return { state: 'unavailable', code: `http-${status}` };
   return {
     state: status >= 400 && status < 500 && status !== 408 && status !== 429 ? 'refused' : 'unknown-delivery',
     code: `http-${status}`,
