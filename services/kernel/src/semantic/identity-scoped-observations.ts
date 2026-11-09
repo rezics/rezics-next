@@ -1930,9 +1930,9 @@ export function createIdentityScopedObservations(
             deadline: input.deadline,
           });
           for (const axis of ['rows', 'points', 'statements', 'bytes'] as const) measured[axis] += retired.work[axis];
-          return retired.status === 'retired' || retired.status === 'pending'
-            ? { status: 'pending', work: measured }
-            : { ...retired, work: measured };
+          if (retired.status === 'unavailable' || retired.status === 'stale')
+            return { status: retired.status, reason: retired.reason, work: measured };
+          return { status: 'pending', work: measured };
         }
       }
       let registrationAllowance = input.capture.kind === 'library' ? input.capture.allowance : undefined;
