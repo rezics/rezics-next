@@ -983,7 +983,7 @@ export function createImportTransport(options: ImportTransportOptions) {
             throw error;
           }
         }
-        const redirected = snapshot(reply.error?.value ?? reply.data, RESPONSE_BYTES) as {
+        const redirected = snapshot(reply.error ?? reply.data, RESPONSE_BYTES) as {
           redirect?: { from?: unknown; to?: unknown };
         };
         ensure(redirected.redirect?.from === current && typeof redirected.redirect.to === 'string');
