@@ -17,6 +17,7 @@ import { createPublicBulkClient } from '../src/public-bulk-client.ts';
 import {
   currentBangumiCreatorCreditBindings,
   prepareBangumiCreatorCreditBindings,
+  writeBangumiStaffVocabularyCommands,
   type BangumiCreditVocabularyResolution,
 } from '../src/showcase-bangumi-credits.ts';
 import {
@@ -335,3 +336,72 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     await rm(directory, { recursive: true, force: true });
   }
 }, 30_000);
+
+test('staff vocabulary creates use small envelopes and resume only missing acknowledgements', async () => {
+  const journal = new ShowcaseJournal(':memory:');
+  try {
+    const commands: BatchCommand[] = Array.from({ length: 9 }, (_, index) => ({
+      op: 'create',
+      key: `staff-role-fixture:${index}`,
+      source: {
+        source: 'bangumi_cross_media',
+        external_id: `vocabulary:bangumi.staff:${index}`,
+        record_revision: 'unversioned',
+        digest: 'a'.repeat(64),
+        converter_revision: 'bangumi-vocabulary@3:staff-role@1',
+        field_group: 'facts',
+      },
+      subject: { type: 'skos:Concept', labels: { en: `Role ${index}` } },
+    }));
+    const id = (index: number) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
+    const sent: BatchCommand[][] = [];
+    let exhausted = true;
+    const port = captureShowcaseCommands(
+      {
+        async batch({ commands: page }: BatchWriteRequest): Promise<BatchWriteResult> {
+          sent.push(page);
+          if (page.length > 4) throw new Error('unbounded staff create envelope');
+          return {
+            results: page.map((command) => {
+              const index = commands.findIndex(({ key }) => command.key === key);
+              return exhausted && index === 4
+                ? {
+                    key: command.key,
+                    status: 503,
+                    problem: {
+                      type: 'https://rezics.com/problems/transaction_retry_exhausted',
+                      title: 'Transaction retry exhausted',
+                      status: 503,
+                      code: 'transaction_retry_exhausted',
+                      retryable: true,
+                    },
+                  }
+                : { key: command.key, status: 201, value: { id: id(index), revision: 1 } };
+            }),
+          };
+        },
+      } as CrossMediaPort,
+      journal,
+    );
+    const write = () =>
+      writeBangumiStaffVocabularyCommands({
+        port,
+        journal,
+        commands,
+        async read(subjectId) {
+          return { subject: { id: subjectId, type: 'skos:Concept' } } as unknown as ReviewedSubjectRead;
+        },
+      });
+    await expect(write()).rejects.toThrow('Bangumi staff vocabulary write failed: 503');
+    expect(sent).toEqual([commands.slice(0, 4), commands.slice(4, 8)]);
+    expect(journal.preparedCommands().map(({ command }) => command)).toEqual([commands[4]!]);
+    expect(journal.acknowledgedCommands()).toHaveLength(7);
+    exhausted = false;
+    const ids = await write();
+    expect(sent.slice(2)).toEqual([[commands[4]!, commands[8]!]]);
+    expect(commands.map(({ key }) => ids.get(key))).toEqual(commands.map((_, index) => id(index)));
+    expect(journal.preparedCommands()).toEqual([]);
+  } finally {
+    journal.close();
+  }
+});
