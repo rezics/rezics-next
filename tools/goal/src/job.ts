@@ -1897,6 +1897,8 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (task.brief.kind === 'verification') {
         if (store.events(task.id, ref.attempt).some((event) => event.kind === 'proof-failure-routed')) return;
+        const proof = store.record(ref)?.proof;
+        const captureOnly = task.state === 'stopped' && kind === null && proof?.status === 'terminal' && proof.passed;
         store.updateTask(ref, (current) => {
           current.state = 'stopped';
         });
@@ -1904,11 +1906,10 @@ export class WorkerJob implements GateOutcomeSink {
           managerId: task.brief.manager,
           taskId: task.id,
           kind: 'instruction' as const,
-          summary:
-            `Original proof stopped; create a separate minimal product fix. ${attempt.result} ${attempt.blocker ?? ''}`.slice(
-              0,
-              1000,
-            ),
+          summary: (captureOnly
+            ? `Original proof passed on its captured source; current integration requires a fresh authenticated proof registration. ${attempt.result}`
+            : `Original proof stopped; create a separate minimal product fix. ${attempt.result} ${attempt.blocker ?? ''}`
+          ).slice(0, 1000),
           evidencePath: attempt.evidencePath,
         };
         store.event(ref, 'proof-failure-routed', event);
@@ -2042,7 +2043,9 @@ export class WorkerJob implements GateOutcomeSink {
             previous?.failureKind === 'tool' &&
             !reranFailingCommand(task, attempt, previous, this.policy.worker);
           const idle = !repeated && !unrerun && devProductBrief(task.brief) && noProgressTwice(store, task, ref);
-          if ((repeated || unrerun || idle) && !hasSharedIncident) {
+          // A shared incident deduplicates and holds peers, but it must not reset the same-task blocker limit.
+          // Otherwise its one probe can fail, advance to a new task attempt, and repeat its transport budget forever.
+          if (repeated || ((unrerun || idle) && !hasSharedIncident)) {
             const firstLine = (
               silence
                 ? attempt.result
@@ -2060,6 +2063,12 @@ export class WorkerJob implements GateOutcomeSink {
             store.updateAttempt(ref, (a) => {
               a.escalation = 'stalled';
             });
+            const pendingRetry = store.retryIntent(ref);
+            if (pendingRetry?.status === 'pending')
+              store.updateRetryIntent(ref, (intent) => {
+                intent.status = 'abandoned';
+                delete intent.nextAttempt;
+              });
             record.escalation = 'stalled';
             store.putRecord(record);
             const event =

@@ -1977,8 +1977,11 @@ supermanager with the line, count, example tasks and the first tracked source ma
 affected task every 10 minutes. An affected launch recorded after the incident's trigger failure becomes its probe;
 the first provider output appended beyond that launch's saved log offset resolves the incident and releases pending
 retries immediately. The resolved state event names the probe and records the failure sequence, run sequence and
-observed log range. A probe that fails again with the same fingerprint keeps the incident open and moves its next
-probe time. Incident notices are one line; an undelivered notice is retried during the existing recovery sweep without
+observed log range. If a probe task ends a consecutive attempt with the same fingerprint, the existing repeated-
+blocker guard parks it and abandons its pending retry even while the incident remains open. This prevents an incident
+probe from resetting its six-resume transport budget on every new attempt. The incident continues to hold peer retries;
+an operator can retry the probe after the cause is addressed and its existing cooldown has elapsed. Incident notices
+are one line; an undelivered notice is retried during the existing recovery sweep without
 reopening the incident or moving its probe cadence. `status` lists open incidents and identifies affected pending
 retries. Without a shared incident, the same
 tool blocker in two consecutive attempts parks the task and sends its manager one `environment` event, whether or not
@@ -3409,7 +3412,10 @@ with identical raw prefixes, including cwd/env arguments. Service file lists inc
 after tests, starting at the first input. Exact whole original Auth/Kernel workspace checks require their same-Goal
 integrated original provenance; they need no invented explicit test list. Mixed bare and `env -u` groups stay separate.
 Shortened selections, changed flags and broad root/gate campaigns are refused. Explicit command files must exist in
-the captured Git tree before execution can be granted. Advancing integration invalidates that capture.
+the captured Git tree before execution can be granted. Registration and new-attempt admission require current
+integration. Once proof preparation records `proof-command-ready`, launch and same-session resume check the
+registered fingerprint and exact clean captured HEAD/tree. A later integration change does not prevent that original observation, but its
+result cannot verify the new integration head.
 
 For a never-started held task, submit the typed brief on the SAME task id:
 
@@ -3447,8 +3453,11 @@ the expected generation. A reserved incarnation's source/token never changes, ev
 on the same task requires only normal authenticated stopped/exited receiving, with no live current worker/driver;
 it preserves that old incarnation. Historical UNKNOWN custody and unreleased reservations do not prevent the new
 registration. A retained legacy product record predating `taskKind` keeps that field absent. The host keeps the same intent through capacity waits and recovery;
-capacity waits never launch a model; optional unavailable custody does not block ordinary execution. A stale capture refusal names the old/current commits and exact authorized
-`--proof-start --expected-attempt` refresh needed; it never runs a doomed stale check.
+capacity waits never launch a model; optional unavailable custody does not block ordinary execution. A stale capture refusal before new-attempt admission names the old/current commits and exact authorized
+`--proof-start --expected-attempt` refresh needed. Settlement retains an admitted attempt's original result and
+distinguishes capture mutation from a capture that is no longer current integration. A passing original observation
+blocked only by integration drift stays stopped with its native result retained; the owner is asked for fresh
+authenticated receiving, without a product-fix instruction or automatic retry.
 
 The retained `bun scripts/worker-check.ts --local -- bun test <files...>` prefix, including an original env
 prefix, runs directly as the one ordinary invocation. Goal preserves the raw wrapper argv and never double-wraps it.

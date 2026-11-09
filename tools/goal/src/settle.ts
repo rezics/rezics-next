@@ -4,7 +4,7 @@ import {
   HOST_INTERRUPTION_RETAINED,
   primaryWorkerStderr,
 } from './worker-host-custody.ts';
-import { readProofObservation, proofSourceUnchanged, nativeCheckId } from './verification.ts';
+import { readProofObservation, proofSourceStatus, nativeCheckId } from './verification.ts';
 import { createHash } from 'node:crypto';
 import { parseAgentExit } from './agents.ts';
 import type { LandingQueue } from './contracts.ts';
@@ -557,15 +557,23 @@ export async function settle(
           Array.isArray(exit.checks) &&
           exit.checks.length === 0,
         );
-        const unchanged = proofSourceUnchanged(task, tasks.settings.integrationBranch, tasks.settings.policy?.proof);
-        const verified =
+        const sourceStatus = proofSourceStatus(task, tasks.settings.integrationBranch, tasks.settings.policy?.proof);
+        const unchanged = sourceStatus === 'current';
+        const sourceDiagnostic =
+          sourceStatus === 'capture-changed'
+            ? '; captured source changed'
+            : sourceStatus === 'integration-not-current'
+              ? '; capture is not current integration'
+              : '';
+        const observedPass =
           !finalMeasurement.failureKind &&
           !finalMeasurement.blocker &&
           code === 0 &&
           structured &&
-          unchanged &&
           proofObservation.status === 'terminal' &&
           proofObservation.passed;
+        const verified = observedPass && unchanged;
+        const captureOnly = observedPass && sourceStatus === 'integration-not-current';
         const proofRecord = makeRecord(task, attempt, finalMeasurement, verified ? 'verified' : 'stopped');
         proofRecord.proof = proofObservation;
         store.putRecord(proofRecord);
@@ -573,13 +581,14 @@ export async function settle(
           current.state = verified ? 'verified' : 'stopped';
         });
         store.updateAttempt(ref, (current) => {
-          current.failureKind = verified ? null : 'tool';
-          current.result = `${finalMeasurement.result}\n${proofObservation.cause}${unchanged ? '' : '; captured source changed'}`;
+          current.failureKind = verified || captureOnly ? null : 'tool';
+          current.result = `${finalMeasurement.result}\n${proofObservation.cause}${sourceDiagnostic}`;
         });
         store.releaseExitedProofReservations(ref);
-        store.event(ref, verified ? 'proof-verified' : 'proof-failed', {
+        store.event(ref, verified ? 'proof-verified' : captureOnly ? 'proof-capture-not-current' : 'proof-failed', {
           binding: run?.binding,
           observation: proofObservation,
+          sourceStatus,
           unchanged,
           structured,
         });

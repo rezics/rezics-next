@@ -86,8 +86,8 @@ function attempt(taskId: string, n: number, directory: string): Attempt {
     approaches: [],
   };
 }
-function registeredFixture(withoutDependencies = false) {
-  const h = harness();
+function registeredFixture(withoutDependencies = false, workerScript?: string) {
+  const h = harness(workerScript);
   // Lifecycle-only cases have no dependency manifest, installer or provider to execute.
   if (withoutDependencies) rmSync(join(h.root, 'package.json'));
   // These are the current delivered reader exports and record layout, without launching any native check.
@@ -442,6 +442,81 @@ test('source advancement invalidates passing evidence and unregistered product j
   }
 });
 
+test('an admitted exact proof resumes after Dev moves but cannot verify the new head', async () => {
+  const h = registeredFixture(true, '#!/usr/bin/env bun\n');
+  try {
+    const task = h.store.task(h.proof.id);
+    const advanced = git(h.root, ['commit-tree', 'HEAD^{tree}', '-p', h.binding.sourceCommit, '-m', 'Move Dev only']);
+    git(h.root, ['update-ref', 'refs/heads/dev', advanced]);
+    expect(proofSourceUnchanged(task, 'dev')).toBe(false);
+    const resume = (captured = task) =>
+      launch(
+        h.store,
+        captured,
+        h.current,
+        h.settings.pools[0]!,
+        'Observe the original fixture proof.',
+        h.settings.codex,
+        h.current.session!,
+      );
+    const worker = await resume();
+    expect(await worker.exited).toMatchObject({ code: 0 });
+    const dirt = join(h.root, 'dirty-captured-proof');
+    writeFileSync(dirt, 'unexpected input');
+    await expect(resume()).rejects.toThrow('captured worktree');
+    rmSync(dirt);
+    await expect(
+      resume({ ...task, proofAuthorization: { ...task.proofAuthorization!, sourceTree: 'f'.repeat(40) } }),
+    ).rejects.toThrow('captured worktree');
+    expect(h.store.events(h.proof.id).filter((event) => event.kind === 'worker-run-started')).toHaveLength(1);
+
+    const { record, physical } = records(h.binding);
+    const directory = join(h.root, '.temp/goal/checks');
+    mkdirSync(join(directory, 'results'), { recursive: true });
+    mkdirSync(join(directory, 'history', h.binding.checkId), { recursive: true });
+    writeFileSync(join(directory, 'results', `${h.binding.checkId}.json`), JSON.stringify(record));
+    writeFileSync(
+      join(directory, 'history', h.binding.checkId, `${record.physicalRunId}.json`),
+      JSON.stringify(physical),
+    );
+    writeFileSync(
+      h.current.logPath,
+      JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'agent_message',
+          text: JSON.stringify({
+            status: 'success',
+            summary: 'Original fixture observation',
+            blocker: null,
+            checks: [],
+            approaches: [],
+          }),
+        },
+      }) + '\n',
+    );
+    await settle(h.tasks, worker, {
+      enqueue: () => {
+        throw new Error('proof must not land');
+      },
+    });
+    expect(h.store.record(h.current)?.proof).toMatchObject({ status: 'terminal', passed: true });
+    expect(h.store.task(h.proof.id).state).toBe('stopped');
+    expect(h.store.attempt(h.current)).toMatchObject({
+      failureKind: null,
+      result: expect.stringContaining('capture is not current integration'),
+    });
+    expect(h.store.events(h.proof.id).some((event) => event.kind === 'proof-capture-not-current')).toBe(true);
+    expect(h.store.events(h.proof.id).some((event) => event.kind === 'proof-verified')).toBe(false);
+    const events: ManagerEvent[] = [];
+    new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => events.push(event) }).onAttemptExit(h.current);
+    expect(events.map(({ summary }) => summary)).toEqual([expect.stringContaining('passed on its captured source')]);
+    expect(h.store.retryIntent(h.current)).toBeUndefined();
+  } finally {
+    await h.disposeAsync();
+  }
+});
+
 test('authoritative custody after model cancellation releases its owned permit without reviving the task', () => {
   const h = registeredFixture();
   try {
@@ -640,7 +715,7 @@ test('historical detached UUIDs consume proof capacity without acquiring source 
   }
 });
 
-import { workerCheckProtocol, workerPrompt, launchCommand } from './launch.ts';
+import { workerCheckProtocol, workerPrompt, launchCommand, launch } from './launch.ts';
 import { fixturePool } from './test-support.ts';
 import { requireOriginalProofProfile } from './agents.ts';
 import { readRouting, routeTask } from './routing.ts';

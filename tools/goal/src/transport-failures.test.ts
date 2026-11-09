@@ -291,6 +291,114 @@ test('transport failures open one environment incident on the transport line and
   }
 }, 20_000);
 
+test('an open transport incident parks its probe after the same blocker repeats on the next attempt', async () => {
+  const h = settleHarness();
+  const inbox = { deliver() {} };
+  const now = Date.now();
+  const refs: { taskId: string; attempt: number }[] = [];
+  try {
+    for (let index = 0; index < 3; index++) {
+      const attempt = runningAttempt(h, TLS, [null]);
+      const ref = { taskId: attempt.taskId, attempt: attempt.attempt };
+      writeFileSync(attempt.logPath, '');
+      h.store.updateAttempt(ref, (current) => {
+        current.state = 'exited';
+        current.session = null;
+        current.exitCode = 1;
+        current.endedAt = new Date().toISOString();
+        current.failureKind = 'tool';
+        current.result = TLS;
+        current.blocker = TLS;
+      });
+      h.store.event(ref, TRANSPORT_FAILURE_EVENT, {
+        count: TRANSPORT_RETRY_LIMIT,
+        line: TLS,
+        delayMs: transportRetryBackoffMs(TRANSPORT_RETRY_LIMIT),
+        nextResumeAt: new Date(now - 1).toISOString(),
+      });
+      const recorded = recordTransportFailure(
+        h.store,
+        h.store.task(ref.taskId),
+        h.store.attempt(ref),
+        h.settings,
+        inbox,
+        TLS,
+        now,
+      );
+      expect(recorded.opened).toBe(index === 2);
+      refs.push(ref);
+    }
+
+    const probe = refs[2]!;
+    const incident = listOpenToolIncidents(h.store)[0]!;
+    expect(incident.probe).toEqual(probe);
+    expect(Date.parse(incident.nextProbeAt)).toBeLessThanOrEqual(now);
+
+    const previous = h.store.attempt(probe);
+    const probeNext = h.store.nextAttempt(probe, (number): Attempt => ({
+      ...previous,
+      attempt: number,
+      state: 'running',
+      startedAt: new Date().toISOString(),
+      endedAt: null,
+      process: null,
+      driver: null,
+      logPath: join(h.settings.stateDirectory, 'runs', probe.taskId, `${number}.jsonl`),
+      evidencePath: join(h.settings.stateDirectory, 'evidence', probe.taskId, String(number)),
+      auxiliaryProcesses: [],
+      session: null,
+      before: null,
+      after: null,
+      exitCode: null,
+      result: '',
+      blocker: null,
+      failureKind: null,
+      escalation: null,
+      approaches: [],
+    }));
+    const ref = { taskId: probe.taskId, attempt: probeNext.attempt };
+    h.store.updateTask(ref, (task) => {
+      task.state = 'running';
+    });
+    mkdirSync(join(probeNext.logPath, '..'), { recursive: true });
+    writeFileSync(probeNext.logPath, '');
+    writeFileSync(`${probeNext.logPath}.err`, `${TLS}\n`);
+    for (let count = 1; count <= TRANSPORT_RETRY_LIMIT; count++)
+      h.store.event(ref, TRANSPORT_FAILURE_EVENT, {
+        count,
+        line: TLS,
+        delayMs: transportRetryBackoffMs(count),
+        nextResumeAt: new Date(now - 1).toISOString(),
+      });
+
+    await settle(
+      h.tasks,
+      { attempt: h.store.attempt(ref), exited: Promise.resolve({ code: 1, signal: null }) },
+      { enqueue() {} },
+    );
+    expect(h.store.attempt(ref)).toMatchObject({
+      state: 'exited',
+      failureKind: 'tool',
+      session: null,
+      result: TLS,
+    });
+
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, inbox, undefined, undefined, undefined, undefined, () => false);
+    job.onAttemptExit(ref);
+    await job.drain();
+
+    expect(h.store.task(ref.taskId).state).toBe('stopped');
+    expect(h.store.retryIntent(ref)).toMatchObject({ status: 'abandoned' });
+    expect(h.store.retryIntent(ref)?.nextAttempt).toBeUndefined();
+    expect(listOpenToolIncidents(h.store)).toHaveLength(1);
+    expect(listOpenToolIncidents(h.store)[0]!.probe).toEqual(ref);
+    expect(transportIncidentResumeAllowed(h.store, refs[0]!, Date.now())).toBe(false);
+    expect(transportIncidentResumeAllowed(h.store, refs[1]!, Date.now())).toBe(false);
+  } finally {
+    await h.disposeAsync();
+  }
+}, 20_000);
+
 test('a transport drop resumes the existing session after backoff', async () => {
   const h = settleHarness(tlsCli);
   try {
