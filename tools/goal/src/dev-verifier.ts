@@ -175,10 +175,17 @@ function isAncestor(cwd: string, base: string, target: string): boolean {
   return spawnSync('git', ['merge-base', '--is-ancestor', base, target], { cwd }).status === 0;
 }
 
-function shouldRunRound(previous: DevVerifierRun | undefined, now: number, intervalMs: number): boolean {
+const CHANGED_DEV_CHECK_INTERVAL_MS = 10 * 60_000;
+
+function shouldRunRound(previous: DevVerifierRun | undefined, target: string, now: number, intervalMs: number): boolean {
   if (!previous?.round) return true;
-  const completedAt = Date.parse(previous.round.completedAt);
-  return !Number.isFinite(completedAt) || now - completedAt >= intervalMs;
+  const { completedAt, headCommit, pendingChecks, unknown } = previous.round;
+  const changed = headCommit !== target;
+  // A settled head has no new evidence to collect. Unreached and infrastructure results keep the normal retry cadence.
+  if (!changed && (pendingChecks?.length ?? 0) === 0 && unknown === 0) return false;
+  const completed = Date.parse(completedAt);
+  const interval = changed ? Math.min(intervalMs, CHANGED_DEV_CHECK_INTERVAL_MS) : intervalMs;
+  return !Number.isFinite(completed) || now - completed >= interval;
 }
 
 function advanceVerified(settings: Settings, target: string): void {
@@ -767,12 +774,11 @@ function saveRoundRecord(options: DevVerifierOptions, summary: DevVerifierRoundS
   saveRun(options.store, record, options.settings.policy?.verifier);
 }
 
-async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | undefined): Promise<void> {
+async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | undefined, captured: string): Promise<void> {
   const { settings } = options;
   const checkout = settings.mainCheckout;
   const startedMs = Date.now();
   const startedAt = new Date(startedMs).toISOString();
-  const captured = head(checkout, settings.integrationBranch);
   let verified: string;
   try {
     verified = head(checkout, verifiedBranch);
@@ -872,8 +878,9 @@ async function verifyDueRound(options: DevVerifierOptions): Promise<void> {
   try {
     const previous = latestRound(options.store);
     const policy = (settings.policy ?? defaultPolicy).verifier;
-    if (!shouldRunRound(previous, Date.now(), policy.roundIntervalMs)) return;
-    await runRound(options, previous);
+    const captured = head(settings.mainCheckout, settings.integrationBranch);
+    if (!shouldRunRound(previous, captured, Date.now(), policy.roundIntervalMs)) return;
+    await runRound(options, previous, captured);
   } catch (error) {
     if (error instanceof LeaseHeldError) return;
     throw error;
