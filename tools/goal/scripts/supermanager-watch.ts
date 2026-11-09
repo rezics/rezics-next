@@ -1,7 +1,13 @@
 #!/usr/bin/env bun
 import { Database } from 'bun:sqlite';
 import { parseArgs } from 'node:util';
-import { dirname, join } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { poolAllowed } from '../src/allowance.ts';
+import { readRetainedPoolReadings } from '../src/pacing.ts';
+import { defaultPolicy } from '../src/policy.ts';
+import { PoolPolicyReloader } from '../src/pools.ts';
+import { loadSettings } from '../src/settings.ts';
 import { SqliteManagerInbox, residentInboxCursor } from '../src/inbox.ts';
 import { openDb } from '../src/db.ts';
 import {
@@ -51,7 +57,26 @@ if (values.emit) {
   const db = new Database(values.db, { readonly: true, strict: true });
   db.exec('PRAGMA busy_timeout = 5000');
   const cursor = values.cursor ?? join(dirname(values.db), 'watch', 'supermanager-delivery.json');
-  const activity = new CodexResidentActivity(values.transcript);
+  const transcript = realpathSync(values.transcript);
+  const activity = new CodexResidentActivity(transcript);
+  const settings = loadSettings();
+  const policy = settings.policy ?? defaultPolicy;
+  const pools = new PoolPolicyReloader(settings.localFile, settings.pools, (message) => console.error(message));
+  const allowed = () => {
+    const matches = pools.read().filter((pool) => {
+      if (pool.cli !== 'codex') return false;
+      try {
+        const path = relative(realpathSync(join(pool.configDirectory, 'sessions')), transcript);
+        return path !== '' && path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path);
+      } catch {
+        return false;
+      }
+    });
+    const readings = readRetainedPoolReadings(dirname(values.db!));
+    return matches.length > 0 && matches.every((pool) =>
+      poolAllowed(pool, readings, { history: readings, spanMs: policy.pacing.burnSpanMs, policy: policy.provider }),
+    );
+  };
   const bridge = new ResidentWakeBridge(
     db,
     values.manager,
@@ -61,6 +86,8 @@ if (values.emit) {
     ),
     startAfter,
     (resident) => activity.read(resident),
+    Date.now,
+    allowed,
   );
   let stopped = false;
   process.once('SIGTERM', () => {

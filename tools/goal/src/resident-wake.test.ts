@@ -37,7 +37,8 @@ function fixture() {
       prompts.push(prompt);
     },
     activity = idle,
-  ) => new ResidentWakeBridge(db, 'supermanager', cursor, send, 0, activity, () => now);
+    canStartTurn = () => true,
+  ) => new ResidentWakeBridge(db, 'supermanager', cursor, send, 0, activity, () => now, canStartTurn);
   return {
     dir,
     db,
@@ -99,6 +100,26 @@ test('foreign reads and acknowledgements preserve full owner mail; one wake coal
       provider: 'codex',
       session_id: 'fixture-thread',
     });
+  } finally {
+    f.close();
+  }
+});
+
+test('an allowance hold keeps all mail unread and coalesces one wake when admission resumes', () => {
+  const f = fixture();
+  try {
+    let allowed = false;
+    const bridge = f.bridge(undefined, undefined, () => allowed);
+    for (const summary of ['First question', 'Second question'])
+      f.inbox.deliver({ managerId: 'supermanager', kind: 'question', summary });
+    f.age();
+    expect(bridge.flush()).toBe(0);
+    expect(f.prompts).toHaveLength(0);
+    expect(residentInboxCursor(f.db, 'supermanager')).toBeUndefined();
+    allowed = true;
+    expect(bridge.flush()).toBe(2);
+    expect(bridge.flush()).toBe(0);
+    expect(f.prompts).toHaveLength(1);
   } finally {
     f.close();
   }

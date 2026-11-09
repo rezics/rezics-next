@@ -661,7 +661,7 @@ export class ManagerSessions {
     assertManagedManager(stopped);
     const { history: _history, renewalAttempts: _attempts, nextRenewalRetryAt: _retry, ...snapshot } = stopped;
     const history = retryingFailed ? (stopped.history ?? []) : [...(stopped.history ?? []), snapshot];
-    return this.startSession(spec, history, stopped.pendingRenewal);
+    return this.startSession({ ...spec, goals: ownedGoals(stopped) }, history, stopped.pendingRenewal);
   }
 
   private specFromState(state: ManagedManagerState): ManagerSpec {

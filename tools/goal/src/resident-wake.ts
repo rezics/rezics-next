@@ -122,6 +122,7 @@ export class ResidentWakeBridge {
     private readonly startAfter: number | undefined,
     private readonly activity: (resident: ResidentIdentity) => ResidentActivity,
     private readonly now: () => number = Date.now,
+    private readonly canStartTurn: (resident: ResidentIdentity) => boolean = () => true,
   ) {
     if (existsSync(cursorFile)) {
       const cursor = JSON.parse(readFileSync(cursorFile, 'utf8'));
@@ -170,6 +171,7 @@ export class ResidentWakeBridge {
     const status = this.activity(resident);
     const now = this.now();
     if (now - first.created_at < 60_000 || status.state !== 'idle' || now - status.since < 10_000) return 0;
+    if (!this.canStartTurn(resident)) return 0;
     this.outstanding ??= { first: first.id, through: last.id, threadId: resident.threadId, submitted: false };
     this.outstanding.through = last.id;
     this.checkpoint();
