@@ -162,6 +162,8 @@ const statement = (
 export const CANONICAL_SOURCE_SQL = Object.freeze({
   scope: `SELECT identity,frontier,capture_id::text AS capture,committed_revision::text AS revision
   FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence=$3`,
+  predecessorScope: `SELECT identity,frontier,capture_id::text AS capture,committed_revision::text AS revision
+  FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence<>$3 ORDER BY source_fence LIMIT 1`,
   head: 'SELECT generation::text FROM library.canonical_source_head WHERE route=$1 AND collection_id=$2',
   generation: `SELECT generation::text,basis,driver,after_subject::text,after_fact::text,source_exhausted,state,version::text
   FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 AND generation=$3`,
@@ -228,6 +230,14 @@ export function CANONICAL_SOURCE_STATEMENTS() {
         maxScopeRow,
         1,
         point(CANONICAL_SOURCE_SQL.scope, maxScopeValues, maxScopeRow, 1, 4),
+      ),
+      predecessorScope: statement(
+        'canonical-source-predecessor-scope',
+        CANONICAL_SOURCE_SQL.predecessorScope,
+        maxScopeValues,
+        maxScopeRow,
+        1,
+        point(CANONICAL_SOURCE_SQL.predecessorScope, maxScopeValues, maxScopeRow, 1, 8),
       ),
       head: statement(
         'canonical-source-head',
@@ -629,6 +639,7 @@ export function CANONICAL_SOURCE_REPAIR_STEP(
     repair = sumBounds(
       observation(),
       observation(),
+      CANONICAL_SOURCE_STATEMENTS().predecessorScope.bound,
       CANONICAL_SOURCE_TERMS(observations).rawWindow,
       CANONICAL_SOURCE_TERMS(observations).mapping,
       CANONICAL_SOURCE_TERMS(observations).repairWrite,

@@ -16,6 +16,7 @@ import {
 } from '../command/command.ts';
 import {
   createNativeLibrarySourceCustody,
+  readNativeIdentitySourceBasis,
   type NativeSourceIdentity,
   type NativeLibrarySourceCustody,
   type NativeSourceFrontier,
@@ -1710,16 +1711,42 @@ export function createIdentityScopedObservations(
     ).value;
   }
 
+  async function replacementCurrent(
+    tx: CommandTransaction,
+    replacement: NonNullable<S.IdentityScopeRetireInput['replacement']>,
+    budget: NativeCollectionWork,
+    measured: Work,
+    deadline: number,
+  ): Promise<boolean> {
+    const basis = await budget.compose((allowance) =>
+      readNativeIdentitySourceBasis(tx, replacement.identity, {
+        captureId: replacement.captureId,
+        allowance,
+        deadline,
+      }),
+    );
+    charge(measured, basis.work);
+    return basis.status === 'current' && basis.complete;
+  }
+
   async function retireScope(input: S.IdentityScopeRetireInput): Promise<S.IdentityScopeRetireResult> {
     const measured = work();
+    const budget = new NativeCollectionWork(input.allowance, input.deadline);
     const partition = identityScopeAddress(input.key).partition;
     if (input.key.source.kind === 'library' && input.key.source.identity.scope === 'public_output')
       return fail('custody_missing', measured);
     if ((input.receiving?.length ?? 0) > 8) throw new RangeError('Retirement receiving hints must be bounded');
     if (Date.now() >= input.deadline) return fail('deadline', measured);
     const snapshot = await runCommand(pool, { partition, deadline: input.deadline }, async (tx) => {
+      if (input.replacement && !(await replacementCurrent(tx, input.replacement, budget, measured, input.deadline)))
+        return noEffect(null);
       const row = await head(tx, input.key, measured, true);
-      if (!row || !same(row.source, input.key.source)) return { value: null, events: [] };
+      if (
+        !row ||
+        !same(row.source, input.key.source) ||
+        (input.expectedRegistration !== undefined && row.registration !== input.expectedRegistration)
+      )
+        return noEffect(null);
       if (row.state !== 'retiring' && row.state !== 'retired') {
         await query(
           tx,
@@ -1784,9 +1811,10 @@ export function createIdentityScopedObservations(
       });
       return { status: 'pending', work: measured };
     }
-    const budget = new NativeCollectionWork(input.allowance, input.deadline);
     return (
       await runCommand<S.IdentityScopeRetireResult>(pool, { partition, deadline: input.deadline }, async (tx) => {
+        if (input.replacement && !(await replacementCurrent(tx, input.replacement, budget, measured, input.deadline)))
+          return noEffect(fail('source_unready', measured, 'stale'));
         const locked = await head(tx, input.key, measured, true);
         if (
           !locked ||
@@ -1876,11 +1904,65 @@ export function createIdentityScopedObservations(
       )
         captureId = input.capture.capture.captureId;
       else return fail('source_unready', measured);
+      // Only the named retained predecessor may enter retirement. A delayed producer
+      // sees the successor's different source/capture and cannot make it unsafe.
+      if (input.replaces) {
+        if (
+          input.key.source.kind !== 'library' ||
+          input.key.source.identity.scope === 'public_output' ||
+          input.capture.kind !== 'library' ||
+          !same(identityScopeAddress(input.replaces.key), k)
+        )
+          return fail('source_unready', measured);
+        const prior = await withReadTransaction(pool, (tx) => head(tx, input.key, measured));
+        if (prior && prior.state !== 'retired' && !same(prior.source, input.key.source)) {
+          if (
+            !same(prior.source, input.replaces.key.source) ||
+            prior.capture.kind !== 'library' ||
+            (input.replaces.captureId !== null && prior.capture_id !== input.replaces.captureId)
+          )
+            return fail('source_unready', measured, 'stale');
+          const retired = await retireScope({
+            key: input.replaces.key,
+            expectedRegistration: prior.registration,
+            replacement: { identity: input.key.source.identity, captureId },
+            allowance: input.capture.allowance,
+            deadline: input.deadline,
+          });
+          for (const axis of ['rows', 'points', 'statements', 'bytes'] as const) measured[axis] += retired.work[axis];
+          return retired.status === 'retired' || retired.status === 'pending'
+            ? { status: 'pending', work: measured }
+            : { ...retired, work: measured };
+        }
+      }
+      let registrationAllowance = input.capture.kind === 'library' ? input.capture.allowance : undefined;
       const nativeAssociation = prepayIdentityScopeNativeAssociation(pool, input.deadline);
       await withSingleCommandAttempt(() =>
         runCommand(pool, { partition: k.partition, deadline: nativeAssociation.deadline }, async (tx) => {
           bindIdentityScopeNativeAssociation(tx, nativeAssociation);
           if (!(await ownerCurrent(tx, input.key))) throw unavailable();
+          if (
+            input.replaces &&
+            input.key.source.kind === 'library' &&
+            input.key.source.identity.scope !== 'public_output' &&
+            input.capture.kind === 'library'
+          ) {
+            const budget = new NativeCollectionWork(input.capture.allowance, input.deadline);
+            if (
+              !(await replacementCurrent(
+                tx,
+                { identity: input.key.source.identity, captureId },
+                budget,
+                measured,
+                input.deadline,
+              ))
+            )
+              throw unavailable();
+            const remaining = { ...input.capture.allowance.remaining };
+            const used = budget.receipt().used;
+            for (const axis of Object.keys(remaining) as (keyof WorkDimensions)[]) remaining[axis] -= used[axis];
+            registrationAllowance = { reservationId: input.capture.allowance.reservationId, remaining };
+          }
           if (capture.kind === 'public-locator' && !(await verifyPublicIdentitySourceCaptureLocator(tx, capture)))
             throw unavailable();
           const inserted = await query(
@@ -1922,12 +2004,7 @@ export function createIdentityScopedObservations(
           };
         }),
       );
-      return advance(
-        input.key,
-        nativeAssociation.deadline,
-        measured,
-        input.capture.kind === 'library' ? input.capture.allowance : undefined,
-      );
+      return advance(input.key, nativeAssociation.deadline, measured, registrationAllowance);
     },
     async arm(input) {
       const measured = work();
@@ -2020,7 +2097,12 @@ export function createIdentityScopedObservations(
         (row.capture.kind === 'library' ? { ...row.capture.allowance, reservationId: randomUUID() } : null);
       if (row.state === 'retiring') {
         if (!allowance) return fail('custody_missing', measured);
-        const result = await retireScope({ key: input.key, allowance, deadline: input.deadline });
+        const result = await retireScope({
+          key: input.key,
+          expectedRegistration: row.registration,
+          allowance,
+          deadline: input.deadline,
+        });
         for (const axis of ['rows', 'points', 'statements', 'bytes'] as const) measured[axis] += result.work[axis];
         return { status: 'pending', observation: null, work: measured };
       }

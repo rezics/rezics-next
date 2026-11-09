@@ -14,6 +14,12 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { createCollectionRulesFixture, type CollectionRulesFixture } from './support/collection-rules-fixture.ts';
 import { COLLECTION_PUBLICATION_STEP_CEILING } from '../../src/library/collection-publication-bounds.ts';
 import { NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING } from '../../src/library/native-public-output-work.ts';
+import { canonicalSourceCallAllowance } from '../../src/library/canonical-source-bounds.ts';
+import {
+  createIdentityScopedObservations,
+  identityScopeAddress,
+} from '../../src/semantic/identity-scoped-observations.ts';
+import type { IdentityScopeSource } from '../../src/semantic/identity-scope-types.ts';
 
 let f: CollectionRulesFixture;
 beforeAll(async () => {
@@ -133,6 +139,7 @@ test('one selected native member publishes exactly that set and exact replay rea
   expect(body.publication.itemCount).toBe(1);
   const published = await native(collection.id);
   expect(published.members).toEqual([a]);
+  await f.prepareSource(collection.id);
   const replay = await f.send('POST', path(collection.id), input, f.owner, key);
   expect(replay.status).toBe(200);
   expect(await replay.json()).toEqual(body);
@@ -162,6 +169,7 @@ test('a selected nonmember denies the entire intent and cannot leak another owne
   expect(first.status).toBe(200);
   const revision = (await first.json()).collection.revision;
   const before = await native(collection.id);
+  await f.prepareSource(collection.id);
   const denied = await f.send('POST', path(collection.id), { revision, subjectIds: [a, outsider] });
   expect(denied.status).toBe(404);
   expect(await denied.json()).toMatchObject({ code: 'not_found' });
@@ -244,6 +252,7 @@ test('two completed generations retain exact custody and a third refuses without
   let revision = collection.revision;
   const generations: string[] = [];
   for (const subjectIds of [[a], [b]]) {
+    await f.prepareSource(collection.id);
     const response = await f.send('POST', path(collection.id), { revision, subjectIds });
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -263,6 +272,13 @@ test('A real owner prepares and republishes an explicit selection after public a
   const a = await f.subject('Published selection A');
   await f.entry(a);
   const collection = await saved();
+  const old = (
+    await f.database.admin.query<{ source: IdentityScopeSource; registration: string; capture_id: string }>(
+      `SELECT source,registration::text,capture_id::text FROM semantic.identity_scope_summary
+     WHERE source->'identity'->>'collectionId'=$1 AND scope_id='collection-source'`,
+      [collection.id],
+    )
+  ).rows[0]!;
   const first = await f.send('POST', path(collection.id), { revision: collection.revision, subjectIds: [a] });
   expect(first.status).toBe(200);
   const outputA = await first.json();
@@ -272,6 +288,41 @@ test('A real owner prepares and republishes an explicit selection after public a
   const b = await f.subject('New private working selection B');
   await f.entry(b);
   await f.prepareSource(collection.id);
+  expect(await native(collection.id)).toEqual(before);
+  const oldKey = { source: old.source, scopeId: 'collection-source' };
+  const address = identityScopeAddress(oldKey);
+  const readRegistration = async () =>
+    (
+      await f.database.admin.query(
+        `SELECT source,registration::text,state FROM semantic.identity_scope_summary
+     WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`,
+        [address.partition, address.source, address.scope],
+      )
+    ).rows[0];
+  const successor = await readRegistration();
+  expect(successor.state).toBe('ready');
+  expect(successor.registration).not.toBe(old.registration);
+  expect(
+    (
+      await f.database.admin.query(
+        `SELECT released FROM library.native_source_hold WHERE route=$1 AND capture_id=$2 AND hold_id=$3`,
+        [routeOf(collection.id), old.capture_id, old.registration],
+      )
+    ).rows,
+  ).toEqual([{ released: true }]);
+  // A delayed retirement from A cannot retire B at the same stable scope address.
+  const { rawKeys, ...remaining } = canonicalSourceCallAllowance();
+  const delayed = await createIdentityScopedObservations(f.database.pool).retire({
+    key: oldKey,
+    expectedRegistration: old.registration,
+    allowance: {
+      reservationId: randomUUID(),
+      remaining: { ...remaining, candidateKeys: rawKeys, witnessKeys: rawKeys },
+    },
+    deadline: Date.now() + 30_000,
+  });
+  expect(delayed.status).toBe('unavailable');
+  expect(await readRegistration()).toEqual(successor);
   expect(await native(collection.id)).toEqual(before);
   const query = new URLSearchParams({ filter: JSON.stringify({ owner: { presence: true } }), sort: 'id' });
   const working = await f.send('GET', `/v1/collections/${collection.id}/members?${query}`);
@@ -374,6 +425,7 @@ test('a saved selection retains its accepted release through fresh publication a
     expect(published.status).toBe(200);
     const receipt = await published.json();
     const beforeReplay = await native(collection.id);
+    await f.prepareSource(collection.id);
     const replay = await f.send('POST', path(collection.id), input, f.owner, key);
     expect(replay.status).toBe(200);
     expect(await replay.json()).toEqual(receipt);

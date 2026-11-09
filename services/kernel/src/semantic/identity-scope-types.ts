@@ -52,6 +52,8 @@ export type IdentityScopeCapture =
   | Readonly<{ kind: 'public-output'; capture: PublicIdentityOutputCapture; allowance: WorkAllowance }>;
 export type IdentityScopeRegistration = Readonly<{
   key: IdentityScopeKey;
+  /** Null capture means the producer has not yet committed an observation for this predecessor. */
+  replaces?: Readonly<{ key: IdentityScopeKey; captureId: string | null }>;
   capture: IdentityScopeCapture;
   deadline: number;
 }>;
@@ -133,6 +135,10 @@ export type IdentityScopeRepairResult =
     }>;
 export type IdentityScopeRetireInput = Readonly<{
   key: IdentityScopeKey;
+  /** An observed registration, pinned across the bounded retirement step's transactions. */
+  expectedRegistration?: string;
+  /** Replacement must still own the current complete native capture under the same Source lock. */
+  replacement?: Readonly<{ identity: NativeSourceIdentity; captureId: string }>;
   receiving?: readonly IdentityReceivingRecord[];
   allowance: WorkAllowance;
   deadline: number;

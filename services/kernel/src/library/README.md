@@ -946,6 +946,20 @@ participant or independent ACK. Consume the semantic scoped concurrent closure t
 [owner plan](../../../../docs/library-owner-queries.md#shared-operational-identity-and-disclosure-producers);
 actual native participant, whole-query Source2a and custody proofs remain required pending.
 
+### Working Source generation replacement
+
+Decision: keep the stable `collection-source` scope. The canonical producer names its retained predecessor's
+identity and committed capture, when available, when registering a successor. Semantic retires only that predecessor registration,
+under the successor's complete current native capture fence, through its existing bounded attempt, directory-ticket
+and native-hold release protocol. Registration waits for retirement; neither a different scope key nor overwriting
+an active registration supplies custody. Old canonical rows and completed public output remain retained under their
+existing capacity and disposition rules.
+
+Output activation advances the working Source fence. Finite publication fixtures explicitly complete the existing
+Source worker before replay or another publication that needs the new working generation. Replay still performs
+current authorization before returning its receipt. `collection-publication.test.ts` retains the exact replay and
+refusal assertions and covers actual old-hold release plus a delayed predecessor retirement after replacement.
+
 ### Native identity participant prerequisites
 
 The [Semantic contract](../semantic/identity-epoch-contract.md#complete-library-canonical-coverage-under-the-fixed-participant)

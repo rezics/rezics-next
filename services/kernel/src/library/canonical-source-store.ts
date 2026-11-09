@@ -946,9 +946,24 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
       custody.finishCapture({ identity: row.identity, frontier: row.frontier!, deadline: input.deadline, allowance }),
     );
     if (completed.status !== 'complete') return notReady(l, 'identity');
+    const [predecessor] = await withConnection(pool, (client) =>
+      query<ScopeRow>(client, l, CANONICAL_SOURCE_STATEMENTS().predecessorScope, [
+        input.route,
+        input.collectionId,
+        fence,
+      ]),
+    );
     const observations = semanticObservations(input);
     const registered = await observations.canonical.registerScope(pool, {
       key: scopeKey(row.identity),
+      ...(predecessor?.frontier
+        ? {
+            replaces: {
+              key: scopeKey(predecessor.identity),
+              captureId: predecessor.capture,
+            },
+          }
+        : {}),
       deadline: input.deadline,
       capture: { kind: 'library', capture: completed.capture, frontier: row.frontier, allowance: l.allowance() },
     });

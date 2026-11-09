@@ -1022,6 +1022,15 @@ A fresh registration after retirement gets a new registration ID and increments 
 cannot inherit the earlier attempt's completion prefix. Upgrade rows with unknown preexisting send outcomes
 stay unavailable unless their exact committed directory locator is retained; absence is never rollback.
 
+Library working Source replacement names the retained predecessor identity and its committed capture when available
+at the same stable scope address. An unfinished predecessor has no producer observation yet; Semantic resolves and
+pins its actual registration before each retirement step. Both the
+transition to retiring and the final hold release resolve the successor's complete capture against current native
+Source and writer fences under native locks. A stale successor capture or mismatched predecessor cannot start
+retirement. A delayed step cannot retire a newer registration. Retirement yields bounded pending progress; only
+after it is retired may the ordinary registration path install the successor, with another current native fence
+check. This lifecycle preserves completed public output and grants no authority to purge the old native capture.
+
 Retirement first makes the summary unsafe, finishes real outstanding attempts, then retires one directory ticket
 at a time under its original bridge. A durable source-local sending intent precedes every directory enrollment.
 Directory release retains a native receipt and tombstone, so a lost reply or delayed enrollment cannot resurrect
