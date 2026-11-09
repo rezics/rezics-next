@@ -131,7 +131,23 @@ function authorization(cookie: string, overrides: Record<string, string | null> 
 async function grant(cookie: string) {
   const auth = authorization(cookie);
   const response = await auth.response();
-  expect(response.status).toBe(302);
+  if (response.status !== 302) {
+    const [transitions, dependencies] = await Promise.all([
+      pool.query<{ state: string }>(
+        'SELECT state FROM auth_kind_consent_transition WHERE client_id=$1 ORDER BY updated_at DESC LIMIT 3',
+        [WEBSITE_CLIENT_ID],
+      ),
+      pool.query<{ count: string }>(
+        'SELECT count(*)::text AS count FROM auth_kind_consent_dependency WHERE client_id=$1 AND active',
+        [WEBSITE_CLIENT_ID],
+      ),
+    ]);
+    throw new Error(
+      `website authorize expected 302, received ${response.status}; consent transitions=${transitions.rows
+        .map((row) => row.state)
+        .join(',')}; active dependencies=${dependencies.rows[0]?.count ?? '0'}`,
+    );
+  }
   return { code: new URL(response.headers.get('location')!).searchParams.get('code')!, verifier: auth.verifier };
 }
 async function assertion(overrides: Record<string, unknown> = {}, key = clientKey.privateKey, kid = 'website-client') {
