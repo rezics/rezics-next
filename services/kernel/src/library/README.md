@@ -3790,6 +3790,10 @@ Canonical Source SQL writes that return no rows consume zero result bytes. The q
 serialized result arrays against their declared byte ceiling; an empty driver result does not charge JSON framing
 against a zero-result write declaration.
 
+Curated and private owner captures carry null publication provenance. Custody statement admission accepts that
+null publication position; a supplied position remains a positive signed-bigint value. Activated output identity
+continues to require its native publication transaction and position before custody dispatch.
+
 Decision: one immutable Library-owned custody operation plan is authoritative for capture, finish, hold, retained
 revalidation and release; it is shared by the native adapter and original-work composition, with request SQL/binds
 and schema-derived serialized projections priced separately and explicit translation to eight-axis native receipts
