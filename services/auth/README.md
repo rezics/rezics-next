@@ -2237,7 +2237,9 @@ Access epochs and caller timestamps do not replace this current fact.
 
 First-party consent materialization reuses an identical current consent under the native issuance barrier. It reads
 one exact account/client consent and the indexed pending-transition range; only an absent or changed consent enters
-the existing writer after release. Pending transitions still require that writer. Repeated live-proof signing during
+the existing writer after release. It reuses an unfinished materialization for the same target, while a new operation
+restores consent removed after a completed write; completed transition history is not searched. Pending transitions
+still require that writer. Repeated live-proof signing during
 a credential transaction therefore does not request an exclusive client lock against its own shared lock.
 
 `@rezics/auth/internal-consent` exports `createInternalConsentHandler` with the
@@ -2367,6 +2369,8 @@ Registration reuses existing coverage without replaying its guarded insert. Revo
 the exact API resource before native assertion consumption or Access invalidation; the six-field refresh request
 retains native family revocation and Access-first denial of previously issued API JWTs. Focused security coverage
 keeps the original grant assertions, rejects a wrong resource without effects and verifies the family cannot refresh.
+Code redemption serializes the native family-create/code-consume operation by code identity across service instances;
+the replay still passes confidential admission and native family revocation and returns `invalid_grant`.
 
 ### Registration and key rotation
 

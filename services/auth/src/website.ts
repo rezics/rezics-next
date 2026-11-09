@@ -151,6 +151,27 @@ export function websiteRoutes(input: {
   const issuance = new AsyncLocalStorage<{ session: Session; scopes: string[] }>();
   const assertionAdmission = new AsyncLocalStorage<() => Promise<void>>();
   const logoutAdmission = new AsyncLocalStorage<boolean>();
+  async function nativeToken(
+    request: Request,
+    fields: URLSearchParams,
+    selected?: { session: Session; scopes: string[] },
+  ) {
+    return input.withIssuance(WEBSITE_CLIENT_ID, async () => {
+      const code = fields.get('grant_type') === 'authorization_code' ? fields.get('code') : null;
+      const lock = code ? `auth-website-code:${hash(code)}` : null;
+      // The provider establishes a family before consuming the code. Serialize
+      // that whole native operation so a replay observes the consumed code and
+      // revokes the family instead of colliding on its PostgreSQL primary key.
+      // The issuance connection holds this lock across native transactions.
+      if (lock) await database.query('SELECT pg_advisory_lock(hashtextextended($1,0))', [lock]);
+      try {
+        const run = () => input.native().handler(nativeRequest(request, '/oauth2/token', fields));
+        return await (selected ? issuance.run(selected, run) : run());
+      } finally {
+        if (lock) await database.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', [lock]);
+      }
+    });
+  }
   async function client(): Promise<Client> {
     const row = (
       await database.query<Client>(
@@ -692,10 +713,7 @@ export function websiteRoutes(input: {
                 [hash(fields.get('code') ?? '')],
               )
             ).rows[0];
-            if (!record)
-              return input.withIssuance(WEBSITE_CLIENT_ID, () =>
-                input.native().handler(nativeRequest(request, '/oauth2/token', fields)),
-              );
+            if (!record) return nativeToken(request, fields);
             const verification = JSON.parse(record.value);
             sessionId = verification.sessionId;
             scopes = verification.query.scope.split(' ');
@@ -720,11 +738,7 @@ export function websiteRoutes(input: {
             family = record.authorizationCodeId;
           } else deny('unsupported_grant_type');
           const session = await proof(await nativeSession(sessionId), scopes);
-          const response = await input.withIssuance(WEBSITE_CLIENT_ID, () =>
-            issuance.run({ session, scopes }, () =>
-              input.native().handler(nativeRequest(request, '/oauth2/token', fields)),
-            ),
-          );
+          const response = await nativeToken(request, fields, { session, scopes });
           // The native guard revokes a family on reuse, including a replay that
           // raced a rotation. That transition also ends minted JWT authority.
           if (family && response.status !== 200 && !(await familyActive(family))) {
