@@ -967,19 +967,87 @@ async function memberWebsiteToken(
   );
 }
 
-async function signInBrowser(
+export type BrowserSignInPhase = 'response/redirect' | 'issuer-document' | 'interactive-form' | 'callback' | 'session';
+
+/** A document lifecycle event is not proof that the form or the returned session is ready. */
+export async function signInBrowser(
   page: Page,
   base: URL,
   signIn: { origin: string; email: string; password: string },
   timeoutMs: number,
+  report: (message: string) => void = () => {},
 ): Promise<void> {
-  await page.goto(new URL('/auth/sign-in', base).href, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
-  const email = page.getByLabel(/email/i);
-  await email.waitFor({ state: 'visible', timeout: timeoutMs });
-  await email.fill(signIn.email, { timeout: timeoutMs });
-  await page.locator('input[name="password"]').fill(signIn.password, { timeout: timeoutMs });
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click({ timeout: timeoutMs });
-  await page.waitForURL((url) => url.origin === base.origin, { timeout: timeoutMs });
+  const issuer = publicOrigin(signIn.origin, 'auth origin');
+  let phase: BrowserSignInPhase = 'response/redirect';
+  let lastDocument = 'none';
+  let callbackStatus: number | undefined;
+  const observeResponse = (response: PlaywrightResponse) => {
+    const request = response.request();
+    if (!request.isNavigationRequest() || request.frame() !== page.mainFrame()) return;
+    const url = new URL(response.url());
+    // Omit query strings: authorization redirects contain state, codes and other private operands.
+    lastDocument = `${response.status()} ${url.origin}${url.pathname}`;
+    report(`Member browser sign-in phase=${phase} document=${lastDocument}`);
+    if (url.origin === base.origin && url.pathname === '/auth/callback') callbackStatus = response.status();
+    if (phase === 'response/redirect' && response.status() >= 300 && response.status() < 400) phase = 'issuer-document';
+  };
+  page.on('response', observeResponse);
+  try {
+    const navigation = await navigateToDocument(page, new URL('/auth/sign-in', base).href, timeoutMs);
+    if (!navigation.responseReceived) throw navigation.error;
+    phase = new URL(page.url()).origin === issuer.origin ? 'issuer-document' : phase;
+    if (navigation.status >= 400) throw new Error('Sign-in document refused');
+    if ('error' in navigation)
+      report(`Member browser sign-in navigation incomplete after document response status=${navigation.status}`);
+    phase = 'issuer-document';
+    await page.waitForURL((url) => url.origin === issuer.origin, { waitUntil: 'commit', timeout: timeoutMs });
+
+    report('Member browser sign-in phase=issuer-document committed');
+    phase = 'interactive-form';
+    const readerDeadline = performance.now() + timeoutMs;
+    const email = page.getByLabel(/email/i);
+    const password = page.locator('input[name="password"]');
+    const submit = page.getByRole('button', { name: 'Sign in', exact: true });
+    const remaining = () => {
+      const ms = remainingUntil(readerDeadline);
+      if (ms === 0) throw new Error('Sign-in form readiness timed out');
+      return ms;
+    };
+    await email.waitFor({ state: 'visible', timeout: remaining() });
+    await password.waitFor({ state: 'visible', timeout: remaining() });
+    await submit.waitFor({ state: 'visible', timeout: remaining() });
+    await email.fill(signIn.email, { timeout: remaining() });
+    await password.fill(signIn.password, { timeout: remaining() });
+
+    report('Member browser sign-in phase=interactive-form ready');
+    phase = 'callback';
+    // Click actionability still checks the visible control; the explicit URL wait owns navigation readiness.
+    await submit.click({ timeout: remaining(), noWaitAfter: true });
+    await page.waitForURL((url) => url.origin === base.origin, { waitUntil: 'commit', timeout: timeoutMs });
+    if (callbackStatus === undefined || callbackStatus < 300 || callbackStatus >= 400)
+      throw new Error('Successful Web callback redirect not observed');
+
+    report('Member browser sign-in phase=callback accepted');
+    phase = 'session';
+    await page.waitForURL((url) => url.origin === base.origin && !url.pathname.startsWith('/auth/'), {
+      waitUntil: 'commit',
+      timeout: timeoutMs,
+    });
+    // The cookie alone does not prove that Web accepts the session. The account control reads actual session state.
+    const cookies = await page.context().cookies(base.href);
+    if (!cookies.some((cookie) => cookie.name === '__Host-rezics_session' && cookie.value))
+      throw new Error('Web session cookie missing');
+    await page.locator('#account-menu-button').waitFor({ state: 'visible', timeout: timeoutMs });
+    report('Member browser sign-in phase=session verified');
+  } catch (error) {
+    // Playwright errors can embed redirect query strings; keep only the phase and observed public document address.
+    throw new Error(
+      `Member browser sign-in failed phase=${phase}; last document=${lastDocument}; cause=${isTimeout(error) ? 'timeout' : 'error'}`,
+      { cause: error },
+    );
+  } finally {
+    page.off('response', observeResponse);
+  }
 }
 
 function localSignIn(): RunOptions['signIn'] {
@@ -1117,7 +1185,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
             });
             page = await context.newPage();
             if (persona === 'member' && signIn && !options.memberStorageState)
-              await signInBrowser(page, base, signIn, pageTimeout);
+              await signInBrowser(page, base, signIn, pageTimeout, report);
           } catch (error) {
             incomplete = true;
             report(`${persona} browser setup unavailable: ${displayError(error)}`);
