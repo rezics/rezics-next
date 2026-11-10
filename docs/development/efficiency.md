@@ -111,6 +111,10 @@ Decision: enforce the six-task per-Goal limit at worker start admission; waiting
   the maintainer. It reports the decision afterwards.
 - Every hour the supermanager checks that each manager session is running and its inbox is read, and renews a paused
   one. Control-plane work goes out as briefs the supermanager dispatches; no manager inbox stands in for that.
+- At each hourly review, check ready repairs, occupied coding slots and running checks separately. A check blocks only
+  work that needs its result. Keep a concrete independent repair ready while checks run, and dispatch it when an
+  existing coding slot and allowance permit. If the coding queue is empty, report whether no independent repair is
+  ready, planning missed one, or admission is limiting starts. Use existing telemetry and the hourly review.
 - An alarm fires only on a real problem, and its receiver fixes the cause at once. An alarm that repeats for the same
   cause without a fix escalates to the supermanager. Throttling or batching an alarm hides the problem; fix the cause or
   the threshold.
