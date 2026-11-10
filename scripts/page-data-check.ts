@@ -128,6 +128,11 @@ export type NativeObservation = {
   error?: string;
 };
 
+export type NativeProblemEvidence = {
+  code?: string;
+  pointer?: string;
+};
+
 export type PageObservation = {
   present: boolean;
   itemCount: number;
@@ -155,6 +160,7 @@ export type SectionResult = {
     nativeProbe: 'run' | 'unrun';
     browserProbe: 'run' | 'unrun';
     sqlProbe: 'run' | 'unrun' | 'not-declared';
+    nativeProblem?: NativeProblemEvidence;
     unrun?: UnrunProbeEvidence;
   };
 };
@@ -244,6 +250,37 @@ function problemCode(body: unknown): string | undefined {
   return undefined;
 }
 
+function safeProblemCode(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length <= 64 && /^[a-z][a-z0-9_]*$/.test(value) ? value : undefined;
+}
+
+function safeValidationPointer(value: unknown): string | undefined {
+  if (value === '') return '';
+  return typeof value === 'string' &&
+    value.length <= 128 &&
+    /^\/(?:[A-Za-z0-9_-]|~[01])+(?:\/(?:[A-Za-z0-9_-]|~[01])+){0,15}$/.test(value)
+    ? value
+    : undefined;
+}
+
+/** Retain only compact, structured diagnostics from non-success HTTP responses. */
+export function nativeProblemEvidence(status: number, body: unknown): NativeProblemEvidence | undefined {
+  if (status < 300 || status > 599 || !isRecord(body)) return undefined;
+  const nested = isRecord(body.error) ? body.error : undefined;
+  const code = safeProblemCode(typeof body.code === 'string' ? body.code : nested?.code);
+  const errors = Array.isArray(body.errors) ? body.errors : nested?.errors;
+  let pointer: string | undefined;
+  if (Array.isArray(errors)) {
+    for (const error of errors.slice(0, 16)) {
+      if (!isRecord(error)) continue;
+      pointer = safeValidationPointer(error.pointer);
+      if (pointer !== undefined) break;
+    }
+  }
+  if (code === undefined && pointer === undefined) return undefined;
+  return { ...(code === undefined ? {} : { code }), ...(pointer === undefined ? {} : { pointer }) };
+}
+
 function nativeStatesUnavailable(body: unknown): boolean {
   if (!isRecord(body)) return false;
   const sources = body.sources;
@@ -318,7 +355,10 @@ export function classifySection(
 
 export function formatLine(result: SectionResult): string {
   const provenance = result.evidence.unrun ? ` unrun=${encodeURIComponent(JSON.stringify(result.evidence.unrun))}` : '';
-  return `${result.page} ${result.persona} ${result.section} ${result.class}${provenance}`;
+  const nativeProblem = result.evidence.nativeProblem
+    ? ` nativeProblem=${encodeURIComponent(JSON.stringify(result.evidence.nativeProblem))}`
+    : '';
+  return `${result.page} ${result.persona} ${result.section} ${result.class}${nativeProblem}${provenance}`;
 }
 
 type SeedIdentityCandidate = { id: unknown; type: unknown; collection: string };
@@ -1036,6 +1076,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
                   section.native.admission,
                 )
               : 'UNAVAILABLE';
+            const nativeProblem = native ? nativeProblemEvidence(native.status, native.body) : undefined;
             const result: SectionResult = {
               page: manifestPage.id,
               persona,
@@ -1058,6 +1099,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
                 nativeProbe: native ? 'run' : 'unrun',
                 browserProbe,
                 sqlProbe,
+                ...(nativeProblem ? { nativeProblem } : {}),
               },
             };
             if (native?.error) incomplete ||= native.status === 0;

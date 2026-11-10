@@ -6,6 +6,7 @@ import {
   formatLine,
   hasItems,
   nativeKind,
+  nativeProblemEvidence,
   pageKind,
   parseArgs,
   parseManifest,
@@ -18,6 +19,7 @@ import {
   type Manifest,
   type NativeObservation,
   type PageObservation,
+  type SectionResult,
 } from './page-data-check.ts';
 
 const native = (status: number, body: unknown, authorized = false): NativeObservation => ({
@@ -62,6 +64,53 @@ test('native request errors are API and explicit readiness is UNAVAILABLE', () =
   expect(classifySection(native(401, { code: 'expired' }, true), page({ text: 'Sign in' }), '/feedItems', null)).toBe(
     'API',
   );
+});
+
+test('public Collection discovery matches the installed directory request', () => {
+  const manifest = parseManifest(
+    JSON.parse(readFileSync(new URL('./page-data-sections.json', import.meta.url), 'utf8')),
+  );
+  const discovery = manifest.pages
+    .find(({ id }) => id === 'collections')
+    ?.sections.find(({ id }) => id === 'discovery');
+  expect(discovery?.native).toEqual({
+    method: 'POST',
+    path: '/v1/subjects:search',
+    body: {
+      representation: 'discovery-v1',
+      limit: 24,
+      descriptions: true,
+      languages: ['en'],
+      filter: { and: [{ kind: { in: ['collection'] } }] },
+      emptyRecoveryActions: [{ kind: 'remove-kind', value: 'collection' }],
+      collectionDirectory: { order: 'recent' },
+    },
+    items: '/hits',
+  });
+});
+
+test('non-success output retains only bounded problem codes and validation pointers', () => {
+  const evidence = nativeProblemEvidence(503, {
+    code: 'internal_error',
+    detail: 'private response detail',
+    request_id: 'secret-request-id',
+    errors: [
+      { pointer: '/filter/and/0/kind/in/0', code: 'unsupported', message: 'Bearer secret-token password=hunter2' },
+    ],
+  });
+  expect(evidence).toEqual({ code: 'internal_error', pointer: '/filter/and/0/kind/in/0' });
+  const line = formatLine({
+    page: 'collections',
+    persona: 'anonymous',
+    section: 'discovery',
+    class: 'UNAVAILABLE',
+    evidence: { nativeStatus: 503, nativeProblem: evidence },
+  } as SectionResult);
+  expect(line).toContain('nativeProblem=');
+  expect(line).not.toMatch(/private response detail|secret-request-id|secret-token|hunter2/);
+  expect(nativeProblemEvidence(0, { code: 'internal_error' })).toBeUndefined();
+  expect(nativeProblemEvidence(503, { code: 'Bearer secret-token' })).toBeUndefined();
+  expect(nativeProblemEvidence(503, { errors: [{ pointer: '/Authorization: Bearer secret-token' }] })).toBeUndefined();
 });
 
 test('a zero-count relation is SEED', () => {

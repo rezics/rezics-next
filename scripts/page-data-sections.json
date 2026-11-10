@@ -1249,8 +1249,14 @@
                   }
                 ]
               },
-              "kindPage": {
-                "limit": 8
+              "emptyRecoveryActions": [
+                {
+                  "kind": "remove-kind",
+                  "value": "collection"
+                }
+              ],
+              "collectionDirectory": {
+                "order": "recent"
               }
             },
             "items": "/hits"
