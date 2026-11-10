@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import type { Database } from 'bun:sqlite';
@@ -109,6 +109,7 @@ export class PageDataStackError extends Error {
 }
 
 const seedArtifactHandoffPrefix = 'Cross-media seed artifact handoff ';
+const pageDataArtifactLimit = 64 * 1024 * 1024;
 
 /** Admit only the seed owner's post-write publication refusal for this cycle's expected result file. */
 export function pageDataSeedStatus(
@@ -131,10 +132,12 @@ export function pageDataSeedStatus(
       throw new PageDataStackError('boot', 'page-data seed emitted an invalid artifact handoff', undefined, output);
     const handoff = value as Record<string, unknown>;
     if (
-      Object.keys(handoff).length !== 4 ||
-      handoff.version !== 1 ||
+      Object.keys(handoff).length !== 5 ||
+      handoff.version !== 2 ||
       handoff.state !== 'publication-incomplete' ||
       handoff.artifact !== expectedArtifact ||
+      typeof handoff.artifactSha256 !== 'string' ||
+      !/^[0-9a-f]{64}$/u.test(handoff.artifactSha256) ||
       !Number.isSafeInteger(handoff.omissions) ||
       Number(handoff.omissions) < 1
     )
@@ -145,6 +148,17 @@ export function pageDataSeedStatus(
         output,
       );
     omissions = handoff.omissions;
+    const artifact = lstatSync(expectedArtifact);
+    if (!artifact.isFile() || artifact.size > pageDataArtifactLimit)
+      throw new PageDataStackError('boot', 'page-data seed artifact is not a bounded regular file', undefined, output);
+    const artifactSha256 = createHash('sha256').update(readFileSync(expectedArtifact)).digest('hex');
+    if (artifactSha256 !== handoff.artifactSha256)
+      throw new PageDataStackError(
+        'boot',
+        'page-data seed artifact digest did not match its handoff',
+        undefined,
+        output,
+      );
   }
   if (exitCode === 0) {
     if (markers.length)

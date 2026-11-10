@@ -1751,9 +1751,10 @@ instrumentation and startup repair; page-data owns child/readiness capture. Logs
 
 Decision: a page-data seed with the seed owner's versioned publication-incomplete handoff runs route checks on the
 same stack and records its incomplete status and omission count in the page-data run. Only the exact current result
-path and exit code 1 are admitted; the seed command remains strict. A partial run does not create the seeded marker,
-so the next cycle retries. Existing cycle state has no exact source-input and database identity for safe partial
-artifact reuse.
+path, matching artifact SHA-256 and exit code 1 are admitted; the seed command remains strict. A partial run does not
+create the seeded marker, so the next cycle retries. Partial reuse stays unavailable until existing stack owners
+expose the actual dedicated PostgreSQL generation and a cheap exact identity for every locally selected seed input;
+URL-derived database identity, mtimes and artifact path or digest alone cannot authorize reuse.
 
 Decision: isolate each page-data prerequisite at its owning boundary. A member browser setup failure leaves anonymous
 readers, SQL counts and independently token-authorized member native reads running on the same owned browser/stack.
