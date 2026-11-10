@@ -181,11 +181,11 @@ test('the policy interval, defect transition, section output and per-run report 
       provider: 'bangumi',
       sourceKey: 'character:4',
       nativeType: 'wd:Q95074',
-      artifact: '.temp/cross-media-seed/result.json',
+      artifact: '../page-data-stack/.temp/cross-media-seed/result.json',
       collection: 'readings',
       reason: 'identity-invalid',
       probes: { web: 'unrun', native: 'unrun', sql: 'unrun' },
-    };
+    } as const;
     const unrunRow = `home anonymous feed UNAVAILABLE unrun=${encodeURIComponent(JSON.stringify(unrunEvidence))}\n`;
     expect(parsePageDataOutput(unrunRow, h.registry)[0]?.unrun).toEqual(unrunEvidence);
     expect(
