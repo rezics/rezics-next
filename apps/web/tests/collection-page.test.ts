@@ -115,7 +115,8 @@ test('The Collection identity keeps its own cover frame and shared placeholder w
       overwriteGetLocale(() => locale);
       const html = await render();
       const hero = html.match(/<header\b[^>]*data-slot="collection-hero"[\s\S]*?<\/header>/)?.[0] ?? '';
-      const toolbar = html.match(/<div\b[^>]*data-slot="collection-toolbar"[\s\S]*?<\/nav><\/noscript><\/div>/)?.[0] ?? '';
+      const toolbar =
+        html.match(/<div\b[^>]*data-slot="collection-toolbar"[\s\S]*?<\/nav><\/noscript><\/div>/)?.[0] ?? '';
       expect(hero).toContain(recording.collection.title);
       expect(hero).toContain(recording.collection.curator.displayName);
       expect(hero).toContain(m.library_visibility_public());
