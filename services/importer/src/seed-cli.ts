@@ -2,6 +2,7 @@ import { CredentialDeniedError, CredentialServiceError } from './credentials.ts'
 import { formatImportTransportError, ImportTransportError } from './import-client.ts';
 import { importRequestFailure, type ImportRequestDiagnostics } from './import-fetch.ts';
 import type { ImportRunResult } from './importer.ts';
+import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
@@ -103,6 +104,7 @@ export class SeedPublicationIncompleteError extends Error {
   constructor(
     readonly resultPath: string,
     readonly omissions: number,
+    readonly artifactSha256: string,
   ) {
     super('Showcase publication is incomplete');
     this.name = 'SeedPublicationIncompleteError';
@@ -110,9 +112,10 @@ export class SeedPublicationIncompleteError extends Error {
 }
 
 export type SeedArtifactHandoff = Readonly<{
-  version: 1;
+  version: 2;
   state: 'publication-incomplete';
   artifact: string;
+  artifactSha256: string;
   omissions: number;
 }>;
 
@@ -120,9 +123,10 @@ export type SeedArtifactHandoff = Readonly<{
 export function seedArtifactHandoff(error: unknown): SeedArtifactHandoff | undefined {
   return error instanceof SeedPublicationIncompleteError
     ? {
-        version: 1,
+        version: 2,
         state: 'publication-incomplete',
         artifact: error.resultPath,
+        artifactSha256: error.artifactSha256,
         omissions: error.omissions,
       }
     : undefined;
@@ -143,11 +147,16 @@ export async function finalizeSeedResult(input: {
 }): Promise<void> {
   input.progress.enter('result-write');
   await mkdir(dirname(input.resultPath), { recursive: true });
-  await writeFile(input.resultPath, JSON.stringify(input.report, null, 2) + '\n');
+  const artifact = JSON.stringify(input.report, null, 2) + '\n';
+  await writeFile(input.resultPath, artifact);
   input.onWritten();
   input.progress.enter('publication-completion');
   if (input.publication && input.publication.status !== 'published')
-    throw new SeedPublicationIncompleteError(input.resultPath, input.publication.omissions.length);
+    throw new SeedPublicationIncompleteError(
+      input.resultPath,
+      input.publication.omissions.length,
+      createHash('sha256').update(artifact).digest('hex'),
+    );
   input.progress.complete();
 }
 

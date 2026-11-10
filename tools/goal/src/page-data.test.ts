@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -224,11 +225,13 @@ test('fresh incomplete seed artifacts permit route checks while boot failures an
   try {
     const artifact = join(h.root, '.temp/cross-media-seed/result.json');
     mkdirSync(join(h.root, '.temp/cross-media-seed'), { recursive: true });
-    writeFileSync(artifact, '{"published":507,"omissions":[{"code":"legacy-candidate-not-exact"}]}');
+    const artifactBytes = '{"published":507,"omissions":[{"code":"legacy-candidate-not-exact"}]}';
+    writeFileSync(artifact, artifactBytes);
     const handoff = `Cross-media seed artifact handoff ${JSON.stringify({
-      version: 1,
+      version: 2,
       state: 'publication-incomplete',
       artifact,
+      artifactSha256: createHash('sha256').update(artifactBytes).digest('hex'),
       omissions: 1,
     })}`;
     const seed = pageDataSeedStatus(1, `${handoff}\nCross-media seed publication incomplete`, artifact);
@@ -266,6 +269,7 @@ test('fresh incomplete seed artifacts permit route checks while boot failures an
     );
 
     writeFileSync(artifact, '{"old":true}');
+    expect(() => pageDataSeedStatus(1, handoff, artifact)).toThrow('artifact digest did not match its handoff');
     expect(() => pageDataSeedStatus(1, 'Cross-media seed failed', artifact)).toThrow(
       'without an admitted publication-incomplete artifact handoff',
     );

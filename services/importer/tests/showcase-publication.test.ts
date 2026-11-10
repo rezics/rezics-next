@@ -1635,9 +1635,12 @@ test('incomplete publication preserves the written seed artifact and reports com
     expect(formatSeedError(failure)).toContain(`artifact=${JSON.stringify(resultPath)} bounded-omissions=1`);
     expect(formatSeedArtifactHandoff(failure)).toBe(
       `Cross-media seed artifact handoff ${JSON.stringify({
-        version: 1,
+        version: 2,
         state: 'publication-incomplete',
         artifact: resultPath,
+        artifactSha256: createHash('sha256')
+          .update(JSON.stringify(report, null, 2) + '\n')
+          .digest('hex'),
         omissions: 1,
       })}`,
     );
