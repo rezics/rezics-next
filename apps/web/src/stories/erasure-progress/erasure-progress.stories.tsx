@@ -261,5 +261,3 @@ export const AuthorStatusCheckPending: Story = {
     await expect(await canvas.findByRole('button', { name: m.author_erasure_checking() })).toBeDisabled();
   },
 };
-export const AuthorPermissionPhone390: Story = authorProgressStory(terminalOperation(7), m.author_erasure_failed());
-export const AuthorDependencyDesktop1280: Story = authorProgressStory(terminalOperation(14), m.author_erasure_failed());

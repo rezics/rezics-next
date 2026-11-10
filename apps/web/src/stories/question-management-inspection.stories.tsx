@@ -170,7 +170,7 @@ export const StaleHistoryCursor: Story = {
 
 export const UnavailableAdvice: Story = { args: { page: unavailablePage } };
 
-export const Phone390: Story = {
+export const CaptionReview: Story = {
   args: { page: activePage, address: { selectedQuestionId: activeId, cursor: null }, history: captionHistory },
   globals: {},
   play: async ({ canvasElement }) => {
@@ -187,7 +187,7 @@ export const Phone390: Story = {
   },
 };
 
-export const Desktop1280: Story = {
+export const RestoreConfirmation: Story = {
   args: { page, history: captionHistory },
   globals: {},
   play: async ({ canvasElement }) => {

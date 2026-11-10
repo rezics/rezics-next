@@ -443,25 +443,25 @@ export const GameCreation: Story = {
     );
   },
 };
-export const InitialPhone390: Story = {
+export const InitialFactsJapanese: Story = {
   ...InitialFacts,
   globals: { locale: 'ja' },
 };
-export const InitialDesktop1280Rtl: Story = {
+export const IndependentSelectorsRtl: Story = {
   ...IndependentSelectors,
   args: { ...IndependentSelectors.args, direction: 'rtl' },
   globals: { locale: 'zh-Hant' },
 };
-export const ProposedPhone390: Story = {
+export const ProposedFactsJapanese: Story = {
   ...Proposed,
   globals: { locale: 'ja' },
 };
-export const LongClassificationDesktop1280Rtl: Story = {
+export const LongClassificationRtl: Story = {
   ...LongClassification,
   args: { ...LongClassification.args, direction: 'rtl' },
   globals: { locale: 'zh-Hant' },
 };
-export const AddonPhone390Rtl: Story = {
+export const AddonCompatibilityRtl: Story = {
   ...AddonCompatibility,
   args: { mode: 'addon', direction: 'rtl' },
   globals: { locale: 'ja' },

@@ -70,13 +70,13 @@ export const DesktopDark: Story = {
   play: (context) => selectedReview(context),
 };
 
-export const Desktop1440Light: Story = {
+export const TraditionalChineseSelectionReview: Story = {
   tags: ['!dev'],
   globals: { locale: 'zh-Hant' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
 };
-export const Desktop1440Dark: Story = {
+export const JapaneseSelectionReview: Story = {
   tags: ['!dev'],
   globals: { locale: 'ja' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,

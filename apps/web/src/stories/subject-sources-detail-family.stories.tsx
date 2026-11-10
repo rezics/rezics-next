@@ -259,8 +259,7 @@ export const IndependentReaders: Story = {
     );
   },
 };
-export const Phone390: Story = { ...IndependentReaders, args: { width: 390 } };
-export const Desktop1280: Story = { ...IndependentReaders, args: { width: 1280 } };
+
 export const NoCitations: Story = { args: { scenario: 'no-citations' } };
 export const PartialMetadata: Story = { args: { scenario: 'partial-metadata' } };
 export const UnknownCoverRights: Story = { args: { scenario: 'partial-metadata', coverUnknown: true } };

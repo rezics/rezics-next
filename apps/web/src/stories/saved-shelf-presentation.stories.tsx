@@ -256,15 +256,8 @@ async function saveLayout(canvasElement: HTMLElement, layout: 'grid' | 'table') 
   await expect(canvas.getByTestId('library-preview')).toHaveAttribute('data-layout', layout);
 }
 
-export const Phone390: Story = {
+export const SaveGridPreference: Story = {
   name: 'Default',
-  render: () => <SavedShelfJourney />,
-  globals: {},
-  play: async ({ canvasElement }) => saveLayout(canvasElement, 'grid'),
-};
-
-export const Desktop1280: Story = {
-  tags: ['!dev'],
   render: () => <SavedShelfJourney />,
   globals: {},
   play: async ({ canvasElement }) => saveLayout(canvasElement, 'grid'),
@@ -281,32 +274,32 @@ export const SavedScoreHighest: Story = {
   globals: {},
 };
 
-export const SavedViewPhone390: Story = {
+export const SavedViewEnglish: Story = {
   render: () => <SavedShelfJourney visitState="saved-view" />,
   globals: { locale: 'en' },
 };
 
-export const SavedViewDesktop1280: Story = {
+export const SavedViewTraditionalChinese: Story = {
   render: () => <SavedShelfJourney visitState="saved-view" />,
   globals: { locale: 'zh-Hant' },
 };
 
-export const CurrentUnavailablePhone390: Story = {
+export const CurrentUnavailableJapanese: Story = {
   render: () => <SavedShelfJourney visitState="current-unavailable" />,
   globals: { locale: 'ja' },
 };
 
-export const CurrentUnavailableDesktop1280: Story = {
+export const CurrentUnavailableGerman: Story = {
   render: () => <SavedShelfJourney visitState="current-unavailable" />,
   globals: { locale: 'de' },
 };
 
-export const RecoveredVisitPhone390: Story = {
+export const RecoveredVisitFrench: Story = {
   render: () => <SavedShelfJourney visitState="recovered-visit" />,
   globals: { locale: 'fr' },
 };
 
-export const RecoveredVisitDesktop1280: Story = {
+export const RecoveredVisitSpanish: Story = {
   render: () => <SavedShelfJourney visitState="recovered-visit" />,
   globals: { locale: 'es' },
 };

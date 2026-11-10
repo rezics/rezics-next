@@ -230,54 +230,30 @@ export const NamedCurrentContext: Story = {
   },
 };
 
-export const NamedEnglishPhone390: Story = { name: 'Named English', ...NamedCurrentContext, globals: { locale: 'en' } };
+export const NamedEnglish: Story = { name: 'Named English', ...NamedCurrentContext, globals: { locale: 'en' } };
 
-export const NamedEnglishDesktop1280: Story = { tags: ['!dev'], ...NamedCurrentContext, globals: { locale: 'en' } };
+export const NamedGerman: Story = { name: 'Named German', ...NamedCurrentContext, globals: { locale: 'de' } };
 
-export const NamedGermanPhone390: Story = { name: 'Named German', ...NamedCurrentContext, globals: { locale: 'de' } };
+export const NamedSpanish: Story = { name: 'Named Spanish', ...NamedCurrentContext, globals: { locale: 'es' } };
 
-export const NamedGermanDesktop1280: Story = { tags: ['!dev'], ...NamedCurrentContext, globals: { locale: 'de' } };
+export const NamedFrench: Story = { name: 'Named French', ...NamedCurrentContext, globals: { locale: 'fr' } };
 
-export const NamedSpanishPhone390: Story = { name: 'Named Spanish', ...NamedCurrentContext, globals: { locale: 'es' } };
-
-export const NamedSpanishDesktop1280: Story = { tags: ['!dev'], ...NamedCurrentContext, globals: { locale: 'es' } };
-
-export const NamedFrenchPhone390: Story = { name: 'Named French', ...NamedCurrentContext, globals: { locale: 'fr' } };
-
-export const NamedFrenchDesktop1280: Story = { tags: ['!dev'], ...NamedCurrentContext, globals: { locale: 'fr' } };
-
-export const NamedJapanesePhone390: Story = {
+export const NamedJapanese: Story = {
   name: 'Named Japanese',
   ...NamedCurrentContext,
   globals: { locale: 'ja' },
 };
 
-export const NamedJapaneseDesktop1280: Story = { tags: ['!dev'], ...NamedCurrentContext, globals: { locale: 'ja' } };
+export const NamedKorean: Story = { name: 'Named Korean', ...NamedCurrentContext, globals: { locale: 'ko' } };
 
-export const NamedKoreanPhone390: Story = { name: 'Named Korean', ...NamedCurrentContext, globals: { locale: 'ko' } };
-
-export const NamedKoreanDesktop1280: Story = { tags: ['!dev'], ...NamedCurrentContext, globals: { locale: 'ko' } };
-
-export const NamedSimplifiedChinesePhone390: Story = {
+export const NamedSimplifiedChinese: Story = {
   name: 'Named Simplified Chinese',
   ...NamedCurrentContext,
   globals: { locale: 'zh-Hans' },
 };
 
-export const NamedSimplifiedChineseDesktop1280: Story = {
-  tags: ['!dev'],
-  ...NamedCurrentContext,
-  globals: { locale: 'zh-Hans' },
-};
-
-export const NamedTraditionalChinesePhone390: Story = {
+export const NamedTraditionalChinese: Story = {
   name: 'Named Traditional Chinese',
-  ...NamedCurrentContext,
-  globals: { locale: 'zh-Hant' },
-};
-
-export const NamedTraditionalChineseDesktop1280: Story = {
-  tags: ['!dev'],
   ...NamedCurrentContext,
   globals: { locale: 'zh-Hant' },
 };

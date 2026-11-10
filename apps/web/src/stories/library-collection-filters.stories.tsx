@@ -162,11 +162,10 @@ export const ActualCombinedPhoneDarkTraditionalChinese: Story = {
   ...ActualCombined,
   globals: { locale: 'zh-Hant' },
 };
-export const ActualCombinedDesktop1440LightJapanese: Story = {
+export const ActualCombinedJapanese: Story = {
   ...ActualCombined,
   globals: { locale: 'ja' },
 };
-export const ActualCombinedDesktop1440Dark: Story = { tags: ['!dev'], ...ActualCombined, globals: { locale: 'en' } };
 
 export const NoMatches: Story = {
   name: 'No matching results',

@@ -256,18 +256,18 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Phone320: Story = { globals: { locale: 'fr' } };
-export const CompactPhone320: Story = { ...Phone320, args: { density: 'compact' } };
-export const LargeTextPhone320: Story = { ...Phone320, args: { largeText: true } };
-export const CompactLargeTextPhone320: Story = { ...Phone320, args: { density: 'compact', largeText: true } };
+export const ReadingLayout: Story = { globals: { locale: 'fr' } };
+export const CompactDensity: Story = { ...ReadingLayout, args: { density: 'compact' } };
+export const LargeText: Story = { ...ReadingLayout, args: { largeText: true } };
+export const CompactLargeText: Story = { ...ReadingLayout, args: { density: 'compact', largeText: true } };
 export const NestedColumns: Story = {
   args: { width: 960 },
   globals: { locale: 'fr' },
 };
 export const CompactNestedColumns: Story = { ...NestedColumns, args: { width: 960, density: 'compact' } };
-export const PublishedPreviewPhone320: Story = { ...Phone320, args: { surface: 'published-preview' } };
+export const PublishedPreview: Story = { ...ReadingLayout, args: { surface: 'published-preview' } };
 export const PublishedPreviewLargeText: Story = {
-  ...Phone320,
+  ...ReadingLayout,
   args: { surface: 'published-preview', largeText: true },
 };
 export const PublishedPreviewCompactColumns: Story = {
@@ -275,7 +275,7 @@ export const PublishedPreviewCompactColumns: Story = {
   args: { surface: 'published-preview', density: 'compact', width: 960 },
 };
 export const RightToLeftLargeText: Story = {
-  ...Phone320,
+  ...ReadingLayout,
   args: { rtl: true, largeText: true },
   globals: { locale: 'ja' },
 };
