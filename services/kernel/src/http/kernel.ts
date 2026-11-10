@@ -295,7 +295,9 @@ export function realmAwareContentAccess(access: Access): Access {
           }
         }
       }
-      const proof = Object.freeze({});
+      // Keep native permission evidence recognizable to durable restoration and
+      // deadline readers. The side table adds Realm checks without replacing it.
+      const proof = typeof primary === 'object' && primary !== null ? primary : Object.freeze({});
       proofs.set(proof, {
         actor,
         action,
