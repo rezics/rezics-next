@@ -195,6 +195,11 @@ test('a reader chooses personal Library table columns on the actual page and ret
     Array.from(scope.querySelectorAll<HTMLButtonElement>('button')).find(
       (node) => node.textContent === label || node.getAttribute('aria-label') === label,
     )!;
+  const chooseLayout = (value: string) => {
+    const control = host.querySelector<HTMLSelectElement>('[data-slot="layout-select"]')!;
+    control.value = value;
+    control.dispatchEvent(new window.Event('change', { bubbles: true }));
+  };
   const click = async (node: HTMLElement) => {
     expect(node).toBeDefined();
     await act(async () => node.click());
@@ -275,12 +280,12 @@ test('a reader chooses personal Library table columns on the actual page and ret
     expect(reads()).toHaveLength(2);
     expect(new URL(reads()[1]!.url).search).toBe(initialQuery);
     const reloadedRequests = requests.length;
-    await click(button(m.library_layout_list()));
+    await act(async () => chooseLayout('list'));
     expect(host.querySelector('table')).toBeNull();
     expect(button(m.library_columns())).toBeUndefined();
-    await click(button(m.library_layout_grid()));
+    await act(async () => chooseLayout('grid'));
     await click(button(m.library_size_small()));
-    await click(button(m.library_layout_table()));
+    await act(async () => chooseLayout('table'));
     expect(search().get('columns')).toBe('title,status');
     expect(search().get('cursor')).toBe('native-current');
     expect(headers()).toEqual([m.library_column_title(), m.library_column_status()]);

@@ -6,6 +6,7 @@ import { Badge } from '../shadcn/badge.tsx';
 import { Field, FieldLabel } from '../shadcn/field.tsx';
 import { NativeSelect, NativeSelectOption } from '../shadcn/native-select.tsx';
 import { Menu } from './menu.tsx';
+import { LayoutSelect } from './layout-select.tsx';
 
 type Option = { value: string; label: string };
 type Layout = 'grid' | 'list' | 'table';
@@ -201,23 +202,13 @@ export function ShelfToolbar(p: Props) {
   );
   const display = (
     <div className="grid min-w-0 gap-3">
-      <div className="sm:hidden">
-        <ToggleGroup
-          aria-label={l.layout}
-          value={[p.layout]}
-          onValueChange={(v) => {
-            if (v[0]) p.onLayoutChange(v[0] as Layout);
-          }}
-          variant="outline"
-          className="max-w-full flex-wrap"
-        >
-          {(['grid', 'list'] as const).map((v) => (
-            <ToggleGroupItem key={v} value={v} className="max-w-full whitespace-normal break-words text-left">
-              {l[v]}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      </div>
+      <LayoutSelect
+        label={l.layout}
+        className="sm:hidden"
+        value={p.layout}
+        options={(['grid', 'list'] as const).map((value) => ({ value, label: l[value] }))}
+        onValueChange={p.onLayoutChange}
+      />
       <span className="min-w-0 max-w-full whitespace-normal break-words text-sm">{l.density}</span>
       <ToggleGroup
         aria-label={l.density}
@@ -292,26 +283,16 @@ export function ShelfToolbar(p: Props) {
             }
             content={filter}
           />
-          <ToggleGroup
-            aria-label={l.layout}
-            value={[p.layout]}
-            onValueChange={(v) => {
-              if (v[0]) p.onLayoutChange(v[0] as Layout);
-            }}
-            variant="outline"
-            spacing={0}
-            className="max-w-full flex-wrap"
-          >
-            {(['grid', 'list', 'table'] as const).map((v) => (
-              <ToggleGroupItem
-                key={v}
-                value={v}
-                className={`max-w-full whitespace-normal break-words text-left ${v === 'table' ? 'hidden md:inline-flex' : ''}`}
-              >
-                {l[v]}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+          <LayoutSelect
+            label={l.layout}
+            value={p.layout}
+            options={(['grid', 'list', 'table'] as const).map((value) => ({
+              value,
+              label: l[value],
+              ...(value === 'table' ? { className: 'hidden md:block' } : {}),
+            }))}
+            onValueChange={p.onLayoutChange}
+          />
           <Menu
             title={l.display}
             trigger={

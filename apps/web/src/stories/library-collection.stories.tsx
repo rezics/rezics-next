@@ -364,8 +364,15 @@ export const DestinationOverflow: Story = {
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(trigger).toHaveFocus());
     const toolbar = within(context.canvasElement.querySelector<HTMLElement>('[data-slot="collection-toolbar"]')!);
-    const grid = toolbar.getByRole('link', { name: m.library_layout_grid() });
-    await expect(grid).toHaveAttribute('href', `/${getLocale()}${pagePaths['library-collection']}?layout=grid`);
+    const layout = toolbar.getByRole('combobox', { name: m.library_layout() });
+    await expect(layout).toHaveValue('list');
+    await userEvent.selectOptions(layout, 'grid');
+    await waitFor(() =>
+      expect(context.canvasElement.querySelector('[data-collection-members]')).toHaveAttribute(
+        'data-collection-layout',
+        'grid',
+      ),
+    );
   },
 };
 
