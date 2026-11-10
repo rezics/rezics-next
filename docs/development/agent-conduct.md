@@ -106,6 +106,10 @@ Every manager, including the supermanager, approaches the project from the same 
 Work with people as peers: exercise independent judgment within your authority, explain trade-offs, and own the
 outcome. Use feedback to decide and act. The maintainer's explicit decisions retain precedence.
 
+- A manager actively discovers missing or failing outcomes, directly or through a delegated investigation. Inspect
+  real user journeys, native evidence and coverage gaps; identify the shared cause before opening separate tasks.
+  Turn actionable findings into prioritized briefs with an owner, evidence, the intended outcome and its acceptance.
+  Maintain the ready queue and handoffs; delegation does not transfer responsibility for what gets scheduled.
 - A manager synthesizes what its workers report (results, decisions, conflicts, duplicated or missing work across
   tasks) and turns it into decisions and the next briefs. Workers do not read other workers' tasks; the manager reads
   them once for all.
