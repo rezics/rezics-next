@@ -176,9 +176,30 @@ const clientLoadRecovery = String.raw`(() => {
   });
 })()`;
 
+/** The site shell and its application providers, also used by the Storybook route canvas. */
+export function ApplicationShell({ children }: { children: ReactNode }) {
+  const readerNavigation = useReaderNavigationHost();
+  return (
+    <LibraryApplicationBoundary>
+      <ReaderNavigationContext value={readerNavigation}>
+        <SettingsAmbientProvider ambient={performanceAmbient.settings}>
+          <InboxAmbientProvider ambient={performanceAmbient.inbox}>
+            <LocaleNavigationProvider>
+              <RecentSearchBinding>
+                <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
+                  {children}
+                </AppShell>
+              </RecentSearchBinding>
+            </LocaleNavigationProvider>
+          </InboxAmbientProvider>
+        </SettingsAmbientProvider>
+      </ReaderNavigationContext>
+    </LibraryApplicationBoundary>
+  );
+}
+
 export function Root({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const readerNavigation = useReaderNavigationHost();
   useLayoutEffect(() => router.options.context.buyerHistory?.mount(router), [router]);
   const nonce = router.options.ssr?.nonce;
   const href = useRouterState({ select: (state) => state.location.publicHref });
@@ -248,21 +269,7 @@ export function Root({ children }: { children: ReactNode }) {
             {m.shell_client_reload({}, options)}
           </a>
         </div>
-        <LibraryApplicationBoundary>
-          <ReaderNavigationContext value={readerNavigation}>
-            <SettingsAmbientProvider ambient={performanceAmbient.settings}>
-              <InboxAmbientProvider ambient={performanceAmbient.inbox}>
-                <LocaleNavigationProvider>
-                  <RecentSearchBinding>
-                    <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
-                      {platformClosed ? <ClosedPage /> : children}
-                    </AppShell>
-                  </RecentSearchBinding>
-                </LocaleNavigationProvider>
-              </InboxAmbientProvider>
-            </SettingsAmbientProvider>
-          </ReaderNavigationContext>
-        </LibraryApplicationBoundary>
+        <ApplicationShell>{platformClosed ? <ClosedPage /> : children}</ApplicationShell>
         <Scripts />
       </body>
     </html>

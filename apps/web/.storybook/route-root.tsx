@@ -1,8 +1,5 @@
-import { Outlet } from '@tanstack/react-router';
 import { useLayoutEffect, type ReactNode } from 'react';
-import { Route } from '../src/routes/__root';
-import { AppShell } from '../src/shell/shell';
-import { RecentSearchBinding } from '../src/session/recent-search-binding';
+import { ApplicationShell, Route } from '../src/routes/__root';
 
 function StorybookDocument({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
@@ -17,13 +14,8 @@ function StorybookDocument({ children }: { children: ReactNode }) {
     return () => observer.disconnect();
   }, []);
 
-  return (
-    <RecentSearchBinding>
-      <AppShell>{children}</AppShell>
-    </RecentSearchBinding>
-  );
+  return <ApplicationShell>{children}</ApplicationShell>;
 }
 
-// Storybook owns the iframe document. Keep the real root route but mount its AppShell in the story canvas.
-Route.update({ component: Outlet });
+// Storybook owns the iframe document; keep the real route and shell providers.
 Object.assign(Route.options, { shellComponent: StorybookDocument });

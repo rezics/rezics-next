@@ -1,7 +1,6 @@
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import { requestForStory } from './react-start';
-
-const kernelOrigin = 'http://kernel.local';
+import { storyKernelOrigin as kernelOrigin } from './kernel-origin';
 const runtime = globalThis as typeof globalThis & { __rezicsStoryFetchInstalled?: boolean };
 
 /** Only the existing suggestions/trending BFF routes and recorded kernel belong to this browser bridge. */

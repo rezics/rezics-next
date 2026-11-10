@@ -9,7 +9,7 @@ import { recordPageReadCacheControl } from '../security/page-cache.ts';
 
 const kernelOrigin = createIsomorphicFn()
   .server(() => (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN)
-  .client(() => undefined as string | undefined);
+  .client((): string | undefined => import.meta.env.REZICS_STORYBOOK_KERNEL_ORIGIN);
 
 const currentRequest = createIsomorphicFn()
   .server((given?: Request) => {
