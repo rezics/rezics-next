@@ -5,13 +5,13 @@ const kernelOrigin = 'http://kernel.local';
 const runtime = globalThis as typeof globalThis & { __rezicsStoryFetchInstalled?: boolean };
 
 /** Only the existing suggestions/trending BFF routes and recorded kernel belong to this browser bridge. */
-export function createStoryFetch(
-  liveFetch: typeof fetch,
-  recordedFetch = createStoryRecordedKernelFetch(),
-): typeof fetch {
+export function createStoryFetch(liveFetch: typeof fetch, recordedFetch?: typeof fetch): typeof fetch {
+  // The browser bridge is imported by routes that also appear in the recorded fixture graph.
+  // Wait for the first kernel request so those modules can finish initialization.
+  let kernelFetch = recordedFetch;
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
-    if (url.origin === kernelOrigin) return recordedFetch(input, init);
+    if (url.origin === kernelOrigin) return (kernelFetch ??= createStoryRecordedKernelFetch())(input, init);
     const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
     if (
       url.origin !== window.location.origin ||
