@@ -53,6 +53,12 @@ async function command<T>(
  * `home: 'realm'` is the buyer sale-capture composition: a public Realm and a
  * published Realm board. Global showcase boards stay the default for historical
  * callers that only hold `board:create`.
+ * The request must retain one admitted account through source authorship and
+ * publication. Its Global Context grants are `subject:create` and `board:create`;
+ * bootstrap the governance grantor's local showcase authority before delegating
+ * them. The mounted Content runtime supplies the original publisher's current
+ * consent reader for subsequent sale capture. Another seller cannot reuse this
+ * publisher's edition merely by holding `offer:create`.
  */
 export async function createNativeEditionFixture(
   request: NativeEditionRequest,
