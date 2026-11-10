@@ -314,7 +314,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         visibility: 'private',
       });
 
-      const concept = await json<{ subject: { id: string } }>('staff', 'POST', '/v1/subjects', {
+      const concept = await world.json<{ subject: { id: string } }>(people().staff, 'POST', '/v1/subjects', {
         type: 'skos:Concept',
         labels: { en: 'Terminal erasure board' },
       });

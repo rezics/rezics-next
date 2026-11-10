@@ -4,7 +4,7 @@ import { accountAgentId } from '../../src/semantic/agents.ts';
 import { TERMINAL_ERASURE_BARRIER_TABLE } from './support/terminal-erasure-worker.ts';
 import { createTerminalErasureFixture } from './support/terminal-erasure-fixture.ts';
 
-test('terminal erasure combined Edition prerequisites publish and capture each native seller independently', async () => {
+test('terminal erasure combined subject and Edition prerequisites publish and capture each native seller independently', async () => {
   const world = await createTerminalErasureFixture();
   try {
     const worker = await world.startWorker();
@@ -46,14 +46,34 @@ test('terminal erasure combined Edition prerequisites publish and capture each n
       );
       expect(gate!.held).toBe(held);
       expect(
-        world.editionSubjectWrites
-          .filter((write) => write.sellerAccountId === seller.accountId)
+        world.subjectWrites
+          .filter((write) => write.actorAccountId === seller.accountId)
           .map((write) => ({ type: write.subjectType, held: write.held })),
       ).toEqual([
         { type: 'skos:ConceptScheme', held },
         { type: 'skos:Concept', held },
         { type: 'skos:Concept', held },
       ]);
+      // Cover the shared Book helper and the discussion Concept path in both gate states.
+      const { subject: book } = await world.subject('Pending or sentinel erasure member');
+      const { subject: concept } = await world.json<{ subject: { id: string } }>(
+        world.people.staff,
+        'POST',
+        '/v1/subjects',
+        { type: 'skos:Concept', labels: { en: 'Terminal erasure board' } },
+      );
+      expect(book.id).not.toBe(concept.id);
+      expect(world.subjectWrites.slice(-2).map((write) => ({ type: write.subjectType, held: write.held }))).toEqual([
+        { type: 'schema:Book', held },
+        { type: 'skos:Concept', held },
+      ]);
+      // A refused request must restore the same gate without a retry or bypassing admission.
+      const invalid = await world.command(world.people.staff, 'POST', '/v1/subjects', { type: 'invalid:Type' });
+      expect(invalid.status).toBe(400);
+      const [restored] = await world.readOnly<{ held: boolean }>(
+        `SELECT held FROM ${TERMINAL_ERASURE_BARRIER_TABLE} WHERE singleton=true`,
+      );
+      expect(restored!.held).toBe(held);
       if (held) await worker.release(world.pool);
     }
   } finally {

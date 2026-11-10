@@ -54,7 +54,7 @@ export async function createTerminalErasureFixture() {
   let work: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   let worker: NativeWorker | undefined;
   let closing: Promise<void> | undefined;
-  const editionSubjectWrites: Array<WorkerBoundary & { sellerAccountId: string; subjectType: string }> = [];
+  const subjectWrites: Array<WorkerBoundary & { actorAccountId: string; subjectType: string }> = [];
 
   const close = () =>
     (closing ??= (async () => {
@@ -136,18 +136,33 @@ export async function createTerminalErasureFixture() {
       body?: unknown,
       headers?: Readonly<Record<string, string>>,
     ) {
-      return kernel.handle(
-        new Request(`https://kernel.test${path}`, {
-          method,
-          headers: {
-            authorization: `Bearer ${actor.bearer}`,
-            'idempotency-key': JSON.stringify(randomUUID()),
-            ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-            ...headers,
-          },
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        }),
+      const write = () =>
+        kernel.handle(
+          new Request(`https://kernel.test${path}`, {
+            method,
+            headers: {
+              authorization: `Bearer ${actor.bearer}`,
+              'idempotency-key': JSON.stringify(randomUUID()),
+              ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+              ...headers,
+            },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          }),
+        );
+      if (method !== 'POST' || path !== '/v1/subjects' || !worker) return write();
+      // The native account_agent effect also creates Subjects through the single-attempt
+      // Semantic owner. Observe admission before draining, including non-Edition creates.
+      const [boundary] = await readOnly<WorkerBoundary>(
+        `SELECT held,active,steps FROM ${TERMINAL_ERASURE_BARRIER_TABLE} WHERE singleton=true`,
       );
+      const evidence = {
+        ...boundary!,
+        actorAccountId: actor.accountId,
+        subjectType: (body as { type: string }).type,
+      };
+      subjectWrites.push(evidence);
+      console.info('Terminal erasure subject-write boundary:', JSON.stringify(evidence));
+      return withWorkerHeld(write, boundary!);
     }
     async function json<T>(actor: Persona, method: string, path: string, body?: unknown): Promise<T> {
       const response = await command(actor, method, path, body);
@@ -172,23 +187,8 @@ export async function createTerminalErasureFixture() {
         actions: ['subject:create', 'board:create'],
         valid: '(,)',
       });
-      const request: NativeEditionRequest = async (method, path, body, headers) => {
-        const write = () => command(actor, method, path, body, headers);
-        if (method !== 'POST' || path !== '/v1/subjects' || !worker) return write();
-        // Observe the competing native steps before draining them. Never report the
-        // post-hold idle state as evidence of what was live at subject admission.
-        const [boundary] = await readOnly<WorkerBoundary>(
-          `SELECT held,active,steps FROM ${TERMINAL_ERASURE_BARRIER_TABLE} WHERE singleton=true`,
-        );
-        const evidence = {
-          ...boundary!,
-          sellerAccountId: actor.accountId,
-          subjectType: (body as { type: string }).type,
-        };
-        editionSubjectWrites.push(evidence);
-        console.info('Terminal erasure Edition subject-write boundary:', JSON.stringify(evidence));
-        return withWorkerHeld(write, boundary!);
-      };
+      const request: NativeEditionRequest = (method, path, body, headers) =>
+        command(actor, method, path, body, headers);
       return createNativeEditionFixture(request);
     }
 
@@ -258,7 +258,7 @@ export async function createTerminalErasureFixture() {
       json,
       subject,
       editions,
-      editionSubjectWrites,
+      subjectWrites,
       readOnly,
       async prepareSource(actor: Persona, collectionId: string) {
         // Canonical Source continuation and scope repair share this native owner.
