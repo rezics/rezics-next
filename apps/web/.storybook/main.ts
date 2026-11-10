@@ -4,6 +4,7 @@ import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { browserRoutes } from './browser-routes.ts';
+import { staticDocgen } from './static-docgen.ts';
 
 const app = fileURLToPath(new URL('..', import.meta.url));
 const componentRefs =
@@ -67,16 +68,23 @@ const config: StorybookConfig = {
     },
     { from: './media', to: '/media' },
   ],
-  async viteFinal(config) {
+  async viteFinal(config, { configType, outputDir }) {
+    const staticOutput = configType === 'PRODUCTION' ? outputDir : undefined;
     const storyPlugins = (plugins: typeof config.plugins): typeof config.plugins =>
       plugins?.flatMap((plugin) =>
         Array.isArray(plugin)
           ? storyPlugins(plugin)
-          : plugin && typeof plugin === 'object' && 'name' in plugin && /cloudflare|tanstack/.test(String(plugin.name))
+          : plugin &&
+              typeof plugin === 'object' &&
+              'name' in plugin &&
+              (/cloudflare|tanstack/.test(String(plugin.name)) ||
+                (staticOutput && plugin.name === 'storybook:react-docgen-plugin'))
             ? []
             : [plugin],
       ) ?? [];
     config.plugins = storyPlugins(config.plugins) ?? [];
+    // The static build already extracts component props for its JSON manifest.
+    if (staticOutput) config.plugins.unshift(staticDocgen(staticOutput));
     // Run before React transforms; this allocates no Start/Cloudflare runtime or route watcher.
     config.plugins.unshift(await browserRoutes(app));
     config.server ??= {};
