@@ -3,7 +3,7 @@
 Goal: accounts
 Manager: supermanager
 
-Root coordinates the Access/Content publisher-restoration prerequisite. Keep
+Root coordinates the Access/Content publisher action prerequisite. Keep
 the buyer/native offer binding, controlled Checkout composition and exact-offer
 grant. Do not replace native authority, change schemas, widen permissions or
 rerun the full terminal-erasure witness to diagnose this prerequisite.
@@ -67,13 +67,49 @@ and check-ref cleanup timeouts occurred concurrently. The wrapper did not
 classify the order failure as infrastructure-only; those errors do not explain
 the failing assertion. Full logs are `.temp/check-logs/<check UUID>.log`.
 
+## Received Realm adapter and final owner handoff
+
+`d78f6c41-fff1-41f0-bcfa-011ea151e378`,
+`339124d7-72c5-4ab3-b81f-a8706472dd9f` and
+`78dd5deb-30b8-4801-bebc-11618eda808d` each passed kernel compiler and selected
+quality checks, then failed the same native pre-grant order assertion: expected
+404, received 503 `dependency_unavailable`, `retryable: true`,
+`effect_status: not_applied`. The latter two used temporary diagnostics around
+native Content restoration and Access preparation respectively. Neither logged
+an exception during that first failing HTTP operation. The earlier subsequent
+direct-port exceptions therefore do not establish that operation's cause. All
+temporary diagnostics were removed; native request, authority and assertion
+remain intact.
+
+Received exactly the accepted Realm adapter source `c243a7a5f7` by cherry-pick,
+which preserves native permission evidence instead of replacing it with an empty
+Realm proof. The only additional product path is
+`services/kernel/src/http/kernel.ts`.
+
+`66eee6c9-d645-4f9d-b395-7661627fe47f`, source `bb5e84ca5a`: complete kernel
+compiler and selected lint/format passed, including the received adapter and all
+three changed TypeScript fixture/test files. The affected order case still
+failed at its first pre-grant `POST /v1/orders`: expected 404, received 503
+`dependency_unavailable`, `retryable: true`, `effect_status: not_applied`,
+request ID `01a1c5dc-3405-773a-a888-59772e9a9e3a`. Result: 0 pass, 1 fail,
+2 unchanged readiness cases filtered out. Checkout and retained-order success
+remain unreached. Concurrent Discovery physical-incarnation errors and account
+agent contention do not classify this native assertion as infrastructure-only.
+
+Keep this continuation and stop fixture expansion and unchanged selector reruns.
+Root will keep the order witness separate and compare it only after the owner's
+new publisher action repair has verified proof. No producer absence or exact
+first-503 cause is inferred from the generic availability response. Documentation
+updates after this result change no executable source; reuse its compiler and
+quality evidence, retaining the failed order result as failed.
+
 ## Remaining producer and receiving check
 
-The native Access/Content producer must restore Bob's original Edition publisher
-under the existing current-role, consent and finite-deadline contracts. Repair
-that owner prerequisite without introducing another Access engine, mock facts,
-broader grants, a public source or increased deadlines. The producer's exact
-restoration failure needs owner evidence before choosing a repair.
+The native Access/Content publisher action repair must first have verified owner
+proof under the existing current-role, consent and finite-deadline contracts.
+Receive that owner prerequisite without introducing another Access engine, mock facts,
+broader grants, a public source or increased deadlines. The exact first-503 cause remains unverified; do not choose a broader fixture
+repair from the later direct-port restoration exceptions.
 
 Then run only `terminal erasure order prerequisite` through the owning kernel
 runner. Keep native pre-grant 404 and post-grant 201, and preserve actual buyer
