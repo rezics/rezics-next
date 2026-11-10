@@ -1,14 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
+import { bindExecutionContract } from '../../../src/command/execution-contract.ts';
 import { createPool } from '../../../src/database/pool.ts';
+import { historyExecutionPort } from '../../../src/history/application/index.ts';
+import { bindCanonicalSourceWork } from '../../../src/library/canonical-source-store.ts';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../../src/semantic/definitions.ts';
+import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
-import { readLiveAccountHandle } from '../../support/account-deletion.ts';
+import { WORK_QUEUES } from '../../../src/work/queues.ts';
+import type { WorkContext } from '../../../src/work/registry.ts';
+import { workExecutionPort } from '../../../src/work/selected-runtime.ts';
+import { prepareCollectionSource } from '../../library/support/collection-source-preparation.ts';
+import { drainEffects, readLiveAccountHandle } from '../../support/account-deletion.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { createPersonas, type Persona } from '../../support/personas.ts';
 import { testKernel } from '../../support/test-kernel.ts';
+import { workerTestEnv } from '../../support/worker-env.ts';
 import { startTerminalErasureWorker, TERMINAL_ERASURE_BARRIER_TABLE } from './terminal-erasure-worker.ts';
 import { nativeFixture } from '../native-account-bindings-fixture.ts';
 export {
@@ -77,7 +87,8 @@ export async function createTerminalErasureFixture() {
     readPool = new Pool({ connectionString: databaseUrl, max: 4 });
     await bootstrapRelease(pool, bundledRelease);
     auth = await nativeFixture(pool);
-    work = await createWorkClient(databaseUrl, pool);
+    work = bindExecutionContract(await createWorkClient(databaseUrl, pool), workExecutionPort(), historyExecutionPort);
+    await work.registerQueue('maintenance', WORK_QUEUES.maintenance);
     const service = auth.host.service;
     const kernel = testKernel({
       pool,
@@ -92,6 +103,21 @@ export async function createTerminalErasureFixture() {
       }),
     });
     const people = await createPersonas(kernel, { version: 1, pool, auth });
+    const consent = createCurrentConsentReader({ database: auth.authPool });
+    const sourceContext: WorkContext = {
+      pool,
+      client: work,
+      queues: WORK_QUEUES,
+      env: workerTestEnv(),
+      clock: () => new Date(),
+      getAuthorization: () => ({
+        access: kernel.testAccess,
+        readConsent: ({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId }),
+      }),
+      addEffects() {},
+      addService() {},
+    };
+    bindCanonicalSourceWork(sourceContext);
 
     async function command(actor: Persona, method: string, path: string, body?: unknown) {
       return kernel.handle(
@@ -170,6 +196,39 @@ export async function createTerminalErasureFixture() {
       json,
       subject,
       readOnly,
+      async prepareSource(actor: Persona, collectionId: string) {
+        await prepareCollectionSource(sourceContext, actor.accountId, collectionId);
+      },
+      async prepareAccountAgent(actor: Persona) {
+        const partition = partitionOf(routeOf(actor.accountId)!);
+        const deadline = Date.now() + 45_000;
+        try {
+          await drainEffects(pool!, partition, { deadlineMs: 45_000 });
+          // The relay checkpoint proves enqueue, not completion of the native account-agent effect.
+          for (;;) {
+            const pending = await readOnly<{ workflow_id: string }>(
+              `SELECT consumer.workflow_id
+               FROM core.history_event_consumer consumer
+               JOIN core.outbox event USING(partition_no,position,event_seq)
+               WHERE consumer.partition_no=$1 AND consumer.consumer='account_agent'
+                 AND event.subject=$2 AND consumer.state='open'`,
+              [partition, actor.accountId],
+            );
+            if (pending.length === 0) return;
+            for (const row of pending) {
+              const status = await work!.getWorkflow(row.workflow_id);
+              if (status?.status === 'ERROR' || status?.status === 'CANCELLED')
+                await work!.retrieveWorkflow(row.workflow_id).getResult();
+            }
+            if (Date.now() >= deadline)
+              throw new Error(`Account agent effects did not complete within 45000ms: ${actor.accountId}`);
+            await Bun.sleep(15);
+          }
+        } catch (error) {
+          console.error('Terminal erasure account-agent preparation failed:', worker?.output);
+          throw error;
+        }
+      },
       async startWorker() {
         if (worker) throw new Error('Terminal erasure worker is already running');
         worker = await startTerminalErasureWorker(databaseUrl);

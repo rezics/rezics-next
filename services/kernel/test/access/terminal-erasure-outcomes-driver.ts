@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { Elysia } from 'elysia';
 import { documentText, fromPlainText } from '@rezics/document';
 import bookStarter from '../../../../packages/definitions/presentation/book/zone.json';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { ProblemError } from '../../src/http/problem-error.ts';
 import { createNativeEditionFixture } from '../commerce/support/native-edition-fixture.ts';
 import { drainEffects } from '../support/account-deletion.ts';
 import { password } from './native-account-bindings-fixture.ts';
@@ -62,6 +63,12 @@ function plainBody(value: unknown): string | unknown {
 
 export async function createTerminalErasureDriver(): Promise<TerminalErasureDriver> {
   const world = await createTerminalErasureFixture();
+  const http = new Elysia()
+    .onError('global', ({ error }) => {
+      if (error instanceof ProblemError && error.code === 'dependency_unavailable') console.error(error.stack);
+    })
+    .use(world.kernel)
+    .compile();
   let worker: Awaited<ReturnType<World['startWorker']>> | undefined;
   let clockMs = Date.now();
   let published = { collectionId: '', aliceId: '' };
@@ -75,7 +82,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
 
   async function handle(actor: Actor, request: HttpRequest): Promise<Response> {
     const token = bearer(actor);
-    return world.kernel.handle(
+    return http.handle(
       new Request(`https://kernel.test${request.path}`, {
         method: request.method,
         headers: {
@@ -144,7 +151,12 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
 
   async function drainAlice(accountId: string) {
     const route = routeOf(accountId);
-    if (route !== null) await drainEffects(world.pool, partitionOf(route), { deadlineMs: 45_000 });
+    try {
+      if (route !== null) await drainEffects(world.pool, partitionOf(route), { deadlineMs: 45_000 });
+    } catch (error) {
+      console.error('Terminal erasure worker at failed effects drain:', worker?.output);
+      throw error;
+    }
   }
 
   const driver: TerminalErasureDriver = {
@@ -160,6 +172,8 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
       const aliceId = alicePerson.accountId;
       const bobId = bobPerson.accountId;
       const aliceAgent = accountAgentId(aliceId);
+      worker = await world.startWorker();
+      await world.prepareAccountAgent(alicePerson);
       for (const group of [
         'collections',
         'personal_library',
@@ -246,6 +260,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
       );
       const pendingOnly = await world.subject(`Pending only ${marker('pending-member')}`);
       await json('alice', 'PUT', `/v1/libraryEntries/${pendingOnly.subject.id}`, { state: 'planned' });
+      await world.prepareSource(people().alice, publicCollection.collection.id);
       const publishedCollection = await json<{
         collection: { revision: number };
         publication: { generation: string };
@@ -433,7 +448,6 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         visibility: 'private',
       });
 
-      worker = await world.startWorker();
       await drainAlice(aliceId);
 
       const opened = await handle('alice', {
@@ -457,6 +471,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         'GET',
         `/v1/collections/${publicCollection.collection.id}`,
       );
+      await world.prepareSource(people().alice, publicCollection.collection.id);
       const pendingSelected = await json<{ collection: { revision: number } }>(
         'alice',
         'POST',

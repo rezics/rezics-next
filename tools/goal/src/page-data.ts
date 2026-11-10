@@ -24,6 +24,7 @@ type PageManifest = {
   pages: {
     id: string;
     path: string;
+    seedIdentity?: { provider: 'bangumi' | 'vndb'; sourceKey: string; nativeType: string; namespace?: string };
     personas?: string[];
     sections: {
       id: string;
@@ -43,6 +44,25 @@ export type PageDataSection = {
   goal: string;
   files: string[];
   firstErrorLine?: string;
+  unrun?: PageDataUnrunEvidence;
+};
+export type PageDataUnrunEvidence = {
+  version: 1;
+  provider: 'bangumi' | 'vndb';
+  sourceKey: string;
+  nativeType: string;
+  namespace?: string;
+  artifact: string;
+  collection?: string;
+  reason:
+    | 'artifact-missing'
+    | 'artifact-invalid'
+    | 'source-key-missing'
+    | 'identity-missing'
+    | 'identity-invalid'
+    | 'ambiguous'
+    | 'native-type-mismatch';
+  probes: { web: 'unrun'; native: 'unrun'; sql: 'unrun' | 'not-declared' };
 };
 export type PageDataRun = {
   runId: number;
@@ -369,12 +389,57 @@ function safeOutput(value: string): string {
   return value.replace(secretPattern, '[redacted]');
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseUnrunEvidence(token: string): PageDataUnrunEvidence {
+  if (token.length > 4096) throw new Error('invalid page-data unrun provenance');
+  let value: unknown;
+  try {
+    value = JSON.parse(decodeURIComponent(token)) as unknown;
+  } catch {
+    throw new Error('invalid page-data unrun provenance');
+  }
+  if (!isRecord(value) || value.version !== 1 || !isRecord(value.probes))
+    throw new Error('invalid page-data unrun provenance');
+  const allowedReasons = [
+    'artifact-missing',
+    'artifact-invalid',
+    'source-key-missing',
+    'identity-missing',
+    'identity-invalid',
+    'ambiguous',
+    'native-type-mismatch',
+  ];
+  if (
+    (value.provider !== 'bangumi' && value.provider !== 'vndb') ||
+    typeof value.sourceKey !== 'string' ||
+    value.sourceKey.length === 0 ||
+    value.sourceKey.length > 256 ||
+    typeof value.nativeType !== 'string' ||
+    value.nativeType.length === 0 ||
+    value.nativeType.length > 128 ||
+    typeof value.artifact !== 'string' ||
+    value.artifact.length === 0 ||
+    value.artifact.length > 512 ||
+    (value.namespace !== undefined && (typeof value.namespace !== 'string' || value.namespace.length > 256)) ||
+    (value.collection !== undefined && (typeof value.collection !== 'string' || value.collection.length > 256)) ||
+    !allowedReasons.includes(value.reason as string) ||
+    value.probes.web !== 'unrun' ||
+    value.probes.native !== 'unrun' ||
+    (value.probes.sql !== 'unrun' && value.probes.sql !== 'not-declared')
+  )
+    throw new Error('invalid page-data unrun provenance');
+  return value as PageDataUnrunEvidence;
+}
+
 export function parsePageDataOutput(output: string, registry: ReadonlyMap<string, SectionConfig>): PageDataSection[] {
   const results: PageDataSection[] = [];
   const seen = new Set<string>();
   for (const line of output.split(/\r?\n/).filter(Boolean)) {
     const [page, persona, section, className, ...extra] = line.trim().split(/\s+/);
-    if (!page || !persona || !section || !className || extra.length)
+    if (!page || !persona || !section || !className)
       throw new Error(`invalid page-data output: ${safeLine(line)}`);
     const key = `${page}\t${persona}\t${section}`;
     const source = registry.get(key);
@@ -382,11 +447,18 @@ export function parsePageDataOutput(output: string, registry: ReadonlyMap<string
     if (!PAGE_DATA_CLASSES.includes(className as PageDataClass))
       throw new Error(`page-data output has an unknown class: ${safeLine(line)}`);
     if (seen.has(key)) throw new Error(`page-data output repeated ${page}/${persona}/${section}`);
+    let unrun: PageDataUnrunEvidence | undefined;
+    if (extra.length) {
+      if (extra.length !== 1 || !extra[0]!.startsWith('unrun=') || className !== 'UNAVAILABLE')
+        throw new Error(`invalid page-data output: ${safeLine(line)}`);
+      unrun = parseUnrunEvidence(extra[0]!.slice('unrun='.length));
+    }
     seen.add(key);
     const classValue = className as PageDataClass;
     results.push({
       ...source,
       class: classValue,
+      ...(unrun ? { unrun } : {}),
       ...(PAGE_DATA_DEFECTS.has(classValue) ? { firstErrorLine: safeLine(line) } : {}),
     });
   }

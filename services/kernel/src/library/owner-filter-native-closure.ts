@@ -197,7 +197,8 @@ export async function retainNativeOwnerFilterPopulation(binding: OwnerFilterRead
 }
 
 function locator(subjectId: string, row: NativeFactKey): OwnerFilterFactLocator {
-  if (routeOf(row.factId) === null) throw ownerFilterUnavailable();
+  // Assignment identities use gen_random_uuid(); the label, rather than its assignment, is routed.
+  if (row.driver !== 2 && routeOf(row.factId) === null) throw ownerFilterUnavailable();
   switch (row.driver) {
     case 1:
       return { kind: 'entry', subjectId };

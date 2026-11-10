@@ -8,10 +8,10 @@
  * with that persona's native response, and classify SEED only for a declared expected SQL
  * relation whose count is zero after the reader settles.
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, lstatSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   chromium,
@@ -28,6 +28,7 @@ export type Persona = (typeof PERSONAS)[number];
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_MANIFEST = resolve(ROOT, 'scripts/page-data-sections.json');
+const DEFAULT_SEED_ARTIFACT = resolve(ROOT, '..', 'page-data-stack', '.temp/cross-media-seed/result.json');
 const DEFAULT_AUTH_ORIGIN = 'http://127.0.0.1:4200';
 const DEFAULT_KERNEL_ENV = resolve(ROOT, 'services/kernel/.env');
 const LOCAL_KEYS = resolve(ROOT, '.temp/local-stack/keys.json');
@@ -80,9 +81,37 @@ export type ManifestSection = {
 export type ManifestPage = {
   id: string;
   path: string;
-  subject?: string;
+  seedIdentity?: SeedIdentityReference;
   personas?: readonly Persona[];
   sections: ManifestSection[];
+};
+
+export type SeedIdentityReference = {
+  provider: 'bangumi' | 'vndb';
+  sourceKey: string;
+  nativeType: string;
+  namespace?: string;
+};
+
+export type SeedIdentityFailure =
+  | 'artifact-missing'
+  | 'artifact-invalid'
+  | 'source-key-missing'
+  | 'identity-missing'
+  | 'identity-invalid'
+  | 'ambiguous'
+  | 'native-type-mismatch';
+
+export type UnrunProbeEvidence = {
+  version: 1;
+  provider: SeedIdentityReference['provider'];
+  sourceKey: string;
+  nativeType: string;
+  namespace?: string;
+  artifact: string;
+  collection?: string;
+  reason: SeedIdentityFailure;
+  probes: { web: 'unrun'; native: 'unrun'; sql: 'unrun' | 'not-declared' };
 };
 
 export type Manifest = {
@@ -125,6 +154,8 @@ export type SectionResult = {
     seedExpected: boolean;
     nativeProbe: 'run' | 'unrun';
     browserProbe: 'run' | 'unrun';
+    sqlProbe: 'run' | 'unrun' | 'not-declared';
+    unrun?: UnrunProbeEvidence;
   };
 };
 
@@ -136,6 +167,9 @@ export type RunOptions = {
   databaseUrl?: string;
   memberToken?: string;
   memberStorageState?: string;
+  seedArtifact?: unknown;
+  seedArtifactSource?: string;
+  seedArtifactFailure?: 'artifact-missing' | 'artifact-invalid';
   signIn?: { origin: string; email: string; password: string };
   queryCount?: (text: string, values: readonly string[]) => Promise<number>;
   fetch?: typeof fetch;
@@ -283,7 +317,94 @@ export function classifySection(
 }
 
 export function formatLine(result: SectionResult): string {
-  return `${result.page} ${result.persona} ${result.section} ${result.class}`;
+  const provenance = result.evidence.unrun ? ` unrun=${encodeURIComponent(JSON.stringify(result.evidence.unrun))}` : '';
+  return `${result.page} ${result.persona} ${result.section} ${result.class}${provenance}`;
+}
+
+type SeedIdentityCandidate = { id: unknown; type: unknown; collection: string };
+export type SeedIdentityResolution =
+  | { status: 'resolved'; subjectId: string; collection: string }
+  | { status: 'unrun'; reason: SeedIdentityFailure; collection?: string };
+
+function identityCandidates(reference: SeedIdentityReference, artifact: unknown): SeedIdentityCandidate[] {
+  if (!isRecord(artifact)) return [];
+  const candidates: SeedIdentityCandidate[] = [];
+  const readings = artifact.readings;
+  if (Array.isArray(readings)) {
+    for (const reading of readings) {
+      if (!isRecord(reading) || reading.source !== reference.provider || reading.externalId !== reference.sourceKey)
+        continue;
+      const current =
+        isRecord(reading.subject) && isRecord(reading.subject.subject) ? reading.subject.subject : reading.subject;
+      candidates.push({
+        id: isRecord(current) ? current.id : undefined,
+        type: isRecord(current) ? current.type : undefined,
+        collection: 'readings',
+      });
+    }
+  }
+
+  const publicTags = artifact.publicTags;
+  const currentBindings = isRecord(publicTags) ? publicTags.currentBindings : undefined;
+  const concepts = isRecord(currentBindings) ? currentBindings.concepts : undefined;
+  if (reference.provider === 'vndb' && reference.namespace !== undefined && Array.isArray(concepts)) {
+    for (const concept of concepts) {
+      if (!isRecord(concept) || concept.taxonomy !== reference.namespace || concept.code !== reference.sourceKey)
+        continue;
+      candidates.push({ id: concept.id, type: concept.type, collection: 'publicTags.currentBindings.concepts' });
+    }
+  }
+  return candidates;
+}
+
+export function resolveSeedIdentity(
+  reference: SeedIdentityReference,
+  artifact: unknown,
+  artifactFailure?: 'artifact-missing' | 'artifact-invalid',
+): SeedIdentityResolution {
+  if (artifactFailure) return { status: 'unrun', reason: artifactFailure };
+  const candidates = identityCandidates(reference, artifact);
+  if (!candidates.length) return { status: 'unrun', reason: 'source-key-missing' };
+
+  const identities = new Map<string, SeedIdentityCandidate>();
+  for (const candidate of candidates) {
+    if (typeof candidate.id !== 'string' || typeof candidate.type !== 'string' || !candidate.id || !candidate.type)
+      return { status: 'unrun', reason: 'identity-missing', collection: candidate.collection };
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate.id))
+      return { status: 'unrun', reason: 'identity-invalid', collection: candidate.collection };
+    identities.set(`${candidate.id}\0${candidate.type}`, candidate);
+  }
+  if (identities.size > 1)
+    return {
+      status: 'unrun',
+      reason: 'ambiguous',
+      collection: [...new Set(candidates.map((candidate) => candidate.collection))].join(','),
+    };
+  const [candidate] = identities.values();
+  if (!candidate) return { status: 'unrun', reason: 'identity-missing' };
+  if (candidate.type !== reference.nativeType)
+    return { status: 'unrun', reason: 'native-type-mismatch', collection: candidate.collection };
+  return { status: 'resolved', subjectId: candidate.id as string, collection: candidate.collection };
+}
+
+function loadSeedArtifact(path: string): {
+  artifact?: unknown;
+  failure?: 'artifact-missing' | 'artifact-invalid';
+} {
+  let stat;
+  try {
+    stat = lstatSync(path);
+  } catch (error) {
+    if (isRecord(error) && error.code === 'ENOENT') return { failure: 'artifact-missing' };
+    throw error;
+  }
+  if (!stat.isFile() || stat.size > 64 * 1024 * 1024) return { failure: 'artifact-invalid' };
+  try {
+    return { artifact: JSON.parse(readFileSync(path, 'utf8')) as unknown };
+  } catch (error) {
+    if (error instanceof SyntaxError) return { failure: 'artifact-invalid' };
+    throw error;
+  }
 }
 
 function personasOf(value: { personas?: readonly Persona[] } | undefined): readonly Persona[] {
@@ -294,6 +415,27 @@ export function parseManifest(value: unknown): Manifest {
   if (!isRecord(value) || value.version !== 1) throw new Error('Manifest version must be 1');
   if (typeof value.context !== 'string' || typeof value.question !== 'string' || !Array.isArray(value.pages))
     throw new Error('Manifest is missing context, question or pages');
+  for (const page of value.pages) {
+    if (!isRecord(page) || typeof page.id !== 'string' || typeof page.path !== 'string')
+      throw new Error('Manifest contains an invalid page');
+    if ('subject' in page) throw new Error(`Manifest page ${page.id} must resolve its seeded identity`);
+    const identity = page.seedIdentity;
+    if (page.path.includes('{subject}') && !isRecord(identity))
+      throw new Error(`Manifest page ${page.id} has a subject route without a seed identity`);
+    if (identity !== undefined) {
+      if (
+        !isRecord(identity) ||
+        (identity.provider !== 'bangumi' && identity.provider !== 'vndb') ||
+        typeof identity.sourceKey !== 'string' ||
+        !identity.sourceKey.trim() ||
+        typeof identity.nativeType !== 'string' ||
+        !identity.nativeType.trim() ||
+        (identity.namespace !== undefined && (typeof identity.namespace !== 'string' || !identity.namespace.trim())) ||
+        !page.path.includes('{subject}')
+      )
+        throw new Error(`Manifest page ${page.id} has an invalid seed identity`);
+    }
+  }
   return value as Manifest;
 }
 
@@ -307,6 +449,14 @@ function expand(template: string, vars: Record<string, string>): string {
     if (value === undefined) throw new Error(`Unknown path variable ${name}`);
     return value;
   });
+}
+
+function expandValue(value: unknown, vars: Record<string, string>): unknown {
+  if (typeof value === 'string') return expand(value, vars);
+  if (Array.isArray(value)) return value.map((entry) => expandValue(entry, vars));
+  if (isRecord(value))
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, expandValue(entry, vars)]));
+  return value;
 }
 
 function bindSql(sql: SeedSql, vars: Record<string, string>): { text: string; values: string[] } {
@@ -394,7 +544,7 @@ async function nativeCall(
       new Request(url, {
         method: call.method,
         headers,
-        ...(call.method === 'POST' ? { body: JSON.stringify(call.body ?? {}) } : {}),
+        ...(call.method === 'POST' ? { body: JSON.stringify(expandValue(call.body ?? {}, vars)) } : {}),
         signal: AbortSignal.timeout(timeoutMs),
       }),
     );
@@ -650,6 +800,16 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
     diagnostics.push(line);
     err.write(`${line}\n`);
   };
+  const artifactSource = options.seedArtifactSource ?? '../page-data-stack/.temp/cross-media-seed/result.json';
+  const artifactFailure =
+    options.seedArtifactFailure ?? (options.seedArtifact === undefined ? 'artifact-missing' : undefined);
+  const seedIdentities = new Map(
+    options.manifest.pages.flatMap((page) =>
+      page.seedIdentity
+        ? [[page.id, resolveSeedIdentity(page.seedIdentity, options.seedArtifact, artifactFailure)] as const]
+        : [],
+    ),
+  );
   const pagesFor = (persona: Persona) =>
     options.manifest.pages.filter(
       (entry) =>
@@ -738,10 +898,56 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
         for (const manifestPage of pages) {
           const sections = manifestPage.sections.filter((section) => personasOf(section).includes(persona));
           if (sections.length === 0) continue;
+          const identity = seedIdentities.get(manifestPage.id);
+          if (identity?.status === 'unrun') {
+            incomplete = true;
+            for (const section of sections) {
+              const reference = manifestPage.seedIdentity!;
+              const sqlProbe = section.sql ? 'unrun' : 'not-declared';
+              const unrun: UnrunProbeEvidence = {
+                version: 1,
+                provider: reference.provider,
+                sourceKey: reference.sourceKey,
+                nativeType: reference.nativeType,
+                ...(reference.namespace ? { namespace: reference.namespace } : {}),
+                artifact: artifactSource,
+                ...(identity.collection ? { collection: identity.collection } : {}),
+                reason: identity.reason,
+                probes: { web: 'unrun', native: 'unrun', sql: sqlProbe },
+              };
+              const result: SectionResult = {
+                page: manifestPage.id,
+                persona,
+                section: section.id,
+                name: section.name,
+                class: 'UNAVAILABLE',
+                evidence: {
+                  nativeStatus: 0,
+                  nativeItems: 0,
+                  pageItems: 0,
+                  reader: 'unavailable',
+                  seedCount: null,
+                  seedExpected: section.sql !== undefined,
+                  nativeProbe: 'unrun',
+                  browserProbe: 'unrun',
+                  sqlProbe,
+                  unrun,
+                },
+              };
+              report(
+                `Probes unrun ${manifestPage.id} ${persona} ${section.id}: provider=${reference.provider} sourceKey=${reference.sourceKey} expectedType=${reference.nativeType} artifact=${artifactSource} collection=${identity.collection ?? 'unavailable'} reason=${identity.reason}; web=unrun native=unrun sql=${sqlProbe}`,
+              );
+              results.push(result);
+              out.write(`${formatLine(result)}\n`);
+            }
+            continue;
+          }
+          const subject = identity?.status === 'resolved' ? identity.subjectId : '';
           let navigationFailed = !page;
           if (page) {
             try {
-              await page.goto(new URL(manifestPage.path, base).href, { waitUntil: 'load', timeout: pageTimeout });
+              const route = expand(manifestPage.path, { subject });
+              await page.goto(new URL(route, base).href, { waitUntil: 'load', timeout: pageTimeout });
             } catch (error) {
               navigationFailed = true;
               incomplete = true;
@@ -753,7 +959,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
 
           const evaluateSection = async (section: ManifestSection): Promise<SectionResult> => {
             const vars: Record<string, string> = {
-              subject: manifestPage.subject ?? '',
+              subject,
               GLOBAL: options.manifest.context,
               QUESTION: options.manifest.question,
               context: options.manifest.context,
@@ -790,6 +996,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
               readSection(),
             ]);
             let seedCount: number | null = null;
+            let sqlProbe: 'run' | 'unrun' | 'not-declared' = section.sql ? 'unrun' : 'not-declared';
             if (section.sql) {
               const bound = bindSql(section.sql, vars);
               if (!queryCount) {
@@ -803,6 +1010,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
               } else {
                 try {
                   seedCount = await queryCount(bound.text, bound.values);
+                  sqlProbe = 'run';
                 } catch (error) {
                   incomplete = true;
                   sqlInfrastructureFailure = displayError(error);
@@ -849,6 +1057,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
                 seedExpected: section.sql !== undefined,
                 nativeProbe: native ? 'run' : 'unrun',
                 browserProbe,
+                sqlProbe,
               },
             };
             if (native?.error) incomplete ||= native.status === 0;
@@ -936,6 +1145,8 @@ async function main(argv: readonly string[]): Promise<number> {
   try {
     const args = parseArgs(argv);
     const manifestPath = isAbsolute(args.manifest) ? args.manifest : resolve(args.manifest);
+    const seedArtifactPath = DEFAULT_SEED_ARTIFACT;
+    const seedArtifact = loadSeedArtifact(seedArtifactPath);
     const databaseUrl = args.databaseUrl ?? process.env.DATABASE_URL ?? databaseUrlFromEnv(DEFAULT_KERNEL_ENV);
     const memberToken = args.memberToken ?? process.env.PAGE_DATA_CHECK_MEMBER_TOKEN;
     const signIn = localSignIn();
@@ -944,6 +1155,9 @@ async function main(argv: readonly string[]): Promise<number> {
       baseUrl: args.baseUrl,
       kernel: args.kernel,
       manifest: loadManifest(manifestPath),
+      seedArtifact: seedArtifact.artifact,
+      seedArtifactSource: relative(ROOT, seedArtifactPath),
+      ...(seedArtifact.failure ? { seedArtifactFailure: seedArtifact.failure } : {}),
       ...(args.invocation ? { invocation: args.invocation } : {}),
       ...(databaseUrl ? { databaseUrl } : {}),
       ...(memberToken ? { memberToken } : {}),

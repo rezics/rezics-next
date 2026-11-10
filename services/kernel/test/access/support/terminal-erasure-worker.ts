@@ -1,4 +1,3 @@
-import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Pool } from 'pg';
 import { workerTestEnv } from '../../support/worker-env.ts';
 
@@ -26,6 +25,8 @@ export async function startTerminalErasureWorker(databaseUrl: string) {
   const read = async (stream: ReadableStream<Uint8Array>) => {
     const decoder = new TextDecoder();
     for await (const chunk of stream) {
+      // Preserve the first relay/checkpoint failure even when periodic progress evicts the tail.
+      process.stderr.write(chunk);
       output = (output + decoder.decode(chunk, { stream: true })).slice(-8192);
       if (output.includes('TERMINAL_ERASURE_WORKER_READY')) ready();
     }

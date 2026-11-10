@@ -25,7 +25,7 @@ import { workExecutionPort } from '../../../src/work/selected-runtime.ts';
 import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import type { WorkContext } from '../../../src/work/registry.ts';
 import { bindCanonicalSourceWork } from '../../../src/library/canonical-source-store.ts';
-import { advanceCollectionSourceWork } from '../../../src/library/collection-source-work.ts';
+import { prepareCollectionSource } from './collection-source-preparation.ts';
 import { createCurrentConsentReader } from '../../../../auth/src/current-consent.ts';
 
 export const collectionScopes = [
@@ -110,17 +110,7 @@ export async function createCollectionPresentationFixture() {
     };
     bindCanonicalSourceWork(sourceContext);
     async function prepareSource(collectionId: string) {
-      // Run the existing native worker step explicitly before a finite command case.
-      // No ready head, capture or membership evidence is supplied by the fixture.
-      for (let step = 0; step < 100; step++) {
-        const result = await advanceCollectionSourceWork(sourceContext, {
-          accounts: [identity.ordinary.accountId],
-          collectionId,
-        });
-        if (result === 'ready') return;
-        if (result === 'unavailable') throw new Error(`Collection fixture native Source unavailable: ${collectionId}`);
-      }
-      throw new Error(`Collection fixture native Source preparation did not complete: ${collectionId}`);
+      await prepareCollectionSource(sourceContext, identity.ordinary.accountId, collectionId);
     }
     const clientId = `collection-presentation-${randomUUID()}`;
     await identity.auth.internal.registerClient({ clientId, firstParty: true, scopes: managementScopes });

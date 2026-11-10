@@ -176,6 +176,21 @@ test('the policy interval, defect transition, section output and per-run report 
         firstErrorLine,
       ]),
     ).toEqual([['API', 'home anonymous feed API']]);
+    const unrunEvidence = {
+      version: 1,
+      provider: 'bangumi',
+      sourceKey: 'character:4',
+      nativeType: 'wd:Q95074',
+      artifact: '../page-data-stack/.temp/cross-media-seed/result.json',
+      collection: 'readings',
+      reason: 'identity-invalid',
+      probes: { web: 'unrun', native: 'unrun', sql: 'unrun' },
+    } as const;
+    const unrunRow = `home anonymous feed UNAVAILABLE unrun=${encodeURIComponent(JSON.stringify(unrunEvidence))}\n`;
+    expect(parsePageDataOutput(unrunRow, h.registry)[0]?.unrun).toEqual(unrunEvidence);
+    expect(
+      parsePageDataCompletion(completed('identity', unrunRow, true), h.registry, 'identity', 2).sections[0]?.unrun,
+    ).toEqual(unrunEvidence);
 
     const routed: string[] = [];
     let result = 'home anonymous feed DATA\n';
