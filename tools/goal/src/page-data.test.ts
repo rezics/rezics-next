@@ -18,6 +18,7 @@ import {
   newlyDefectiveSections,
   pageDataClassCounts,
   parsePageDataOutput,
+  parsePageDataCompletion,
   pageDataSeedStatus,
   PageDataStackError,
   firstSubstantiveErrorLine,
@@ -88,6 +89,16 @@ const section = (className: PageDataSection['class']): PageDataSection => ({
   files: ['apps/web/src/routes/index.tsx'],
   ...(className === 'API' ? { firstErrorLine: 'home anonymous feed API' } : {}),
 });
+
+const completed = (invocation: string, rows: string, incomplete = false) =>
+  rows +
+  `Page-data completed ${JSON.stringify({
+    version: 1,
+    invocation,
+    sections: rows.trim().split('\n').length,
+    defects: rows.split('\n').filter((row) => / (API|WEB|SEED)$/.test(row)).length,
+    incomplete,
+  })}\n`;
 
 test('page-data refresh notices declared dependency patch changes but reuses unrelated source updates', () => {
   const h = fixture();
@@ -173,7 +184,11 @@ test('the policy interval, defect transition, section output and per-run report 
       tasks: { tasks: () => [] },
       inbox: { deliver() {} },
       now: () => start,
-      runStack: async () => ({ output: result, exitCode: 0, registry: h.registry }),
+      runStack: async (_head: string, invocation: string) => ({
+        output: completed(invocation, result),
+        exitCode: result.includes(' API') ? 1 : 0,
+        registry: h.registry,
+      }),
       routeDefect: async ({
         section: defective,
         previousClass,
@@ -232,8 +247,8 @@ test('fresh incomplete seed artifacts permit route checks while boot failures an
       tasks: { tasks: () => [] },
       inbox: { deliver() {} },
       now: () => new Date('2026-01-01T00:00:00.000Z'),
-      runStack: async () => ({
-        output: 'home anonymous feed DATA\n',
+      runStack: async (_head, invocation) => ({
+        output: completed(invocation, 'home anonymous feed DATA\n'),
         exitCode: 0,
         registry: h.registry,
         seed,
@@ -321,6 +336,84 @@ test('a page-data check failure saves the stack and check output and names the l
     const log = readFileSync(logPath!, 'utf8');
     expect(log).toContain(stackOutput);
     expect(log).toContain(checkOutput);
+  } finally {
+    h.db.close();
+  }
+});
+
+test('only a matching completed check retains partial evidence and records coverage separately from seed', async () => {
+  const h = fixture();
+  try {
+    const notices: { summary: string }[] = [];
+    const seed = { status: 'publication-incomplete' as const, omissions: 2 };
+    const rows = 'home anonymous feed API\n';
+    const options = {
+      settings: h.settings,
+      db: h.db,
+      tasks: { tasks: () => [] },
+      inbox: {
+        deliver: (notice: { summary: string }) => {
+          notices.push(notice);
+        },
+      },
+      now: () => new Date('2026-01-01T00:00:00.000Z'),
+      runStack: async (_head: string, invocation: string) => ({
+        output: completed(invocation, rows, true),
+        exitCode: 1,
+        registry: h.registry,
+        seed,
+        diagnostics: 'Member browser setup unavailable password=hidden\n',
+      }),
+      routeDefect: async () => 'dispatched' as const,
+    };
+    expect(await runPageDataCycle(options)).toBe('ran');
+    const retained = readLatestPageDataRun(h.db);
+    expect(retained).toMatchObject({ seed, coverage: { status: 'incomplete' }, classes: { API: 1 } });
+    const reports = flowReport(readFlow(h.db), []).pageDataRuns;
+    expect(reports[0]).toMatchObject({
+      seed,
+      coverage: { status: 'incomplete' },
+      sections: { API: [{ class: 'API' }] },
+    });
+    expect(reports[1]?.failure?.phase).toBe('check');
+    expect(formatPageDataFlowRuns(reports)[0]).toContain('coverage=incomplete; seed=publication-incomplete');
+    const log = readFileSync(notices[0]!.summary.match(/output log: (.+)$/)![1]!, 'utf8');
+    expect(log).toContain(rows);
+    expect(log).toContain('Member browser setup unavailable');
+    expect(log).not.toContain('hidden');
+
+    const partial = completed('current', rows, true);
+    expect(parsePageDataCompletion(partial, h.registry, 'current', 1).incomplete).toBe(true);
+    expect(
+      parsePageDataCompletion(completed('current', 'home anonymous feed UNAVAILABLE\n', true), h.registry, 'current', 2)
+        .incomplete,
+    ).toBe(true);
+    for (const [output, code] of [
+      [rows, 1],
+      [partial, 2],
+      [partial.replace('current', 'stale'), 1],
+      [partial.replace('current', 'x'.repeat(513)), 1],
+      [partial + partial, 1],
+      [partial + 'later output\n', 1],
+      [partial.replace('"sections":1', '"sections":0'), 1],
+      [partial.replace('"defects":1', '"defects":0'), 1],
+      [partial.replace('"incomplete":true', '"incomplete":"true"'), 1],
+      [partial.replace('home anonymous feed API\n', ''), 1],
+      ['Page-data completed {bad}\n', 2],
+    ] as const) {
+      expect(() => parsePageDataCompletion(output, h.registry, 'current', code)).toThrow();
+    }
+    options.now = () => new Date('2026-01-01T00:00:00.001Z');
+    options.runStack = async () => ({
+      output: rows,
+      exitCode: 2,
+      registry: h.registry,
+      seed,
+      diagnostics: 'error: child crashed',
+    });
+    expect(await runPageDataCycle(options)).toBe('failed');
+    expect(readLatestPageDataRun(h.db)).toEqual(retained);
+    expect(notices.at(-1)?.summary).toContain('error: child crashed');
   } finally {
     h.db.close();
   }

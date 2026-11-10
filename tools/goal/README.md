@@ -1755,6 +1755,18 @@ path and exit code 1 are admitted; the seed command remains strict. A partial ru
 so the next cycle retries. Existing cycle state has no exact source-input and database identity for safe partial
 artifact reuse.
 
+Decision: isolate each page-data prerequisite at its owning boundary. A member browser setup failure leaves anonymous
+readers, SQL counts and independently token-authorized member native reads running on the same owned browser/stack.
+A missing member token skips member native calls; a missing browser sign-in skips member readers. Neither falls back
+to anonymous authority. Retain declared section order, available evidence and actual API/WEB/SEED defects. Browser
+setup, navigation, reader and cleanup failures report incomplete coverage rather than discarding other settled probes.
+The checker ends stdout with one `Page-data completed` JSON marker (at most 512 characters) containing `version: 1`,
+the caller's fresh `--invocation`, section and defect counts, and `incomplete`. The caller accepts only this final
+marker, the exact manifest coverage and the corresponding exit (defects: 1; otherwise incomplete: 2; otherwise: 0).
+A timeout, stale, duplicate, missing or malformed marker remains a check failure. A usable partial result stores
+`coverage=incomplete` separately from seed publication status, preserves its redacted diagnostic log and check-failure
+notice, and never manufactures a successful dependent probe.
+
 Decision: persist each bounded page-data boot/check transcript in a run-scoped state-directory log, name that path in the supermanager notice, retain the pre-teardown cause alongside cleanup and the final origin-specific readiness probe, and redact recognized credentials.
 
 Decision: before a dedicated page-data seed or resume, compare the live active Definitions digest with the bundled

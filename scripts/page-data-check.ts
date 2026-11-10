@@ -9,6 +9,7 @@
  * relation whose count is zero after the reader settles.
  */
 import { readFileSync, existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -122,6 +123,8 @@ export type SectionResult = {
     reader: PageKind;
     seedCount: number | null;
     seedExpected: boolean;
+    nativeProbe: 'run' | 'unrun';
+    browserProbe: 'run' | 'unrun';
   };
 };
 
@@ -129,6 +132,7 @@ export type RunOptions = {
   baseUrl: string;
   kernel: string;
   manifest: Manifest;
+  invocation?: string;
   databaseUrl?: string;
   memberToken?: string;
   memberStorageState?: string;
@@ -608,8 +612,8 @@ async function signInBrowser(
   await page.goto(new URL('/auth/sign-in', base).href, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
   const email = page.getByLabel(/email/i);
   await email.waitFor({ state: 'visible', timeout: timeoutMs });
-  await email.fill(signIn.email);
-  await page.locator('input[name="password"]').fill(signIn.password);
+  await email.fill(signIn.email, { timeout: timeoutMs });
+  await page.locator('input[name="password"]').fill(signIn.password, { timeout: timeoutMs });
   await page.getByRole('button', { name: 'Sign in', exact: true }).click({ timeout: timeoutMs });
   await page.waitForURL((url) => url.origin === base.origin, { timeout: timeoutMs });
 }
@@ -646,189 +650,249 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
     diagnostics.push(line);
     err.write(`${line}\n`);
   };
+  const pagesFor = (persona: Persona) =>
+    options.manifest.pages.filter(
+      (entry) =>
+        personasOf(entry).includes(persona) && entry.sections.some((section) => personasOf(section).includes(persona)),
+    );
   let token = options.memberToken;
   const signIn = options.signIn;
-  if (!token && signIn) token = await memberTokenFromAuth(signIn, send);
+  if (!token && signIn && pagesFor('member').length) {
+    try {
+      token = await memberTokenFromAuth(signIn, send);
+    } catch (error) {
+      incomplete = true;
+      report(`Member native authentication unavailable: ${displayError(error)}`);
+    }
+  }
 
   const ownedBrowser = options.browser === undefined;
-  const browser = options.browser ?? (await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] }));
+  let browser = options.browser;
+  if (!browser) {
+    try {
+      browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] });
+    } catch (error) {
+      incomplete = true;
+      report(`Browser unavailable: ${displayError(error)}`);
+    }
+  }
+  const close = async (label: string, resource: { close(): Promise<void> } | undefined) => {
+    try {
+      await resource?.close();
+    } catch (error) {
+      incomplete = true;
+      report(`${label} cleanup failed: ${displayError(error)}`);
+    }
+  };
+  const unread = (): PageObservation => ({
+    present: false,
+    itemCount: 0,
+    text: '',
+    dataState: null,
+    busy: true,
+  });
   const results: SectionResult[] = [];
   let seedCounter: ReturnType<typeof createSeedCounter> | undefined;
   try {
-    seedCounter = !options.queryCount && options.databaseUrl ? createSeedCounter(options.databaseUrl) : undefined;
+    try {
+      seedCounter = !options.queryCount && options.databaseUrl ? createSeedCounter(options.databaseUrl) : undefined;
+    } catch (error) {
+      incomplete = true;
+      report(`SQL counter unavailable: ${displayError(error)}`);
+    }
     const queryCount = options.queryCount ?? seedCounter?.queryCount;
     let sqlInfrastructureFailure: string | undefined;
-    const contexts: Record<Persona, BrowserContext> = {
-      anonymous: await browser.newContext({ locale: 'en-US' }),
-      member: await browser.newContext({
-        locale: 'en-US',
-        ...(options.memberStorageState ? { storageState: options.memberStorageState } : {}),
-      }),
-    };
-    try {
-      if (signIn && !options.memberStorageState) {
-        const page = await contexts.member.newPage();
-        try {
-          await signInBrowser(page, base, signIn, pageTimeout);
-        } finally {
-          await page.close();
+    for (const persona of PERSONAS) {
+      const pages = pagesFor(persona);
+      if (!pages.length) continue;
+      let context: BrowserContext | undefined;
+      let page: Page | undefined;
+      try {
+        // Native authorization and browser sign-in are independent prerequisites.
+        if (browser && (persona === 'anonymous' || options.memberStorageState || signIn)) {
+          try {
+            context = await browser.newContext({
+              locale: 'en-US',
+              ...(persona === 'member' && options.memberStorageState
+                ? { storageState: options.memberStorageState }
+                : {}),
+            });
+            page = await context.newPage();
+            if (persona === 'member' && signIn && !options.memberStorageState)
+              await signInBrowser(page, base, signIn, pageTimeout);
+          } catch (error) {
+            incomplete = true;
+            report(`${persona} browser setup unavailable: ${displayError(error)}`);
+            await close(`${persona} setup page`, page);
+            page = undefined;
+          }
         }
-      }
-      for (const persona of PERSONAS) {
-        const page = await contexts[persona].newPage();
-        try {
-          for (const manifestPage of options.manifest.pages) {
-            if (!personasOf(manifestPage).includes(persona)) continue;
-            const sections = manifestPage.sections.filter((section) => personasOf(section).includes(persona));
-            if (sections.length === 0) continue;
-            let navigationTimedOut = false;
+        if (!page) {
+          incomplete = true;
+          report(`${persona} browser probes unrun: authenticated browser or browser setup unavailable`);
+        }
+        if (persona === 'member' && !token) {
+          incomplete = true;
+          report('Member native probes unrun: no member token');
+        }
+        for (const manifestPage of pages) {
+          const sections = manifestPage.sections.filter((section) => personasOf(section).includes(persona));
+          if (sections.length === 0) continue;
+          let navigationFailed = !page;
+          if (page) {
             try {
               await page.goto(new URL(manifestPage.path, base).href, { waitUntil: 'load', timeout: pageTimeout });
             } catch (error) {
-              if (!isTimeout(error)) throw error;
-              navigationTimedOut = true;
+              navigationFailed = true;
               incomplete = true;
               report(
-                `Page navigation timed out for ${manifestPage.id} ${persona}; continuing bounded section coverage`,
+                `Page navigation ${isTimeout(error) ? 'timed out' : 'failed'} for ${manifestPage.id} ${persona}; continuing bounded section coverage: ${displayError(error)}`,
               );
-            }
-
-            const evaluateSection = async (section: ManifestSection): Promise<SectionResult> => {
-              const vars: Record<string, string> = {
-                subject: manifestPage.subject ?? '',
-                GLOBAL: options.manifest.context,
-                QUESTION: options.manifest.question,
-                context: options.manifest.context,
-                question: options.manifest.question,
-                place: options.manifest.context,
-                ...(section.property ? { property: section.property } : {}),
-                ...(section.kind ? { kind: section.kind } : {}),
-              };
-              vars.filter = section.native.query?.filter ? expand(section.native.query.filter, vars) : NIL_UUID;
-              let actionFailed = false;
-              if (section.native.action && navigationTimedOut) {
-                actionFailed = true;
-              } else if (section.native.action) {
-                try {
-                  await clickSectionAction(page, section, readerTimeout);
-                } catch (error) {
-                  if (!isTimeout(error)) throw error;
-                  incomplete = true;
-                  actionFailed = true;
-                  report(`Reader action timed out for ${manifestPage.id} ${persona} ${section.id}`);
-                }
-              }
-              const [native, read] = await Promise.all([
-                nativeCall(
-                  kernel,
-                  section.native,
-                  vars,
-                  persona === 'member' ? token : undefined,
-                  send,
-                  requestTimeout,
-                ),
-                navigationTimedOut
-                  ? Promise.resolve({
-                      observation: { present: false, itemCount: 0, text: '', dataState: null, busy: true },
-                      timedOut: false,
-                    })
-                  : observeSection(page, section, readerTimeout),
-              ]);
-              let seedCount: number | null = null;
-              if (section.sql) {
-                const bound = bindSql(section.sql, vars);
-                if (!queryCount) {
-                  incomplete = true;
-                  report(`SQL seed count unavailable for ${manifestPage.id} ${persona} ${section.id}: no database URL`);
-                } else if (sqlInfrastructureFailure) {
-                  incomplete = true;
-                  report(
-                    `SQL seed count not retried for ${manifestPage.id} ${persona} ${section.id}: ${sqlInfrastructureFailure}`,
-                  );
-                } else {
-                  try {
-                    seedCount = await queryCount(bound.text, bound.values);
-                  } catch (error) {
-                    incomplete = true;
-                    sqlInfrastructureFailure = displayError(error);
-                    report(
-                      `SQL seed count failed for ${manifestPage.id} ${persona} ${section.id}: ${sqlInfrastructureFailure}`,
-                    );
-                  }
-                }
-              }
-              if (native.error) report(`${manifestPage.id} ${persona} ${section.id}: ${native.error}`);
-              if (read.timedOut) {
-                incomplete = true;
-                report(`Reader readiness timed out for ${manifestPage.id} ${persona} ${section.id}`);
-              }
-              const observed =
-                actionFailed || navigationTimedOut ? { ...read.observation, busy: true } : read.observation;
-              const classified = classifySection(
-                native,
-                observed,
-                section.native.items,
-                seedCount,
-                section.sql !== undefined,
-                section.native.admission,
-              );
-              const result: SectionResult = {
-                page: manifestPage.id,
-                persona,
-                section: section.id,
-                name: section.name,
-                class: classified,
-                evidence: {
-                  nativeStatus: native.status,
-                  nativeItems:
-                    section.native.admission === undefined
-                      ? countItems(pointer(native.body, section.native.items))
-                      : nativeKind(native, section.native.items, section.native.admission) === 'data'
-                        ? 1
-                        : 0,
-                  pageItems: observed.itemCount,
-                  reader: pageKind(observed),
-                  seedCount,
-                  seedExpected: section.sql !== undefined,
-                },
-              };
-              if (native.error) incomplete ||= native.status === 0;
-              if (DEFECTS.has(classified)) {
-                report(
-                  `Evidence ${manifestPage.id} ${persona} ${section.id}: native=${native.status} selected=${result.evidence.nativeItems}; reader=${pageKind(observed)} items=${observed.itemCount} state=${observed.dataState ?? 'none'} busy=${observed.busy}; ${section.sql ? `SQL=${seedCount ?? 'unavailable'}` : 'SQL=not-declared'}`,
-                );
-              }
-              return result;
-            };
-
-            const independent = sections.filter((section) => !section.native.action);
-            const activated = sections.filter((section) => section.native.action);
-            const evaluated = await Promise.all(independent.map(evaluateSection));
-            for (const section of activated) evaluated.push(await evaluateSection(section));
-            const byId = new Map(evaluated.map((result) => [result.section, result]));
-            for (const section of sections) {
-              const result = byId.get(section.id)!;
-              results.push(result);
-              out.write(`${formatLine(result)}\n`);
             }
           }
-        } finally {
-          await page.close();
+
+          const evaluateSection = async (section: ManifestSection): Promise<SectionResult> => {
+            const vars: Record<string, string> = {
+              subject: manifestPage.subject ?? '',
+              GLOBAL: options.manifest.context,
+              QUESTION: options.manifest.question,
+              context: options.manifest.context,
+              question: options.manifest.question,
+              place: options.manifest.context,
+              ...(section.property ? { property: section.property } : {}),
+              ...(section.kind ? { kind: section.kind } : {}),
+            };
+            vars.filter = section.native.query?.filter ? expand(section.native.query.filter, vars) : NIL_UUID;
+            let browserProbe: 'run' | 'unrun' = navigationFailed ? 'unrun' : 'run';
+            const readSection = async (): Promise<{ observation: PageObservation; timedOut: boolean }> => {
+              if (!page || navigationFailed) return { observation: unread(), timedOut: false };
+              try {
+                if (section.native.action) await clickSectionAction(page, section, readerTimeout);
+                return await observeSection(page, section, readerTimeout);
+              } catch (error) {
+                incomplete = true;
+                browserProbe = 'unrun';
+                report(`Reader unavailable for ${manifestPage.id} ${persona} ${section.id}: ${displayError(error)}`);
+                return { observation: unread(), timedOut: false };
+              }
+            };
+            const [native, read] = await Promise.all([
+              persona === 'member' && !token
+                ? Promise.resolve(undefined)
+                : nativeCall(
+                    kernel,
+                    section.native,
+                    vars,
+                    persona === 'member' ? token : undefined,
+                    send,
+                    requestTimeout,
+                  ),
+              readSection(),
+            ]);
+            let seedCount: number | null = null;
+            if (section.sql) {
+              const bound = bindSql(section.sql, vars);
+              if (!queryCount) {
+                incomplete = true;
+                report(`SQL seed count unavailable for ${manifestPage.id} ${persona} ${section.id}: no database URL`);
+              } else if (sqlInfrastructureFailure) {
+                incomplete = true;
+                report(
+                  `SQL seed count not retried for ${manifestPage.id} ${persona} ${section.id}: ${sqlInfrastructureFailure}`,
+                );
+              } else {
+                try {
+                  seedCount = await queryCount(bound.text, bound.values);
+                } catch (error) {
+                  incomplete = true;
+                  sqlInfrastructureFailure = displayError(error);
+                  report(
+                    `SQL seed count failed for ${manifestPage.id} ${persona} ${section.id}: ${sqlInfrastructureFailure}`,
+                  );
+                }
+              }
+            }
+            if (native?.error) report(`${manifestPage.id} ${persona} ${section.id}: ${native.error}`);
+            if (read.timedOut) {
+              incomplete = true;
+              report(`Reader readiness timed out for ${manifestPage.id} ${persona} ${section.id}`);
+            }
+            const observed = read.observation;
+            const classified = native
+              ? classifySection(
+                  native,
+                  observed,
+                  section.native.items,
+                  seedCount,
+                  section.sql !== undefined,
+                  section.native.admission,
+                )
+              : 'UNAVAILABLE';
+            const result: SectionResult = {
+              page: manifestPage.id,
+              persona,
+              section: section.id,
+              name: section.name,
+              class: classified,
+              evidence: {
+                nativeStatus: native?.status ?? 0,
+                nativeItems: !native
+                  ? 0
+                  : section.native.admission === undefined
+                    ? countItems(pointer(native.body, section.native.items))
+                    : nativeKind(native, section.native.items, section.native.admission) === 'data'
+                      ? 1
+                      : 0,
+                pageItems: observed.itemCount,
+                reader: pageKind(observed),
+                seedCount,
+                seedExpected: section.sql !== undefined,
+                nativeProbe: native ? 'run' : 'unrun',
+                browserProbe,
+              },
+            };
+            if (native?.error) incomplete ||= native.status === 0;
+            if (DEFECTS.has(classified) || !native || browserProbe === 'unrun') {
+              report(
+                `Evidence ${manifestPage.id} ${persona} ${section.id}: native=${native?.status ?? 'unrun'} browser=${browserProbe} selected=${result.evidence.nativeItems}; reader=${pageKind(observed)} items=${observed.itemCount} state=${observed.dataState ?? 'none'} busy=${observed.busy}; ${section.sql ? `SQL=${seedCount ?? 'unavailable'}` : 'SQL=not-declared'}`,
+              );
+            }
+            return result;
+          };
+
+          const independent = sections.filter((section) => !section.native.action);
+          const activated = sections.filter((section) => section.native.action);
+          const evaluated = await Promise.all(independent.map(evaluateSection));
+          for (const section of activated) evaluated.push(await evaluateSection(section));
+          const byId = new Map(evaluated.map((result) => [result.section, result]));
+          for (const section of sections) {
+            const result = byId.get(section.id)!;
+            results.push(result);
+            out.write(`${formatLine(result)}\n`);
+          }
         }
+      } finally {
+        await close(`${persona} page`, page);
+        await close(`${persona} context`, context);
       }
-    } finally {
-      await Promise.all(Object.values(contexts).map((context) => context.close()));
     }
   } finally {
-    try {
-      if (ownedBrowser) await browser.close();
-    } finally {
-      await seedCounter?.close();
-    }
+    if (ownedBrowser) await close('Browser', browser);
+    await close('SQL counter', seedCounter);
   }
+  const defects = results.filter((result) => DEFECTS.has(result.class)).length;
+  out.write(
+    `Page-data completed ${JSON.stringify({
+      version: 1,
+      invocation: options.invocation ?? randomUUID(),
+      sections: results.length,
+      defects,
+      incomplete,
+    })}\n`,
+  );
   return {
     results,
-    defects: results.filter((result) => DEFECTS.has(result.class)).length,
+    defects,
     incomplete,
     diagnostics,
   };
@@ -842,6 +906,7 @@ export function parseArgs(argv: readonly string[]): {
   memberToken?: string;
   memberStorageState?: string;
   authOrigin?: string;
+  invocation?: string;
 } {
   const values: Record<string, string> = {};
   for (let index = 0; index < argv.length; index++) {
@@ -863,6 +928,7 @@ export function parseArgs(argv: readonly string[]): {
     ...(values['member-token'] ? { memberToken: values['member-token'] } : {}),
     ...(values['storage-state'] ? { memberStorageState: values['storage-state'] } : {}),
     ...(values['auth-origin'] ? { authOrigin: values['auth-origin'] } : {}),
+    ...(values.invocation ? { invocation: values.invocation } : {}),
   };
 }
 
@@ -878,6 +944,7 @@ async function main(argv: readonly string[]): Promise<number> {
       baseUrl: args.baseUrl,
       kernel: args.kernel,
       manifest: loadManifest(manifestPath),
+      ...(args.invocation ? { invocation: args.invocation } : {}),
       ...(databaseUrl ? { databaseUrl } : {}),
       ...(memberToken ? { memberToken } : {}),
       ...(args.memberStorageState ? { memberStorageState: args.memberStorageState } : {}),
