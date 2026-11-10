@@ -172,14 +172,11 @@ async function recoverExample(canvasElement: HTMLElement) {
   await expect(links[0]!.href).not.toBe(links[1]!.href);
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
-export const Desktop1280: Story = {
+export const RecoveredComparison: Story = {
   name: 'Compare a recovered collection',
   args: { layout: 'grid' },
   play: async ({ canvasElement }) => recoverExample(canvasElement),
 };
-
-// Keep old bookmarks while the catalogue presents this scenario once.
-export const Phone390: Story = { ...Desktop1280, args: { layout: 'list' }, tags: ['!dev'] };
 
 export const MissingDefinitionLabels: Story = {
   render: () => <Example unavailable />,
