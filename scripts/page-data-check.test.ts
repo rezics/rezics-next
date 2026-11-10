@@ -1000,7 +1000,8 @@ test.each([
       if (url.pathname === '/authorize') {
         expect(request.redirect).toBe('manual');
         expect(url.searchParams.get('client_id')).toBe('rezics-website');
-        expect(url.searchParams.get('scope')).toBe(scopes.join(' '));
+        expect(url.searchParams.get('scope')).toBe(['openid', 'offline_access', ...scopes].join(' '));
+        expect(url.searchParams.get('nonce')).toBeTruthy();
         expect(url.searchParams.get('resource')).toBe('https://api.rezics.test');
         expect(url.searchParams.get('code_challenge_method')).toBe('S256');
         expect(request.headers.get('cookie')).toBe('identity=cookie-secret');

@@ -897,8 +897,10 @@ async function memberWebsiteToken(
     client_id: client,
     redirect_uri: redirect,
     response_type: 'code',
-    scope: scopes.join(' '),
+    // The Website owner requires its OIDC protocol scopes in addition to the selected API reads.
+    scope: ['openid', 'offline_access', ...scopes].join(' '),
     state,
+    nonce: randomUUID(),
     code_challenge: createHash('sha256').update(verifier).digest('base64url'),
     code_challenge_method: 'S256',
     resource: website.resource,
