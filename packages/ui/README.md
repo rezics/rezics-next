@@ -277,6 +277,19 @@ on the actual heading alongside ContentItem's `data-content-item-slot="title"`; 
 `member-list-row-cover` selector. The adapter does not fetch or derive member facts; the caller supplies any already
 available localized facts and links.
 
+`MemberReadingItem` is the compact Collection composition for either `list` or `grid`. It uses the same
+proportional thumbnail, semantic title and supplied summary; list rows have a bounded reading width. The caller
+supplies occurrence identity, position, an explicit Inspect action and essential action evidence. A grid keeps
+that evidence and the Inspect action outside `CoverCard`'s action row. `MemberListRow` remains the adapter for
+existing Search and other list consumers.
+
+Use one `MemberReadingDetail` after the member list for the selected occurrence's full evidence. It is a named,
+focusable region on the page background, separated by whitespace and a section divider. Opening focuses the
+region; Close or Escape returns focus to the captured opener. Callers retire the selection on page, native
+observation, viewer, locale or layout replacement; unmount has no return-focus effect. Complete notes, metadata
+and exact reference copy/open actions belong in this region. The compact summary is never the only access to
+supplied evidence. Keep permission, unavailable and uncertain action outcomes visible beside their controls.
+
 The current released hints and exact Type fallbacks all select portrait 5:7. Unknown Types retain a valid
 configured composition ratio, otherwise the same portrait default. A Collection kind may guide composition;
 it never rewrites a member's actual Type. Rows use 72/96 px portrait and square frames and 128/192 px explicitly

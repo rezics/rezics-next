@@ -31,9 +31,14 @@ export function CollectionLayoutSelect({
         }}
       />
       <noscript>
-        <nav aria-label={m.library_layout()} data-slot="collection-layout" className="flex gap-3">
+        <nav aria-label={m.library_layout()} data-slot="collection-layout" className="flex min-w-0 flex-wrap gap-3">
           {options.map((option) => (
-            <a key={option.value} href={href(option.value)} aria-current={value === option.value ? 'page' : undefined}>
+            <a
+              key={option.value}
+              href={href(option.value)}
+              aria-current={value === option.value ? 'page' : undefined}
+              className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
               {option.label}
             </a>
           ))}

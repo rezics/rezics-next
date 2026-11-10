@@ -11600,5 +11600,14 @@
   "zones_owner_unlisted": "Nicht gelistet",
   "zones_owner_unnamed": "Unbenannte Zone",
   "zones_owner_views": "Zone-Listen",
-  "zones_owner_working": "Wird gespeichert…"
+  "zones_owner_working": "Wird gespeichert…",
+  "collection_reading_inspect": "Details ansehen",
+  "collection_reading_close": "Details schließen",
+  "collection_reading_note_available": "Notiz vorhanden",
+  "collection_reading_metadata": "Bereitgestellte Metadaten",
+  "collection_reading_note": "Notiz der kuratierenden Person",
+  "collection_reading_copy_reference": "Referenzlink kopieren",
+  "collection_reading_copy_pending": "Link wird kopiert…",
+  "collection_reading_copy_done": "Link kopiert.",
+  "collection_reading_copy_unavailable": "Der Link konnte nicht kopiert werden. Öffne die Referenz oder versuche es erneut."
 }

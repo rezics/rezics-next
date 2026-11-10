@@ -11600,5 +11600,14 @@
   "zones_owner_unlisted": "不公开列出",
   "zones_owner_unnamed": "未命名的 Zone",
   "zones_owner_views": "Zone 列表",
-  "zones_owner_working": "正在保存…"
+  "zones_owner_working": "正在保存…",
+  "collection_reading_inspect": "查看详情",
+  "collection_reading_close": "关闭详情",
+  "collection_reading_note_available": "有附注",
+  "collection_reading_metadata": "提供的元数据",
+  "collection_reading_note": "策展人附注",
+  "collection_reading_copy_reference": "复制引用链接",
+  "collection_reading_copy_pending": "正在复制链接…",
+  "collection_reading_copy_done": "链接已复制。",
+  "collection_reading_copy_unavailable": "无法复制链接。请打开引用或重试。"
 }

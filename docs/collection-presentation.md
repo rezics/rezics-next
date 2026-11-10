@@ -8,6 +8,46 @@ privacy, cost and lifecycle authority. Second-scope saved-query authoring is in 
 execution, publication and generated API delivery remain Commerce obligations; this page does not claim they are
 present.
 
+## Compact Collection reading
+
+Decision: ordinary and dynamic Collection readers use the shared `MemberReadingItem` for compact list/grid
+reading and one explicitly opened `MemberReadingDetail` after the members. A row leads with the actual Type's
+proportional thumbnail, title and at most two supplied fact values in a bounded reading width. Grid summaries
+retain the same supplied context. Full notes, all comparison evidence and copy actions belong in the selected
+detail. Essential permission, unavailable and uncertain outcomes remain beside their actions outside the
+CoverCard action row. Shared reading surfaces use whitespace and section dividers, without outlined content cards.
+
+The detail retains every supplied value for the selected four properties, up to three values each, together with
+full localized property labels and exact supplied item IDs. A brief summary never discards access to later values.
+Identical reference labels remain separate links and copy actions by their supplied IDs; a label without a target
+stays text. Copy uses the exact selected reference URL, including the admitted Collection return address and
+occurrence fragment. Clipboard denial or unavailability appears beside that copy control and permits retry.
+
+Inspect names the exact occurrence and moves keyboard focus into its single named detail region. Close and Escape
+return focus to that occurrence's opener. Native page/observation, address, viewer, locale, layout or row replacement
+retires the detail without returning focus; a retired clipboard result changes no current reading. Filtered
+projections without occurrence IDs use local display keys and return to their bounded page, without invented notes
+or occurrence fragments. Existing caller ownership continues to retire navigation-return focus effects.
+
+### Browser verification plan
+
+The Web manager publishes one combined Storybook and runs `.temp/storybook-sections/verify.ts` for the following
+receiving pass. Source typing and illustrative fixtures are separate from native, visual and main acceptance.
+
+- Use the original `pages-library-collection-comparison--desktop1280` and
+  `pages-library-collection-comparison--phone390` IDs at desktop1280 and phone390, in light/dark and all launch
+  locales. Recover the bounded page, switch list/grid, open each identical-title occurrence, read its full note
+  and metadata, and open/copy both same-label references. Check distinct IDs, exact destinations and return fragments.
+- In the existing `pages-library-collection--signed-in`, `--grid-layout` and `--long-notes-sparse-continuation`
+  PageStory/provider compositions, retain filters, cursor and return URL while switching layout. Disable scripts
+  and follow both layout links, checking that the same address operands survive. Return from a reference to the
+  exact occurrence; replace the reading while detail or copying is active and confirm no stale detail/focus/status.
+- Use keyboard Inspect, Close and Escape in both layouts. Confirm only one detail opens, close returns to its own
+  opener, all controls wrap and show focus, and long unbroken notes/references cause no horizontal overflow at 390.
+  Check thumbnail proportions and the bounded row width at 1280, with permission/unavailable outcomes by actions.
+- Recheck the unchanged `pages-catalogue-book-and-book-series-work-editor--current-book` editor in its existing host. Preserve
+  original story IDs and PatternStory hosts. These steps remain browser work; authored plays are illustrative.
+
 ## Model and definitions
 
 Collection `presentationKind` is a definitions TypeId, never a fixed vertical enum, Concept/public tag or private

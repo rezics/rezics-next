@@ -50,9 +50,8 @@ test('ranked public rows keep occurrence order, notes, covers, and exact Collect
   expect(html).toContain(description);
   expect(html).toContain('/media/ranked-cover/webp-640');
   const noteOrder = members.map((member) => html.indexOf(member.note!));
-  expect(noteOrder.every((position) => position >= 0)).toBe(true);
-  expect(noteOrder[0]).toBeLessThan(noteOrder[1]!);
-  expect(noteOrder[1]).toBeLessThan(noteOrder[2]!);
+  expect(noteOrder.every((position) => position === -1)).toBe(true);
+  expect(html.match(/data-collection-detail-opener/g)).toHaveLength(3);
   expect(html).toContain(m.library_collection_position_on_page({ position: 1 }));
   expect(html).toContain(m.library_collection_position_on_page({ position: 2 }));
   expect(html).toContain(m.library_collection_position_on_page({ position: 3 }));

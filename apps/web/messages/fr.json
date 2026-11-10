@@ -11600,5 +11600,14 @@
   "zones_owner_unlisted": "Non répertoriée",
   "zones_owner_unnamed": "Zone sans nom",
   "zones_owner_views": "Listes des Zones",
-  "zones_owner_working": "Enregistrement…"
+  "zones_owner_working": "Enregistrement…",
+  "collection_reading_inspect": "Consulter les détails",
+  "collection_reading_close": "Fermer les détails",
+  "collection_reading_note_available": "Note disponible",
+  "collection_reading_metadata": "Métadonnées fournies",
+  "collection_reading_note": "Note de la personne qui a créé la collection",
+  "collection_reading_copy_reference": "Copier le lien de référence",
+  "collection_reading_copy_pending": "Copie du lien…",
+  "collection_reading_copy_done": "Lien copié.",
+  "collection_reading_copy_unavailable": "Le lien n’a pas pu être copié. Ouvrez la référence ou réessayez."
 }

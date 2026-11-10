@@ -6,6 +6,7 @@ import { CollectionPage } from '../library/collection-page';
 import type { EditableCollectionPage } from '../library/collection-load';
 import type { CollectionMember } from '../library/reads';
 import { parseListPresentation } from '@rezics/ui/cover';
+import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { pickText } from '@rezics/composition';
 import definitions from '../kernel/recorded/definitions-release.json';
@@ -165,11 +166,29 @@ type Story = StoryObj<typeof meta>;
 async function recoverExample(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await userEvent.click(await canvas.findByRole('button', { name: 'Recover same cursor' }));
-  await expect(await canvas.findByText('Read this occurrence first.')).toBeVisible();
-  await expect(await canvas.findByText('Revisit this occurrence later.')).toBeVisible();
-  const links = canvasElement.querySelectorAll<HTMLAnchorElement>('[data-comparison-reference]');
-  await expect(links).toHaveLength(2);
-  await expect(links[0]!.href).not.toBe(links[1]!.href);
+  const openers = [...canvasElement.querySelectorAll<HTMLButtonElement>('[data-collection-detail-opener]')];
+  await expect(openers).toHaveLength(4);
+  const references: string[] = [];
+  for (const [index, note] of ['Read this occurrence first.', 'Revisit this occurrence later.'].entries()) {
+    await userEvent.click(openers[index]!);
+    const detail = canvasElement.querySelector<HTMLElement>('[data-slot="member-reading-detail"]')!;
+    await expect(detail).toHaveFocus();
+    await expect(await within(detail).findByText(note)).toBeVisible();
+    const reference = detail.querySelector<HTMLAnchorElement>('[data-comparison-reference]')!;
+    await expect(reference).toBeVisible();
+    references.push(reference.href);
+    await expect(
+      detail.querySelector(`[data-copy-reference="${reference.dataset.comparisonReference}"]`),
+    ).toBeVisible();
+    await expect(
+      canvasElement.querySelector('[data-slot="cover-card-actions-row"] [data-collection-member-id]'),
+    ).toBeNull();
+    if (index === 0) {
+      await userEvent.click(within(detail).getByRole('button', { name: m.collection_reading_close() }));
+      await expect(openers[index]).toHaveFocus();
+    }
+  }
+  await expect(references[0]).not.toBe(references[1]);
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
 export const RecoveredComparison: Story = {

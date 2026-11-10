@@ -11600,5 +11600,14 @@
   "zones_owner_unlisted": "限定公開",
   "zones_owner_unnamed": "名前のない Zone",
   "zones_owner_views": "Zone の一覧",
-  "zones_owner_working": "保存中…"
+  "zones_owner_working": "保存中…",
+  "collection_reading_inspect": "詳細を確認",
+  "collection_reading_close": "詳細を閉じる",
+  "collection_reading_note_available": "メモあり",
+  "collection_reading_metadata": "提供されたメタデータ",
+  "collection_reading_note": "コレクション作成者のメモ",
+  "collection_reading_copy_reference": "参照リンクをコピー",
+  "collection_reading_copy_pending": "リンクをコピー中…",
+  "collection_reading_copy_done": "リンクをコピーしました。",
+  "collection_reading_copy_unavailable": "リンクをコピーできませんでした。参照先を開くか、もう一度お試しください。"
 }

@@ -114,7 +114,7 @@ function rows(html: string) {
   return [...html.matchAll(/<li\b(?=[^>]*data-slot="list-row")[\s\S]*?<\/li>/g)].map((match) => match[0]);
 }
 
-test('collection members default to linked rows with each note and kind inside its own row', async () => {
+test('collection members default to compact linked rows with a note indicator and detail opener', async () => {
   const html = await render(undefined, {
     cursor: 'next-page',
     filters: { 'f.schema:genre': ['novel', 'essay'] },
@@ -125,10 +125,12 @@ test('collection members default to linked rows with each note and kind inside i
   expect(memberRows[0]).toContain('href="/en/subjects/subject-little-prince/the-little-prince"');
   expect(memberRows[0]).toContain('The Little Prince');
   expect(memberRows[0]).toContain('Book');
-  expect(memberRows[0]).toContain('A note for The Little Prince.');
+  expect(memberRows[0]).not.toContain('A note for The Little Prince.');
+  expect(memberRows[0]).toContain('data-collection-detail-opener');
   expect(memberRows[1]).toContain('href="/en/subjects/subject-kokoro/kokoro"');
   expect(memberRows[1]).toContain('Kokoro');
-  expect(memberRows[1]).toContain('A separate note for Kokoro.');
+  expect(memberRows[1]).not.toContain('A separate note for Kokoro.');
+  expect(memberRows[1]).toContain('data-collection-note-available');
 
   const layoutNav = /<nav\b(?=[^>]*data-slot="collection-layout")[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
   expect(layoutNav).toContain('aria-current="page"');
@@ -144,17 +146,12 @@ test('collection members default to linked rows with each note and kind inside i
   expect(grid.searchParams.getAll('f.schema:genre')).toEqual(['novel', 'essay']);
 });
 
-test('grid layout keeps each note under its own card and exposes the list link', async () => {
+test('grid layout keeps full details outside cover action rows and exposes the list link', async () => {
   const html = await render('grid');
-  const cards = [...html.matchAll(/data-slot="cover-card"/g)];
-  const notes = [...html.matchAll(/data-slot="collection-member-note"/g)];
-
-  expect(cards).toHaveLength(2);
-  expect(notes).toHaveLength(2);
-  expect(cards[0]!.index!).toBeLessThan(notes[0]!.index!);
-  expect(notes[0]!.index!).toBeLessThan(cards[1]!.index!);
-  expect(cards[1]!.index!).toBeLessThan(notes[1]!.index!);
-  expect(html).toContain('line-clamp-4');
+  expect([...html.matchAll(/data-slot="cover-card"/g)]).toHaveLength(2);
+  expect([...html.matchAll(/data-collection-detail-opener/g)]).toHaveLength(2);
+  expect(html).not.toContain('data-slot="collection-member-note"');
+  expect(html).not.toContain('data-slot="cover-card-actions-row"');
 
   const layoutNav = /<nav\b(?=[^>]*data-slot="collection-layout")[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
   expect(layoutNav).toContain('aria-current="page"');
@@ -245,7 +242,7 @@ test('mixed reading keeps occurrence positions and notes independent and returns
     expect(html).toContain('Type unavailable in this reading.');
     expect(html).toContain('Position 5 on this page');
     expect(html).toContain(`id="collection-member-${unavailableOccurrenceId}"`);
-    expect(html).toContain('A note for an unavailable occurrence.');
+    expect(html).not.toContain('A note for an unavailable occurrence.');
     expect(html).not.toMatch(/global rank/i);
 
     const subjectLinks = [...html.matchAll(/href="([^"]*\/subjects\/[^\"]+)"/g)].map(
@@ -257,8 +254,8 @@ test('mixed reading keeps occurrence positions and notes independent and returns
       `${collectionPageAddress('en', exactCollectionId, search.cursor, search.filters, layout)}#collection-member-${firstOccurrenceId}`,
       `${collectionPageAddress('en', exactCollectionId, search.cursor, search.filters, layout)}#collection-member-${secondOccurrenceId}`,
     ]);
-    expect(html).toContain('Curator note for the first occurrence.');
-    expect(html).toContain('Curator note for the second occurrence.');
+    expect(html).not.toContain('Curator note for the first occurrence.');
+    expect(html).not.toContain('Curator note for the second occurrence.');
     expect(subjectLinks).toHaveLength(4);
   }
   expect(

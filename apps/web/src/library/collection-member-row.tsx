@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   collectionComparisonFacts,
   collectionComparisonHref,
@@ -34,12 +35,14 @@ export function CollectionMemberDetails({
   comparisonDefinitions,
   currentHref,
   onReferenceNavigate,
+  referenceActions,
 }: {
   member: Pick<CollectionMember, 'subject' | 'facts'> & { id?: string };
   listPresentations?: CollectionListPresentations | undefined;
   comparisonDefinitions?: CollectionComparisonDefinitions | undefined;
   currentHref?: string | undefined;
   onReferenceNavigate?: ((anchor: HTMLAnchorElement) => void) | undefined;
+  referenceActions?: ((reference: { id: string; label: string; href: string }) => ReactNode) | undefined;
 }) {
   if (!member.subject) return null;
   const locale = getLocale();
@@ -64,7 +67,7 @@ export function CollectionMemberDetails({
                   {fact.label.text || m.search_constraint_identity_property_unavailable()}
                 </dt>
                 <dd lang={fact.lang}>
-                  {fact.targetId && currentHref ? (
+                  {fact.targetId && (currentHref || referenceActions) ? (
                     <a
                       href={collectionComparisonHref(fact.targetId, fact.text, locale, currentHref, member.id)}
                       data-comparison-reference={fact.targetId}
@@ -76,6 +79,13 @@ export function CollectionMemberDetails({
                   ) : (
                     fact.text
                   )}
+                  {fact.targetId
+                    ? referenceActions?.({
+                        id: fact.targetId,
+                        label: fact.text,
+                        href: collectionComparisonHref(fact.targetId, fact.text, locale, currentHref, member.id),
+                      })
+                    : null}
                 </dd>
               </div>
             ))}

@@ -1,5 +1,6 @@
+import { pickText } from '@rezics/composition';
 import { listKeyFacts } from '../../media/type-presentation';
-import { resultFactLabel, type ResultFactDefinitions } from '../../search/work-context/facts';
+import { type ResultFactDefinitions } from '../../search/work-context/facts';
 import { subjectHref } from '../../subject/subject-href';
 import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
 import { collectionMemberReturnAddress, collectionViewerActionHref } from '../collection-viewer/model';
@@ -41,18 +42,15 @@ export function collectionComparisonFacts(
 ) {
   if (!member.subject) return [];
   const properties = presentations?.[member.subject.type]?.keyFacts ?? Object.keys(member.facts ?? {});
-  return properties
-    .slice(0, 4)
-    .flatMap((property) =>
-      (member.facts?.[property] ?? []).slice(0, 3).flatMap((value) =>
-        listKeyFacts({ [property]: [value] }, [property], [], locale).map((formatted) => ({
-          ...formatted,
-          label: resultFactLabel(property, definitions, locale),
-          ...(value.kind === 'item' && value.id ? { targetId: value.id } : {}),
-        })),
-      ),
-    )
-    .slice(0, 4);
+  return properties.slice(0, 4).flatMap((property) =>
+    (member.facts?.[property] ?? []).slice(0, 3).flatMap((value) =>
+      listKeyFacts({ [property]: [value] }, [property], [], locale).map((formatted) => ({
+        ...formatted,
+        label: pickText(definitions?.[property]?.labels ?? {}, locale),
+        ...(value.kind === 'item' && value.id ? { targetId: value.id } : {}),
+      })),
+    ),
+  );
 }
 
 /** Reuse the Subject visit convention. Filtered projections without occurrence IDs return to their page only. */
