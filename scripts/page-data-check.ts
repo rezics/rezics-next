@@ -18,6 +18,7 @@ import {
   type Browser,
   type BrowserContext,
   type Page,
+  type Response as PlaywrightResponse,
 } from '../packages/ui/node_modules/playwright/index.mjs';
 
 export const CLASSES = ['DATA', 'EMPTY', 'UNAUTHORIZED', 'UNAVAILABLE', 'API', 'WEB', 'SEED'] as const;
@@ -621,66 +622,104 @@ type SectionProbe = {
   busy: boolean;
 };
 
+type DocumentNavigation =
+  | { responseReceived: true; status: number; error?: unknown }
+  | { responseReceived: false; error: unknown };
+
+async function navigateToDocument(page: Page, url: string, timeoutMs: number): Promise<DocumentNavigation> {
+  let mainDocumentStatus: number | undefined;
+  const observeResponse = (response: PlaywrightResponse) => {
+    const request = response.request();
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame() && request.redirectedTo() === null) {
+      mainDocumentStatus = response.status();
+    }
+  };
+  page.on('response', observeResponse);
+  try {
+    const response = await page.goto(url, { waitUntil: 'commit', timeout: timeoutMs });
+    if (response) return { responseReceived: true, status: response.status() };
+    if (mainDocumentStatus !== undefined) return { responseReceived: true, status: mainDocumentStatus };
+    return {
+      responseReceived: false,
+      error: new Error('Navigation completed without a main document response'),
+    };
+  } catch (error) {
+    if (mainDocumentStatus !== undefined) return { responseReceived: true, status: mainDocumentStatus, error };
+    return { responseReceived: false, error };
+  } finally {
+    page.off('response', observeResponse);
+  }
+}
+
+function remainingUntil(deadline: number): number {
+  return Math.max(0, Math.ceil(deadline - performance.now()));
+}
+
 async function observeSection(
   page: Page,
   section: ManifestSection,
-  timeoutMs: number,
+  readerDeadline: number,
 ): Promise<{ observation: PageObservation; timedOut: boolean }> {
   let timedOut = false;
-  try {
-    await page.waitForFunction(
-      ({ selector, heading }) => {
-        const loading = (element: HTMLElement): boolean => {
-          if (
-            element.getAttribute('aria-busy') === 'true' ||
-            element.getAttribute('data-state') === 'loading' ||
-            element.getAttribute('data-feed-result-state') === 'loading' ||
-            /\b(loading|preparing)\b/i.test(element.innerText ?? element.textContent ?? '')
-          )
-            return true;
-          return [
-            ...element.querySelectorAll<HTMLElement>(
-              '[aria-busy="true"],[data-state="loading"],[data-feed-result-state="loading"],[role="status"],[aria-live]',
-            ),
-          ].some(
-            (child) =>
-              child.getAttribute('aria-busy') === 'true' ||
-              child.getAttribute('data-state') === 'loading' ||
-              child.getAttribute('data-feed-result-state') === 'loading' ||
-              /\b(loading|preparing)\b/i.test(child.innerText ?? child.textContent ?? ''),
-          );
-        };
-        const titleOf = (element: HTMLElement): string => {
-          const labelledBy = element
-            .getAttribute('aria-labelledby')
-            ?.split(/\s+/)
-            .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
-            .filter(Boolean)
-            .join(' ')
-            .trim();
-          if (labelledBy) return labelledBy;
-          const label = element.getAttribute('aria-label')?.trim();
-          if (label) return label;
-          const headingNode = element.querySelector<HTMLElement>('h1,h2,h3,h4,h5,h6,[role="heading"]');
-          if (headingNode?.textContent?.trim()) return headingNode.textContent.trim();
-          return element.matches('a[href],button,[role="link"],[role="button"]')
-            ? (element.textContent?.trim() ?? '')
-            : '';
-        };
-        const matches = [...document.querySelectorAll<HTMLElement>(selector)];
-        const wanted = heading?.trim().toLocaleLowerCase();
-        const node =
-          wanted === undefined
-            ? matches[0]
-            : matches.find((element) => titleOf(element).toLocaleLowerCase().includes(wanted));
-        return node !== undefined && !loading(node);
-      },
-      { selector: section.selector, heading: section.heading },
-      { timeout: timeoutMs },
-    );
-  } catch (error) {
-    if (!isTimeout(error)) throw error;
+  const timeoutMs = remainingUntil(readerDeadline);
+  if (timeoutMs === 0) {
     timedOut = true;
+  } else {
+    try {
+      await page.waitForFunction(
+        ({ selector, heading }) => {
+          const loading = (element: HTMLElement): boolean => {
+            if (
+              element.getAttribute('aria-busy') === 'true' ||
+              element.getAttribute('data-state') === 'loading' ||
+              element.getAttribute('data-feed-result-state') === 'loading' ||
+              /\b(loading|preparing)\b/i.test(element.innerText ?? element.textContent ?? '')
+            )
+              return true;
+            return [
+              ...element.querySelectorAll<HTMLElement>(
+                '[aria-busy="true"],[data-state="loading"],[data-feed-result-state="loading"],[role="status"],[aria-live]',
+              ),
+            ].some(
+              (child) =>
+                child.getAttribute('aria-busy') === 'true' ||
+                child.getAttribute('data-state') === 'loading' ||
+                child.getAttribute('data-feed-result-state') === 'loading' ||
+                /\b(loading|preparing)\b/i.test(child.innerText ?? child.textContent ?? ''),
+            );
+          };
+          const titleOf = (element: HTMLElement): string => {
+            const labelledBy = element
+              .getAttribute('aria-labelledby')
+              ?.split(/\s+/)
+              .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
+              .filter(Boolean)
+              .join(' ')
+              .trim();
+            if (labelledBy) return labelledBy;
+            const label = element.getAttribute('aria-label')?.trim();
+            if (label) return label;
+            const headingNode = element.querySelector<HTMLElement>('h1,h2,h3,h4,h5,h6,[role="heading"]');
+            if (headingNode?.textContent?.trim()) return headingNode.textContent.trim();
+            return element.matches('a[href],button,[role="link"],[role="button"]')
+              ? (element.textContent?.trim() ?? '')
+              : '';
+          };
+          const matches = [...document.querySelectorAll<HTMLElement>(selector)];
+          const wanted = heading?.trim().toLocaleLowerCase();
+          const node =
+            wanted === undefined
+              ? matches[0]
+              : matches.find((element) => titleOf(element).toLocaleLowerCase().includes(wanted));
+          return node !== undefined && !loading(node);
+        },
+        { selector: section.selector, heading: section.heading },
+        { timeout: timeoutMs },
+      );
+    } catch (error) {
+      if (!isTimeout(error)) throw error;
+      timedOut = true;
+    }
   }
   const observation = await page.evaluate(
     ({ selector, heading, itemSelector, timedOut }) => {
@@ -743,8 +782,10 @@ async function observeSection(
   return { observation, timedOut };
 }
 
-async function clickSectionAction(page: Page, section: ManifestSection, timeoutMs: number): Promise<void> {
+async function clickSectionAction(page: Page, section: ManifestSection, readerDeadline: number): Promise<void> {
   const action = section.native.action!;
+  const timeoutMs = remainingUntil(readerDeadline);
+  if (timeoutMs === 0) throw new Error('Reader readiness deadline elapsed before section action');
   await page.getByRole(action.role, { name: action.name, exact: true }).click({ timeout: timeoutMs });
 }
 
@@ -985,17 +1026,21 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
           const subject = identity?.status === 'resolved' ? identity.subjectId : '';
           let navigationFailed = !page;
           if (page) {
-            try {
-              const route = expand(manifestPage.path, { subject });
-              await page.goto(new URL(route, base).href, { waitUntil: 'load', timeout: pageTimeout });
-            } catch (error) {
-              navigationFailed = true;
+            const route = expand(manifestPage.path, { subject });
+            const navigation = await navigateToDocument(page, new URL(route, base).href, pageTimeout);
+            navigationFailed = !navigation.responseReceived;
+            if ('error' in navigation) {
               incomplete = true;
+              const outcome = isTimeout(navigation.error) ? 'timed out' : 'failed';
+              const response = navigation.responseReceived
+                ? `after document response status=${navigation.status}`
+                : 'before document response';
               report(
-                `Page navigation ${isTimeout(error) ? 'timed out' : 'failed'} for ${manifestPage.id} ${persona}; continuing bounded section coverage: ${displayError(error)}`,
+                `Page navigation ${outcome} ${response} for ${manifestPage.id} ${persona}; ${navigation.responseReceived ? 'continuing bounded section coverage' : 'browser probes unrun'}: ${displayError(navigation.error)}`,
               );
             }
           }
+          const readerDeadline = performance.now() + readerTimeout;
 
           const evaluateSection = async (section: ManifestSection): Promise<SectionResult> => {
             const vars: Record<string, string> = {
@@ -1013,8 +1058,8 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
             const readSection = async (): Promise<{ observation: PageObservation; timedOut: boolean }> => {
               if (!page || navigationFailed) return { observation: unread(), timedOut: false };
               try {
-                if (section.native.action) await clickSectionAction(page, section, readerTimeout);
-                return await observeSection(page, section, readerTimeout);
+                if (section.native.action) await clickSectionAction(page, section, readerDeadline);
+                return await observeSection(page, section, readerDeadline);
               } catch (error) {
                 incomplete = true;
                 browserProbe = 'unrun';

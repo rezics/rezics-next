@@ -41,6 +41,11 @@ states are UNAVAILABLE. HTTP requests, page navigation, reader readiness and SQL
 missing SQL evidence is reported, does not produce WEB or SEED, and makes an otherwise clean run exit 2; defects exit
 1 and a complete non-defect run exits 0. Credentials and tokens never appear in output.
 
+Decision: browser navigation waits only for the committed document response; real section selectors then share one
+reader deadline per page. A navigation timeout records whether a main document response was observed; without a
+response browser probes stay unrun, while an observed response still permits section evidence. No timeout is
+attributed to assets without evidence.
+
 Decision: seeded subject pages bind only by their declared provider source key and expected native type from the
 owned `page-data-stack` worktree's `.temp/cross-media-seed/result.json`. One resolved subject ID drives the browser
 route, native path/body and SQL parameters. Missing, malformed, ambiguous or wrong-type identities leave the affected

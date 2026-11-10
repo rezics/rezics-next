@@ -309,7 +309,12 @@ test('seeded pages bind exact source identities for Web, native and SQL, and lea
   const browser = {
     newContext: async () => ({
       newPage: async () => ({
-        goto: async (url: string) => visits.push(new URL(url).pathname),
+        on: () => {},
+        off: () => {},
+        goto: async (url: string) => {
+          visits.push(new URL(url).pathname);
+          return { status: () => 200 };
+        },
         waitForFunction: async () => {},
         evaluate: async () => page({ itemCount: 1, text: 'Book reader', dataState: 'ready' }),
         close: async () => {},
@@ -496,6 +501,26 @@ const fixtureManifest = (paths: Record<string, string>, kernelPath: string): Man
         ],
       },
       {
+        id: 'reader-readiness',
+        path: paths.readiness,
+        personas: ['anonymous'],
+        sections: [
+          {
+            id: 'settled',
+            name: 'Settled reader',
+            selector: '[data-case="settled"]',
+            itemSelector: 'li[data-item]',
+            native: { method: 'GET', path: `${kernelPath}/data`, items: '/relations' },
+          },
+          {
+            id: 'pending',
+            name: 'Independently pending reader',
+            selector: '[data-case="pending"]',
+            native: { method: 'GET', path: `${kernelPath}/data`, items: '/relations' },
+          },
+        ],
+      },
+      {
         id: 'slow-navigation',
         path: paths.slow,
         personas: ['anonymous'],
@@ -565,10 +590,22 @@ const pages = {
       section.innerHTML = '<h2>Following feed</h2><ul><li data-item>following row</li></ul>';
     })</script>
   </body></html>`,
+  readiness: `<!doctype html><html><body>
+    <img src="/irrelevant.png" alt="">
+    <section data-case="settled" data-state="ready"><h2>Settled reader</h2><ul><li data-item>visible row</li></ul></section>
+    <section data-case="pending" aria-busy="true"><h2>Pending reader</h2><p role="status">Loading reader</p></section>
+  </body></html>`,
 };
 
 test('fixture pages exercise classification, reader readiness and coverage after navigation timeout', async () => {
   const browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] });
+  let irrelevantResourceStarted = false;
+  let irrelevantResourceFinished = false;
+  let releaseIrrelevantResource: (() => void) | undefined;
+  let finishIrrelevantResource: () => void = () => {};
+  const irrelevantResourceSettled = new Promise<void>((resolve) => {
+    finishIrrelevantResource = resolve;
+  });
   const web = Bun.serve({
     port: 0,
     async fetch(request) {
@@ -576,6 +613,16 @@ test('fixture pages exercise classification, reader readiness and coverage after
       if (path === '/en/web') return new Response(pages.web, { headers: { 'content-type': 'text/html' } });
       if (path === '/en/empty') return new Response(pages.empty, { headers: { 'content-type': 'text/html' } });
       if (path === '/en/readers') return new Response(pages.readers, { headers: { 'content-type': 'text/html' } });
+      if (path === '/en/readiness') return new Response(pages.readiness, { headers: { 'content-type': 'text/html' } });
+      if (path === '/irrelevant.png') {
+        irrelevantResourceStarted = true;
+        await new Promise<void>((resolve) => {
+          releaseIrrelevantResource = resolve;
+        });
+        irrelevantResourceFinished = true;
+        finishIrrelevantResource();
+        return new Response(new Uint8Array(), { headers: { 'content-type': 'image/png' } });
+      }
       if (path === '/en/slow') {
         await new Promise((resolve) => setTimeout(resolve, 800));
         return new Response(pages.empty, { headers: { 'content-type': 'text/html' } });
@@ -604,7 +651,13 @@ test('fixture pages exercise classification, reader readiness and coverage after
       baseUrl: `http://127.0.0.1:${web.port}`,
       kernel: `http://127.0.0.1:${kernel.port}`,
       manifest: fixtureManifest(
-        { web: '/en/web', empty: '/en/empty', readers: '/en/readers', slow: '/en/slow' },
+        {
+          web: '/en/web',
+          empty: '/en/empty',
+          readers: '/en/readers',
+          readiness: '/en/readiness',
+          slow: '/en/slow',
+        },
         '/v1',
       ),
       memberToken: 'secret-member-token',
@@ -652,9 +705,24 @@ test('fixture pages exercise classification, reader readiness and coverage after
     expect(printed).toContain('reader-states anonymous empty-title-fallback DATA');
     expect(printed).toContain('reader-states anonymous root-item DATA');
     expect(printed).toContain('reader-states anonymous following-action DATA');
+    expect(
+      result.results.find((entry) => entry.page === 'reader-readiness' && entry.section === 'settled'),
+    ).toMatchObject({
+      class: 'DATA',
+      evidence: { browserProbe: 'run', reader: 'data', pageItems: 1 },
+    });
+    expect(
+      result.results.find((entry) => entry.page === 'reader-readiness' && entry.section === 'pending'),
+    ).toMatchObject({
+      class: 'UNAVAILABLE',
+      evidence: { browserProbe: 'run', reader: 'loading' },
+    });
+    expect([irrelevantResourceStarted, irrelevantResourceFinished]).toEqual([true, false]);
     expect(printed).toContain('slow-navigation anonymous bounded-reader UNAVAILABLE');
     expect(printed).toContain('after-timeout anonymous continues EMPTY');
-    expect(diagnosticText).toContain('Page navigation timed out for slow-navigation anonymous');
+    expect(diagnosticText).toContain(
+      'Page navigation timed out before document response for slow-navigation anonymous',
+    );
     expect(
       result.results.find((entry) => entry.page === 'reader-states' && entry.section === 'root-item')?.evidence
         .pageItems,
@@ -663,6 +731,8 @@ test('fixture pages exercise classification, reader readiness and coverage after
     expect(result.defects).toBeGreaterThan(0);
     expect(result.results.every((entry) => printed.includes(formatLine(entry)))).toBe(true);
   } finally {
+    releaseIrrelevantResource?.();
+    if (irrelevantResourceStarted) await irrelevantResourceSettled;
     await browser.close();
     web.stop(true);
     kernel.stop(true);
@@ -680,9 +750,12 @@ test.each([true, false])(
     const browser = {
       newContext: async () => ({
         newPage: async () => ({
+          on: () => {},
+          off: () => {},
           goto: async (url: string, options: { timeout: number }) => {
             expect(options.timeout).toBe(50);
             if (url.endsWith('/auth/sign-in')) throw new Error('navigation timed out password=hidden');
+            return { status: () => 200 };
           },
           waitForFunction: async () => {},
           evaluate: async () => page({ itemCount: 1 }),
