@@ -505,6 +505,10 @@ async function startReactionWorker(databaseUrl: string, routeKey: Uint8Array, re
 async function runReactionRelayWorker(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+  // Bun's test preload does not run in this child process. Install the ordinary
+  // native owner bindings before work registration constructs the route catalogue.
+  const { installNativeHistoryPreload } = await import('../../src/composition/preload.ts');
+  installNativeHistoryPreload();
   const pool = new Pool({ connectionString: databaseUrl, max: 10 });
   const client = await createWorkClient(databaseUrl, pool);
   const registered: Effect[] = [];

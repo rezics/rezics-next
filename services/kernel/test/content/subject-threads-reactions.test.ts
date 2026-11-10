@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
+import { composeContentFeed } from '../../src/composition/content.ts';
 import { readSubjectThread, readSubjectThreads } from '../../src/content/reads.ts';
 import { projectSubjectThreadReactions } from '../../src/content/subject-threads-reactions.ts';
 import viewerReactions from '../../src/content/reaction-viewer.sql';
@@ -11,6 +12,7 @@ import { observeSql } from './support/sql-observer.ts';
 
 test('Subject threads retain native reaction totals, viewer isolation and final source authority', async () => {
   const world = await createReactionRelayBase();
+  composeContentFeed();
   let effects: Awaited<ReturnType<typeof world.startEffects>> | undefined;
   let trace: ReturnType<typeof observeSql> | undefined;
   try {

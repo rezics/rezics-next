@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { createKernel } from '../../src/http/kernel.ts';
+import { composeContentFeed } from '../../src/composition/content.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -27,6 +28,7 @@ beforeAll(async () => {
     receiptKeys: testReceiptKeys(),
     requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
   });
+  composeContentFeed();
   app.compile();
   db.pool.options.max = 1;
 });
@@ -320,6 +322,7 @@ test('anonymous six-review previews use the production deadline and retain their
   for (let index = 0; index < 7; index++)
     ids.push(await thread(subjectId, boardId, { kind: 'review', activityAt: `2026-10-27T01:00:0${6 - index}.000Z` }));
   const production = createKernel({ pool: db.pool, routeKey, tokens, receiptKeys: testReceiptKeys() });
+  composeContentFeed();
   production.compile();
   const read = async (cursor?: string) => {
     const response = await production.handle(
