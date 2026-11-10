@@ -63,7 +63,7 @@ export function CollectionMemberDetails({
           <dl className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 [overflow-wrap:anywhere]">
             {facts.map((fact, index) => (
               <div key={`${fact.property}:${index}`} data-property={fact.property} className="min-w-0 max-w-full">
-                <dt lang={fact.label.lang} className="text-xs">
+                <dt lang={fact.label.lang ?? undefined} className="text-xs">
                   {fact.label.text || m.search_constraint_identity_property_unavailable()}
                 </dt>
                 <dd lang={fact.lang}>
