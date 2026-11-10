@@ -48,6 +48,10 @@ Web, native and SQL probes unrun with the provider, source key, expected type, a
 UNAVAILABLE observations, not product 404s. The checker reads source records from `readings` and VNDB tags from
 `publicTags.currentBindings.concepts`.
 
+Decision: Collection discovery matches the installed directory request (collection kind, limit 24,
+`collectionDirectory: { order: "recent" }`, and no `kindPage`); non-success HTTP output retains only a bounded problem
+code and/or constrained validation pointer, while missing and unrun probes remain separate.
+
 `--database-url`, `DATABASE_URL` or `services/kernel/.env` supplies SQL access. `--member-token` or
 `PAGE_DATA_CHECK_MEMBER_TOKEN` supplies the member Kernel bearer; otherwise the local development persona credentials
 are used with the Auth app's `login` client and empty scope. The seeded complete manifest is expected to finish in under
