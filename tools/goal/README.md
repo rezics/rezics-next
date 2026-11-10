@@ -1772,9 +1772,24 @@ fields and preserves the remaining evidence for a valid completed invocation.
 The checker ends stdout with one `Page-data completed` JSON marker (at most 512 characters) containing `version: 1`,
 the caller's fresh `--invocation`, section and defect counts, and `incomplete`. The caller accepts only this final
 marker, the exact manifest coverage and the corresponding exit (defects: 1; otherwise incomplete: 2; otherwise: 0).
-A timeout, stale, duplicate, missing or malformed marker remains a check failure. A usable partial result stores
-`coverage=incomplete` separately from seed publication status, preserves its redacted diagnostic log and check-failure
-notice, and never manufactures a successful dependent probe.
+A timeout, stale, duplicate or malformed marker remains a check failure. A missing marker remains a check failure
+except when the owned page-data scope reports an OOM kill or the scoped checker exits via SIGKILL; then strict valid
+emitted rows are saved as `coverage=incomplete`, and only an unterminated malformed final fragment is discarded. A
+usable partial result stores `coverage=incomplete` separately from seed publication status, preserves its redacted
+diagnostic log and check-failure notice, and never manufactures a successful dependent probe.
+
+Incident: a live canonical page-data check held about 25.9 GB in the verifier service, including one exact owned
+Chromium process at roughly 19 GB RSS; host memory full PSI approached 29%. Stopping only that browser process brought
+memory full avg10 below 1%.
+
+Decision: run `bun scripts/page-data-check.ts` and its Chromium child inside a uniquely named owned user-manager scope
+under `rezics-check.slice`, separate from `rezics-workers.slice`, reusing the existing 12 GiB `MemoryMax` and setting
+`OOMPolicy=continue` so a killed browser can leave the checker to report independent evidence. The in-scope wrapper
+reads `memory.events` after the checker exits because a continuing scope does not reliably finish with `Result=oom-kill`.
+Keep the existing one-hour check timeout. A scope launch failure stops the check without an unbounded retry. An OOM
+records valid emitted sections as `coverage=incomplete`, writes the existing diagnostic log and notice, and cannot
+count as full coverage. Stop and reset only that exact scope after each outcome; retain the page-data lease and stack
+process cleanup.
 
 Decision: persist each bounded page-data boot/check transcript in a run-scoped state-directory log, name that path in the supermanager notice, retain the pre-teardown cause alongside cleanup and the final origin-specific readiness probe, and redact recognized credentials.
 
