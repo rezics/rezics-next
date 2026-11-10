@@ -4,7 +4,13 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
-import { deadlineClient, commandAccessContext, requireCommandAdmission } from './access-port.ts';
+import {
+  deadlineClient,
+  commandAccessContext,
+  requireCommandAdmission,
+  collectionAuthorizationPreparationWork,
+} from './access-port.ts';
+import { declareBound, repeatBound, sumBounds } from '@rezics/bounds';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import {
@@ -47,7 +53,7 @@ import type { PublicFilterSourceBinding } from '../semantic/public-filter-source
 import type { PublicFilterSource, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { FilterDocument } from '@rezics/filter';
 import { resolveSubject } from './subject-anchor.ts';
-import type { OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
+import { ordinaryPageWorkDimensions, type OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
 
 type Dependencies = {
   pool: Pool;
@@ -547,13 +553,24 @@ export async function bindNativeOwnerFilterRead(
   const reservationId = randomUUID();
   const root = ownerFilterRootAllowance(100, reservationId, ceilings?.total);
   // One direct Source request reservation, never renewed by a candidate/refill/closure.
-  // Search supplies its own existing ceilings unchanged.
-  const work =
-    inherited?.work ??
-    new NativeCollectionWork(
-      ceilings ? root : { ...root, remaining: { ...root.remaining, bytes: 16 * 1024 * 1024 } },
-      deadline,
-    );
+  // Search and selected commands supply their own already composed ceilings unchanged.
+  let direct = { ...root, remaining: { ...root.remaining, bytes: 16 * 1024 * 1024 } };
+  if (pagePlan && !inherited && !ceilings) {
+    // Two binding prepares, the page prepare, and the final prepare/disclosure pair.
+    // FULL repeats the final pair after foreign facts. Each refill revalidates twice;
+    // each candidate revalidates once in prefix membership and twice in containsSubject.
+    const preparations = (pagePlan.view === 'FULL' ? 7 : 5) + 2 * pagePlan.rounds + 3 * pagePlan.candidateLimit;
+    direct = {
+      ...root,
+      remaining: ordinaryPageWorkDimensions(
+        sumBounds(
+          declareBound(direct.remaining),
+          repeatBound(declareBound(collectionAuthorizationPreparationWork()), preparations),
+        ),
+      ),
+    };
+  }
+  const work = inherited?.work ?? new NativeCollectionWork(ceilings ? root : direct, deadline);
   const ownTime = !attempt && !inherited;
   const at =
     attempt?.time ??

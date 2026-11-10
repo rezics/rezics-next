@@ -358,7 +358,7 @@ test('A real owner prepares and republishes an explicit selection after public a
   expect(await native(collection.id)).toEqual(before);
   const query = new URLSearchParams({ filter: JSON.stringify({ owner: { presence: true } }), sort: 'id' });
   const working = await f.send('GET', `/v1/collections/${collection.id}/members?${query}`);
-  expect(working.status).toBe(200);
+  expect(working.status, await working.clone().text()).toBe(200);
   const page = await working.json();
   expect(page.members.map((row: { subjectId: string }) => row.subjectId)).toContain(b);
   expect(await native(collection.id)).toEqual(before);

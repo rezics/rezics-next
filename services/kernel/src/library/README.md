@@ -481,7 +481,11 @@ Current implementation evidence is narrower than the capability:
   for the working facts; public output never certifies that capture. Private working reads require an explicit
   owner filter on the existing members route; the ordinary unfiltered public/unlisted request continues to read
   selected COMPLETE output. Current Collection/account and every expanded family scope/gate/Access are still
-  checked before and after work. Neither working reads nor preparation update the public head, output members or
+  checked before and after work. The direct ordinary page reservation composes Access's existing Collection
+  authorization preparation bound for five fixed preparations (seven for FULL), two per refill round and three per
+  candidate. This pays repeated native authorization independently of the existing Source work allowance; the
+  canonical raw/group limits and inherited Search/selected-command reservations retain their original bounds.
+  Neither working reads nor preparation update the public head, output members or
   its cursor basis. Publication B uses the existing native atomic output hooks and observed Collection revision;
   failed/refused B retains A, and a third retained allocation still refuses without actual disposition.
   Whole-query publication now consumes this distinct private working Source through its own current native
