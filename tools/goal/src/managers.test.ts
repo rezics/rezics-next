@@ -130,12 +130,15 @@ async function waitForPausedGoalSet(s: Awaited<ReturnType<typeof setup>>, thread
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
     if (
-      s.requests().slice(after).some(
-        (request) =>
-          request.method === 'thread/goal/set' &&
-          request.params.threadId === threadId &&
-          request.params.status === 'paused',
-      )
+      s
+        .requests()
+        .slice(after)
+        .some(
+          (request) =>
+            request.method === 'thread/goal/set' &&
+            request.params.threadId === threadId &&
+            request.params.status === 'paused',
+        )
     )
       return;
     await Bun.sleep(5);
@@ -147,12 +150,15 @@ async function waitForTurnInterrupt(s: Awaited<ReturnType<typeof setup>>, thread
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
     if (
-      s.requests().slice(after).some(
-        (request) =>
-          request.method === 'turn/interrupt' &&
-          request.params.threadId === threadId &&
-          request.params.turnId === 'turn-2',
-      )
+      s
+        .requests()
+        .slice(after)
+        .some(
+          (request) =>
+            request.method === 'turn/interrupt' &&
+            request.params.threadId === threadId &&
+            request.params.turnId === 'turn-2',
+        )
     )
       return;
     await Bun.sleep(5);
@@ -708,7 +714,11 @@ test('idle Goals stay parked; a concurrent inbox wake is retained through pool r
     await s.managers.recover();
     await s.managers.flush();
     expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(startsAfterDecision);
-    expect(s.managers.get(manager.id)).toMatchObject({ threadId, waitingForInbox: true, goalState: { status: 'paused' } });
+    expect(s.managers.get(manager.id)).toMatchObject({
+      threadId,
+      waitingForInbox: true,
+      goalState: { status: 'paused' },
+    });
   } finally {
     await s.close();
   }
@@ -733,7 +743,11 @@ test('a blocked running Goal accepts one admitted inbox turn without reactivatio
     });
 
     s.setTurnAllowed(false);
-    s.inbox.deliver({ managerId: manager.id, kind: 'decision', summary: 'Review the blocked Goal and choose the next action' });
+    s.inbox.deliver({
+      managerId: manager.id,
+      kind: 'decision',
+      summary: 'Review the blocked Goal and choose the next action',
+    });
     await s.managers.wake(manager.id);
     await s.managers.flush();
     expect(s.inbox.notifications(manager.id)).toHaveLength(1);
@@ -760,7 +774,10 @@ test('a blocked running Goal accepts one admitted inbox turn without reactivatio
         .map((request) => request.params.status),
     ).toEqual(['active', 'paused', 'blocked']);
     expect(
-      s.requests().filter((request) => request.method === 'turn/start').at(-1)?.params.input[0]?.text,
+      s
+        .requests()
+        .filter((request) => request.method === 'turn/start')
+        .at(-1)?.params.input[0]?.text,
     ).toBe('Review the blocked Goal and choose the next action');
 
     await s.notify({ method: 'turn/completed', params: { threadId, turn: { id: 'turn-2', status: 'completed' } } });
@@ -768,7 +785,11 @@ test('a blocked running Goal accepts one admitted inbox turn without reactivatio
     await s.managers.recover();
     await s.managers.flush();
     expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(startsAfterCompletion);
-    expect(s.managers.get(manager.id)).toMatchObject({ status: 'running', activeTurnId: null, goalState: { status: 'blocked' } });
+    expect(s.managers.get(manager.id)).toMatchObject({
+      status: 'running',
+      activeTurnId: null,
+      goalState: { status: 'blocked' },
+    });
   } finally {
     await s.close();
   }
@@ -1326,6 +1347,29 @@ test('close flushes a pending wake and ignores later notifications', async () =>
       })
       .catch(() => {});
     expect(s.managers.get(manager.id).turns).toBe(turns);
+  } finally {
+    await s.close();
+  }
+});
+
+test('manager renewal preserves an empty assignment and transfer repairs a duplicate paused claim', async () => {
+  const s = await setup();
+  try {
+    const goal = s.spec.goal;
+    const source = await s.managers.start({ ...s.spec, goals: [goal, 'other-goal'] });
+    const destination = { ...s.spec, id: 'destination', goals: [] };
+    await s.managers.start(destination);
+    await s.managers.stop(destination.id);
+    const renewed = await s.managers.renew(destination.id, destination);
+    expect(renewed).toMatchObject({ status: 'running', goals: [] });
+    await s.managers.stop(source.id);
+    // Reproduce the ownership row left by the previous renewal code.
+    s.db
+      .query("UPDATE manager_sessions SET state=json_set(state, '$.goals', json(?)) WHERE id=?")
+      .run(JSON.stringify([goal]), destination.id);
+    const moved = await s.managers.assign(goal, destination.id);
+    expect(moved).toEqual({ goal, from: source.id, to: destination.id, goals: [goal] });
+    expect(s.managers.get(source.id)).toMatchObject({ status: 'paused', goals: ['other-goal'] });
   } finally {
     await s.close();
   }
