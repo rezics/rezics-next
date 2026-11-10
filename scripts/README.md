@@ -46,6 +46,18 @@ reader deadline per page. A navigation timeout records whether a main document r
 response browser probes stay unrun, while an observed response still permits section evidence. No timeout is
 attributed to assets without evidence.
 
+Decision: member browser sign-in uses that same committed-document navigation, then the visible email, password and
+Sign in controls under a form reader deadline. Submission waits explicitly for the Web callback redirect and requires
+both the Web session cookie and the visible signed-in account control. Each main-document response records its
+status, origin and path; failures name response/redirect, issuer-document, interactive-form, callback or session.
+Redirect queries and underlying browser errors are omitted because they can contain authorization operands.
+The retained member run establishes a document-lifecycle timeout only: it recorded no response or issuer evidence,
+so it cannot establish a server-hop failure or an asset cause. Native Website authority remains independent.
+The focused regression in `scripts/page-data-check.test.ts` holds an issuer's deferred script pending while exercising
+the visible form and returned session; the fresh-stack fixture reuses the same helper and keeps its existing assertions.
+Run only the focused selection with `bun test scripts/page-data-check.test.ts --test-name-pattern 'member browser'`;
+this selection creates no seed, database or native authorization grant. Full live-stack acceptance remains separate.
+
 Decision: seeded subject pages bind only by their declared provider source key and expected native type from the
 owned `page-data-stack` worktree's `.temp/cross-media-seed/result.json`. One resolved subject ID drives the browser
 route, native path/body and SQL parameters. Missing, malformed, ambiguous or wrong-type identities leave the affected

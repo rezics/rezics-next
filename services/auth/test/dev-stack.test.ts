@@ -9,6 +9,7 @@ import { Pool } from 'pg';
 import { root } from '../scripts/dev-stack.ts';
 import { StackFixtureLifetime, waitForFixtureResponse, type StackFixtureChild } from '../scripts/dev-stack-lifetime.ts';
 import { admitWalkStack, walkStackEnvironment } from '../../../scripts/walk-stack.ts';
+import { signInBrowser } from '../../../scripts/page-data-check.ts';
 
 // Exercise the documented commands in a fresh retained-source copy. Never reset a developer's stack.
 test('fresh checkout starts native loopback Auth and signs a person into and out of Web without an external service', async () => {
@@ -179,10 +180,13 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
       await page.locator('input[name="password"]').fill(password);
       await page.locator('form[action="/signup"] button[type="submit"]').click();
       await page.locator('.auth-signup-links a[href^="/login"]').click();
-      await page.locator('input[name="email"]').fill(email);
-      await page.locator('input[name="password"]').fill(password);
-      await page.locator('button[type="submit"]').click();
-      await page.waitForURL(`${origins.web}/**`);
+      await signInBrowser(
+        page,
+        new URL(origins.web),
+        { origin: origins.issuer, email, password },
+        5_000,
+        console.error,
+      );
       expect(
         (await page.context().cookies()).some((cookie: { name: string }) => cookie.name === '__Host-rezics_session'),
       ).toBe(true);

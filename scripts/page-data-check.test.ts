@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { createHash, generateKeyPairSync, verify } from 'node:crypto';
-import { chromium, type Browser } from '../packages/ui/node_modules/playwright/index.mjs';
+import { chromium, type Browser } from '../packages/ui/node_modules/playwright/index.js';
 import {
   classifySection,
   formatLine,
@@ -18,6 +18,7 @@ import {
   resolveSeedIdentity,
   runPageDataCheck,
   signInRequestBody,
+  signInBrowser,
   type Manifest,
   type NativeObservation,
   type PageObservation,
@@ -740,6 +741,83 @@ test('fixture pages exercise classification, reader readiness and coverage after
     kernel.stop(true);
   }
 }, 60_000);
+
+test('member browser sign-in uses visible controls before document lifecycle and verifies the returned session', async () => {
+  const browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] });
+  let release!: () => void;
+  const pending = new Promise<Response>((resolve) => {
+    release = () => resolve(new Response(''));
+  });
+  const evidence: string[] = [];
+  let failure: 'callback' | 'session' | undefined;
+  const web = Bun.serve({
+    port: 0,
+    fetch(request): Response {
+      const path = new URL(request.url).pathname;
+      if (path === '/auth/sign-in') return Response.redirect(`${issuer.url}login?state=private-state`);
+      if (path === '/auth/callback' && failure === 'callback') return new Response('Refused', { status: 400 });
+      if (path === '/auth/callback')
+        return new Response(null, {
+          status: 303,
+          headers: {
+            location: '/',
+            'set-cookie': '__Host-rezics_session=fixture; Path=/; Secure; HttpOnly; SameSite=Lax',
+          },
+        });
+      return new Response(
+        failure !== 'session' && request.headers.get('cookie')?.includes('__Host-rezics_session=fixture')
+          ? '<button id="account-menu-button">Account</button>'
+          : '<a href="/auth/sign-in">Sign in</a>',
+        { headers: { 'content-type': 'text/html' } },
+      );
+    },
+  });
+  const issuer = Bun.serve({
+    port: 0,
+    fetch(request): Response | Promise<Response> {
+      if (new URL(request.url).pathname === '/pending.js') return pending;
+      if (request.method === 'POST') return Response.redirect(`${web.url}auth/callback?code=private-code`);
+      return new Response(
+        `<form method="post"><label>Email<input name="email"></label>
+      <label>Password<input name="password" type="password"></label><button>Sign in</button></form>
+      ${failure ? '' : '<script defer src="/pending.js"></script>'}`,
+        { headers: { 'content-type': 'text/html' } },
+      );
+    },
+  });
+  const credentials = { origin: issuer.url.origin, email: 'member@example.test', password: 'private-password' };
+  try {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    let issuerLoaded = false;
+    page.on('domcontentloaded', () => {
+      if (new URL(page.url()).origin === issuer.url.origin) issuerLoaded = true;
+    });
+    await signInBrowser(page, web.url, credentials, 1_000, (line) => evidence.push(line));
+    expect(issuerLoaded).toBe(false);
+    expect(evidence.join('\n')).toContain('phase=callback document=303');
+    expect(evidence.at(-1)).toBe('Member browser sign-in phase=session verified');
+    expect(evidence.join('\n')).not.toMatch(/private-state|private-code|private-password/);
+    await context.close();
+    // A returned Web origin and a session cookie cannot turn a refused callback or signed-out reader green.
+    for (failure of ['callback', 'session'] as const) {
+      const fresh = await browser.newContext();
+      try {
+        const error = await signInBrowser(await fresh.newPage(), web.url, credentials, 1_000).catch((error: Error) => {
+          if (!error.message.includes(`failed phase=${failure};`)) throw error;
+          return error;
+        });
+        expect(error).toBeInstanceOf(Error);
+      } finally {
+        await fresh.close();
+      }
+    }
+  } finally {
+    release();
+    await browser.close();
+    await Promise.all([web.stop(true), issuer.stop(true)]);
+  }
+}, 15_000);
 
 test.each([true, false])(
   'member browser setup failure retains independent evidence (native token=%s)',
