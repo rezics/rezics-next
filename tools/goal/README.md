@@ -1542,8 +1542,8 @@ independent defects. Only resumed or dispatched repairs become `routed`, and a r
 replay without granting the repair any risk area. Generated repair briefs declare the risks classified from the same path
 rules as ordinary brief admission. To recover a retained classification refusal, run
 `bun tools/goal/src/page-data.ts reconcile-repairs <run-id>` from the control-plane checkout. This uses the original
-run, cause key, and evidence without starting the checker. It changes only an unadmitted generator's empty risk
-declaration; other brief changes and other refusals remain untouched. Already routed causes are skipped.
+run, cause key, and evidence without starting the checker. It replaces the exact unadmitted brief with the current generator's routing and risk declaration. Other brief changes
+and other refusals remain untouched. Already routed causes are skipped.
 
 Decision: dispatch and retry refuse a brief whose `acceptance.requires` lists `native` or `browser` when another task of
 the same Goal with those requires is ready, running, held or landing. The error names that task and links
@@ -1749,7 +1749,8 @@ patch-only changes refresh the pinned install before boot. It runs `bun scripts/
 `flow_events`, and includes the section results by run in flow reports. A section moving from `DATA`, `EMPTY`,
 `UNAUTHORIZED` or `UNAVAILABLE` to `API`, `WEB` or `SEED` returns to the latest integrated task that changed one of
 its mapped files when its retained session can resume; otherwise one repair task is dispatched to that section's
-Goal. Boot and check failures write their bounded captured stack output, plus failing command output when present, to
+Goal. A `SEED` defect uses the cross-media fixture producer's Imports ownership and source paths. Its recorded section
+and consumer paths remain available as evidence. Boot and check failures write their bounded captured stack output, plus failing command output when present, to
 `stateDirectory/page-data-failures/<runId>-<phase>.log`; the supermanager notice includes that log path. When the stack
 exits, the notice retains the first substantive pre-teardown cause and skips Task command echoes. When readiness
 expires without a producer error, the notice uses the final failed probe with its origin and HTTP status or error.

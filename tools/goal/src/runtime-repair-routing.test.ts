@@ -176,3 +176,59 @@ test('compiler diagnostics notify the concrete source owner without dispatching 
     h.dispose();
   }
 });
+
+test('seed repair uses the fixture producer and skips a cancelled consumer copy', async () => {
+  const h = harness();
+  const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
+  const repairKey = 'a'.repeat(64);
+  try {
+    const reader = h.tasks.dispatch(h.briefFile);
+    h.store.updateTask({ taskId: reader.id, attempt: reader.currentAttempt }, (task) => {
+      task.state = 'cancelled';
+      task.brief = {
+        ...task.brief,
+        goal: 'web',
+        markdown: task.brief.markdown + `\npage-data-repair-key: ${repairKey}\n`,
+      };
+    });
+    const routing = createRuntimeRepairRouting({
+      tasks: h.tasks,
+      store: h.store,
+      job: {
+        async resumePageDataRepair() {
+          throw new Error('a Web reader cannot own a seed repair');
+        },
+      },
+      inbox,
+      settings: h.settings,
+    });
+    const seed = {
+      repairKey,
+      head: 'retained-source',
+      previousClass: 'EMPTY' as const,
+      owner: h.store.task(reader.id),
+      section: {
+        page: 'vn',
+        persona: 'member',
+        section: 'tags',
+        name: 'Tags',
+        class: 'SEED' as const,
+        goal: 'web',
+        files: ['services/auth/src/authorization/permissions.ts'],
+      },
+    };
+    expect(await routing.routePageDataRepair(seed)).toBe('dispatched');
+    expect(await routing.routePageDataRepair(seed)).toBe('dispatched');
+    const producers = h.store.tasks().filter((task) => task.brief.goal === 'imports');
+    expect(producers).toHaveLength(1);
+    const producer = h.store.task(producers[0]!.id);
+    expect(producer.brief.paths).toContain('scripts/datasets/cross-media-seed.ts');
+    expect(producer.brief.paths).toContain('services/importer/src/showcase-*.ts');
+    expect(producer.brief.paths.includes(seed.section.files[0]!)).toBe(false);
+    expect(producer.brief.riskAreas).toEqual([]);
+    expect(producer.brief.markdown).toContain('vn/member/tags');
+    expect(h.store.task(reader.id).state).toBe('cancelled');
+  } finally {
+    await h.disposeAsync();
+  }
+});
