@@ -217,7 +217,8 @@ test('a real native source fence change after released preparation rolls back vi
     connection.query = function (...args: unknown[]) {
       const query = args[0] as string | { text: string };
       const sql = typeof query === 'string' ? query : query.text;
-      if (sql.includes('curator_account_id=$3') && sql.includes('FOR UPDATE')) reached();
+      // Wait for the publication header compare, rather than the Source's earlier custody lock.
+      if (sql.includes('rule_release_digest IS NOT NULL') && sql.includes('FOR UPDATE')) reached();
       return (original as (...values: unknown[]) => unknown).apply(connection, args);
     } as PoolClient['query'];
     restorers.push(() => {
@@ -243,7 +244,7 @@ test('a real native source fence change after released preparation rolls back vi
     ]);
     await client.query('COMMIT');
     const response = await request;
-    expect(response.status).toBe(409);
+    expect(response.status, await response.clone().text()).toBe(409);
     const after = await native(collection.id);
     expect(after.collection.visibility).toBe('private');
     expect(after.collection.revision).toBe(before.collection.revision);
@@ -356,10 +357,16 @@ test('A real owner prepares and republishes an explicit selection after public a
   expect(delayed.status).toBe('unavailable');
   expect(await readRegistration()).toEqual(successor);
   expect(await native(collection.id)).toEqual(before);
-  const query = new URLSearchParams({ filter: JSON.stringify({ owner: { presence: true } }), sort: 'id' });
-  const working = await f.send('GET', `/v1/collections/${collection.id}/members?${query}`);
-  expect(working.status).toBe(200);
-  const page = await working.json();
+  const query = new URLSearchParams({ filter: JSON.stringify({ owner: { presence: true } }), sort: 'id', limit: '1' });
+  // Other cases retain owner facts; consume ordinary cursors to find this case's new working member.
+  let page: { members: { subjectId: string }[]; next: string | null };
+  do {
+    const working = await f.send('GET', `/v1/collections/${collection.id}/members?${query}`);
+    expect(working.status, await working.clone().text()).toBe(200);
+    page = await working.json();
+    if (page.members.some((row) => row.subjectId === b) || page.next === null) break;
+    query.set('cursor', page.next);
+  } while (true);
   expect(page.members.map((row: { subjectId: string }) => row.subjectId)).toContain(b);
   expect(await native(collection.id)).toEqual(before);
   const scopes = await f.database.admin.query<{ scope: string; account: string; generation: string; capture: string }>(
@@ -434,7 +441,7 @@ test('a saved selection retains its accepted release through fresh publication a
   const subject = await f.subject('Accepted saved meaning');
   await f.entry(subject);
   const collection = await saved();
-  await f.page(collection.id);
+  expect((await f.send('GET', `/v1/collections/${collection.id}/members?limit=1`)).status).toBe(200);
   const original = await (await f.send('GET', '/v1/definitions/active')).json();
   const release = structuredClone(bundledRelease);
   release.catalogue.version = '999.0.1';

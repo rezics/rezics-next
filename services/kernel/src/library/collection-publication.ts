@@ -182,6 +182,7 @@ async function prepareSelection(
   attempt: CommandAttempt,
   deadline: number,
   plan: CollectionSelectedPublicationPlan,
+  expected?: Pick<Prepared, 'header' | 'rule'>,
 ): Promise<Prepared> {
   const saved = await withConnection(deps.pool, async (connection) => {
     const client = deadlineClient(connection, deadline);
@@ -199,6 +200,13 @@ async function prepareSelection(
       throw error;
     }
   });
+  // Core retries acquire fresh authority, but a changed definition must still refuse this selection.
+  if (
+    expected &&
+    (canonicalize(saved.header) !== canonicalize(expected.header) ||
+      canonicalize(saved.rule) !== canonicalize(expected.rule))
+  )
+    throw conflict();
   const admission = await admitSavedCollectionMemberQuery(deps, actor, saved.rule, {}, deadline);
   if (!admission.filter || admission.releaseDigest !== saved.rule.releaseDigest) throw unavailable();
   const checks = await prepareCollectionRuleAuthority(deps, actor, admission.filter, attempt, deadline);
@@ -372,6 +380,7 @@ export function createCollectionPublications(deps: Dependencies) {
         context: { pool: deps.pool, deadline, partition: partitionOf(route) },
       });
       const attempts = new WeakMap<AuthoritativeTime, Prepared>();
+      let initialDefinition: Pick<Prepared, 'header' | 'rule'> | undefined;
       const identity = principalCommandIdentity(actor);
       const kind = 'library.collection.publish-selected';
       const generation = randomUUID();
@@ -394,10 +403,19 @@ export function createCollectionPublications(deps: Dependencies) {
             ...native,
             async prepare(attempt) {
               const proof = await native.prepare!(attempt);
-              attempts.set(
-                attempt.time,
-                await prepareSelection(deps, actor, route, collectionId, input.subjectIds, attempt, deadline, plan),
+              const prepared = await prepareSelection(
+                deps,
+                actor,
+                route,
+                collectionId,
+                input.subjectIds,
+                attempt,
+                deadline,
+                plan,
+                initialDefinition,
               );
+              initialDefinition ??= { header: prepared.header, rule: prepared.rule };
+              attempts.set(attempt.time, prepared);
               return proof;
             },
             async authorize(tx, attempt, proof) {

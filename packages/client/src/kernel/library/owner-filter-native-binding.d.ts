@@ -15,7 +15,7 @@ import type { PublicFilterQueriedObservation } from '../search/public-filter-con
 import type { PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
 import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
 import type { FilterDocument } from '@rezics/filter';
-import type { OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
+import { type OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
 type Dependencies = {
     pool: Pool;
     access: Access;
