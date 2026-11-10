@@ -803,9 +803,11 @@ test('member browser sign-in uses visible controls before document lifecycle and
     for (failure of ['callback', 'session'] as const) {
       const fresh = await browser.newContext();
       try {
-        await expect(signInBrowser(await fresh.newPage(), web.url, credentials, 1_000)).rejects.toThrow(
-          `failed phase=${failure};`,
-        );
+        const error = await signInBrowser(await fresh.newPage(), web.url, credentials, 1_000).catch((error: Error) => {
+          if (!error.message.includes(`failed phase=${failure};`)) throw error;
+          return error;
+        });
+        expect(error).toBeInstanceOf(Error);
       } finally {
         await fresh.close();
       }
