@@ -255,6 +255,124 @@ test('the policy interval, defect transition, section output and per-run report 
   }
 });
 
+test('a refused repair keeps its completed run, lets independent repairs route, and skips an immediate replay', async () => {
+  const h = harness();
+  try {
+    const integrationRef = spawnSync('git', ['branch', 'dev', 'main'], {
+      cwd: h.settings.mainCheckout,
+      encoding: 'utf8',
+    });
+    expect(integrationRef.status).toBe(0);
+    const start = new Date('2026-01-01T00:00:00.000Z');
+    const interval = h.settings.policy?.pageData?.intervalMs ?? 7_200_000;
+    const registry = new Map<string, SectionConfig>([
+      [
+        'settings\tanonymous\tpermissions',
+        {
+          page: 'settings',
+          persona: 'anonymous',
+          section: 'permissions',
+          name: 'Permissions',
+          goal: 'web',
+          files: ['services/auth/src/authorization/permissions.ts'],
+        },
+      ],
+      [
+        'home\tanonymous\tfeed',
+        {
+          page: 'home',
+          persona: 'anonymous',
+          section: 'feed',
+          name: 'Feed',
+          goal: 'web',
+          files: ['apps/web/src/routes/index.tsx'],
+        },
+      ],
+    ]);
+    let rows = 'settings anonymous permissions DATA\nhome anonymous feed DATA\n';
+    let currentTime = start;
+    let stackRuns = 0;
+    const routeAttempts: string[] = [];
+    const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
+    const job = { resumePageDataRepair: async () => false };
+    const options = {
+      settings: h.settings,
+      db: h.store.db,
+      tasks: { tasks: () => [] },
+      inbox,
+      now: () => currentTime,
+      runStack: async (_head: string, invocation: string) => {
+        stackRuns++;
+        return {
+          output: completed(invocation, rows),
+          exitCode: rows.includes(' API') ? 1 : 0,
+          registry,
+        };
+      },
+      routeDefect: (repair: PageDataRepair) => {
+        routeAttempts.push(repair.section.section);
+        return routePageDataRepair(h.tasks, h.store, job, inbox, h.settings, repair);
+      },
+    };
+
+    expect(await runPageDataCycle(options)).toBe('ran');
+    currentTime = new Date(start.getTime() + interval);
+    rows = 'settings anonymous permissions API\nhome anonymous feed API\n';
+    expect(await runPageDataCycle(options)).toBe('ran');
+
+    expect(routeAttempts).toEqual(['permissions', 'feed']);
+    expect(stackRuns).toBe(2);
+    expect(readLatestPageDataRun(h.store.db)).toMatchObject({
+      sections: [
+        {
+          page: 'settings',
+          section: 'permissions',
+          class: 'API',
+          files: ['services/auth/src/authorization/permissions.ts'],
+        },
+        { page: 'home', section: 'feed', class: 'API' },
+      ],
+    });
+    const report = flowReport(readFlow(h.store.db), []).pageDataRuns.at(-1)!;
+    expect(report.repairs).toEqual([
+      expect.objectContaining({
+        route: 'refused',
+        reason: 'declared paths touch undeclared risk area: authorization',
+        section: expect.objectContaining({ page: 'settings', section: 'permissions', class: 'API' }),
+      }),
+      expect.objectContaining({
+        route: 'dispatched',
+        section: expect.objectContaining({ page: 'home', section: 'feed', class: 'API' }),
+      }),
+    ]);
+    expect(formatPageDataFlowRuns([report]).join('\n')).toContain(
+      'Repair refused for settings/anonymous/permissions (API): declared paths touch undeclared risk area: authorization',
+    );
+    const claims = h.store.db.query('SELECT status,detail FROM page_data_repairs').all() as {
+      status: string;
+      detail: string;
+    }[];
+    expect(claims.map(({ status }) => status).sort()).toEqual(['refused', 'routed']);
+    expect(claims.map(({ detail }) => JSON.parse(detail))).toContainEqual(
+      expect.objectContaining({
+        route: 'refused',
+        reason: 'declared paths touch undeclared risk area: authorization',
+        section: expect.objectContaining({ files: ['services/auth/src/authorization/permissions.ts'] }),
+      }),
+    );
+    expect(h.store.tasks().filter((task) => task.brief.markdown.includes('page-data-repair-key:'))).toHaveLength(1);
+    expect(inbox.read('web')).toHaveLength(1);
+
+    expect(await runPageDataCycle(options)).toBe('skipped');
+    expect(stackRuns).toBe(2);
+    expect(routeAttempts).toEqual(['permissions', 'feed']);
+    expect(h.store.tasks().filter((task) => task.brief.markdown.includes('page-data-repair-key:'))).toHaveLength(1);
+    expect(inbox.read('web')).toHaveLength(1);
+  } finally {
+    await h.disposeAsync();
+  }
+});
+
 test('fresh incomplete seed artifacts permit route checks while boot failures and stale files stay stops', async () => {
   const h = fixture();
   try {

@@ -91,7 +91,13 @@ export type PageDataRepair = {
   owner?: Task;
   head: string;
 };
-export type PageDataRepairRoute = 'resumed' | 'dispatched';
+export type PageDataRepairRoute =
+  | 'resumed'
+  | 'dispatched'
+  | {
+      status: 'refused';
+      reason: string;
+    };
 export type PageDataOptions = {
   settings: Settings;
   db: Database;
@@ -638,8 +644,12 @@ function repairKey(section: PageDataSection, owner: Task | undefined): string {
     .digest('hex');
 }
 
-function repairWasRouted(db: Database, key: string): boolean {
-  return Boolean(db.query("SELECT 1 FROM page_data_repairs WHERE repair_key=? AND status='routed' LIMIT 1").get(key));
+function readRepairClaim(db: Database, key: string): { status: string; detail: string } | undefined {
+  const row = db.query('SELECT status,detail FROM page_data_repairs WHERE repair_key=? LIMIT 1').get(key) as {
+    status: string;
+    detail: string;
+  } | null;
+  return row ?? undefined;
 }
 
 function claimRepair(db: Database, key: string, at: string, detail: string): void {
@@ -653,6 +663,19 @@ function claimRepair(db: Database, key: string, at: string, detail: string): voi
 
 function finishRepair(db: Database, key: string): void {
   db.query("UPDATE page_data_repairs SET status='routed' WHERE repair_key=?").run(key);
+}
+
+function settleRepair(
+  db: Database,
+  key: string,
+  status: 'routed' | 'refused',
+  detail: string,
+  event: Parameters<typeof recordFlow>[1],
+): void {
+  db.transaction(() => {
+    db.query('UPDATE page_data_repairs SET status=?,detail=? WHERE repair_key=?').run(status, detail, key);
+    recordFlow(db, event);
+  }).immediate();
 }
 
 function saveRun(db: Database, run: PageDataRun): void {
@@ -804,18 +827,37 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
     }
     const previous = loadLastSuccessfulRun(options.db);
     const newDefects = newlyDefectiveSections(previous?.sections ?? [], sections);
+    const newDefectBySection = new Map(newDefects.map((defect) => [sectionKey(defect.section), defect]));
+    const run: PageDataRun = {
+      runId,
+      at,
+      head,
+      classes: pageDataClassCounts(sections),
+      sections,
+      ...(seed ? { seed } : {}),
+      ...(incomplete ? { coverage: { status: 'incomplete' } } : {}),
+    };
+    saveRun(options.db, run);
+
     const changes = previous?.head ? projectChanges(options.settings.mainCheckout, previous.head, head) : [];
     const tasks = options.tasks.tasks();
-    for (const defect of newDefects) {
-      const owner = latestSectionOwner(tasks, changes, defect.section.files);
-      const key = repairKey(defect.section, owner);
-      if (repairWasRouted(options.db, key)) continue;
-      const detail = JSON.stringify({
+    for (const section of sections.filter((candidate) => PAGE_DATA_DEFECTS.has(candidate.class))) {
+      const owner = latestSectionOwner(tasks, changes, section.files);
+      const key = repairKey(section, owner);
+      const claim = readRepairClaim(options.db, key);
+      if (claim?.status === 'routed' || claim?.status === 'refused') continue;
+      const transition = newDefectBySection.get(sectionKey(section));
+      const previousClass =
+        transition?.previousClass ??
+        (claim ? (JSON.parse(claim.detail) as { previousClass?: PageDataClass }).previousClass : undefined);
+      if (!previousClass) continue;
+      const repairDetail = {
         repairKey: key,
-        section: sectionKey(defect.section),
-        class: defect.section.class,
-        owner: owner?.id,
-      });
+        section,
+        previousClass,
+        ...(owner ? { owner: owner.id } : {}),
+      };
+      const detail = JSON.stringify(repairDetail);
       claimRepair(options.db, key, at, detail);
       const resumed = owner
         ? Boolean(
@@ -833,31 +875,27 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
       }
       const route = await options.routeDefect({
         repairKey: key,
-        section: defect.section,
-        previousClass: defect.previousClass,
+        section,
+        previousClass,
         ...(owner ? { owner } : {}),
         head,
       });
-      recordFlow(options.db, {
+      const refusal = typeof route === 'object' ? route : undefined;
+      const routeName = refusal ? 'refused' : route;
+      const routeDetail = JSON.stringify({
+        ...repairDetail,
+        route: routeName,
+        ...(refusal ? { reason: refusal.reason } : {}),
+      });
+      settleRepair(options.db, key, refusal ? 'refused' : 'routed', routeDetail, {
         taskId: pageDataTaskId,
         attempt: runId,
         stage: 'verification',
         action: 'page-data-repair',
         at,
-        detail: JSON.stringify({ ...JSON.parse(detail), route }),
+        detail: routeDetail,
       });
-      finishRepair(options.db, key);
     }
-    const run: PageDataRun = {
-      runId,
-      at,
-      head,
-      classes: pageDataClassCounts(sections),
-      sections,
-      ...(seed ? { seed } : {}),
-      ...(incomplete ? { coverage: { status: 'incomplete' } } : {}),
-    };
-    saveRun(options.db, run);
     if (incomplete) {
       const transcript = combineFailureOutput(stackOutput, commandOutput(output, diagnostics));
       const logPath = writePageDataFailureLog(options.settings.stateDirectory, runId, 'check', transcript);

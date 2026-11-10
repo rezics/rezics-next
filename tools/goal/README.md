@@ -857,7 +857,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.watchdog.commandLogTailBytes`                 | `262144`                                                                   | Worker log tail inspected for recent commands (bytes).                                                                                                                                      |
 | `policy.watchdog.commitCountTimeoutMs`                | `5000`                                                                     | Deadline for counting commits in long-attempt reports (ms).                                                                                                                                 |
 | `policy.watchdog.processPollingCommands`              | `2`                                                                        | Recent process-inspection commands before reporting repeated polling.                                                                                                                       |
-| `policy.watchdog.longAttemptReportMs`                 | `3600000`                                                                  | Minimum interval between reports for the same long attempt (ms).                                                                                                                               |
+| `policy.watchdog.longAttemptReportMs`                 | `3600000`                                                                  | Minimum interval between reports for the same long attempt (ms).                                                                                                                            |
 | `policy.width.workerThreshold`                        | `10`                                                                       | Confirmed live workers below which an eligible Goal receives a width event.                                                                                                                 |
 | `policy.width.bucketMs`                               | `900000`                                                                   | Width-event deduplication bucket duration (ms).                                                                                                                                             |
 | `policy.width.pageSize`                               | `64`                                                                       | Active task rows per width-snapshot database page.                                                                                                                                          |
@@ -1535,6 +1535,11 @@ paths remain protected. New landing requests persist per-area rules, while previ
 original matching behavior. Every intersected production risk area must be declared. Extend the ownership data when adding
 product modules. A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and asks
 that they be split into a dev task.
+
+Decision: completed page-data runs and section evidence are recorded before repair admission. A risk-area refusal stays a
+`refused` repair claim with its exact section and reason in the page-data flow report; the cycle continues routing
+independent defects. Only resumed or dispatched repairs become `routed`, and a refused claim suppresses an immediate
+replay without granting the repair any risk area.
 
 Decision: dispatch and retry refuse a brief whose `acceptance.requires` lists `native` or `browser` when another task of
 the same Goal with those requires is ready, running, held or landing. The error names that task and links
