@@ -81,7 +81,9 @@ extraction and retains every source file's stories for shared IDs. The focused d
 Do not enable `experimentalReactComponentMeta` with the pinned TypeScript 7 package: it lacks the legacy compiler
 API (`ts.sys`) required by this alpha's component-meta generator, which otherwise returns component errors without
 props. Neither server-side docgen nor that experimental flag provides a working substitute with these pins.
-Builder-side docgen is deprecated for Storybook 12; revisit these flags when upgrading.
+The static Web preview reuses those extracted props for its declared components rather than traversing all
+Vite modules with builder-side docgen. Development retains its existing docgen behavior. Builder-side docgen is
+deprecated for Storybook 12; revisit these flags when upgrading.
 
 Keep one server per catalogue and one outstanding request per endpoint. Retain the owned server/request handles,
 logs, endpoint and terminal results under `.temp/`. If a read times out, inspect its terminal error and the existing
