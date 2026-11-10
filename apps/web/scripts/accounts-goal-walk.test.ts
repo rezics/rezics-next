@@ -42,7 +42,7 @@ test('J10 sends the exact confidential form to the discovered issuer endpoint wi
   expect(fields).toEqual({
     client_id: 'rezics-website',
     client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
-    client_assertion: fields.client_assertion,
+    client_assertion: fields.client_assertion!,
     resource: 'https://api.example.test/exact/',
     token: 'refresh+&=',
     token_type_hint: 'refresh_token',
