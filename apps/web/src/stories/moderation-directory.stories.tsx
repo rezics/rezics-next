@@ -122,7 +122,7 @@ const meta = {
   component: DirectoryStory,
   parameters: {
     layout: 'fullscreen',
-    viewport: { options: queueViewports },
+
     docs: {
       description: {
         component:
@@ -163,4 +163,4 @@ export const ClosedAdvice: Story = { args: { mode: 'closed' } };
 export const Empty: Story = { args: { mode: 'empty' } };
 export const Preparing: Story = { args: { mode: 'preparing' } };
 export const FailedContinuation: Story = { args: { mode: 'unavailable', continuation: true } };
-export const ModerationDirectory: Story = { name: 'Default', globals: {} };
+export const ModerationDirectory: Story = { name: 'Default' };

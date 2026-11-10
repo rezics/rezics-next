@@ -30,15 +30,7 @@ const rows: OwnedClient[] = [
   },
 ];
 type Mode = 'pages' | 'failure' | 'expired' | 'empty' | 'loading' | 'signed-out' | 'denied' | 'unavailable';
-function Review({
-  theme,
-  mode = 'pages',
-  unavailableClipboard = false,
-}: {
-  theme: 'light' | 'dark';
-  mode?: Mode;
-  unavailableClipboard?: boolean;
-}) {
+function Review({ mode = 'pages', unavailableClipboard = false }: { mode?: Mode; unavailableClipboard?: boolean }) {
   const source = useMemo<InventorySource>(() => {
     let failed = false;
     return async (view, cursor) => {
@@ -58,7 +50,7 @@ function Review({
     };
   }, [mode]);
   return (
-    <div className={`${theme === 'dark' ? 'dark' : ''} min-h-screen bg-background text-foreground`}>
+    <div className="min-h-screen bg-background text-foreground">
       <AuthShell>
         <AuthPage heading={m.auth_security_heading()}>
           <OwnedApplicationReview
@@ -80,27 +72,21 @@ async function disclose(canvas: HTMLElement, index: number) {
   (await waitFor(() => canvas.querySelectorAll<HTMLButtonElement>('[data-owned-control]')[index])).click();
   await waitFor(() => canvas.querySelector('[role="region"] h3'));
 }
-const phone = { viewport: {} };
-const desktop = { viewport: {} };
 
-export const PhoneLightLongIdentity = {
-  parameters: phone,
-  render: () => <Review theme="light" />,
+export const LongIdentity = {
+  render: () => <Review />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => disclose(canvasElement, 3),
 };
-export const PhoneDarkDisabledEmptyScopes = {
-  parameters: phone,
-  render: () => <Review theme="dark" />,
+export const DisabledEmptyScopes = {
+  render: () => <Review />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => disclose(canvasElement, 2),
 };
-export const DesktopLightDuplicateNames = {
-  parameters: desktop,
-  render: () => <Review theme="light" />,
+export const DuplicateNames = {
+  render: () => <Review />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => disclose(canvasElement, 0),
 };
-export const DesktopDarkNextPrevious = {
-  parameters: desktop,
-  render: () => <Review theme="dark" />,
+export const NextPrevious = {
+  render: () => <Review />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     (await waitFor(() => button(canvasElement, m.auth_inventory_next()))).click();
     (await waitFor(() => button(canvasElement, m.auth_inventory_previous()))).click();
@@ -108,8 +94,7 @@ export const DesktopDarkNextPrevious = {
   },
 };
 export const FailedNextRetry = {
-  parameters: phone,
-  render: () => <Review theme="light" mode="failure" />,
+  render: () => <Review mode="failure" />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     (await waitFor(() => button(canvasElement, m.auth_inventory_next()))).click();
     (await waitFor(() => button(canvasElement, m.auth_owned_retry()))).click();
@@ -117,24 +102,22 @@ export const FailedNextRetry = {
   },
 };
 export const ExpiredCursor = {
-  parameters: desktop,
-  render: () => <Review theme="dark" mode="expired" />,
+  render: () => <Review mode="expired" />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     (await waitFor(() => button(canvasElement, m.auth_inventory_next()))).click();
     await waitFor(() => canvasElement.textContent?.includes(m.auth_owned_expired()));
   },
 };
 export const ClipboardUnavailable = {
-  parameters: phone,
-  render: () => <Review theme="dark" unavailableClipboard />,
+  render: () => <Review unavailableClipboard />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await disclose(canvasElement, 0);
     button(canvasElement, m.auth_owned_copy())!.click();
     await waitFor(() => canvasElement.textContent?.includes(m.auth_owned_copy_failed()));
   },
 };
-export const EmptyPage = { parameters: phone, render: () => <Review theme="light" mode="empty" /> };
-export const Loading = { parameters: desktop, render: () => <Review theme="dark" mode="loading" /> };
-export const SignedOut = { parameters: phone, render: () => <Review theme="light" mode="signed-out" /> };
-export const Denied = { parameters: desktop, render: () => <Review theme="dark" mode="denied" /> };
-export const Unavailable = { parameters: phone, render: () => <Review theme="light" mode="unavailable" /> };
+export const EmptyPage = { render: () => <Review mode="empty" /> };
+export const Loading = { render: () => <Review mode="loading" /> };
+export const SignedOut = { render: () => <Review mode="signed-out" /> };
+export const Denied = { render: () => <Review mode="denied" /> };
+export const Unavailable = { render: () => <Review mode="unavailable" /> };

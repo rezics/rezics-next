@@ -38,8 +38,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const AvailableOnPhone: Story = {
-  globals: {},
+export const AvailableCredit: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const source = canvas.getByRole('link', { name: viaName });
@@ -52,9 +51,8 @@ export const AvailableOnPhone: Story = {
   },
 };
 
-export const UnavailableOnPhone: Story = {
+export const UnavailableCredit: Story = {
   args: { image: null, alt, locale: 'en' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('img', { name: `Image unavailable: ${alt}` })).toBeVisible();

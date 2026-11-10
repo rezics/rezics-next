@@ -163,12 +163,6 @@ const meta = {
   args: { scenario: 'qualified', visitor: 'Signed Out' },
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1440: { name: 'Desktop 1440', styles: { width: '1440px', height: '960px' } },
-      },
-    },
   },
 } satisfies Meta<typeof Visit>;
 export default meta;
@@ -243,27 +237,22 @@ export const RetiredContextReading: Story = {
     );
   },
 };
-export const OrdinarySignedInPhoneLight: Story = {
-  name: 'Ordinary Signed In',
+export const OrdinarySignedIn: Story = {
   args: { visitor: 'Signed In' },
   globals: { locale: 'en' },
 };
-export const OrdinarySignedInDesktopDark: Story = {
-  tags: ['!dev'],
-  args: { visitor: 'Signed In' },
-  globals: { locale: 'en' },
-};
-export const SimplifiedChinesePhoneDark: Story = {
+
+export const SimplifiedChinese: Story = {
   globals: { locale: 'zh-Hans' },
 };
-export const KoreanDesktopLight: Story = {
+export const Korean: Story = {
   globals: { locale: 'ko' },
 };
-export const FrenchPhoneLight: Story = { globals: { locale: 'fr' } };
-export const GermanDesktopDark: Story = {
+export const French: Story = { globals: { locale: 'fr' } };
+export const German: Story = {
   globals: { locale: 'de' },
 };
-export const SpanishDesktopLight: Story = {
+export const Spanish: Story = {
   globals: { locale: 'es' },
 };
 

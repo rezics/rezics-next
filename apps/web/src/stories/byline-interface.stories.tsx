@@ -153,8 +153,8 @@ const observe: NonNullable<Story['play']> = async ({ canvasElement, args }) => {
   await expect(portrait).toHaveAttribute('data-size', args.size === 'sm' ? 'sm' : 'default');
 };
 
-export const LongNamePhone: Story = { name: 'Long Name', globals: {}, play: observe };
-export const LongNameDesktop: Story = { tags: ['!dev'], globals: {}, play: observe };
+export const LongName: Story = { play: observe };
+
 export const LongNameRtl: Story = {
   globals: { locale: 'fr' },
   parameters: { direction: 'rtl' },
@@ -167,7 +167,6 @@ export const HandleOnly: Story = {
   play: observe,
 };
 export const DisplayNameOnly: Story = {
-  globals: {},
   args: { author: { ...carol, displayName, handle: null } },
   play: observe,
 };
@@ -197,7 +196,6 @@ export const NoAvatar: Story = {
   },
 };
 export const IdentityPrivacy: Story = {
-  globals: {},
   render: () => (
     <main id="thread" className="mx-auto min-w-0 max-w-3xl space-y-6 p-4">
       {privacy.map(({ label, author }) => (

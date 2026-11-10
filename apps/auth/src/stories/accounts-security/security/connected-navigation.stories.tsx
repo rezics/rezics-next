@@ -65,7 +65,7 @@ const middleRows: InventoryRows['consents'][] = [
 ];
 
 type Mode = 'pages' | 'empty-next' | 'failed-next' | 'failed-previous' | 'failed-reload' | 'expired' | 'pending';
-function Review({ mode, theme }: { mode: Mode; theme: 'light' | 'dark' }) {
+function Review({ mode }: { mode: Mode }) {
   const source = useMemo<InventorySource>(() => {
     const reads = new Map<string, number>();
     return async <V extends InventoryView>(view: V, cursor?: string): Promise<InventoryPage<V>> => {
@@ -96,19 +96,15 @@ function Review({ mode, theme }: { mode: Mode; theme: 'light' | 'dark' }) {
   }, [mode]);
 
   const page: ReactNode = (
-    <div className={`${theme === 'dark' ? 'dark' : ''} min-h-screen bg-background text-foreground`}>
+    <div className="min-h-screen bg-background text-foreground">
       <SecurityPage initial={initial} identitySource={identitySource} inventorySource={source} />
     </div>
   );
   return <AuthStory>{page}</AuthStory>;
 }
 
-const phone = { viewport: {} };
-const desktop = { viewport: {} };
-
-export const PhoneLightMiddleBackward = {
-  parameters: phone,
-  render: () => <Review theme="light" mode="pages" />,
+export const MiddleBackward = {
+  render: () => <Review mode="pages" />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     (await waitFor(() => button(canvasElement, m.auth_inventory_next())))!.click();
     (await waitFor(() => button(canvasElement, m.auth_inventory_next())))!.click();
@@ -117,14 +113,12 @@ export const PhoneLightMiddleBackward = {
   },
 };
 
-export const DesktopDarkCurrentAndInactive = {
-  parameters: desktop,
-  render: () => <Review theme="dark" mode="pages" />,
+export const CurrentAndInactive = {
+  render: () => <Review mode="pages" />,
 };
 
-export const PhoneDarkEmptyWithNext = {
-  parameters: phone,
-  render: () => <Review theme="dark" mode="empty-next" />,
+export const EmptyWithNext = {
+  render: () => <Review mode="empty-next" />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await waitFor(() => canvasElement.textContent?.includes(m.auth_connected_page_count({ count: 0 })));
     (await waitFor(() => button(canvasElement, m.auth_inventory_next())))!.click();
@@ -132,18 +126,16 @@ export const PhoneDarkEmptyWithNext = {
   },
 };
 
-export const DesktopLightFailedNext = {
-  parameters: desktop,
-  render: () => <Review theme="light" mode="failed-next" />,
+export const FailedNext = {
+  render: () => <Review mode="failed-next" />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     (await waitFor(() => button(canvasElement, m.auth_inventory_next())))!.click();
     await waitFor(() => button(canvasElement, m.auth_connected_retry_page()));
   },
 };
 
-export const PhoneLightFailedPrevious = {
-  parameters: phone,
-  render: () => <Review theme="light" mode="failed-previous" />,
+export const FailedPrevious = {
+  render: () => <Review mode="failed-previous" />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     (await waitFor(() => button(canvasElement, m.auth_inventory_next())))!.click();
     (await waitFor(() => button(canvasElement, m.auth_inventory_previous())))!.click();
@@ -151,9 +143,8 @@ export const PhoneLightFailedPrevious = {
   },
 };
 
-export const DesktopDarkFailedReload = {
-  parameters: desktop,
-  render: () => <Review theme="dark" mode="failed-reload" />,
+export const FailedReload = {
+  render: () => <Review mode="failed-reload" />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     (await waitFor(() => button(canvasElement, m.auth_inventory_next())))!.click();
     (await waitFor(() => button(canvasElement, m.auth_connected_reload_current())))!.click();
@@ -161,9 +152,8 @@ export const DesktopDarkFailedReload = {
   },
 };
 
-export const PhoneDarkExpiredCursor = {
-  parameters: phone,
-  render: () => <Review theme="dark" mode="expired" />,
+export const ExpiredCursor = {
+  render: () => <Review mode="expired" />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     (await waitFor(() => button(canvasElement, m.auth_inventory_next())))!.click();
     await waitFor(() => canvasElement.textContent?.includes(m.auth_inventory_expired()));
@@ -171,9 +161,8 @@ export const PhoneDarkExpiredCursor = {
   },
 };
 
-export const DesktopLightPendingNavigation = {
-  parameters: desktop,
-  render: () => <Review theme="light" mode="pending" />,
+export const PendingNavigation = {
+  render: () => <Review mode="pending" />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     (await waitFor(() => button(canvasElement, m.auth_inventory_next())))!.click();
     await waitFor(() => canvasElement.textContent?.includes(m.auth_inventory_loading()));

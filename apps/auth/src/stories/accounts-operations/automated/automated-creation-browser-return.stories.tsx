@@ -29,7 +29,7 @@ const profile = {
 };
 type Mode = 'interrupted' | 'unknown' | 'acknowledged' | 'unknown-acknowledged' | 'unavailable';
 
-function Fixture({ mode, dark }: { mode: Mode; dark: boolean }) {
+function Fixture({ mode }: { mode: Mode }) {
   const [ready, setReady] = useState(false);
   useLayoutEffect(() => {
     const key = 'rezics.automated-create.attempt';
@@ -76,19 +76,13 @@ function Fixture({ mode, dark }: { mode: Mode; dark: boolean }) {
     };
   }, [mode]);
   return (
-    <div
-      className={
-        dark ? 'dark min-h-screen bg-background text-foreground' : 'min-h-screen bg-background text-foreground'
-      }
-    >
+    <div className={'min-h-screen bg-background text-foreground'}>
       <AuthShell>{ready ? <AutomatedAccountCreatePage /> : null}</AuthShell>
     </div>
   );
 }
 
-const page = (mode: Mode, dark = false) => <Fixture mode={mode} dark={dark} />;
-const phone = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
-const desktop = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
+const page = (mode: Mode) => <Fixture mode={mode} />;
 
 async function retire(canvas: HTMLElement) {
   window.dispatchEvent(new PageTransitionEvent('pagehide'));
@@ -104,21 +98,21 @@ async function confirm(canvas: HTMLElement) {
   submit.click();
 }
 
-export const InterruptedPhoneDark = {
-  parameters: phone,
-  render: () => page('interrupted', true),
+export const Interrupted = {
+  parameters: reviewParameters,
+  render: () => page('interrupted'),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     fill(canvasElement.querySelector<HTMLInputElement>('#automated-handle')!, 'story-private-handle');
     await retire(canvasElement);
   },
 };
-export const PossiblySentDesktopLight = {
-  parameters: desktop,
+export const PossiblySent = {
+  parameters: reviewParameters,
   render: () => page('unknown'),
   play: ({ canvasElement }: { canvasElement: HTMLElement }) => retire(canvasElement),
 };
-export const AcknowledgedPhoneLight = {
-  parameters: phone,
+export const Acknowledged = {
+  parameters: reviewParameters,
   render: () => page('acknowledged'),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     fill(canvasElement.querySelector<HTMLInputElement>('#automated-operator')!, operator.id);
@@ -130,9 +124,9 @@ export const AcknowledgedPhoneLight = {
     await retire(canvasElement);
   },
 };
-export const UnknownAndAcknowledgedDesktopDark = {
-  parameters: desktop,
-  render: () => page('unknown-acknowledged', true),
+export const UnknownAndAcknowledged = {
+  parameters: reviewParameters,
+  render: () => page('unknown-acknowledged'),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await waitFor(() => canvasElement.querySelector('#automated-confirm'));
     await confirm(canvasElement);
@@ -140,9 +134,9 @@ export const UnknownAndAcknowledgedDesktopDark = {
     await retire(canvasElement);
   },
 };
-export const UnknownWithUnavailableReturnPhoneDark = {
-  parameters: phone,
-  render: () => page('unavailable', true),
+export const UnknownWithUnavailableReturn = {
+  parameters: reviewParameters,
+  render: () => page('unavailable'),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await waitFor(() => canvasElement.querySelector('#automated-confirm'));
     window.dispatchEvent(new PageTransitionEvent('pagehide'));

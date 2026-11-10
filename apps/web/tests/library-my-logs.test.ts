@@ -89,7 +89,7 @@ test('canonical log and progress stories retain real owner plays and historic gu
     'RetiredPair',
     'EmptyChanges',
     'LongContent',
-    'NarrowOriginalHistory',
+    'OriginalHistoryUnknownMeaning',
     'CompletedAmountHistory',
     'Unavailable',
     'Error',
@@ -100,7 +100,7 @@ test('canonical log and progress stories retain real owner plays and historic gu
     'WithheldSummaries',
     'OriginalHistoryRoute',
     'IndependentHistoryRecovery',
-    'NarrowOriginalHistoryRoute',
+    'OriginalCursorHistoryRoute',
     'StaleChangesRecovery',
     'StaleUnitsRecovery',
   ]);

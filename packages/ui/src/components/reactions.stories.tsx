@@ -140,9 +140,8 @@ export const ChooseReaction: Story = {
     await expect(canvas.getByRole('button', { name: 'Like 1' })).toHaveAttribute('aria-pressed', 'true');
   },
 };
-export const MenuOpenPhone: Story = {
+export const MenuOpen: Story = {
   render: () => <PendingReactions initialCounts={{ upvote: 8 }} initialValue={null} />,
-  globals: {},
   async play({ canvasElement }) {
     const choices = await openChoices(canvasElement);
     await expect(within(choices).getByRole('button', { name: /^Like(?:\s|$)/ })).toBeVisible();
@@ -261,7 +260,7 @@ function crowdedPhoneLabels(locale: 'de' | 'zh-Hans') {
 
 function crowdedPhone(locale: 'de' | 'zh-Hans') {
   return (
-    <div className="w-[390px] p-4">
+    <div className="min-w-0 p-4">
       <Reactions
         counts={{ upvote: 90, downvote: 80, like: 70, love: 60, laugh: 50, insightful: 40, sad: 30 }}
         labels={crowdedPhoneLabels(locale)}
@@ -295,14 +294,12 @@ async function crowdedPhoneReady({ canvasElement }: { canvasElement: HTMLElement
   }
 }
 
-export const CrowdedGermanPhone: Story = {
-  name: 'All reactions / German / Phone 390',
+export const CrowdedGerman: Story = {
   render: () => crowdedPhone('de'),
   play: crowdedPhoneReady,
 };
 
-export const CrowdedChinesePhone: Story = {
-  name: 'All reactions / Chinese / Phone 390',
+export const CrowdedChinese: Story = {
   globals: { locale: 'zh-Hans' },
   render: () => crowdedPhone('zh-Hans'),
   play: crowdedPhoneReady,

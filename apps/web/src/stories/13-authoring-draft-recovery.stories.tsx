@@ -35,7 +35,7 @@ const actor = 'prepared-writer';
 const scope = writingScope({ containerId: 'prepared-thread' })!;
 const initialText = 'A private unsent thought. 私の下書き。\n\nA second paragraph to keep after reloading.';
 
-function Example({ scenario, width, dark, long }: { scenario: Scenario; width: number; dark: boolean; long: boolean }) {
+function Example({ scenario, long }: { scenario: Scenario; long: boolean }) {
   const [storage] = useState(() => {
     const value = new PreparedStorage();
     if (['preview', 'unknown', 'attachments'].includes(scenario)) {
@@ -93,7 +93,7 @@ function Example({ scenario, width, dark, long }: { scenario: Scenario; width: n
     setEpoch((value) => value + 1);
   };
   return (
-    <div className={dark ? 'dark' : ''} style={{ width, maxWidth: '100%' }}>
+    <div className="w-full min-w-0">
       <main className="min-h-screen min-w-0 space-y-4 bg-background p-4 text-foreground">
         <p className="rounded border border-border p-3 text-sm">
           Prepared fixture: isolated browser storage and admitted account. Reload, account changes and submission
@@ -195,7 +195,7 @@ const meta = {
   id: 'authoring-browser-writing-recovery',
   component: Example,
   parameters: { layout: 'fullscreen' },
-  args: { scenario: 'writing', width: 390, dark: false, long: false },
+  args: { scenario: 'writing', long: false },
 } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -217,12 +217,10 @@ const journey: NonNullable<Story['play']> = async ({ canvasElement }) => {
   await userEvent.click(view.getByRole('button', { name: 'Prepared reload' }));
   await expect(view.queryByRole('button', { name: m.thread_draft_restore() })).not.toBeInTheDocument();
 };
-export const PhoneLightJourney: Story = { play: journey };
-export const PhoneDarkJourney: Story = { args: { dark: true }, play: journey };
-export const DesktopLightJourney: Story = { args: { width: 1280 }, play: journey };
-export const DesktopDarkJourney: Story = { args: { width: 1280, dark: true }, play: journey };
+export const Journey: Story = { play: journey };
+
 export const LongPreviewKeyboardDiscard: Story = {
-  args: { scenario: 'preview', long: true, dark: true },
+  args: { scenario: 'preview', long: true },
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     const discard = await view.findByRole('button', { name: m.thread_draft_discard() });
@@ -249,7 +247,7 @@ export const StorageDeniedExport: Story = {
     await expect(view.getByRole('textbox', { name: m.thread_draft_export_hint() })).toHaveValue(initialText);
   },
 };
-export const CorruptStorage: Story = { args: { scenario: 'corrupt', width: 1280, dark: true } };
+export const CorruptStorage: Story = { args: { scenario: 'corrupt' } };
 export const AttachmentRepair: Story = {
   args: { scenario: 'attachments' },
   play: async ({ canvasElement }) => {

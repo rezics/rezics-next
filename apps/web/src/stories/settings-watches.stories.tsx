@@ -115,10 +115,9 @@ function Preview({ view, attempts }: { view: View; attempts: StopWatch[] }) {
   );
 }
 
-function story(view: View, viewport: 'phone390' | 'desktop1280', theme: 'light' | 'dark' = 'light'): Story {
+function story(view: View): Story {
   const attempts: StopWatch[] = [];
   return {
-    globals: {},
     render: () => (
       <PatternStory visitor="Signed In" path="/settings#watches">
         <AppShell>
@@ -156,17 +155,14 @@ function story(view: View, viewport: 'phone390' | 'desktop1280', theme: 'light' 
   };
 }
 
-export const PopulatedPhone = story('populated', 'phone390');
-export const PopulatedDesktop = story('populated', 'desktop1280');
-export const InaccessibleTargetPhone = story('inaccessible', 'phone390');
-export const InaccessibleTargetDesktop = story('inaccessible', 'desktop1280');
-export const ReturnedLaterWindowPhone = story('returned', 'phone390');
-export const ReturnedLaterWindowDesktop = story('returned', 'desktop1280');
-export const KeyboardReturnedPhone = story('keyboard-returned', 'phone390');
-export const KeyboardReturnedDesktop = story('keyboard-returned', 'desktop1280');
-export const FailedPhone = story('failed', 'phone390');
-export const FailedDesktop = story('failed', 'desktop1280');
-export const UncertainUnwatchPhoneLight = story('uncertain', 'phone390', 'light');
-export const UncertainUnwatchPhoneDark = story('uncertain', 'phone390', 'dark');
-export const UncertainUnwatchDesktopLight = story('uncertain', 'desktop1280', 'light');
-export const UncertainUnwatchDesktopDark = story('uncertain', 'desktop1280', 'dark');
+export const Populated = story('populated');
+
+export const InaccessibleTarget = story('inaccessible');
+
+export const ReturnedLaterWindow = story('returned');
+
+export const KeyboardReturned = story('keyboard-returned');
+
+export const Failed = story('failed');
+
+export const UncertainUnwatch = story('uncertain');

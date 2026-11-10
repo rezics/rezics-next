@@ -99,22 +99,14 @@ const meta = {
   args: { model, related, definitions, locale: 'en', spoilerThreshold: 0, workHref: model.workHref },
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1440: { name: 'Desktop 1440', styles: { width: '1440px', height: '960px' } },
-      },
-    },
   },
-  globals: {},
 } satisfies Meta<typeof WorkTagReadingView>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const BoundedReading: Story = {};
-export const CurrentMembershipPhone: Story = { name: 'Current Membership' };
-export const CurrentMembershipDesktop: Story = { tags: ['!dev'], globals: {} };
+
 export const UnavailableMembership: Story = { args: { model: unavailable } };
 export const WeightScaleBounds: Story = {
   args: {

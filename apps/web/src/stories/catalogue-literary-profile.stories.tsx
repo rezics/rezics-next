@@ -93,12 +93,7 @@ const meta = {
   component: LiteraryStory,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -225,7 +220,6 @@ export const Route: Story = {
   render: () => (
     <PageStory visitor="Signed In" path={`/subjects/${literaryWorkId}/an-original-literary-work/literary`} />
   ),
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const document = canvasElement.ownerDocument;
@@ -521,29 +515,15 @@ async function inspectInitialBibliography(canvasElement: HTMLElement) {
 
 export const InitialBibliography: Story = {
   render: () => <InitialBibliographyStory />,
-  globals: {},
   play: ({ canvasElement }) => inspectInitialBibliography(canvasElement),
 };
 export const InitialBibliographyRTL: Story = {
   render: () => <InitialBibliographyStory direction="rtl" />,
-  globals: {},
   play: ({ canvasElement }) => inspectInitialBibliography(canvasElement),
 };
-export const InitialBibliographyDesktop: Story = {
-  tags: ['!dev'],
-  render: () => <InitialBibliographyStory />,
-  globals: {},
-  play: ({ canvasElement }) => inspectInitialBibliography(canvasElement),
-};
-export const InitialBibliographyPhoneRTL: Story = {
-  tags: ['!dev'],
-  render: () => <InitialBibliographyStory direction="rtl" />,
-  globals: {},
-  play: ({ canvasElement }) => inspectInitialBibliography(canvasElement),
-};
+
 export const InitialBibliographyIndependent: Story = {
   render: () => <InitialBibliographyStory pair />,
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const regions = [

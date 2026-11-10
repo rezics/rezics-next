@@ -74,6 +74,21 @@ afterAll(async () => {
 });
 
 describe('Storybook catalogue', () => {
+  test('publishes canonical outcome URLs in both indexes, including hidden stories', () => {
+    const displayAlias =
+      /(?:^|[-\s/])(?:phone|desktop|mobile|tablet|narrow)(?:[-\s/]|$)|(?:^|-)(?:320|360|390|768|1280|1440)(?:-|$)/i;
+    for (const path of ['index.json', 'ui/index.json']) {
+      const entries = Object.values(readIndex(resolve(output, path)).entries);
+      expect(entries.length).toBeGreaterThan(0);
+      expect(entries.filter((entry) => displayAlias.test(`${entry.id} ${entry.name}`))).toEqual([]);
+    }
+    const web = readIndex(resolve(output, 'index.json')).entries;
+    expect(web['pages-library-collection-comparison--recovered-comparison']).toBeDefined();
+    expect(web['pages-catalogue-book-and-book-series-work-editor--current-book']).toBeDefined();
+    expect(web['pages-library-collection-comparison--phone-390']).toBeUndefined();
+    expect(web['pages-library-collection-comparison--desktop-1280']).toBeUndefined();
+  });
+
   test('publishes the web and composed UI catalogues with the required sidebar groups', async () => {
     const web = readIndex(resolve(output, 'index.json'));
     const ui = readIndex(resolve(output, 'ui/index.json'));
@@ -134,11 +149,10 @@ describe('Storybook catalogue', () => {
     expect(stories.some((entry) => entry.title === 'Discovery/Search Empty')).toBe(false);
     expect(stories.some((entry) => entry.title === 'Discovery/Search Typed')).toBe(false);
     expect(
-      stories.filter((entry) =>
-        /^(?:pages|patterns)-/.test(entry.id) &&
-        /\b(?:390|1280)(?:px)?\b|\b(?:phone|mobile|desktop|tablet|light|dark|english|japanese|chinese|locale)\b/i.test(
-          entry.name,
-        ),
+      stories.filter(
+        (entry) =>
+          /^(?:pages|patterns)-/.test(entry.id) &&
+          /\b(?:390|1280)(?:px)?\b|\b(?:phone|mobile|desktop|tablet|narrow|light|dark)\b/i.test(entry.name),
       ),
     ).toEqual([]);
     expect(stories.some((entry) => entry.title === 'Library/Collection details')).toBe(false);
@@ -214,10 +228,9 @@ describe('Storybook catalogue', () => {
         states: [
           'signed-in',
           'signed-out',
-          'library-slot-menu-phone',
-          'library-slot-menu-desktop',
-          'overview-reactions-english-phone',
-          'overview-reactions-chinese-phone',
+          'collection-menu-open',
+          'overview-reactions-english',
+          'overview-reactions-chinese',
           'cover-viewer-open',
           'cover-viewer-interaction',
           'hero-signed-in-spoilers-hidden',
@@ -315,7 +328,11 @@ describe('Storybook catalogue', () => {
     ];
     for (const state of states) {
       const id = `patterns-collection-editor--${state}`;
-      expect(index.entries[id], id).toMatchObject({ id, type: 'story', title: 'Library/Collections/Collection Editor' });
+      expect(index.entries[id], id).toMatchObject({
+        id,
+        type: 'story',
+        title: 'Library/Collections/Collection Editor',
+      });
       expect(index.entries[id]!.importPath).toEndWith('src/stories/library-collection-editor.stories.tsx');
       expect(index.entries[id]!.tags).toContain('dev');
     }
@@ -340,7 +357,7 @@ describe('Storybook catalogue', () => {
     await page.close();
   }, 120_000);
 
-  test('renders patterns without the site shell and honors a phone-only viewport global', async () => {
+  test('renders patterns without the site shell and honors the selected viewport global', async () => {
     const stories = Object.values(readIndex(resolve(output, 'index.json')).entries).filter(
       (entry) => entry.type === 'story',
     );
@@ -348,9 +365,9 @@ describe('Storybook catalogue', () => {
     const phone = stories.find((entry) => entry.id === 'pages-discovery-search--active-facet');
     expect(pattern).toBeDefined();
     expect(phone).toBeDefined();
-    expect(
-      stories.some((entry) => entry.title === 'Library/Cover wall' && entry.name === 'Mixed media wall'),
-    ).toBe(true);
+    expect(stories.some((entry) => entry.title === 'Library/Cover wall' && entry.name === 'Mixed media wall')).toBe(
+      true,
+    );
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     await page.goto(`${server.url}index.html?path=/story/${pattern!.id}`);
     const frame = page.frameLocator('#storybook-preview-iframe');

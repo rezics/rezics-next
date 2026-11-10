@@ -105,12 +105,7 @@ const meta = {
   component: CorrectionFamily,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1440: { name: 'Desktop 1440', styles: { width: '1440px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -201,15 +196,11 @@ async function editPages(canvasElement: HTMLElement) {
   return pages;
 }
 export const FullGroups: Story = {
-  globals: {},
   play: ({ canvasElement }) => inspectGroups(canvasElement),
 };
-export const Desktop: Story = {
-  globals: {},
-  play: ({ canvasElement }) => inspectGroups(canvasElement),
-};
+
 export const Rtl: Story = { ...FullGroups, args: { rtl: true } };
-export const RtlDesktop: Story = { ...Desktop, args: { rtl: true } };
+
 export const ProposedAndExactReview: Story = {
   play: async ({ canvasElement }) => {
     const pages = await editPages(canvasElement);

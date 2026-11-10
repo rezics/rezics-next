@@ -42,12 +42,7 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -59,7 +54,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const List: Story = {
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const list = await canvas.findByRole('list', { name: m.zones_owner_active() });
@@ -76,11 +70,10 @@ export const List: Story = {
     expect(row.getByRole('button', { name: m.zones_owner_trash_action() })).toHaveFocus();
   },
 };
-export const ListPhone: Story = { ...List, globals: {} };
+
 export const Empty: Story = { args: { scenario: 'empty' } };
 export const Trash: Story = {
   args: { scenario: 'trash' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const list = await canvas.findByRole('list', { name: m.zones_owner_trash() });
@@ -93,7 +86,7 @@ export const Trash: Story = {
     expect(restore).toBeEnabled();
   },
 };
-export const TrashPhone: Story = { ...Trash, globals: {} };
+
 export const Loading: Story = { args: { scenario: 'loading' } };
 export const Denied: Story = { args: { scenario: 'denied' } };
 export const ActorDenied: Story = { args: { scenario: 'actor' } };

@@ -238,9 +238,9 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const PhoneFallback: Story = {};
-export const PhoneLargeText: Story = { args: { largeText: true } };
-export const PhoneRtl: Story = { args: { rtl: true } };
+export const Fallback: Story = {};
+export const LargeText: Story = { args: { largeText: true } };
+export const Rtl: Story = { args: { rtl: true } };
 export const MissingLabelAndCover: Story = { args: { missing: true, actionSession: 'unavailable' } };
 export const GlobalActions: Story = { args: { realm: false } };
 export const StreamOwned: Story = { args: { streams: 'one' } };

@@ -223,18 +223,11 @@ function Example({ state = 'rest', loadRealms }: { state?: State; loadRealms?: S
   );
 }
 const meta = {
-  title: 'Site Shell/Phone Shell',
-  id: 'patterns-phone-shell',
+  title: 'Site Shell/Navigation',
+  id: 'patterns-shell-navigation',
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
-  globals: {},
   render: () => <Example />,
 } satisfies Meta;
 export default meta;
@@ -280,8 +273,7 @@ export const UnreadUnavailable: Story = {
     await expect(within(navigation).getByRole('img', { name: m.inbox_unread_unavailable() })).toBeEmptyDOMElement();
   },
 };
-export const DesktopPersonalNavigation: Story = {
-  globals: {},
+export const PersonalNavigation: Story = {
   play: async (context) => {
     await pageReady(context);
     const navigation = within(within(context.canvasElement).getByRole('navigation', { name: m.shell_navigation() }));
@@ -295,8 +287,7 @@ export const DesktopPersonalNavigation: Story = {
     );
   },
 };
-export const DesktopPersonalUnavailable: Story = {
-  globals: {},
+export const PersonalUnavailable: Story = {
   parameters: { admitted: [] },
   play: async (context) => {
     await pageReady(context);

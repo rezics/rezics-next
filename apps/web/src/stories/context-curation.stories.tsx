@@ -226,22 +226,13 @@ async function suppliedComparisonJourney(canvasElement: HTMLElement) {
     }
   }
 }
-const comparisonViewports = {
-  options: {
-    phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-    desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-  },
-};
-export const SuppliedLongComparisonPhone: Story = {
+
+export const SuppliedLongComparison: Story = {
   render: () => <SuppliedComparisons />,
-  parameters: { viewport: comparisonViewports },
-  globals: {},
   play: async ({ canvasElement }) => suppliedComparisonJourney(canvasElement),
 };
-export const SuppliedLongComparisonDesktopRtl: Story = {
+export const SuppliedLongComparisonRtl: Story = {
   render: () => <SuppliedComparisons rtl />,
-  parameters: { viewport: comparisonViewports },
-  globals: {},
   play: async ({ canvasElement }) => suppliedComparisonJourney(canvasElement),
 };
 

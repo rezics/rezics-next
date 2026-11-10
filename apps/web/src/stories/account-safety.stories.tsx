@@ -39,8 +39,7 @@ async function waiting({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(canvas.queryByRole('link', { name: m.settings_account_rename_continue() })).toBeNull();
 }
 
-export const RateLimitedPhone: Story = {
-  globals: {},
+export const RateLimited: Story = {
   args: {
     renameRead: {
       loading: false,
@@ -51,8 +50,7 @@ export const RateLimitedPhone: Story = {
   play: waiting,
 };
 
-export const ServiceWaitDesktop: Story = {
-  globals: {},
+export const ServiceWait: Story = {
   args: {
     renameAccount: null,
     renameRead: {
@@ -64,8 +62,7 @@ export const ServiceWaitDesktop: Story = {
   play: waiting,
 };
 
-export const DeniedDesktop: Story = {
-  globals: {},
+export const Denied: Story = {
   args: { renameRead: { loading: false, reload() {}, failures: [{ kind: 'denied', status: 403, code: 'forbidden' }] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -79,8 +76,7 @@ export const DeniedDesktop: Story = {
   },
 };
 
-export const DeploymentUnavailablePhone: Story = {
-  globals: {},
+export const DeploymentUnavailable: Story = {
   args: {
     renameAccount: accountRenameNavigation(
       { AUTH_ISSUER: 'https://auth.example.test' },

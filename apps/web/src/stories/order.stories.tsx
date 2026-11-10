@@ -159,9 +159,8 @@ export const RecordedCharge: Story = {
   },
 };
 
-export const LongReceiptNarrow: Story = {
-  name: 'Buyer, long receipt and unavailable access, phone (component)',
-  globals: {},
+export const LongReceiptUnavailableAccess: Story = {
+  name: 'Buyer, long receipt and unavailable access (component)',
   render: () => {
     const order = currentOrder({ kind: 'unavailable' });
     const title =

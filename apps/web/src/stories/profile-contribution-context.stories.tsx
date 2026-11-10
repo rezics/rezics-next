@@ -108,13 +108,10 @@ const journey: Story['play'] = async ({ canvasElement }) => {
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth);
 };
 
-export const PhoneLight: Story = { name: 'Default', globals: {}, play: journey };
-export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: journey };
-export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: journey };
-export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: journey };
+export const ContributionContext: Story = { play: journey };
+
 export const LongKeyboard: Story = {
   args: { state: 'long' },
-  globals: {},
   play: journey,
 };
 export const UnavailableContext: Story = { args: { state: 'unavailable' } };

@@ -96,10 +96,8 @@ const inspect: Story['play'] = async (context) => {
   await userEvent.keyboard('{Escape}');
   await expect(trigger).toHaveFocus();
 };
-export const PhoneLight: Story = { name: 'Default', globals: {}, play: inspect };
-export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: inspect };
-export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: inspect };
-export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: inspect };
+export const ArtworkInspection: Story = { play: inspect };
+
 export const Japanese: Story = { globals: { locale: 'ja' }, play: view };
 export const TraditionalChinese: Story = {
   globals: { locale: 'zh-Hant' },

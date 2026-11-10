@@ -68,9 +68,7 @@ async function comfortableControls(region: HTMLElement) {
   await expect(region.scrollWidth).toBeLessThanOrEqual(region.clientWidth + 1);
 }
 
-export const PreferencePhoneControls: Story = {
-  name: 'Preference controls and guarded recovery',
-  tags: ['!dev'],
+export const PreferenceControls: Story = {
   render: () => <PageStory visitor="Signed In" path="/settings?reading-state=lost#reading" />,
   play: async (context) => {
     await pageReady(context);

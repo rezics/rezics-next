@@ -227,11 +227,11 @@ export const PopulatedWithoutNextTraditionalChinese: Story = {
   args: { pages: [{ ...populated, next: null }] },
   globals: { locale: 'zh-Hant' },
 };
-export const LongTextPhone: Story = {
+export const LongTextWithContinuation: Story = {
   args: { pages: [longText] },
   globals: { locale: 'zh-Hant' },
 };
-export const LongTextDesktop: Story = {
+export const LongTextLastPage: Story = {
   args: { pages: [{ ...longText, next: null }] },
   globals: { locale: 'en' },
 };

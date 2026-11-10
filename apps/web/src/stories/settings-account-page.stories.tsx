@@ -227,9 +227,7 @@ const preferenceTransition: Story = {
   },
 };
 
-export const PreferenceTransitionPhone: Story = { name: 'Preference Transition', ...preferenceTransition, globals: {} };
-
-export const PreferenceTransitionDesktop: Story = { tags: ['!dev'], ...preferenceTransition, globals: {} };
+export const PreferenceTransitionJourney: Story = { ...preferenceTransition };
 
 const draftDecision: Story = {
   beforeEach: () => setFakeVerificationState('none'),
@@ -267,13 +265,10 @@ const draftDecision: Story = {
   },
 };
 
-export const DraftDecisionPhone: Story = { name: 'Draft Decision', ...draftDecision, globals: {} };
+export const DraftDecision: Story = { ...draftDecision };
 
-export const DraftDecisionDesktop: Story = { tags: ['!dev'], ...draftDecision, globals: {} };
-
-export const LeaveDraftsDesktop: Story = {
+export const LeaveDrafts: Story = {
   ...draftDecision,
-  globals: {},
   play: async (context) => {
     await draftDecision.play!(context);
     const dialog = within(await within(document.body).findByRole('alertdialog'));
@@ -288,8 +283,7 @@ export const LeaveDraftsDesktop: Story = {
   },
 };
 
-export const NoticeDraftDecisionPhone: Story = {
-  globals: {},
+export const NoticeDraftDecision: Story = {
   render: preferenceTransition.render!,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

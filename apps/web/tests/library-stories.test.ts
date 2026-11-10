@@ -353,13 +353,13 @@ test(
     for (const [file, exportName] of [
       ['library-page-states.stories.tsx', 'PinnedCollections'],
       ['library-collections.stories.tsx', 'CollectionsNinePins'],
-      ['library-navigation-patterns.stories.tsx', 'PhoneSelectorOpen'],
+      ['library-navigation-patterns.stories.tsx', 'SelectorOpen'],
     ]) {
       const opened = await openNamedStory(file, exportName, 'en', 390);
       try {
         const canvas = opened.page.locator('body');
         const menu = opened.page.locator('[data-slot="drawer-content"]');
-        if (exportName === 'PhoneSelectorOpen') await menu.waitFor({ state: 'visible' });
+        if (exportName === 'SelectorOpen') await menu.waitFor({ state: 'visible' });
         await expect(canvas).toBeVisible();
         const width = await opened.page.evaluate(() => ({
           client: document.documentElement.clientWidth,

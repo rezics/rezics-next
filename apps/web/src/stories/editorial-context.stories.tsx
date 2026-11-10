@@ -14,12 +14,7 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -40,7 +35,7 @@ async function expectPhoneControls(canvasElement: HTMLElement) {
   const workspace = canvasElement.querySelector<HTMLElement>('[data-editorial-workspace]');
   if (!workspace) throw new Error('Editorial Context workspace was not rendered');
   const bounds = workspace.getBoundingClientRect();
-  await expect(bounds.width).toBeLessThanOrEqual(390);
+  await expect(bounds.width).toBeLessThanOrEqual(canvasElement.ownerDocument.documentElement.clientWidth);
   const form = workspace.querySelector<HTMLElement>('[data-editorial-form]');
   if (form) await expect(form.scrollWidth).toBeLessThanOrEqual(form.clientWidth + 1);
   for (const row of workspace.querySelectorAll<HTMLElement>('[data-editorial-action-row]')) {
@@ -76,7 +71,6 @@ export const Ready: Story = {
 export const Empty: Story = { args: { scenario: 'create' } };
 export const Created: Story = {
   args: { scenario: 'create' },
-  globals: {},
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByRole('textbox', { name: m.catalogue_create_label() });
     await expectPhoneControls(canvasElement);
@@ -90,7 +84,6 @@ export const Created: Story = {
   },
 };
 export const Deleted: Story = {
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const deleteButton = await canvas.findByRole('button', { name: m.editorial_delete() });
@@ -118,7 +111,6 @@ export const Deleted: Story = {
   },
 };
 export const Restored: Story = {
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await remove(canvasElement);
     await expectPhoneControls(canvasElement);
@@ -157,7 +149,6 @@ export const Invalid: Story = {
 };
 export const Conflict: Story = {
   args: { scenario: 'conflict' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await create(canvasElement);
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.editorial_conflict());
@@ -187,7 +178,6 @@ export const Concealed: Story = {
 };
 export const Unavailable: Story = {
   args: { scenario: 'unavailable' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.editorial_unavailable());
@@ -199,7 +189,6 @@ export const Unavailable: Story = {
 };
 export const RetrySameCreation: Story = {
   args: { scenario: 'uncertain' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await create(canvasElement);
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.editorial_unavailable());
@@ -253,7 +242,7 @@ async function independentWorkspaceJourney(canvasElement: HTMLElement) {
   await expect(within(second!).queryByText(m.editorial_created())).toBeNull();
   for (const workspace of workspaces) {
     const bounds = workspace.getBoundingClientRect();
-    await expect(bounds.width).toBeLessThanOrEqual(390);
+    await expect(bounds.width).toBeLessThanOrEqual(canvasElement.ownerDocument.documentElement.clientWidth);
     await expect(workspace.scrollWidth).toBeLessThanOrEqual(workspace.clientWidth + 1);
     for (const control of workspace.querySelectorAll<HTMLElement>('[data-editorial-control]')) {
       const rect = control.getBoundingClientRect();
@@ -267,18 +256,16 @@ async function independentWorkspaceJourney(canvasElement: HTMLElement) {
     }
   }
 }
-export const IndependentWorkspacesPhone: Story = {
+export const IndependentWorkspaceJourney: Story = {
   render: () => <IndependentWorkspaces />,
-  globals: {},
   play: async ({ canvasElement }) => independentWorkspaceJourney(canvasElement),
 };
-export const IndependentWorkspacesDesktopRtl: Story = {
+export const IndependentWorkspacesRtl: Story = {
   render: () => (
     <div dir="rtl">
       <IndependentWorkspaces />
     </div>
   ),
-  globals: {},
   play: async ({ canvasElement }) => {
     const workspaces = canvasElement.querySelectorAll<HTMLElement>('[data-editorial-workspace]');
     await expect(workspaces).toHaveLength(2);

@@ -23,8 +23,8 @@ const visitors = ['Signed In', 'Signed Out'] as const;
 type Visitor = (typeof visitors)[number];
 type StoryIndexEntry = { id: string; importPath: string; name: string; type: string };
 const homeRepresentatives: Record<Visitor, { id: string; name: string }> = {
-  'Signed In': { id: 'pages-discovery-home--signed-in-one-phone', name: 'Member, one in-progress title' },
-  'Signed Out': { id: 'pages-discovery-home--signed-out-phone', name: 'Signed out' },
+  'Signed In': { id: 'pages-discovery-home--signed-in', name: 'Member, one in-progress title' },
+  'Signed Out': { id: 'pages-discovery-home--signed-out', name: 'Signed out' },
 };
 const recorded = join(app, 'src/kernel/recorded');
 const englishTextExceptions: { story: string; locale: string; text: string }[] = [];
@@ -322,7 +322,7 @@ test(
   async () => {
     const origin = await sharedStorybook();
     const index = (await (await fetch(`${origin}/index.json`)).json()) as { entries: Record<string, StoryIndexEntry> };
-    const collectionsId = 'pages-library-collections--phone-selector-open';
+    const collectionsId = 'pages-library-collections--selector-open';
     const searchId = 'pages-discovery-search--mixed-cards';
     for (const id of [collectionsId, searchId]) expect(index.entries[id]?.type, id).toBe('story');
     const collection = await Bun.file(join(recorded, 'library-collection.json')).json();

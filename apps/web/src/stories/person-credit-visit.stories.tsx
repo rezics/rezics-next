@@ -192,7 +192,3 @@ export const CurrentRetry: Story = {
   },
 };
 export const LateReplyRetired: Story = { ...CurrentCandidateReplaced, render: () => <PersonCreditVisit mode="late" /> };
-export const PhoneLight: Story = { name: 'Default', ...PersonQualifiedVoice, globals: {} };
-export const PhoneDark: Story = { tags: ['!dev'], ...PersonQualifiedVoice, globals: {} };
-export const DesktopLight: Story = { name: 'Default', ...ContextTargetReturn, globals: {} };
-export const DesktopDark: Story = { tags: ['!dev'], ...ContextTargetReturn, globals: {} };

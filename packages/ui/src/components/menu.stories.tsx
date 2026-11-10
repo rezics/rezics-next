@@ -5,7 +5,7 @@ import { Button } from '../shadcn/button.tsx';
 import { Menu, type MenuEntry } from './menu.tsx';
 import { ShelfToolbar } from './shelf-toolbar.tsx';
 
-// Phone stories are reviewed at 390px; desktop stories are reviewed at 1280px in both themes.
+// Review these same outcomes with the viewport and theme toolbar controls.
 
 function Example({ entries, title = 'Actions' }: { entries: MenuEntry[]; title?: string }) {
   return <Menu title={title} backLabel="Back" entries={entries} trigger={<Button>Open menu</Button>} />;
@@ -34,11 +34,8 @@ function RadioExample() {
 const meta = { title: 'Components/Menu', component: Example } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-const open: Story['play'] = async () => {
-  await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
-  await waitFor(() => expect(screen.queryByRole('menu') ?? screen.queryByRole('dialog')).not.toBeNull());
-};
-const phone = {};
+const sheetPresentation = () =>
+  window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
 const plain: MenuEntry[] = [
   { type: 'item', label: 'Open', onSelect: () => {} },
   { type: 'link', label: 'Visit subject', href: '/subjects/example' },
@@ -47,27 +44,33 @@ const plain: MenuEntry[] = [
 ];
 export const PlainEntries: Story = {
   args: { entries: plain },
-  globals: phone,
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
-    const panel = await screen.findByRole('dialog');
-    const labels = [...panel.querySelectorAll('button, a')].map((row) => row.textContent?.trim()).filter(Boolean);
+    const panel = await screen.findByRole(sheetPresentation() ? 'dialog' : 'menu');
+    const labels = [...panel.querySelectorAll('button, a, [role="menuitem"]')]
+      .map((row) => row.textContent?.trim())
+      .filter(Boolean);
     await expect(labels).toEqual(['Open', 'Visit subject', 'Copy link']);
   },
 };
-export const PlainEntriesDark: Story = { ...PlainEntries, globals: {} };
+
 export const SubmenuPage: Story = {
   args: {
     entries: [
       { type: 'submenu', label: 'Status', entries: [{ type: 'item', label: 'Completed', onSelect: () => {} }] },
     ],
   },
-  globals: phone,
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Status' }));
-    await expect(await screen.findByRole('button', { name: 'Back' })).toBeVisible();
+    await userEvent.click(await screen.findByRole(sheetPresentation() ? 'button' : 'menuitem', { name: 'Status' }));
     await expect(await screen.findByText('Completed')).toBeVisible();
+    if (sheetPresentation()) {
+      await userEvent.click(await screen.findByRole('button', { name: 'Back' }));
+      await expect(await screen.findByRole('button', { name: 'Status' })).toBeVisible();
+    } else {
+      await userEvent.keyboard('{Escape}');
+      await expect(await screen.findByRole('menuitem', { name: 'Status' })).toBeVisible();
+    }
   },
 };
 export const BrowserBack: Story = {
@@ -76,12 +79,19 @@ export const BrowserBack: Story = {
       { type: 'submenu', label: 'Status', entries: [{ type: 'item', label: 'Completed', onSelect: () => {} }] },
     ],
   },
-  globals: phone,
   play: async () => {
     const trigger = await screen.findByRole('button', { name: 'Open menu' });
     const route = window.location.href;
     await userEvent.click(trigger);
-    await userEvent.click(await screen.findByRole('button', { name: 'Status' }));
+    await userEvent.click(await screen.findByRole(sheetPresentation() ? 'button' : 'menuitem', { name: 'Status' }));
+    if (!sheetPresentation()) {
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByText('Completed')).not.toBeInTheDocument());
+      await userEvent.keyboard('{Escape}');
+      await expect(trigger).toHaveFocus();
+      await expect(window.location.href).toBe(route);
+      return;
+    }
     window.history.back();
     await waitFor(() => expect(screen.queryByText('Completed')).not.toBeInTheDocument());
     await expect(screen.getByRole('button', { name: 'Back' })).toBeVisible();
@@ -94,45 +104,25 @@ export const BrowserBack: Story = {
 export const RadioEntries: Story = {
   args: { entries: [] },
   render: () => <RadioExample />,
-  globals: phone,
   play: async () => {
+    const role = sheetPresentation() ? 'radio' : 'menuitemradio';
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
-    const planned = await screen.findByRole('radio', { name: 'Planned' });
-    await expect(planned).toBeChecked();
-    await userEvent.click(await screen.findByRole('radio', { name: 'Reading' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeVisible());
+    await expect(await screen.findByRole(role, { name: 'Planned' })).toBeChecked();
+    const panel = screen.getByRole(sheetPresentation() ? 'dialog' : 'menu');
+    await userEvent.click(await screen.findByRole(role, { name: 'Reading' }));
+    await waitFor(() => expect(panel).not.toBeVisible());
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
-    await expect(await screen.findByRole('radio', { name: 'Reading' })).toBeChecked();
-  },
-};
-export const RadioDropdown: Story = {
-  args: { entries: [] },
-  render: () => <RadioExample />,
-  globals: {},
-  play: async () => {
-    await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
-    await expect(await screen.findByRole('menuitemradio', { name: 'Planned' })).toBeChecked();
-    const menu = screen.getByRole('menu');
-    await userEvent.click(screen.getByRole('menuitemradio', { name: 'Reading' }));
-    await waitFor(() => expect(menu).not.toBeVisible());
+    await expect(await screen.findByRole(role, { name: 'Reading' })).toBeChecked();
   },
 };
 export const DestructiveEntry: Story = {
   args: { entries: [{ type: 'destructive', label: 'Remove', onSelect: () => {} }] },
-  globals: phone,
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
-    const remove = await screen.findByRole('button', { name: 'Remove' });
+    const remove = await screen.findByRole(sheetPresentation() ? 'button' : 'menuitem', { name: 'Remove' });
     await expect(remove).toHaveClass(/text-destructive/);
   },
 };
-export const DesktopDropdown: Story = {
-  args: { entries: plain },
-  globals: {},
-  play: open,
-};
-export const DesktopDropdownDark: Story = { ...DesktopDropdown, globals: {} };
-
 const toolbarLabels = {
   sort: 'Sort by the most recently updated items in your personal collection',
   direction: 'Choose the direction for ordering the complete collection',
@@ -284,6 +274,10 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
   const canvas = within(canvasElement);
   const document = canvasElement.ownerDocument;
   const browser = document.defaultView!;
+  if (within(canvasElement).queryByRole('button', { name: new RegExp(toolbarLabels.view) })) {
+    await viewForms(canvasElement, true);
+    return;
+  }
   const originalHref = browser.location.href;
   const matchMediaDescriptor = Object.getOwnPropertyDescriptor(browser, 'matchMedia');
   const triggerRects = new Map<HTMLElement, PropertyDescriptor | undefined>();
@@ -445,31 +439,66 @@ const customFormRegression: Story['play'] = async ({ canvasElement }) => {
   }
 };
 
-export const ShelfToolbarCustomFormsDesktop: Story = {
-  name: 'Shelf Toolbar Custom Forms Desktop',
+export const ShelfToolbarFormRecovery: Story = {
   args: { entries: [] },
   render: () => <ShelfToolbarFormStory />,
-  globals: {},
   play: customFormRegression,
 };
 
-export const ShelfToolbarCustomFormsPhone: Story = {
-  name: 'Shelf Toolbar Custom Forms Phone',
+async function viewForms(canvasElement: HTMLElement, recover = false) {
+  const canvas = within(canvasElement);
+  const compact = !!canvas.queryByRole('button', { name: new RegExp(toolbarLabels.view) });
+  if (compact) {
+    await userEvent.click(canvas.getByRole('button', { name: new RegExp(toolbarLabels.view) }));
+    const panel = await screen.findByRole('dialog', { name: toolbarLabels.view });
+    await userEvent.click(within(panel).getByRole('tab', { name: new RegExp(toolbarLabels.filter) }));
+  } else {
+    await userEvent.click(canvas.getByRole('button', { name: new RegExp(toolbarLabels.filter) }));
+  }
+  const filter = await screen.findByRole('dialog', { name: compact ? toolbarLabels.view : toolbarLabels.filter });
+  await expect(
+    within(filter).getByRole('combobox', {
+      name: 'Filter by language and translated publication status',
+    }),
+  ).toBeVisible();
+  const notes = within(filter).getByRole('textbox', { name: 'Notes for this filter' });
+  await expect(notes).toBeVisible();
+  if (recover) {
+    await userEvent.type(notes, 'Retain the filter while opening additional criteria.');
+    await userEvent.click(within(filter).getByRole('button', { name: 'Load additional filter criteria' }));
+    await expect(notes).toHaveValue('Retain the filter while opening additional criteria.');
+    await expectPanelInViewport(filter);
+  }
+  if (compact) {
+    await userEvent.click(within(filter).getByRole('tab', { name: new RegExp(toolbarLabels.display) }));
+  } else {
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(canvas.getByRole('button', { name: new RegExp(toolbarLabels.display) }));
+  }
+  const display = await screen.findByRole('dialog', { name: compact ? toolbarLabels.view : toolbarLabels.display });
+  await expect(within(display).getByRole('group', { name: toolbarLabels.density })).toBeVisible();
+  if (recover) {
+    const large = within(display).getByRole('button', { name: toolbarLabels.large });
+    await userEvent.click(large);
+    await expect(large).toHaveAttribute('aria-pressed', 'true');
+  }
+  await userEvent.keyboard('{Escape}');
+  await waitFor(() => expect(display).not.toBeInTheDocument());
+  if (recover) {
+    await userEvent.click(canvas.getByRole('button', { name: new RegExp(toolbarLabels.view) }));
+    const panel = await screen.findByRole('dialog', { name: toolbarLabels.view });
+    await userEvent.click(within(panel).getByRole('tab', { name: new RegExp(toolbarLabels.filter) }));
+    await userEvent.click(within(panel).getByRole('button', { name: 'Unmount ShelfToolbar' }));
+    await waitFor(() => expect(panel).not.toBeInTheDocument());
+    await userEvent.click(canvas.getByRole('button', { name: 'Mount ShelfToolbar' }));
+    await userEvent.click(canvas.getByRole('button', { name: new RegExp(toolbarLabels.view) }));
+    await expect(await screen.findByRole('dialog', { name: toolbarLabels.view })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+  }
+}
+
+export const ShelfToolbarViewForms: Story = {
   args: { entries: [] },
   render: () => <ShelfToolbarFormStory />,
-  globals: phone,
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: new RegExp(toolbarLabels.view) }));
-    const viewPanel = await screen.findByRole('dialog', { name: toolbarLabels.view });
-    await userEvent.click(within(viewPanel).getByRole('tab', { name: new RegExp(toolbarLabels.filter) }));
-    await expect(
-      within(viewPanel).getByRole('combobox', { name: 'Filter by language and translated publication status' }),
-    ).toBeVisible();
-    await expect(within(viewPanel).getByRole('textbox', { name: 'Notes for this filter' })).toBeVisible();
-    await userEvent.click(within(viewPanel).getByRole('tab', { name: new RegExp(toolbarLabels.display) }));
-    await expect(within(viewPanel).getByRole('group', { name: toolbarLabels.density })).toBeVisible();
-    await userEvent.click(within(viewPanel).getByRole('button', { name: 'Done' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.view })).not.toBeInTheDocument());
-  },
+  play: async ({ canvasElement }) => viewForms(canvasElement),
 };

@@ -119,16 +119,13 @@ async function directoryJourney({ canvasElement }: { canvasElement: HTMLElement 
   await userEvent.keyboard('{Enter}');
   await expect(await main.findByText(m.managed_transfer_unavailable())).toBeVisible();
 }
-export const CompletePhoneJourney: Story = {
+export const CompleteJourney: Story = {
   render: () => render('populated'),
   globals: { locale: 'de' },
   play: directoryJourney,
 };
-export const CompleteDesktopJourney: Story = {
-  ...CompletePhoneJourney,
-  globals: { locale: 'de' },
-};
+
 export const CompleteRtlJourney: Story = {
-  ...CompletePhoneJourney,
+  ...CompleteJourney,
   render: () => <div dir="rtl">{render('populated')}</div>,
 };

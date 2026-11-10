@@ -35,12 +35,7 @@ const meta = {
   component: ReviewPage,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
-        desktop: { name: 'Desktop', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -169,19 +164,11 @@ async function exactReferences({ canvasElement }: { canvasElement: HTMLElement }
   }
   await expect(page.scrollWidth).toBeLessThanOrEqual(page.clientWidth + 1);
 }
-export const LongReferencesPhone: Story = {
-  name: 'Long References',
+export const LongReferences: Story = {
   args: { scenario: 'pending' },
-  globals: {},
   play: exactReferences,
 };
-export const LongReferencesDesktop: Story = {
-  tags: ['!dev'],
-  name: 'Full references — illustrative UUIDs at 1280px',
-  args: { scenario: 'pending' },
-  globals: {},
-  play: exactReferences,
-};
+
 export const LongReferencesRtl: Story = {
   name: 'Full references — RTL at 390px',
   render: () => (
@@ -189,6 +176,5 @@ export const LongReferencesRtl: Story = {
       <ReviewPage />
     </div>
   ),
-  globals: {},
   play: exactReferences,
 };

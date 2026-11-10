@@ -20,9 +20,6 @@ const meta = {
   id: 'pages-subjects-unavailable-qualified-credits',
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: { phone320: { name: 'Phone 320', styles: { width: '320px', height: '900px' }, type: 'mobile' } },
-    },
   },
 } satisfies Meta;
 export default meta;
@@ -215,23 +212,15 @@ const readingJourney: Story['play'] = async ({ canvasElement }) => {
   await expect(canvas.queryByRole('link', { name: 'Spoiler performer' })).toBeNull();
 };
 
-export const Narrow320: Story = {
-  globals: {},
+export const UnavailableCredit: Story = {
   render: () => <Reading />,
   play: readingJourney,
 };
 export const Text200Percent320: Story = {
-  globals: {},
   render: () => <Reading enlarged />,
   play: readingJourney,
 };
 export const RightToLeft320: Story = {
-  globals: {},
   render: () => <Reading rtl />,
-  play: readingJourney,
-};
-export const Desktop: Story = {
-  globals: {},
-  render: () => <Reading />,
   play: readingJourney,
 };

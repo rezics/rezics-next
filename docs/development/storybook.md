@@ -12,18 +12,30 @@ Pages still show route level states in the full site shell. Connected compositio
 same recorded or fake data without the shell. Page stories cover populated states when the page frame differs by
 viewer, plus empty, unavailable and error outcomes. Preserve explicit meta IDs and story export names when
 renaming a folder so existing story and docs links keep working, except when retiring a display-only ID. Name stories for persona
-and outcome (`Signed out`, `Owner, empty`, `Filter sheet open`), not viewport, theme or locale. Keep the hierarchy
+and outcome (`Signed out`, `Owner, empty`, `Filter sheet open`), not preview settings. Keep the hierarchy
 compact and include every required behavior state, even when a folder needs more than eight. Regression stories carry the `!dev` tag; every distinct required state stays visible. Cross cutting exposure views use the `exposure` tag in
 the page they cover.
 
 Locale and theme are Storybook globals. Review the same canonical IDs at `phone390` and `desktop1280` using the
-viewport toolbar, with locale and theme globals; do not create width, locale or theme behavior variants. Stories
+viewport toolbar, with locale and theme globals; do not create width or theme behavior variants. Keep a locale fixture only when its admitted data or authored interaction differs,
+and name that distinction explicitly. Stories
 must leave viewport and theme free for the toolbar. Use Controls for behavior or layout options independent of device
 width. Run browser coverage at desktop and phone widths by selecting viewport globals in the runner.
 Do not encode a viewport in a story ID or retain a size-only export as a hidden alias. Keep distinct behavior
 under an outcome name and exercise it at supported widths on the same URL. Do not use the removed
 `parameters.viewport.defaultViewport` setting. The preview canvas uses white in light mode and black in dark mode;
 shared application colors remain unchanged. Project defaults belong in `initialGlobals`, so reviewers can override them.
+
+Decision: publish one behavior URL per admitted fixture outcome, including recovery, language and viewer differences;
+retire every display-only URL and hidden size alias. The recovered comparison is
+`pages-library-collection-comparison--recovered-comparison` at both toolbar sizes. Preserve Current Book editor's
+`pages-catalogue-book-and-book-series-work-editor--current-book` identity. The responsive navigation family uses
+`patterns-shell-navigation`; product phone navigation and credential-device labels retain their semantic meaning.
+An explicit sheet presentation is a component behavior fixture, independent of preview width. Shared `PageStory`
+and `PatternStory` remain the production composition owners; story wrappers must inherit theme and available width.
+Source identity coverage is in `apps/web/tests/storybook-identities.test.ts`; publication coverage checks both built
+indexes in `apps/web/tests/storybook-catalogue.test.ts`. A source delivery does not establish built-index, browser,
+smoke-scenario or physical-image acceptance; the combined catalogue verifier owns those checks.
 
 Group ordinary content with headings, spacing, and a horizontal divider where adjacent sections need separation.
 Do not frame ordinary sections with an outline, raised surface, or decorative card. Controls and focus indicators

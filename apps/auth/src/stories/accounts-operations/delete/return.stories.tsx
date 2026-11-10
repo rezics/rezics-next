@@ -5,9 +5,6 @@ import type { AccountDeletionReturnKind } from '../../../account-deletion-return
 import { m } from '../../../paraglide/messages.js';
 import { authLocale, reviewParameters } from '../story';
 
-const phone = { viewport: { ...reviewParameters.viewport } };
-const desktop = { viewport: { ...reviewParameters.viewport } };
-
 export default {
   title: 'Account/Delete account return',
   id: 'pages-account-delete-account-return',
@@ -15,11 +12,11 @@ export default {
   decorators: [authLocale],
 };
 
-function example(kind: AccountDeletionReturnKind, theme: 'light' | 'dark' = 'light') {
+function example(kind: AccountDeletionReturnKind) {
   const attempt =
     kind === 'unknown' ? createAccountDeletionAttempt('private-story-account', '0'.repeat(32), true) : null;
   return (
-    <main className={`auth-login-form mx-auto w-full max-w-2xl p-6 ${theme === 'dark' ? 'dark' : ''}`}>
+    <main className="auth-login-form mx-auto w-full max-w-2xl p-6">
       <h1 className="text-2xl font-semibold">{m.auth_account_delete_heading()}</h1>
       <AccountDeletionReturnView history={{ kind, dismissed: false }} onDismiss={() => {}} />
       {attempt ? <AccountDeletionRecovery attempt={attempt} visible refreshing={false} onRefresh={() => {}} /> : null}
@@ -32,7 +29,6 @@ function example(kind: AccountDeletionReturnKind, theme: 'light' | 'dark' = 'lig
   );
 }
 
-export const UnsentPhoneLight = { parameters: phone, render: () => example('unsent') };
-export const UnknownPhoneDark = { parameters: phone, render: () => example('unknown', 'dark') };
-export const AcknowledgedDesktopLight = { parameters: desktop, render: () => example('acknowledged') };
-export const AcknowledgedDesktopDark = { parameters: desktop, render: () => example('acknowledged', 'dark') };
+export const Unsent = { render: () => example('unsent') };
+export const Unknown = { render: () => example('unknown') };
+export const Acknowledged = { render: () => example('acknowledged') };

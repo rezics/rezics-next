@@ -97,7 +97,7 @@ const meta = {
   component: HistoricalReaders,
   parameters: {
     layout: 'fullscreen',
-    viewport: { options: exactRevisionViewports },
+
     docs: {
       description: {
         component:
@@ -110,7 +110,6 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const SameImmutableRevision: Story = {
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await readable(canvasElement.querySelector('main')!);
@@ -182,7 +181,6 @@ export const RightToLeft: Story = { ...SameImmutableRevision, args: { direction:
 
 const retry = fn();
 export const LocalStates: Story = {
-  globals: {},
   render: () => (
     <main className="mx-auto flex min-w-0 max-w-3xl flex-col gap-10 p-4 sm:p-8">
       <ExactRevisionView identity={identity} page={{ state: 'loading' }} />

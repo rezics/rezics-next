@@ -80,7 +80,7 @@ const meta = {
   component: ReadingJourney,
   parameters: {
     layout: 'fullscreen',
-    viewport: { options: { phone320: { name: 'Phone 320', styles: { width: '320px', height: '900px' } } } },
+
     docs: {
       description: {
         component:
@@ -165,14 +165,13 @@ async function longControls(canvasElement: HTMLElement) {
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
 
-export const NarrowLongLabels: Story = {
+export const LongLabels: Story = {
   args: { long: true },
-  globals: {},
   play: async ({ canvasElement }) => longControls(canvasElement),
 };
 
-export const NarrowLargeText: Story = {
-  ...NarrowLongLabels,
+export const LargeText: Story = {
+  ...LongLabels,
   beforeEach: () => {
     const original = document.documentElement.style.fontSize;
     document.documentElement.style.fontSize = '200%';
@@ -183,6 +182,6 @@ export const NarrowLargeText: Story = {
 };
 
 export const RightToLeftLargeText: Story = {
-  ...NarrowLargeText,
+  ...LargeText,
   args: { long: true, rtl: true },
 };

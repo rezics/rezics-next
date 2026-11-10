@@ -10,15 +10,8 @@ import { PatternStory, pageReady } from './page';
 const meta = {
   title: 'Site Shell/App Shell',
   id: 'patterns-app-shell',
-  globals: {},
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
-        desktop: { name: 'Desktop', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
 } satisfies Meta;
 export default meta;
@@ -72,8 +65,8 @@ function ShellPreview({
   );
 }
 
-export const Desktop: Story = { name: 'Default', globals: {}, render: () => <ShellPreview />, play: pageReady };
-export const Phone: Story = { tags: ['!dev'], globals: {}, render: () => <ShellPreview />, play: pageReady };
+export const Navigation: Story = { render: () => <ShellPreview />, play: pageReady };
+
 export const SignedIn: Story = {
   render: () => <ShellPreview />,
   play: async (context) => {
@@ -117,8 +110,7 @@ export const FoldedCommunities: Story = {
   },
 };
 
-export const PhoneCreate: Story = {
-  globals: {},
+export const CreationActions: Story = {
   play: async (context) => {
     await pageReady(context);
     const nav = within(await within(context.canvasElement).findByRole('navigation', { name: m.shell_phone_tabs() }));
@@ -144,5 +136,4 @@ function HeaderState({ session }: { session: 'unknown' | 'unavailable' }) {
 export const RestoringHeader: Story = { render: () => <HeaderState session="unknown" /> };
 export const UnavailableHeader: Story = {
   render: () => <HeaderState session="unavailable" />,
-  globals: {},
 };

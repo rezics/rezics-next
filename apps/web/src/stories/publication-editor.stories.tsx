@@ -55,12 +55,7 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -164,7 +159,6 @@ export const UnavailableRetry: Story = {
 };
 export const UncertainRetry: Story = {
   args: { scenario: 'uncertain' },
-  globals: {},
   parameters: {
     docs: {
       description: {
@@ -181,7 +175,7 @@ export const UncertainRetry: Story = {
         await canvas.findByRole('textbox', { name: m.catalogue_create_label() });
         const article = canvas.getByRole('article');
         const bounds = article.getBoundingClientRect();
-        await expect(bounds.width).toBeLessThanOrEqual(390);
+        await expect(bounds.width).toBeLessThanOrEqual(canvasElement.ownerDocument.documentElement.clientWidth);
         const contained = async (element: HTMLElement) => {
           const rect = element.getBoundingClientRect();
           await expect(element).toBeVisible();
@@ -429,43 +423,25 @@ const familyEvidence = {
     },
   },
 };
-export const IndependentEditorsPhone: Story = {
-  name: 'Independent Editors',
+export const IndependentEditors: Story = {
   render: () => <PublicationFamilyStory />,
-  globals: {},
   parameters: familyEvidence,
   play: async ({ canvasElement }) => independentFamily(canvasElement),
 };
-export const IndependentEditorsDesktop: Story = {
-  tags: ['!dev'],
-  render: () => <PublicationFamilyStory />,
-  globals: {},
-  parameters: familyEvidence,
-  play: async ({ canvasElement }) => independentFamily(canvasElement),
-};
+
 export const IndependentEditorsRtl: Story = {
   render: () => <PublicationFamilyStory rtl />,
-  globals: {},
   parameters: familyEvidence,
   play: async ({ canvasElement }) => independentFamily(canvasElement),
 };
-export const LongSuppliedNamesPhone: Story = {
-  name: 'Long Supplied Names',
+export const LongSuppliedNames: Story = {
   render: () => <PublicationFamilyStory longNames />,
-  globals: {},
   parameters: familyEvidence,
   play: async ({ canvasElement }) => independentFamily(canvasElement, true),
 };
-export const LongSuppliedNamesDesktop: Story = {
-  tags: ['!dev'],
-  render: () => <PublicationFamilyStory longNames />,
-  globals: {},
-  parameters: familyEvidence,
-  play: async ({ canvasElement }) => independentFamily(canvasElement, true),
-};
+
 export const LongSuppliedNamesRtl: Story = {
   render: () => <PublicationFamilyStory longNames rtl />,
-  globals: {},
   parameters: familyEvidence,
   play: async ({ canvasElement }) => independentFamily(canvasElement, true),
 };

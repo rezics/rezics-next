@@ -108,13 +108,13 @@ const render: NonNullable<Story['render']> = (args) => (
   </PatternStory>
 );
 
-export const LongMultilingualPhone: Story = {
+export const LongMultilingualTraditionalChinese: Story = {
   args: settingsArgs,
   render,
   globals: { locale: 'zh-Hant' },
 };
 
-export const LongMultilingualDesktop: Story = {
+export const LongMultilingualEnglish: Story = {
   args: settingsArgs,
   render,
   globals: { locale: 'en' },

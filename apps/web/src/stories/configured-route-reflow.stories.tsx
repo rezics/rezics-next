@@ -75,13 +75,12 @@ function readingDocument(density: 'comfortable' | 'compact'): CompositionDocumen
 type JourneyProps = {
   surface: 'route' | 'published-preview';
   density: 'comfortable' | 'compact';
-  width: number;
   largeText: boolean;
   rtl: boolean;
 };
 
 // Inert, bounded configuration fixtures through both real public renderers. No native-read proof.
-function ConfiguredReadingJourney({ surface, density, width, largeText, rtl }: JourneyProps) {
+function ConfiguredReadingJourney({ surface, density, largeText, rtl }: JourneyProps) {
   const locale = getLocale();
   useLayoutEffect(() => {
     const previous = document.documentElement.style.fontSize;
@@ -113,7 +112,6 @@ function ConfiguredReadingJourney({ surface, density, width, largeText, rtl }: J
         data-large-text={largeText}
         dir={rtl ? 'rtl' : 'ltr'}
         lang={locale}
-        style={{ width: `min(100%, ${width}px)` }}
         className="min-w-0 p-4"
       >
         {surface === 'published-preview' ? (
@@ -238,12 +236,10 @@ const meta = {
   title: 'Site Shell/Configured Route Reflow',
   id: 'pages-configured-route-reflow',
   component: ConfiguredReadingJourney,
-  args: { surface: 'route', density: 'comfortable', width: 320, largeText: false, rtl: false },
+  args: { surface: 'route', density: 'comfortable', largeText: false, rtl: false },
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: { phone320: { name: 'Phone 320', styles: { width: '320px', height: '800px' }, type: 'mobile' } },
-    },
+
     docs: {
       description: {
         component:
@@ -261,10 +257,10 @@ export const CompactDensity: Story = { ...ReadingLayout, args: { density: 'compa
 export const LargeText: Story = { ...ReadingLayout, args: { largeText: true } };
 export const CompactLargeText: Story = { ...ReadingLayout, args: { density: 'compact', largeText: true } };
 export const NestedColumns: Story = {
-  args: { width: 960 },
+  args: {},
   globals: { locale: 'fr' },
 };
-export const CompactNestedColumns: Story = { ...NestedColumns, args: { width: 960, density: 'compact' } };
+export const CompactNestedColumns: Story = { ...NestedColumns, args: { density: 'compact' } };
 export const PublishedPreview: Story = { ...ReadingLayout, args: { surface: 'published-preview' } };
 export const PublishedPreviewLargeText: Story = {
   ...ReadingLayout,
@@ -272,7 +268,7 @@ export const PublishedPreviewLargeText: Story = {
 };
 export const PublishedPreviewCompactColumns: Story = {
   ...NestedColumns,
-  args: { surface: 'published-preview', density: 'compact', width: 960 },
+  args: { surface: 'published-preview', density: 'compact' },
 };
 export const RightToLeftLargeText: Story = {
   ...ReadingLayout,

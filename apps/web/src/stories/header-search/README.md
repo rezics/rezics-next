@@ -34,34 +34,9 @@ Root screenshot review is pending for every cell:
 | patterns-header-search--no-results    | pending  | pending     |
 | patterns-header-search--loading       | pending  | pending     |
 | patterns-header-search--error         | pending  | pending     |
-| patterns-header-search--phone-sheet   | pending  | pending     |
+| patterns-header-search--sheet         | pending  | pending     |
 
-PhoneSheet and PhoneSheetKeyboardSubmission use the phone390 viewport global for the active phone state, with
-focus containment and Escape return. Other states choose presentation responsively. Expanded covers keyboard
-focus and recent discovery; Suggestions covers active-descendant selection. Canonical IDs remain unchanged;
-viewport, locale and theme variations use toolbar globals.
-
-Extra story callsites declared for this slice: `src/stories/header-search/header-search.stories.tsx` and
-`src/stories/header-search/HeaderSearch.mdx`, discovered by the existing Storybook glob. They give the reusable
-region one complete Patterns folder without changing Storybook configuration or sibling sources.
-
-Reference sources: Primer React `SelectPanel.tsx`, Discourse `search-menu.scss` and Open Library's selected-facet
-template in the indexed read-only clones. These supply responsive panel, scrolling and explicit context patterns;
-REZICS supplies its own native form, composer region and tokens. The supplied search/mobile images and adopted
-resume correction inform surface hierarchy and the retained second-row Filters placement.
-
-Implementation decisions: unsupported scopes stay visibly unavailable until explicitly removed; supported route
-filters keep their own forms and named concept choices; new query submission retains the route's supported
-Type/facet/sort conditions and drops its cursor. Suggestions use each member's own `coverRatio`, with an additive
-per-member ratio hook for a presentation already supplied by a read. The former isolated initial-open filter story
-is replaced by the canonical FiltersOpen interaction. Existing account and navigation stories remain intact.
-No sibling source or risk-owned file changed.
-
-Worker verification follows the maintainer's minimal override: only `bun run --cwd apps/web typecheck`; focused
-acceptance, unit execution, native/browser/remote checks, publication and screenshots are deferred. Written
-regressions cover the real presenter, transition reducer and request boundary. A typecheck pass is not their pass
-or Root visual approval.
-
-The default-composition regression is `apps/web/tests/header-search-composition.test.tsx`. It uses the existing
-Search PageStory route assembly and default ShellSearch, not an injected presenter. It is written for later
-integration execution; acceptance, story plays and screenshot review remain deferred for this change.
+Sheet and SheetKeyboardSubmission explicitly select the sheet presentation, with focus containment and Escape
+return at either toolbar size. Other states choose presentation responsively. Expanded covers keyboard focus and
+recent discovery; Suggestions covers active-descendant selection. Display-only URLs are retired; viewport and theme
+variations use toolbar globals on the behavior story.

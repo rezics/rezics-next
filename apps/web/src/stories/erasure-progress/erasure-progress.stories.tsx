@@ -17,12 +17,7 @@ const meta = {
   component: ErasureProgressView,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component: 'Illustrative consumer states only. These stories provide no native erasure or participant proof.',

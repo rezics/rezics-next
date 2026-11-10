@@ -13,19 +13,13 @@ const meta = {
   id: 'pages-library-progress-history-reader-recovery',
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
-      },
-    },
+
     docs: {
       description: {
         component: 'Supplied immutable history DTOs. All interactions and visual/native verification are UNRUN.',
       },
     },
   },
-  globals: {},
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -169,8 +163,7 @@ export const ShortZeroDuplicatesAndLifecycle: Story = {
   },
 };
 
-export const LongFactsPhone: Story = {
-  globals: {},
+export const LongFacts: Story = {
   render: () => render(long),
   play: async ({ canvasElement }) => {
     const history = region(canvasElement, 'changes');
@@ -207,7 +200,6 @@ export const FirstPageEmpty: Story = {
 };
 
 export const LaterEmptyIndependentRecovery: Story = {
-  globals: {},
   render: () => render(later),
   play: async ({ canvasElement }) => {
     for (const kind of ['changes', 'units'] as const) {

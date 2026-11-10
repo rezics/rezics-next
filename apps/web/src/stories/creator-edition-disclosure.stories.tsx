@@ -135,8 +135,7 @@ export const Normal: Story = {
   },
 };
 
-export const NarrowLongText: Story = {
-  globals: {},
+export const LongTitleAndLicence: Story = {
   render: () => (
     <SuppliedEditor
       data={{

@@ -114,15 +114,6 @@ export const TermsChanged: Story = {
   },
   render: () => <PageStory visitor="Signed In" path={pagePaths.offer} />,
 };
-export const TermsChangedMobile: Story = {
-  ...TermsChanged,
-  parameters: {
-    viewport: {
-      options: { phone: { name: 'Phone 390', styles: { width: '390px', height: '844px' } } },
-    },
-  },
-  globals: {},
-};
 
 export const MappedFixedEdition: Story = {
   name: 'Buyer, fixed edition promise',
@@ -208,9 +199,3 @@ export const AcquisitionPending: Story = {
   ...recoveryStory(acquisitionProblems.pending),
   name: 'Existing payment in progress',
 };
-const phone = {
-  parameters: { viewport: { options: { phone: { name: 'Phone 390', styles: { width: '390px', height: '844px' } } } } },
-  globals: {},
-};
-export const AlreadyOwnedMobile: Story = { ...AlreadyOwned, ...phone };
-export const AcquisitionPendingMobile: Story = { ...AcquisitionPending, ...phone };

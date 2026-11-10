@@ -79,12 +79,6 @@ const meta = {
   component: Example,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
 } satisfies Meta<typeof Example>;
 export default meta;
@@ -159,17 +153,10 @@ async function review({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
 }
 export const CurrentTransferReview: Story = { play: review };
-export const LongTransferReviewPhone: Story = {
-  name: 'Long Transfer Review',
+export const LongTransferReview: Story = {
   args: { scenario: 'long' },
-  globals: {},
   play: review,
 };
-export const LongTransferReviewDesktop: Story = {
-  tags: ['!dev'],
-  args: { scenario: 'long' },
-  globals: {},
-  play: review,
-};
+
 export const UnresolvedOwnerReview: Story = { args: { scenario: 'unresolved' }, play: review };
 export const DeletedOwnerReview: Story = { args: { scenario: 'deleted' }, play: review };

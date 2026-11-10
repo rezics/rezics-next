@@ -273,11 +273,11 @@ export const IndependentForms: Story = {
     await expect(second.getByText(comparisonDigest)).toBeVisible();
   },
 };
-export const IndependentFormsPhone: Story = {
+export const IndependentFormsTraditionalChinese: Story = {
   ...IndependentForms,
   globals: { locale: 'zh-Hant' },
 };
-export const RedirectPhone: Story = {
+export const RedirectFrench: Story = {
   render: () => <ConnectedCuration state="redirect" />,
   globals: { locale: 'fr' },
   play: async ({ canvasElement }) => {

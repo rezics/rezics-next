@@ -40,7 +40,7 @@ test('Order component examples use the shared AppShell frame for a representativ
     'NoEntitlement',
     'AccessRefresh',
     'RecordedCharge',
-    'LongReceiptNarrow',
+    'LongReceiptUnavailableAccess',
     'UnknownSettlement',
     'RecordedMoneyUnavailable',
     'MappedCurrentUse',
@@ -62,7 +62,7 @@ test('Order component examples use the shared AppShell frame for a representativ
     expect(scenario(story, name)).toContain('<PageStory visitor="Signed In"');
     expect(scenario(story, name)).not.toContain('(component)');
   }
-  for (const name of ['Refunded', 'LongReceiptNarrow', 'UnknownSettlement', 'ReconciliationRetry']) {
+  for (const name of ['Refunded', 'LongReceiptUnavailableAccess', 'UnknownSettlement', 'ReconciliationRetry']) {
     expect(scenario(story, name)).toContain('(component)');
   }
   expect(story).toContain('<OrderPattern id={order.id}>');

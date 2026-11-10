@@ -28,14 +28,7 @@ const meta = {
   id: 'pages-library-progress-session',
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
-      },
-    },
   },
-  globals: {},
   beforeEach() {
     setLibraryProgressStoryMode('recorded');
     return () => setLibraryProgressStoryMode('recorded');
@@ -249,9 +242,8 @@ const longHistoryPage: ProgressPageData = {
   },
 };
 
-export const NarrowOriginalHistory: Story = {
-  name: 'Narrow original cursor history with unknown meaning (bounded view)',
-  globals: {},
+export const OriginalHistoryUnknownMeaning: Story = {
+  name: 'Original cursor history with unknown meaning (bounded view)',
   parameters: {
     docs: {
       description: {
@@ -529,9 +521,8 @@ function linkSearch(link: HTMLElement): URLSearchParams {
 const constructedRouteDescription =
   'Constructed contract-shaped responses pass through the actual Progress route. These stories do not establish native history or recording permission.';
 
-export const NarrowOriginalHistoryRoute: Story = {
+export const OriginalCursorHistoryRoute: Story = {
   name: 'Long original cursor history through the detail route',
-  globals: {},
   parameters: { docs: { description: { story: constructedRouteDescription } } },
   play: async (context) => {
     await libraryProgressSessionReady(context);

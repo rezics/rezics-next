@@ -108,12 +108,6 @@ const meta = {
   args: { locale: 'en' },
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
   render: () => <Example />,
   beforeEach: ({ parameters }) => {
@@ -136,7 +130,6 @@ type Story = StoryObj<typeof meta>;
 
 /** Keeps scoped names, field purpose and shortcut help aligned in the real presenter. */
 export const ScopedAccessibleNaming: Story = {
-  globals: {},
   render: () => <Example scope={scope} keyboardShortcut />,
   play: async (context) => {
     const canvas = within(context.canvasElement);
@@ -367,8 +360,7 @@ export const CommunitiesClosed: Story = {
     await expect(canvas.queryByRole('button', { name: m.realm_discovery_retry() })).toBeNull();
   },
 };
-export const PhoneSheet: Story = {
-  globals: {},
+export const Sheet: Story = {
   render: () => <Example presentation="sheet" />,
   play: async (context) => {
     const { canvas, input } = await expand(context);
@@ -381,8 +373,7 @@ export const PhoneSheet: Story = {
   },
 };
 
-export const PhoneSheetKeyboardSubmission: Story = {
-  globals: {},
+export const SheetKeyboardSubmission: Story = {
   args: { onNavigate: fn() },
   render: (args) => (
     <Example presentation="sheet" fields={[['type', 'schema:Book']]} onNavigate={(href) => args.onNavigate?.(href)} />

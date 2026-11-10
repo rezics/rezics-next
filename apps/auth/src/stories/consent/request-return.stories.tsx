@@ -29,7 +29,7 @@ type Mode =
   | 'declined'
   | 'pending';
 // Presentation responses only; the stories make no native execution claim.
-function Visit({ mode, dark = false }: { mode: Mode; dark?: boolean }) {
+function Visit({ mode }: { mode: Mode }) {
   const [ready, setReady] = useState(false);
   const [router] = useState(() => {
     const parent = createRootRoute();
@@ -105,7 +105,7 @@ function Visit({ mode, dark = false }: { mode: Mode; dark?: boolean }) {
     };
   }, [mode]);
   return (
-    <div className={dark ? 'dark' : ''}>
+    <div className="bg-background text-foreground">
       <AuthShell>{ready ? <RouterProvider router={router} /> : null}</AuthShell>
     </div>
   );
@@ -150,8 +150,6 @@ export const LeavingPendingDecision = {
   play: ({ canvasElement }: { canvasElement: HTMLElement }) => reachHistory(canvasElement, true),
 };
 
-const phone = { viewport: { ...reviewParameters.viewport } };
-const desktop = { viewport: { ...reviewParameters.viewport } };
 async function latest(canvas: HTMLElement, decision: 'approve' | 'decline') {
   await reachHistory(canvas);
   (
@@ -163,19 +161,12 @@ async function latest(canvas: HTMLElement, decision: 'approve' | 'decline') {
     ),
   );
 }
-export const UnknownThenApprovedPhoneLight = {
-  parameters: phone,
+export const UnknownThenApproved = {
   render: () => <Visit mode="approved" />,
   play: ({ canvasElement }: { canvasElement: HTMLElement }) => latest(canvasElement, 'approve'),
 };
-export const UnknownThenApprovedDesktopDark = {
-  ...UnknownThenApprovedPhoneLight,
-  parameters: desktop,
-  render: () => <Visit mode="approved" dark />,
-};
-export const UnknownThenDeclinedPhoneDark = {
-  parameters: phone,
-  render: () => <Visit mode="declined" dark />,
+
+export const UnknownThenDeclined = {
+  render: () => <Visit mode="declined" />,
   play: ({ canvasElement }: { canvasElement: HTMLElement }) => latest(canvasElement, 'decline'),
 };
-export const UnknownCurrentReviewDesktopLight = { ...ReplacementWithReductionPending, parameters: desktop };

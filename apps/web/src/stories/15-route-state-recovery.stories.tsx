@@ -18,7 +18,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 const phone = {};
-const desktop = {};
 
 async function keyboardRecovery(context: { canvasElement: HTMLElement }) {
   const main = await errorReady(context);
@@ -31,18 +30,17 @@ async function keyboardRecovery(context: { canvasElement: HTMLElement }) {
   await expect(within(context.canvasElement).getAllByRole('main')).toHaveLength(1);
 }
 
-export const RetryPhone: Story = {
+export const Retry: Story = {
   globals: phone,
   render: () => <ErrorStory outcome="unavailable" />,
   play: keyboardRecovery,
 };
-export const RetryDesktop: Story = { ...RetryPhone, globals: desktop };
-export const FailedRetryPhone: Story = { ...StillUnavailable, globals: { ...phone } };
-export const FailedRetryDesktop: Story = { ...StillUnavailable, globals: { ...desktop } };
-export const ClosedPhone: Story = { name: 'Closed', ...Closed, globals: phone };
-export const ClosedDesktop: Story = { tags: ['!dev'], ...Closed, globals: desktop };
-export const MissingPhone: Story = { ...NotFound, globals: { ...phone } };
-export const MissingDesktop: Story = { ...NotFound, globals: { ...desktop } };
+
+export const FailedRetry: Story = { ...StillUnavailable, globals: { ...phone } };
+
+export const Closed: Story = { ...Closed, globals: phone };
+
+export const Missing: Story = { ...NotFound, globals: { ...phone } };
 
 /** Prepared shell states, without pretending that a recording is a native pending request. */
 function PreparedLoading({ layout }: { layout: PendingLayout }) {
@@ -77,22 +75,21 @@ async function pendingReady({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(canvas.getByRole('main')).toBe(main);
   await expect(main.querySelector('[aria-busy="true"]')).toBeNull();
 }
-export const FeedPhone: Story = { globals: phone, render: () => <PreparedLoading layout="feed" />, play: pendingReady };
-export const FeedDesktop: Story = { ...FeedPhone, globals: desktop };
-export const DetailPhone: Story = {
+export const Feed: Story = { globals: phone, render: () => <PreparedLoading layout="feed" />, play: pendingReady };
+
+export const Detail: Story = {
   globals: { ...phone },
   render: () => <PreparedLoading layout="detail" />,
   play: pendingReady,
 };
-export const DetailDesktop: Story = { ...DetailPhone, globals: { ...desktop } };
-export const FormPhone: Story = { globals: phone, render: () => <PreparedLoading layout="form" />, play: pendingReady };
-export const FormDesktop: Story = { ...FormPhone, globals: desktop };
-export const GenericPhone: Story = {
+
+export const Form: Story = { globals: phone, render: () => <PreparedLoading layout="form" />, play: pendingReady };
+
+export const Generic: Story = {
   globals: { ...phone },
   render: () => <PreparedLoading layout="page" />,
   play: pendingReady,
 };
-export const GenericDesktop: Story = { ...GenericPhone, globals: { ...desktop } };
 
 function LongRecovery() {
   return (
@@ -107,7 +104,7 @@ function LongRecovery() {
     </PatternStory>
   );
 }
-export const LongStringsPhone: Story = {
+export const LongStrings: Story = {
   globals: { ...phone, locale: 'de' },
   render: () => <LongRecovery />,
   play: async ({ canvasElement }) => {
@@ -120,4 +117,3 @@ export const LongStringsPhone: Story = {
     await expect(main.scrollWidth).toBeLessThanOrEqual(main.clientWidth);
   },
 };
-export const LongStringsDesktop: Story = { ...LongStringsPhone, globals: { ...desktop, locale: 'de' } };

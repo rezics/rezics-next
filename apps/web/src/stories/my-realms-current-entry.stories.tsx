@@ -94,41 +94,21 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const phone = {};
-const desktop = {};
 
-export const MemberEntryPhone: Story = { name: 'Member Entry', globals: phone };
-export const MemberEntryDesktop: Story = { tags: ['!dev'], globals: desktop };
+export const MemberEntry: Story = { globals: phone };
 
-export const SelectedLeavePendingPhone: Story = {
-  name: 'Selected Leave Pending',
+export const SelectedLeavePending: Story = {
   args: {
     page: { signedIn: true, realms: [selectedLeave], next: null },
     currentController: reviewController('pending'),
   },
   globals: phone,
 };
-export const SelectedLeavePendingDesktop: Story = {
-  tags: ['!dev'],
-  args: {
-    page: { signedIn: true, realms: [selectedLeave], next: null },
-    currentController: reviewController('pending'),
-  },
-  globals: desktop,
-};
 
-export const UncertainExactRetryPhone: Story = {
-  name: 'Uncertain Exact Retry',
+export const UncertainExactRetry: Story = {
   args: {
     page: { signedIn: true, realms: [selectedLeave], next: null },
     currentController: reviewController('uncertain'),
   },
   globals: phone,
-};
-export const UncertainExactRetryDesktop: Story = {
-  tags: ['!dev'],
-  args: {
-    page: { signedIn: true, realms: [selectedLeave], next: null },
-    currentController: reviewController('uncertain'),
-  },
-  globals: desktop,
 };

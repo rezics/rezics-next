@@ -204,9 +204,8 @@ export const WithheldClearRequiresPreparation: StoryType = {
     await expect(canvas.getByRole('button', { name: m.subject_classification_assessment_withdraw() })).toBeVisible();
   },
 };
-export const Phone: StoryType = {
+export const LongTitleKeyboardInspection: StoryType = {
   args: { mode: 'long' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const inspect = canvas.getByRole('button', { name: m.subject_classification_assessment_inspect() });
@@ -217,9 +216,8 @@ export const Phone: StoryType = {
     await expect(canvas.getByText(/A long disclosed title/)).toBeVisible();
   },
 };
-export const Desktop: StoryType = {
+export const KeyboardAssessmentChange: StoryType = {
   args: { mode: 'ready' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const inspect = canvas.getByRole('button', { name: m.subject_classification_assessment_inspect() });

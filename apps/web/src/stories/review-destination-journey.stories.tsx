@@ -149,7 +149,6 @@ async function open(canvasElement: HTMLElement) {
 }
 
 export const SelectCurrentDestination: Story = {
-  parameters: { viewport: {} },
   play: async ({ canvasElement }) => {
     const { entries, view } = await open(canvasElement);
     await expect(destinationCalls()).toHaveLength(0);
@@ -211,8 +210,7 @@ export const Preparing: Story = {
   },
 };
 
-export const DesktopLongLabels: Story = {
-  parameters: { viewport: {} },
+export const LongLabels: Story = {
   play: async ({ canvasElement }) => {
     const { view } = await open(canvasElement);
     await userEvent.click(view.getByRole('button', { name: longRealm }));

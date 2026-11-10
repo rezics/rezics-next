@@ -183,39 +183,26 @@ async function observeGeometry(canvasElement: HTMLElement) {
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
   await expect(canvasElement.querySelector('details')).toBeNull();
 }
-export const LongSuppliedLabelsPhone: Story = {
+export const LongSuppliedLabels: Story = {
   args: { long: true, selected: true },
-  globals: {},
   play: async ({ canvasElement }) => observeGeometry(canvasElement),
 };
-export const LongSuppliedLabelsDesktop: Story = {
-  ...LongSuppliedLabelsPhone,
-  globals: {},
-};
+
 export const LongSuppliedLabelsRtl: Story = {
-  ...LongSuppliedLabelsPhone,
+  ...LongSuppliedLabels,
   args: { long: true, selected: true, direction: 'rtl' },
 };
-export const LongSuppliedLabelsRtlDesktop: Story = {
-  ...LongSuppliedLabelsRtl,
-  globals: {},
-};
-export const LongSchemeLabelsPhone: Story = {
-  ...LongSuppliedLabelsPhone,
+
+export const LongSchemeLabels: Story = {
+  ...LongSuppliedLabels,
   args: { kind: 'scheme', long: true, selected: true },
 };
-export const LongSchemeLabelsDesktop: Story = {
-  ...LongSchemeLabelsPhone,
-  globals: {},
-};
+
 export const LongSchemeLabelsRtl: Story = {
   ...LongSuppliedLabelsRtl,
   args: { kind: 'scheme', long: true, selected: true, direction: 'rtl' },
 };
-export const LongSchemeLabelsRtlDesktop: Story = {
-  ...LongSchemeLabelsRtl,
-  globals: {},
-};
+
 export const SuccessfulEmpty: Story = {
   args: { kind: 'scheme', mode: 'empty' },
   play: async ({ canvasElement }) => {

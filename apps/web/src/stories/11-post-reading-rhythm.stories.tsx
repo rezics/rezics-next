@@ -138,13 +138,10 @@ async function journey({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(returned).toHaveTextContent(readingEnding);
 }
 
-export const PhoneLight: Story = { name: 'Default', globals: {}, play: journey };
-export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: journey };
-export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: journey };
-export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: journey };
+export const ReadingVisit: Story = { play: journey };
+
 export const UnavailableMedia: Story = {
   args: { unavailable: true },
-  globals: {},
   play: async (context) => {
     await journey(context);
     const canvas = within(context.canvasElement);

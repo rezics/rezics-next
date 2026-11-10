@@ -63,12 +63,6 @@ const meta = {
           'An original, licensed replacement document uses the generated candidate API and existing review controls. Declared story samples are isolated from runtime. Proposed text is read through the actual candidate locator; public text is read independently. Locale, theme and viewport globals apply to every state. Native integration and Web/Root visual review remain pending.',
       },
     },
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
 } satisfies Meta<typeof Example>;
 export default meta;
@@ -207,7 +201,6 @@ export const Conflict: Story = {
 };
 export const Unavailable: Story = {
   args: { scenario: 'lost-response' },
-  globals: {},
   parameters: {
     docs: {
       description: {
@@ -224,7 +217,7 @@ export const Unavailable: Story = {
         const selected = await canvas.findByRole('region', { name: m.authored_selected() });
         const article = canvas.getByRole('article');
         const bounds = article.getBoundingClientRect();
-        await expect(bounds.width).toBeLessThanOrEqual(390);
+        await expect(bounds.width).toBeLessThanOrEqual(canvasElement.ownerDocument.documentElement.clientWidth);
         const contained = async (element: HTMLElement) => {
           const rect = element.getBoundingClientRect();
           await expect(element).toBeVisible();
@@ -500,16 +493,15 @@ export const LongSuppliedContent: Story = {
     }
   },
 };
-export const PhoneAssociations: Story = {
+export const Associations: Story = {
   render: () => <IndependentExamples long />,
   parameters: unrun,
-  globals: {},
   play: async ({ canvasElement }) => {
     const { articles } = await independentForms(canvasElement);
     for (const article of articles) {
       const local = within(article);
       const bounds = article.getBoundingClientRect();
-      await expect(bounds.width).toBeLessThanOrEqual(390);
+      await expect(bounds.width).toBeLessThanOrEqual(canvasElement.ownerDocument.documentElement.clientWidth);
       const selected = local.getByRole('region', { name: m.authored_selected() });
       await userEvent.click(selected.querySelector('summary')!);
       for (const control of [
@@ -672,27 +664,8 @@ export const SelectedSynopsisComparison: Story = {
   render: () => <SelectedComparisonStory />,
   play: async ({ canvasElement }) => selectedComparisonPlay(canvasElement),
 };
-export const SelectedSynopsisComparisonPhone: Story = {
-  tags: ['!dev'],
-  render: () => <SelectedComparisonStory />,
-  globals: {},
-  play: async ({ canvasElement }) => selectedComparisonPlay(canvasElement),
-};
-export const SelectedSynopsisComparisonDesktop: Story = {
-  tags: ['!dev'],
-  render: () => <SelectedComparisonStory />,
-  globals: {},
-  play: async ({ canvasElement }) => selectedComparisonPlay(canvasElement),
-};
-export const SelectedSynopsisComparisonABAPhone: Story = {
-  name: 'Selected Synopsis Comparison ABA',
+
+export const SelectedSynopsisComparisonABA: Story = {
   render: () => <SelectedComparisonStory retryAba />,
-  globals: {},
-  play: async ({ canvasElement }) => selectedComparisonAbaPlay(canvasElement),
-};
-export const SelectedSynopsisComparisonABADesktop: Story = {
-  tags: ['!dev'],
-  render: () => <SelectedComparisonStory retryAba />,
-  globals: {},
   play: async ({ canvasElement }) => selectedComparisonAbaPlay(canvasElement),
 };

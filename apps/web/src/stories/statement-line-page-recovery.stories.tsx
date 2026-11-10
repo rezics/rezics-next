@@ -157,8 +157,7 @@ export const Preparing: Story = {
     await expect(view.queryByText(m.statements_lines_empty())).not.toBeInTheDocument();
   },
 };
-export const NarrowLongText: Story = {
-  globals: {},
+export const LongExternalReference: Story = {
   render: () =>
     render({
       ...empty(true, next),

@@ -24,7 +24,7 @@ import { m } from '../paraglide/messages.js';
 
 type Scenario = 'writing' | 'long' | 'empty' | 'pending' | 'unsupported' | 'changed' | 'account' | 'unknown';
 type Caller = 'new-thread' | 'reply' | 'edit';
-type Props = { width: number; dark: boolean; caller: Caller; scenario: Scenario };
+type Props = { caller: Caller; scenario: Scenario };
 const session = {
   state: 'signed-in' as const,
   subject: 'prepared-inspection-writer',
@@ -125,7 +125,7 @@ function PreparedSnapshotPort({ scenario }: { scenario: 'unsupported' | 'changed
   );
 }
 
-function PreparedJourney({ width, dark, caller, scenario }: Props) {
+function PreparedJourney({ caller, scenario }: Props) {
   const [client] = useState(() => {
     const value = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     value.setQueryData(sessionQuery.queryKey, session);
@@ -201,19 +201,8 @@ function PreparedJourney({ width, dark, caller, scenario }: Props) {
     });
   });
   useLayoutEffect(() => () => client.clear(), [client]);
-  useLayoutEffect(() => {
-    const root = document.documentElement;
-    const previous = root.classList.contains('dark');
-    root.classList.toggle('dark', dark);
-    return () => {
-      root.classList.toggle('dark', previous);
-    };
-  }, [dark]);
   return (
-    <main
-      className={`${dark ? 'dark' : ''} min-h-screen bg-background text-foreground`}
-      style={{ width, maxWidth: '100%' }}
-    >
+    <main className="min-h-screen min-w-0 bg-background text-foreground">
       <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-8">
         <p role="status" className="text-sm">
           {result}
@@ -247,7 +236,7 @@ const meta = {
   title: 'Community/Writing Inspection',
   id: 'pages-community-writing-inspection',
   component: PreparedJourney,
-  args: { width: 390, dark: false, caller: 'reply', scenario: 'writing' },
+  args: { caller: 'reply', scenario: 'writing' },
   parameters: {
     layout: 'fullscreen',
     docs: {
@@ -298,20 +287,20 @@ const returnToRepair: NonNullable<Story['play']> = async (context) => {
     }),
   ).toHaveFocus();
 };
-export const NewThreadPhoneLight: Story = { args: { caller: 'new-thread' }, play: returnToRepair };
-export const NewThreadDesktopDark: Story = {
-  args: { caller: 'new-thread', width: 1280, dark: true, scenario: 'long' },
+export const NewThreadRepairReturn: Story = { args: { caller: 'new-thread' }, play: returnToRepair };
+export const NewThreadLongInspection: Story = {
+  args: { caller: 'new-thread', scenario: 'long' },
   play: inspect,
 };
-export const ReplyPhoneDark: Story = { args: { dark: true }, play: returnToRepair };
-export const ReplyDesktopLight: Story = { args: { width: 1280, scenario: 'long' }, play: inspect };
-export const EditPhoneLight: Story = { args: { caller: 'edit' }, play: returnToRepair };
-export const EditDesktopDark: Story = {
-  args: { caller: 'edit', width: 1280, dark: true, scenario: 'long' },
+export const ReplyRepairReturn: Story = { args: {}, play: returnToRepair };
+export const ReplyLongInspection: Story = { args: { scenario: 'long' }, play: inspect };
+export const EditRepairReturn: Story = { args: { caller: 'edit' }, play: returnToRepair };
+export const EditLongInspection: Story = {
+  args: { caller: 'edit', scenario: 'long' },
   play: inspect,
 };
 export const EmptyBody: Story = { args: { scenario: 'empty' }, play: inspect };
-export const PendingAttachment: Story = { args: { scenario: 'pending', dark: true }, play: inspect };
+export const PendingAttachment: Story = { args: { scenario: 'pending' }, play: inspect };
 export const UnsupportedSnapshot: Story = {
   args: { scenario: 'unsupported' },
   play: async ({ canvasElement }) => {
@@ -320,7 +309,7 @@ export const UnsupportedSnapshot: Story = {
   },
 };
 export const ChangedDuringInspection: Story = {
-  args: { scenario: 'changed', width: 1280 },
+  args: { scenario: 'changed' },
   play: async (context) => {
     await inspect(context);
     await userEvent.click(await screen.findByRole('button', { name: 'Prepared background editor transaction' }));
@@ -330,7 +319,7 @@ export const ChangedDuringInspection: Story = {
   },
 };
 export const AccountReplacement: Story = {
-  args: { scenario: 'account', dark: true },
+  args: { scenario: 'account' },
   play: async (context) => {
     await inspect(context);
     await userEvent.click(await screen.findByRole('button', { name: m.thread_inspection_return() }));
@@ -341,7 +330,7 @@ export const AccountReplacement: Story = {
   },
 };
 export const UncertainCommandLock: Story = {
-  args: { scenario: 'unknown', width: 1280, dark: true },
+  args: { scenario: 'unknown' },
   play: async (context) => {
     const view = within(context.canvasElement);
     await userEvent.click(await view.findByRole('button', { name: m.thread_write_send() }));

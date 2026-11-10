@@ -104,12 +104,7 @@ const meta = {
   component: CatalogueFileReaderStory,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -136,13 +131,13 @@ const inspectByKeyboard: NonNullable<Story['play']> = async ({ canvasElement }) 
 export const AdmittedFile: Story = {
   globals: { locale: 'en' },
 };
-export const TraditionalChinesePhoneDark: Story = {
+export const TraditionalChinese: Story = {
   globals: { locale: 'zh-Hant' },
 };
-export const SimplifiedChineseDesktopLight: Story = {
+export const SimplifiedChinese: Story = {
   globals: { locale: 'zh-Hans' },
 };
-export const JapaneseDesktopDark: Story = {
+export const Japanese: Story = {
   globals: { locale: 'ja' },
 };
 export const UnsupportedFileType: Story = {

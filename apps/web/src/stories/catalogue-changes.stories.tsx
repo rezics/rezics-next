@@ -104,7 +104,6 @@ const select = async (canvasElement: HTMLElement, revision: number) => {
 };
 export const Revisions: Story = {};
 export const ContinueAndExplain: Story = {
-  globals: {},
   parameters: {
     docs: {
       description: {
@@ -393,8 +392,7 @@ function assertHistoryGeometry(page: HTMLElement) {
   for (const evidence of page.querySelectorAll<HTMLElement>('section, dl, dt, dd')) contained(evidence);
 }
 
-export const IndependentHistoryPhone: Story = {
-  globals: {},
+export const IndependentHistory: Story = {
   parameters: {
     docs: {
       description: {
@@ -452,19 +450,13 @@ export const IndependentHistoryPhone: Story = {
   },
 };
 
-export const IndependentHistoryDesktop: Story = {
-  ...IndependentHistoryPhone,
-  globals: {},
-};
-
 export const IndependentHistoryRtl: Story = {
-  ...IndependentHistoryPhone,
+  ...IndependentHistory,
   render: () => <IndependentHistoryFamily rtl />,
 };
 
 /** Explicit supplied presentation evidence; the original connected/native witnesses remain unchanged. */
 export const LongRevisionCurrentAndFields: Story = {
-  globals: {},
   parameters: {
     docs: {
       description: {
@@ -572,14 +564,4 @@ export const LongRevisionCurrentAndFields: Story = {
     }
     expect(within(pages[1]!).getByText(m.changes_current_notice())).toBeVisible();
   },
-};
-
-export const IndependentHistoryDesktopRtl: Story = {
-  ...IndependentHistoryDesktop,
-  render: () => <IndependentHistoryFamily rtl />,
-};
-
-export const LongRevisionCurrentAndFieldsDesktop: Story = {
-  ...LongRevisionCurrentAndFields,
-  globals: {},
 };

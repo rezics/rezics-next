@@ -44,12 +44,6 @@ const meta = {
   component: WideDocumentReader,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      viewports: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
   render: (args) => <WideDocumentReader {...args} />,
 } satisfies Meta<typeof WideDocumentReader>;
@@ -128,16 +122,12 @@ async function readerRetirement({ canvasElement }: { canvasElement: HTMLElement 
   await expect(canvas.getByRole('button', { name: m.wide_document_code_inspect() })).toBeVisible();
 }
 
-export const PhoneLight: Story = { name: 'Default', globals: {}, play: inspectWrapCopyReturn };
-export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: inspectWrapCopyReturn };
-export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: inspectWrapCopyReturn };
-export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: inspectWrapCopyReturn };
-export const PhoneClipboardFailure: Story = {
-  globals: {},
+export const DocumentJourney: Story = { play: inspectWrapCopyReturn };
+
+export const ClipboardFailure: Story = {
   play: clipboardFailure,
 };
-export const DesktopReaderRetirement: Story = {
+export const ReaderRetirement: Story = {
   args: { retirement: true },
-  globals: {},
   play: readerRetirement,
 };

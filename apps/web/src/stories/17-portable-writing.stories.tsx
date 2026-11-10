@@ -22,7 +22,7 @@ import { sessionQuery } from '../session/query';
 import { m } from '../paraglide/messages.js';
 
 type Scenario = 'writing' | 'unknown' | 'raw';
-type Props = { width: number; dark: boolean; long: boolean; scenario: Scenario };
+type Props = { long: boolean; scenario: Scenario };
 const session = {
   state: 'signed-in' as const,
   subject: 'prepared-writer',
@@ -66,7 +66,7 @@ function PreparedRawRecovery() {
   );
 }
 
-function PreparedJourney({ width, dark, long, scenario }: Props) {
+function PreparedJourney({ long, scenario }: Props) {
   const [client] = useState(() => {
     const value = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     value.setQueryData(sessionQuery.queryKey, session);
@@ -113,10 +113,7 @@ function PreparedJourney({ width, dark, long, scenario }: Props) {
     [client],
   );
   return (
-    <main
-      className={`${dark ? 'dark' : ''} min-h-screen bg-background text-foreground`}
-      style={{ width, maxWidth: '100%' }}
-    >
+    <main className="min-h-screen min-w-0 bg-background text-foreground">
       <div className="mx-auto max-w-3xl space-y-4 p-4 sm:p-8">
         <p role="status" className="text-sm">
           {result}
@@ -153,7 +150,7 @@ const meta = {
   title: 'Community/Portable Writing',
   id: 'pages-community-portable-writing',
   component: PreparedJourney,
-  args: { width: 390, dark: false, long: false, scenario: 'writing' },
+  args: { long: false, scenario: 'writing' },
   parameters: {
     layout: 'fullscreen',
     docs: {
@@ -199,12 +196,10 @@ const journey: NonNullable<Story['play']> = async ({ canvasElement }) => {
   await userEvent.click(view.getByRole('button', { name: m.thread_write_send() }));
   await view.findByText('Prepared confirmed submission through the original composer.');
 };
-export const PhoneLightJourney: Story = { play: journey };
-export const PhoneDarkJourney: Story = { args: { dark: true }, play: journey };
-export const DesktopLightJourney: Story = { args: { width: 1280 }, play: journey };
-export const DesktopDarkJourney: Story = { args: { width: 1280, dark: true }, play: journey };
+export const Journey: Story = { play: journey };
+
 export const LongWritingKeyboardKeep: Story = {
-  args: { long: true, dark: true },
+  args: { long: true },
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await userEvent.click(await view.findByRole('button', { name: m.thread_portable_files() }));
@@ -217,7 +212,7 @@ export const LongWritingKeyboardKeep: Story = {
   },
 };
 export const EditedPreviewIsInvalid: Story = {
-  args: { width: 1280 },
+  args: {},
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await userEvent.click(await view.findByRole('button', { name: m.thread_portable_files() }));
@@ -242,7 +237,7 @@ export const MediaRepairAndInvalidJSON: Story = {
   },
 };
 export const UnknownKeepsExactCustody: Story = {
-  args: { scenario: 'unknown', width: 1280, dark: true },
+  args: { scenario: 'unknown' },
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await userEvent.click(await view.findByRole('button', { name: m.thread_portable_files() }));
@@ -269,7 +264,7 @@ export const RawRecoveryIsDistinct: Story = {
   },
 };
 export const AccountRetiresPreview: Story = {
-  args: { dark: true },
+  args: {},
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await userEvent.click(await view.findByRole('button', { name: m.thread_portable_files() }));

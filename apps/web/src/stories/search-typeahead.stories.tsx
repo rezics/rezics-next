@@ -199,17 +199,7 @@ const constructedScopedReadyPlay: NonNullable<Story['play']> = async (context) =
 };
 
 /** Constructed UI response from the recorded public Search subjects; not native permission evidence. */
-export const ConstructedScopedCollectionDesktop: Story = {
-  name: 'Constructed Scoped Collection',
-  parameters: { scopedOutcome: 'ready' },
-  render: () => <PageStory visitor="Signed In" path={scopedPath} />,
-  play: constructedScopedReadyPlay,
-};
-
-export const ConstructedScopedCollectionNarrow: Story = {
-  tags: ['!dev'],
-  name: 'Constructed: signed-in permitted Collection suggestions (narrow)',
-  globals: {},
+export const ConstructedScopedCollection: Story = {
   parameters: { scopedOutcome: 'ready' },
   render: () => <PageStory visitor="Signed In" path={scopedPath} />,
   play: constructedScopedReadyPlay,

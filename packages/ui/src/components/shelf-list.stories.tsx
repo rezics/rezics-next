@@ -44,10 +44,9 @@ export const Entries: Story = {
     await userEvent.keyboard('{Escape}');
   },
 };
-export const MenusOpenPhone: Story = {
+export const MenusOpen: Story = {
   args: { children: null },
   render: () => <Example />,
-  globals: {},
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const first = canvas.getByRole('heading', { name: subject.title }).closest('li')!;

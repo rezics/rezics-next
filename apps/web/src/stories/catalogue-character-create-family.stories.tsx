@@ -115,12 +115,7 @@ const meta = {
   argTypes: { direction: { control: 'inline-radio', options: ['ltr', 'rtl'] } },
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -163,9 +158,8 @@ async function phoneGeometry(canvasElement: HTMLElement) {
   }
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
-export const Desktop: Story = {};
-export const Phone: Story = {
-  globals: {},
+export const EmptyDraft: Story = {};
+export const CreateCharacter: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await draft(canvasElement);
     await phoneGeometry(canvasElement);
@@ -182,9 +176,8 @@ export const Phone: Story = {
     await expect(canvas.queryByRole('form')).toBeNull();
   },
 };
-export const LongFallbackPhone: Story = {
+export const LongFallback: Story = {
   args: { variant: 'long' },
-  globals: {},
   play: async ({ canvasElement }) => {
     await draft(canvasElement);
     await expect(canvasElement.querySelector('[data-slot="character-initial-fact"] legend')).toHaveAttribute(
@@ -194,7 +187,7 @@ export const LongFallbackPhone: Story = {
     await phoneGeometry(canvasElement);
   },
 };
-export const RightToLeft: Story = { ...LongFallbackPhone, args: { variant: 'long', direction: 'rtl' } };
+export const RightToLeft: Story = { ...LongFallback, args: { variant: 'long', direction: 'rtl' } };
 export const EnteredDraft: Story = {
   play: async ({ canvasElement }) => {
     await draft(canvasElement);

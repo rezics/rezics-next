@@ -29,12 +29,7 @@ const meta = {
   ),
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -91,7 +86,7 @@ export const Stale = failure('stale');
 export const StaleWithCallback = failure('stale', true);
 export const Unavailable = failure('unavailable');
 export const UnavailableWithCallback = failure('unavailable', true);
-export const SignInEscapingPhone: Story = {
+export const SignInEscaping: Story = {
   ...SignedOutWithCallback,
   globals: phone,
   args: { ...SignedOutWithCallback.args, returnTo: longReturnTo },
@@ -103,7 +98,7 @@ export const SignInEscapingPhone: Story = {
     expect(args.onRetry).not.toHaveBeenCalled();
   },
 };
-export const ReturnNavigationPhone: Story = {
+export const ReturnNavigation: Story = {
   ...Unavailable,
   globals: phone,
   args: { returnTo: longReturnTo },
@@ -125,7 +120,7 @@ function IndependentRecovery({ count = 1, rtl = false }: { count?: number; rtl?:
     </div>
   );
 }
-export const IndependentPhoneRtl: Story = {
+export const IndependentRtl: Story = {
   globals: phone,
   render: () => <IndependentRecovery count={2} rtl />,
   play: async ({ canvasElement }) => {

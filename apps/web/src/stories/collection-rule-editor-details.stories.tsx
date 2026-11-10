@@ -88,9 +88,9 @@ const available: Ready = {
   },
 };
 
-function SuppliedEditor({ page = available, narrow = false }: { page?: RulePage; narrow?: boolean }) {
+function SuppliedEditor({ page = available }: { page?: RulePage }) {
   return (
-    <div className={narrow ? 'w-full max-w-sm p-4' : 'w-full p-4 md:p-6'}>
+    <div className="w-full min-w-0 p-4 md:p-6">
       <CollectionRuleEditor
         ConditionInput={SavedQueryConditionInput}
         page={page}
@@ -150,7 +150,7 @@ const longText: Ready = {
     },
   },
 };
-export const NarrowLongText: Story = { render: () => <SuppliedEditor page={longText} narrow /> };
+export const LongReferences: Story = { render: () => <SuppliedEditor page={longText} /> };
 
 const mismatched: Ready = {
   ...available,

@@ -24,14 +24,7 @@ const meta = {
           'Recorded published-log fields with explicit DTO variants for long text, empty pages and unavailable summaries. The local origin guard illustrates retirement; it is not native authorization evidence.',
       },
     },
-    viewport: {
-      options: {
-        phone320: { name: 'Phone 320', styles: { width: '320px', height: '844px' }, type: 'mobile' },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
-      },
-    },
   },
-  globals: {},
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -117,8 +110,7 @@ export const Normal: Story = {
   },
 };
 
-export const NarrowLongText: Story = {
-  globals: {},
+export const LongNotesWithContinuation: Story = {
   render: () => <Reader logs={[longLog, unavailableLog, longLog]} later continuation={next} />,
   play: async ({ canvasElement }) => {
     const view = await reader(canvasElement);

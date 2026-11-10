@@ -112,12 +112,7 @@ const meta = {
   component: Journey,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -170,13 +165,10 @@ async function journey({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(box.height).toBeGreaterThanOrEqual(44);
   await expect(canvasElement.querySelectorAll('[data-conversation-row]')).toHaveLength(12);
 }
-export const PhoneLight: Story = { name: 'Default', globals: {}, play: journey };
-export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: journey };
-export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: journey };
-export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: journey };
+export const BranchJourney: Story = { play: journey };
+
 export const BoundedAndUnavailable: Story = {
   args: { boundaryStates: true },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByRole('link', { name: m.thread_branch_continue() }).length).toBeGreaterThan(0);

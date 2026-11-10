@@ -43,12 +43,7 @@ const meta = {
   argTypes: { direction: { control: 'inline-radio', options: ['ltr', 'rtl'] } },
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -305,24 +300,21 @@ export const CompleteVolume: Story = {
     );
   },
 };
-export const SeriesPhone: Story = {
+export const Series: Story = {
   ...CompleteSeries,
   globals: { locale: 'ja' },
 };
-export const SeriesDesktopRTL: Story = {
+export const SeriesRTL: Story = {
   ...CompleteSeries,
   args: { ...CompleteSeries.args, direction: 'rtl' },
   globals: { locale: 'de' },
 };
-export const VolumePhoneRTL: Story = {
+export const VolumeRTL: Story = {
   ...CompleteVolume,
   args: { ...CompleteVolume.args, direction: 'rtl' },
   globals: { locale: 'fr' },
 };
-export const VolumeDesktop: Story = {
-  ...CompleteVolume,
-  globals: { locale: 'en' },
-};
+
 export const UncertainReplay: Story = {
   args: { scenario: 'uncertain' },
   play: async ({ canvasElement }) => {

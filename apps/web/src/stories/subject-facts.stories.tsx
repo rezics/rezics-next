@@ -71,12 +71,6 @@ const meta = {
           'The canonical subject’s multi-field workspace reuses the scalar editor controls and existing native-shaped proposal/review seam. Each included changed field keeps its own request and outcome. The stories demonstrate interface behavior; integrated native outcome verification, Web visual review and Root screenshots remain pending. Use locale, theme and viewport globals.',
       },
     },
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
 } satisfies Meta<typeof Example>;
 export default meta;
@@ -297,9 +291,8 @@ export const IndependentKeyboard: Story = {
   },
 };
 
-export const IndependentPhone: Story = {
+export const Independent: Story = {
   render: () => <IndependentExample />,
-  globals: {},
   parameters: {
     docs: {
       description: {
@@ -359,7 +352,7 @@ function LongEvidenceWorkspace() {
   return <SubjectFacts initial={query.data} locale={locale} transport={fixture.transport} review={fixture.review} />;
 }
 
-export const LongSelectedEvidencePhone: Story = {
+export const LongSelectedEvidence: Story = {
   render: () => (
     <PatternStory visitor="Signed In">
       <AppShell>
@@ -367,7 +360,6 @@ export const LongSelectedEvidencePhone: Story = {
       </AppShell>
     </PatternStory>
   ),
-  globals: {},
   parameters: {
     docs: {
       description: {

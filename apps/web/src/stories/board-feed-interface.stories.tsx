@@ -143,12 +143,6 @@ const meta = {
           'Actual BoardFeed and BoardSortNav with the existing router and recorded board/threads/accounts DTOs. Authored observations are UNRUN: phone390/desktop1280, en/zh-Hant/de, light/dark and RTL stress full supplied text, 44px controls, independent actions, local clipboard outcomes and own-heading associations. Native reads, privacy/lifetime, physical growth and full acceptance remain owed. Navigation exports reuse the existing actual-page plays without changing their fixtures or IDs.',
       },
     },
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
   args: { variant: 'populated', direction: 'ltr', sort: 'hot' },
   render: (args) => (
@@ -273,11 +267,9 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const FullControlsPhone: Story = { globals: { locale: 'en' } };
-export const LongGermanPhone: Story = { globals: { locale: 'de' } };
-export const DarkGermanPhone: Story = {
-  globals: { locale: 'de' },
-};
+export const FullControls: Story = { globals: { locale: 'en' } };
+export const LongGerman: Story = { globals: { locale: 'de' } };
+
 export const TraditionalChineseRtl: Story = {
   args: { direction: 'rtl' },
   globals: { locale: 'zh-Hant' },
@@ -380,8 +372,4 @@ export const ClipboardUnavailable: Story = {
   globals: { locale: 'zh-Hant' },
   beforeEach: clipboardFixture(true),
   play: localControls(true),
-};
-export const ClipboardUnavailableRtlPhone: Story = {
-  ...ClipboardUnavailable,
-  globals: { locale: 'zh-Hant' },
 };

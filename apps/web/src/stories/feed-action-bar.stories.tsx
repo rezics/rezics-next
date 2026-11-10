@@ -97,19 +97,12 @@ const meta = {
   component: PreparedCard,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
 } satisfies Meta<typeof PreparedCard>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const SignedIn: Story = {
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: new RegExp(`^${m.reaction_upvote()}\\s`) }));
@@ -137,11 +130,10 @@ export const SignedOut: Story = {
   },
 };
 export const Voted: Story = { args: { voted: true } };
-export const PlainReply: Story = { args: { plain: true, voted: true }, globals: {} };
-export const UnavailableVotes: Story = { args: { unavailable: true }, globals: {} };
-export const ExactCountsPhone: Story = {
+export const PlainReply: Story = { args: { plain: true, voted: true } };
+export const UnavailableVotes: Story = { args: { unavailable: true } };
+export const ExactCounts: Story = {
   args: { countInspection: true, plain: true },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const upvoteCount = 1234567890123;
@@ -159,10 +151,7 @@ export const ExactCountsPhone: Story = {
     await expect(canvasElement.querySelector('[data-slot="vote-control"] output')).toHaveAttribute('aria-label', '-7');
   },
 };
-export const ExactCountsDesktopDark: Story = {
-  ...ExactCountsPhone,
-  globals: {},
-};
+
 export const CopiedLink: Story = {
   play: async ({ canvasElement }) => {
     const share = Object.getOwnPropertyDescriptor(navigator, 'share');
@@ -194,15 +183,13 @@ export const Refused: Story = {
     );
   },
 };
-export const Phone: Story = { ...SignedIn, globals: {} };
-export const PhoneDarkLongStrings: Story = {
+
+export const LongStrings: Story = {
   ...SignedIn,
   args: { long: true },
-  globals: {},
 };
-export const DesktopDarkKeyboard: Story = {
+export const KeyboardActions: Story = {
   args: { long: true },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const up = await canvas.findByRole('button', { name: new RegExp(`^${m.reaction_upvote()}\\s`) });

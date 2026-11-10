@@ -186,7 +186,7 @@ describe('interim library shelf contract', () => {
     expect(view).not.toContain('shadcn/dropdown-menu');
     expect(menu).toContain("window.matchMedia('(max-width: 767px)')");
     expect(menu).toContain("window.matchMedia('(pointer: coarse)')");
-    expect(stories).toContain('export const PhoneTileMenuOpen');
+    expect(stories).toContain('export const TileMenuOpen');
     expect(stories).toContain("globals: { viewport: { value: 'phone' } }");
     expect(stories).toContain('[data-slot="drawer-content"]');
     expect(grid).not.toContain('Updated');

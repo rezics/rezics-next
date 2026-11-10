@@ -113,9 +113,9 @@ single submission, original-intent retry, price conflict distinction and the cre
 They have not been executed in this interface delivery.
 
 Web's next ordinary 390/1280, eight-locale review receives
-`pages-commerce-offer--already-owned`, `pages-commerce-offer--already-owned-mobile`,
-`pages-commerce-offer--acquisition-pending` and `pages-commerce-offer--acquisition-pending-mobile`;
-retain `pages-commerce-offer--terms-changed` and `pages-commerce-offer--terms-changed-mobile` for comparison.
+`pages-commerce-offer--already-owned`, `pages-commerce-offer--already-owned`,
+`pages-commerce-offer--acquisition-pending` and `pages-commerce-offer--acquisition-pending`;
+retain `pages-commerce-offer--terms-changed` and `pages-commerce-offer--terms-changed` for comparison.
 Source fixtures are not payment, protected-use, native, visual or promoted-main approval.
 Independent source review found no blocking issue. The sole local verification,
 `bun run --cwd apps/web typecheck`, passed on the committed implementation with no type errors in 1,163 files.
