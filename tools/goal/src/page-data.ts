@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { Database } from 'bun:sqlite';
 import { processTreeMembers } from '../../../scripts/check-custody.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
@@ -50,7 +50,9 @@ export type PageDataRun = {
   head: string;
   classes: Record<PageDataClass, number>;
   sections: PageDataSection[];
+  seed?: PageDataSeedStatus;
 };
+export type PageDataSeedStatus = { status: 'publication-incomplete'; omissions: number };
 export type PageDataRepair = {
   repairKey: string;
   section: PageDataSection;
@@ -71,6 +73,7 @@ export type PageDataOptions = {
     exitCode: number;
     registry?: ReadonlyMap<string, SectionConfig>;
     stackOutput?: string;
+    seed?: PageDataSeedStatus;
   }>;
 };
 
@@ -98,6 +101,64 @@ export class PageDataStackError extends Error {
     super(message);
     this.name = 'PageDataStackError';
   }
+}
+
+const seedArtifactHandoffPrefix = 'Cross-media seed artifact handoff ';
+
+/** Admit only the seed owner's post-write publication refusal for this cycle's expected result file. */
+export function pageDataSeedStatus(
+  exitCode: number,
+  output: string,
+  expectedArtifact: string,
+): PageDataSeedStatus | undefined {
+  const markers = output.split(/\r?\n/u).filter((line) => line.startsWith(seedArtifactHandoffPrefix));
+  if (markers.length > 1)
+    throw new PageDataStackError('boot', 'page-data seed emitted multiple artifact handoffs', undefined, output);
+  let omissions: unknown;
+  if (markers.length === 1) {
+    let value: unknown;
+    try {
+      value = JSON.parse(markers[0]!.slice(seedArtifactHandoffPrefix.length));
+    } catch {
+      throw new PageDataStackError('boot', 'page-data seed emitted an invalid artifact handoff', undefined, output);
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      throw new PageDataStackError('boot', 'page-data seed emitted an invalid artifact handoff', undefined, output);
+    const handoff = value as Record<string, unknown>;
+    if (
+      Object.keys(handoff).length !== 4 ||
+      handoff.version !== 1 ||
+      handoff.state !== 'publication-incomplete' ||
+      handoff.artifact !== expectedArtifact ||
+      !Number.isSafeInteger(handoff.omissions) ||
+      Number(handoff.omissions) < 1
+    )
+      throw new PageDataStackError(
+        'boot',
+        'page-data seed artifact handoff did not match this fresh result',
+        undefined,
+        output,
+      );
+    omissions = handoff.omissions;
+  }
+  if (exitCode === 0) {
+    if (markers.length)
+      throw new PageDataStackError(
+        'boot',
+        'page-data seed completed with an incomplete artifact handoff',
+        undefined,
+        output,
+      );
+    return undefined;
+  }
+  if (exitCode !== 1 || markers.length !== 1)
+    throw new PageDataStackError(
+      'boot',
+      `page-data seed exited ${exitCode} without an admitted publication-incomplete artifact handoff`,
+      undefined,
+      output,
+    );
+  return { status: 'publication-incomplete', omissions: Number(omissions) };
 }
 
 const sectionKey = (section: Pick<PageDataSection, 'page' | 'persona' | 'section'>) =>
@@ -334,7 +395,11 @@ export function readLatestPageDataRun(db: Database): PageDataRun | undefined {
     )
     .get(pageDataTaskId) as { attempt: number; at: string; detail: string } | null;
   if (!row) return undefined;
-  const metadata = JSON.parse(row.detail) as { head: string; classes: Record<PageDataClass, number> };
+  const metadata = JSON.parse(row.detail) as {
+    head: string;
+    classes: Record<PageDataClass, number>;
+    seed?: PageDataSeedStatus;
+  };
   const sections = db
     .query(
       `SELECT detail FROM flow_events WHERE task_id=? AND attempt=? AND stage='verification' AND action='page-data-section'
@@ -347,6 +412,7 @@ export function readLatestPageDataRun(db: Database): PageDataRun | undefined {
     head: metadata.head,
     classes: metadata.classes,
     sections: sections.map((value) => JSON.parse(value.detail) as PageDataSection),
+    ...(metadata.seed ? { seed: metadata.seed } : {}),
   };
 }
 
@@ -412,7 +478,7 @@ function saveRun(db: Database, run: PageDataRun): void {
       stage: 'verification' as const,
       action: 'page-data-run',
       at: run.at,
-      detail: JSON.stringify({ head: run.head, classes: run.classes }),
+      detail: JSON.stringify({ head: run.head, classes: run.classes, ...(run.seed ? { seed: run.seed } : {}) }),
     },
     ...run.sections.map((section) => ({
       taskId: pageDataTaskId,
@@ -500,6 +566,7 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
     const head = firstParent(options.settings.mainCheckout, options.settings.integrationBranch);
     let output = '';
     let stackOutput = '';
+    let seed: PageDataSeedStatus | undefined;
     let registryForRun: ReadonlyMap<string, SectionConfig> | undefined;
     try {
       const result = await (
@@ -507,6 +574,7 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
       )(head);
       output = result.output;
       stackOutput = result.stackOutput ?? '';
+      seed = result.seed;
       if (result.exitCode !== 0 && result.exitCode !== 1) {
         const line = result.output.trim()
           ? terminalErrorLine(result.output)
@@ -581,7 +649,14 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
       });
       finishRepair(options.db, key);
     }
-    const run: PageDataRun = { runId, at, head, classes: pageDataClassCounts(sections), sections };
+    const run: PageDataRun = {
+      runId,
+      at,
+      head,
+      classes: pageDataClassCounts(sections),
+      sections,
+      ...(seed ? { seed } : {}),
+    };
     saveRun(options.db, run);
     return 'ran';
   } finally {
@@ -1130,6 +1205,7 @@ async function runDedicatedPageDataStack(
   exitCode: number;
   registry: ReadonlyMap<string, SectionConfig>;
   stackOutput: string;
+  seed?: PageDataSeedStatus;
 }> {
   const { policy, worktree, config, names, env: preparedEnv } = await prepareDedicatedPageDataStack(settings, head);
   const bun = process.execPath;
@@ -1142,6 +1218,7 @@ async function runDedicatedPageDataStack(
   let child: ChildProcess | undefined;
   let checked: ProcessResult | undefined;
   let registry: ReadonlyMap<string, SectionConfig> | undefined;
+  let seedStatus: PageDataSeedStatus | undefined;
   let failed = false;
   let failure: unknown;
   try {
@@ -1225,7 +1302,7 @@ async function runDedicatedPageDataStack(
         policy.stopTimeoutMs,
       );
       env = { ...env, ...readEnvFile(join(worktree, '.temp/local-stack/seed.env')) };
-      await runCommand(
+      const seedResult = await runCommand(
         bun,
         ['scripts/datasets/cross-media-seed.ts', '--dev'],
         worktree,
@@ -1233,11 +1310,24 @@ async function runDedicatedPageDataStack(
         policy.seedTimeoutMs,
         policy.outputBytes,
         'boot',
-        [0],
+        [0, 1],
         policy.stopTimeoutMs,
       );
-      mkdirSync(join(worktree, '.temp/local-stack'), { recursive: true });
-      writeFileSync(seeded, `${head}\n`, { flag: 'w' });
+      seedStatus = pageDataSeedStatus(
+        seedResult.exitCode,
+        commandOutput(seedResult.stdout, seedResult.stderr),
+        resolve(worktree, '.temp/cross-media-seed/result.json'),
+      );
+      if (seedStatus)
+        captureEvent(stackCapture, {
+          kind: 'seed',
+          status: seedStatus.status,
+          omissions: seedStatus.omissions,
+        });
+      if (!seedStatus) {
+        mkdirSync(join(worktree, '.temp/local-stack'), { recursive: true });
+        writeFileSync(seeded, `${head}\n`, { flag: 'w' });
+      }
     }
 
     checked = await runCommand(
@@ -1296,6 +1386,7 @@ async function runDedicatedPageDataStack(
     exitCode: result.exitCode,
     registry: registry!,
     stackOutput: pageDataCaptureOutput(stackCapture, policy.outputBytes),
+    ...(seedStatus ? { seed: seedStatus } : {}),
   };
 }
 

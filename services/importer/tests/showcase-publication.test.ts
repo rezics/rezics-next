@@ -34,7 +34,7 @@ import {
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
 import { prepareShowcaseTags } from '../src/showcase-tags.ts';
-import { finalizeSeedResult, formatSeedError, SeedFinalization } from '../src/seed-cli.ts';
+import { finalizeSeedResult, formatSeedArtifactHandoff, formatSeedError, SeedFinalization } from '../src/seed-cli.ts';
 
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
@@ -1633,6 +1633,14 @@ test('incomplete publication preserves the written seed artifact and reports com
     expect(JSON.parse(await readFile(resultPath, 'utf8'))).toEqual(report);
     expect(formatSeedError(failure)).toContain('publication incomplete result-write=completed');
     expect(formatSeedError(failure)).toContain(`artifact=${JSON.stringify(resultPath)} bounded-omissions=1`);
+    expect(formatSeedArtifactHandoff(failure)).toBe(
+      `Cross-media seed artifact handoff ${JSON.stringify({
+        version: 1,
+        state: 'publication-incomplete',
+        artifact: resultPath,
+        omissions: 1,
+      })}`,
+    );
     expect(lines.at(-1)).toContain('state=failed scope=seed phase=publication-completion');
     expect(lines.some((line) => line.includes('state=completed'))).toBe(false);
   } finally {

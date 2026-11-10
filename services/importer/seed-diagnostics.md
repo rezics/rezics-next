@@ -49,3 +49,8 @@ retained candidate before acceptance, adoption and public readback.
 Result persistence ends before `publication-completion` begins. An incomplete publication fails that strict final
 check with the written artifact path and bounded omission count, while preserving the usable report. A write failure
 retains its original error and `result-write` phase; neither outcome implies that omitted claims were published.
+
+Decision: after that post-write refusal, the development seed CLI emits one versioned `Cross-media seed artifact
+handoff` JSON line with the exact artifact path and omission count. It keeps the strict nonzero exit and ordinary
+bounded diagnostic. The page-data runner admits only this handoff for its expected result path; source failures,
+development-showcase incompleteness and old result files remain stops.

@@ -121,6 +121,7 @@ export type PageDataFlowRun = {
   head: string;
   classes: Partial<Record<PageDataClass, number>>;
   sections: Partial<Record<PageDataClass, PageDataReportSection[]>>;
+  seed?: { status: 'publication-incomplete'; omissions: number };
   failure?: { phase: 'boot' | 'check'; firstErrorLine: string };
 };
 
@@ -134,6 +135,7 @@ export function pageDataFlowRuns(
     const metadata = JSON.parse(event.detail ?? '{}') as {
       head?: string;
       classes?: Partial<Record<PageDataClass, number>>;
+      seed?: { status: 'publication-incomplete'; omissions: number };
     };
     const sections: Partial<Record<PageDataClass, PageDataReportSection[]>> = {};
     for (const row of pageEvents.filter(
@@ -148,6 +150,7 @@ export function pageDataFlowRuns(
       head: metadata.head ?? '',
       classes: metadata.classes ?? {},
       sections,
+      ...(metadata.seed ? { seed: metadata.seed } : {}),
     };
   });
   for (const event of pageEvents.filter(
@@ -175,8 +178,9 @@ export function formatPageDataFlowRuns(runs: readonly PageDataFlowRun[]): string
     if (run.failure)
       return [`Page-data ${run.failure.phase} failure at ${run.at} (${run.head}): ${run.failure.firstErrorLine}`];
     const counts = PAGE_DATA_CLASSES.map((className) => `${className}=${run.classes[className] ?? 0}`).join(' ');
+    const seed = run.seed ? `; seed=${run.seed.status} omissions=${run.seed.omissions}` : '';
     return [
-      `Page-data run at ${run.at} (${run.head}): ${counts}.`,
+      `Page-data run at ${run.at} (${run.head}): ${counts}${seed}.`,
       ...PAGE_DATA_CLASSES.map((className) => {
         const sections =
           run.sections[className]?.map((section) => `${section.page}/${section.persona}/${section.section}`) ?? [];
@@ -629,7 +633,7 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
             ? Math.max(0, Date.parse(end.at) - Date.parse(event.at))
             : boundary || terminal.has(event.taskId)
               ? 0
-              : (q.stage === 'promotion' || currentAttemptEvent[i])
+              : q.stage === 'promotion' || currentAttemptEvent[i]
                 ? Math.max(0, now - Date.parse(event.at))
                 : 0;
         }

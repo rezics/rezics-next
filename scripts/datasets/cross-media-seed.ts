@@ -28,7 +28,7 @@ import {
   releasedReviewedVocabulary,
 } from '../../services/importer/src/showcase-cross-media.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
-import { formatSeedError } from '../../services/importer/src/seed-cli.ts';
+import { formatSeedArtifactHandoff, formatSeedError } from '../../services/importer/src/seed-cli.ts';
 import { fetchCrossMediaDumps, type CrossMediaDumpPaths } from './fetch-dumps.ts';
 import { releaseWalkFileCache } from '../walk-memory.ts';
 import { ShowcaseJournal, type ShowcasePublicationResult } from '../../services/importer/src/showcase-publication.ts';
@@ -369,6 +369,8 @@ if (import.meta.main) {
     const remaining =
       reviewed || journal || transport ? mergeRemainingRequest(reviewed ?? journal, transport) : undefined;
     if (remaining) await writeSeedRemainingRequest(directory, remaining);
+    const handoff = formatSeedArtifactHandoff(error);
+    if (handoff) process.stderr.write(`${handoff}\n`);
     process.stderr.write(
       `${seedFailureDetail(error)}${remaining ? ` remaining{${formatSeedFailure(undefined, remaining)}}` : ''}\n`,
     );
