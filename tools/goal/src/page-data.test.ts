@@ -97,7 +97,7 @@ const completed = (invocation: string, rows: string, incomplete = false) =>
     version: 1,
     invocation,
     sections: rows.trim().split('\n').length,
-    defects: rows.split('\n').filter((row) => / (API|WEB|SEED)$/.test(row)).length,
+    defects: rows.split('\n').filter((row) => / (API|WEB|SEED)(?:\s|$)/.test(row)).length,
     incomplete,
   })}\n`;
 
@@ -638,5 +638,32 @@ test('page-data reconciliation requires the retained dedicated stack and never c
     expect(readFileSync(config, 'utf8')).toBe('retained-stack-config');
   } finally {
     h.dispose();
+  }
+});
+
+test('page-data member authority provenance survives completion without hiding real forbidden defects', () => {
+  const h = fixture();
+  const evidence = {
+    version: 1,
+    reason: 'member-authority-unavailable',
+    scopes: ['follow:list'],
+    probes: { native: 'unrun' },
+  };
+  const source = { ...h.registry.values().next().value!, persona: 'member' };
+  const registry = new Map([[`${source.page}\tmember\t${source.section}`, source]]);
+  const prefix = `${source.page} member ${source.section}`;
+  const row = `${prefix} UNAVAILABLE unrun=${encodeURIComponent(JSON.stringify(evidence))}\n`;
+  expect(parsePageDataCompletion(completed('member', row, true), registry, 'member', 2).sections[0]?.unrun).toEqual(
+    evidence,
+  );
+  const problem = { code: 'forbidden' };
+  const denied = `${prefix} API nativeProblem=${encodeURIComponent(JSON.stringify(problem))}\n`;
+  expect(parsePageDataCompletion(completed('denied', denied), registry, 'denied', 1).sections[0]).toMatchObject({
+    class: 'API',
+    nativeProblem: problem,
+  });
+  for (const change of [{ scopes: ['access:grant'] }, { probes: { native: 'run' } }]) {
+    const invalid = `${prefix} UNAVAILABLE unrun=${encodeURIComponent(JSON.stringify({ ...evidence, ...change }))}\n`;
+    expect(() => parsePageDataOutput(invalid, registry)).toThrow('invalid page-data unrun provenance');
   }
 });

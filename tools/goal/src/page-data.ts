@@ -45,8 +45,17 @@ export type PageDataSection = {
   files: string[];
   firstErrorLine?: string;
   unrun?: PageDataUnrunEvidence;
+  nativeProblem?: { code?: string; pointer?: string };
 };
-export type PageDataUnrunEvidence = {
+export type PageDataUnrunEvidence =
+  | {
+      version: 1;
+      reason: 'member-authority-unavailable';
+      scopes: string[];
+      probes: { native: 'unrun' };
+    }
+  | PageDataSeedUnrunEvidence;
+export type PageDataSeedUnrunEvidence = {
   version: 1;
   provider: 'bangumi' | 'vndb';
   sourceKey: string;
@@ -403,6 +412,21 @@ function parseUnrunEvidence(token: string): PageDataUnrunEvidence {
   }
   if (!isRecord(value) || value.version !== 1 || !isRecord(value.probes))
     throw new Error('invalid page-data unrun provenance');
+  if (value.reason === 'member-authority-unavailable') {
+    const readScopes = new Set(['feed_item:list', 'follow:list', 'library_entry:list', 'progress_session:list']);
+    if (
+      Object.keys(value).length !== 4 ||
+      Object.keys(value.probes).length !== 1 ||
+      value.probes.native !== 'unrun' ||
+      !Array.isArray(value.scopes) ||
+      !value.scopes.length ||
+      value.scopes.length > readScopes.size ||
+      new Set(value.scopes).size !== value.scopes.length ||
+      value.scopes.some((scope) => !readScopes.has(scope))
+    )
+      throw new Error('invalid page-data unrun provenance');
+    return value as PageDataUnrunEvidence;
+  }
   const allowedReasons = [
     'artifact-missing',
     'artifact-invalid',
@@ -439,8 +463,7 @@ export function parsePageDataOutput(output: string, registry: ReadonlyMap<string
   const seen = new Set<string>();
   for (const line of output.split(/\r?\n/).filter(Boolean)) {
     const [page, persona, section, className, ...extra] = line.trim().split(/\s+/);
-    if (!page || !persona || !section || !className)
-      throw new Error(`invalid page-data output: ${safeLine(line)}`);
+    if (!page || !persona || !section || !className) throw new Error(`invalid page-data output: ${safeLine(line)}`);
     const key = `${page}\t${persona}\t${section}`;
     const source = registry.get(key);
     if (!source) throw new Error(`page-data output named an unknown section: ${safeLine(line)}`);
@@ -448,17 +471,41 @@ export function parsePageDataOutput(output: string, registry: ReadonlyMap<string
       throw new Error(`page-data output has an unknown class: ${safeLine(line)}`);
     if (seen.has(key)) throw new Error(`page-data output repeated ${page}/${persona}/${section}`);
     let unrun: PageDataUnrunEvidence | undefined;
-    if (extra.length) {
-      if (extra.length !== 1 || !extra[0]!.startsWith('unrun=') || className !== 'UNAVAILABLE')
+    let nativeProblem: PageDataSection['nativeProblem'];
+    for (const field of extra) {
+      if (field.startsWith('unrun=') && !unrun && className === 'UNAVAILABLE') {
+        unrun = parseUnrunEvidence(field.slice('unrun='.length));
+      } else if (field.startsWith('nativeProblem=') && !nativeProblem) {
+        const token = field.slice('nativeProblem='.length);
+        if (token.length > 1024) throw new Error('invalid page-data native problem');
+        const value: unknown = JSON.parse(decodeURIComponent(token));
+        if (
+          !isRecord(value) ||
+          !Object.keys(value).length ||
+          Object.keys(value).some((key) => key !== 'code' && key !== 'pointer') ||
+          (value.code !== undefined &&
+            (typeof value.code !== 'string' || value.code.length > 64 || !/^[a-z][a-z0-9_]*$/.test(value.code))) ||
+          (value.pointer !== undefined &&
+            (typeof value.pointer !== 'string' ||
+              value.pointer.length > 128 ||
+              (value.pointer !== '' &&
+                !/^\/(?:[A-Za-z0-9_-]|~[01])+(?:\/(?:[A-Za-z0-9_-]|~[01])+){0,15}$/.test(value.pointer))))
+        )
+          throw new Error('invalid page-data native problem');
+        nativeProblem = value;
+      } else {
         throw new Error(`invalid page-data output: ${safeLine(line)}`);
-      unrun = parseUnrunEvidence(extra[0]!.slice('unrun='.length));
+      }
     }
+    if (unrun?.reason === 'member-authority-unavailable' && persona !== 'member')
+      throw new Error('invalid page-data member authority persona');
     seen.add(key);
     const classValue = className as PageDataClass;
     results.push({
       ...source,
       class: classValue,
       ...(unrun ? { unrun } : {}),
+      ...(nativeProblem ? { nativeProblem } : {}),
       ...(PAGE_DATA_DEFECTS.has(classValue) ? { firstErrorLine: safeLine(line) } : {}),
     });
   }

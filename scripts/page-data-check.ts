@@ -9,7 +9,7 @@
  * relation whose count is zero after the reader settles.
  */
 import { readFileSync, existsSync, lstatSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { createHash, createPrivateKey, randomBytes, randomUUID, sign, type JsonWebKey } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -103,7 +103,15 @@ export type SeedIdentityFailure =
   | 'ambiguous'
   | 'native-type-mismatch';
 
-export type UnrunProbeEvidence = {
+export type MemberAuthorityUnrun = {
+  version: 1;
+  reason: 'member-authority-unavailable';
+  scopes: readonly string[];
+  probes: { native: 'unrun' };
+};
+
+export type UnrunProbeEvidence = MemberAuthorityUnrun | SeedUnrunProbeEvidence;
+export type SeedUnrunProbeEvidence = {
   version: 1;
   provider: SeedIdentityReference['provider'];
   sourceKey: string;
@@ -177,7 +185,12 @@ export type RunOptions = {
   seedArtifact?: unknown;
   seedArtifactSource?: string;
   seedArtifactFailure?: 'artifact-missing' | 'artifact-invalid';
-  signIn?: { origin: string; email: string; password: string };
+  signIn?: {
+    origin: string;
+    email: string;
+    password: string;
+    website?: { key: JsonWebKey; resource: string };
+  };
   queryCount?: (text: string, values: readonly string[]) => Promise<number>;
   fetch?: typeof fetch;
   browser?: Browser;
@@ -548,13 +561,13 @@ function createSeedCounter(databaseUrl: string): {
   };
 }
 
-function databaseUrlFromEnv(file: string): string | undefined {
+function envFileValue(file: string, name: string): string | undefined {
   if (!existsSync(file)) return undefined;
   const line = readFileSync(file, 'utf8')
     .split('\n')
-    .find((entry) => entry.startsWith('DATABASE_URL='));
+    .find((entry) => entry.startsWith(`${name}=`));
   if (!line) return undefined;
-  return line.slice('DATABASE_URL='.length).replace(/^(['"])(.*)\1$/, '$2');
+  return line.slice(name.length + 1).replace(/^(['"])(.*)\1$/, '$2');
 }
 
 function isTimeout(error: unknown): boolean {
@@ -801,12 +814,34 @@ export function signInRequestBody(
   return { email, password, client_id: 'login', scope: [] };
 }
 
-async function memberTokenFromAuth(
-  signIn: { origin: string; email: string; password: string },
-  send: typeof fetch,
-): Promise<string> {
+/** Read scopes of the four retained member probes, including the feed's personal inputs. */
+export function memberReadScopes(call: NativeCall): readonly string[] {
+  if (call.method !== 'GET') return [];
+  if (call.path === '/v1/feedItems')
+    return call.query?.stream === 'following'
+      ? ['feed_item:list', 'follow:list']
+      : ['feed_item:list', 'follow:list', 'library_entry:list', 'progress_session:list'];
+  if (call.path === '/v1/follows') return ['follow:list'];
+  if (call.path === '/v1/libraryEntries') return ['library_entry:list'];
+  return [];
+}
+
+/** Scope preflight is diagnostic only; Kernel still verifies the bearer and current authority. */
+function coversMemberRead(token: string | undefined, scopes: readonly string[]): boolean {
+  if (!token) return false;
+  try {
+    const claims: unknown = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString());
+    if (!isRecord(claims) || typeof claims.scope !== 'string') return false;
+    const held = new Set(claims.scope.split(' '));
+    return scopes.every((scope) => held.has(scope));
+  } catch {
+    return false;
+  }
+}
+
+async function memberCookieFromAuth(signIn: NonNullable<RunOptions['signIn']>, send: typeof fetch): Promise<string> {
   const origin = publicOrigin(signIn.origin, 'auth origin');
-  const signin = await send(
+  const response = await send(
     new Request(new URL('/signin', origin), {
       method: 'POST',
       headers: { origin: origin.origin, 'content-type': 'application/json' },
@@ -814,24 +849,114 @@ async function memberTokenFromAuth(
       signal: AbortSignal.timeout(REQUEST_WAIT_MS),
     }),
   );
-  if (!signin.ok) throw new Error(`Member sign-in failed: ${signin.status}`);
-  const cookie = signin.headers
+  if (!response.ok) throw new Error(`Member sign-in failed: ${response.status}`);
+  return response.headers
     .getSetCookie()
     .map((value) => value.split(';')[0])
     .join('; ');
-  const token = await send(
-    new Request(new URL('/token', origin), {
-      method: 'POST',
-      headers: { origin: origin.origin, 'content-type': 'application/json', cookie },
-      body: '{}',
-      signal: AbortSignal.timeout(REQUEST_WAIT_MS),
-    }),
-  );
-  if (!token.ok) throw new Error(`Member token failed: ${token.status}`);
-  const body: unknown = await token.json();
+}
+
+async function readAccessToken(response: Response): Promise<string> {
+  if (!response.ok) throw new Error(`Member token failed: ${response.status}`);
+  const body: unknown = await response.json();
   if (!isRecord(body) || typeof body.access_token !== 'string' || body.access_token.length === 0)
     throw new Error('Member token response had no access token');
   return body.access_token;
+}
+
+async function memberTokenFromAuth(signIn: NonNullable<RunOptions['signIn']>, send: typeof fetch): Promise<string> {
+  const origin = publicOrigin(signIn.origin, 'auth origin');
+  const cookie = await memberCookieFromAuth(signIn, send);
+  return readAccessToken(
+    await send(
+      new Request(new URL('/token', origin), {
+        method: 'POST',
+        headers: { origin: origin.origin, 'content-type': 'application/json', cookie },
+        body: '{}',
+        signal: AbortSignal.timeout(REQUEST_WAIT_MS),
+      }),
+    ),
+  );
+}
+
+/** Consume the installed Website registration; never register a client or widen consent here. */
+async function memberWebsiteToken(
+  signIn: NonNullable<RunOptions['signIn']>,
+  base: URL,
+  scopes: readonly string[],
+  send: typeof fetch,
+): Promise<string> {
+  const origin = publicOrigin(signIn.origin, 'auth origin');
+  const website = signIn.website!;
+  const client = 'rezics-website';
+  const redirect = new URL('/auth/callback', base).href;
+  const verifier = randomBytes(48).toString('base64url');
+  const state = randomUUID();
+  const authorize = new URL('/authorize', origin);
+  authorize.search = new URLSearchParams({
+    client_id: client,
+    redirect_uri: redirect,
+    response_type: 'code',
+    scope: scopes.join(' '),
+    state,
+    code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+    code_challenge_method: 'S256',
+    resource: website.resource,
+  }).toString();
+  const cookie = await memberCookieFromAuth(signIn, send);
+  const response = await send(
+    new Request(authorize, {
+      headers: { origin: origin.origin, cookie },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(REQUEST_WAIT_MS),
+    }),
+  );
+  // Do not follow login, consent or registration redirects, or expose their parameters.
+  if (![302, 303].includes(response.status)) throw new Error(`Member Website authorization failed: ${response.status}`);
+  const location = response.headers.get('location');
+  if (!location) throw new Error('Member Website authorization omitted callback');
+  const callback = new URL(location, origin);
+  if (
+    callback.origin !== base.origin ||
+    callback.pathname !== '/auth/callback' ||
+    callback.searchParams.get('state') !== state ||
+    !callback.searchParams.get('code')
+  )
+    throw new Error('Member Website authorization requires an approved callback and current consent');
+  const now = Math.floor(Date.now() / 1000);
+  const header = Buffer.from(JSON.stringify({ alg: 'ES256', kid: website.key.kid })).toString('base64url');
+  const payload = Buffer.from(
+    JSON.stringify({
+      iss: client,
+      sub: client,
+      aud: origin.origin,
+      iat: now,
+      exp: now + 120,
+      jti: randomUUID(),
+    }),
+  ).toString('base64url');
+  const unsigned = `${header}.${payload}`;
+  const key = createPrivateKey({ key: website.key, format: 'jwk' });
+  const assertion = `${unsigned}.${sign('sha256', Buffer.from(unsigned), { key, dsaEncoding: 'ieee-p1363' }).toString('base64url')}`;
+  return readAccessToken(
+    await send(
+      new Request(new URL('/token', origin), {
+        method: 'POST',
+        headers: { origin: origin.origin, 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: client,
+          client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+          client_assertion: assertion,
+          resource: website.resource,
+          grant_type: 'authorization_code',
+          code: callback.searchParams.get('code')!,
+          redirect_uri: redirect,
+          code_verifier: verifier,
+        }),
+        signal: AbortSignal.timeout(REQUEST_WAIT_MS),
+      }),
+    ),
+  );
 }
 
 async function signInBrowser(
@@ -849,7 +974,7 @@ async function signInBrowser(
   await page.waitForURL((url) => url.origin === base.origin, { timeout: timeoutMs });
 }
 
-function localSignIn(): { origin: string; email: string; password: string } | undefined {
+function localSignIn(): RunOptions['signIn'] {
   if (!existsSync(LOCAL_KEYS)) return undefined;
   const keys: unknown = JSON.parse(readFileSync(LOCAL_KEYS, 'utf8'));
   if (!isRecord(keys) || typeof keys.password !== 'string' || keys.password.length === 0) return undefined;
@@ -857,6 +982,17 @@ function localSignIn(): { origin: string; email: string; password: string } | un
     origin: process.env.AUTH_ORIGIN?.trim() || DEFAULT_AUTH_ORIGIN,
     email: MEMBER_EMAIL,
     password: keys.password,
+    ...(isRecord(keys.website)
+      ? {
+          website: {
+            key: keys.website as JsonWebKey,
+            resource:
+              process.env.AUTH_AUDIENCE ??
+              envFileValue(DEFAULT_KERNEL_ENV, 'AUTH_AUDIENCE') ??
+              'https://api.rezics.test',
+          },
+        }
+      : {}),
   };
 }
 
@@ -898,7 +1034,20 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
     );
   let token = options.memberToken;
   const signIn = options.signIn;
-  if (!token && signIn && pagesFor('member').length) {
+  const memberCalls = pagesFor('member').flatMap((page) =>
+    page.sections.filter((section) => personasOf(section).includes('member')).map((section) => section.native),
+  );
+  const readScopes = [...new Set(memberCalls.flatMap(memberReadScopes))].sort();
+  let readToken = options.memberToken;
+  if (!readToken && signIn?.website && readScopes.length) {
+    try {
+      readToken = await memberWebsiteToken(signIn, base, readScopes, send);
+    } catch {
+      // Issuer/transport/key failures may contain credentials. Keep this diagnostic fixed.
+      report('Member read authority unavailable: existing Website registration, key or consent could not be used');
+    }
+  }
+  if (!token && signIn && memberCalls.some((call) => memberReadScopes(call).length === 0)) {
     try {
       token = await memberTokenFromAuth(signIn, send);
     } catch (error) {
@@ -972,7 +1121,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
           incomplete = true;
           report(`${persona} browser probes unrun: authenticated browser or browser setup unavailable`);
         }
-        if (persona === 'member' && !token) {
+        if (persona === 'member' && !token && memberCalls.some((call) => memberReadScopes(call).length === 0)) {
           incomplete = true;
           report('Member native probes unrun: no member token');
         }
@@ -1067,14 +1216,26 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
                 return { observation: unread(), timedOut: false };
               }
             };
+            const requiredScopes = persona === 'member' ? memberReadScopes(section.native) : [];
+            const scopedRead = requiredScopes.length > 0;
+            const nativeToken = scopedRead ? readToken : token;
+            const authorityMissing =
+              persona === 'member' && (scopedRead ? !coversMemberRead(nativeToken, requiredScopes) : !nativeToken);
+            if (authorityMissing) {
+              incomplete = true;
+              if (scopedRead)
+                report(
+                  `Member native read unrun ${manifestPage.id} ${section.id}: member-authority-unavailable; required scopes=${requiredScopes.join(',')}`,
+                );
+            }
             const [native, read] = await Promise.all([
-              persona === 'member' && !token
+              authorityMissing
                 ? Promise.resolve(undefined)
                 : nativeCall(
                     kernel,
                     section.native,
                     vars,
-                    persona === 'member' ? token : undefined,
+                    persona === 'member' ? nativeToken : undefined,
                     send,
                     requestTimeout,
                   ),
@@ -1145,6 +1306,16 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
                 browserProbe,
                 sqlProbe,
                 ...(nativeProblem ? { nativeProblem } : {}),
+                ...(authorityMissing && scopedRead
+                  ? {
+                      unrun: {
+                        version: 1 as const,
+                        reason: 'member-authority-unavailable' as const,
+                        scopes: requiredScopes,
+                        probes: { native: 'unrun' as const },
+                      },
+                    }
+                  : {}),
               },
             };
             if (native?.error) incomplete ||= native.status === 0;
@@ -1234,7 +1405,8 @@ async function main(argv: readonly string[]): Promise<number> {
     const manifestPath = isAbsolute(args.manifest) ? args.manifest : resolve(args.manifest);
     const seedArtifactPath = DEFAULT_SEED_ARTIFACT;
     const seedArtifact = loadSeedArtifact(seedArtifactPath);
-    const databaseUrl = args.databaseUrl ?? process.env.DATABASE_URL ?? databaseUrlFromEnv(DEFAULT_KERNEL_ENV);
+    const databaseUrl =
+      args.databaseUrl ?? process.env.DATABASE_URL ?? envFileValue(DEFAULT_KERNEL_ENV, 'DATABASE_URL');
     const memberToken = args.memberToken ?? process.env.PAGE_DATA_CHECK_MEMBER_TOKEN;
     const signIn = localSignIn();
     if (signIn && args.authOrigin) signIn.origin = args.authOrigin;
