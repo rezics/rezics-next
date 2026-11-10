@@ -24,6 +24,7 @@ import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion
 import {
   captureShowcaseCommands,
   publishShowcase,
+  replayMissingSelectedProposalCommands,
   resolveLegacyCandidates,
   publishShowcaseVocabulary,
   adoptResumeKeys,
@@ -76,6 +77,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     },
   });
   const bySource = new Map<string, string>();
+  const candidateByKey = new Map<string, string>();
   const candidates = new Map<
     string,
     { id: string; source: BatchCommand['source'] | null; statement: BatchStatement; head: number | null }
@@ -193,7 +195,8 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
           return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
         }
         if (command.op === 'propose') {
-          const id = randomUUID();
+          const id = candidateByKey.get(command.key) ?? randomUUID();
+          candidateByKey.set(command.key, id);
           candidates.set(id, { id, source: command.source, statement: command.statement, head: null });
           return { key: command.key, status: 201 as const, value: { candidate: id, revision: 1 } };
         }
@@ -593,6 +596,37 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     } finally {
       lostAckJournal.close();
     }
+    const preparedReplayPath = join(directory, 'prepared-proposal.sqlite');
+    const preparedReplayJournal = new ShowcaseJournal(preparedReplayPath);
+    preparedReplayJournal.prepareCommand(interruptedSynopsisProposal.command);
+    const preparedReplayCalls: BatchCommand[] = [];
+    try {
+      const preparedReplayTransport = {
+        ...port,
+        async batch(request: { commands: readonly BatchCommand[] }): Promise<BatchWriteResult> {
+          preparedReplayCalls.push(...request.commands);
+          return port.batch({ commands: [...request.commands] });
+        },
+      } as CrossMediaPort;
+      const resumedPrepared = await replayMissingSelectedProposalCommands({
+        plan,
+        aliases: crossMediaAliases,
+        journal: preparedReplayJournal,
+        review,
+        transport: preparedReplayTransport,
+      });
+      expect(resumedPrepared).toEqual([interruptedSynopsisProposal.command]);
+      expect(preparedReplayCalls).toEqual([interruptedSynopsisProposal.command]);
+      expect(preparedReplayJournal.preparedCommands()).toEqual([]);
+      expect(preparedReplayJournal.acknowledgedCommands()).toContainEqual(
+        expect.objectContaining({
+          command: interruptedSynopsisProposal.command,
+          candidateId: interruptedSynopsis.id,
+        }),
+      );
+    } finally {
+      preparedReplayJournal.close();
+    }
     expect(preparedTags.associationBindings).toEqual([
       expect.objectContaining({
         workId: 'v2',
@@ -640,6 +674,16 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(journal.acknowledgedCommands()).toEqual(retainedCommands);
     expect(journal.preparedCommands()).toEqual([]);
     const publicationPhases: string[] = [];
+    candidates.delete(membershipCandidateId);
+    candidates.delete(interruptedSynopsis.id);
+    const resumedAcknowledgedCalls: BatchCommand[] = [];
+    const resumedAcknowledgedTransport = {
+      ...port,
+      async batch(request: { commands: readonly BatchCommand[] }): Promise<BatchWriteResult> {
+        resumedAcknowledgedCalls.push(...request.commands);
+        return port.batch({ commands: [...request.commands] });
+      },
+    } as CrossMediaPort;
     const replayed = await publishShowcase({
       onProgress: (line) => publicationPhases.push(line),
       plan,
@@ -647,9 +691,14 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       aliases: crossMediaAliases,
       journal,
       review,
+      transport: resumedAcknowledgedTransport,
       publicClient,
       ...tagOptions,
     });
+    expect(resumedAcknowledgedCalls).toContainEqual(interruptedSynopsisProposal.command);
+    expect(resumedAcknowledgedCalls).toContainEqual(membership.command);
+    expect(candidates.has(interruptedSynopsis.id)).toBe(true);
+    expect(candidates.has(membershipCandidateId)).toBe(true);
     expect(replayed.status).toBe('published');
     expect(publicationPhases).toHaveLength(12);
     expect(publicationPhases.at(-2)).toContain('phase=manifest-finalization remaining=manifest-finalization');
@@ -665,6 +714,11 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     }
     expect(replayed.manifest.digest).toBe(first.manifest.digest);
     expect(accepted).toEqual(new Set(acknowledged.map((entry) => entry.candidateId!)));
+    expect(
+      replayed.published
+        .find((record) => record.provider === 'vndb' && record.sourceKey === 'v2')
+        ?.assertions.some((assertion) => assertion.property === 'schema:abstract'),
+    ).toBe(false);
     for (const candidate of synopses) {
       const subject = [...subjects.values()].find((item) => item.sourceExternalId === candidate.source?.external_id)!;
       expect(accepted.has(candidate.id)).toBe(true);
@@ -708,6 +762,29 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     }
     const tagAcceptanceCalls = acceptanceCalls.filter((call) => call.candidateId === membershipCandidateId);
     expect(tagAcceptanceCalls.length - tagAcceptanceCallsBeforeReplay).toBe(1);
+    const publishedMembership = replayed.published
+      .find((record) => record.provider === 'vndb' && record.sourceKey === 'v2')
+      ?.assertions.find((assertion) => assertion.candidateId === membershipCandidateId);
+    const manifestMembership = replayed.manifest.records
+      .find((record) => record.provider === 'vndb' && record.sourceKey === 'v2')
+      ?.assertions.find((assertion) => assertion.candidateId === membershipCandidateId);
+    expect(manifestMembership).toMatchObject({
+      source: { source: crossMediaAliases.vndb, external_id: 'v2' },
+      citations: ['https://vndb.org/v2.1#/tags_vn/v2/g105/tag'],
+    });
+    expect(publishedMembership).toMatchObject({
+      candidateId: membershipCandidateId,
+      property: 'schema:genre',
+      citations: ['https://vndb.org/v2.1#/tags_vn/v2/g105/tag'],
+      adoption: { candidateId: membershipCandidateId, rank: 'normal' },
+      readback: {
+        property: { id: 'schema:genre' },
+        value: { type: 'value', content: tagConceptId },
+      },
+    });
+    expect(publicReads.get(membership.command.subject)?.subject?.statements?.['schema:genre']).toContainEqual(
+      expect.objectContaining({ value: { type: 'value', content: tagConceptId } }),
+    );
 
     omitSelectedSynopsisOperands = true;
     const absentCurrentSlot = await publishShowcase({

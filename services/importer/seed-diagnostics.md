@@ -46,6 +46,12 @@ import. Missing receipts still require exactly one matching candidate in a compl
 ambiguous evidence cannot produce a recovered receipt. The ordinary publication pass independently checks every
 retained candidate before acceptance, adoption and public readback.
 
+Final publication resumes prepared selected proposals with their sealed bodies and replays acknowledged proposals
+without a candidate ID or whose sealed ID is absent from a complete current listing. The source transport retains
+the journal's original command key and body; publication then rereads the candidate and produces the normal artifact
+from current review, adoption and anonymous public reads. A selected Bangumi synopsis requires its exact source
+record and document snapshot to establish CC-BY-SA-3.0 for the same work; VNDB prose remains outside admitted rights.
+
 Result persistence ends before `publication-completion` begins. An incomplete publication fails that strict final
 check with the written artifact path and bounded omission count, while preserving the usable report. A write failure
 retains its original error and `result-write` phase; neither outcome implies that omitted claims were published.
