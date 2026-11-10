@@ -217,7 +217,8 @@ test('a real native source fence change after released preparation rolls back vi
     connection.query = function (...args: unknown[]) {
       const query = args[0] as string | { text: string };
       const sql = typeof query === 'string' ? query : query.text;
-      if (sql.includes('curator_account_id=$3') && sql.includes('FOR UPDATE')) reached();
+      // Wait for the publication header compare, rather than the Source's earlier custody lock.
+      if (sql.includes('rule_release_digest IS NOT NULL') && sql.includes('FOR UPDATE')) reached();
       return (original as (...values: unknown[]) => unknown).apply(connection, args);
     } as PoolClient['query'];
     restorers.push(() => {
@@ -243,7 +244,7 @@ test('a real native source fence change after released preparation rolls back vi
     ]);
     await client.query('COMMIT');
     const response = await request;
-    expect(response.status).toBe(409);
+    expect(response.status, await response.clone().text()).toBe(409);
     const after = await native(collection.id);
     expect(after.collection.visibility).toBe('private');
     expect(after.collection.revision).toBe(before.collection.revision);

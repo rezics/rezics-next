@@ -564,7 +564,7 @@ export async function bindNativeOwnerFilterRead(
       ...root,
       remaining: ordinaryPageWorkDimensions(
         sumBounds(
-          declareBound(direct.remaining),
+          declareBound({ ...direct.remaining, engineRequests: 0 }),
           repeatBound(declareBound(collectionAuthorizationPreparationWork()), preparations),
         ),
       ),
