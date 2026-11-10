@@ -543,7 +543,7 @@ export class ManagerSessions {
     const state: ManagedManagerState = {
       kind: 'managed',
       ...spec,
-      goals: ownedGoals(spec).length ? ownedGoals(spec) : [spec.goal],
+      goals: ownedGoals(spec),
       threadId: null,
       activeTurnId: null,
       waitingForInbox: false,
@@ -1030,11 +1030,7 @@ export class ManagerSessions {
       assertManagedManager(state);
     }
     const idleWake = state.waitingForInbox === true;
-    if (
-      (idleWake || state.activeTurnId === null) &&
-      this.services.canStartTurn &&
-      !this.services.canStartTurn(state)
-    )
+    if ((idleWake || state.activeTurnId === null) && this.services.canStartTurn && !this.services.canStartTurn(state))
       return;
     const client = await this.transport.client(state.pool);
     state.goalState = await this.transport.getGoal(client, state.threadId!);
@@ -1148,11 +1144,10 @@ export class ManagerSessions {
     );
     return next;
   }
-  private goalOwner(goal: string): ManagedManagerState | undefined {
-    const owners = this.list().filter(
+  private goalOwners(goal: string): ManagedManagerState[] {
+    return this.list().filter(
       (state): state is ManagedManagerState => isManagedManager(state) && ownedGoals(state).includes(goal),
     );
-    return owners.length === 1 ? owners[0] : undefined;
   }
   private reassignGoalTasks(goal: string, from: string, to: string): void {
     if (!this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'worker_tasks'").get()) return;
@@ -1192,8 +1187,16 @@ export class ManagerSessions {
     }
     if (!isManagedManager(target) || target.status !== 'running')
       throw new Error(`Manager ${toId} is not a running managed manager`);
-    const source = this.goalOwner(goal);
-    if (!source) throw new Error(`No managed manager owns Goal ${goal}`);
+    const owners = this.goalOwners(goal);
+    const other = owners.find((owner) => owner.id !== toId);
+    // Older renewals could reclaim a transferred Goal from an explicitly empty ownership list.
+    // Only reconcile the exact running destination and one paused prior owner, never two live owners.
+    const restoringTransfer = owners.length === 2 && ownedGoals(target).includes(goal) && other?.status === 'paused';
+    const source = owners.length === 1 ? owners[0] : restoringTransfer ? other : undefined;
+    if (!source)
+      throw new Error(
+        owners.length ? `Ambiguous managed ownership for Goal ${goal}` : `No managed manager owns Goal ${goal}`,
+      );
     if (source.id === toId) throw new Error(`Goal ${goal} is already owned by manager ${toId}`);
     const remaining = ownedGoals(source).filter((owned) => owned !== goal);
     const nextGoals = [...ownedGoals(target), goal].filter((owned, index, all) => all.indexOf(owned) === index);
@@ -1303,11 +1306,7 @@ export class ManagerSessions {
               reportProgress();
               current.activeTurnId = resumed.activeTurnId;
               current.goalState = await this.transport.getGoal(client, current.threadId);
-              if (
-                current.status === 'running' &&
-                current.activeTurnId === null &&
-                current.turns > 0
-              ) {
+              if (current.status === 'running' && current.activeTurnId === null && current.turns > 0) {
                 await this.markWaitingForInbox(current.id);
                 current = this.get(current.id);
                 assertManagedManager(current);
