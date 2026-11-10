@@ -129,16 +129,10 @@ function EditorStory({ mode = 'ready' }: { mode?: Mode }) {
   );
 }
 
-export const Desktop: Story = {
-  globals: { viewport: { value: 'desktop1280' } },
-  render: () => <EditorStory />,
-};
-export const Phone: Story = {
-  globals: { viewport: { value: 'phone390' } },
-  render: () => <EditorStory />,
-};
+export const Desktop: Story = { name: 'Default', globals: {}, render: () => <EditorStory /> };
+export const Phone: Story = { tags: ['!dev'], globals: {}, render: () => <EditorStory /> };
 export const Dirty: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   render: () => <EditorStory mode="dirty" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -147,7 +141,7 @@ export const Dirty: Story = {
   },
 };
 export const Conflict: Story = {
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   render: () => <EditorStory mode="conflict" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -183,42 +177,32 @@ export const Loading: Story = {
 
 // UNRUN: actual editor states at both supported review widths; contract-shaped API outcomes only.
 export const ValidationPhone: Story = {
-  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  name: 'Validation',
+  globals: { locale: 'de' },
   render: () => <EditorStory mode="validation-long" />,
 };
 export const ValidationDesktop: Story = {
-  globals: { locale: 'de', viewport: { value: 'desktop1280' } },
+  tags: ['!dev'],
+  globals: { locale: 'de' },
   render: () => <EditorStory mode="validation-long" />,
 };
-export const DeniedPhone: Story = {
-  globals: { viewport: { value: 'phone390' } },
-  render: () => <EditorStory mode="denied" />,
-};
-export const DeniedDesktop: Story = {
-  globals: { viewport: { value: 'desktop1280' } },
-  render: () => <EditorStory mode="denied" />,
-};
-export const ConflictPhone: Story = {
-  globals: { viewport: { value: 'phone390' } },
-  render: () => <EditorStory mode="conflict" />,
-};
-export const ConflictDesktop: Story = {
-  globals: { viewport: { value: 'desktop1280' } },
-  render: () => <EditorStory mode="conflict" />,
-};
+export const DeniedPhone: Story = { tags: ['!dev'], globals: {}, render: () => <EditorStory mode="denied" /> };
+export const DeniedDesktop: Story = { tags: ['!dev'], globals: {}, render: () => <EditorStory mode="denied" /> };
+export const ConflictPhone: Story = { name: 'Conflict', globals: {}, render: () => <EditorStory mode="conflict" /> };
+export const ConflictDesktop: Story = { tags: ['!dev'], globals: {}, render: () => <EditorStory mode="conflict" /> };
 export const UnknownCodePhone: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  name: 'Unknown Code',
+  globals: {},
   render: () => <EditorStory mode="unknown" />,
 };
-export const UnknownCodeDesktop: Story = {
-  globals: { viewport: { value: 'desktop1280' } },
-  render: () => <EditorStory mode="unknown" />,
-};
+export const UnknownCodeDesktop: Story = { tags: ['!dev'], globals: {}, render: () => <EditorStory mode="unknown" /> };
 export const StaleTargetPhone: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  name: 'Stale Target',
+  globals: {},
   render: () => <EditorStory mode="stale-target" />,
 };
 export const StaleTargetDesktop: Story = {
-  globals: { viewport: { value: 'desktop1280' } },
+  tags: ['!dev'],
+  globals: {},
   render: () => <EditorStory mode="stale-target" />,
 };

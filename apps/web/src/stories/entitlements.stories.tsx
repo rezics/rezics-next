@@ -126,7 +126,7 @@ export const LaterPageEmptyWithNext: Story = {
   },
 };
 export const LongTitlesNarrow: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <EntitlementsStory mode="long" path="/entitlements?cursor=story-signed-current" />,
   play: ready,
 };

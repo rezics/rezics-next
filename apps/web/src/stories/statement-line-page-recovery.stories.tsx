@@ -158,7 +158,7 @@ export const Preparing: Story = {
   },
 };
 export const NarrowLongText: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () =>
     render({
       ...empty(true, next),

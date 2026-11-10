@@ -162,8 +162,8 @@ export const UnavailableRetry: Story = {
     await waitFor(() => expect(canvasElement.ownerDocument.activeElement).toBe(heading));
   },
 };
-export const UnavailableRetryPhone: Story = { ...UnavailableRetry, globals: { viewport: { value: 'phone390' } } };
-export const UnavailableRetryDesktop: Story = { ...UnavailableRetry, globals: { viewport: { value: 'desktop1280' } } };
+export const UnavailableRetryPhone: Story = { name: 'Unavailable Retry', ...UnavailableRetry, globals: {} };
+export const UnavailableRetryDesktop: Story = { tags: ['!dev'], ...UnavailableRetry, globals: {} };
 async function retryAbaStory(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   const retry = await canvas.findByRole('button', { name: m.sources_retry() });
@@ -180,13 +180,15 @@ async function retryAbaStory(canvasElement: HTMLElement) {
   });
 }
 export const UnavailableRetryABAPhone: Story = {
+  name: 'Unavailable Retry ABA',
   args: { scenario: 'unavailable', exact: 'matched', retryAba: true },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => retryAbaStory(canvasElement),
 };
 export const UnavailableRetryABADesktop: Story = {
+  tags: ['!dev'],
   args: { scenario: 'unavailable', exact: 'matched', retryAba: true },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => retryAbaStory(canvasElement),
 };
 

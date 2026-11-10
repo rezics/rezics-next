@@ -67,8 +67,8 @@ function Examples() {
   );
 }
 
-export const Light: Story = { globals: { theme: 'light' }, render: () => <Examples /> };
-export const Dark: Story = { ...Light, globals: { theme: 'dark' } };
+export const Light: Story = { globals: {}, render: () => <Examples /> };
+export const Dark: Story = { ...Light, globals: {} };
 
 export const Footprints: Story = {
   render: () => <Examples />,

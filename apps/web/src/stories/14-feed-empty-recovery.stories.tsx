@@ -248,17 +248,19 @@ const journey: Story['play'] = async ({ canvasElement }) => {
       await expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   }
 };
-export const PhoneLight: Story = { globals: { viewport: { value: 'phone390' }, theme: 'light' }, play: journey };
-export const PhoneDark: Story = { globals: { viewport: { value: 'phone390' }, theme: 'dark' }, play: journey };
-export const DesktopLight: Story = { globals: { viewport: { value: 'desktop1280' }, theme: 'light' }, play: journey };
-export const DesktopDark: Story = { globals: { viewport: { value: 'desktop1280' }, theme: 'dark' }, play: journey };
+export const PhoneLight: Story = { name: 'Default', globals: {}, play: journey };
+export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: journey };
+export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: journey };
+export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: journey };
 export const LongKeyboardPhone: Story = {
+  name: 'Long Keyboard',
   args: { long: true },
-  globals: { viewport: { value: 'phone390' }, theme: 'dark', locale: 'de' },
+  globals: { locale: 'de' },
   play: journey,
 };
 export const LongKeyboardDesktop: Story = {
+  tags: ['!dev'],
   args: { long: true },
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light', locale: 'de' },
+  globals: { locale: 'de' },
   play: journey,
 };

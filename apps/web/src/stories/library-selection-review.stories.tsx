@@ -46,33 +46,39 @@ async function selectedReview(context: { canvasElement: HTMLElement }, unavailab
 }
 
 export const PhoneLight: Story = {
-  globals: { locale: 'en', viewport: { value: 'phone390' }, theme: 'light' },
+  name: 'Default',
+  globals: { locale: 'en' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
 };
 export const PhoneDark: Story = {
-  globals: { locale: 'zh-Hant', viewport: { value: 'phone390' }, theme: 'dark' },
+  name: 'Default',
+  globals: { locale: 'zh-Hant' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
 };
 export const DesktopLight: Story = {
-  globals: { locale: 'ja', viewport: { value: 'desktop1280' }, theme: 'light' },
+  name: 'Default',
+  globals: { locale: 'ja' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
 };
 export const DesktopDark: Story = {
-  globals: { locale: 'en', viewport: { value: 'desktop1280' }, theme: 'dark' },
+  tags: ['!dev'],
+  globals: { locale: 'en' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
 };
 
 export const Desktop1440Light: Story = {
-  globals: { locale: 'zh-Hant', viewport: { value: 'desktop1440' }, theme: 'light' },
+  tags: ['!dev'],
+  globals: { locale: 'zh-Hant' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
 };
 export const Desktop1440Dark: Story = {
-  globals: { locale: 'ja', viewport: { value: 'desktop1440' }, theme: 'dark' },
+  tags: ['!dev'],
+  globals: { locale: 'ja' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
 };
@@ -83,19 +89,7 @@ const unavailableVisit = {
   play: (context: Parameters<typeof selectedReview>[0]) => selectedReview(context, true),
 };
 
-export const StatusUnavailablePhoneLight: Story = {
-  ...unavailableVisit,
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
-};
-export const StatusUnavailablePhoneDark: Story = {
-  ...unavailableVisit,
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
-};
-export const StatusUnavailableDesktopLight: Story = {
-  ...unavailableVisit,
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
-};
-export const StatusUnavailableDesktopDark: Story = {
-  ...unavailableVisit,
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
-};
+export const StatusUnavailablePhoneLight: Story = { name: 'Status Unavailable', ...unavailableVisit, globals: {} };
+export const StatusUnavailablePhoneDark: Story = { tags: ['!dev'], ...unavailableVisit, globals: {} };
+export const StatusUnavailableDesktopLight: Story = { tags: ['!dev'], ...unavailableVisit, globals: {} };
+export const StatusUnavailableDesktopDark: Story = { tags: ['!dev'], ...unavailableVisit, globals: {} };

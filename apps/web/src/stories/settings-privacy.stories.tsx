@@ -20,7 +20,7 @@ const meta = {
   parameters: {
     layout: 'padded',
   },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   decorators: [
     (Story) => (
       <PatternStory visitor="Signed In" path="/settings#privacy">
@@ -165,7 +165,7 @@ async function choosePrivate(canvasElement: HTMLElement) {
 export const Collections: Story = { render: () => <Example /> };
 export const PrivateCollection: Story = { render: () => <Example scenario="private" /> };
 export const PublicChangedPrivate: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <Example />,
   play: async ({ canvasElement }) => {
     const view = await choosePrivate(canvasElement);
@@ -183,7 +183,7 @@ export const PendingSave: Story = {
   },
 };
 export const AmbiguousResponse: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <Example scenario="lost" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -236,7 +236,7 @@ export const EmptyOwnerPage: Story = {
   },
 };
 export const OwnerPageUnavailable: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <Example scenario="owner-page-unavailable" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -271,7 +271,7 @@ export const NextPageRecovered: Story = {
 };
 
 export const CurrentPageReadRefused: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <Example scenario="page-refused" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -326,7 +326,7 @@ export const CurrentRowReadRefused: Story = {
   play: ({ canvasElement }) => assertRowReadRefusal(canvasElement, false),
 };
 export const ReplayCurrentReadRefused: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <Example scenario="replay-refused" />,
   play: ({ canvasElement }) => assertRowReadRefusal(canvasElement, true),
 };
@@ -413,7 +413,7 @@ function RetryDelayExample({ scenario }: { scenario: 'first-page' | 'independent
 }
 
 export const InitialPageRetryDelay: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <RetryDelayExample scenario="first-page" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -464,7 +464,7 @@ export const IndependentRecoveryDelays: Story = {
 };
 
 export const ReplayReadbackRetryDelay: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <RetryDelayExample scenario="readback" />,
   play: async ({ canvasElement }) => {
     const view = await choosePrivate(canvasElement);
@@ -538,7 +538,7 @@ function ListRestartExample({ scenario }: { scenario: 'cursor' | 'exhausted' | '
 }
 
 export const RejectedCursorRestart: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <ListRestartExample scenario="cursor" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -574,7 +574,7 @@ export const ExhaustedListRefresh: Story = {
 };
 
 export const FailedListRefresh: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <ListRestartExample scenario="failed" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -653,7 +653,7 @@ function StandaloneRowExample() {
 
 export const StandaloneInjectedOriginalRetry: Story = {
   render: () => <StandaloneRowExample />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     const select = await view.findByRole('combobox');

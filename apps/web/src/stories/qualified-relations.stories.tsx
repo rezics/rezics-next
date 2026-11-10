@@ -10,7 +10,11 @@ import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 import { longCredit, longCreditPage } from './qualified-relations-data';
 import { m } from '../paraglide/messages.js';
-const meta = { title: 'Subjects/Qualified Relations', id: 'pages-subjects-qualified-relations', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Subjects/Qualified Relations',
+  id: 'pages-subjects-qualified-relations',
+  parameters: { layout: 'fullscreen' },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 function QualifiedRelationsReader({ error = false, long = false }: { error?: boolean; long?: boolean }) {
@@ -60,12 +64,14 @@ const completeCredit: Story['play'] = async ({ canvasElement }) => {
 };
 
 export const CompleteCreditPhone: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  name: 'Complete Credit',
+  globals: {},
   render: () => <QualifiedRelationsReader long />,
   play: completeCredit,
 };
 export const CompleteCreditDesktop: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  tags: ['!dev'],
+  globals: {},
   render: () => <QualifiedRelationsReader long />,
   play: completeCredit,
 };

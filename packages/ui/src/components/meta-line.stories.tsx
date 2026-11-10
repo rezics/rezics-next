@@ -41,15 +41,15 @@ function Examples({ locale }: { locale: 'en' | 'zh-Hans' }) {
 }
 
 export const EnglishLight: Story = {
-  globals: { locale: 'en', theme: 'light' },
+  globals: { locale: 'en' },
   render: () => <Examples locale="en" />,
 };
-export const EnglishDark: Story = { ...EnglishLight, globals: { locale: 'en', theme: 'dark' } };
+export const EnglishDark: Story = { ...EnglishLight, globals: { locale: 'en' } };
 export const SimplifiedChineseLight: Story = {
-  globals: { locale: 'zh-Hans', theme: 'light' },
+  globals: { locale: 'zh-Hans' },
   render: () => <Examples locale="zh-Hans" />,
 };
 export const SimplifiedChineseDark: Story = {
   ...SimplifiedChineseLight,
-  globals: { locale: 'zh-Hans', theme: 'dark' },
+  globals: { locale: 'zh-Hans' },
 };

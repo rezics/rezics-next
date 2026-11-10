@@ -6,7 +6,11 @@ import { LibraryNavigation } from '../library/library-nav';
 import { PatternStory } from './page';
 import collectionRecording from '../kernel/recorded/library-collection.json';
 
-const meta = { title: 'Library/Navigation', id: 'patterns-library-navigation', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Library/Navigation',
+  id: 'patterns-library-navigation',
+  parameters: { layout: 'fullscreen' },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -50,7 +54,6 @@ export const PhoneSelectorOpen: Story = {
   parameters: {
     viewport: {
       viewports: { phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } } },
-      defaultViewport: 'phone390',
     },
   },
   render: () => (

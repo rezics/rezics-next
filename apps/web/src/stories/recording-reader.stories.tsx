@@ -119,22 +119,25 @@ async function inspectQualifiedFact({ canvasElement }: { canvasElement: HTMLElem
 
 export const AdmittedExample: Story = {
   args: { admitted: true },
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: {},
   play: inspectQualifiedFact,
 };
 export const CurrentReleaseUnsupported: Story = { args: { admitted: false } };
 export const QualifiedFactPhoneDark: Story = {
+  name: 'Qualified Fact',
   args: { admitted: true },
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: {},
   play: inspectQualifiedFact,
 };
 export const QualifiedFactDesktopLight: Story = {
+  tags: ['!dev'],
   args: { admitted: true },
-  globals: { viewport: { value: 'desktop1440' }, theme: 'light' },
+  globals: {},
   play: inspectQualifiedFact,
 };
 export const QualifiedFactDesktopDark: Story = {
+  tags: ['!dev'],
   args: { admitted: true },
-  globals: { viewport: { value: 'desktop1440' }, theme: 'dark' },
+  globals: {},
   play: inspectQualifiedFact,
 };

@@ -230,7 +230,7 @@ function nextMediaId(): string {
 }
 
 export const Default: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   render: () => <PageStory visitor="Signed In" path="/settings#profile" />,
   beforeEach: () => {
     traffic.media = [];

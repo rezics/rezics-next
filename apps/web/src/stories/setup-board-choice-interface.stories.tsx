@@ -185,12 +185,12 @@ async function observeGeometry(canvasElement: HTMLElement) {
 }
 export const LongSuppliedLabelsPhone: Story = {
   args: { long: true, selected: true },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => observeGeometry(canvasElement),
 };
 export const LongSuppliedLabelsDesktop: Story = {
   ...LongSuppliedLabelsPhone,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 };
 export const LongSuppliedLabelsRtl: Story = {
   ...LongSuppliedLabelsPhone,
@@ -198,7 +198,7 @@ export const LongSuppliedLabelsRtl: Story = {
 };
 export const LongSuppliedLabelsRtlDesktop: Story = {
   ...LongSuppliedLabelsRtl,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 };
 export const LongSchemeLabelsPhone: Story = {
   ...LongSuppliedLabelsPhone,
@@ -206,7 +206,7 @@ export const LongSchemeLabelsPhone: Story = {
 };
 export const LongSchemeLabelsDesktop: Story = {
   ...LongSchemeLabelsPhone,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 };
 export const LongSchemeLabelsRtl: Story = {
   ...LongSuppliedLabelsRtl,
@@ -214,7 +214,7 @@ export const LongSchemeLabelsRtl: Story = {
 };
 export const LongSchemeLabelsRtlDesktop: Story = {
   ...LongSchemeLabelsRtl,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 };
 export const SuccessfulEmpty: Story = {
   args: { kind: 'scheme', mode: 'empty' },

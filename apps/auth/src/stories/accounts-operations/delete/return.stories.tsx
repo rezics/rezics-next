@@ -5,8 +5,8 @@ import type { AccountDeletionReturnKind } from '../../../account-deletion-return
 import { m } from '../../../paraglide/messages.js';
 import { authLocale, reviewParameters } from '../story';
 
-const phone = { viewport: { ...reviewParameters.viewport, defaultViewport: 'phone390' } };
-const desktop = { viewport: { ...reviewParameters.viewport, defaultViewport: 'desktop1280' } };
+const phone = { viewport: { ...reviewParameters.viewport } };
+const desktop = { viewport: { ...reviewParameters.viewport } };
 
 export default {
   title: 'Account/Delete account return',

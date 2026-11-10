@@ -25,7 +25,7 @@ const meta = {
       },
     },
   },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -170,7 +170,7 @@ export const ShortZeroDuplicatesAndLifecycle: Story = {
 };
 
 export const LongFactsPhone: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => render(long),
   play: async ({ canvasElement }) => {
     const history = region(canvasElement, 'changes');
@@ -207,7 +207,7 @@ export const FirstPageEmpty: Story = {
 };
 
 export const LaterEmptyIndependentRecovery: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => render(later),
   play: async ({ canvasElement }) => {
     for (const kind of ['changes', 'units'] as const) {

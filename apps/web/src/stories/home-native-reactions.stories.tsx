@@ -99,10 +99,10 @@ const meta = {
 } satisfies Meta<typeof PreparedHome>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const CurrentViewerPhone: Story = { globals: { viewport: { value: 'phone390' }, theme: 'light' } };
-export const CurrentViewerPhoneDark: Story = { globals: { viewport: { value: 'phone390' }, theme: 'dark' } };
-export const CurrentViewerDesktop: Story = { globals: { viewport: { value: 'desktop1280' }, theme: 'light' } };
-export const CurrentViewerDesktopDark: Story = { globals: { viewport: { value: 'desktop1280' }, theme: 'dark' } };
+export const CurrentViewerPhone: Story = { name: 'Current Viewer', globals: {} };
+export const CurrentViewerPhoneDark: Story = { tags: ['!dev'], globals: {} };
+export const CurrentViewerDesktop: Story = { tags: ['!dev'], globals: {} };
+export const CurrentViewerDesktopDark: Story = { tags: ['!dev'], globals: {} };
 export const AnonymousPhone: Story = { ...CurrentViewerPhone, args: { anonymous: true } };
 export const AnonymousPhoneDark: Story = { ...CurrentViewerPhoneDark, args: { anonymous: true } };
 export const AnonymousDesktop: Story = { ...CurrentViewerDesktop, args: { anonymous: true } };

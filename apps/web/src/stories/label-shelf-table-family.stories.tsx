@@ -27,7 +27,7 @@ const meta = {
       },
     },
   },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -142,7 +142,7 @@ export const Normal: Story = {
 };
 
 export const NarrowLongText: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <TablePattern longText columns="title,status" />,
   play: async ({ canvasElement }) => {
     const table = await tableReady(canvasElement, 2);

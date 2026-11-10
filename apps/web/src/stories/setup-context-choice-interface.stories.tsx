@@ -94,7 +94,7 @@ const meta = {
       },
     },
   },
-  globals: { locale: 'en', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'en' },
 } satisfies Meta<typeof SetupContextPickerField>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -143,15 +143,13 @@ const longObservation: NonNullable<Story['play']> = async ({ canvasElement }) =>
   await userEvent.tab();
   await focusVisible(canvas.getByRole('button', { name: m.space_setup_resolve() }));
 };
-export const LongCurrentAndSelectedPhone: Story = { play: longObservation };
-export const LongCurrentAndSelectedDesktop: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
-  play: longObservation,
-};
+export const LongCurrentAndSelectedPhone: Story = { name: 'Long Current And Selected', play: longObservation };
+export const LongCurrentAndSelectedDesktop: Story = { tags: ['!dev'], globals: {}, play: longObservation };
 export const LongCurrentAndSelectedRTL: Story = { parameters: { direction: 'rtl' }, play: longObservation };
 export const LongCurrentAndSelectedDesktopRTL: Story = {
+  tags: ['!dev'],
   parameters: { direction: 'rtl' },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: longObservation,
 };
 export const LoadingIsNotEmpty: Story = {

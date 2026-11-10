@@ -201,11 +201,11 @@ async function editPages(canvasElement: HTMLElement) {
   return pages;
 }
 export const FullGroups: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: ({ canvasElement }) => inspectGroups(canvasElement),
 };
 export const Desktop: Story = {
-  globals: { viewport: { value: 'desktop1440', isRotated: false } },
+  globals: {},
   play: ({ canvasElement }) => inspectGroups(canvasElement),
 };
 export const Rtl: Story = { ...FullGroups, args: { rtl: true } };

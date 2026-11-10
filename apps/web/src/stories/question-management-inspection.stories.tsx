@@ -172,7 +172,7 @@ export const UnavailableAdvice: Story = { args: { page: unavailablePage } };
 
 export const Phone390: Story = {
   args: { page: activePage, address: { selectedQuestionId: activeId, cursor: null }, history: captionHistory },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const edit = canvas.getByRole('button', { name: m.realm_question_caption_edit() });
@@ -189,7 +189,7 @@ export const Phone390: Story = {
 
 export const Desktop1280: Story = {
   args: { page, history: captionHistory },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const restore = canvas.getByRole('button', { name: m.realm_question_restore() });

@@ -176,7 +176,7 @@ const connectedLongRecoveryPlay: NonNullable<Story['play']> = async ({ canvasEle
 };
 
 export const LongLocaleBoundedRecoveryPhone: Story = {
-  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  globals: { locale: 'de' },
   render: () => (
     <PatternStory visitor="Signed In" path="/settings?panel=compact#account">
       <SettingsExample recovery longRecovery />
@@ -186,7 +186,7 @@ export const LongLocaleBoundedRecoveryPhone: Story = {
 };
 export const LongLocaleBoundedRecoveryDesktop: Story = {
   ...LongLocaleBoundedRecoveryPhone,
-  globals: { locale: 'fr', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'fr' },
 };
 export const LongLocaleBoundedRecoveryRTL: Story = {
   ...LongLocaleBoundedRecoveryPhone,

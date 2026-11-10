@@ -111,13 +111,13 @@ const render: NonNullable<Story['render']> = (args) => (
 export const LongMultilingualPhone: Story = {
   args: settingsArgs,
   render,
-  globals: { viewport: { value: 'phone390', isRotated: false }, locale: 'zh-Hant' },
+  globals: { locale: 'zh-Hant' },
 };
 
 export const LongMultilingualDesktop: Story = {
   args: settingsArgs,
   render,
-  globals: { viewport: { value: 'desktop1280', isRotated: false }, locale: 'en' },
+  globals: { locale: 'en' },
 };
 
 export const ManagerWithoutPostPermission: Story = {

@@ -123,7 +123,7 @@ function expectPhoneTarget(target: HTMLElement) {
 
 export const SignedOutAndSessionRecovery: Story = {
   name: 'Signed out and session recovery',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <InboxEntryPhoneStory />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

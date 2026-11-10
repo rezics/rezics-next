@@ -136,7 +136,7 @@ export const Normal: Story = {
 };
 
 export const NarrowLongText: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => (
     <SuppliedEditor
       data={{

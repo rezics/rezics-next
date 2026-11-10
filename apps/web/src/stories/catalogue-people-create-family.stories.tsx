@@ -322,22 +322,16 @@ export const PersonInitialFamily: Story = {
 export const OrganizationInitialFamily: Story = {
   play: async ({ canvasElement }) => family(first(canvasElement), 'schema:Organization'),
 };
-export const PersonPhone390: Story = {
-  ...PersonInitialFamily,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
-};
-export const OrganizationDesktop1280: Story = {
-  ...OrganizationInitialFamily,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
-};
+export const PersonPhone390: Story = { name: 'Person', ...PersonInitialFamily, globals: {} };
+export const OrganizationDesktop1280: Story = { name: 'Organization', ...OrganizationInitialFamily, globals: {} };
 export const LongPersonPhone390RTL: Story = {
   args: { variant: 'long', rtl: true },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => family(first(canvasElement), 'schema:Person', true),
 };
 export const LongOrganizationDesktop1280RTL: Story = {
   args: { variant: 'long', rtl: true },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => family(first(canvasElement), 'schema:Organization', true),
 };
 export const IndependentSuppliedInstances: Story = {
@@ -471,19 +465,13 @@ export const CreationReaderRetirement: Story = {
   },
 };
 
-export const PersonDesktop1280: Story = {
-  ...PersonInitialFamily,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
-};
-export const OrganizationPhone390: Story = {
-  ...OrganizationInitialFamily,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
-};
+export const PersonDesktop1280: Story = { tags: ['!dev'], ...PersonInitialFamily, globals: {} };
+export const OrganizationPhone390: Story = { tags: ['!dev'], ...OrganizationInitialFamily, globals: {} };
 export const LongPersonDesktop1280RTL: Story = {
   ...LongPersonPhone390RTL,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 };
 export const LongOrganizationPhone390RTL: Story = {
   ...LongOrganizationDesktop1280RTL,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
 };

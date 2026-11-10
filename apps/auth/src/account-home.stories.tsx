@@ -10,7 +10,7 @@ import './styles.css';
 export default {
   title: 'Pages/Auth/Account home',
   parameters: reviewParameters,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   decorators: [
     (Story: () => React.ReactNode, context: { globals: Record<string, unknown> }) => {
       initializeDocumentLocale(String(context.globals.locale ?? 'en'));
@@ -92,7 +92,7 @@ export const Denied = { render: () => <DeniedPage /> };
 export const Unavailable = { render: () => <UnavailablePage /> };
 export const CurrentReadReplacement = { render: () => <ReplacementPage /> };
 
-const phoneDark = { theme: 'dark', viewport: { value: 'phone390', isRotated: false } };
+const phoneDark = {};
 export const ReadyPhoneDark = { ...Ready, globals: phoneDark };
 export const MissingEmailPhoneDark = { ...ReadyWithoutEmail, globals: phoneDark };
 export const LoadingPhoneDark = { ...Loading, globals: phoneDark };

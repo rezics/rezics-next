@@ -99,7 +99,7 @@ async function recoveryView(canvasElement: HTMLElement) {
 
 export const Pending: Story = {
   render: () => <Example scenario="pending" />,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const view = await recoveryView(canvasElement);
     await expect(view.getByRole('status')).toHaveTextContent(m.settings_sections_loading());
@@ -111,7 +111,7 @@ export const Pending: Story = {
 
 export const SettledError: Story = {
   render: () => <Example scenario="error" />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const view = await recoveryView(canvasElement);
     await expect(view.getByRole('status')).toHaveTextContent(m.settings_session_unavailable());
@@ -124,7 +124,7 @@ export const SettledError: Story = {
 
 export const RetryFails: Story = {
   render: () => <Example scenario="retry-fails" />,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const view = await recoveryView(canvasElement);
     const retry = view.getByRole('button', { name: m.settings_retry() });
@@ -139,7 +139,7 @@ export const RetryFails: Story = {
 
 export const RecoveredSignedOut: Story = {
   render: () => <Example scenario="signed-out" />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const view = await recoveryView(canvasElement);
     await userEvent.click(view.getByRole('button', { name: m.settings_retry() }));
@@ -262,7 +262,7 @@ export const RetainedSessionCannotReviveEditors: Story = {
       </StrictMode>
     </PatternStory>
   ),
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const main = within(await canvas.findByRole('main'));
@@ -290,7 +290,7 @@ export const ReadWithoutWriteCredential: Story = {
       </StrictMode>
     </PatternStory>
   ),
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const main = within(await canvas.findByRole('main'));

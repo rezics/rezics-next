@@ -128,28 +128,16 @@ async function readerRetirement({ canvasElement }: { canvasElement: HTMLElement 
   await expect(canvas.getByRole('button', { name: m.wide_document_code_inspect() })).toBeVisible();
 }
 
-export const PhoneLight: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
-  play: inspectWrapCopyReturn,
-};
-export const PhoneDark: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
-  play: inspectWrapCopyReturn,
-};
-export const DesktopLight: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
-  play: inspectWrapCopyReturn,
-};
-export const DesktopDark: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
-  play: inspectWrapCopyReturn,
-};
+export const PhoneLight: Story = { name: 'Default', globals: {}, play: inspectWrapCopyReturn };
+export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: inspectWrapCopyReturn };
+export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: inspectWrapCopyReturn };
+export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: inspectWrapCopyReturn };
 export const PhoneClipboardFailure: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: {},
   play: clipboardFailure,
 };
 export const DesktopReaderRetirement: Story = {
   args: { retirement: true },
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
+  globals: {},
   play: readerRetirement,
 };

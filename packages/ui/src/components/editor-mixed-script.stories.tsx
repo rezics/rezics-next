@@ -132,7 +132,7 @@ const latin = createDemo(fromPlainText(latinDominant, 'text'), 'Reading notes', 
 const replace = createDemo(fromPlainText(cjkDominant, 'text'), 'Reading notes', 'zh-Hant');
 
 export const CjkDominantText: Story = {
-  globals: { locale: 'en', theme: 'light', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
   render: () => <cjkText.Demo />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -150,7 +150,7 @@ export const CjkDominantText: Story = {
 };
 
 export const CjkDominantBlocks: Story = {
-  globals: { locale: 'en', theme: 'light', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'en' },
   render: () => <cjkBlock.Demo />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -173,7 +173,7 @@ export const CjkDominantBlocks: Story = {
 };
 
 export const LatinDominant: Story = {
-  globals: { locale: 'zh-Hant', theme: 'light', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'zh-Hant' },
   render: () => <latin.Demo />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -188,7 +188,7 @@ export const LatinDominant: Story = {
 };
 
 export const ReplaceMixedSelection: Story = {
-  globals: { locale: 'en', theme: 'light', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
   render: () => <replace.Demo />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);

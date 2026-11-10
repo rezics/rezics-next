@@ -45,7 +45,7 @@ function canvas(theme: 'light' | 'dark', children: ReactNode) {
 }
 
 export const PhoneCurrentReview = {
-  parameters: { viewport: { defaultViewport: 'phone390' } },
+  parameters: { viewport: {} },
   render: () => (
     <AuthStory>
       {canvas(
@@ -64,7 +64,7 @@ export const PhoneCurrentReview = {
 };
 
 export const DesktopUnknownReturn = {
-  parameters: { viewport: { defaultViewport: 'desktop1280' } },
+  parameters: { viewport: {} },
   render: () => (
     <AuthStory mode="unknown">
       {canvas(

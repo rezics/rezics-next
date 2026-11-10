@@ -109,7 +109,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const SignedIn: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: new RegExp(`^${m.reaction_upvote()}\\s`) }));
@@ -137,11 +137,11 @@ export const SignedOut: Story = {
   },
 };
 export const Voted: Story = { args: { voted: true } };
-export const PlainReply: Story = { args: { plain: true, voted: true }, globals: { viewport: { value: 'phone390' } } };
-export const UnavailableVotes: Story = { args: { unavailable: true }, globals: { viewport: { value: 'phone390' } } };
+export const PlainReply: Story = { args: { plain: true, voted: true }, globals: {} };
+export const UnavailableVotes: Story = { args: { unavailable: true }, globals: {} };
 export const ExactCountsPhone: Story = {
   args: { countInspection: true, plain: true },
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const upvoteCount = 1234567890123;
@@ -161,7 +161,7 @@ export const ExactCountsPhone: Story = {
 };
 export const ExactCountsDesktopDark: Story = {
   ...ExactCountsPhone,
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
+  globals: {},
 };
 export const CopiedLink: Story = {
   play: async ({ canvasElement }) => {
@@ -194,15 +194,15 @@ export const Refused: Story = {
     );
   },
 };
-export const Phone: Story = { ...SignedIn, globals: { viewport: { value: 'phone390' }, theme: 'light' } };
+export const Phone: Story = { ...SignedIn, globals: {} };
 export const PhoneDarkLongStrings: Story = {
   ...SignedIn,
   args: { long: true },
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: {},
 };
 export const DesktopDarkKeyboard: Story = {
   args: { long: true },
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const up = await canvas.findByRole('button', { name: new RegExp(`^${m.reaction_upvote()}\\s`) });

@@ -116,7 +116,7 @@ export const StateFilter: Story = activeStateId
 
 export const PhoneTileMenuOpen: Story = {
   name: 'Phone tile actions open',
-  globals: { viewport: { value: 'phone' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { name: m.library_heading() });

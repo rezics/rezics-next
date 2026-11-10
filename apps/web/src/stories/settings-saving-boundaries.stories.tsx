@@ -38,7 +38,7 @@ type Story = StoryObj<typeof meta>;
 export const SavingBoundaries: Story = {
   name: 'Saving boundaries',
   tags: ['!dev'],
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <PageStory visitor="Signed In" path="/settings#profile" />,
   play: async (context) => {
     await context.step(

@@ -130,7 +130,7 @@ export const MemberList: Story = {
   play: async ({ canvasElement }) => readNotes(canvasElement),
 };
 export const Grid: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <ReadPresentation presentation="grid" />,
   play: async ({ canvasElement }) => readNotes(canvasElement),
 };

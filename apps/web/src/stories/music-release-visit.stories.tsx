@@ -150,16 +150,12 @@ export const IndependentStreamRetryAndPrevious: Story = {
     await expect(canvasElement.querySelectorAll('[data-slot="music-release-row"]').length).toBe(2);
   },
 };
-export const PhoneLight: Story = {
-  globals: { theme: 'light', viewport: { value: 'phone390', isRotated: false } },
-};
-export const DesktopDark: Story = {
-  globals: { theme: 'dark', viewport: { value: 'desktop1440', isRotated: false } },
-};
+export const PhoneLight: Story = { name: 'Default', globals: {} };
+export const DesktopDark: Story = { tags: ['!dev'], globals: {} };
 export const OrdinarySignedIn: Story = { args: { visitor: 'Signed In' } };
 export const TraditionalChinesePhoneDark: Story = {
-  globals: { locale: 'zh-Hant', theme: 'dark', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'zh-Hant' },
 };
 export const JapanesePhoneLight: Story = {
-  globals: { locale: 'ja', theme: 'light', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'ja' },
 };

@@ -79,7 +79,7 @@ export const Denied: Story = { args: { scenario: 'denied' } };
 export const InvalidRelease: Story = { args: { scenario: 'invalid' } };
 export const UnavailableRetry: Story = {
   args: { scenario: 'unavailable' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: {
     docs: {
       description: {
@@ -246,7 +246,7 @@ function LongGuideStory() {
 
 export const LongNamesAndPhoneKeyboard: Story = {
   render: () => <LongGuideStory />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: {
     docs: {
       description: {

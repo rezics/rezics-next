@@ -273,35 +273,35 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const FullControlsPhone: Story = { globals: { locale: 'en', viewport: { value: 'phone390' } } };
-export const LongGermanPhone: Story = { globals: { locale: 'de', viewport: { value: 'phone390' } } };
+export const FullControlsPhone: Story = { globals: { locale: 'en' } };
+export const LongGermanPhone: Story = { globals: { locale: 'de' } };
 export const DarkGermanPhone: Story = {
-  globals: { theme: 'dark', locale: 'de', viewport: { value: 'phone390' } },
+  globals: { locale: 'de' },
 };
 export const TraditionalChineseRtl: Story = {
   args: { direction: 'rtl' },
-  globals: { locale: 'zh-Hant', viewport: { value: 'phone390' } },
+  globals: { locale: 'zh-Hant' },
 };
 export const MultipleInstances: Story = {
   args: { variant: 'multiple' },
-  globals: { locale: 'en', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'en' },
 };
 export const MultipleInstancesRtl: Story = {
   args: { variant: 'multiple', direction: 'rtl' },
-  globals: { locale: 'zh-Hant', viewport: { value: 'phone390' } },
+  globals: { locale: 'zh-Hant' },
 };
 export const SparseContinuation: Story = {
   args: { variant: 'sparse', sort: 'active' },
-  globals: { locale: 'en', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
 };
 export const FinalEmpty: Story = { args: { variant: 'final' } };
 export const SuppliedUnavailable: Story = {
   args: { variant: 'unavailable' },
-  globals: { locale: 'zh-Hant', viewport: { value: 'phone390' } },
+  globals: { locale: 'zh-Hant' },
 };
 export const DeletedAuthor: Story = {
   args: { variant: 'deleted-author' },
-  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  globals: { locale: 'de' },
 };
 export const NewWithoutRankExplanation: Story = { args: { sort: 'new' } };
 export const ExactCursorNavigation: Story = { ...continuation };
@@ -371,17 +371,17 @@ function localControls(failed: boolean) {
 }
 
 export const CopyAndManualControls: Story = {
-  globals: { locale: 'en', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
   beforeEach: clipboardFixture(false),
   play: localControls(false),
 };
 export const ClipboardUnavailable: Story = {
   args: { direction: 'rtl' },
-  globals: { locale: 'zh-Hant', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'zh-Hant' },
   beforeEach: clipboardFixture(true),
   play: localControls(true),
 };
 export const ClipboardUnavailableRtlPhone: Story = {
   ...ClipboardUnavailable,
-  globals: { theme: 'dark', locale: 'zh-Hant', viewport: { value: 'phone390' } },
+  globals: { locale: 'zh-Hant' },
 };

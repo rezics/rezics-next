@@ -123,7 +123,7 @@ export const Invalid: Story = {
 };
 export const StaleDraft: Story = {
   args: { scenario: 'stale' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
     await phoneControls(canvasElement);
@@ -358,7 +358,7 @@ export const IndependentForms: Story = {
 
 export const LongTextPhone: Story = {
   render: () => <IndependentTermsStory />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const languages = await within(canvasElement).findAllByRole('combobox', { name: m.catalogue_create_language() });
     const [left] = independentArticles(canvasElement);

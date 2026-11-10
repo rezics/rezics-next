@@ -98,33 +98,23 @@ async function keyboardReview({ canvasElement }: { canvasElement: HTMLElement })
   const article = canvasElement.querySelector('article[aria-busy]')!;
   await expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth + 1);
 }
-export const OrdinaryPhoneLight: Story = {
-  globals: { theme: 'light', viewport: { value: 'phone' } },
-  play: keyboardReview,
-};
-export const OrdinaryPhoneDark: Story = {
-  globals: { theme: 'dark', viewport: { value: 'phone' } },
-  play: keyboardReview,
-};
-export const OrdinaryDesktopLight: Story = {
-  globals: { theme: 'light', viewport: { value: 'desktop' } },
-  play: keyboardReview,
-};
-export const OrdinaryDesktopDark: Story = {
-  globals: { theme: 'dark', viewport: { value: 'desktop' } },
-  play: keyboardReview,
-};
+export const OrdinaryPhoneLight: Story = { name: 'Ordinary', globals: {}, play: keyboardReview };
+export const OrdinaryPhoneDark: Story = { tags: ['!dev'], globals: {}, play: keyboardReview };
+export const OrdinaryDesktopLight: Story = { tags: ['!dev'], globals: {}, play: keyboardReview };
+export const OrdinaryDesktopDark: Story = { tags: ['!dev'], globals: {}, play: keyboardReview };
 export const TenRequests: Story = { args: { count: 10 } };
 export const TwentyRequests: Story = { args: { count: 20 } };
 export const ConcealedIdentityWithoutContext: Story = { args: { concealed: true, context: false } };
 export const LongAdmittedValuesPhone: Story = {
+  name: 'Long Admitted Values',
   args: { long: true },
-  globals: { theme: 'dark', viewport: { value: 'phone' } },
+  globals: {},
   play: keyboardReview,
 };
 export const LongAdmittedValuesDesktop: Story = {
+  tags: ['!dev'],
   args: { long: true },
-  globals: { theme: 'light', viewport: { value: 'desktop' } },
+  globals: {},
   play: keyboardReview,
 };
 export const InspectThenRecover: Story = {

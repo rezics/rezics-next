@@ -26,7 +26,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const SignInDiscoveryFailure: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'light', locale: 'en' },
+  globals: { locale: 'en' },
   render: () => (
     <DependencyUnavailablePage
       locale="en"
@@ -37,7 +37,7 @@ export const SignInDiscoveryFailure: Story = {
 };
 
 export const ConsumedCallbackRecovery: Story = {
-  globals: { viewport: { value: 'desktop1440' }, theme: 'dark', locale: 'ja' },
+  globals: { locale: 'ja' },
   render: () => (
     <DependencyUnavailablePage
       locale="ja"
@@ -95,7 +95,7 @@ function PrivateLoaderBoundary({ restored }: { restored: boolean }) {
 }
 
 export const PrivateLoaderOutage: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'dark', locale: 'en' },
+  globals: { locale: 'en' },
   render: () => <PrivateLoaderBoundary restored={false} />,
   play: async ({ canvasElement }) => {
     const page = within(canvasElement);
@@ -109,7 +109,7 @@ export const PrivateLoaderOutage: Story = {
 };
 
 export const RestoredDependency: Story = {
-  globals: { viewport: { value: 'desktop1440' }, theme: 'light', locale: 'en' },
+  globals: { locale: 'en' },
   render: () => <PrivateLoaderBoundary restored />,
   play: async ({ canvasElement }) => {
     const page = within(canvasElement);

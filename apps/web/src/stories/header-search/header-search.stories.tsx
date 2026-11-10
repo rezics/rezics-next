@@ -136,7 +136,7 @@ type Story = StoryObj<typeof meta>;
 
 /** Keeps scoped names, field purpose and shortcut help aligned in the real presenter. */
 export const ScopedAccessibleNaming: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   render: () => <Example scope={scope} keyboardShortcut />,
   play: async (context) => {
     const canvas = within(context.canvasElement);
@@ -368,7 +368,7 @@ export const CommunitiesClosed: Story = {
   },
 };
 export const PhoneSheet: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   render: () => <Example presentation="sheet" />,
   play: async (context) => {
     const { canvas, input } = await expand(context);
@@ -382,7 +382,7 @@ export const PhoneSheet: Story = {
 };
 
 export const PhoneSheetKeyboardSubmission: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   args: { onNavigate: fn() },
   render: (args) => (
     <Example presentation="sheet" fields={[['type', 'schema:Book']]} onNavigate={(href) => args.onNavigate?.(href)} />

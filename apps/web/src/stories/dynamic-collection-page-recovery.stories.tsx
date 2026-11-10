@@ -151,7 +151,7 @@ export const LaterMembers: Story = {
 };
 export const RepeatedFiltersAndKeyboardRecovery: Story = {
   name: 'Repeated filters, named keyboard recovery',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () =>
     render({ cursor, next, filter, title: Array(12).fill(m.library_dynamic_everything()).join(' · ') }, search),
   play: async (context) => {

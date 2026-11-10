@@ -134,27 +134,27 @@ const inspectByKeyboard: NonNullable<Story['play']> = async ({ canvasElement }) 
 };
 
 export const AdmittedFile: Story = {
-  globals: { locale: 'en', theme: 'light', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
 };
 export const TraditionalChinesePhoneDark: Story = {
-  globals: { locale: 'zh-Hant', theme: 'dark', viewport: { value: 'phone390' } },
+  globals: { locale: 'zh-Hant' },
 };
 export const SimplifiedChineseDesktopLight: Story = {
-  globals: { locale: 'zh-Hans', theme: 'light', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'zh-Hans' },
 };
 export const JapaneseDesktopDark: Story = {
-  globals: { locale: 'ja', theme: 'dark', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'ja' },
 };
 export const UnsupportedFileType: Story = {
   args: { unsupported: true },
-  globals: { locale: 'en', theme: 'dark', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
 };
 export const LongMetadataAndKeyboardInspection: Story = {
   args: { longValue: true },
-  globals: { locale: 'de', theme: 'light', viewport: { value: 'phone390' } },
+  globals: { locale: 'de' },
   play: inspectByKeyboard,
 };
 export const AdmittedEmptyPage: Story = {
   args: { empty: true },
-  globals: { locale: 'es', theme: 'dark', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'es' },
 };

@@ -190,7 +190,7 @@ export const PreparedToUseful: Story = {
   parameters: { __id: 'pages-zones-prepared-to-useful-completion' },
   name: 'Prepared page reaches a useful route',
   play: preparedToUsefulReady,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   render: () => <PageStory visitor="Signed Out" path={`/zones/${withinBudgetZone}`} />,
 };
 
@@ -198,21 +198,21 @@ export const SubjectReturn: Story = {
   parameters: { __id: 'pages-zones-subject-return-to-route' },
   name: 'Direct subject returns to the Zone route',
   play: subjectReturnReady,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}/subjects/${subject}`} />,
 };
 
 export const SubjectReturnPhone: Story = {
   name: 'Direct subject return on a narrow layout',
   play: subjectReturnReady,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}/subjects/${subject}`} />,
 };
 
 export const KeyboardNavigation: Story = {
   name: 'Keyboard Zone navigation',
   play: keyboardNavigationReady,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 
@@ -233,58 +233,58 @@ export const TypeListFull: Story = {
   parameters: { __id: 'pages-zones-type-list-full-page-on-route' },
   name: 'TypeList full page stays on the Zone route',
   play: typeListFullReady,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}?list=books`} />,
 };
 
 export const TypeListFullPhone: Story = {
   name: 'TypeList full page on a narrow layout',
   play: typeListFullReady,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}?list=books`} />,
 };
 
 export const HomePhone: Story = {
   name: 'Static home on a narrow layout',
   play: staticHomeReady,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 
 export const HomeLocales: Story = {
   name: 'Static home in every launch locale',
   play: staticHomeReady,
-  globals: { locale: 'zh-Hant', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'zh-Hant' },
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 
 export const HomeDe: Story = {
-  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  globals: { locale: 'de' },
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 export const HomeJa: Story = {
-  globals: { locale: 'ja', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'ja' },
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 export const HomeKo: Story = {
-  globals: { locale: 'ko', viewport: { value: 'phone390' } },
+  globals: { locale: 'ko' },
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 export const HomeFr: Story = {
-  globals: { locale: 'fr', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'fr' },
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 export const HomeEs: Story = {
-  globals: { locale: 'es', viewport: { value: 'phone390' } },
+  globals: { locale: 'es' },
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 export const HomeZhHans: Story = {
-  globals: { locale: 'zh-Hans', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'zh-Hans' },
   play: staticHomeReady,
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };

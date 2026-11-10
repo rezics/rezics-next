@@ -161,21 +161,21 @@ async function refreshWithdrawnMeasure({ canvasElement }: { canvasElement: HTMLE
 
 export const RefreshWithoutDraft: Story = {
   args: { scenario: 'refresh' },
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: {},
   play: refreshWithoutDraft,
 };
 export const PreserveVolumeDraft: Story = {
   args: { scenario: 'draft' },
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: {},
   play: preserveVolumeDraft,
 };
 export const CorrectChangedRules: Story = {
   args: { scenario: 'correction' },
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
+  globals: {},
   play: correctChangedRules,
 };
 export const RefreshWithdrawnMeasure: Story = {
   args: { scenario: 'withdrawn' },
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
+  globals: {},
   play: refreshWithdrawnMeasure,
 };

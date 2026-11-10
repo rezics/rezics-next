@@ -127,13 +127,13 @@ async function readingExample(canvasElement: HTMLElement) {
 }
 
 export const Phone390: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: {},
   render: () => <Showcase layout="list" />,
   play: async ({ canvasElement }) => readingExample(canvasElement),
 };
 
 export const Desktop1280: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
+  globals: {},
   render: () => <Showcase layout="grid" />,
   play: async ({ canvasElement }) => readingExample(canvasElement),
 };

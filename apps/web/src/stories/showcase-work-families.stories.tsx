@@ -282,14 +282,16 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Phone390: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  name: 'Default',
+  globals: {},
   play: async ({ canvasElement }) => {
     await expectFamilies(canvasElement);
   },
 };
 
 export const Desktop1280: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
+  tags: ['!dev'],
+  globals: {},
   play: async ({ canvasElement }) => {
     await expectFamilies(canvasElement);
   },

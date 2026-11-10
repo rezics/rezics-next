@@ -6,7 +6,11 @@ import { getLocale } from '../../../../paraglide/runtime.js';
 import { AccountManagementPage } from '../../../../accounts/management/pages';
 import { PageStory, PatternStory } from '../../../page';
 import { ready, reviewParameters } from '../support';
-const meta = { title: 'Account/Management/Account', id: 'pages-account-management-account', parameters: reviewParameters } satisfies Meta;
+const meta = {
+  title: 'Account/Management/Account',
+  id: 'pages-account-management-account',
+  parameters: reviewParameters,
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 function render(mode: Parameters<typeof selectManagementStory>[0], self = false) {
@@ -107,12 +111,12 @@ async function accountControls({ canvasElement }: { canvasElement: HTMLElement }
 }
 export const LongSelfPhoneRtl: Story = {
   render: () => suppliedAccount(),
-  globals: { locale: 'de', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'de' },
   play: accountControls,
 };
 export const LongSelfDesktopRtl: Story = {
   ...LongSelfPhoneRtl,
-  globals: { locale: 'de', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'de' },
 };
 export const OperatorIdentityUnavailable: Story = {
   ...LongSelfPhoneRtl,

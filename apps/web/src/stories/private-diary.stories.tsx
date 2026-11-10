@@ -21,7 +21,7 @@ const meta = {
       },
     },
   },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -67,4 +67,4 @@ function panel(value: ReportedYearSummary | null) {
 export const YearOnlyUnallocated: Story = { render: () => panel(summary) };
 export const EmptyYear: Story = { render: () => panel({ ...summary, ...counts(), monthUnallocated: counts() }) };
 export const PreparingOrUnavailable: Story = { render: () => panel(null) };
-export const Phone: Story = { ...YearOnlyUnallocated, globals: { viewport: { value: 'phone390', isRotated: false } } };
+export const Phone: Story = { ...YearOnlyUnallocated, globals: {} };

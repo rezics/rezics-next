@@ -3,8 +3,8 @@ import { OrganizationCreateReturnView } from '../../../organization-create-retur
 import { AuthStory, authLocale, reviewParameters } from '../story';
 import type { OrganizationCreateReturnViewProps } from '../../../organization-create-return-view';
 
-const phoneViewport = { viewport: { ...reviewParameters.viewport, defaultViewport: 'phone390' } };
-const desktopViewport = { viewport: { ...reviewParameters.viewport, defaultViewport: 'desktop1280' } };
+const phoneViewport = { viewport: { ...reviewParameters.viewport } };
+const desktopViewport = { viewport: { ...reviewParameters.viewport } };
 
 export default {
   title: 'Account/Organization creation return',

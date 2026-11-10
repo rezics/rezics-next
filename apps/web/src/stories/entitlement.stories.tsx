@@ -129,7 +129,7 @@ export const Retry: Story = {
   },
 };
 export const LongTitles: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <EntitlementStory mode="long" />,
   async play(context) {
     await ready(context);

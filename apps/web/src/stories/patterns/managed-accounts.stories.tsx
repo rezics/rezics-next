@@ -168,7 +168,7 @@ export const IndependentCursors: Story = {
 };
 export const PartialPreparing: Story = {
   args: { scenario: 'preparing' },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.managed_preparing_text());
@@ -179,7 +179,7 @@ export const PartialPreparing: Story = {
 };
 export const ReconcilingAndUnavailableIdentity: Story = {
   args: { scenario: 'reconciling' },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.settings_managed_identity_unavailable());
@@ -202,7 +202,7 @@ export const ReconcilingAndUnavailableIdentity: Story = {
 
 export const InitialRetryDelay: Story = {
   args: { scenario: 'initial-delay' },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const alert = await canvas.findByRole('alert');
@@ -221,7 +221,7 @@ export const InitialRetryDelay: Story = {
 
 export const InitialUnavailable: Story = {
   args: { scenario: 'initial-unavailable' },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const alert = within(await canvas.findByRole('alert'));
@@ -236,7 +236,7 @@ export const InitialUnavailable: Story = {
 
 export const IndependentRetryDelays: Story = {
   args: { scenario: 'feed-delays' },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
@@ -272,7 +272,7 @@ export const IndependentRetryDelays: Story = {
 
 export const DenialClearsInventory: Story = {
   args: { scenario: 'denied' },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
@@ -287,7 +287,7 @@ export const DenialClearsInventory: Story = {
 
 export const InvalidCursorFirstPageRecovery: Story = {
   args: { scenario: 'invalid-cursor' },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
@@ -316,7 +316,7 @@ export const InvalidCursorFirstPageRecovery: Story = {
 
 export const StaleCursorIndependentRecovery: Story = {
   args: { scenario: 'stale-cursor' },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
@@ -341,7 +341,7 @@ export const StaleCursorIndependentRecovery: Story = {
 
 export const FailedFirstPageRecovery: Story = {
   args: { scenario: 'restart-unavailable' },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
@@ -366,7 +366,7 @@ export const FailedFirstPageRecovery: Story = {
 
 export const DeniedFirstPageClearsInventory: Story = {
   args: { scenario: 'restart-denied' },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
@@ -494,20 +494,20 @@ const longRecoveryPlay: NonNullable<Story['play']> = async ({ canvasElement }) =
 };
 
 export const LongLocaleBoundedRecoveryPhone: Story = {
-  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  globals: { locale: 'de' },
   render: () => <LongInventoryExample />,
   play: longRecoveryPlay,
 };
 export const LongLocaleBoundedRecoveryDesktop: Story = {
   ...LongLocaleBoundedRecoveryPhone,
-  globals: { locale: 'fr', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'fr' },
 };
 export const LongLocaleBoundedRecoveryRTL: Story = {
   ...LongLocaleBoundedRecoveryPhone,
   render: () => <LongInventoryExample rtl />,
 };
 export const LongLocalePreparing: Story = {
-  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  globals: { locale: 'de' },
   render: () => <LongInventoryExample preparing />,
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByText(m.managed_preparing_text());
@@ -515,7 +515,7 @@ export const LongLocalePreparing: Story = {
   },
 };
 export const LongLocaleEmpty: Story = {
-  globals: { locale: 'fr', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'fr' },
   render: () => <LongInventoryExample empty />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -526,7 +526,7 @@ export const LongLocaleEmpty: Story = {
   },
 };
 export const LongLocaleInventoryWait: Story = {
-  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  globals: { locale: 'de' },
   render: () => <LongInventoryExample waiting rtl />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -543,7 +543,7 @@ export const LongLocaleInventoryWait: Story = {
 };
 
 export const LongLocaleBusy: Story = {
-  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  globals: { locale: 'de' },
   render: () => <LongInventoryExample busy rtl />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

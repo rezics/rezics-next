@@ -194,7 +194,6 @@ function authorProgressStory(
   heading: string,
   options: {
     visitor?: 'Signed In' | 'Signed Out';
-    defaultViewport?: 'phone390' | 'desktop1280';
     holdRead?: boolean;
   } = {},
 ): Story {
@@ -208,7 +207,6 @@ function authorProgressStory(
       />
     ),
     parameters: {
-      ...(options.defaultViewport ? { viewport: { defaultViewport: options.defaultViewport } } : {}),
       docs: {
         description: {
           story:
@@ -263,11 +261,5 @@ export const AuthorStatusCheckPending: Story = {
     await expect(await canvas.findByRole('button', { name: m.author_erasure_checking() })).toBeDisabled();
   },
 };
-export const AuthorPermissionPhone390: Story = authorProgressStory(terminalOperation(7), m.author_erasure_failed(), {
-  defaultViewport: 'phone390',
-});
-export const AuthorDependencyDesktop1280: Story = authorProgressStory(
-  terminalOperation(14),
-  m.author_erasure_failed(),
-  { defaultViewport: 'desktop1280' },
-);
+export const AuthorPermissionPhone390: Story = authorProgressStory(terminalOperation(7), m.author_erasure_failed());
+export const AuthorDependencyDesktop1280: Story = authorProgressStory(terminalOperation(14), m.author_erasure_failed());

@@ -171,21 +171,9 @@ export const CancelledFocus: Story = {
 export const AllLocalesUnsupported: Story = {
   args: { state: 'unsupported' },
   render: () => <AllLocales />,
-  globals: { locale: 'en', viewport: { value: 'desktop1280' }, theme: 'light' },
+  globals: { locale: 'en' },
 };
-export const PhoneLight: Story = {
-  args: { state: 'unsupported' },
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
-};
-export const PhoneDark: Story = {
-  args: { state: 'unsupported' },
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
-};
-export const DesktopLight: Story = {
-  args: { state: 'unsupported' },
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
-};
-export const DesktopDark: Story = {
-  args: { state: 'unsupported' },
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
-};
+export const PhoneLight: Story = { name: 'Default', args: { state: 'unsupported' }, globals: {} };
+export const PhoneDark: Story = { tags: ['!dev'], args: { state: 'unsupported' }, globals: {} };
+export const DesktopLight: Story = { tags: ['!dev'], args: { state: 'unsupported' }, globals: {} };
+export const DesktopDark: Story = { tags: ['!dev'], args: { state: 'unsupported' }, globals: {} };

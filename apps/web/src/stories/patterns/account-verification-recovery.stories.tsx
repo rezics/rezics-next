@@ -267,7 +267,7 @@ export const ReadUnavailable: Story = {
 };
 
 export const AstralBoundary: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   args: { scenario: 'astral', onRequest: fn() },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
@@ -312,7 +312,7 @@ export const AstralBoundary: Story = {
 };
 
 export const InvalidDraftBeforeCommand: Story = {
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   args: { scenario: 'invalid', onRequest: fn() },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
@@ -357,7 +357,7 @@ export const InvalidDraftBeforeCommand: Story = {
 };
 
 export const FiveLinkKeyboardEditing: Story = {
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   args: { scenario: 'links', onRequest: fn() },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
@@ -420,7 +420,7 @@ export const FiveLinkKeyboardEditing: Story = {
 
 export const FiveLinkKeyboardEditingPhone: Story = {
   ...FiveLinkKeyboardEditing,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
 };
 
 async function showRetryAfter(canvasElement: HTMLElement, withdraw = false) {

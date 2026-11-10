@@ -35,7 +35,7 @@ const meta = {
       },
     },
   },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   beforeEach() {
     setLibraryProgressStoryMode('recorded');
     return () => setLibraryProgressStoryMode('recorded');
@@ -251,7 +251,7 @@ const longHistoryPage: ProgressPageData = {
 
 export const NarrowOriginalHistory: Story = {
   name: 'Narrow original cursor history with unknown meaning (bounded view)',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: {
     docs: {
       description: {
@@ -531,7 +531,7 @@ const constructedRouteDescription =
 
 export const NarrowOriginalHistoryRoute: Story = {
   name: 'Long original cursor history through the detail route',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: { docs: { description: { story: constructedRouteDescription } } },
   play: async (context) => {
     await libraryProgressSessionReady(context);

@@ -328,8 +328,8 @@ async function readingJourney({ canvasElement }: { canvasElement: HTMLElement })
 
 export const Overview: Story = { args: { view: 'overview' }, play: readingJourney };
 export const Details: Story = { args: { view: 'details', signedIn: true }, play: readingJourney };
-export const NarrowOverview: Story = { ...Overview, globals: { viewport: { value: 'phone320', isRotated: false } } };
-export const NarrowDetails: Story = { ...Details, globals: { viewport: { value: 'phone320', isRotated: false } } };
+export const NarrowOverview: Story = { ...Overview, globals: {} };
+export const NarrowDetails: Story = { ...Details, globals: {} };
 export const EnlargedOverview: Story = { ...NarrowOverview, args: { view: 'overview', enlarged: true } };
 export const EnlargedRtlDetails: Story = {
   ...NarrowDetails,

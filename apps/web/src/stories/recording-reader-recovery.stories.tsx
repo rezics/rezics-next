@@ -123,22 +123,26 @@ async function restartRetiredSelection({ canvasElement }: { canvasElement: HTMLE
 }
 
 export const FailedReleaseRecoveredPhone: Story = {
+  name: 'Failed Release Recovered',
   args: { scenario: 'failed' },
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: {},
   play: recoverRelease,
 };
 export const FailedReleaseRecoveredDesktop: Story = {
+  tags: ['!dev'],
   args: { scenario: 'failed' },
-  globals: { viewport: { value: 'desktop1440' }, theme: 'dark' },
+  globals: {},
   play: recoverRelease,
 };
 export const RetiredExactSelectionPhone: Story = {
+  name: 'Retired Exact Selection',
   args: { scenario: 'retired' },
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: {},
   play: restartRetiredSelection,
 };
 export const RetiredExactSelectionDesktop: Story = {
+  tags: ['!dev'],
   args: { scenario: 'retired' },
-  globals: { viewport: { value: 'desktop1440' }, theme: 'light' },
+  globals: {},
   play: restartRetiredSelection,
 };

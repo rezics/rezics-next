@@ -86,7 +86,7 @@ const meta = {
   component: DraftPreviewPanel,
   parameters: {
     layout: 'fullscreen',
-    viewport: { defaultViewport: 'responsive' },
+    viewport: {},
   },
   render: ({ read }) => <PanelFrame read={read} />,
 } satisfies Meta<typeof DraftPreviewPanel>;

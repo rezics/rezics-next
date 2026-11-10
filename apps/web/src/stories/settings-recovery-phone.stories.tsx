@@ -196,7 +196,7 @@ function expectPhoneTarget(target: HTMLElement, boundary: HTMLElement) {
 export const UnavailableToSignedInRecovery: Story = {
   name: 'Unavailable to signed-in recovery',
   tags: ['!dev'],
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <SettingsRecoveryStory />,
   play: async ({ canvasElement }) => {
     const main = within(await within(canvasElement).findByRole('main'));

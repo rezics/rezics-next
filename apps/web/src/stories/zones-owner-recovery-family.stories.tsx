@@ -13,8 +13,8 @@ import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
 const longReturnTo = `/ja/my/zones/new?name=${'読書と旅の記録 مكتبة الرحلات & "<書棚>" +/#?'.repeat(8)}&cursor=opaque+/cursor==#names`;
-const desktop = { viewport: { value: 'desktop1280', isRotated: false } };
-const phone = { viewport: { value: 'phone390', isRotated: false } };
+const desktop = {};
+const phone = {};
 
 const meta = {
   title: 'Zones/Owner recovery family',

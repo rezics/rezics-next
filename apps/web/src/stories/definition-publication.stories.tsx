@@ -73,13 +73,13 @@ async function importReview(canvasElement: HTMLElement) {
 }
 
 export const Review: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => importReview(canvasElement),
 };
-export const ReviewPhone: Story = { ...Review, globals: { viewport: { value: 'phone390', isRotated: false } } };
+export const ReviewPhone: Story = { ...Review, globals: {} };
 export const BuildContinuation: Story = {
   args: { scenario: 'build' },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     await importReview(canvasElement);
     const canvas = within(canvasElement);
@@ -91,11 +91,11 @@ export const BuildContinuation: Story = {
 };
 export const BuildContinuationPhone: Story = {
   ...BuildContinuation,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
 };
 export const Reconciliation: Story = {
   args: { scenario: 'reconciliation' },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     await importReview(canvasElement);
     const canvas = within(canvasElement);
@@ -108,11 +108,11 @@ export const Reconciliation: Story = {
 };
 export const ReconciliationPhone: Story = {
   ...Reconciliation,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
 };
 export const Completed: Story = {
   args: { scenario: 'completed' },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     await importReview(canvasElement);
     const canvas = within(canvasElement);
@@ -124,6 +124,6 @@ export const Completed: Story = {
     expect(create).toHaveFocus();
   },
 };
-export const CompletedPhone: Story = { ...Completed, globals: { viewport: { value: 'phone390', isRotated: false } } };
+export const CompletedPhone: Story = { ...Completed, globals: {} };
 export const Closed: Story = { args: { scenario: 'closed' } };
 export const Denied: Story = { args: { scenario: 'denied' } };

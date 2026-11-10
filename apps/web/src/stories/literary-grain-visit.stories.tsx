@@ -52,16 +52,10 @@ type Story = StoryObj<typeof meta>;
 
 export const SeriesAndVolume: Story = {};
 export const VolumeAndEdition: Story = { args: grainExample('schema:Book') };
-export const PhoneLight: Story = { ...SeriesAndVolume, globals: { viewport: { value: 'phone390' }, theme: 'light' } };
-export const PhoneDark: Story = { ...SeriesAndVolume, globals: { viewport: { value: 'phone390' }, theme: 'dark' } };
-export const DesktopLight: Story = {
-  ...SeriesAndVolume,
-  globals: { viewport: { value: 'desktop1440' }, theme: 'light' },
-};
-export const DesktopDark: Story = {
-  ...SeriesAndVolume,
-  globals: { viewport: { value: 'desktop1440' }, theme: 'dark' },
-};
+export const PhoneLight: Story = { name: 'Default', ...SeriesAndVolume, globals: {} };
+export const PhoneDark: Story = { tags: ['!dev'], ...SeriesAndVolume, globals: {} };
+export const DesktopLight: Story = { tags: ['!dev'], ...SeriesAndVolume, globals: {} };
+export const DesktopDark: Story = { tags: ['!dev'], ...SeriesAndVolume, globals: {} };
 
 const concealed = grainExample();
 const concealedWindow = concealed.windows[0]!;
@@ -161,7 +155,7 @@ export const LongNamesAndJapaneseLabels: Story = {
       }),
     })),
   },
-  globals: { viewport: { value: 'phone390' }, theme: 'dark', locale: 'ja' },
+  globals: { locale: 'ja' },
 };
 
 export const ContextRoundTrip: Story = {

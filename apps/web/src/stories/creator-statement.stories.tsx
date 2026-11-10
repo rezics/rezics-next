@@ -122,7 +122,7 @@ const longPaymentReference =
   'External bank reference for the September royalty statement / retained-reference-202609-USD-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
 export const NarrowLongText: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => (
     <PatternStory visitor="Signed In" path={`/creator/statements/${paidCreatorStatementFixture.id}`}>
       <AppShell>
@@ -202,7 +202,7 @@ export const UnknownHistoricalMoney: Story = {
 };
 export const UnknownHistoricalMoneyPhone: Story = {
   ...UnknownHistoricalMoney,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
 };
 function stateReady(label: () => string) {
   return async (context: { canvasElement: HTMLElement }) => {

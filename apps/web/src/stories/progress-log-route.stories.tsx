@@ -29,7 +29,7 @@ const meta = {
       },
     },
   },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   beforeEach() {
     setLibraryProgressLogsStory();
     return () => setLibraryProgressLogsStory();
@@ -69,7 +69,7 @@ function sessionOf(link: HTMLElement) {
 }
 
 export const LongUnavailableSummaries: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   ...scenario('long'),
   play: async ({ canvasElement }) => {
     const view = await logsRegion(canvasElement);

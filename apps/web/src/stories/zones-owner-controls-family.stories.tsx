@@ -16,8 +16,8 @@ import { PatternStory } from './page';
 const longName = '読書と旅の記録 — مكتبة الرحلات والقراءة — Carnets de lecture et de voyage';
 const trashZone = fixtureZone(true);
 const deadline = trashZone.restoreUntil!;
-const desktopGlobals = { viewport: { value: 'desktop1280', isRotated: false } };
-const phoneGlobals = { viewport: { value: 'phone390', isRotated: false } };
+const desktopGlobals = {};
+const phoneGlobals = {};
 type Example = Scenario | 'empty-trash' | 'long-active' | 'long-trash' | 'growth' | 'retired';
 
 function ControlsExample({

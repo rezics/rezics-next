@@ -153,21 +153,21 @@ const observe: NonNullable<Story['play']> = async ({ canvasElement, args }) => {
   await expect(portrait).toHaveAttribute('data-size', args.size === 'sm' ? 'sm' : 'default');
 };
 
-export const LongNamePhone: Story = { globals: { viewport: { value: 'phone390' } }, play: observe };
-export const LongNameDesktop: Story = { globals: { viewport: { value: 'desktop1280' } }, play: observe };
+export const LongNamePhone: Story = { name: 'Long Name', globals: {}, play: observe };
+export const LongNameDesktop: Story = { tags: ['!dev'], globals: {}, play: observe };
 export const LongNameRtl: Story = {
-  globals: { viewport: { value: 'phone390' }, locale: 'fr' },
+  globals: { locale: 'fr' },
   parameters: { direction: 'rtl' },
   args: { size: 'sm' },
   play: observe,
 };
 export const HandleOnly: Story = {
-  globals: { viewport: { value: 'phone390' }, locale: 'ja' },
+  globals: { locale: 'ja' },
   args: { author: { ...carol, displayName: null, handle } },
   play: observe,
 };
 export const DisplayNameOnly: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   args: { author: { ...carol, displayName, handle: null } },
   play: observe,
 };
@@ -197,7 +197,7 @@ export const NoAvatar: Story = {
   },
 };
 export const IdentityPrivacy: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   render: () => (
     <main id="thread" className="mx-auto min-w-0 max-w-3xl space-y-6 p-4">
       {privacy.map(({ label, author }) => (

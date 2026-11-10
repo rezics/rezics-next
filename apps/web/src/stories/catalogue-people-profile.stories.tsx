@@ -236,7 +236,7 @@ async function submit(canvasElement: HTMLElement) {
   return canvas;
 }
 export const Create: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await fillAndAssertOwnedControls(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));

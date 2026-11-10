@@ -174,10 +174,10 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const QualifiedPair: Story = { globals: { locale: 'en', viewport: { value: 'phone390' }, theme: 'light' } };
+export const QualifiedPair: Story = { globals: { locale: 'en' } };
 export const SamePerformerTwoCharacters: Story = {
   args: { scenario: 'two-characters' },
-  globals: { locale: 'ja', viewport: { value: 'desktop1440' }, theme: 'dark' },
+  globals: { locale: 'ja' },
 };
 export const ConcealedAssociation: Story = {
   args: { scenario: 'spoiler' },
@@ -190,7 +190,7 @@ export const ConcealedAssociation: Story = {
 };
 export const UnavailableCharacterTarget: Story = {
   args: { scenario: 'unavailable-target', visitor: 'Signed In' },
-  globals: { locale: 'zh-Hant', viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: { locale: 'zh-Hant' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText(new RegExp(m.subject_value_unlabelled()))).toBeVisible();
@@ -199,10 +199,10 @@ export const UnavailableCharacterTarget: Story = {
 };
 export const OriginalCreditUnavailable: Story = {
   args: { scenario: 'unavailable-credit' },
-  globals: { locale: 'ja', viewport: { value: 'desktop1440' }, theme: 'light' },
+  globals: { locale: 'ja' },
 };
 export const CurrentTargetReturn: Story = {
-  globals: { locale: 'en', viewport: { value: 'desktop1440' }, theme: 'dark' },
+  globals: { locale: 'en' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvasElement.querySelector('[data-slot="work-cast-window"]')).toHaveAttribute(
@@ -220,7 +220,7 @@ export const CurrentTargetReturn: Story = {
 };
 export const ChangedRowAfterReturn: Story = {
   args: { scenario: 'changed' },
-  globals: { locale: 'zh-Hant', viewport: { value: 'phone390' }, theme: 'light' },
+  globals: { locale: 'zh-Hant' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('status')).toHaveTextContent(m.work_cast_window_changed());
@@ -233,7 +233,7 @@ export const ChangedRowAfterReturn: Story = {
 export const RetiredContextReading: Story = {
   name: 'Retired reading after Context changes',
   args: { scenario: 'retired-context' },
-  globals: { locale: 'ja', viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: { locale: 'ja' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('status')).toHaveTextContent(m.work_cast_window_changed());
@@ -244,25 +244,27 @@ export const RetiredContextReading: Story = {
   },
 };
 export const OrdinarySignedInPhoneLight: Story = {
+  name: 'Ordinary Signed In',
   args: { visitor: 'Signed In' },
-  globals: { locale: 'en', viewport: { value: 'phone390' }, theme: 'light' },
+  globals: { locale: 'en' },
 };
 export const OrdinarySignedInDesktopDark: Story = {
+  tags: ['!dev'],
   args: { visitor: 'Signed In' },
-  globals: { locale: 'en', viewport: { value: 'desktop1440' }, theme: 'dark' },
+  globals: { locale: 'en' },
 };
 export const SimplifiedChinesePhoneDark: Story = {
-  globals: { locale: 'zh-Hans', viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: { locale: 'zh-Hans' },
 };
 export const KoreanDesktopLight: Story = {
-  globals: { locale: 'ko', viewport: { value: 'desktop1440' }, theme: 'light' },
+  globals: { locale: 'ko' },
 };
-export const FrenchPhoneLight: Story = { globals: { locale: 'fr', viewport: { value: 'phone390' }, theme: 'light' } };
+export const FrenchPhoneLight: Story = { globals: { locale: 'fr' } };
 export const GermanDesktopDark: Story = {
-  globals: { locale: 'de', viewport: { value: 'desktop1440' }, theme: 'dark' },
+  globals: { locale: 'de' },
 };
 export const SpanishDesktopLight: Story = {
-  globals: { locale: 'es', viewport: { value: 'desktop1440' }, theme: 'light' },
+  globals: { locale: 'es' },
 };
 
 const retryRoute = new URL(
@@ -272,7 +274,7 @@ const retryRoute = new URL(
 retryRoute.searchParams.set('realm', qualifiedRealm);
 export const CurrentRetryAfterReadFailure: Story = {
   name: 'Current retry after a fresh relation-read failure',
-  globals: { locale: 'en', viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: { locale: 'en' },
   render: () => <PageStory visitor="Signed Out" path={`${retryRoute.pathname}${retryRoute.search}`} />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

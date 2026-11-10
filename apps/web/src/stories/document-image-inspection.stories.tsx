@@ -99,39 +99,26 @@ async function unavailableImage({ canvasElement }: { canvasElement: HTMLElement 
   await expect(canvas.queryByText(image.credit!.rightsHolder)).toBeNull();
 }
 
-export const PhoneLight: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
-  play: inspectAndReturn,
-};
-export const PhoneDark: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
-  play: inspectAndReturn,
-};
-export const DesktopLight: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
-  play: inspectAndReturn,
-};
-export const DesktopDark: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
-  play: inspectAndReturn,
-};
+export const PhoneLight: Story = { name: 'Default', globals: {}, play: inspectAndReturn };
+export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: inspectAndReturn };
+export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: inspectAndReturn };
+export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: inspectAndReturn };
 export const PhoneFailureLight: Story = {
+  name: 'Failure',
   args: { failure: true },
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: {},
   play: unavailableImage,
 };
-export const PhoneFailureDark: Story = {
-  args: { failure: true },
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
-  play: unavailableImage,
-};
+export const PhoneFailureDark: Story = { tags: ['!dev'], args: { failure: true }, globals: {}, play: unavailableImage };
 export const DesktopFailureLight: Story = {
+  tags: ['!dev'],
   args: { failure: true },
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
+  globals: {},
   play: unavailableImage,
 };
 export const DesktopFailureDark: Story = {
+  tags: ['!dev'],
   args: { failure: true },
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
+  globals: {},
   play: unavailableImage,
 };

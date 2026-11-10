@@ -2,6 +2,7 @@
 @import '@fontsource-variable/source-serif-4';
 @import '@fontsource-variable/geist-mono';
 @import '../src/styles.css';
+@import './preview-palette.css';
 
 @source "../src/**/*.{ts,tsx}";
 @source "./**/*.{ts,tsx}";

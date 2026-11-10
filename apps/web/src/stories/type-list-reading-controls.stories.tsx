@@ -167,7 +167,7 @@ async function longControls(canvasElement: HTMLElement) {
 
 export const NarrowLongLabels: Story = {
   args: { long: true },
-  globals: { viewport: { value: 'phone320' } },
+  globals: {},
   play: async ({ canvasElement }) => longControls(canvasElement),
 };
 

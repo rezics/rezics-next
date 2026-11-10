@@ -53,8 +53,8 @@ export const SignedIn: Story = {
 };
 
 export const UnfollowMenuPhone: Story = {
-  name: 'Unfollow menu phone',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  name: 'Unfollow Menu',
+  globals: {},
   render: () => FollowingStory(),
   play: async (context) => {
     await pageReady(context);
@@ -195,7 +195,8 @@ export const RemoveUnavailableTarget: Story = {
 };
 
 export const UnfollowMenuDesktop: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  tags: ['!dev'],
+  globals: {},
   render: () => FollowingStory(),
   play: async (context) => {
     await pageReady(context);
@@ -261,7 +262,7 @@ export const NoDestination: Story = {
   },
 };
 export const LongLocalizedInspection: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => FollowingStory('reading-long'),
   play: async ({ canvasElement }) => {
     await inspectCommunity(canvasElement);

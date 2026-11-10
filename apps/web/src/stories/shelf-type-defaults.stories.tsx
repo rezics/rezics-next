@@ -14,7 +14,11 @@ const csrfToken = 'type-layout-story-credential';
 const book = 'schema:Book',
   movie = 'schema:Movie',
   absent = 'schema:Unavailable';
-const meta = { title: 'Library/Type layout defaults', id: 'patterns-library-type-layout-defaults', parameters: { layout: 'padded' } } satisfies Meta;
+const meta = {
+  title: 'Library/Type layout defaults',
+  id: 'patterns-library-type-layout-defaults',
+  parameters: { layout: 'padded' },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -92,7 +96,7 @@ const inspect = async (canvasElement: HTMLElement, type: string) => {
 };
 export const Inherited: Story = {
   render: () => <Editor />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await inspect(canvasElement, book);
     await expect(canvas.getByText(m.settings_shelf_type_inherits({ layout: m.library_layout_grid() }))).toBeVisible();
@@ -100,7 +104,7 @@ export const Inherited: Story = {
 };
 export const Overridden: Story = {
   render: () => <Editor />,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await inspect(canvasElement, movie);
     await expect(canvas.getByText(m.settings_shelf_type_override({ layout: m.library_layout_table() }))).toBeVisible();
@@ -108,7 +112,7 @@ export const Overridden: Story = {
 };
 export const UnavailableTypeRemoval: Story = {
   render: () => <Editor />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await inspect(canvasElement, absent);
     await userEvent.click(canvas.getByRole('button', { name: m.settings_shelf_type_remove() }));

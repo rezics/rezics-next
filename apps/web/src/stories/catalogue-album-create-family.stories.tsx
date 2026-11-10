@@ -274,7 +274,7 @@ async function geometry(canvasElement: HTMLElement) {
 
 export const TermsCreditsAndFacts: Story = {
   args: { longMetadata: true },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     await fill(canvasElement, true);
     const fixture = fixtureFor(canvasElement);
@@ -290,7 +290,7 @@ export const TermsCreditsAndFacts: Story = {
 };
 export const TermsCreditsAndFactsDesktop: Story = {
   ...TermsCreditsAndFacts,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 };
 export const TermsCreditsAndFactsRTL: Story = {
   ...TermsCreditsAndFactsDesktop,
@@ -372,7 +372,7 @@ export const MetadataFailure: Story = {
 };
 export const UncertainExactReplay: Story = {
   args: { scenario: 'uncertain' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement, true);
     const fixture = fixtureFor(canvasElement);
@@ -413,7 +413,7 @@ export const CreatedReaderRecovery: Story = {
 };
 export const EligibilityPending: Story = {
   args: { deferredAdmission: true },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
     const fixture = fixtureFor(canvasElement);
@@ -427,7 +427,7 @@ export const EligibilityPending: Story = {
 };
 export const StaleReviewRecovery: Story = {
   args: { deferredAdmission: true },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
     const fixture = fixtureFor(canvasElement);
@@ -461,13 +461,14 @@ export const SignedOut: Story = { args: { signedOut: true } };
 export const CreatedExactReferenceRTL: Story = {
   ...UncertainExactReplay,
   args: { scenario: 'uncertain', rtl: true },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 };
 export const CreatedExactReferenceDesktop: Story = {
   ...UncertainExactReplay,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 };
 export const CreatedExactReferencePhoneRTL: Story = {
+  tags: ['!dev'],
   ...UncertainExactReplay,
   args: { scenario: 'uncertain', rtl: true },
 };

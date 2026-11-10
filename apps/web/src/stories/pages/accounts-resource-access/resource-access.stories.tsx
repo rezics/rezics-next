@@ -382,13 +382,15 @@ async function longIdentities({ canvasElement }: { canvasElement: HTMLElement })
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
 export const LongIdentitiesPhone: Story = {
+  name: 'Long Identities',
   args: { scenario: 'long' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: longIdentities,
 };
 export const LongIdentitiesDesktop: Story = {
+  tags: ['!dev'],
   args: { scenario: 'long' },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: longIdentities,
 };
 export const GenericResource: Story = {

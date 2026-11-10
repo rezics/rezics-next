@@ -121,7 +121,7 @@ export const TermsChangedMobile: Story = {
       options: { phone: { name: 'Phone 390', styles: { width: '390px', height: '844px' } } },
     },
   },
-  globals: { viewport: { value: 'phone' } },
+  globals: {},
 };
 
 export const MappedFixedEdition: Story = {
@@ -210,7 +210,7 @@ export const AcquisitionPending: Story = {
 };
 const phone = {
   parameters: { viewport: { options: { phone: { name: 'Phone 390', styles: { width: '390px', height: '844px' } } } } },
-  globals: { viewport: { value: 'phone' } },
+  globals: {},
 };
 export const AlreadyOwnedMobile: Story = { ...AlreadyOwned, ...phone };
 export const AcquisitionPendingMobile: Story = { ...AcquisitionPending, ...phone };

@@ -282,17 +282,14 @@ const meta = {
       },
     },
   },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
 } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const CurrentHierarchy: Story = {};
-export const DesktopHierarchy: Story = { globals: { viewport: { value: 'desktop1440' } } };
-export const CurrentMembershipPhone: Story = { args: { state: 'membership' } };
-export const CurrentMembershipDesktop: Story = {
-  args: { state: 'membership' },
-  globals: { viewport: { value: 'desktop1440' } },
-};
+export const DesktopHierarchy: Story = { globals: {} };
+export const CurrentMembershipPhone: Story = { name: 'Current Membership', args: { state: 'membership' } };
+export const CurrentMembershipDesktop: Story = { tags: ['!dev'], args: { state: 'membership' }, globals: {} };
 export const UnavailableMembership: Story = { args: { state: 'membership-unavailable' } };
 export const SpoilerAssociation: Story = { args: { state: 'spoiler' } };
 export const InitialLoading: Story = { args: { state: 'loading' } };
@@ -306,7 +303,7 @@ export const Denied: Story = { args: { state: 'denied' } };
 export const ReturningFromAChild: Story = { args: { state: 'returning' } };
 export const ReturningFromAChildDesktopDark: Story = {
   args: { state: 'returning' },
-  globals: { locale: 'ja', viewport: { value: 'desktop1440' }, theme: 'dark' },
+  globals: { locale: 'ja' },
 };
 export const RetainedAfterFailure: Story = {
   args: { state: 'retained' },

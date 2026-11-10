@@ -40,7 +40,7 @@ async function waiting({ canvasElement }: { canvasElement: HTMLElement }) {
 }
 
 export const RateLimitedPhone: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   args: {
     renameRead: {
       loading: false,
@@ -52,7 +52,7 @@ export const RateLimitedPhone: Story = {
 };
 
 export const ServiceWaitDesktop: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   args: {
     renameAccount: null,
     renameRead: {
@@ -65,7 +65,7 @@ export const ServiceWaitDesktop: Story = {
 };
 
 export const DeniedDesktop: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   args: { renameRead: { loading: false, reload() {}, failures: [{ kind: 'denied', status: 403, code: 'forbidden' }] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -80,7 +80,7 @@ export const DeniedDesktop: Story = {
 };
 
 export const DeploymentUnavailablePhone: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   args: {
     renameAccount: accountRenameNavigation(
       { AUTH_ISSUER: 'https://auth.example.test' },

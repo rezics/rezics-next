@@ -16,7 +16,11 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { ConnectedStory } from './connected-story';
 
-const meta = { title: 'Subjects/Person credit visit', id: 'pages-subjects-person-credit-visit', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Subjects/Person credit visit',
+  id: 'pages-subjects-person-credit-visit',
+  parameters: { layout: 'fullscreen' },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 type Mode = 'normal' | 'two' | 'concealed' | 'partial' | 'context' | 'replaced' | 'refused' | 'unavailable' | 'late';
@@ -188,19 +192,7 @@ export const CurrentRetry: Story = {
   },
 };
 export const LateReplyRetired: Story = { ...CurrentCandidateReplaced, render: () => <PersonCreditVisit mode="late" /> };
-export const PhoneLight: Story = {
-  ...PersonQualifiedVoice,
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
-};
-export const PhoneDark: Story = {
-  ...PersonQualifiedVoice,
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
-};
-export const DesktopLight: Story = {
-  ...ContextTargetReturn,
-  globals: { viewport: { value: 'desktop1440' }, theme: 'light' },
-};
-export const DesktopDark: Story = {
-  ...ContextTargetReturn,
-  globals: { viewport: { value: 'desktop1440' }, theme: 'dark' },
-};
+export const PhoneLight: Story = { name: 'Default', ...PersonQualifiedVoice, globals: {} };
+export const PhoneDark: Story = { tags: ['!dev'], ...PersonQualifiedVoice, globals: {} };
+export const DesktopLight: Story = { name: 'Default', ...ContextTargetReturn, globals: {} };
+export const DesktopDark: Story = { tags: ['!dev'], ...ContextTargetReturn, globals: {} };

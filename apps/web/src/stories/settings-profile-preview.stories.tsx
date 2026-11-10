@@ -63,7 +63,11 @@ function captureProfilePreviewTraffic() {
   };
 }
 
-const meta = { title: 'Account/Profile Page', id: 'pages-settings-profile', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Account/Profile Page',
+  id: 'pages-settings-profile',
+  parameters: { layout: 'fullscreen' },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -79,7 +83,7 @@ const savedBiography = 'I collect thoughtful stories and share notes about what 
 export const DraftPreview: Story = {
   name: 'Draft preview',
   tags: ['!dev'],
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   beforeEach: captureProfilePreviewTraffic,
   render: () => <PageStory visitor="Signed In" path="/settings?profile=self#profile" />,
   play: async (context) => {

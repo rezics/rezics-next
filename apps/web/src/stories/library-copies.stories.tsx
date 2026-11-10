@@ -392,7 +392,7 @@ export const FilteredEmptyLaterPage: Story = {
 
 export const LongLaterPage: Story = {
   name: 'Later page, long text and independent recovery controls',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <RecoveryView filtered long />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);

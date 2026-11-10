@@ -161,7 +161,7 @@ function journey(view: View, viewport: 'phone390' | 'desktop1280', theme: 'light
   const attempts: InboxNoticeSeenAttempt[] = [];
   const cursors: (string | null)[] = [];
   return {
-    globals: { viewport: { value: viewport, isRotated: false }, theme },
+    globals: {},
     render: () => <Preview view={view} attempts={attempts} cursors={cursors} />,
     play: async ({ canvasElement }) => {
       const canvas = within(canvasElement);

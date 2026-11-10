@@ -107,7 +107,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const ReleasedFields: Story = {
-  globals: { locale: 'en', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
   render: () => <AdvancedFacets state="released" reader="curated" />,
   play: async ({ canvasElement }) => {
     const fields = await openFields(canvasElement, properties[9]!.id);
@@ -117,7 +117,7 @@ export const ReleasedFields: Story = {
 };
 
 export const NextValues: Story = {
-  globals: { locale: 'en', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'en' },
   render: () => <AdvancedFacets state="next" reader="curated" />,
   play: async ({ canvasElement }) => {
     const fields = await openFields(canvasElement, properties[0]!.id);
@@ -128,7 +128,7 @@ export const NextValues: Story = {
 };
 
 export const SelectedOutsideWindow: Story = {
-  globals: { locale: 'en', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
   render: () => <AdvancedFacets state="outside" reader="builtin" />,
   play: async ({ canvasElement }) => {
     const fields = await openFields(canvasElement, properties[9]!.id);
@@ -138,7 +138,7 @@ export const SelectedOutsideWindow: Story = {
 };
 
 export const ScopeUnavailable: Story = {
-  globals: { locale: 'en', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'en' },
   render: () => <AdvancedFacets state="unavailable" reader="builtin" />,
   play: async ({ canvasElement }) => {
     const fields = await openFields(canvasElement, properties[0]!.id);

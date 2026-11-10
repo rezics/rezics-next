@@ -82,14 +82,15 @@ async function mixedWatchPlay({ canvasElement }: { canvasElement: HTMLElement })
 
 export const MixedWatch: Story = {
   name: 'Installed thread watch notice',
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   render: () => <InboxStory fixture="thread-watch" />,
   play: mixedWatchPlay,
 };
 
 export const MixedWatchPhone: Story = {
+  tags: ['!dev'],
   name: 'Installed thread watch notice on phone',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <InboxStory fixture="thread-watch" />,
   play: mixedWatchPlay,
 };

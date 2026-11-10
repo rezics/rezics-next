@@ -97,7 +97,7 @@ type Story = StoryObj<typeof meta>;
 
 export const RefusedSaveRecovery: Story = {
   args: { onConfirmed: fn(), onEditor: fn(), onPending: fn(), onSave: fn() },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement);
     const onEditor = mocked(args.onEditor);

@@ -31,7 +31,7 @@ const meta = {
       },
     },
   },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -118,7 +118,7 @@ export const Normal: Story = {
 };
 
 export const NarrowLongText: Story = {
-  globals: { viewport: { value: 'phone320', isRotated: false } },
+  globals: {},
   render: () => <Reader logs={[longLog, unavailableLog, longLog]} later continuation={next} />,
   play: async ({ canvasElement }) => {
     const view = await reader(canvasElement);

@@ -34,7 +34,7 @@ function Example({
 
 export const Manager: Story = {
   render: () => <Example />,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
@@ -54,7 +54,7 @@ export const Manager: Story = {
 
 export const MemberRestricted: Story = {
   render: () => <Example member />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
@@ -121,7 +121,7 @@ export const SessionRecovery: Story = {
 // Connected settings examples retain the actual read boundary and independently owned action catalogue.
 export const LongIdentityPhone: Story = {
   render: () => <Example mode="long" />,
-  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  globals: { locale: 'de' },
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
@@ -151,7 +151,7 @@ function canvasElementCard(canvasElement: HTMLElement) {
 
 export const UnnamedAccount: Story = {
   render: () => <Example mode="handleless" />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async (context) => {
     await pageReady(context);
     const target = within(await within(context.canvasElement).findByRole('region', { name: m.managed_target_title() }));
@@ -173,7 +173,7 @@ export const OperatedAccount: Story = {
 
 export const InitialReadRecovery: Story = {
   render: () => <Example mode="unavailable" />,
-  globals: { locale: 'fr', viewport: { value: 'phone390' } },
+  globals: { locale: 'fr' },
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);

@@ -23,7 +23,7 @@ const meta = {
       },
     },
   },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -83,7 +83,7 @@ export const Empty: Story = {
   },
 };
 export const NextPage: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="next" />,
   play: async (context) => {
     await labelsReady(context);
@@ -250,7 +250,7 @@ export const EmptyPrefix: Story = {
 
 export const LaterPagePrefix: Story = {
   name: 'Empty later page, keep the filter',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => (
     <PageStory
       visitor="Signed In"
@@ -307,7 +307,7 @@ function RecoveryState({ uncertain = false }: { uncertain?: boolean }) {
 
 export const StalePage: Story = {
   name: 'Stale page, restart with the same filter',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <RecoveryState />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -322,7 +322,7 @@ export const StalePage: Story = {
 
 export const UnconfirmedChange: Story = {
   name: 'Unconfirmed create, retained long draft',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <RecoveryState uncertain />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -486,7 +486,7 @@ async function openPhoneLabelForm(context: { canvasElement: HTMLElement }) {
 }
 
 export const PhoneBeforeCapacity: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <SubjectLabelStory count={31} />,
   play: async (context) => {
     const { trigger, form } = await openPhoneLabelForm(context);
@@ -506,7 +506,7 @@ export const PhoneBeforeCapacity: Story = {
 };
 
 export const PhoneCapacity: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <SubjectLabelStory count={32} />,
   play: async (context) => {
     const { view, input, create } = await openPhoneLabelForm(context);

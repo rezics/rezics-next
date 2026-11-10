@@ -206,7 +206,7 @@ export const WithheldClearRequiresPreparation: StoryType = {
 };
 export const Phone: StoryType = {
   args: { mode: 'long' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const inspect = canvas.getByRole('button', { name: m.subject_classification_assessment_inspect() });
@@ -219,7 +219,7 @@ export const Phone: StoryType = {
 };
 export const Desktop: StoryType = {
   args: { mode: 'ready' },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const inspect = canvas.getByRole('button', { name: m.subject_classification_assessment_inspect() });

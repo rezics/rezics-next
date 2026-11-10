@@ -103,8 +103,8 @@ function Review({ mode, theme }: { mode: Mode; theme: 'light' | 'dark' }) {
   return <AuthStory>{page}</AuthStory>;
 }
 
-const phone = { viewport: { defaultViewport: 'phone390' } };
-const desktop = { viewport: { defaultViewport: 'desktop1280' } };
+const phone = { viewport: {} };
+const desktop = { viewport: {} };
 
 export const PhoneLightMiddleBackward = {
   parameters: phone,

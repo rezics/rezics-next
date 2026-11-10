@@ -257,7 +257,7 @@ export const ExplicitSaveReadback: Story = {
 
 export const RejectedImage: Story = {
   args: { scenario: 'rejected' },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const view = await choose(canvasElement);
     await view.findByText(m.settings_profile_avatar_rejected());
@@ -273,7 +273,7 @@ export const RejectedImage: Story = {
 
 export const RateLimitedReservation: Story = {
   args: { scenario: 'rate-limited' },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const view = await choose(canvasElement);
     await view.findByText(m.settings_profile_avatar_rate_limited());

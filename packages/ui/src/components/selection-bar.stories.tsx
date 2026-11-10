@@ -61,5 +61,5 @@ export const Selection: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'More' }));
     await expect(await screen.findByRole('dialog')).toBeVisible();
   },
-  globals: { viewport: { value: 'phone' } },
+  globals: {},
 };

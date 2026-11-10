@@ -17,7 +17,7 @@ const meta = {
       },
     },
   },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -52,7 +52,7 @@ async function shelfReady(context: { canvasElement: HTMLElement }, count: number
 
 export const ThreeWorks: Story = {
   name: 'Three works',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <LabelShelfStory count={3} />,
   play: async (context) => {
     await shelfReady(context, 3, 'Reading list');

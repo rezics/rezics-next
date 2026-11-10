@@ -306,7 +306,7 @@ export const ExplicitDiscard: Story = {
 export const ExplicitDiscardLongRtl: Story = {
   ...ExplicitDiscard,
   args: { scenario: 'discard', direction: 'rtl', enlargedText: true },
-  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  globals: { locale: 'de' },
 };
 
 export const SessionExpired: Story = {

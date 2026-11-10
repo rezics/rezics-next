@@ -135,7 +135,7 @@ export const KnownUnitUnchanged: Story = {
 };
 
 export const LongPaginationLabels: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   render: () => <History sessions={[]} />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

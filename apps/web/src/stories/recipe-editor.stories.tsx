@@ -299,7 +299,7 @@ export const ExactCurrentValue: Story = {
 export const Concealed: Story = { args: { correction: true, scenario: 'concealed' } };
 export const Proposed: Story = {
   args: { correction: true, onFixture: observeRecipe() },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     const observed = args.onFixture as ReturnType<typeof observeRecipe>;
@@ -628,14 +628,14 @@ const exerciseRecipeFamily: NonNullable<Story['play']> = async ({ canvasElement,
 export const IndependentFamilyPhone: Story = {
   args: { onFixture: observeRecipe() },
   render: (args) => <RecipeFamilyStory onFixture={args.onFixture} />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: familyDescription,
   play: exerciseRecipeFamily,
 };
 export const IndependentFamilyDesktop: Story = {
   ...IndependentFamilyPhone,
   args: { onFixture: observeRecipe() },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 };
 export const IndependentFamilyRtl: Story = {
   ...IndependentFamilyPhone,

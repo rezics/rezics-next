@@ -307,21 +307,21 @@ export const CompleteVolume: Story = {
 };
 export const SeriesPhone: Story = {
   ...CompleteSeries,
-  globals: { locale: 'ja', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'ja' },
 };
 export const SeriesDesktopRTL: Story = {
   ...CompleteSeries,
   args: { ...CompleteSeries.args, direction: 'rtl' },
-  globals: { locale: 'de', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'de' },
 };
 export const VolumePhoneRTL: Story = {
   ...CompleteVolume,
   args: { ...CompleteVolume.args, direction: 'rtl' },
-  globals: { locale: 'fr', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'fr' },
 };
 export const VolumeDesktop: Story = {
   ...CompleteVolume,
-  globals: { locale: 'en', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'en' },
 };
 export const UncertainReplay: Story = {
   args: { scenario: 'uncertain' },

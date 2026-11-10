@@ -222,50 +222,50 @@ const unavailable: NonNullable<Story['play']> = async (context) => {
 };
 
 export const PhoneLight: Story = {
-  globals: { locale: 'en', theme: 'light', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
   play: inspect,
 };
 export const DesktopDark: Story = {
-  globals: { locale: 'de', theme: 'dark', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'de' },
   play: inspect,
 };
 export const TraditionalChinesePhoneDark: Story = {
-  globals: { locale: 'zh-Hant', theme: 'dark', viewport: { value: 'phone390' } },
+  globals: { locale: 'zh-Hant' },
   play: inspect,
 };
 export const SimplifiedChineseDesktopLight: Story = {
-  globals: { locale: 'zh-Hans', theme: 'light', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'zh-Hans' },
   play: inspect,
 };
 export const JapanesePhoneLight: Story = {
-  globals: { locale: 'ja', theme: 'light', viewport: { value: 'phone390' } },
+  globals: { locale: 'ja' },
   play: inspect,
 };
 export const KoreanDesktopDark: Story = {
-  globals: { locale: 'ko', theme: 'dark', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'ko' },
   play: inspect,
 };
 export const FrenchPhoneDark: Story = {
-  globals: { locale: 'fr', theme: 'dark', viewport: { value: 'phone390' } },
+  globals: { locale: 'fr' },
   play: inspect,
 };
 export const SpanishDesktopLight: Story = {
-  globals: { locale: 'es', theme: 'light', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'es' },
   play: inspect,
 };
 export const HundredSections: Story = {
   args: { blocks: 100 },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: inspect,
 };
 export const CurrentBodyMissing: Story = {
   args: { scenario: 'missing' },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: unavailable,
 };
 export const CurrentErased: Story = {
   args: { scenario: 'erased' },
-  globals: { theme: 'dark', viewport: { value: 'desktop1280' } },
+  globals: {},
   play: unavailable,
 };
 export const KeepWriting: Story = {
@@ -314,12 +314,12 @@ const changeDuringReview =
   };
 export const DraftChangedDuringInspection: Story = {
   render: () => <ChangedInspectionExample />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: changeDuringReview(() => m.thread_inspect_draft_changed()),
 };
 export const CurrentReadingChanged: Story = {
   render: () => <ChangedInspectionExample currentChanged />,
-  globals: { theme: 'dark', viewport: { value: 'desktop1280' } },
+  globals: {},
   play: changeDuringReview(() => m.thread_inspect_current_changed()),
 };
 export const RetiredReading: Story = {

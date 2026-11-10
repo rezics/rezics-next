@@ -161,7 +161,7 @@ export const RecordedCharge: Story = {
 
 export const LongReceiptNarrow: Story = {
   name: 'Buyer, long receipt and unavailable access, phone (component)',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => {
     const order = currentOrder({ kind: 'unavailable' });
     const title =

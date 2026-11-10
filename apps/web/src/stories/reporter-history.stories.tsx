@@ -7,7 +7,11 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 
-const meta = { title: 'Moderation/Reporter history', id: 'pages-moderation-reporter-history', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Moderation/Reporter history',
+  id: 'pages-moderation-reporter-history',
+  parameters: { layout: 'fullscreen' },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -137,7 +141,6 @@ export const KeyboardAndPhone: Story = {
   parameters: {
     viewport: {
       viewports: { phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } } },
-      defaultViewport: 'phone390',
     },
   },
   render: () => (

@@ -109,7 +109,7 @@ async function observeControls(
 
 export const SelectedReports: Story = {
   args: { onSelection: fn() },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement, args }) => {
     const { selects, reset } = await observeControls(canvasElement);
     for (const select of selects) {
@@ -125,14 +125,14 @@ export const SelectedReports: Story = {
 
 export const SelectedAppeals: Story = {
   args: { tab: 'appeals', onSelection: fn() },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     await observeControls(canvasElement, 'appeals');
   },
 };
 
 export const DisabledSelection: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const { group, selects, reset } = await observeControls(canvasElement);
     await expect(group).toBeDisabled();
@@ -142,7 +142,7 @@ export const DisabledSelection: Story = {
 
 export const PendingSelection: Story = {
   args: { onSelection: fn(() => new Promise<void>(() => {})) },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement, args }) => {
     const { view, group, selects, reset } = await observeControls(canvasElement);
     await userEvent.selectOptions(selects[0]!, 'resolved');
@@ -161,14 +161,14 @@ export const PendingSelection: Story = {
 
 export const LongLocalizedPhone: Story = {
   args: { selection: { status: 'all', targetKind: 'all', order: 'oldest' }, onSelection: fn() },
-  globals: { locale: 'fr', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'fr' },
   play: async ({ canvasElement, args }) => {
     await observeControls(canvasElement, 'reports', args.selection);
   },
 };
 export const LongLocalizedDesktop: Story = {
   ...LongLocalizedPhone,
-  globals: { locale: 'fr', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'fr' },
 };
 export const LongLocalizedRtlPhone: Story = {
   ...LongLocalizedPhone,
