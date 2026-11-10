@@ -1031,6 +1031,11 @@ retirement. A delayed step cannot retire a newer registration. Retirement yields
 after it is retired may the ordinary registration path install the successor, with another current native fence
 check. This lifecycle preserves completed public output and grants no authority to purge the old native capture.
 
+Decision: retirement mutations emit `identity-scope.retirement.v1` owner events for the initial transition,
+directory release, local dependency removal and final retirement; each retains its existing native commit purpose.
+Repeated, blocked and unchanged reads use `noEffect`, never a mutation. Replacement and native hold authority stay
+under their existing locks; directory release creates no bridge on a blocked read.
+
 Retirement first makes the summary unsafe, finishes real outstanding attempts, then retires one directory ticket
 at a time under its original bridge. A durable source-local sending intent precedes every directory enrollment.
 Directory release retains a native receipt and tombstone, so a lost reply or delayed enrollment cannot resurrect

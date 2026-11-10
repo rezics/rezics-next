@@ -130,6 +130,13 @@ test('one selected native member publishes exactly that set and exact replay rea
   await f.entry(a);
   await f.entry(b);
   const collection = await saved();
+  const predecessor = (
+    await f.database.admin.query(
+      `SELECT registration,capture_id FROM semantic.identity_scope_summary
+       WHERE source->'identity'->>'collectionId'=$1 AND scope_id='collection-source'`,
+      [collection.id],
+    )
+  ).rows[0]!;
   const input = { revision: collection.revision, subjectIds: [a] };
   const key = randomUUID();
   const first = await f.send('POST', path(collection.id), input, f.owner, key);
@@ -140,6 +147,14 @@ test('one selected native member publishes exactly that set and exact replay rea
   const published = await native(collection.id);
   expect(published.members).toEqual([a]);
   await f.prepareSource(collection.id);
+  expect(
+    (
+      await f.database.admin.query(
+        `SELECT released FROM library.native_source_hold WHERE route=$1 AND capture_id=$2 AND hold_id=$3`,
+        [routeOf(collection.id), predecessor.capture_id, predecessor.registration],
+      )
+    ).rows,
+  ).toEqual([{ released: true }]);
   const replay = await f.send('POST', path(collection.id), input, f.owner, key);
   expect(replay.status).toBe(200);
   expect(await replay.json()).toEqual(body);
@@ -302,6 +317,23 @@ test('A real owner prepares and republishes an explicit selection after public a
   const successor = await readRegistration();
   expect(successor.state).toBe('ready');
   expect(successor.registration).not.toBe(old.registration);
+  expect(
+    (
+      await f.database.admin.query(
+        `SELECT 1 FROM semantic.identity_scope_forward
+     WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4`,
+        [address.partition, address.source, address.scope, old.registration],
+      )
+    ).rows,
+  ).toEqual([]);
+  const releases = await f.database.admin.query(
+    `SELECT r.transaction_id FROM semantic.identity_scope_directory_release r
+     JOIN semantic.identity_epoch_native_commit n USING (partition_no,transaction_id)
+     WHERE r.source_partition=$1 AND r.source_key=$2 AND r.scope_id=$3 AND r.registration=$4
+       AND r.capture_id=$5 AND n.purpose='identity-scope-directory-release' AND n.xmin=r.xmin`,
+    [address.partition, address.source, address.scope, old.registration, old.capture_id],
+  );
+  expect(releases.rows.length).toBeGreaterThan(0);
   expect(
     (
       await f.database.admin.query(

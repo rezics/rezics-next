@@ -1536,6 +1536,13 @@ export declare function EVENT_TYPES(): Readonly<{
         survivor: Type.TString;
         voters: Type.TInteger;
     }>;
+    readonly "com.rezics.semantic.identity-scope.retirement.v1": Type.TObject<{
+        sourceKey: Type.TString;
+        scope: Type.TString;
+        registration: Type.TString;
+        captureId: Type.TString;
+        phase: Type.TUnion<Type.TLiteral<string>[]>;
+    }>;
     readonly "com.rezics.semantic.identity-scope.native-associated.v1": Type.TObject<{
         sourceKey: Type.TString;
         scope: Type.TString;

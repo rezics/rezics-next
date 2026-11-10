@@ -140,6 +140,7 @@ export type IdentityScopeRetireInput = Readonly<{
     allowance: WorkAllowance;
     deadline: number;
 }>;
+/** Pending can commit one retirement step; repeated or blocked reads have no domain effect. */
 export type IdentityScopeRetireResult = IdentityScopeFailure | Readonly<{
     status: 'retired' | 'pending';
     work: IdentityScopeWork;
