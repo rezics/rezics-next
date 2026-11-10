@@ -42,6 +42,12 @@ export function PublicViewsCard({
       : {};
   const changed = Object.keys(viewsPatch).length > 0;
   const canSubmitPatch = changed && profilePatchAdmitted(viewsPatch, state.editing);
+  const viewLabels = {
+    posts: m.settings_public_posts(),
+    reviews: m.settings_public_reviews(),
+    collections: m.settings_public_collections(),
+    realms: m.settings_public_realms(),
+  };
   return (
     <Card>
       <CardHeader>
@@ -66,7 +72,7 @@ export function PublicViewsCard({
               <label key={view} htmlFor={`${ids}-${view}`} className="block min-h-11 w-full py-3">
                 <Field orientation="horizontal">
                   <FieldContent className="min-w-0">
-                    <FieldTitle>{m[`settings_public_${view}`]()}</FieldTitle>
+                    <FieldTitle>{viewLabels[view]}</FieldTitle>
                   </FieldContent>
                   <Switch
                     id={`${ids}-${view}`}
