@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { createHash, generateKeyPairSync, verify } from 'node:crypto';
-import { chromium, type Browser } from '../packages/ui/node_modules/playwright/index.mjs';
+import { chromium, type Browser } from '../packages/ui/node_modules/playwright/index.js';
 import {
   classifySection,
   formatLine,

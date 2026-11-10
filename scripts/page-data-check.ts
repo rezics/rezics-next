@@ -9,7 +9,7 @@
  * relation whose count is zero after the reader settles.
  */
 import { readFileSync, existsSync, lstatSync } from 'node:fs';
-import { createHash, createPrivateKey, randomBytes, randomUUID, sign, type JsonWebKey } from 'node:crypto';
+import { createHash, createPrivateKey, randomBytes, randomUUID, sign, type JsonWebKeyInput } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +19,9 @@ import {
   type BrowserContext,
   type Page,
   type Response as PlaywrightResponse,
-} from '../packages/ui/node_modules/playwright/index.mjs';
+} from '../packages/ui/node_modules/playwright/index.js';
+
+type JsonWebKey = JsonWebKeyInput['key'];
 
 export const CLASSES = ['DATA', 'EMPTY', 'UNAUTHORIZED', 'UNAVAILABLE', 'API', 'WEB', 'SEED'] as const;
 export type SectionClass = (typeof CLASSES)[number];
