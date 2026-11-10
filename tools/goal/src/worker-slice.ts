@@ -110,11 +110,7 @@ export class WorkerSlice {
       );
     }
 
-    const scoped = this.run(
-      'systemd-run',
-      workerScopeArguments(workerUnit(taskId, attempt), command, args),
-      options,
-    );
+    const scoped = this.run('systemd-run', workerScopeArguments(workerUnit(taskId, attempt), command, args), options);
     const scopedError = failure(scoped);
     if (!scopedError) return scoped;
     if (hasStarted()) {

@@ -845,9 +845,10 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
     let sections: PageDataSection[];
     let incomplete: boolean;
     try {
-      ({ sections, incomplete } = scopeLimitExceeded || scopeKilled
-        ? parseScopeLimitedPageDataOutput(output, registry, invocation, exitCode)
-        : parsePageDataCompletion(output, registry, invocation, exitCode));
+      ({ sections, incomplete } =
+        scopeLimitExceeded || scopeKilled
+          ? parseScopeLimitedPageDataOutput(output, registry, invocation, exitCode)
+          : parsePageDataCompletion(output, registry, invocation, exitCode));
     } catch (error) {
       const transcript = combineFailureOutput(stackOutput, commandOutput(output, diagnostics));
       const logPath = writePageDataFailureLog(options.settings.stateDirectory, runId, 'check', transcript);
@@ -1253,9 +1254,7 @@ export function pageDataCheckScopeArguments(invocation: string, command: string,
   );
 }
 
-function takePageDataScopeOomStatus(
-  stderr: string,
-): { stderr: string; reported: boolean; oomKills?: number } {
+function takePageDataScopeOomStatus(stderr: string): { stderr: string; reported: boolean; oomKills?: number } {
   const lines = stderr.split(/\r?\n/u);
   const markers = lines.filter((line) => line.startsWith('REZICS_PAGE_DATA_SCOPE_OOM_KILLS='));
   if (markers.length === 0) return { stderr, reported: false };
@@ -1424,9 +1423,7 @@ async function runPageDataScopedCheck(
     if (!scopeLimitExceeded && !scopeKilled && ![0, 1, 2].includes(result.exitCode)) {
       const detail = result.stderr || result.stdout;
       const signal = result.signal ? ` (signal ${result.signal})` : '';
-      const line = detail.trim()
-        ? terminalErrorLine(detail)
-        : `page-data-check exited ${result.exitCode}${signal}`;
+      const line = detail.trim() ? terminalErrorLine(detail) : `page-data-check exited ${result.exitCode}${signal}`;
       throw new PageDataStackError('check', line, line, commandOutput(result.stdout, result.stderr));
     }
   } catch (error) {
