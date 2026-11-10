@@ -52,6 +52,7 @@ import libraryProgressSessionRecording from '../kernel/recorded/library-progress
 import libraryProgressSessionsRecording from '../kernel/recorded/library-progress-sessions.json';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
+import { PageVisitBinding } from '../subject/page-visit-binding';
 import { bindPreviewNavigation } from './preview-navigation';
 
 const missingSubjectId = '00000000-0000-4000-8000-000000000000';
@@ -59,7 +60,7 @@ const missingSubjectId = '00000000-0000-4000-8000-000000000000';
 const PatternChildren = createContext<ReactNode>(null);
 
 function PatternRoot() {
-  return useContext(PatternChildren);
+  return <PageVisitBinding>{useContext(PatternChildren)}</PageVisitBinding>;
 }
 
 const patternRoute = createRootRoute({ component: PatternRoot });
