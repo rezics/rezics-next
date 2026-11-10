@@ -15,6 +15,7 @@ import { setStoryRequestContext } from '../../.storybook/react-start';
 import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime.js';
 import { deletedOrganizationThreadId } from '../kernel/fake';
 import { PendingPage } from '../shell/pending';
+import { DefaultReaderProvider } from '../shell/default-reader';
 import { searchFacetStoryPaths } from '../kernel/fake/search-facets';
 import { selectLabelStory } from '../kernel/fake/library-labels';
 import { selectRatingsFixture, type RatingsFixtureName } from '../kernel/fake/ratings';
@@ -224,9 +225,11 @@ export function PatternStory({
   return (
     <PatternChildren.Provider value={children}>
       <QueryClientProvider client={queryClient}>
-        <NativeAccountsProvider profileHref={accountProfileHref}>
-          <RouterProvider router={router} />
-        </NativeAccountsProvider>
+        <DefaultReaderProvider>
+          <NativeAccountsProvider profileHref={accountProfileHref}>
+            <RouterProvider router={router} />
+          </NativeAccountsProvider>
+        </DefaultReaderProvider>
       </QueryClientProvider>
     </PatternChildren.Provider>
   );

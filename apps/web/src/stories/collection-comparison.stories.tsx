@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { PatternStory } from './page';
 import { CollectionPage } from '../library/collection-page';
 import type { EditableCollectionPage } from '../library/collection-load';
@@ -158,7 +158,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 async function recoverExample(canvasElement: HTMLElement) {
-  const { userEvent } = await import('storybook/test');
   const canvas = within(canvasElement);
   await userEvent.click(await canvas.findByRole('button', { name: 'Recover same cursor' }));
   await expect(await canvas.findByText('Read this occurrence first.')).toBeVisible();
@@ -186,7 +185,6 @@ export const MissingDefinitionLabels: Story = {
 export const ReplacementDuringReferenceVisit: Story = {
   render: () => <Example />,
   play: async ({ canvasElement }) => {
-    const { userEvent } = await import('storybook/test');
     await recoverExample(canvasElement);
     const canvas = within(canvasElement);
     await userEvent.click(canvasElement.querySelector<HTMLElement>('[data-comparison-reference]')!);

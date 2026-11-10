@@ -114,7 +114,6 @@ export const Following: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    const { userEvent } = await import('storybook/test');
     await canvas.findByRole('link', { name: 'Letters from B-612' });
     const following = await canvas.findByRole('button', { name: m.home_feed_following() });
     await expect(following).toBeEnabled();
