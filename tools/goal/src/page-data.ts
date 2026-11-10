@@ -91,7 +91,12 @@ export type PageDataRepair = {
   previousClass: PageDataClass;
   owner?: Task;
   head: string;
+  reconcileRiskRefusal?: true;
 };
+export function isPageDataRiskRefusal(reason: unknown): reason is string {
+  return typeof reason === 'string' && /^declared paths touch undeclared risk area: [a-z0-9_-]+$/.test(reason);
+}
+
 export type PageDataRepairRoute =
   | 'resumed'
   | 'dispatched'
@@ -702,6 +707,81 @@ function settleRepair(
     db.query('UPDATE page_data_repairs SET status=?,detail=? WHERE repair_key=?').run(status, detail, key);
     recordFlow(db, event);
   }).immediate();
+}
+
+/** Recover only classification refusals from one retained run, without launching a browser or reclassifying its evidence. */
+export async function reconcilePageDataRepairs(
+  options: Pick<PageDataOptions, 'settings' | 'db' | 'tasks' | 'routeDefect' | 'now'>,
+  runId: number,
+): Promise<{ routed: number; unresolved: { key: string; reason: string }[] }> {
+  const { db, settings } = options;
+  if (!Number.isSafeInteger(runId) || runId < 1) throw new Error('Expected a retained page-data run ID');
+  ensureFlow(db);
+  const lock = acquireDirectoryLease(join(settings.stateDirectory, 'page-data.lease'), settings.policy?.leases);
+  try {
+    const run = db
+      .query(
+        "SELECT detail FROM flow_events WHERE task_id=? AND attempt=? AND stage='verification' AND action='page-data-run'",
+      )
+      .get(pageDataTaskId, runId) as { detail: string } | null;
+    const head = run && (JSON.parse(run.detail) as { head?: string }).head;
+    if (!head) throw new Error(`No retained page-data run ${runId}`);
+    const claims = db
+      .query(
+        `SELECT DISTINCT claim.repair_key AS key, claim.detail FROM page_data_repairs claim
+         JOIN flow_events event ON json_extract(event.detail, '$.repairKey')=claim.repair_key
+         WHERE event.task_id=? AND event.attempt=? AND event.stage='verification' AND event.action='page-data-repair'
+           AND claim.status='refused' AND json_extract(event.detail, '$.route')='refused'`,
+      )
+      .all(pageDataTaskId, runId) as { key: string; detail: string }[];
+    const tasks = options.tasks.tasks();
+    const at = (options.now ?? (() => new Date()))().toISOString();
+    const result: { routed: number; unresolved: { key: string; reason: string }[] } = { routed: 0, unresolved: [] };
+    for (const claim of claims) {
+      const detail = JSON.parse(claim.detail) as {
+        repairKey: string;
+        section: PageDataSection;
+        previousClass: PageDataClass;
+        owner?: string;
+        reason?: string;
+      };
+      if (!isPageDataRiskRefusal(detail.reason)) continue;
+      const owner = detail.owner ? tasks.find((task) => task.id === detail.owner) : undefined;
+      if ((detail.owner && !owner) || claim.key !== repairKey(detail.section, owner)) {
+        result.unresolved.push({ key: claim.key, reason: 'The original repair identity could not be recovered' });
+        continue;
+      }
+      try {
+        const route = await options.routeDefect({
+          repairKey: claim.key,
+          section: detail.section,
+          previousClass: detail.previousClass,
+          ...(owner ? { owner } : {}),
+          head,
+          reconcileRiskRefusal: true,
+        });
+        if (typeof route === 'object') {
+          result.unresolved.push({ key: claim.key, reason: route.reason });
+          continue;
+        }
+        const repairedDetail = JSON.stringify({ ...detail, route, reason: undefined, reconciled: true });
+        settleRepair(db, claim.key, 'routed', repairedDetail, {
+          taskId: pageDataTaskId,
+          attempt: runId,
+          stage: 'verification',
+          action: 'page-data-repair',
+          at,
+          detail: repairedDetail,
+        });
+        result.routed++;
+      } catch (error) {
+        result.unresolved.push({ key: claim.key, reason: errorMessage(error) });
+      }
+    }
+    return result;
+  } finally {
+    lock.release();
+  }
 }
 
 function saveRun(db: Database, run: PageDataRun): void {
@@ -1893,8 +1973,31 @@ export async function reconcileDedicatedPageDataDefinitions(settings: Settings):
 }
 
 if (import.meta.main) {
-  if (process.argv.length !== 3 || process.argv[2] !== 'reconcile-definitions')
-    throw new Error('Usage: bun tools/goal/src/page-data.ts reconcile-definitions');
-  const { loadSettings } = await import('./settings.ts');
-  await reconcileDedicatedPageDataDefinitions(loadSettings());
+  if (process.argv.length === 3 && process.argv[2] === 'reconcile-definitions') {
+    const { loadSettings } = await import('./settings.ts');
+    await reconcileDedicatedPageDataDefinitions(loadSettings());
+  } else if (process.argv.length === 4 && process.argv[2] === 'reconcile-repairs' && /^\d+$/.test(process.argv[3]!)) {
+    if (process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT)
+      throw new Error('Workers cannot reconcile retained page-data repairs');
+    const [{ createRuntime }, { createRuntimeRepairRouting }] = await Promise.all([
+      import('./config.ts'),
+      import('./runtime-repair-routing.ts'),
+    ]);
+    const runtime = createRuntime();
+    try {
+      const result = await reconcilePageDataRepairs(
+        {
+          db: runtime.db,
+          settings: runtime.settings,
+          tasks: runtime.store,
+          routeDefect: createRuntimeRepairRouting(runtime).routePageDataRepair,
+        },
+        Number(process.argv[3]),
+      );
+      console.log(JSON.stringify(result));
+      if (result.unresolved.length) process.exitCode = 1;
+    } finally {
+      runtime.close();
+    }
+  } else throw new Error('Usage: bun tools/goal/src/page-data.ts reconcile-definitions | reconcile-repairs <run-id>');
 }

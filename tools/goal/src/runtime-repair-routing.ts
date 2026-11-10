@@ -1,16 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { classifyRiskAreas, readRiskOwnership, riskAreaRulesFor } from './briefs.ts';
 import { testFailureRepairBrief, type TestFailureRepair } from './dev-verifier.ts';
 import type { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerJob } from './job.ts';
-import type { PageDataRepair, PageDataRepairRoute } from './page-data.ts';
+import { isPageDataRiskRefusal, type PageDataRepair, type PageDataRepairRoute } from './page-data.ts';
 import type { WorkerStore } from './store.ts';
 import type { WorkerTasks } from './tasks.ts';
 import type { Settings } from './types.ts';
 
-type RoutingSettings = Pick<Settings, 'stateDirectory'> & {
-  policy?: Pick<NonNullable<Settings['policy']>, 'verifier'>;
+type RoutingSettings = Pick<Settings, 'stateDirectory' | 'riskAreasFile'> & {
+  policy?: Pick<NonNullable<Settings['policy']>, 'verifier' | 'brief'>;
 };
 
 export type RuntimeRepairRoutingDependencies = {
@@ -96,14 +97,14 @@ function dispatchTestFailureRepair(dependencies: RuntimeRepairRoutingDependencie
   );
 }
 
-function pageDataRepairBrief(repair: PageDataRepair, goal: string, manager: string): string {
+function pageDataRepairBrief(repair: PageDataRepair, goal: string, manager: string, riskAreas: string[]): string {
   return `---\n${JSON.stringify(
     {
       goal,
       manager,
       kind: 'implementation',
       paths: repair.section.files,
-      riskAreas: [],
+      riskAreas,
       urgent: true,
       acceptance: { failing: true },
       estimate: { lines: 700, files: 12 },
@@ -121,7 +122,7 @@ export async function routePageDataRepair(
   store: Pick<WorkerStore, 'tasks'>,
   job: RuntimeRepairRoutingDependencies['job'],
   inbox: RuntimeRepairRoutingDependencies['inbox'],
-  settings: Pick<Settings, 'stateDirectory'>,
+  settings: RoutingSettings,
   repair: PageDataRepair,
 ): Promise<PageDataRepairRoute> {
   if (await job.resumePageDataRepair(repair)) return 'resumed';
@@ -139,18 +140,38 @@ export async function routePageDataRepair(
     });
     return 'dispatched';
   }
-  const markdown = pageDataRepairBrief(repair, goal, manager);
+  const policy = settings.policy?.brief;
+  const rules = riskAreaRulesFor(readRiskOwnership(settings.riskAreasFile, policy));
+  const riskAreas = [
+    ...new Set(repair.section.files.flatMap((path) => classifyRiskAreas(path, rules, 'pattern', policy))),
+  ];
+  const markdown = pageDataRepairBrief(repair, goal, manager, riskAreas);
   const briefPath = join(settings.stateDirectory, 'page-data-repairs', `${repair.repairKey}.brief.md`);
   mkdirSync(dirname(briefPath), { recursive: true });
   if (existsSync(briefPath)) {
-    if (readFileSync(briefPath, 'utf8') !== markdown)
-      throw new Error('page-data repair brief changed for an existing cause');
+    const previous = readFileSync(briefPath, 'utf8');
+    if (previous !== markdown) {
+      // The retained refusal authorizes only replacement of the generator's empty risk declaration.
+      if (
+        !repair.reconcileRiskRefusal ||
+        !riskAreas.length ||
+        previous !== pageDataRepairBrief(repair, goal, manager, [])
+      )
+        throw new Error('page-data repair brief changed for an existing cause');
+      const staged = `${briefPath}.${randomUUID()}.tmp`;
+      try {
+        writeFileSync(staged, markdown, { flag: 'wx', mode: 0o600 });
+        renameSync(staged, briefPath);
+      } finally {
+        rmSync(staged, { force: true });
+      }
+    }
   } else writeFileSync(briefPath, markdown, { flag: 'wx', mode: 0o600 });
   let task: ReturnType<typeof tasks.dispatch>;
   try {
     task = tasks.dispatch(briefPath, null, true, 'verifier');
   } catch (error) {
-    if (error instanceof Error && /^declared paths touch undeclared risk area: [a-z0-9_-]+$/.test(error.message))
+    if (error instanceof Error && isPageDataRiskRefusal(error.message))
       return { status: 'refused', reason: error.message };
     throw error;
   }
