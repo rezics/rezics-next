@@ -12,6 +12,7 @@ import {
   pointer,
   publicOrigin,
   redact,
+  resolveSeedIdentity,
   runPageDataCheck,
   signInRequestBody,
   type Manifest,
@@ -165,6 +166,163 @@ test('CLI requires the web and kernel origins', () => {
   expect(args.kernel).toBe('http://127.0.0.1:4100');
 });
 
+test('seeded pages bind exact source identities for Web, native and SQL, and leave missing or ambiguous probes unrun', async () => {
+  const reference = { provider: 'bangumi' as const, sourceKey: '84148', nativeType: 'schema:Book' };
+  const subjectId = '00000000-0000-4000-8000-000000000123';
+  const record = {
+    source: reference.provider,
+    externalId: reference.sourceKey,
+    subject: { subject: { id: subjectId, type: reference.nativeType } },
+  };
+  const artifact = { readings: [record] };
+  expect(resolveSeedIdentity(reference, artifact)).toEqual({
+    status: 'resolved',
+    subjectId,
+    collection: 'readings',
+  });
+  expect(resolveSeedIdentity(reference, { readings: [] })).toMatchObject({
+    status: 'unrun',
+    reason: 'source-key-missing',
+  });
+  expect(
+    resolveSeedIdentity(reference, {
+      readings: [
+        record,
+        {
+          ...record,
+          subject: { subject: { id: '00000000-0000-4000-8000-000000000124', type: reference.nativeType } },
+        },
+      ],
+    }),
+  ).toMatchObject({
+    status: 'unrun',
+    reason: 'ambiguous',
+  });
+  expect(
+    resolveSeedIdentity(reference, {
+      readings: [{ ...record, subject: { subject: { id: 'bad-id', type: reference.nativeType } } }],
+    }),
+  ).toMatchObject({
+    status: 'unrun',
+    reason: 'identity-invalid',
+  });
+
+  const tagReference = {
+    provider: 'vndb' as const,
+    sourceKey: 'g105',
+    nativeType: 'skos:Concept',
+    namespace: 'vndb.tag.cont',
+  };
+  expect(
+    resolveSeedIdentity(tagReference, {
+      publicTags: {
+        currentBindings: {
+          concepts: [
+            { taxonomy: 'vndb.tag.cont', code: 'g105', id: subjectId, type: 'skos:Concept' },
+            { taxonomy: 'other-taxonomy', code: 'g105', id: 'bad-id', type: 'skos:Concept' },
+          ],
+        },
+      },
+    }),
+  ).toEqual({ status: 'resolved', subjectId, collection: 'publicTags.currentBindings.concepts' });
+
+  const manifest: Manifest = {
+    version: 1,
+    context: '',
+    question: '',
+    pages: [
+      {
+        id: 'book',
+        path: '/en/subjects/{subject}',
+        personas: ['anonymous'],
+        seedIdentity: reference,
+        sections: [
+          {
+            id: 'reader',
+            name: 'Book reader',
+            selector: '[data-book-reader]',
+            native: {
+              method: 'POST',
+              path: '/v1/subjects/{subject}/read',
+              body: { target: { subject: '{subject}' } },
+              items: '/relations',
+            },
+            sql: { text: 'SELECT subject_id FROM semantic.candidate WHERE subject_id = $1::uuid', params: ['subject'] },
+          },
+        ],
+      },
+    ],
+  };
+  const visits: string[] = [];
+  const nativeRequests: { path: string; subject: string }[] = [];
+  const sqlValues: string[][] = [];
+  const output: string[] = [];
+  const browser = {
+    newContext: async () => ({
+      newPage: async () => ({
+        goto: async (url: string) => visits.push(new URL(url).pathname),
+        waitForFunction: async () => {},
+        evaluate: async () => page({ itemCount: 1, text: 'Book reader', dataState: 'ready' }),
+        close: async () => {},
+      }),
+      close: async () => {},
+    }),
+  } as unknown as Browser;
+  const options = {
+    baseUrl: 'http://web.test',
+    kernel: 'http://kernel.test',
+    manifest,
+    seedArtifact: artifact,
+    browser,
+    fetch: (async (request: Request) => {
+      const body = (await request.json()) as { target: { subject: string } };
+      nativeRequests.push({ path: new URL(request.url).pathname, subject: body.target.subject });
+      return Response.json({ relations: [{ id: 'relation-1' }] });
+    }) as typeof fetch,
+    queryCount: async (_text: string, values: readonly string[]) => {
+      sqlValues.push([...values]);
+      return 1;
+    },
+    stdout: { write: (chunk: string) => output.push(chunk) },
+    stderr: { write() {} },
+  };
+  const checked = await runPageDataCheck(options);
+  expect(visits).toEqual([`/en/subjects/${subjectId}`]);
+  expect(nativeRequests).toEqual([{ path: `/v1/subjects/${subjectId}/read`, subject: subjectId }]);
+  expect(sqlValues).toEqual([[subjectId]]);
+  expect(checked.results[0]?.evidence).toMatchObject({
+    nativeProbe: 'run',
+    browserProbe: 'run',
+    sqlProbe: 'run',
+  });
+
+  const before = { visits: visits.length, native: nativeRequests.length, sql: sqlValues.length };
+  const unresolved = await runPageDataCheck({
+    ...options,
+    seedArtifact: { readings: [] },
+    stdout: { write: (chunk: string) => output.push(chunk) },
+  });
+  const unrun = unresolved.results[0]!;
+  expect(unresolved.incomplete).toBe(true);
+  expect(unrun.class).toBe('UNAVAILABLE');
+  expect(unrun.evidence).toMatchObject({
+    nativeProbe: 'unrun',
+    browserProbe: 'unrun',
+    sqlProbe: 'unrun',
+    unrun: {
+      provider: 'bangumi',
+      sourceKey: '84148',
+      nativeType: 'schema:Book',
+      artifact: '../page-data-stack/.temp/cross-media-seed/result.json',
+      reason: 'source-key-missing',
+      probes: { web: 'unrun', native: 'unrun', sql: 'unrun' },
+    },
+  });
+  expect({ visits: visits.length, native: nativeRequests.length, sql: sqlValues.length }).toEqual(before);
+  expect(output.join('')).toContain('unrun=');
+  expect(unresolved.diagnostics.join('\n')).toContain('sourceKey=84148');
+});
+
 const fixtureManifest = (paths: Record<string, string>, kernelPath: string): Manifest =>
   parseManifest({
     version: 1,
@@ -174,7 +332,6 @@ const fixtureManifest = (paths: Record<string, string>, kernelPath: string): Man
       {
         id: 'web-hide',
         path: paths.web,
-        subject: '00000000-0000-4000-8000-000000000001',
         sections: [
           {
             id: 'hidden',
@@ -433,6 +590,7 @@ test('fixture pages exercise classification, reader readiness and coverage after
           seedExpected: false,
           nativeProbe: 'run',
           browserProbe: 'run',
+          sqlProbe: 'not-declared',
         },
       }),
     );
@@ -575,6 +733,32 @@ test('the tracked M1 manifest names the starting pages and seed counts', () => {
     'library',
   ]);
   expect(manifest.pages.find((page) => page.id === 'library')?.personas).toEqual(['member']);
+  expect(
+    manifest.pages.filter((page) => page.seedIdentity).map(({ id, path, seedIdentity }) => [id, path, seedIdentity]),
+  ).toEqual([
+    ['vn', '/en/subjects/{subject}', { provider: 'vndb', sourceKey: 'v2002', nativeType: 'wd:Q689445' }],
+    ['anime', '/en/subjects/{subject}', { provider: 'bangumi', sourceKey: '10380', nativeType: 'schema:TVSeries' }],
+    ['book', '/en/subjects/{subject}', { provider: 'bangumi', sourceKey: '84148', nativeType: 'schema:Book' }],
+    ['character', '/en/subjects/{subject}', { provider: 'bangumi', sourceKey: 'character:4', nativeType: 'wd:Q95074' }],
+    [
+      'person',
+      '/en/subjects/{subject}',
+      { provider: 'bangumi', sourceKey: 'person:1916', nativeType: 'schema:Person' },
+    ],
+    [
+      'tag',
+      '/en/subjects/{subject}',
+      { provider: 'vndb', sourceKey: 'g105', nativeType: 'skos:Concept', namespace: 'vndb.tag.cont' },
+    ],
+  ]);
+  expect(() =>
+    parseManifest({
+      version: 1,
+      context: '',
+      question: '',
+      pages: [{ id: 'stale', path: '/', subject: 'static-id', sections: [] }],
+    }),
+  ).toThrow('must resolve its seeded identity');
   expect(manifest.pages.some((page) => page.sections.some((section) => section.sql))).toBe(true);
   const sections = Object.fromEntries(
     manifest.pages.flatMap((page) => page.sections.map((section) => [`${page.id}.${section.id}`, section])),

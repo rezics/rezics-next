@@ -41,6 +41,13 @@ states are UNAVAILABLE. HTTP requests, page navigation, reader readiness and SQL
 missing SQL evidence is reported, does not produce WEB or SEED, and makes an otherwise clean run exit 2; defects exit
 1 and a complete non-defect run exits 0. Credentials and tokens never appear in output.
 
+Decision: seeded subject pages bind only by their declared provider source key and expected native type from the
+owned `page-data-stack` worktree's `.temp/cross-media-seed/result.json`. One resolved subject ID drives the browser
+route, native path/body and SQL parameters. Missing, malformed, ambiguous or wrong-type identities leave the affected
+Web, native and SQL probes unrun with the provider, source key, expected type, artifact and reason recorded; these are
+UNAVAILABLE observations, not product 404s. The checker reads source records from `readings` and VNDB tags from
+`publicTags.currentBindings.concepts`.
+
 `--database-url`, `DATABASE_URL` or `services/kernel/.env` supplies SQL access. `--member-token` or
 `PAGE_DATA_CHECK_MEMBER_TOKEN` supplies the member Kernel bearer; otherwise the local development persona credentials
 are used with the Auth app's `login` client and empty scope. The seeded complete manifest is expected to finish in under

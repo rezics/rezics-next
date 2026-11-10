@@ -128,8 +128,8 @@
     },
     {
       "id": "vn",
-      "path": "/en/subjects/01a1a8fe-b84b-749c-a651-806639d32394",
-      "subject": "01a1a8fe-b84b-749c-a651-806639d32394",
+      "path": "/en/subjects/{subject}",
+      "seedIdentity": { "provider": "vndb", "sourceKey": "v2002", "nativeType": "wd:Q689445" },
       "sections": [
         {
           "id": "related-edition-of",
@@ -467,8 +467,8 @@
     },
     {
       "id": "anime",
-      "path": "/en/subjects/01a1a8f0-7edf-77a4-899b-f42edb681fd8",
-      "subject": "01a1a8f0-7edf-77a4-899b-f42edb681fd8",
+      "path": "/en/subjects/{subject}",
+      "seedIdentity": { "provider": "bangumi", "sourceKey": "10380", "nativeType": "schema:TVSeries" },
       "sections": [
         {
           "id": "related-members",
@@ -684,8 +684,8 @@
     },
     {
       "id": "book",
-      "path": "/en/subjects/01a1a8f0-a734-762b-b0ef-adbbf390a859",
-      "subject": "01a1a8f0-a734-762b-b0ef-adbbf390a859",
+      "path": "/en/subjects/{subject}",
+      "seedIdentity": { "provider": "bangumi", "sourceKey": "84148", "nativeType": "schema:Book" },
       "sections": [
         {
           "id": "related-edition-of",
@@ -717,7 +717,7 @@
             "path": "/v1/pages:read",
             "body": {
               "target": {
-                "subject": "01a1a8f0-a734-762b-b0ef-adbbf390a859"
+                "subject": "{subject}"
               },
               "languages": ["en"]
             },
@@ -874,8 +874,8 @@
     },
     {
       "id": "character",
-      "path": "/en/subjects/01a1a8fc-cb59-7657-960c-f1831f7c4ce2",
-      "subject": "01a1a8fc-cb59-7657-960c-f1831f7c4ce2",
+      "path": "/en/subjects/{subject}",
+      "seedIdentity": { "provider": "bangumi", "sourceKey": "character:4", "nativeType": "wd:Q95074" },
       "sections": [
         {
           "id": "profile",
@@ -978,8 +978,8 @@
     },
     {
       "id": "person",
-      "path": "/en/subjects/01a1a8fd-da6a-73b6-9eb4-5950a5094808",
-      "subject": "01a1a8fd-da6a-73b6-9eb4-5950a5094808",
+      "path": "/en/subjects/{subject}",
+      "seedIdentity": { "provider": "bangumi", "sourceKey": "person:1916", "nativeType": "schema:Person" },
       "sections": [
         {
           "id": "about",
@@ -1082,8 +1082,13 @@
     },
     {
       "id": "tag",
-      "path": "/en/subjects/01a1a8ed-59a4-739e-bb52-769d57822b9a",
-      "subject": "01a1a8ed-59a4-739e-bb52-769d57822b9a",
+      "path": "/en/subjects/{subject}",
+      "seedIdentity": {
+        "provider": "vndb",
+        "sourceKey": "g105",
+        "nativeType": "skos:Concept",
+        "namespace": "vndb.tag.cont"
+      },
       "sections": [
         {
           "id": "works",
