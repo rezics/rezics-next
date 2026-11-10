@@ -151,7 +151,12 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
 
   async function drainAlice(accountId: string) {
     const route = routeOf(accountId);
-    if (route !== null) await drainEffects(world.pool, partitionOf(route), { deadlineMs: 45_000 });
+    try {
+      if (route !== null) await drainEffects(world.pool, partitionOf(route), { deadlineMs: 45_000 });
+    } catch (error) {
+      console.error('Terminal erasure worker at failed effects drain:', worker?.output);
+      throw error;
+    }
   }
 
   const driver: TerminalErasureDriver = {
