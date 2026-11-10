@@ -780,7 +780,7 @@ test('member browser sign-in uses visible controls before document lifecycle and
       return new Response(
         `<form method="post"><label>Email<input name="email"></label>
       <label>Password<input name="password" type="password"></label><button>Sign in</button></form>
-      <script defer src="/pending.js"></script>`,
+      ${failure ? '' : '<script defer src="/pending.js"></script>'}`,
         { headers: { 'content-type': 'text/html' } },
       );
     },
@@ -798,6 +798,7 @@ test('member browser sign-in uses visible controls before document lifecycle and
     expect(evidence.join('\n')).toContain('phase=callback document=303');
     expect(evidence.at(-1)).toBe('Member browser sign-in phase=session verified');
     expect(evidence.join('\n')).not.toMatch(/private-state|private-code|private-password/);
+    await context.close();
     // A returned Web origin and a session cookie cannot turn a refused callback or signed-out reader green.
     for (failure of ['callback', 'session'] as const) {
       const fresh = await browser.newContext();

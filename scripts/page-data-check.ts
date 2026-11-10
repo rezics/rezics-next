@@ -21,7 +21,7 @@ import {
   type Response as PlaywrightResponse,
 } from '../packages/ui/node_modules/playwright/index.js';
 
-type JsonWebKey = JsonWebKeyInput['key'];
+type JsonWebKey = JsonWebKeyInput['key'] & { kid?: string };
 
 export const CLASSES = ['DATA', 'EMPTY', 'UNAUTHORIZED', 'UNAVAILABLE', 'API', 'WEB', 'SEED'] as const;
 export type SectionClass = (typeof CLASSES)[number];
