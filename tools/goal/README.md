@@ -1161,6 +1161,18 @@ conflict fields read back as unavailable, without backfilling today's observatio
 proof boundary for same-session/attempt/pass landing with one acceptance, rerere without a worker wake, exact-owner
 wrong-resolution fixes and authenticated manager ownership guards; these counters do not certify those scenarios.
 
+Decision: record landing lifecycle by durable operation identity. The landing owner should persist each queue-state
+transition and its flow event in one SQLite transaction. A replay of the same transition emits no extra event;
+a genuine retry has a new operation identity. Keep the exact start and terminal outcome so a completion can be
+paired across midnight. Readers must leave missing boundaries unknown and must not infer duplicate execution
+from repeated events on an older attempt identity.
+
+The [November 9 daily audit](reports/daily-step-audit-2026-11-09.md#one-structural-change-and-its-measure)
+is the baseline: 80 enqueue events for 40 attempt identities, and one complete same-day interval for 40
+integrations. Verify the new producer with two complete UTC days: one enqueue per operation and complete
+start/terminal coverage for the terminal cohort. Compare throughput at comparable offered work; the old
+counts do not establish time or allowance saved.
+
 ### Hourly delivery report
 
 `bun tools/goal/scripts/efficiency-report.ts [--bucket <UTC-hour-start>]` prints the most recently completed UTC hour
