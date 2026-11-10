@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { browserRoutes } from './browser-routes.ts';
 import { staticDocgen } from './static-docgen.ts';
+import { storyKernelOrigin } from './kernel-origin.ts';
 
 const app = fileURLToPath(new URL('..', import.meta.url));
 const componentRefs =
@@ -69,6 +70,10 @@ const config: StorybookConfig = {
     { from: './media', to: '/media' },
   ],
   async viteFinal(config, { configType, outputDir }) {
+    config.define = {
+      ...config.define,
+      'import.meta.env.REZICS_STORYBOOK_KERNEL_ORIGIN': JSON.stringify(storyKernelOrigin),
+    };
     const staticOutput = configType === 'PRODUCTION' ? outputDir : undefined;
     const storyPlugins = (plugins: typeof config.plugins): typeof config.plugins =>
       plugins?.flatMap((plugin) =>
