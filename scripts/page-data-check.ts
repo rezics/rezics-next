@@ -914,8 +914,14 @@ async function memberWebsiteToken(
     }),
   );
   // Do not follow login, consent or registration redirects, or expose their parameters.
-  if (![302, 303].includes(response.status)) throw new Error(`Member Website authorization failed: ${response.status}`);
-  const location = response.headers.get('location');
+  let location: string | null;
+  if ([302, 303].includes(response.status)) location = response.headers.get('location');
+  else if (response.status === 200) {
+    // The native Website owner can describe the redirect without navigating it.
+    const redirect: unknown = await response.json();
+    location =
+      isRecord(redirect) && redirect.redirect === true && typeof redirect.url === 'string' ? redirect.url : null;
+  } else throw new Error(`Member Website authorization failed: ${response.status}`);
   if (!location) throw new Error('Member Website authorization omitted callback');
   const callback = new URL(location, origin);
   if (

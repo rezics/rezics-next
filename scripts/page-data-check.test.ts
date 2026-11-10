@@ -908,6 +908,8 @@ test('the tracked M1 manifest names the starting pages and seed counts', () => {
 
 test.each([
   'website',
+  'website-json',
+  'website-json-foreign',
   'missing-key',
   'missing-scope',
   'registration',
@@ -1008,8 +1010,12 @@ test.each([
         challenge = url.searchParams.get('code_challenge')!;
         if (mode === 'registration') return Response.json({ error: 'invalid_client' }, { status: 400 });
         const callback = new URL(mode === 'consent' ? 'http://auth.test/consent' : 'http://web.test/auth/callback');
-        callback.searchParams.set('state', mode === 'foreign-state' ? 'foreign' : url.searchParams.get('state')!);
+        callback.searchParams.set(
+          'state',
+          mode === 'foreign-state' || mode === 'website-json-foreign' ? 'foreign' : url.searchParams.get('state')!,
+        );
         callback.searchParams.set('code', 'code-secret');
+        if (mode.startsWith('website-json')) return Response.json({ redirect: true, url: callback.href });
         return new Response(null, { status: 302, headers: { location: callback.href } });
       }
       expect(url.pathname).toBe('/token');
@@ -1051,7 +1057,7 @@ test.each([
       },
     },
   });
-  const available = mode === 'website' || mode === 'supplied';
+  const available = mode === 'website' || mode === 'website-json' || mode === 'supplied';
   const partial = mode === 'following-only';
   expect(nativePaths.toSorted()).toEqual(
     (available
