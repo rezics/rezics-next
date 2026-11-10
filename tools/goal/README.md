@@ -1539,7 +1539,11 @@ that they be split into a dev task.
 Decision: completed page-data runs and section evidence are recorded before repair admission. A risk-area refusal stays a
 `refused` repair claim with its exact section and reason in the page-data flow report; the cycle continues routing
 independent defects. Only resumed or dispatched repairs become `routed`, and a refused claim suppresses an immediate
-replay without granting the repair any risk area.
+replay without granting the repair any risk area. Generated repair briefs declare the risks classified from the same path
+rules as ordinary brief admission. To recover a retained classification refusal, run
+`bun tools/goal/src/page-data.ts reconcile-repairs <run-id>` from the control-plane checkout. This uses the original
+run, cause key, and evidence without starting the checker. It changes only an unadmitted generator's empty risk
+declaration; other brief changes and other refusals remain untouched. Already routed causes are skipped.
 
 Decision: dispatch and retry refuse a brief whose `acceptance.requires` lists `native` or `browser` when another task of
 the same Goal with those requires is ready, running, held or landing. The error names that task and links

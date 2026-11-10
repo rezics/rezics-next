@@ -25,6 +25,7 @@ import {
   firstSubstantiveErrorLine,
   terminalErrorLine,
   runPageDataCycle,
+  reconcilePageDataRepairs,
   readLatestPageDataRun,
   type PageDataSection,
   type PageDataUnrunEvidence,
@@ -255,7 +256,7 @@ test('the policy interval, defect transition, section output and per-run report 
   }
 });
 
-test('a refused repair keeps its completed run, lets independent repairs route, and skips an immediate replay', async () => {
+test('an incomplete run retains evidence while a legacy risk refusal is reconciled once without rerunning the checker', async () => {
   const h = harness();
   try {
     const integrationRef = spawnSync('git', ['branch', 'dev', 'main'], {
@@ -295,6 +296,19 @@ test('a refused repair keeps its completed run, lets independent repairs route, 
     const routeAttempts: string[] = [];
     const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
     const job = { resumePageDataRepair: async () => false };
+    let legacyGenerator = true;
+    let refusedBriefPath = '';
+    const dispatch = {
+      dispatch(...args: Parameters<typeof h.tasks.dispatch>) {
+        const path = args[0];
+        const brief = readFileSync(path, 'utf8');
+        if (legacyGenerator && brief.includes('settings/anonymous/permissions')) {
+          refusedBriefPath = path;
+          writeFileSync(path, brief.replace(/"riskAreas": \[\s*"authorization"\s*\]/, '"riskAreas": []'));
+        }
+        return h.tasks.dispatch(...args);
+      },
+    };
     const options = {
       settings: h.settings,
       db: h.store.db,
@@ -304,14 +318,14 @@ test('a refused repair keeps its completed run, lets independent repairs route, 
       runStack: async (_head: string, invocation: string) => {
         stackRuns++;
         return {
-          output: completed(invocation, rows),
+          output: completed(invocation, rows, rows.includes(' API')),
           exitCode: rows.includes(' API') ? 1 : 0,
           registry,
         };
       },
       routeDefect: (repair: PageDataRepair) => {
         routeAttempts.push(repair.section.section);
-        return routePageDataRepair(h.tasks, h.store, job, inbox, h.settings, repair);
+        return routePageDataRepair(dispatch, h.store, job, inbox, h.settings, repair);
       },
     };
 
@@ -323,6 +337,7 @@ test('a refused repair keeps its completed run, lets independent repairs route, 
     expect(routeAttempts).toEqual(['permissions', 'feed']);
     expect(stackRuns).toBe(2);
     expect(readLatestPageDataRun(h.store.db)).toMatchObject({
+      coverage: { status: 'incomplete' },
       sections: [
         {
           page: 'settings',
@@ -333,7 +348,8 @@ test('a refused repair keeps its completed run, lets independent repairs route, 
         { page: 'home', section: 'feed', class: 'API' },
       ],
     });
-    const report = flowReport(readFlow(h.store.db), []).pageDataRuns.at(-1)!;
+    const retainedRunId = readLatestPageDataRun(h.store.db)!.runId;
+    const report = flowReport(readFlow(h.store.db), []).pageDataRuns.find((item) => item.runId === retainedRunId)!;
     expect(report.repairs).toEqual([
       expect.objectContaining({
         route: 'refused',
@@ -368,6 +384,29 @@ test('a refused repair keeps its completed run, lets independent repairs route, 
     expect(routeAttempts).toEqual(['permissions', 'feed']);
     expect(h.store.tasks().filter((task) => task.brief.markdown.includes('page-data-repair-key:'))).toHaveLength(1);
     expect(inbox.read('web')).toHaveLength(1);
+
+    legacyGenerator = false;
+    const run = readLatestPageDataRun(h.store.db)!;
+    const originalBrief = readFileSync(refusedBriefPath, 'utf8');
+    expect(originalBrief).toContain('"riskAreas": []');
+    writeFileSync(refusedBriefPath, originalBrief + '\nUnexpected content change\n');
+    expect(await reconcilePageDataRepairs(options, run.runId)).toMatchObject({
+      routed: 0,
+      unresolved: [expect.objectContaining({ reason: 'page-data repair brief changed for an existing cause' })],
+    });
+    writeFileSync(refusedBriefPath, originalBrief);
+    expect(await reconcilePageDataRepairs(options, run.runId)).toEqual({ routed: 1, unresolved: [] });
+    expect(await reconcilePageDataRepairs(options, run.runId)).toEqual({ routed: 0, unresolved: [] });
+    expect(readLatestPageDataRun(h.store.db)).toEqual(run);
+    expect(stackRuns).toBe(2);
+    const retained = h.store.tasks().filter((task) => task.brief.markdown.includes('page-data-repair-key:'));
+    expect(retained).toHaveLength(2);
+    expect(
+      retained.find((task) => task.brief.markdown.includes('settings/anonymous/permissions'))?.brief.riskAreas,
+    ).toEqual(['authorization']);
+    expect(h.store.db.query("SELECT count(*) AS count FROM page_data_repairs WHERE status='routed'").get()).toEqual({
+      count: 2,
+    });
   } finally {
     await h.disposeAsync();
   }
