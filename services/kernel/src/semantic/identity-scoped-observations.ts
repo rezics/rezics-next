@@ -12,6 +12,7 @@ import {
   runCommand,
   withSingleCommandAttempt,
   type CommandTransaction,
+  type CommandEvent,
   type AuthoritativeTime,
 } from '../command/command.ts';
 import {
@@ -61,6 +62,7 @@ import {
   recordIdentityScopeNativeAssociation,
   recordIdentityScopeDirectoryEnrollment,
 } from './identity-scope-native-association.ts';
+import { IDENTITY_SCOPE_RETIREMENT } from './events.ts';
 import receivingSelectionRead from './identity-receiving-selection-read.sql';
 import receivingLookup from './identity-epoch-store-receiving-lookup.sql';
 import receivingPlan from './identity-epoch-store-receiving-plan.sql';
@@ -1028,6 +1030,30 @@ function persistedSeal(seal: LibraryScopeEffectSeal): LibraryScopeEffectSeal {
   };
 }
 
+/** Retirement effects retain the exact predecessor even after a successor replaces its summary. */
+function retirementEvent(
+  tx: CommandTransaction,
+  key: S.IdentityScopeKey,
+  row: Head,
+  phase: 'retiring' | 'directory-released' | 'dependency-removed' | 'retired',
+): CommandEvent {
+  const address = identityScopeAddress(key);
+  recordIdentityEpochNativeCommit(
+    tx,
+    phase === 'directory-released' ? 'identity-scope-directory-release' : 'identity-scope-retirement',
+  );
+  return {
+    type: IDENTITY_SCOPE_RETIREMENT,
+    data: {
+      sourceKey: address.source,
+      scope: address.scope,
+      registration: row.registration,
+      captureId: row.capture_id,
+      phase,
+    },
+  };
+}
+
 /** Release one directory obligation only while the SAME bridge is open. A tombstone fences late sends. */
 async function releaseDirectory(
   pool: Pool,
@@ -1059,7 +1085,7 @@ async function releaseDirectory(
       WHERE partition_no=$1 AND generation=$2 AND original=$3 AND source_partition=$4 AND source_key=$5 AND scope_id=$6 AND registration=$7 AND capture_id=$8`,
       values,
     );
-    if (prior.rowCount) return { value: true, events: [] };
+    if (prior.rowCount) return noEffect(true);
     if (dep.original) {
       const nativeBridge = (
         await query(
@@ -1070,14 +1096,8 @@ async function releaseDirectory(
           [home, dep.directory_generation],
         )
       ).rows[0];
-      if (!nativeBridge || nativeBridge.job_id !== null) return { value: false, events: [] };
+      if (!nativeBridge || nativeBridge.job_id !== null) return noEffect(false);
     }
-    await query(
-      tx,
-      measured,
-      `INSERT INTO semantic.identity_scope_bridge(partition_no,generation) VALUES($1,$2) ON CONFLICT DO NOTHING`,
-      [home, dep.directory_generation],
-    );
     const bridge = (
       await query(
         tx,
@@ -1087,7 +1107,15 @@ async function releaseDirectory(
         [home, dep.directory_generation],
       )
     ).rows[0];
-    if (!bridge || bridge.closed_job !== null) return { value: false, events: [] };
+    if (bridge && bridge.closed_job !== null) return noEffect(false);
+    if (!bridge) {
+      await query(
+        tx,
+        measured,
+        `INSERT INTO semantic.identity_scope_bridge(partition_no,generation) VALUES($1,$2) ON CONFLICT DO NOTHING`,
+        [home, dep.directory_generation],
+      );
+    }
     // An uncertain in-flight enrollment must retry against this changed bridge and the release tombstone.
     await query(
       tx,
@@ -1127,8 +1155,7 @@ async function releaseDirectory(
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [...values, currentCommand(tx).transactionId],
     );
-    recordIdentityEpochNativeCommit(tx, 'identity-scope-directory-release');
-    return { value: true, events: [] };
+    return { value: true, events: [retirementEvent(tx, key, row, 'directory-released')] };
   });
   if (!issued.value) return false;
   // Release directory home before taking the native receipt into Source-local custody.
@@ -1747,7 +1774,8 @@ export function createIdentityScopedObservations(
         (input.expectedRegistration !== undefined && row.registration !== input.expectedRegistration)
       )
         return noEffect(null);
-      if (row.state !== 'retiring' && row.state !== 'retired') {
+      const changed = row.state !== 'retiring' && row.state !== 'retired';
+      if (changed) {
         await query(
           tx,
           measured,
@@ -1777,7 +1805,8 @@ export function createIdentityScopedObservations(
           [...params(input.key), row.registration],
         )
       ).rows[0] as Dependency | undefined;
-      return { value: { row, active, dependency }, events: [] };
+      const value = { row, active, dependency };
+      return changed ? { value, events: [retirementEvent(tx, input.key, row, 'retiring')] } : noEffect(value);
     });
     if (!snapshot.value) return fail('summary_missing', measured);
     const { row, active, dependency } = snapshot.value;
@@ -1800,14 +1829,16 @@ export function createIdentityScopedObservations(
       await runCommand(pool, { partition, deadline: input.deadline }, async (tx) => {
         const locked = await head(tx, input.key, measured, true);
         if (!locked || locked.registration !== row.registration || locked.state !== 'retiring') throw unavailable();
-        await query(
+        const removed = await query(
           tx,
           measured,
           `DELETE FROM semantic.identity_scope_forward
           WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND dependency=$5`,
           [...params(input.key), row.registration, dependency.dependency],
         );
-        return { value: null, events: [] };
+        return removed.rowCount
+          ? { value: null, events: [retirementEvent(tx, input.key, locked, 'dependency-removed')] }
+          : noEffect(null);
       });
       return { status: 'pending', work: measured };
     }
@@ -1823,7 +1854,7 @@ export function createIdentityScopedObservations(
           locked.state !== 'retiring' ||
           locked.active !== 0
         )
-          return { value: { status: 'pending', work: measured }, events: [] };
+          return noEffect({ status: 'pending', work: measured });
         const outstanding = await query(
           tx,
           measured,
@@ -1831,7 +1862,7 @@ export function createIdentityScopedObservations(
         WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 LIMIT 1`,
           [...params(input.key), row.registration],
         );
-        if (outstanding.rowCount) return { value: { status: 'pending', work: measured }, events: [] };
+        if (outstanding.rowCount) return noEffect({ status: 'pending', work: measured });
         // Old cursor bases already fail the retiring summary. No caller hint can release a native hold.
         if (input.key.source.kind === 'library' && locked.capture.kind === 'library' && locked.scan_complete) {
           const identity = input.key.source.identity;
@@ -1847,7 +1878,7 @@ export function createIdentityScopedObservations(
             }),
           );
           charge(measured, released.work);
-          if (released.status !== 'released') return { value: fail('custody_missing', measured), events: [] };
+          if (released.status !== 'released') return noEffect(fail('custody_missing', measured));
         }
         await query(
           tx,
@@ -1856,8 +1887,10 @@ export function createIdentityScopedObservations(
         WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`,
           params(input.key),
         );
-        recordIdentityEpochNativeCommit(tx, 'identity-scope-retirement');
-        return { value: { status: 'retired', work: measured }, events: [] };
+        return {
+          value: { status: 'retired', work: measured },
+          events: [retirementEvent(tx, input.key, locked, 'retired')],
+        };
       })
     ).value;
   }
