@@ -1,10 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
-import {
-  readContentEditionMechanicalSaleAuthority,
-  readContentEditionSaleAuthority,
-} from '../../src/content/edition-sale.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { TERMINAL_ERASURE_BARRIER_TABLE } from './support/terminal-erasure-worker.ts';
@@ -40,34 +35,6 @@ test('terminal erasure order prerequisite reads the offer as the buyer and creat
       offerId,
       expectedOfferRevision: offer.revision,
     });
-    if (denied.status === 503) {
-      const context = { pool: world.pool, deadline: Date.now() + 30_000 };
-      const actor = await world.kernel.testAccess.authenticate(alice.bearer, context);
-      const consent = createCurrentConsentReader({ database: world.auth.authPool });
-      const dependencies = {
-        pool: world.pool,
-        access: world.kernel.testAccess,
-        clock: () => new Date(),
-        readConsent: (input: Parameters<typeof consent.readCurrentConsent>[0]) => consent.readCurrentConsent(input),
-      };
-      try {
-        const authority = await readContentEditionSaleAuthority(dependencies, edition.contentEditionId, {
-          actor,
-          deadline: context.deadline,
-        });
-        console.error('Terminal erasure buyer sale authority after order 503:', authority);
-      } catch (error) {
-        console.error('Terminal erasure buyer sale authority after order 503:', error);
-      }
-      try {
-        const authority = await readContentEditionMechanicalSaleAuthority(dependencies, edition.contentEditionId, {
-          deadline: Date.now() + 30_000,
-        });
-        console.error('Terminal erasure publisher sale authority after order 503:', authority);
-      } catch (error) {
-        console.error('Terminal erasure publisher sale authority after order 503:', error);
-      }
-    }
     expect({ status: denied.status, body: denied.status === 404 ? null : await denied.text() }).toEqual({
       status: 404,
       body: null,
