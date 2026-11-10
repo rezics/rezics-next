@@ -58,8 +58,22 @@ Decision: Collection discovery matches the installed directory request (collecti
 code and/or constrained validation pointer, while missing and unrun probes remain separate.
 
 `--database-url`, `DATABASE_URL` or `services/kernel/.env` supplies SQL access. `--member-token` or
-`PAGE_DATA_CHECK_MEMBER_TOKEN` supplies the member Kernel bearer; otherwise the local development persona credentials
-are used with the Auth app's `login` client and empty scope. The seeded complete manifest is expected to finish in under
+`PAGE_DATA_CHECK_MEMBER_TOKEN` supplies the member Kernel bearer. For the member home feed, following feed,
+follows and Library shelf, the checker preflights the required scope claims; Kernel still verifies the bearer.
+Otherwise these reads use the existing local Website key in `.temp/local-stack/keys.json`, the persona's identity
+sign-in, and the installed `rezics-website` authorization-code/PKCE S256/ES256 client exchange. The API resource
+comes from `AUTH_AUDIENCE` or Kernel's local environment (local default `https://api.rezics.test`).
+
+Decision: the first shared cause of the four retained forbidden reads is the identity-only `login` client's empty
+scope, before any resource decision. Use only `feed_item:list`, `follow:list`, `library_entry:list` and
+`progress_session:list` as required by the selected reads, through the existing approved Website registration;
+never register or enlarge a client, consent or grant. Missing key, registration, current consent or required token
+scope leaves those native probes unrun as UNAVAILABLE with `member-authority-unavailable` provenance and an
+incomplete run. Do not retry anonymously or turn missing probe authority into an application defect. A scoped
+bearer's actual 403 remains API. Other native cases retain their existing identity token path, and browser sign-in
+remains independent. The scope rule is owned by [Access](../services/kernel/src/access/README.md#grant-rule),
+[Accounts](../docs/accounts.md#4-clients-consent-requests-and-permission) and
+[Auth's Website client](../services/auth/README.md#website-client). The seeded complete manifest is expected to finish in under
 five minutes.
 
 ## Check hosts
