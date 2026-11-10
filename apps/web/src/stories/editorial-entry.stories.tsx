@@ -48,7 +48,8 @@ function ContributeStory({ scenario = 'ready' }: { scenario?: Scenario }) {
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Contribute',
+  title: 'Catalogue/Contribute',
+  id: 'pages-catalogue-contribute',
   component: ContributeStory,
   parameters: {
     layout: 'fullscreen',

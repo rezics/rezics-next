@@ -8,7 +8,8 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Patterns/Library/Summary',
+  title: 'Library/Summary',
+  id: 'patterns-library-summary',
   parameters: { layout: 'fullscreen', admitted: ['personal_library', 'reading_progress', 'collections'] },
 } satisfies Meta;
 export default meta;

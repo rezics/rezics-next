@@ -19,7 +19,8 @@ import { inboxTriageStory, resetInboxTriageStory } from '../kernel/fake/notifica
 import recordedWatch from '../kernel/recorded/notifications-inbox-thread-watch.json';
 
 const meta = {
-  title: 'Pages/Account/Inbox consumption',
+  title: 'Account/Inbox consumption',
+  id: 'pages-account-inbox-consumption',
   parameters: {
     layout: 'fullscreen',
     docs: {

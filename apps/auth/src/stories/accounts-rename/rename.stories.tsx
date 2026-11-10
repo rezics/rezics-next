@@ -6,7 +6,7 @@ import { RENAME_PROFILE, type RenameRead, type RenameSource } from '../../accoun
 import { authLocale, reviewParameters, button, fill, waitFor } from '../accounts-operations/story';
 import '../../styles.css';
 
-export default { title: 'Pages/Account/Rename', parameters: reviewParameters, decorators: [authLocale] };
+export default { title: 'Account/Rename', id: 'pages-account-rename', parameters: reviewParameters, decorators: [authLocale] };
 
 // Presentation fixtures only. Native readback/step-up remain owner integration debt.
 function Page({ mode = 'ready' }: { mode?: 'ready' | 'unavailable' | 'signed-out' | 'unknown' }) {

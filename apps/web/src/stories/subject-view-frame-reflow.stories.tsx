@@ -117,7 +117,8 @@ function CompanionPage({ streams, realm, missing, largeText, rtl, actionSession,
 }
 
 const meta = {
-  title: 'Pages/Subjects/Companion view reflow',
+  title: 'Subjects/Companion view reflow',
+  id: 'pages-subjects-companion-view-reflow',
   component: CompanionPage,
   parameters: {
     layout: 'fullscreen',

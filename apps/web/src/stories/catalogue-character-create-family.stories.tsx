@@ -108,7 +108,8 @@ function Example({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Character creation family',
+  title: 'Catalogue/Character creation family',
+  id: 'pages-catalogue-character-creation-family',
   component: Example,
   args: { scenario: 'ready', variant: 'released', direction: 'ltr' },
   argTypes: { direction: { control: 'inline-radio', options: ['ltr', 'rtl'] } },

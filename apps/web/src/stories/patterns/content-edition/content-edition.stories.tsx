@@ -14,7 +14,8 @@ import {
 } from './content-edition-fixtures';
 
 const meta = {
-  title: 'Patterns/Commerce/ContentEditionReader',
+  title: 'Commerce/ContentEditionReader Workflow',
+  id: 'patterns-commerce-contenteditionreader',
   component: ContentEditionExample,
   parameters: { layout: 'fullscreen', viewport: { options: editionViewports } },
   args: { state: 'published' },

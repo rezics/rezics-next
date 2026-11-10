@@ -103,7 +103,8 @@ function PreparedHistory({
 }
 
 const meta = {
-  title: 'Interfaces/Community/Revision history reading',
+  title: 'Community/Revision history reading',
+  id: 'interfaces-community-revision-history-reading',
   component: PreparedHistory,
   args: { count: 10, long: false, removed: false, partialFailure: false, continuation: false },
   parameters: {

@@ -6,7 +6,8 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Patterns/Appeal Resolution',
+  title: 'Moderation/Appeal Resolution',
+  id: 'patterns-appeal-resolution',
   component: AppealResolution,
   tags: ['autodocs'],
   args: { appealId: '0192f3a0-6c1e-7b2a-9d4e-000000000001', mayResolve: true },

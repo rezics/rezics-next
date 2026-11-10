@@ -8,7 +8,7 @@ test('the owner Collection editor joins the browse route in AppShell and keeps p
   const page = source('../src/stories/page.tsx');
   const root = source('../.storybook/route-root.tsx');
 
-  expect(story).toContain("title: 'Patterns/Collection Editor'");
+  expect(story).toContain("title: 'Library/Collections/Collection Editor'");
   expect(page).toContain("import '../../.storybook/route-root'");
   expect(root).toContain('return <AppShell>{children}</AppShell>');
   expect(story).not.toContain("import { AppShell } from '../shell/shell'");

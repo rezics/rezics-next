@@ -118,7 +118,8 @@ function ProfileRoute({ mode }: { mode: PeopleMode }) {
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Person and organization catalogue editor',
+  title: 'Catalogue/Person and organization catalogue editor',
+  id: 'pages-catalogue-person-and-organization-catalogue-editor',
   component: ProfileStory,
   tags: ['autodocs'],
   parameters: {

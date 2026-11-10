@@ -3,7 +3,8 @@ import { ContentEditionExample, editionViewports } from './patterns/content-edit
 import * as pattern from './patterns/content-edition/content-edition.stories';
 
 const meta = {
-  title: 'Pages/Commerce/ContentEditionReader',
+  title: 'Commerce/ContentEditionReader Page',
+  id: 'pages-commerce-contenteditionreader',
   component: ContentEditionExample,
   parameters: { layout: 'fullscreen', viewport: { options: editionViewports } },
   args: { state: 'published', shell: true },

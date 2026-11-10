@@ -101,7 +101,8 @@ function Example({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Narrative story-arc editor',
+  title: 'Catalogue/Narrative story-arc editor',
+  id: 'pages-catalogue-narrative-story-arc-editor',
   component: Example,
   parameters: {
     layout: 'fullscreen',

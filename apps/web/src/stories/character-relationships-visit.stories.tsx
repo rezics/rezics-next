@@ -285,7 +285,8 @@ function DenialExample({ nonGlobal = false }: { nonGlobal?: boolean }) {
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Character relationship visit',
+  title: 'Catalogue/Character relationship visit',
+  id: 'pages-catalogue-character-relationship-visit',
   component: VisitExample,
   parameters: {
     layout: 'fullscreen',

@@ -32,7 +32,8 @@ const invalidContinuation: Page = {
   discovery: { status: 'available', groups: ['collections'] },
 };
 const meta = {
-  title: 'Pages/Platform exposure/Closed native dependency',
+  title: 'Site Shell/Closed native dependency',
+  id: 'pages-platform-exposure-closed-native-dependency',
   component: PlatformExposurePage,
   parameters: {
     layout: 'fullscreen',

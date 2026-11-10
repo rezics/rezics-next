@@ -154,7 +154,7 @@ async function openStory(story: string, visitor: 'Signed In' | 'Signed Out', loc
       candidate.name === visitor,
   );
   if (!entry) throw new Error(`Missing ${story} story for ${visitor}.`);
-  expect(entry.title.startsWith('Pages/Library/'), `${story} is titled under Pages/Library`).toBe(true);
+  expect(entry.title.startsWith('Library/'), `${story} is titled under Library`).toBe(true);
   browser ??= await chromium.launch();
   const context = await browser.newContext({ viewport: { width, height: 860 }, reducedMotion: 'reduce' });
   const page = await context.newPage();

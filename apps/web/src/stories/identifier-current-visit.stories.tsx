@@ -65,7 +65,8 @@ function Example({ scenario = 'duplicates' }: { scenario?: 'duplicates' | 'recov
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Identifier current visit',
+  title: 'Catalogue/Identifier current visit',
+  id: 'pages-catalogue-identifier-current-visit',
   component: Example,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof Example>;

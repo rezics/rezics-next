@@ -15,7 +15,8 @@ import {
 import { initial } from '../accounts-security/security/security.stories';
 
 export default {
-  title: 'Pages/Account/Security request return',
+  title: 'Account/Security request return',
+  id: 'pages-account-security-request-return',
   parameters: reviewParameters,
   decorators: [authLocale],
 };

@@ -10,7 +10,8 @@ const requests: RequestRecord[] = [];
 let notificationMode = false;
 
 const meta = {
-  title: 'Pages/Account/Settings',
+  title: 'Account/Settings',
+  id: 'pages-account-settings',
   parameters: { layout: 'fullscreen' },
   beforeEach: () => {
     requests.length = 0;

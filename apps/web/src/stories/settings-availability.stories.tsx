@@ -3,7 +3,7 @@ import { expect, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { PageStory, pageReady } from './page';
 
-const meta = { title: 'Pages/Settings/Availability', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Account/Availability', id: 'pages-settings-availability', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
 

@@ -92,7 +92,8 @@ function SettingsExample({ recovery = false, longRecovery = false }: { recovery?
   );
 }
 const meta = {
-  title: 'Pages/Account/Settings managed accounts',
+  title: 'Account/Settings managed accounts',
+  id: 'pages-account-settings-managed-accounts',
   parameters: {
     layout: 'fullscreen',
     docs: {

@@ -16,7 +16,8 @@ import {
 } from './patterns/board-report-queue/fixture';
 
 const meta = {
-  title: 'Pages/Community/Moderation reports',
+  title: 'Community/Moderation reports',
+  id: 'pages-community-moderation-reports',
   component: ModerationReportsView,
   parameters: {
     layout: 'fullscreen',

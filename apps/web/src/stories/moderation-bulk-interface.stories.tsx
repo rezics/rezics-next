@@ -14,7 +14,8 @@ import { moderationQueueFixture, postReport, queueViewports } from './patterns/b
 // are authored UNRUN; these examples establish no native admission or browser approval.
 const reports = [...moderationQueueFixture.reports, { ...postReport, id: 'illustrative-third-report' }];
 const meta = {
-  title: 'Patterns/Moderation bulk interface',
+  title: 'Moderation/Moderation bulk interface',
+  id: 'patterns-moderation-bulk-interface',
   component: BoardReportQueue,
   parameters: {
     layout: 'padded',

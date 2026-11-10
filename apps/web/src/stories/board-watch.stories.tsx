@@ -19,7 +19,8 @@ const boardId = pageBase.board.id;
 const accountId = 'board-watch-reader';
 
 const meta = {
-  title: 'Pages/Community/Board watch',
+  title: 'Community/Board watch',
+  id: 'pages-community-board-watch',
   parameters: {
     layout: 'fullscreen',
     viewport: {

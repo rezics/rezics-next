@@ -15,7 +15,8 @@ import { m } from '../paraglide/messages.js';
 import { PageStory, PatternStory, pagePaths, pageReady } from './page';
 
 const meta = {
-  title: 'Patterns/Collection Editor',
+  title: 'Library/Collections/Collection Editor',
+  id: 'patterns-collection-editor',
   tags: ['autodocs'],
   parameters: {
     docs: {

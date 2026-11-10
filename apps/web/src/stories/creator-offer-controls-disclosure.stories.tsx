@@ -16,7 +16,8 @@ import { PatternStory } from './page';
 
 // Authored UNRUN. All states are explicit interface fixtures, without native availability claims.
 const meta = {
-  title: 'Patterns/Commerce/Creator offer controls disclosure',
+  title: 'Commerce/Creator offer controls disclosure',
+  id: 'patterns-commerce-creator-offer-controls-disclosure',
   parameters: {
     layout: 'fullscreen',
     docs: {

@@ -9,7 +9,8 @@ import { PatternStory } from './page';
 
 // UNRUN: supplied DTO presentation cases, not native read, authorization or responsive evidence.
 const meta = {
-  title: 'Pages/Library/Progress history reader recovery',
+  title: 'Library/Progress history reader recovery',
+  id: 'pages-library-progress-history-reader-recovery',
   parameters: {
     layout: 'fullscreen',
     viewport: {

@@ -9,7 +9,8 @@ function SignedInAccount(props: Extract<AccountSafetyProps, { state: 'signed-in'
 }
 
 const meta = {
-  title: 'Patterns/Account/Handle rename',
+  title: 'Account/Handle rename',
+  id: 'patterns-account-handle-rename',
   component: SignedInAccount,
   parameters: { layout: 'padded' },
   args: {

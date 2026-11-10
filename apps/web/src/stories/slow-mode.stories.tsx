@@ -17,7 +17,8 @@ import {
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Pages/Community/Board slow mode',
+  title: 'Community/Board slow mode',
+  id: 'pages-community-board-slow-mode',
   parameters: {
     layout: 'fullscreen',
     viewport: {

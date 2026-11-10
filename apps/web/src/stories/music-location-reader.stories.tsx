@@ -51,7 +51,8 @@ function MusicLocationStory({ scenario = 'admitted-place' }: { scenario?: Scenar
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Music location reader',
+  title: 'Catalogue/Music location reader',
+  id: 'pages-catalogue-music-location-reader',
   component: MusicLocationStory,
   parameters: {
     layout: 'fullscreen',

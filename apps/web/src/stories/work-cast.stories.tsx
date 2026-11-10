@@ -71,7 +71,8 @@ const value = {
 } as unknown as RowValue & { subject: string };
 
 const meta: Meta<typeof WorkCastWindow> = {
-  title: 'Pages/Subjects/Work cast',
+  title: 'Subjects/Work cast',
+  id: 'pages-subjects-work-cast',
   component: WorkCastWindow,
   args: { items, value, label: 'Voice credits' },
 };

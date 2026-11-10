@@ -202,7 +202,8 @@ function DetailJourney({
 }
 
 const meta = {
-  title: 'Pages/Subjects/Detailed sources family',
+  title: 'Subjects/Detailed sources family',
+  id: 'pages-subjects-detailed-sources-family',
   component: DetailJourney,
   parameters: {
     layout: 'fullscreen',

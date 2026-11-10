@@ -1778,7 +1778,7 @@ async function main(): Promise<void> {
   const matched = await searchFor('search', matchingQuery);
   const unmatched = await searchFor('search-empty', emptyQuery);
 
-  // The full subject record belongs to its typed-search fixture; the ordinary Pages/Search story uses only its
+  // The full subject record belongs to its typed-search fixture; the ordinary Discovery/Search story uses only its
   // registered story subjects so the subject-page recorder seed does not duplicate the same work there.
   await createSubjectIndex(opensearch, typedSearchPrefix, 1);
   const typedIndex = subjectIndexName(typedSearchPrefix, 1);

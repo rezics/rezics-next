@@ -29,7 +29,8 @@ const image: DocumentImagePresentation = {
 };
 
 const meta = {
-  title: 'Interfaces/Content/Document image attribution',
+  title: 'Content/Document image attribution',
+  id: 'interfaces-content-document-image-attribution',
   component: NativeDocumentImage,
   args: { image, alt, locale: 'en' },
 } satisfies Meta<typeof NativeDocumentImage>;

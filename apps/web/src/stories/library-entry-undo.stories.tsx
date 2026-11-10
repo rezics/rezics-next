@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { EntryFormPage } from '../library/entry-undo';
 import { getLocale } from '../paraglide/runtime.js';
 
-const meta = { title: 'Pages/Library/Entry Removal', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Library/Entry Removal', id: 'pages-library-entry-removal', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

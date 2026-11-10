@@ -27,7 +27,7 @@ test('Creator Sales Pages stories compose named constructed states in AppShell a
   const shell = source('../src/shell/shell.tsx');
   const sidebar = source('../../../packages/ui/src/shadcn/sidebar.tsx');
 
-  expect(story).toContain("title: 'Pages/Commerce/Creator Sales'");
+  expect(story).toContain("title: 'Commerce/Creator Sales'");
   expect(story).toContain("import { AppShell } from '../shell/shell'");
   expect(story).toContain("import { PageStory, PatternStory, pageReady } from './page'");
   expect(story).toMatch(/<PatternStory visitor="Signed In" path="\/creator\/sales">\s*<AppShell>\s*<CreatorSalesPage/);

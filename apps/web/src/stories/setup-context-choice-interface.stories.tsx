@@ -63,7 +63,8 @@ async function prepare(mode: Mode) {
 type Observation = Awaited<ReturnType<typeof prepare>>;
 const load = (mode: Mode) => async () => ({ observation: await prepare(mode) });
 const meta = {
-  title: 'Patterns/Community/Setup Context Choice Interface',
+  title: 'Community/Setup Context Choice Interface',
+  id: 'patterns-community-setup-context-choice-interface',
   component: SetupContextPickerField,
   args: {
     disabled: false,

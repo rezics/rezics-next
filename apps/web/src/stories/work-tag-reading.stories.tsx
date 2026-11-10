@@ -93,7 +93,8 @@ const unavailable: WorkTagProjection = {
 };
 
 const meta = {
-  title: 'Pages/Work tag reading',
+  title: 'Subjects/Work tag reading',
+  id: 'pages-work-tag-reading',
   component: WorkTagReadingView,
   args: { model, related, definitions, locale: 'en', spoilerThreshold: 0, workHref: model.workHref },
   parameters: {

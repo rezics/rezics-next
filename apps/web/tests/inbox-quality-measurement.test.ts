@@ -247,42 +247,42 @@ test('measure the existing Inbox Page and pattern review matrix with source-boun
   const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
   assertTrue(/^[0-9a-f]{40}$/u.test(sourceCommit), 'Captures bind to a full source commit');
   const visualStories: ReviewStory[] = [
-    { key: 'empty', family: 'page', entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Empty']) },
+    { key: 'empty', family: 'page', entry: findStory('Account/Inbox Page', '/stories/inbox.stories.tsx', ['Empty']) },
     {
       key: 'mixed',
       family: 'page',
       reference: true,
-      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Mixed replies and moderation']),
+      entry: findStory('Account/Inbox Page', '/stories/inbox.stories.tsx', ['Mixed replies and moderation']),
     },
     {
       key: 'unavailable',
       family: 'page',
-      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Unavailable item']),
+      entry: findStory('Account/Inbox Page', '/stories/inbox.stories.tsx', ['Unavailable item']),
     },
     {
       key: 'preparing',
       family: 'page',
-      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Service unavailable (503)']),
+      entry: findStory('Account/Inbox Page', '/stories/inbox.stories.tsx', ['Service unavailable (503)']),
     },
     {
       key: 'closed',
       family: 'page',
-      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Inbox closed']),
+      entry: findStory('Account/Inbox Page', '/stories/inbox.stories.tsx', ['Inbox closed']),
     },
     {
       key: 'unavailable-operation',
       family: 'page',
-      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Inbox unavailable']),
+      entry: findStory('Account/Inbox Page', '/stories/inbox.stories.tsx', ['Inbox unavailable']),
     },
     {
       key: 'more-than-ninety-nine',
       family: 'page',
-      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['More than 99 unread']),
+      entry: findStory('Account/Inbox Page', '/stories/inbox.stories.tsx', ['More than 99 unread']),
     },
     {
       key: 'hidden-target',
       family: 'pattern',
-      entry: findStory('Patterns/Account/Inbox', '/stories/inbox-patterns.stories.tsx', [
+      entry: findStory('Account/Inbox Workflow', '/stories/inbox-patterns.stories.tsx', [
         'Hidden Target',
         'HiddenTarget',
       ]),
@@ -290,7 +290,7 @@ test('measure the existing Inbox Page and pattern review matrix with source-boun
     {
       key: 'long-content',
       family: 'pattern',
-      entry: findStory('Patterns/Account/Inbox', '/stories/inbox-patterns.stories.tsx', [
+      entry: findStory('Account/Inbox Workflow', '/stories/inbox-patterns.stories.tsx', [
         'Long Content',
         'LongContent',
       ]),
@@ -299,7 +299,7 @@ test('measure the existing Inbox Page and pattern review matrix with source-boun
   const interactionStories = [
     {
       key: 'viewer-becomes-unknown',
-      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Signed-in viewer becomes unknown']),
+      entry: findStory('Account/Inbox Page', '/stories/inbox.stories.tsx', ['Signed-in viewer becomes unknown']),
       viewport: viewports[0],
       verify: async (page: Page) => {
         assertEqual(
@@ -312,7 +312,7 @@ test('measure the existing Inbox Page and pattern review matrix with source-boun
     },
     {
       key: 'seen-viewer-becomes-unknown',
-      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', [
+      entry: findStory('Account/Inbox Page', '/stories/inbox.stories.tsx', [
         'Viewer changes while mark seen is waiting',
       ]),
       viewport: viewports[0],
@@ -331,7 +331,7 @@ test('measure the existing Inbox Page and pattern review matrix with source-boun
     },
     {
       key: 'seen-retry-after-recovery',
-      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', [
+      entry: findStory('Account/Inbox Page', '/stories/inbox.stories.tsx', [
         'Mark seen waits, then retries the original notice after pagination',
       ]),
       viewport: viewports[0],
@@ -350,7 +350,7 @@ test('measure the existing Inbox Page and pattern review matrix with source-boun
     },
     {
       key: 'pagination-recovery',
-      entry: findStory('Patterns/Account/Inbox', '/stories/inbox-patterns.stories.tsx', [
+      entry: findStory('Account/Inbox Workflow', '/stories/inbox-patterns.stories.tsx', [
         'Pagination Recovery',
         'PaginationRecovery',
       ]),
@@ -366,7 +366,7 @@ test('measure the existing Inbox Page and pattern review matrix with source-boun
     },
     {
       key: 'rejected-continuation',
-      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', [
+      entry: findStory('Account/Inbox Page', '/stories/inbox.stories.tsx', [
         'Rejected continuation with separate first-page choice',
       ]),
       viewport: viewports[0],
@@ -387,7 +387,7 @@ test('measure the existing Inbox Page and pattern review matrix with source-boun
     },
     {
       key: 'first-page-restart-retry',
-      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', [
+      entry: findStory('Account/Inbox Page', '/stories/inbox.stories.tsx', [
         'First-page restart unavailable, then deliberate retry',
       ]),
       viewport: viewports[0],
@@ -486,7 +486,7 @@ test('measure the existing Inbox Page and pattern review matrix with source-boun
     storybook: { origin, indexUrl: `${origin}/index.json`, indexSha256: storyIndexSha256 },
     evidenceBoundary: 'Storybook route/story fixtures only; these are not native persona or API evidence.',
     reviewMatrix: {
-      referenceStory: 'Pages/Account/Inbox Mixed',
+      referenceStory: 'Account/Inbox Page, Mixed',
       locales: [...launchLocales],
       referenceThemes: { light: [...launchLocales], dark: ['en', 'ja'] },
       otherStories: visualStories.filter((story) => !story.reference).map((story) => story.key),

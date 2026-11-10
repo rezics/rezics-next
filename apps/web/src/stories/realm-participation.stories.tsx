@@ -9,7 +9,8 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Patterns/Realm Participation',
+  title: 'Community/Realm Participation',
+  id: 'patterns-realm-participation',
   component: RealmParticipationView,
   tags: ['autodocs'],
   parameters: {

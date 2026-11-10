@@ -41,7 +41,8 @@ function Addressed({ args, search = '' }: { args: ComponentProps<typeof Literary
 }
 
 const meta = {
-  title: 'Pages/Subjects/Literary grain visit',
+  title: 'Subjects/Literary grain visit',
+  id: 'pages-subjects-literary-grain-visit',
   component: LiteraryReaderEntry,
   args: grainExample(),
   render: (args) => <Addressed args={args} />,

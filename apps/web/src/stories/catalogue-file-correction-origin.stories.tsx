@@ -121,7 +121,8 @@ function PublicCorrection({ state = 'entry' }: { state?: 'entry' | 'restart' | '
 }
 
 const meta = {
-  title: 'Pages/Subjects/File public correction origin',
+  title: 'Subjects/File public correction origin',
+  id: 'pages-subjects-file-public-correction-origin',
   component: PublicCorrection,
   parameters: {
     layout: 'fullscreen',

@@ -39,7 +39,8 @@ function WideDocumentReader({ retirement = false }: { retirement?: boolean }) {
 }
 
 const meta = {
-  title: 'Pages/Community/Wide document reading',
+  title: 'Community/Wide document reading',
+  id: 'pages-community-wide-document-reading',
   component: WideDocumentReader,
   parameters: {
     layout: 'fullscreen',

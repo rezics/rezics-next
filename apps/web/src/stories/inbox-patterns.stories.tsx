@@ -16,7 +16,8 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Patterns/Account/Inbox',
+  title: 'Account/Inbox Workflow',
+  id: 'patterns-account-inbox',
   parameters: {
     layout: 'fullscreen',
     docs: {

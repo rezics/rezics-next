@@ -13,7 +13,8 @@ const countsPath = '/library/follow-counts';
 const contextPath = `${countsPath}?targetType=${privateFollowCountsStoryTarget.targetType}&targetId=${privateFollowCountsStoryTarget.targetId}`;
 
 const meta = {
-  title: 'Pages/Library/Private follow counts',
+  title: 'Library/Private follow counts',
+  id: 'pages-library-private-follow-counts',
   parameters: {
     layout: 'fullscreen',
     docs: {

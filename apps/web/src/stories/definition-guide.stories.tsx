@@ -28,7 +28,8 @@ function GuideStory({ scenario = 'active' }: { scenario?: GuideScenario }) {
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Type and field guide',
+  title: 'Catalogue/Type and field guide',
+  id: 'pages-catalogue-type-and-field-guide',
   component: GuideStory,
   tags: ['autodocs'],
   parameters: {

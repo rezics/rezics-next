@@ -18,7 +18,8 @@ import { ReadingNavigation, SettingsNavigationProvider } from '../settings/readi
 import { sessionQuery } from '../session/query';
 
 const meta = {
-  title: 'Patterns/Account/Settings navigation',
+  title: 'Account/Settings navigation',
+  id: 'patterns-account-settings-navigation',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

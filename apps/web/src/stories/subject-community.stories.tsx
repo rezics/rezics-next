@@ -101,7 +101,8 @@ function CommunityPattern({
 }
 
 const meta = {
-  title: 'Patterns/Subject Community',
+  title: 'Subjects/Subject Community',
+  id: 'patterns-subject-community',
   component: CommunityPattern,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof CommunityPattern>;

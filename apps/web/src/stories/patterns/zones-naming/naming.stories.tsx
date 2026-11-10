@@ -46,7 +46,8 @@ function NamingJourney() {
 }
 
 const meta = {
-  title: 'Patterns/Zones/Authored names',
+  title: 'Zones/Authored names',
+  id: 'patterns-zones-authored-names',
   render: () => <NamingJourney />,
   globals: { locale: 'en' },
   parameters: {

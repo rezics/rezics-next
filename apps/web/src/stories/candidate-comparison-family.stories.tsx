@@ -16,7 +16,8 @@ import * as original from './subject-candidate-review.stories';
 // Authored UNRUN. These are actual reviewers on the existing native-shaped fixture seam.
 // Width/RTL intent and DOM assertions are not measured browser, native or growth proof.
 const meta = {
-  title: 'Patterns/Candidate Comparison Family',
+  title: 'Catalogue/Candidate Comparison Family',
+  id: 'patterns-candidate-comparison-family',
   component: CandidateStory,
   decorators: [
     (Story) => (

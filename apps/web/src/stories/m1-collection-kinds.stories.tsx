@@ -35,7 +35,8 @@ function Example({ layout = 'list', mixed = false }: { layout?: 'list' | 'grid';
 }
 
 const meta = {
-  title: 'Pages/Library/Collection presentation',
+  title: 'Library/Collection presentation',
+  id: 'pages-library-collection-presentation',
   parameters: {
     layout: 'fullscreen',
     docs: {

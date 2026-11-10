@@ -102,7 +102,8 @@ function Example({ filters = false, ...props }: Partial<HeaderSearchProps> & { f
 }
 
 const meta = {
-  title: 'Patterns/Header Search',
+  title: 'Discovery/Header Search',
+  id: 'patterns-header-search',
   component: HeaderSearch,
   args: { locale: 'en' },
   parameters: {

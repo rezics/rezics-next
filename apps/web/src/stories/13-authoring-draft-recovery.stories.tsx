@@ -191,7 +191,8 @@ function Example({ scenario, width, dark, long }: { scenario: Scenario; width: n
 }
 
 const meta = {
-  title: 'Authoring/Browser writing recovery',
+  title: 'Content/Browser writing recovery',
+  id: 'authoring-browser-writing-recovery',
   component: Example,
   parameters: { layout: 'fullscreen' },
   args: { scenario: 'writing', width: 390, dark: false, long: false },

@@ -6,7 +6,8 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageStory, pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Library/Collection publication',
+  title: 'Library/Collection publication',
+  id: 'pages-library-collection-publication',
   parameters: {
     layout: 'fullscreen',
     docs: {

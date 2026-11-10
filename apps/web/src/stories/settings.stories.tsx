@@ -13,7 +13,8 @@ import { PageStory, pageReady } from './page';
 import { selectSettingsCategory } from './settings-category-navigation';
 
 const meta = {
-  title: 'Pages/Account/Settings',
+  title: 'Account/Settings',
+  id: 'pages-account-settings',
   parameters: {
     layout: 'fullscreen',
   },

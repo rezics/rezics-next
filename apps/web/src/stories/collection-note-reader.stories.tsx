@@ -9,7 +9,8 @@ import { subjectOf, type CollectionMember } from '../library/reads';
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Patterns/Collection Notes',
+  title: 'Library/Collection Notes',
+  id: 'patterns-collection-notes',
   component: CollectionNoteReader,
   args: { note: null, occurrence: 'Supplied occurrence' },
   parameters: {

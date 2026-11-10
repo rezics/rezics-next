@@ -86,7 +86,8 @@ function ComposedMembers({ state = 'populated' }: { state?: State }) {
   );
 }
 const meta = {
-  title: 'Patterns/Composed Member List',
+  title: 'Library/Composed Member List',
+  id: 'patterns-composed-member-list',
   component: ComposedMembers,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof ComposedMembers>;

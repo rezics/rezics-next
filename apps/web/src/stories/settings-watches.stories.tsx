@@ -13,7 +13,8 @@ import { PatternStory } from './page';
 
 type View = 'populated' | 'inaccessible' | 'failed' | 'uncertain' | 'returned' | 'keyboard-returned';
 const meta = {
-  title: 'Pages/Account/Settings watches',
+  title: 'Account/Settings watches',
+  id: 'pages-account-settings-watches',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

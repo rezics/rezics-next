@@ -11,7 +11,8 @@ import { AppShell } from '../shell/shell';
 import { PatternStory, pagePaths } from './page';
 
 const meta = {
-  title: 'Patterns/Library/Published log',
+  title: 'Library/Published log',
+  id: 'patterns-library-published-log',
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',

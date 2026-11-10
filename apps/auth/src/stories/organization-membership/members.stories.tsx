@@ -6,7 +6,8 @@ import { OrganizationMembershipRoster } from '../../routes/organizations.members
 import { authLocale, reviewParameters } from '../accounts-operations/story';
 
 export default {
-  title: 'Pages/Account/Organization members',
+  title: 'Account/Organization members',
+  id: 'pages-account-organization-members',
   parameters: reviewParameters,
   decorators: [authLocale],
 };

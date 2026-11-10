@@ -157,7 +157,8 @@ function Visit({
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Work cast visit',
+  title: 'Catalogue/Work cast visit',
+  id: 'pages-catalogue-work-cast-visit',
   component: Visit,
   args: { scenario: 'qualified', visitor: 'Signed Out' },
   parameters: {

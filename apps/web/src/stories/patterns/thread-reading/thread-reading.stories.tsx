@@ -11,7 +11,8 @@ import historyRealm from '../../../kernel/recorded/thread-history-realm.json';
 import historyAccounts from '../../../kernel/recorded/thread-history-accounts.json';
 
 const meta = {
-  title: 'Patterns/Community/Thread reading',
+  title: 'Community/Thread reading Workflow',
+  id: 'patterns-community-thread-reading',
   component: ThreadReadingPreview,
   parameters: {
     layout: 'fullscreen',

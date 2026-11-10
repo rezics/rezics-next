@@ -172,7 +172,8 @@ function Example({ state = 'sourced' }: { state?: State }) {
 }
 
 const meta = {
-  title: 'Pages/Subjects/Quotation reader',
+  title: 'Subjects/Quotation reader',
+  id: 'pages-subjects-quotation-reader',
   component: Example,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof Example>;

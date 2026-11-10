@@ -27,7 +27,8 @@ const longReferenceReport = {
 };
 
 const meta = {
-  title: 'Pages/Reporter status',
+  title: 'Moderation/Reporter status Page',
+  id: 'pages-reporter-status',
   parameters: { layout: 'fullscreen', viewport: { options: reporterStatusViewports } },
 } satisfies Meta;
 export default meta;

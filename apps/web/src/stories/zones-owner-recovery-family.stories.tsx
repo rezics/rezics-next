@@ -17,7 +17,8 @@ const desktop = { viewport: { value: 'desktop1280', isRotated: false } };
 const phone = { viewport: { value: 'phone390', isRotated: false } };
 
 const meta = {
-  title: 'Patterns/Zones/Owner recovery family',
+  title: 'Zones/Owner recovery family',
+  id: 'patterns-zones-owner-recovery-family',
   component: ZoneFeedback,
   tags: ['autodocs'],
   args: { failure: { kind: 'unavailable' }, locale: 'en' },

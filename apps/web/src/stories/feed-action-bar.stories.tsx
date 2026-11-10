@@ -92,7 +92,8 @@ function PreparedCard({
 }
 
 const meta = {
-  title: 'Patterns/Feed/Action bar',
+  title: 'Community/Feed/Action bar',
+  id: 'patterns-feed-action-bar',
   component: PreparedCard,
   parameters: {
     layout: 'fullscreen',

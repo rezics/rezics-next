@@ -12,7 +12,8 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageStory } from './page';
 
 const meta = {
-  title: 'Pages/Commerce/Entitlements',
+  title: 'Commerce/Entitlements',
+  id: 'pages-commerce-entitlements',
   parameters: {
     layout: 'fullscreen',
     viewport: {

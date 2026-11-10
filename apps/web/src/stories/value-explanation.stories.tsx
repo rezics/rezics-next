@@ -21,7 +21,8 @@ function WhyStory({ scenario = 'selected' }: { scenario?: ValueScenario }) {
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Why this value',
+  title: 'Catalogue/Why this value',
+  id: 'pages-catalogue-why-this-value',
   component: WhyStory,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof WhyStory>;

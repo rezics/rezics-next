@@ -7,7 +7,8 @@ import { authLocale, reviewParameters } from '../accounts-operations/story';
 import '../../styles.css';
 
 export default {
-  title: 'Pages/Account/Step-up return',
+  title: 'Account/Step-up return',
+  id: 'pages-account-step-up-return',
   parameters: {
     ...reviewParameters,
     viewport: {

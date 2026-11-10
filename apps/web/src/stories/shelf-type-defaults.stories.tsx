@@ -14,7 +14,7 @@ const csrfToken = 'type-layout-story-credential';
 const book = 'schema:Book',
   movie = 'schema:Movie',
   absent = 'schema:Unavailable';
-const meta = { title: 'Patterns/Library/Type layout defaults', parameters: { layout: 'padded' } } satisfies Meta;
+const meta = { title: 'Library/Type layout defaults', id: 'patterns-library-type-layout-defaults', parameters: { layout: 'padded' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

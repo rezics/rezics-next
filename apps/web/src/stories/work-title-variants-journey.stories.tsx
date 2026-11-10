@@ -41,7 +41,8 @@ function Example({ state }: { state: State }) {
   );
 }
 const meta = {
-  title: 'Pages/Subjects/Work title return states',
+  title: 'Subjects/Work title return states',
+  id: 'pages-subjects-work-title-return-states',
   component: Example,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof Example>;

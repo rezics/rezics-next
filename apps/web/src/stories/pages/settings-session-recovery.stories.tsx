@@ -15,7 +15,8 @@ import { AppShell } from '../../shell/shell';
 import { PatternStory } from '../page';
 
 const meta = {
-  title: 'Pages/Account/Settings session recovery',
+  title: 'Account/Settings session recovery',
+  id: 'pages-account-settings-session-recovery',
   parameters: {
     layout: 'fullscreen',
     docs: {

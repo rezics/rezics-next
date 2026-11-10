@@ -17,7 +17,8 @@ import { unprofiledSubjectId } from '../kernel/fake/library-unprofiled-subject';
 import { PageStory, PatternStory, exposureStory, libraryProgressReady, pagePaths } from './page';
 
 const meta = {
-  title: 'Pages/Library/Progress',
+  title: 'Library/Progress',
+  id: 'pages-library-progress',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

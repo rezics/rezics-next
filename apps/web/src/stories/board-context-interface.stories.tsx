@@ -65,7 +65,8 @@ function ContextExample({ direction = 'ltr', realm, board, prominent = false }: 
 }
 
 const meta = {
-  title: 'Patterns/Community/Board Context Interface',
+  title: 'Community/Board Context Interface',
+  id: 'patterns-community-board-context-interface',
   component: ContextExample,
   parameters: {
     layout: 'fullscreen',

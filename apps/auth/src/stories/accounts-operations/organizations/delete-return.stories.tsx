@@ -6,7 +6,8 @@ import { OrganizationDeletionReturnView } from '../../../organization-deletion-r
 import { AuthStory, authLocale, reviewParameters } from '../story';
 
 export default {
-  title: 'Pages/Account/Delete organization return',
+  title: 'Account/Delete organization return',
+  id: 'pages-account-delete-organization-return',
   parameters: reviewParameters,
   decorators: [authLocale],
 };

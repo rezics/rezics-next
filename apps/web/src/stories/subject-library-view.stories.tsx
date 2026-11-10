@@ -8,7 +8,8 @@ import { subjectHref } from '../subject/subject-href';
 import { PageStory, pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Subjects/Library Reader View',
+  title: 'Subjects/Library Reader View',
+  id: 'pages-subjects-library-reader-view',
   parameters: {
     layout: 'fullscreen',
     docs: {

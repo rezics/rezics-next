@@ -25,12 +25,12 @@ function story(id: string, title: string, name: string): SmokeStoryEntry {
 const webIndex: SmokeStoryIndex = {
   entries: Object.fromEntries(
     [
-      story('pages-subjects-subject--count-unavailable', 'Pages/Subjects/Subject', 'Count Unavailable'),
-      story('pages-subjects-subject--signed-in', 'Pages/Subjects/Subject', 'Member'),
-      story('pages-library-copies--none', 'Pages/Library/Copies', 'None'),
-      story('pages-library-copies--many-copies', 'Pages/Library/Copies', 'Owner'),
-      story('patterns-account-shell--signed-out', 'Patterns/Account/Shell', 'Signed out, account menu open'),
-      story('patterns-account-shell--member-account-menu-open', 'Patterns/Account/Shell', 'Member, account menu open'),
+      story('pages-subjects-subject--count-unavailable', 'Subjects/Subject', 'Count Unavailable'),
+      story('pages-subjects-subject--signed-in', 'Subjects/Subject', 'Member'),
+      story('pages-library-copies--none', 'Library/Copies', 'None'),
+      story('pages-library-copies--many-copies', 'Library/Copies', 'Owner'),
+      story('patterns-account-shell--signed-out', 'Account/Shell', 'Signed out, account menu open'),
+      story('patterns-account-shell--member-account-menu-open', 'Account/Shell', 'Member, account menu open'),
     ].map((entry) => [entry.id, entry] as const),
   ),
 };

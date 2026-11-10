@@ -140,7 +140,8 @@ function DepartureExample({
 }
 
 const meta = {
-  title: 'Patterns/Community/Authoring departure interface',
+  title: 'Community/Authoring departure interface',
+  id: 'patterns-community-authoring-departure-interface',
   component: DepartureExample,
   args: { scenario: 'unsaved', direction: 'ltr', enlargedText: false },
   argTypes: { direction: { control: 'inline-radio', options: ['ltr', 'rtl'] }, scenario: { control: false } },

@@ -20,7 +20,8 @@ const emptyPage = {
 };
 
 const meta = {
-  title: 'Pages/Moderation/Workbench queue',
+  title: 'Moderation/Workbench queue',
+  id: 'pages-moderation-workbench-queue',
   component: WorkbenchView,
   parameters: { layout: 'fullscreen', viewport: { options: queueViewports } },
   decorators: [

@@ -140,7 +140,8 @@ function AlbumCreateFamily({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Album creation family',
+  title: 'Catalogue/Album creation family',
+  id: 'pages-catalogue-album-creation-family',
   component: AlbumCreateFamily,
   parameters: {
     layout: 'fullscreen',

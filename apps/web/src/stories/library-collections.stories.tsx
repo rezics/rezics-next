@@ -12,7 +12,7 @@ import { readLibraryPinsPage } from '../library/pins-read';
 import collectionRecording from '../kernel/recorded/library-collection.json';
 import collectionsRecording from '../kernel/recorded/library-collections.json';
 
-const meta = { title: 'Pages/Library/Collections', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Library/Collections', id: 'pages-library-collections', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

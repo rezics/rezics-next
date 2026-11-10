@@ -5,7 +5,8 @@ import { setLibraryFollowingStoryMode, type LibraryFollowingStoryMode } from '..
 import { PageStory, libraryFollowingReady, libraryHeadingReady, pagePaths, pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Library/Following',
+  title: 'Library/Following',
+  id: 'pages-library-following',
   parameters: {
     layout: 'fullscreen',
     docs: {

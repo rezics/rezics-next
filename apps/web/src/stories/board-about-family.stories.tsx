@@ -122,7 +122,8 @@ function AboutExample({ state }: { state: State }) {
 }
 
 const meta = {
-  title: 'Patterns/Community/Board About Family',
+  title: 'Community/Board About Family',
+  id: 'patterns-community-board-about-family',
   component: BoardCommunity,
   parameters: {
     layout: 'fullscreen',

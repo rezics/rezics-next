@@ -88,7 +88,8 @@ function LiteraryStory({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Book and book-series work editor',
+  title: 'Catalogue/Book and book-series work editor',
+  id: 'pages-catalogue-book-and-book-series-work-editor',
   component: LiteraryStory,
   parameters: {
     layout: 'fullscreen',

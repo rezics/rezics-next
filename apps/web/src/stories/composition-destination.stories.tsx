@@ -5,7 +5,7 @@ import reviewSubject from '../kernel/recorded/subject.json';
 import { PageStory } from './page';
 
 const reviewBoard = reviewBoards.items.find((board) => board.purpose === 'reviews')!;
-const meta = { title: 'Pages/Threads/Composition destination', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Community/Composition destination', id: 'pages-threads-composition-destination', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 
 export const Discussion = {

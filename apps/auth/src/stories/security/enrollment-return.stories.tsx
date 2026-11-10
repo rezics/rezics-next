@@ -15,7 +15,8 @@ import {
 import { initial } from '../accounts-security/security/security.stories';
 
 export default {
-  title: 'Pages/Account/Security enrollment return',
+  title: 'Account/Security enrollment return',
+  id: 'pages-account-security-enrollment-return',
   parameters: reviewParameters,
   decorators: [authLocale],
 };

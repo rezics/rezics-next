@@ -5,7 +5,8 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory, pagePaths, pageReady } from './page';
 
 const meta = {
-  title: 'Patterns/App Shell/CSP Rendering',
+  title: 'Site Shell/CSP Rendering',
+  id: 'patterns-app-shell-csp-rendering',
   globals: { viewport: { value: 'phone' } },
   parameters: {
     layout: 'fullscreen',

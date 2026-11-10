@@ -8,7 +8,8 @@ import type { UndoAttempt, UndoState } from '../library/bulk-operation-undo';
 import type { LibraryRestoreResult, ReloadedLibraryEntry } from '../library/entries-read';
 
 const meta = {
-  title: 'Pages/Library/Bulk Operation Undo',
+  title: 'Library/Bulk Operation Undo',
+  id: 'pages-library-bulk-operation-undo',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

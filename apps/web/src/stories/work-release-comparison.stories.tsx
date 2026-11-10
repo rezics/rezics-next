@@ -39,7 +39,8 @@ function WorkReleaseComparisonStory({ scenario = 'partial' }: { scenario?: Compa
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Work release comparison',
+  title: 'Catalogue/Work release comparison',
+  id: 'pages-catalogue-work-release-comparison',
   component: WorkReleaseComparisonStory,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof WorkReleaseComparisonStory>;

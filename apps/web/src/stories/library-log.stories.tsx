@@ -5,7 +5,8 @@ import { m } from '../paraglide/messages.js';
 import { PageStory, libraryLogReady, pagePaths } from './page';
 
 const meta = {
-  title: 'Pages/Library/Published Log',
+  title: 'Library/Published Log',
+  id: 'pages-library-published-log',
   parameters: { layout: 'fullscreen' },
   beforeEach() {
     setMyLogsStory();

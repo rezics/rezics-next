@@ -37,7 +37,8 @@ function QueueStory({
   );
 }
 const meta = {
-  title: 'Pages/Imports/Review queue',
+  title: 'Imports/Review queue',
+  id: 'pages-imports-review-queue',
   component: QueueStory,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof QueueStory>;

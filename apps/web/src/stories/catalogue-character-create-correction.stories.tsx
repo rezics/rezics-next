@@ -77,7 +77,8 @@ function Example({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Character create correction',
+  title: 'Catalogue/Character create correction',
+  id: 'pages-catalogue-character-create-correction',
   component: Example,
   parameters: {
     layout: 'fullscreen',

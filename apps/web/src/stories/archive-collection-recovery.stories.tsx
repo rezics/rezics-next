@@ -168,7 +168,8 @@ const outcomes: RecoveryOutcomesPage = {
 };
 
 const meta = {
-  title: 'Pages/Library/Archive Collection recovery',
+  title: 'Library/Archive Collection recovery',
+  id: 'pages-library-archive-collection-recovery',
   component: ArchiveCollectionRecoveryUpload,
   args: {
     busy: false,

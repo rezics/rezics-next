@@ -131,7 +131,8 @@ function CreateFamilyStory({
 }
 
 const meta = {
-  title: 'Pages/Catalogue/People creation field family',
+  title: 'Catalogue/People creation field family',
+  id: 'pages-catalogue-people-creation-field-family',
   component: CreateFamilyStory,
   tags: ['autodocs'],
   parameters: {

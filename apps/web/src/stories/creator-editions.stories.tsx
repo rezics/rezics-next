@@ -3,7 +3,8 @@ import { CreatorEditionsExample } from './patterns/creator-editions/creator-edit
 import * as pattern from './patterns/creator-editions/creator-editions.stories';
 
 const meta = {
-  title: 'Pages/Content/CreatorEditions',
+  title: 'Content/CreatorEditions Page',
+  id: 'pages-content-creatoreditions',
   component: CreatorEditionsExample,
   parameters: { layout: 'fullscreen' },
   args: { state: 'editions', shell: true },

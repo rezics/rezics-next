@@ -105,7 +105,8 @@ function Example({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Character identity and credit editor',
+  title: 'Catalogue/Character identity and credit editor',
+  id: 'pages-catalogue-character-identity-and-credit-editor',
   component: Example,
   parameters: {
     layout: 'fullscreen',

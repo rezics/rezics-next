@@ -33,7 +33,8 @@ function AlbumContentsStory({ scenario = 'admitted' }: { scenario?: AlbumTrackEx
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Album contents reader',
+  title: 'Catalogue/Album contents reader',
+  id: 'pages-catalogue-album-contents-reader',
   component: AlbumContentsStory,
   parameters: {
     layout: 'fullscreen',

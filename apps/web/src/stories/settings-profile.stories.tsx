@@ -4,7 +4,7 @@ import { m } from '../paraglide/messages.js';
 import { PageStory, pageReady } from './page';
 import { selectSettingsCategory } from './settings-category-navigation';
 
-const meta = { title: 'Pages/Settings/Profile', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Account/Profile Page', id: 'pages-settings-profile', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
 export const Self: Story = {

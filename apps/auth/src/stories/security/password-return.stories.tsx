@@ -5,7 +5,8 @@ import type { PasswordChangeReturnHistory } from '../../password-change-return';
 import { AuthStory, authLocale, reviewParameters } from '../accounts-operations/story';
 
 export default {
-  title: 'Pages/Account/Password change return',
+  title: 'Account/Password change return',
+  id: 'pages-account-password-change-return',
   parameters: reviewParameters,
   decorators: [authLocale],
 };

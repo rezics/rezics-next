@@ -50,7 +50,8 @@ function Journey() {
   );
 }
 const meta = {
-  title: 'Patterns/Community/Thread replies',
+  title: 'Community/Thread replies',
+  id: 'patterns-community-thread-replies',
   parameters: { layout: 'padded' },
   render: () => <Journey />,
   beforeEach: () => {

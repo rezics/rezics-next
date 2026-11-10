@@ -24,7 +24,8 @@ function GameReaderStory({ scenario = 'work' }: { scenario?: GameExample }) {
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Game reader',
+  title: 'Catalogue/Game reader',
+  id: 'pages-catalogue-game-reader',
   component: GameReaderStory,
   parameters: {
     layout: 'fullscreen',

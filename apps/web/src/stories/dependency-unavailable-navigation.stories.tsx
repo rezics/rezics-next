@@ -18,7 +18,8 @@ import { m } from '../paraglide/messages.js';
 
 const desktop1440 = { name: 'Desktop 1440', styles: { width: '1440px', height: '900px' }, type: 'desktop' };
 const meta = {
-  title: 'Pages/Dependency recovery',
+  title: 'Site Shell/Dependency recovery',
+  id: 'pages-dependency-recovery',
   parameters: { layout: 'fullscreen', viewport: { options: { desktop1440 } } },
 } satisfies Meta;
 export default meta;

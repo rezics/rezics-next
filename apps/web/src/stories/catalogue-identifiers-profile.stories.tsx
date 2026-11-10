@@ -105,7 +105,8 @@ function OriginEntryExample() {
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Ordinary identifier evidence editor',
+  title: 'Catalogue/Ordinary identifier evidence editor',
+  id: 'pages-catalogue-ordinary-identifier-evidence-editor',
   component: Example,
   parameters: {
     layout: 'fullscreen',

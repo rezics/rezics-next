@@ -78,7 +78,8 @@ function CatalogueStory({ state = 'compare' }: { state?: 'compare' | 'unavailabl
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Public list comparison',
+  title: 'Catalogue/Public list comparison',
+  id: 'pages-catalogue-public-list-comparison',
   component: CatalogueStory,
   parameters: {
     layout: 'fullscreen',

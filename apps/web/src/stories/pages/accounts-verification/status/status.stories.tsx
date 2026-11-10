@@ -5,7 +5,8 @@ import { PageStory } from '../../../page';
 import { accountId, selectVerificationStory, viewport } from '../fixtures';
 
 const meta = {
-  title: 'Pages/Account/Verification status',
+  title: 'Account/Verification status',
+  id: 'pages-account-verification-status',
   parameters: { layout: 'fullscreen', viewport },
   beforeEach: () => selectVerificationStory('pending'),
   render: () => <PageStory visitor="Signed In" path={`/accounts/${accountId}/verification`} />,

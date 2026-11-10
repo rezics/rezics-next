@@ -58,7 +58,8 @@ function Example({ person = false }: { person?: boolean }) {
   );
 }
 const meta = {
-  title: 'Pages/Subjects/Character and person composition',
+  title: 'Subjects/Character and person composition',
+  id: 'pages-subjects-character-and-person-composition',
   component: Example,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof Example>;

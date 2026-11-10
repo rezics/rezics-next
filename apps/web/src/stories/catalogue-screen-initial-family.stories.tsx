@@ -223,7 +223,8 @@ function Family({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Screen initial facts and credits',
+  title: 'Catalogue/Screen initial facts and credits',
+  id: 'pages-catalogue-screen-initial-facts-and-credits',
   component: Family,
   parameters: {
     layout: 'fullscreen',

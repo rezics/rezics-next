@@ -29,11 +29,11 @@ export function selectSmokeStories(
     );
   const webEntries = Object.values(webIndex.entries);
   const uiEntries = Object.values(uiIndex.entries);
-  const shell = select(webEntries, 'Patterns/Account/Shell', 'Signed out, account menu open');
-  const signedInShell = select(webEntries, 'Patterns/Account/Shell', 'Member, account menu open');
+  const shell = select(webEntries, 'Account/Shell', 'Signed out, account menu open');
+  const signedInShell = select(webEntries, 'Account/Shell', 'Member, account menu open');
   const uiCoverCard = select(uiEntries, 'Components/Cover Card');
-  const subject = select(webEntries, 'Pages/Subjects/Subject', 'Member');
-  const copiesStory = select(webEntries, 'Pages/Library/Copies', 'Owner');
+  const subject = select(webEntries, 'Subjects/Subject', 'Member');
+  const copiesStory = select(webEntries, 'Library/Copies', 'Owner');
   const coverMedia = copies.copies?.[1]?.subject?.cover?.media;
 
   if (typeof coverMedia !== 'string' || !coverMedia) {
@@ -41,8 +41,8 @@ export function selectSmokeStories(
   }
   if (!shell || !signedInShell || !uiCoverCard || !subject || !copiesStory) {
     const summaries = {
-      pages: webEntries
-        .filter((entry) => entry.type === 'story' && entry.title.startsWith('Pages/'))
+      webStories: webEntries
+        .filter((entry) => entry.type === 'story' && /^(pages|patterns)-/.test(entry.id))
         .map(({ id, title, name }) => ({ id, title, name })),
       uiTitles: uiEntries.filter((entry) => entry.type === 'story').map(({ id, title, name }) => ({ id, title, name })),
     };

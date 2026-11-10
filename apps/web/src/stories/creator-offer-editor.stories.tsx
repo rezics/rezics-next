@@ -9,7 +9,8 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageStory, PatternStory, pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Commerce/Creator Offer Editor',
+  title: 'Commerce/Creator Offer Editor',
+  id: 'pages-commerce-creator-offer-editor',
   parameters: {
     layout: 'fullscreen',
     docs: {

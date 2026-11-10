@@ -185,7 +185,8 @@ function OwnDraftStory(args: StoryArgs) {
 }
 
 const meta = {
-  title: 'Threads/Own drafts',
+  title: 'Community/Own drafts',
+  id: 'threads-own-drafts',
   component: OwnDraftStory,
   args: { locale: 'en', scenario: 'ready' },
   parameters: { layout: 'fullscreen' },

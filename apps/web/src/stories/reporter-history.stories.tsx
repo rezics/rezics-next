@@ -7,7 +7,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 
-const meta = { title: 'Pages/Moderation/Reporter history', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Moderation/Reporter history', id: 'pages-moderation-reporter-history', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

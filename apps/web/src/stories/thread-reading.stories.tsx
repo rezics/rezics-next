@@ -6,7 +6,8 @@ import * as Reading from './patterns/thread-reading/thread-reading.stories';
 
 const meta = {
   ...Reading.default,
-  title: 'Pages/Community/Thread reading',
+  title: 'Community/Thread reading Page',
+  id: 'pages-community-thread-reading',
   component: ThreadReadingPreview,
   args: { shell: true },
 } satisfies Meta<typeof ThreadReadingPreview>;

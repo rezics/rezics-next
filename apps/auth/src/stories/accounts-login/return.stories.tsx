@@ -14,7 +14,7 @@ import { m } from '../../paraglide/messages.js';
 import { authLocale, reviewParameters, button, fill, waitFor } from '../accounts-operations/story';
 import '../../styles.css';
 
-export default { title: 'Pages/Account/Sign in/Return', parameters: reviewParameters, decorators: [authLocale] };
+export default { title: 'Account/Sign in/Return', id: 'pages-account-sign-in-return', parameters: reviewParameters, decorators: [authLocale] };
 
 type Mode = 'dispatched' | 'read-failure' | 'keyboard';
 // Mounted route fixtures. They demonstrate presentation; browser/native acceptance is deferred.

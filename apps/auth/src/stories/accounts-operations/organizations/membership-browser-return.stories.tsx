@@ -9,7 +9,8 @@ import { OrganizationMembershipRoster } from '../../../routes/organizations.memb
 import { AuthStory, authLocale, reviewParameters } from '../story';
 
 export default {
-  title: 'Pages/Account/Membership browser return',
+  title: 'Account/Membership browser return',
+  id: 'pages-account-membership-browser-return',
   parameters: reviewParameters,
   decorators: [authLocale],
 };

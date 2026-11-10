@@ -271,7 +271,8 @@ function ScoreImportStory() {
 }
 
 const meta = {
-  title: 'Pages/Library/AniList import',
+  title: 'Library/AniList import',
+  id: 'pages-library-anilist-import',
   component: ScoreImportStory,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof ScoreImportStory>;

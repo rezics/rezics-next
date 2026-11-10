@@ -137,7 +137,8 @@ function GraphBrowserStory({ state }: { state: StoryState }) {
 }
 
 const meta = {
-  title: 'Pages/Subjects/Graph Browser',
+  title: 'Subjects/Graph Browser',
+  id: 'pages-subjects-graph-browser',
   component: GraphBrowserStory,
   parameters: {
     layout: 'fullscreen',

@@ -168,7 +168,8 @@ function ConnectedCuration({
 }
 
 const meta = {
-  title: 'Patterns/Curation/Presentation Resolution',
+  title: 'Catalogue/Presentation Resolution',
+  id: 'patterns-curation-presentation-resolution',
   globals: { locale: 'en', theme: 'light', viewport: { value: 'desktop1280', isRotated: false } },
   parameters: {
     layout: 'fullscreen',

@@ -51,7 +51,8 @@ function Example({ scenario = 'ready' }: { scenario?: AuthoredScenario | 'loadin
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Authored text',
+  title: 'Catalogue/Authored text',
+  id: 'pages-catalogue-authored-text',
   component: Example,
   tags: ['autodocs'],
   parameters: {

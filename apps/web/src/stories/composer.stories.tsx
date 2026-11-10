@@ -11,7 +11,8 @@ import { getLocale } from '../paraglide/runtime.js';
 import searchRecording from '../kernel/recorded/search.json';
 
 const meta = {
-  title: 'Pages/Community/Post Editor',
+  title: 'Community/Post Editor',
+  id: 'pages-community-post-editor',
   parameters: {
     layout: 'fullscreen',
   },

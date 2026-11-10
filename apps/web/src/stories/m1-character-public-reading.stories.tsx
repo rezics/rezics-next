@@ -63,7 +63,8 @@ function Example({ state = 'current' }: { state?: 'current' | 'spoiler' | 'stale
   );
 }
 const meta = {
-  title: 'Pages/Subjects/Character public reading',
+  title: 'Subjects/Character public reading',
+  id: 'pages-subjects-character-public-reading',
   component: Example,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof Example>;

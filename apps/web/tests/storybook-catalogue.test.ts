@@ -22,45 +22,14 @@ const productAreas = [
   'Catalogue',
   'Zones',
   'Imports',
-  'Accounts',
-  'Subject',
-  'Settings',
-  'Following',
-  'Navigation',
-  'Search',
+  'Content',
+  'Moderation',
+  'Site Shell',
 ];
-// Supplied shared folders keep their canonical IDs instead of acquiring an artificial product area.
-const sharedFolders = new Set([
-  'Patterns/Appeal Resolution',
-  'Patterns/Collection Editor',
-  'Patterns/Collection Preview',
-  'Patterns/Collection Row',
-  'Patterns/Header Search',
-  'Patterns/Moderation Queue',
-  'Patterns/Phone Shell',
-  'Patterns/Realm Participation',
-  'Patterns/Reporter status',
-  'Patterns/Subject Community',
-  'Patterns/Type Presentation',
-  'Pages/Moderation appeals',
-  'Pages/Reporter status',
-  'Pages/Subject Sources',
-]);
 
 function hasCatalogueTitle(title: string): boolean {
-  if (sharedFolders.has(title)) return true;
-  const [tier, area, name, child, extra] = title.split('/');
-  return (
-    (tier === 'Pages' || tier === 'Patterns') &&
-    productAreas.includes(area ?? '') &&
-    Boolean(name?.trim()) &&
-    extra === undefined &&
-    (child === undefined ||
-      (tier === 'Pages' &&
-        area === 'Account' &&
-        name === 'Management' &&
-        ['Account', 'Accounts', 'Organization'].includes(child)))
-  );
+  const [area, ...sections] = title.split('/');
+  return productAreas.includes(area ?? '') && sections.length > 0 && sections.every((section) => section.trim());
 }
 
 function readIndex(path: string): Index {
@@ -137,8 +106,9 @@ describe('Storybook catalogue', () => {
     const sidebar = (await tree.innerText()).split('\n');
     const at = (label: string) => sidebar.indexOf(label);
     expect(at('Overview')).toBeGreaterThanOrEqual(0);
-    expect(at('Pages')).toBeGreaterThan(at('Overview'));
-    expect(at('Patterns')).toBeGreaterThan(at('Pages'));
+    expect(at('Library')).toBeGreaterThan(at('Overview'));
+    expect(at('Pages')).toBe(-1);
+    expect(at('Patterns')).toBe(-1);
     for (const [before, after] of [
       ['Library', 'Subjects'],
       ['Subjects', 'Discovery'],
@@ -155,29 +125,23 @@ describe('Storybook catalogue', () => {
     const stories = Object.values(readIndex(resolve(output, 'index.json')).entries).filter(
       (entry) => entry.type === 'story',
     );
-    const pages = stories.filter((entry) => entry.title.startsWith('Pages/'));
-    const patterns = stories.filter((entry) => entry.title.startsWith('Patterns/'));
-    expect(pages.length).toBeGreaterThan(0);
-    for (const entry of pages) expect(hasCatalogueTitle(entry.title), entry.title).toBe(true);
-    expect(patterns.length).toBeGreaterThan(0);
-    for (const entry of patterns) expect(hasCatalogueTitle(entry.title), entry.title).toBe(true);
+    expect(stories.length).toBeGreaterThan(0);
+    for (const entry of stories) expect(hasCatalogueTitle(entry.title), entry.title).toBe(true);
     expect(new Set(stories.map((entry) => `${entry.title}\0${entry.name}`)).size).toBe(stories.length);
-    for (const title of ['Patterns/Unknown shared folder', 'Pages/Unknown/Page', 'Patterns/Library/Entry/Empty'])
+    for (const title of ['Patterns/Unknown shared folder', 'Pages/Unknown/Page', 'Library/'])
       expect(hasCatalogueTitle(title), title).toBe(false);
-    expect(pages.some((entry) => entry.title === 'Pages/Discovery/Search')).toBe(true);
-    expect(pages.some((entry) => entry.title === 'Pages/Discovery/Search Empty')).toBe(false);
-    expect(pages.some((entry) => entry.title === 'Pages/Discovery/Search Typed')).toBe(false);
-    const pageAndPatternStories = stories.filter(
-      (entry) => entry.title.startsWith('Pages/') || entry.title.startsWith('Patterns/'),
-    );
+    expect(stories.some((entry) => entry.title === 'Discovery/Search')).toBe(true);
+    expect(stories.some((entry) => entry.title === 'Discovery/Search Empty')).toBe(false);
+    expect(stories.some((entry) => entry.title === 'Discovery/Search Typed')).toBe(false);
     expect(
-      pageAndPatternStories.filter((entry) =>
+      stories.filter((entry) =>
+        /^(?:pages|patterns)-/.test(entry.id) &&
         /\b(?:390|1280)(?:px)?\b|\b(?:phone|mobile|desktop|tablet|light|dark|english|japanese|chinese|locale)\b/i.test(
           entry.name,
         ),
       ),
     ).toEqual([]);
-    expect(pages.some((entry) => entry.title === 'Pages/Library/Collection details')).toBe(false);
+    expect(stories.some((entry) => entry.title === 'Library/Collection details')).toBe(false);
     const page = await browser.newPage();
     await page.goto(`${server.url}index.html?path=/docs/${docsId('Overview')}`);
     const tree = page.locator('#storybook-explorer-tree');
@@ -195,7 +159,6 @@ describe('Storybook catalogue', () => {
         .evaluateAll((items) => items.map((item) => item.getAttribute('data-item-id'))),
     );
     for (const entry of stories) {
-      if (!entry.title.startsWith('Pages/') && !entry.title.startsWith('Patterns/')) continue;
       if (entry.tags?.includes('dev')) requiredCounts.set(entry.title, (requiredCounts.get(entry.title) ?? 0) + 1);
       if (visibleIds.has(entry.id)) visibleCounts.set(entry.title, (visibleCounts.get(entry.title) ?? 0) + 1);
     }
@@ -207,7 +170,7 @@ describe('Storybook catalogue', () => {
     const index = readIndex(resolve(output, 'index.json'));
     const families = [
       {
-        title: 'Pages/Library/Collection',
+        title: 'Library/Collection',
         id: 'pages-library-collection',
         file: 'library-collection.stories.tsx',
         states: [
@@ -245,7 +208,7 @@ describe('Storybook catalogue', () => {
         ],
       },
       {
-        title: 'Pages/Subjects/Subject',
+        title: 'Subjects/Subject',
         id: 'pages-subjects-subject',
         file: 'subject.stories.tsx',
         states: [
@@ -280,7 +243,7 @@ describe('Storybook catalogue', () => {
         ],
       },
       {
-        title: 'Pages/Discovery/Search',
+        title: 'Discovery/Search',
         id: 'pages-discovery-search',
         file: 'search-rating.stories.tsx',
         states: [
@@ -302,7 +265,7 @@ describe('Storybook catalogue', () => {
         ],
       },
       {
-        title: 'Pages/Community/Thread',
+        title: 'Community/Thread',
         id: 'pages-community-thread',
         file: 'thread-media.stories.tsx',
         states: [
@@ -352,7 +315,7 @@ describe('Storybook catalogue', () => {
     ];
     for (const state of states) {
       const id = `patterns-collection-editor--${state}`;
-      expect(index.entries[id], id).toMatchObject({ id, type: 'story', title: 'Patterns/Collection Editor' });
+      expect(index.entries[id], id).toMatchObject({ id, type: 'story', title: 'Library/Collections/Collection Editor' });
       expect(index.entries[id]!.importPath).toEndWith('src/stories/library-collection-editor.stories.tsx');
       expect(index.entries[id]!.tags).toContain('dev');
     }
@@ -381,12 +344,12 @@ describe('Storybook catalogue', () => {
     const stories = Object.values(readIndex(resolve(output, 'index.json')).entries).filter(
       (entry) => entry.type === 'story',
     );
-    const pattern = stories.find((entry) => entry.title === 'Patterns/Account/Shell' && entry.name === 'Member');
+    const pattern = stories.find((entry) => entry.title === 'Account/Shell' && entry.name === 'Member');
     const phone = stories.find((entry) => entry.id === 'pages-discovery-search--active-facet');
     expect(pattern).toBeDefined();
     expect(phone).toBeDefined();
     expect(
-      stories.some((entry) => entry.title === 'Patterns/Library/Cover wall' && entry.name === 'Mixed media wall'),
+      stories.some((entry) => entry.title === 'Library/Cover wall' && entry.name === 'Mixed media wall'),
     ).toBe(true);
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     await page.goto(`${server.url}index.html?path=/story/${pattern!.id}`);

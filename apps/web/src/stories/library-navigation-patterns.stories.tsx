@@ -6,7 +6,7 @@ import { LibraryNavigation } from '../library/library-nav';
 import { PatternStory } from './page';
 import collectionRecording from '../kernel/recorded/library-collection.json';
 
-const meta = { title: 'Patterns/Library/Navigation', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Library/Navigation', id: 'patterns-library-navigation', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

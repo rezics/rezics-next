@@ -7,7 +7,8 @@ type KernelWrite = { method: string; path: string; body: unknown; key: string | 
 const writes: KernelWrite[] = [];
 
 const meta = {
-  title: 'Pages/Account/Settings',
+  title: 'Account/Settings',
+  id: 'pages-account-settings',
   parameters: { layout: 'fullscreen' },
   beforeEach: () => {
     writes.length = 0;

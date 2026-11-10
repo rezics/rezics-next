@@ -157,7 +157,8 @@ function LocaleJourney({ journey }: { journey: Journey }) {
 }
 
 const meta = {
-  title: 'Patterns/Locale navigation',
+  title: 'Site Shell/Locale navigation',
+  id: 'patterns-locale-navigation',
   component: LocaleJourney,
   args: { journey: 'success' },
   parameters: {

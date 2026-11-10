@@ -98,7 +98,8 @@ function Example({
 }
 
 const meta = {
-  title: 'Pages/Subjects/Supplied people names',
+  title: 'Subjects/Supplied people names',
+  id: 'pages-subjects-supplied-people-names',
   component: Example,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof Example>;

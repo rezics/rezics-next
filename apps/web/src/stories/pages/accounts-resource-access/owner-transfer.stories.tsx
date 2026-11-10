@@ -74,7 +74,8 @@ function Example({
   return <ResourceAccessPage initial={setup.initial} io={setup.io} />;
 }
 const meta = {
-  title: 'Pages/Account/Resource access ownership',
+  title: 'Account/Resource access ownership',
+  id: 'pages-account-resource-access-ownership',
   component: Example,
   parameters: {
     layout: 'fullscreen',

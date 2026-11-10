@@ -103,7 +103,8 @@ function ConnectedDetail({ member = false, paging = false, failed, waiting = fal
 }
 
 const meta = {
-  title: 'Patterns/Account/Managed account detail',
+  title: 'Account/Managed account detail',
+  id: 'patterns-account-managed-account-detail',
   component: Example,
   parameters: { layout: 'padded' },
   afterEach: async ({ canvasElement }) => {

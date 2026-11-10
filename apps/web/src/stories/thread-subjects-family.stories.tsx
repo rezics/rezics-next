@@ -38,7 +38,8 @@ const sensitive: ThreadSubject = {
 };
 
 const meta = {
-  title: 'Patterns/Community/Thread subjects shared family',
+  title: 'Community/Thread subjects shared family',
+  id: 'patterns-community-thread-subjects-shared-family',
   component: ThreadSubjects,
   parameters: {
     layout: 'fullscreen',

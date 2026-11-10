@@ -50,7 +50,8 @@ function reviewController(phase: 'pending' | 'uncertain'): MyRealmsCurrentContro
 }
 
 const meta = {
-  title: 'Pages/Community/My Realms Current Entry',
+  title: 'Community/My Realms Current Entry',
+  id: 'pages-community-my-realms-current-entry',
   component: MyRealmsPageView,
   parameters: {
     layout: 'padded',

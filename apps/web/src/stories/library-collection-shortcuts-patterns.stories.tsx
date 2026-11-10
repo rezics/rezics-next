@@ -5,7 +5,7 @@ import type { LibraryPinsRead } from '../library/pins-read';
 import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
 
-const meta = { title: 'Patterns/Library/Collection destinations', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Library/Collection destinations', id: 'patterns-library-collection-destinations', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

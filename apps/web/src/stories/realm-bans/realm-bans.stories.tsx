@@ -5,7 +5,8 @@ import { PatternStory } from '../page';
 import { exampleAccountId, fullBanReason, RealmBansExample } from './example';
 
 const meta = {
-  title: 'Patterns/Community/Realm bans',
+  title: 'Community/Realm bans Workflow',
+  id: 'patterns-community-realm-bans',
   component: RealmBansExample,
   excludeStories: ['submitBan', 'banAndUnban'],
   parameters: { layout: 'padded' },

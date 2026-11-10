@@ -55,7 +55,8 @@ function RecoveryExample({
 }
 
 const meta = {
-  title: 'Patterns/Subjects/View error',
+  title: 'Subjects/View error',
+  id: 'patterns-subjects-view-error',
   component: RecoveryExample,
   parameters: {
     layout: 'fullscreen',

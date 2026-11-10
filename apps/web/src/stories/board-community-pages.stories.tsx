@@ -5,7 +5,7 @@ import realmBoard from '../kernel/recorded/board-realm.json';
 import { appearancePath } from '../kernel/fake/community';
 import { communityCurrentClaimStory } from './community-current-claim';
 
-const meta = { title: 'Pages/Community/Community Board', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Community/Community Board', id: 'pages-community-community-board', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 export const Global = { render: () => <PageStory visitor="Signed In" path={pagePaths.board} />, play: boardReady };
 export const Realm = { render: () => <PageStory visitor="Signed In" path={`/boards/${realmBoard.board.id}`} /> };

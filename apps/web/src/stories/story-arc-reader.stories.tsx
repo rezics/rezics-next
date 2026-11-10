@@ -21,7 +21,8 @@ function ArcStory({ scenario = 'admitted' }: { scenario?: ArcExample }) {
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Story arc reader',
+  title: 'Catalogue/Story arc reader',
+  id: 'pages-catalogue-story-arc-reader',
   component: ArcStory,
   parameters: {
     layout: 'fullscreen',

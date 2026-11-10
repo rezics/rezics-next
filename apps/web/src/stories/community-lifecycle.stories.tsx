@@ -49,7 +49,8 @@ function Example() {
   );
 }
 const meta = {
-  title: 'Pages/Community/Container lifecycle',
+  title: 'Community/Container lifecycle Page',
+  id: 'pages-community-container-lifecycle',
   parameters: {
     layout: 'fullscreen',
     docs: {

@@ -82,7 +82,8 @@ function Example({ state, metadata = true }: { state: DiscoveryState; metadata?:
 }
 
 const meta = {
-  title: 'Patterns/Search/Work context',
+  title: 'Discovery/Search/Work context',
+  id: 'patterns-search-work-context',
   component: Example,
   args: { state: homonyms },
   parameters: {

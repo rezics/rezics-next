@@ -6,7 +6,8 @@ import { PageStory, pageReady } from './page';
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Pages/Subjects/Edition Work',
+  title: 'Subjects/Edition Work',
+  id: 'pages-subjects-edition-work',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

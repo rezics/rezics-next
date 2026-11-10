@@ -17,7 +17,7 @@ test('private follow-count page stories enter the signed-in route instead of inj
   const route = source('../src/routes/library/follow-counts.tsx');
   expect(route).toContain('beforeLoad: requireSignedIn');
   expect(route).toContain('validateSearch: followCountsSearch');
-  expect(story).toContain("title: 'Pages/Library/Private follow counts'");
+  expect(story).toContain("title: 'Library/Private follow counts'");
   expect(story).toContain('<PageStory visitor="Signed In" path={path} />');
   expect(story).not.toContain('PrivateFollowCountsPageView');
   expect(story).not.toContain('PatternStory');

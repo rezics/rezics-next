@@ -81,7 +81,8 @@ function PanelFrame({ read }: { read: DraftPreviewRead }) {
 }
 
 const meta = {
-  title: 'Curation/Draft Preview Review',
+  title: 'Catalogue/Draft Preview Review',
+  id: 'curation-draft-preview-review',
   component: DraftPreviewPanel,
   parameters: {
     layout: 'fullscreen',

@@ -79,7 +79,8 @@ function Example(props: RecoveryStoryProps) {
 }
 
 const meta = {
-  title: 'Patterns/Account/Profile',
+  title: 'Account/Profile Workflow',
+  id: 'patterns-account-profile',
   component: Example,
   parameters: {
     layout: 'padded',

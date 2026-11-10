@@ -164,7 +164,8 @@ const episodeOrigin: ScreenEpisodeOrigin = {
 };
 
 const meta = {
-  title: 'Pages/Screen episode return',
+  title: 'Subjects/Screen episode return',
+  id: 'pages-screen-episode-return',
   component: ReaderStory,
   args: { id: seriesId, type: 'schema:TVSeries', label: 'The Observatory', origin: seriesOrigin },
 } satisfies Meta<typeof ReaderStory>;

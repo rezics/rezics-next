@@ -4,7 +4,8 @@ import { m } from '../paraglide/messages.js';
 import { PageStory } from './page';
 
 const meta = {
-  title: 'Pages/Library/Archive recovery',
+  title: 'Library/Archive recovery',
+  id: 'pages-library-archive-recovery',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

@@ -236,7 +236,8 @@ function CurrentCommunityReading({
   );
 }
 const meta = {
-  title: 'Patterns/Subject Community/Current Reading',
+  title: 'Subjects/Current Reading',
+  id: 'patterns-subject-community-current-reading',
   component: CurrentCommunityReading,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof CurrentCommunityReading>;

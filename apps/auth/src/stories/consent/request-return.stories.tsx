@@ -13,7 +13,8 @@ import { authLocale, button, reviewParameters, waitFor } from '../accounts-opera
 import '../../styles.css';
 
 export default {
-  title: 'Pages/Account/Consent outcome history',
+  title: 'Account/Consent outcome history',
+  id: 'pages-account-consent-outcome-history',
   decorators: [authLocale],
   parameters: reviewParameters,
 };

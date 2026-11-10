@@ -24,7 +24,8 @@ import { getLocale } from '../paraglide/runtime.js';
 
 // UNRUN: story interactions, responsive layout and native recording/authority evidence remain deferred.
 const meta = {
-  title: 'Pages/Library/Progress Session',
+  title: 'Library/Progress Session',
+  id: 'pages-library-progress-session',
   parameters: {
     layout: 'fullscreen',
     viewport: {

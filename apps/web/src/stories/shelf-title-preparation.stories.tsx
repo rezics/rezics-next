@@ -2,7 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ShelfTitlePreparation } from '../library/shelf-title-preparation';
 
 const meta = {
-  title: 'Patterns/Library/Title preparation',
+  title: 'Library/Title preparation',
+  id: 'patterns-library-title-preparation',
   component: ShelfTitlePreparation,
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof ShelfTitlePreparation>;

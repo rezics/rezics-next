@@ -86,7 +86,8 @@ function ReviewContextStory({ state }: { state: 'available' | 'withheld' | 'unav
 }
 
 const meta = {
-  title: 'Interfaces/Community/Thread review context',
+  title: 'Community/Thread review context',
+  id: 'interfaces-community-thread-review-context',
   component: ReviewContextStory,
   parameters: { layout: 'fullscreen' },
   args: { state: 'available' },

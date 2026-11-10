@@ -8,7 +8,8 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory, pageReady } from './page';
 
 const meta = {
-  title: 'Patterns/App Shell',
+  title: 'Site Shell/App Shell',
+  id: 'patterns-app-shell',
   globals: { viewport: { value: 'desktop' } },
   parameters: {
     layout: 'fullscreen',

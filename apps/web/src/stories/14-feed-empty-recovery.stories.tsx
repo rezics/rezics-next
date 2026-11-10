@@ -163,7 +163,8 @@ function Recovery({ initial = 'discovery', long = false }: { initial?: Scenario;
   );
 }
 const meta = {
-  title: 'Patterns/Feed/Empty recovery',
+  title: 'Community/Feed/Empty recovery',
+  id: 'patterns-feed-empty-recovery',
   component: Recovery,
   parameters: {
     layout: 'fullscreen',

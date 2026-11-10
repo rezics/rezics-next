@@ -138,7 +138,8 @@ const threeWindows: RealmMembersSource = {
   },
 };
 const meta = {
-  title: 'Patterns/Community/Realm members management',
+  title: 'Community/Realm members management',
+  id: 'patterns-community-realm-members-management',
   component: RealmMembersPage,
   args: { realmId, source: ready },
   parameters: {

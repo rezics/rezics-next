@@ -9,7 +9,8 @@ import { PatternStory } from './page';
 import recorded from '../kernel/recorded/thread-owned.json';
 
 const meta = {
-  title: 'Families/Community/Authoring Controls',
+  title: 'Community/Authoring Controls',
+  id: 'families-community-authoring-controls',
   parameters: {
     layout: 'fullscreen',
     docs: {

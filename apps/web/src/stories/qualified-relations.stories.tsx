@@ -10,7 +10,7 @@ import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 import { longCredit, longCreditPage } from './qualified-relations-data';
 import { m } from '../paraglide/messages.js';
-const meta = { title: 'Pages/Subjects/Qualified Relations', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Subjects/Qualified Relations', id: 'pages-subjects-qualified-relations', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 function QualifiedRelationsReader({ error = false, long = false }: { error?: boolean; long?: boolean }) {

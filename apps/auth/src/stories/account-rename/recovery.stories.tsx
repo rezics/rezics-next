@@ -6,7 +6,7 @@ import { m } from '../../paraglide/messages.js';
 import { authLocale, reviewParameters, button, fill, waitFor } from '../accounts-operations/story';
 import '../../styles.css';
 
-export default { title: 'Pages/Account/Rename/Recovery', parameters: reviewParameters, decorators: [authLocale] };
+export default { title: 'Account/Rename/Recovery', id: 'pages-account-rename-recovery', parameters: reviewParameters, decorators: [authLocale] };
 function Page({ after }: { after: 'refused' | 'signed-out' | 'management-auth-required' | 'ready' | 'acknowledged' }) {
   const source = useMemo<RenameSource>(() => {
     let sent = false;

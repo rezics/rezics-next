@@ -6,7 +6,8 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageStory, pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Commerce/Creator Statements',
+  title: 'Commerce/Creator Statements',
+  id: 'pages-commerce-creator-statements',
   parameters: {
     layout: 'fullscreen',
     docs: {
