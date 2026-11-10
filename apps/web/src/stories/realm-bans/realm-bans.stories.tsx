@@ -121,18 +121,13 @@ async function observeWrappingAndControls(context: Parameters<NonNullable<Story[
   await expect(confirmation.scrollWidth).toBeLessThanOrEqual(confirmation.clientWidth + 1);
 }
 
-export const FullReasonPhone390: Story = {
-  name: 'Full Reason',
+export const UnbanConfirmationKeyboardFocus: Story = {
+  name: 'Unban confirmation keyboard focus',
   args: { scenario: 'current' },
   globals: {},
   play: observeWrappingAndControls,
 };
-export const FullReasonDesktop1280: Story = {
-  tags: ['!dev'],
-  args: { scenario: 'current' },
-  globals: {},
-  play: observeWrappingAndControls,
-};
+
 export const FullReasonRtl: Story = {
   args: { scenario: 'current' },
   globals: {},

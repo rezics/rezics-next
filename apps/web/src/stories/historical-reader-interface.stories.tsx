@@ -178,11 +178,7 @@ export const SameImmutableRevision: Story = {
   },
 };
 
-export const Phone390: Story = {
-  ...SameImmutableRevision,
-  globals: {},
-};
-export const RightToLeft: Story = { ...Phone390, args: { direction: 'rtl' } };
+export const RightToLeft: Story = { ...SameImmutableRevision, args: { direction: 'rtl' } };
 
 const retry = fn();
 export const LocalStates: Story = {

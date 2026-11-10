@@ -163,5 +163,4 @@ export const ClosedAdvice: Story = { args: { mode: 'closed' } };
 export const Empty: Story = { args: { mode: 'empty' } };
 export const Preparing: Story = { args: { mode: 'preparing' } };
 export const FailedContinuation: Story = { args: { mode: 'unavailable', continuation: true } };
-export const Phone390: Story = { name: 'Default', globals: {} };
-export const Desktop1280: Story = { tags: ['!dev'], globals: {} };
+export const ModerationDirectory: Story = { name: 'Default', globals: {} };

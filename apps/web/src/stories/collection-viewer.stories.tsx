@@ -126,13 +126,13 @@ async function readingExample(canvasElement: HTMLElement) {
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
 
-export const Phone390: Story = {
+export const ListLayout: Story = {
   globals: {},
   render: () => <Showcase layout="list" />,
   play: async ({ canvasElement }) => readingExample(canvasElement),
 };
 
-export const Desktop1280: Story = {
+export const GridLayout: Story = {
   globals: {},
   render: () => <Showcase layout="grid" />,
   play: async ({ canvasElement }) => readingExample(canvasElement),

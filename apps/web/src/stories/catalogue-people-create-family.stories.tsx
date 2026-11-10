@@ -322,14 +322,14 @@ export const PersonInitialFamily: Story = {
 export const OrganizationInitialFamily: Story = {
   play: async ({ canvasElement }) => family(first(canvasElement), 'schema:Organization'),
 };
-export const PersonPhone390: Story = { name: 'Person', ...PersonInitialFamily, globals: {} };
-export const OrganizationDesktop1280: Story = { name: 'Organization', ...OrganizationInitialFamily, globals: {} };
-export const LongPersonPhone390RTL: Story = {
+export const PersonFamily: Story = { name: 'Person', ...PersonInitialFamily, globals: {} };
+export const OrganizationFamily: Story = { name: 'Organization', ...OrganizationInitialFamily, globals: {} };
+export const LongPersonRtl: Story = {
   args: { variant: 'long', rtl: true },
   globals: {},
   play: async ({ canvasElement }) => family(first(canvasElement), 'schema:Person', true),
 };
-export const LongOrganizationDesktop1280RTL: Story = {
+export const LongOrganizationRtl: Story = {
   args: { variant: 'long', rtl: true },
   globals: {},
   play: async ({ canvasElement }) => family(first(canvasElement), 'schema:Organization', true),
@@ -463,15 +463,4 @@ export const CreationReaderRetirement: Story = {
     );
     await expect(first(canvasElement).innerHTML).not.toContain(longUrl);
   },
-};
-
-export const PersonDesktop1280: Story = { tags: ['!dev'], ...PersonInitialFamily, globals: {} };
-export const OrganizationPhone390: Story = { tags: ['!dev'], ...OrganizationInitialFamily, globals: {} };
-export const LongPersonDesktop1280RTL: Story = {
-  ...LongPersonPhone390RTL,
-  globals: {},
-};
-export const LongOrganizationPhone390RTL: Story = {
-  ...LongOrganizationDesktop1280RTL,
-  globals: {},
 };

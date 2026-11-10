@@ -281,16 +281,8 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Phone390: Story = {
+export const WorkFamiliesReading: Story = {
   name: 'Default',
-  globals: {},
-  play: async ({ canvasElement }) => {
-    await expectFamilies(canvasElement);
-  },
-};
-
-export const Desktop1280: Story = {
-  tags: ['!dev'],
   globals: {},
   play: async ({ canvasElement }) => {
     await expectFamilies(canvasElement);
