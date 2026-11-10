@@ -246,6 +246,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
       );
       const pendingOnly = await world.subject(`Pending only ${marker('pending-member')}`);
       await json('alice', 'PUT', `/v1/libraryEntries/${pendingOnly.subject.id}`, { state: 'planned' });
+      await world.prepareSource(people().alice, publicCollection.collection.id);
       const publishedCollection = await json<{
         collection: { revision: number };
         publication: { generation: string };
@@ -457,6 +458,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         'GET',
         `/v1/collections/${publicCollection.collection.id}`,
       );
+      await world.prepareSource(people().alice, publicCollection.collection.id);
       const pendingSelected = await json<{ collection: { revision: number } }>(
         'alice',
         'POST',
