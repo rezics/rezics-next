@@ -725,6 +725,9 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
     return realmParticipation(client, input, time);
   };
   const contentDependencies = {
+    get editionPublisherAccess() {
+      return resolveAccess({ actions: actionCatalogue(content), realmRoleReader });
+    },
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,

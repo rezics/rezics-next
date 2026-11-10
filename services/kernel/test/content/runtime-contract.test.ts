@@ -1,4 +1,5 @@
 import { expect, expectTypeOf, mock, spyOn, test } from 'bun:test';
+import type { Access } from '../../src/request/access.ts';
 import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
 import type { MediaImportFetchConfig } from '../../src/content/media-import.ts';
 import type { NativeAuthorErasureWorkflows } from '../../src/content/operation-contract.ts';
@@ -30,10 +31,11 @@ test('trusted optional content runtime types retain exactly the native ports and
       workflows?: NativeAuthorErasureWorkflows;
       anonymousVerifier?: TurnstileVerifier;
       readConsent?: CurrentConsentReader;
+      editionPublisherAccess?: Access;
     }>
   >();
   expectTypeOf<keyof ContentRuntime>().toEqualTypeOf<
-    'fetchConfig' | 'workflows' | 'anonymousVerifier' | 'readConsent'
+    'fetchConfig' | 'workflows' | 'anonymousVerifier' | 'readConsent' | 'editionPublisherAccess'
   >();
   expectTypeOf<KernelDependencies['content']>().toEqualTypeOf<KernelContent | undefined>();
   expectTypeOf<routes.Dependencies['cursorNow']>().toEqualTypeOf<() => number>();
@@ -119,6 +121,7 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
           'readConsent',
           'tokens',
           'access',
+          'editionPublisherAccess',
           'realmParticipation',
           'viewerActionRuntime',
           ...Object.keys(content),
@@ -156,6 +159,8 @@ test('content composition retains lazy access resolution and the validated kerne
     const received = compose.mock.calls.at(-1)![1];
     expect(factory).not.toHaveBeenCalled();
     expect(clock).not.toHaveBeenCalled();
+    expect(received.editionPublisherAccess).toBe(access);
+    expect(factory).toHaveBeenCalledTimes(1);
     const wrapped = received.access!;
     expect(factory).toHaveBeenCalledTimes(1);
     expect(received.access).toBe(wrapped);

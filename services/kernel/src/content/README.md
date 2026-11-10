@@ -3699,7 +3699,11 @@ at the same live native read T, before target checkout. Each action uses its own
 formula; neither identity grants anything to the request's buyer. The publisher also independently restores each
 subject, board, Realm, Space, thread and source/ancestor post read at that same T and fixed deadline. Each exact
 authority anchor validates its own native row before checkout of the edition home. Action evidence is never reused
-for another action; the real buyer still passes its own independent read checks. Current consent comes from the
+for another action; the real buyer still passes its own independent read checks. Kernel supplies
+`editionPublisherAccess` as the same mounted native evaluator before the request Realm adapter. A restored
+`thread:read` identity cannot prepare the adapter's additional `realm:read` action. Publisher Source instead
+restores that Realm action independently and retains its current association and final formula checks; buyer
+reads continue through the request adapter. This composition changes no identity ceiling or permission operand. Current consent comes from the
 mounted Auth reader or the standard Auth consent configuration. Absent configuration is typed unavailability. Current seller grants,
 native author/source/licence/binding and original receipt are checked again before returning authority or bytes.
 One fixed deadline bounds all restorations and final evidence to at most 1,000 ms. Reads mint T on a released

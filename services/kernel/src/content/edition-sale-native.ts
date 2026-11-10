@@ -1,4 +1,3 @@
-import type { Pool } from 'pg';
 import { createInitiatorRestorer, commandAccessContext } from './access-port.ts';
 import { DurableInitiatorUnavailableError } from '../access/contract/index.ts';
 import { createAuthConsentReader, readAuthConsentConfig, type CurrentConsentReader } from '../access/auth-consent.ts';
@@ -6,6 +5,7 @@ import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { accessCheck } from './access-port.ts';
 import type { Access } from '../request/access.ts';
+import type { ContentEditionSaleDependencies } from './edition-sale.ts';
 import type { ContentEditionSaleAuthority } from './edition-model.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { ReadContext } from './model.ts';
@@ -32,11 +32,11 @@ export function readContentEditionConsent(
   return config === null ? undefined : createAuthConsentReader(config);
 }
 
-type Dependencies = Readonly<{ pool: Pool; access: Access; clock: () => Date; readConsent?: CurrentConsentReader }>;
+type Dependencies = ContentEditionSaleDependencies;
 
 /** Server-only Commerce eligibility port. It never authorizes delivery to a buyer. */
 export function readContentEditionMechanicalSaleAuthority(
-  dependencies: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
+  dependencies: Dependencies,
   editionId: string,
   context: Readonly<{ deadline: number }>,
 ): Promise<ContentEditionSaleAuthority | null> {
@@ -108,9 +108,13 @@ async function prepareNativeContentEditionSale(
   if (!publication) throw new AccessUnavailableError('overloaded');
   const readConsent = deps.readConsent;
   if (!readConsent) throw new AccessUnavailableError('overloaded');
+  // Durable identities admit exactly one action/resource. Request adapters may
+  // compose additional actions, so use the mounted native evaluator for the
+  // publisher's separately restored Realm, Space and Content Source formulas.
+  const publisher = { ...deps, access: deps.editionPublisherAccess ?? deps.access };
   const restorer = createInitiatorRestorer({
     pool: deps.pool,
-    access: deps.access,
+    access: publisher.access,
     readOperation: readEditionInitiator,
     readConsent,
   });
@@ -144,7 +148,7 @@ async function prepareNativeContentEditionSale(
     if (seller.accountId !== row.creator_account_id || author.accountId !== row.creator_account_id)
       throw new AccessUnavailableError('overloaded');
     sellerCheck = await accessCheck(
-      deps.access,
+      publisher.access,
       seller,
       'edition:sell',
       { route: row.route, id: editionId },
@@ -159,7 +163,7 @@ async function prepareNativeContentEditionSale(
       }),
     );
     authorCheck = await accessCheck(
-      deps.access,
+      publisher.access,
       author,
       'post:revise',
       { route: row.route, id: row.post_id },
@@ -177,7 +181,14 @@ async function prepareNativeContentEditionSale(
     if (error instanceof DurableInitiatorUnavailableError) throw new AccessUnavailableError('overloaded');
     throw error;
   }
-  const publisherSource = await prepareEditionPublisherSource(deps, source, operation, restorer, time, accessContext);
+  const publisherSource = await prepareEditionPublisherSource(
+    publisher,
+    source,
+    operation,
+    restorer,
+    time,
+    accessContext,
+  );
   if (!publisherSource || !(await publisherSource.final())) return null;
   // A real caller keeps its own current subject and complete parent-chain checks.
   // Mechanical eligibility has no delivery actor and cannot issue a buyer fact.
@@ -225,7 +236,7 @@ async function prepareNativeContentEditionSale(
 }
 
 export function readContentEditionSaleAuthority(
-  dependencies: Readonly<{ pool: Pool; access: Access; clock: () => Date }>,
+  dependencies: Dependencies,
   editionId: string,
   context: ReadContext,
 ): Promise<ContentEditionSaleAuthority | null> {

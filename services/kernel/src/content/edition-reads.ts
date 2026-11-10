@@ -7,8 +7,6 @@ import type { EditionIdentity } from './edition-model.ts';
 import { createHash } from 'node:crypto';
 import { parseDocument, serializeDocument } from '@rezics/document';
 import { accessCheck } from './access-port.ts';
-import type { Access } from '../request/access.ts';
-import type { Pool } from 'pg';
 import { ContentNotFoundError, prepareEditionSource, readPost, type ContentReadDependencies } from './reads.ts';
 import type { ReadContext } from './model.ts';
 import {
@@ -22,11 +20,11 @@ import {
   sourceOf,
   withEditionReadTime,
 } from './edition-store.ts';
-import { prepareContentEditionSale } from './edition-sale.ts';
+import { prepareContentEditionSale, type ContentEditionSaleDependencies } from './edition-sale.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { ContentEditionView, ContentEditionRevisionView } from './edition-model.ts';
 
-type Dependencies = Readonly<{ pool: Pool; access: Access; clock: () => Date }>;
+type Dependencies = ContentEditionSaleDependencies;
 /** Closed authorized metadata never returns source post/thread IDs, body, URLs or history. */
 export async function readContentEdition(deps: Dependencies, id: string, context: ReadContext, identity = false) {
   return readEditionMetadata(deps, id, context, false, identity);
