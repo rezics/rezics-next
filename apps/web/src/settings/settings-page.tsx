@@ -22,7 +22,13 @@ import {
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { m } from '../paraglide/messages.js';
 import { ProfileSection } from './profile';
 import { ReadingCard } from './reading-card';
@@ -77,8 +83,8 @@ export function ManagedAccountSelectionUnavailable({
   onBack?: MouseEventHandler<HTMLAnchorElement> | undefined;
 }) {
   return (
-    <Card className="min-w-0 max-w-full">
-      <CardHeader className="min-w-0">
+    <ContentSection className="min-w-0 max-w-full">
+      <ContentSectionHeader className="min-w-0">
         <a
           className="inline-flex min-h-11 max-w-full items-center rounded-2xl px-3 py-2 text-sm leading-5 whitespace-normal break-words text-primary underline underline-offset-4 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
           href={backHref}
@@ -86,14 +92,14 @@ export function ManagedAccountSelectionUnavailable({
         >
           {m.managed_back()}
         </a>
-        <CardTitle>
+        <ContentSectionTitle>
           <h2 id="settings-account-heading">{m.managed_detail_title()}</h2>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+        </ContentSectionTitle>
+      </ContentSectionHeader>
+      <ContentSectionBody>
         <p role="status">{m.settings_managed_navigation_unavailable()}</p>
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }
 
@@ -160,14 +166,14 @@ function SettingsFailure({
 }) {
   const waiting = usePreferenceRetry(failure);
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
+    <ContentSection>
+      <ContentSectionHeader>
+        <ContentSectionTitle>
           <h2 id="settings-reading-heading">{m.settings_reading_heading()}</h2>
-        </CardTitle>
-        <CardDescription>{m.settings_reading_text()}</CardDescription>
-      </CardHeader>
-      <CardContent>
+        </ContentSectionTitle>
+        <ContentSectionDescription>{m.settings_reading_text()}</ContentSectionDescription>
+      </ContentSectionHeader>
+      <ContentSectionBody>
         <Alert
           variant={state === 'preparing' ? 'default' : 'destructive'}
           data-response-status={failure.status ?? ''}
@@ -201,8 +207,8 @@ function SettingsFailure({
             </Button>
           </AlertDescription>
         </Alert>
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }
 
@@ -447,13 +453,13 @@ function SettingsSections({
               onVersionChange={io.notifications.confirmed}
             />
           ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>
+            <ContentSection>
+              <ContentSectionHeader>
+                <ContentSectionTitle>
                   <h2 id="settings-notifications-heading">{m.settings_notifications_heading()}</h2>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+                </ContentSectionTitle>
+              </ContentSectionHeader>
+              <ContentSectionBody>
                 <Alert variant="destructive">
                   <AlertTitle>{m.settings_unavailable_title()}</AlertTitle>
                   <AlertDescription className="space-y-3">
@@ -468,8 +474,8 @@ function SettingsSections({
                     </Button>
                   </AlertDescription>
                 </Alert>
-              </CardContent>
-            </Card>
+              </ContentSectionBody>
+            </ContentSection>
           )}
         </section>
       ) : null,

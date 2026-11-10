@@ -319,7 +319,7 @@ export const DefaultReadRecovery: StoryObj = {
       await expect(style.overflowWrap).toBe('anywhere');
       await expect(style.textOverflow).not.toBe('ellipsis');
       const bounds = action.getBoundingClientRect();
-      const container = action.closest('[data-slot="card-content"]')!.getBoundingClientRect();
+      const container = action.closest('[data-slot="content-section-body"]')!.getBoundingClientRect();
       await expect(bounds.height).toBeGreaterThanOrEqual(44);
       await expect(bounds.width).toBeGreaterThanOrEqual(44);
       await expect(bounds.left).toBeGreaterThanOrEqual(container.left - 1);

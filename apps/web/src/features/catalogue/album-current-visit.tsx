@@ -56,7 +56,7 @@ export function AlbumCurrentVisitGate({
           {m.album_current_return_original({}, o)}
         </a>
       </header>
-      <section className="space-y-3 rounded-xl border border-border p-4 sm:p-5">
+      <section className="space-y-3 border-t border-border pt-4 sm:p-5">
         <p role="status" className="max-w-prose text-sm text-muted-foreground">
           {m.album_current_global_boundary({}, o)}
         </p>

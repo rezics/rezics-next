@@ -318,10 +318,7 @@ export function EditConflictComparison({
           allowed={allowed}
         />
       ) : (
-        <section
-          aria-label={m.thread_edit_current_title()}
-          className="min-w-0 space-y-3 rounded-xl border border-border p-4"
-        >
+        <section aria-label={m.thread_edit_current_title()} className="min-w-0 space-y-3 border-t border-border pt-4">
           <h2 className="font-heading text-lg font-semibold">{m.thread_edit_current_title()}</h2>
           <p role="status">{erased ? m.thread_inspect_current_erased() : m.thread_edit_current_unavailable()}</p>
         </section>

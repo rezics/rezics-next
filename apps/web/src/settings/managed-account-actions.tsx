@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
 import type { SettingsContentFailureReader } from './ports/content';
@@ -71,19 +77,19 @@ function TargetActions({ viewerId, csrfToken, authCsrfToken, io, authNavigation,
     void read.load();
   }, [read]);
   return (
-    <Card
+    <ContentSection
       data-slot="managed-account-actions"
       aria-busy={pending || result === null}
       onClickCapture={managedNavigationGuard(() => read.isCurrent())}
       onAuxClickCapture={managedNavigationGuard(() => read.isCurrent())}
     >
-      <CardHeader>
-        <CardTitle>
+      <ContentSectionHeader>
+        <ContentSectionTitle>
           <h3>{m.managed_actions_title()}</h3>
-        </CardTitle>
-        <CardDescription>{m.managed_actions_selection()}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+        </ContentSectionTitle>
+        <ContentSectionDescription>{m.managed_actions_selection()}</ContentSectionDescription>
+      </ContentSectionHeader>
+      <ContentSectionBody className="space-y-3">
         {result?.state !== 'ready' ? (
           <div className="space-y-3">
             {navigation ? <p className="font-medium">{m.managed_actions_profile()}</p> : null}
@@ -157,8 +163,8 @@ function TargetActions({ viewerId, csrfToken, authCsrfToken, io, authNavigation,
             })}
           </ul>
         ) : null}
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }
 

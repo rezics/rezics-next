@@ -1,7 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { m } from '../paraglide/messages.js';
 import { useSettingsDisposal, useSettingsSessionOwner } from './settings-session-owner';
@@ -133,9 +139,9 @@ function OwnedWatches({
         : m.settings_watches_rejected();
   return (
     <section id="watches" aria-labelledby="settings-watches-heading" className="scroll-mt-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>
+      <ContentSection>
+        <ContentSectionHeader>
+          <ContentSectionTitle>
             <h2
               ref={heading}
               id="settings-watches-heading"
@@ -144,10 +150,10 @@ function OwnedWatches({
             >
               {m.settings_watches_heading()}
             </h2>
-          </CardTitle>
-          <CardDescription>{m.settings_watches_text()}</CardDescription>
-        </CardHeader>
-        <CardContent className="min-w-0 space-y-5">
+          </ContentSectionTitle>
+          <ContentSectionDescription>{m.settings_watches_text()}</ContentSectionDescription>
+        </ContentSectionHeader>
+        <ContentSectionBody className="min-w-0 space-y-5">
           <div role="group" aria-label={m.settings_watches_heading()} className="flex min-w-0 flex-wrap gap-2">
             <Button
               type="button"
@@ -388,8 +394,8 @@ function OwnedWatches({
               </div>
             </>
           ) : null}
-        </CardContent>
-      </Card>
+        </ContentSectionBody>
+      </ContentSection>
     </section>
   );
 }

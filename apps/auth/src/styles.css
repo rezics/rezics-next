@@ -134,10 +134,6 @@ body {
   max-width: 100%;
   width: min(100%, 34rem);
   padding: 3.25rem 2rem;
-  border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
-  border-radius: 1.5rem;
-  background: color-mix(in oklab, var(--card) 92%, transparent);
-  box-shadow: var(--aura-shadow-card);
   text-align: center;
   overflow-wrap: anywhere;
 }

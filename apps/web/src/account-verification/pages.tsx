@@ -1,6 +1,11 @@
 import { useRef, type ButtonHTMLAttributes, type ReactNode, type RefObject } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { Tombstone } from '@rezics/ui/tombstone';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -302,9 +307,9 @@ function ReviewPageViewContent({
                     )}
                     <div className="space-y-5">
                       {page.value.requests.map(({ request, account, subject }) => (
-                        <Card key={request.id}>
-                          <CardHeader>
-                            <CardTitle>
+                        <ContentSection key={request.id}>
+                          <ContentSectionHeader>
+                            <ContentSectionTitle>
                               {account ? (
                                 <h2 className="text-xl">
                                   <AccountReference account={account} />
@@ -312,7 +317,7 @@ function ReviewPageViewContent({
                               ) : (
                                 <AccountReference account={null} />
                               )}
-                            </CardTitle>
+                            </ContentSectionTitle>
                             {subject ? (
                               <VerificationLink
                                 className={linkClass}
@@ -326,8 +331,8 @@ function ReviewPageViewContent({
                             <VerificationLink className={linkClass} href={verificationHref(request.accountId)}>
                               {m.av_status_title()}
                             </VerificationLink>
-                          </CardHeader>
-                          <CardContent className="space-y-5">
+                          </ContentSectionHeader>
+                          <ContentSectionBody className="space-y-5">
                             <details className="space-y-4">
                               <summary className="cursor-pointer py-2 font-medium text-primary">
                                 {m.av_evidence()}
@@ -350,8 +355,8 @@ function ReviewPageViewContent({
                                 />
                               )}
                             </details>
-                          </CardContent>
-                        </Card>
+                          </ContentSectionBody>
+                        </ContentSection>
                       ))}
                     </div>
                     {page.value.next && (
@@ -444,13 +449,13 @@ function AccountVerificationPageViewContent({
             {m.av_refresh()}
           </Button>
         </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>
+        <ContentSection>
+          <ContentSectionHeader>
+            <ContentSectionTitle>
               <h2>{m.av_public_identity()}</h2>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
+            </ContentSectionTitle>
+          </ContentSectionHeader>
+          <ContentSectionBody className="space-y-3">
             {publication.state === 'verified' ? (
               <>
                 <p>{m.av_verified({ subject: publication.subject.label })}</p>
@@ -470,21 +475,21 @@ function AccountVerificationPageViewContent({
             {request?.state === 'approved' && publication.state !== 'verified' && (
               <p role="status">{m.av_publication_pending()}</p>
             )}
-          </CardContent>
-        </Card>
+          </ContentSectionBody>
+        </ContentSection>
         {privateVisible && (operation.result || operation.attempt) && (
           <OperationFeedback
             operation={operation}
             disabled={!canWrite || !operation.command || !actions.includes(operation.command.action)}
           />
         )}
-        <Card>
-          <CardHeader>
-            <CardTitle>
+        <ContentSection>
+          <ContentSectionHeader>
+            <ContentSectionTitle>
               <h2>{m.av_application()}</h2>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            </ContentSectionTitle>
+          </ContentSectionHeader>
+          <ContentSectionBody className="space-y-4">
             {latest.state !== 'ready' ? (
               <PageState state={latest.state} retry={refresh} />
             ) : request ? (
@@ -507,16 +512,16 @@ function AccountVerificationPageViewContent({
                 {m.av_applicant_settings()}
               </VerificationLink>
             )}
-          </CardContent>
-        </Card>
+          </ContentSectionBody>
+        </ContentSection>
         {actions.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>
+          <ContentSection>
+            <ContentSectionHeader>
+              <ContentSectionTitle>
                 <h2>{m.av_decision()}</h2>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+              </ContentSectionTitle>
+            </ContentSectionHeader>
+            <ContentSectionBody>
               <OperationForm
                 key={`${accountId}:${actions.join(',')}`}
                 draft={operation.command}
@@ -526,8 +531,8 @@ function AccountVerificationPageViewContent({
                 disabled={!canWrite || operation.busy || !!operation.attempt || operation.result?.state === 'accepted'}
                 onSubmit={(input) => void operation.run(input)}
               />
-            </CardContent>
-          </Card>
+            </ContentSectionBody>
+          </ContentSection>
         )}
         {reviewer && (
           <VerificationLink className={linkClass} href={reviewHref()}>

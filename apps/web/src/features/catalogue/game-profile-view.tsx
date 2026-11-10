@@ -866,7 +866,7 @@ function GameCorrection({
         </details>
       )}
       {visible && (
-        <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
+        <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 border-t border-border pt-4">
           <summary className={gameDisclosureSummaryClass}>{m.specialist_identity_reference({}, o)}</summary>
           <dl className="mt-3 min-w-0 space-y-3">
             <div className="min-w-0">

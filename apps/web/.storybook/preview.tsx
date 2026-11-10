@@ -29,7 +29,7 @@ const preview: Preview = {
     theme: { description: 'Color theme', toolbar: { title: 'Theme', icon: 'contrast', items: ['light', 'dark'] } },
     locale: { description: 'Locale', toolbar: { title: 'Locale', items: [...locales] } },
   },
-  initialGlobals: { theme: 'light', locale: 'en' },
+  initialGlobals: { theme: 'light', locale: 'en', viewport: { value: 'responsive', isRotated: false } },
   parameters: {
     a11y: { test: 'error' },
     backgrounds: { disable: true },

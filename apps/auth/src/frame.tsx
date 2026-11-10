@@ -1,4 +1,3 @@
-import { Card } from '@rezics/ui/shadcn/card';
 import type { ReactNode, Ref } from 'react';
 import { m } from './paraglide/messages.js';
 import { LocaleChoice } from './locale-choice-view';
@@ -39,7 +38,7 @@ export function AuthPage({
 }) {
   return (
     <main className="auth-main">
-      <Card role="region" className="auth-card" aria-labelledby="auth-heading">
+      <section role="region" className="auth-card" aria-labelledby="auth-heading">
         <h1
           id="auth-heading"
           ref={headingRef}
@@ -56,7 +55,7 @@ export function AuthPage({
           </nav>
         ) : null}
         {children}
-      </Card>
+      </section>
     </main>
   );
 }

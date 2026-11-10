@@ -2,7 +2,13 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
@@ -397,14 +403,14 @@ export function VerificationCard({
   }
 
   return (
-    <Card className="min-w-0">
-      <CardHeader>
-        <CardTitle>
+    <ContentSection className="min-w-0">
+      <ContentSectionHeader>
+        <ContentSectionTitle>
           <h2>{m.settings_verification_heading()}</h2>
-        </CardTitle>
-        <CardDescription>{m.settings_verification_intro()}</CardDescription>
-      </CardHeader>
-      <CardContent className="min-w-0 space-y-4">
+        </ContentSectionTitle>
+        <ContentSectionDescription>{m.settings_verification_intro()}</ContentSectionDescription>
+      </ContentSectionHeader>
+      <ContentSectionBody className="min-w-0 space-y-4">
         <div role="status" aria-live="polite" aria-atomic="true">
           {state.phase === 'loading' || state.readStatus === 'reading' ? (
             <p>{m.settings_verification_loading()}</p>
@@ -674,7 +680,7 @@ export function VerificationCard({
         >
           {m.settings_verification_read_current()}
         </Button>
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }

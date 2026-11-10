@@ -545,7 +545,7 @@ export function EditionPublication({
         </section>
       ) : null}
       {edition?.state === 'withdrawn' ? (
-        <section className="space-y-3 rounded-xl border border-border p-4 sm:p-5">
+        <section className="space-y-3 border-t border-border pt-4 sm:p-5">
           <h2 ref={resultHeading} tabIndex={-1} className="text-lg font-semibold">
             {m.edition_publication_withdrawn_heading()}
           </h2>

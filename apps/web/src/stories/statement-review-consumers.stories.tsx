@@ -63,7 +63,7 @@ function EvidenceReturn({ revised = false }: { revised?: boolean }) {
         factId={() => 'original-literary-url'}
         onJump={() => field.current?.focus()}
       />
-      <div className="min-w-0 space-y-3 rounded-xl border border-border p-4">
+      <div className="min-w-0 space-y-3 border-t border-border pt-4">
         <label htmlFor="original-literary-url">{m.correction_url({}, o)}</label>
         <Input
           ref={field}

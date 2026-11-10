@@ -14,7 +14,7 @@ const preview: Preview = {
       toolbar: { title: 'Locale', items: ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] },
     },
   },
-  initialGlobals: { theme: 'light', locale: 'en' },
+  initialGlobals: { theme: 'light', locale: 'en', viewport: { value: 'responsive', isRotated: false } },
   parameters: {
     a11y: { test: 'error' },
     backgrounds: { disable: true },

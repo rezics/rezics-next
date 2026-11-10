@@ -242,7 +242,7 @@ export function LiteraryCurrentAssertionInspection({
     );
 
   return (
-    <section data-literary-assertion-inspection="" className="min-w-0 space-y-3 rounded-xl border border-border p-4">
+    <section data-literary-assertion-inspection="" className="min-w-0 space-y-3 border-t border-border pt-4">
       <h3 className="font-semibold">{m.literary_visit_inspect({}, o)}</h3>
       <label className="block min-w-0 space-y-2">
         <span>{m.literary_visit_statement({}, o)}</span>

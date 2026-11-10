@@ -135,7 +135,7 @@ export function DynamicRuleResultsReview({
   }
 
   return (
-    <section className="min-w-0 space-y-3 rounded-xl border border-border p-4" aria-labelledby={headingId}>
+    <section className="min-w-0 space-y-3 border-t border-border pt-4" aria-labelledby={headingId}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <h2 id={headingId} className="text-lg font-semibold">

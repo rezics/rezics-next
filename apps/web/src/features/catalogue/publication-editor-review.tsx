@@ -97,7 +97,7 @@ export function PublicationReview({
         ))}
       </ol>
       {workStatement && (
-        <section className="min-w-0 space-y-3 rounded-xl border border-border p-4">
+        <section className="min-w-0 space-y-3 border-t border-border pt-4">
           <ContentItemHeading level={3} lang={name(relation).lang ?? undefined} className="text-base font-semibold">
             {m.publication_work_link({}, o)} · {name(relation).text || relation}
           </ContentItemHeading>
@@ -113,10 +113,7 @@ export function PublicationReview({
         </section>
       )}
       {reviewedFacts.map((entry) => (
-        <section
-          key={`${entry.property}-${entry.target}`}
-          className="min-w-0 space-y-3 rounded-xl border border-border p-4"
-        >
+        <section key={`${entry.property}-${entry.target}`} className="min-w-0 space-y-3 border-t border-border pt-4">
           <ContentItemHeading
             level={3}
             lang={name(entry.property).lang ?? undefined}

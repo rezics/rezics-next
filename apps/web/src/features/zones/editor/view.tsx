@@ -100,7 +100,7 @@ function RouterDepartureGuard({
   }
 
   return blocker.status === 'blocked' ? (
-    <section role="alert" className="mb-6 space-y-3 rounded-xl border border-border p-4">
+    <section role="alert" className="mb-6 space-y-3 border-t border-border pt-4">
       <p>{m.zone_editor_leave()}</p>
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => resolve(false)}>{m.zone_editor_stay()}</Button>
@@ -371,7 +371,7 @@ export function ZoneConfigurationEditor({
             <p role="status">{state.notice === 'saved' ? m.zone_editor_saved() : m.zone_editor_published()}</p>
           ) : null}
           {state.conflict ? (
-            <section className="space-y-3 rounded-xl border border-border p-4" aria-label={m.zone_editor_conflict()}>
+            <section className="space-y-3 border-t border-border pt-4" aria-label={m.zone_editor_conflict()}>
               <p role="alert">{m.zone_editor_conflict()}</p>
               {state.conflict.resource.kind === 'failure' ? (
                 <EditorFailure failure={state.conflict.resource} locale={locale} />

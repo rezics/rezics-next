@@ -2,7 +2,13 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalSto
 import { useLocation } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
@@ -273,15 +279,15 @@ export function ProfileCard({
       </p>
     ) : null;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
+    <ContentSection>
+      <ContentSectionHeader>
+        <ContentSectionTitle>
           <h2>{m.settings_profile_heading()}</h2>
-        </CardTitle>
-        <CardDescription>{m.settings_profile_text()}</CardDescription>
-        <CardDescription>{m.settings_profile_save_help()}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </ContentSectionTitle>
+        <ContentSectionDescription>{m.settings_profile_text()}</ContentSectionDescription>
+        <ContentSectionDescription>{m.settings_profile_save_help()}</ContentSectionDescription>
+      </ContentSectionHeader>
+      <ContentSectionBody className="space-y-4">
         <ProfileFeedback editor={editor} scope="profile" writable={writable} readable={canRead} />
         <div role="status" aria-live="polite" aria-atomic="true" className="text-sm font-medium">
           {changed && !closed && !busy && !state.attempt && state.phase !== 'uncertain'
@@ -454,7 +460,7 @@ export function ProfileCard({
             </div>
           </form>
         ) : null}
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }

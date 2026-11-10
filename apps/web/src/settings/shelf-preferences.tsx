@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { isNotFound, isRedirect } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
@@ -1029,14 +1035,14 @@ export function ShelfPreferencesCard({
   if (!canRead) return null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
+    <ContentSection>
+      <ContentSectionHeader>
+        <ContentSectionTitle>
           <h2 id="settings-shelf-heading">{m.settings_shelf_heading()}</h2>
-        </CardTitle>
-        <CardDescription>{m.settings_shelf_text()}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
+        </ContentSectionTitle>
+        <ContentSectionDescription>{m.settings_shelf_text()}</ContentSectionDescription>
+      </ContentSectionHeader>
+      <ContentSectionBody className="space-y-5">
         {state.current && unavailableColumns.length ? (
           <p className="text-sm text-muted-foreground">
             {m.settings_shelf_columns_unavailable({ columns: unavailableColumns.join(', ') })}
@@ -1325,7 +1331,7 @@ export function ShelfPreferencesCard({
             </Button>
           </div>
         ) : null}
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }

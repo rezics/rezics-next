@@ -93,7 +93,7 @@ function RouterCreateNavigationGuard({ latest }: { latest: MutableRefObject<Crea
   if (blocker.status !== 'blocked') return null;
   const options = { locale: latest.current.locale as never };
   return (
-    <section role="alert" className="mb-6 space-y-3 rounded-xl border border-border p-4">
+    <section role="alert" className="mb-6 space-y-3 border-t border-border pt-4">
       <p>{m.zone_editor_leave({}, options)}</p>
       {latest.current.requestMayComplete ? <p>{m.zones_create_uncertain({}, options)}</p> : null}
       <div className="flex flex-wrap gap-2">

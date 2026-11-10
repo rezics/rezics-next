@@ -183,7 +183,7 @@ test(
       const { page } = await open(path);
       try {
         await page.locator(ready).first().waitFor();
-        expect(await page.locator('[data-slot="card"]').count(), path).toBeGreaterThan(0);
+        expect(await page.locator('main section[aria-labelledby="auth-heading"]').count(), path).toBeGreaterThan(0);
         const controls = page.locator('main input:not([type="hidden"]):not([aria-hidden="true"]), main button');
         for (const control of await controls.all()) {
           expect(['input', 'input-group-control', 'button', 'checkbox'], path).toContain(
