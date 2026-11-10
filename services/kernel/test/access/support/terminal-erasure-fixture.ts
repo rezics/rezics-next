@@ -8,12 +8,13 @@ import { createPool } from '../../../src/database/pool.ts';
 import { historyExecutionPort } from '../../../src/history/application/index.ts';
 import { bindCanonicalSourceWork } from '../../../src/library/canonical-source-store.ts';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../../src/semantic/definitions.ts';
+import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import type { WorkContext } from '../../../src/work/registry.ts';
 import { workExecutionPort } from '../../../src/work/selected-runtime.ts';
 import { prepareCollectionSource } from '../../library/support/collection-source-preparation.ts';
-import { readLiveAccountHandle } from '../../support/account-deletion.ts';
+import { drainEffects, readLiveAccountHandle } from '../../support/account-deletion.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { createPersonas, type Persona } from '../../support/personas.ts';
 import { testKernel } from '../../support/test-kernel.ts';
@@ -197,6 +198,36 @@ export async function createTerminalErasureFixture() {
       readOnly,
       async prepareSource(actor: Persona, collectionId: string) {
         await prepareCollectionSource(sourceContext, actor.accountId, collectionId);
+      },
+      async prepareAccountAgent(actor: Persona) {
+        const partition = partitionOf(routeOf(actor.accountId)!);
+        const deadline = Date.now() + 45_000;
+        try {
+          await drainEffects(pool!, partition, { deadlineMs: 45_000 });
+          // The relay checkpoint proves enqueue, not completion of the native account-agent effect.
+          for (;;) {
+            const pending = await readOnly<{ workflow_id: string }>(
+              `SELECT consumer.workflow_id
+               FROM core.history_event_consumer consumer
+               JOIN core.outbox event USING(partition_no,position,event_seq)
+               WHERE consumer.partition_no=$1 AND consumer.consumer='account_agent'
+                 AND event.subject=$2 AND consumer.state='open'`,
+              [partition, actor.accountId],
+            );
+            if (pending.length === 0) return;
+            for (const row of pending) {
+              const status = await work!.getWorkflow(row.workflow_id);
+              if (status?.status === 'ERROR' || status?.status === 'CANCELLED')
+                await work!.retrieveWorkflow(row.workflow_id).getResult();
+            }
+            if (Date.now() >= deadline)
+              throw new Error(`Account agent effects did not complete within 45000ms: ${actor.accountId}`);
+            await Bun.sleep(15);
+          }
+        } catch (error) {
+          console.error('Terminal erasure account-agent preparation failed:', worker?.output);
+          throw error;
+        }
       },
       async startWorker() {
         if (worker) throw new Error('Terminal erasure worker is already running');

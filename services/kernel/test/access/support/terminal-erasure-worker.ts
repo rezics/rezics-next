@@ -1,4 +1,3 @@
-import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Pool } from 'pg';
 import { workerTestEnv } from '../../support/worker-env.ts';
 
