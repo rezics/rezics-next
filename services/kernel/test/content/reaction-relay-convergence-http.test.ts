@@ -259,6 +259,7 @@ test.serial(
     ] as const)
       await grantRead(base, { route, id }, base.other, actions);
 
+    const guarded = await base.createThread(base.mainBoardId, `Reaction idempotency ${crypto.randomUUID()}`);
     runtime = await base.startEffects();
     const sourceA = partitionOf(routeOf(base.author.accountId)!);
     const sourceB = partitionOf(routeOf(base.other.accountId)!);
@@ -502,7 +503,6 @@ test.serial(
     await expectPostRead(base, publicTarget, base.author, null, base.other, 'like', { like: 1 }, clearedPostFreshness);
 
     // A changed semantic intent conflicts before changing the actor slot, receipt, event or public aggregate.
-    const guarded = await base.createThread(base.mainBoardId, `Reaction idempotency ${crypto.randomUUID()}`);
     const guardedPath = `/v1/threads/${guarded.threadId}/reaction`;
     const guardedKey = crypto.randomUUID();
     const capture = await runtime.captureBeforeWrite(base.other.accountId);

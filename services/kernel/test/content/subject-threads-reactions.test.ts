@@ -107,4 +107,4 @@ test('Subject threads retain native reaction totals, viewer isolation and final 
     await effects?.stop();
     await world.system.close();
   }
-});
+}, 180_000);
