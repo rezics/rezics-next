@@ -4,7 +4,8 @@ import { AppearanceControls } from '../shell/appearance-controls';
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Patterns/Appearance',
+  title: 'Account/Appearance',
+  id: 'patterns-appearance',
   component: AppearanceControls,
   beforeEach: () => {
     const cookie = /(?:^|;\s*)rezics_contrast=([^;]*)/.exec(document.cookie)?.[1];

@@ -5,7 +5,8 @@ import { expect, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Pages/Library/Dynamic Collection',
+  title: 'Library/Dynamic Collection',
+  id: 'pages-library-dynamic-collection',
   parameters: {
     layout: 'fullscreen',
     docs: {

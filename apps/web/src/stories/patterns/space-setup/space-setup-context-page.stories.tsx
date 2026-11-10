@@ -2,7 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ContextSetupReview, Unavailable, Denied } from './space-setup-context.stories';
 
 const meta = {
-  title: 'Pages/Community/Space Setup Context',
+  title: 'Community/Space Setup Context Page',
+  id: 'pages-community-space-setup-context',
   component: ContextSetupReview,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof ContextSetupReview>;

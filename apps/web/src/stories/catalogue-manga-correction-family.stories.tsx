@@ -100,7 +100,8 @@ function CorrectionFamily({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Manga correction family',
+  title: 'Catalogue/Manga correction family',
+  id: 'pages-catalogue-manga-correction-family',
   component: CorrectionFamily,
   parameters: {
     layout: 'fullscreen',

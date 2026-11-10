@@ -90,7 +90,8 @@ function RecipeStory({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Recipe editor',
+  title: 'Catalogue/Recipe editor',
+  id: 'pages-catalogue-recipe-editor',
   component: RecipeStory,
   tags: ['autodocs'],
   parameters: {

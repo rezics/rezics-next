@@ -108,7 +108,8 @@ function RetiringCreation() {
 }
 
 const meta = {
-  title: 'Pages/Zones/Starter creation family',
+  title: 'Zones/Starter creation family',
+  id: 'pages-zones-starter-creation-family',
   component: CreationFamily,
   tags: ['autodocs'],
   parameters: {

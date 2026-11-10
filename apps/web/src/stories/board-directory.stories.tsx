@@ -133,7 +133,8 @@ export function DirectoryExample({
 }
 
 const meta = {
-  title: 'Patterns/Community/Board Directory',
+  title: 'Community/Board Directory Workflow',
+  id: 'patterns-community-board-directory',
   component: DirectoryExample,
   excludeStories: ['DirectoryExample'],
   tags: ['autodocs'],

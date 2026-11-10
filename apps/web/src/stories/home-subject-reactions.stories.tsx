@@ -65,7 +65,8 @@ function HomeSubjectReactionStory({ scenario }: { scenario: Scenario }) {
 }
 
 const meta = {
-  title: 'Pages/Discovery/Home Subject reactions',
+  title: 'Discovery/Home Subject reactions',
+  id: 'pages-discovery-home-subject-reactions',
   component: HomeSubjectReactionStory,
   parameters: {
     layout: 'fullscreen',

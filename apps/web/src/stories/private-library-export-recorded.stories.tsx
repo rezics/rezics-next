@@ -8,7 +8,8 @@ import { exportRecording, recordedExportPort } from '../library/private-export/r
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Pages/Library/Private Export/Producer recordings',
+  title: 'Library/Private Export/Producer recordings',
+  id: 'pages-library-private-export-producer-recordings',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

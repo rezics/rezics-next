@@ -126,7 +126,8 @@ const observation = (id: string, view = 'overview') => ({
 const recoveryHref = '/en/subjects/0192f3a0-6c1e-7b2a-9d4e-000000000901/example#manga-reader';
 
 const meta = {
-  title: 'Pages/Subjects/Manga reading',
+  title: 'Subjects/Manga reading',
+  id: 'pages-subjects-manga-reading',
   component: MangaReader,
   parameters: {
     docs: {

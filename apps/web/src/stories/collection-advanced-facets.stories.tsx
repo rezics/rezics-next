@@ -85,7 +85,8 @@ async function openFields(canvasElement: HTMLElement, property: string) {
 }
 
 const meta = {
-  title: 'Pages/Collections/Advanced facets',
+  title: 'Library/Advanced facets',
+  id: 'pages-collections-advanced-facets',
   parameters: {
     layout: 'fullscreen',
     docs: {

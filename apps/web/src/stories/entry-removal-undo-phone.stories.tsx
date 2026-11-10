@@ -13,7 +13,8 @@ import { getLocale, getServerAsyncLocalStorage, overwriteServerAsyncLocalStorage
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Patterns/Library/Entry Removal Journey',
+  title: 'Library/Entry Removal Journey',
+  id: 'patterns-library-entry-removal-journey',
   parameters: {
     layout: 'fullscreen',
     admitted: ['personal_library', 'library_entry.restore'],

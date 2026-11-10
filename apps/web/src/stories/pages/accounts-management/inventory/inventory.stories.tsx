@@ -5,7 +5,7 @@ import { m } from '../../../../paraglide/messages.js';
 import { getLocale } from '../../../../paraglide/runtime.js';
 import { PageStory } from '../../../page';
 import { ready, reviewParameters } from '../support';
-const meta = { title: 'Pages/Account/Management/Accounts', parameters: reviewParameters } satisfies Meta;
+const meta = { title: 'Account/Management/Accounts', id: 'pages-account-management-accounts', parameters: reviewParameters } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 function render(mode: Parameters<typeof selectManagementStory>[0]) {

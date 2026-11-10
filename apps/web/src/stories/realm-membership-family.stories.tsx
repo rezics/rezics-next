@@ -144,7 +144,8 @@ function MembershipFamily() {
 }
 
 const meta = {
-  title: 'Patterns/Community/Realm Membership Family',
+  title: 'Community/Realm Membership Family',
+  id: 'patterns-community-realm-membership-family',
   component: MembershipFamily,
   parameters: {
     layout: 'padded',

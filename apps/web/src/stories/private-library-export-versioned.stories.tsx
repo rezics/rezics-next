@@ -24,7 +24,8 @@ import { ExportReady } from '../library/private-export/ready';
 import { PageHeading } from '../shell/page-heading';
 
 const meta = {
-  title: 'Pages/Library/Private Export/Versioned states',
+  title: 'Library/Private Export/Versioned states',
+  id: 'pages-library-private-export-versioned-states',
   parameters: {
     layout: 'fullscreen',
     docs: {

@@ -52,7 +52,7 @@ function Example({ failure, confirmation = false }: { failure?: Failure; confirm
   );
 }
 const meta = {
-  title: 'Pages/Account/Profile editor',
+  title: 'Account/Profile editor',
   id: 'accounts-profile-editor',
   component: Example,
   parameters: {

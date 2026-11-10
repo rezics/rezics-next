@@ -133,7 +133,8 @@ function ReadingStory({
 }
 
 const meta = {
-  title: 'Pages/Subjects/Music Context Reading',
+  title: 'Subjects/Music Context Reading',
+  id: 'pages-subjects-music-context-reading',
   component: ReadingStory,
   parameters: {
     layout: 'fullscreen',

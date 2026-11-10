@@ -10,7 +10,8 @@ import { m } from '../paraglide/messages.js';
 import recordedSubject from '../kernel/recorded/subject.json';
 
 const meta = {
-  title: 'Pages/Community/Exact revision',
+  title: 'Community/Exact revision Page',
+  id: 'pages-community-exact-revision',
   component: ExactRevisionExample,
   parameters: { layout: 'fullscreen', viewport: { options: exactRevisionViewports } },
   args: { initial: ready, shell: true },

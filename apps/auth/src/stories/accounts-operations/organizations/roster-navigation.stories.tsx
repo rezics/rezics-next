@@ -10,7 +10,7 @@ import {
 } from '../../../organization-membership-roster-view';
 import { AuthStory, authLocale, reviewParameters } from '../story';
 
-export default { title: 'Pages/Account/Roster navigation', parameters: reviewParameters, decorators: [authLocale] };
+export default { title: 'Account/Roster navigation', id: 'pages-account-roster-navigation', parameters: reviewParameters, decorators: [authLocale] };
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const holders: Holder[] = [
   {

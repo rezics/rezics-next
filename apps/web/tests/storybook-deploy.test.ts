@@ -277,19 +277,9 @@ describe('storybook review build', () => {
     const uiIndex = JSON.parse(readFileSync(resolve(output, 'ui/index.json'), 'utf8')) as {
       entries: Record<string, { title: string; type: string }>;
     };
-    const pages = Object.values(index.entries).filter(
-      (entry) => entry.type === 'story' && entry.title.startsWith('Pages/'),
-    );
-    expect(pages.length).toBeGreaterThanOrEqual(countStories(resolve(app, 'src/stories')));
-    expect(
-      Object.values(index.entries)
-        .filter((entry) => entry.type === 'story')
-        .every((entry) =>
-          ['Overview', 'Pages/', 'Patterns/', 'Components/', 'shadcn/'].some(
-            (tier) => entry.title === tier || entry.title.startsWith(tier),
-          ),
-        ),
-    ).toBe(true);
+    const webStories = Object.values(index.entries).filter((entry) => entry.type === 'story');
+    expect(webStories.length).toBeGreaterThanOrEqual(countStories(resolve(app, 'src/stories')));
+    expect(webStories.filter((entry) => /^(Pages|Patterns|Interfaces|Families)\//.test(entry.title))).toEqual([]);
     expect(Object.values(uiIndex.entries).filter((entry) => entry.type === 'story').length).toBeGreaterThanOrEqual(
       countStories(resolve(root, 'packages/ui/src')),
     );

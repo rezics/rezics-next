@@ -58,7 +58,7 @@ test('An own-worktree Storybook dev server supplies its real local MCP and compo
     { workspace: 'packages/ui', title: 'Components/Cover', source: '/components/cover.stories.tsx', port: uiPort },
     {
       workspace: 'apps/web',
-      title: 'Patterns/Discovery/Search Refinement',
+      title: 'Discovery/Search Refinement',
       source: '/stories/search-refinement.stories.tsx',
       port: await unusedPort(),
     },

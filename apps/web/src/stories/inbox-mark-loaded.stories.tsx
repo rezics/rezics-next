@@ -13,7 +13,8 @@ import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Pages/Account/Inbox',
+  title: 'Account/Inbox Page',
+  id: 'pages-account-inbox',
   parameters: {
     layout: 'fullscreen',
     docs: {

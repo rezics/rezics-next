@@ -104,7 +104,8 @@ function ContinuationExample({
 }
 
 const meta = {
-  title: 'Pages/Community/My Realms Continuation Interface',
+  title: 'Community/My Realms Continuation Interface',
+  id: 'pages-community-my-realms-continuation-interface',
   component: ContinuationExample,
   parameters: {
     layout: 'fullscreen',

@@ -5,7 +5,7 @@ const source = await Bun.file(new URL('../src/stories/moderation-appeals.stories
 // Guard story composition here; the canonical plays exercise the real localized DOM at integration.
 test('Canonical pending and empty appeal Page stories use the existing shell and one main while retaining native response details and meaningful localized keyboard focus assertions', () => {
   expect([...source.matchAll(/export const (\w+)/g)].map((match) => match[1])).toEqual(['Pending', 'Empty']);
-  expect(source).toContain("title: 'Pages/Moderation appeals'");
+  expect(source).toContain("title: 'Moderation/Moderation appeals'");
   expect(source).toContain('component: ModerationAppealsView');
   expect(source).toMatch(/<PatternStory\b[^>]*>\s*<AppShell>\s*<Story\s*\/>\s*<\/AppShell>\s*<\/PatternStory>/);
   expect(source).not.toMatch(/<main\b|\b(?:globals|defaultViewport|viewports)\s*:/);

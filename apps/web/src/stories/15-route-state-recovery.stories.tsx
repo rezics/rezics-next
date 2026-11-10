@@ -11,7 +11,8 @@ import { PatternStory } from './page';
 import { ErrorStory, errorReady, StillUnavailable, Closed, NotFound } from './shell-errors.stories';
 
 const meta = {
-  title: 'Pages/Shell/Route recovery',
+  title: 'Site Shell/Route recovery',
+  id: 'pages-shell-route-recovery',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

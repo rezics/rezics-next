@@ -84,7 +84,8 @@ function PreparedHome({ anonymous = false }: { anonymous?: boolean }) {
 }
 
 const meta = {
-  title: 'Pages/Discovery/Home native reactions (prepared)',
+  title: 'Discovery/Home native reactions (prepared)',
+  id: 'pages-discovery-home-native-reactions-prepared',
   component: PreparedHome,
   parameters: {
     layout: 'fullscreen',

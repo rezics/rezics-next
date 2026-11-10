@@ -103,7 +103,7 @@ function WorkspaceStory({ scenario = 'directory' }: { scenario?: WorkspaceScenar
 }
 const meta = {
   id: 'context-workspace',
-  title: 'Pages/Contexts/Editorial workspace',
+  title: 'Catalogue/Editorial workspace',
   component: WorkspaceStory,
   parameters: {
     layout: 'fullscreen',

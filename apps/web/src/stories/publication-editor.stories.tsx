@@ -49,7 +49,8 @@ function PublicationStory({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Publication editor',
+  title: 'Catalogue/Publication editor',
+  id: 'pages-catalogue-publication-editor',
   component: PublicationStory,
   tags: ['autodocs'],
   parameters: {

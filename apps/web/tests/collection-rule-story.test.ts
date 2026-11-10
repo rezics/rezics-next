@@ -20,7 +20,7 @@ test('Collection rule editor Pages stories have a genuine existing page shell ma
   const editor = source('../src/library/collection-rule-editor.tsx');
   const fake = source('../src/kernel/fake/collection-rules.ts');
 
-  expect(story).toContain("title: 'Pages/Library/Collection rule'");
+  expect(story).toContain("title: 'Library/Collection rule'");
   expect(story).toContain("import { AppShell } from '../shell/shell'");
   expect(shell).toMatch(/<SidebarInset\s+id="main-content"/);
   expect(sidebar).toMatch(/function SidebarInset\b[\s\S]*?return\s*\(\s*<main\b/);

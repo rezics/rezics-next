@@ -150,7 +150,8 @@ function PreparedJourney({ width, dark, long, scenario }: Props) {
   );
 }
 const meta = {
-  title: 'Pages/Community/Portable Writing',
+  title: 'Community/Portable Writing',
+  id: 'pages-community-portable-writing',
   component: PreparedJourney,
   args: { width: 390, dark: false, long: false, scenario: 'writing' },
   parameters: {

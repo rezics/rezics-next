@@ -31,7 +31,8 @@ function Example({ flow, onCreate = () => {} }: { flow: Flow; onCreate?: Observe
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Correction controls and language recovery',
+  title: 'Catalogue/Correction controls and language recovery',
+  id: 'pages-catalogue-correction-controls-and-language-recovery',
   component: Example,
   parameters: {
     layout: 'fullscreen',

@@ -4,7 +4,8 @@ import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths, pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Discovery/Search',
+  title: 'Discovery/Search',
+  id: 'pages-discovery-search',
   excludeStories: ['mixedResultKindNavigation'],
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

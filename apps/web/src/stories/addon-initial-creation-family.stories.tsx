@@ -124,7 +124,8 @@ function Example({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Add-on initial creation family',
+  title: 'Catalogue/Add-on initial creation family',
+  id: 'pages-catalogue-add-on-initial-creation-family',
   component: Example,
   parameters: {
     layout: 'fullscreen',

@@ -13,7 +13,7 @@ import {
   unavailableInventory,
 } from '../../accounts-operations/story';
 
-export default { title: 'Pages/Account/Consent permissions', parameters: reviewParameters, decorators: [authLocale] };
+export default { title: 'Account/Consent permissions', id: 'pages-account-consent-permissions', parameters: reviewParameters, decorators: [authLocale] };
 const consent: GrantedConsent = {
   client_id: 'third-party',
   display_name: 'Reading companion',

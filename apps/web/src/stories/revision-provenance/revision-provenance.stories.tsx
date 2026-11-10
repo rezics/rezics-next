@@ -9,7 +9,8 @@ const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000020';
 const citation = { questionId: STANDARD_QUESTION_ID, units: 14, revision: 2 };
 const revision = { licence: 'CC-BY-SA-4.0', subjectIds: [subjectId], voteCitation: citation };
 const meta = {
-  title: 'Patterns/Community/Revision provenance',
+  title: 'Community/Revision provenance',
+  id: 'patterns-community-revision-provenance',
   component: RevisionProvenance,
   decorators: [
     (Story) => (

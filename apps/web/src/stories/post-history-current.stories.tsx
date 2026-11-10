@@ -77,7 +77,8 @@ function CurrentHistory({
 }
 
 const meta = {
-  title: 'Interfaces/Community/Current-context history',
+  title: 'Community/Current-context history',
+  id: 'interfaces-community-current-context-history',
   component: CurrentHistory,
   parameters: {
     layout: 'fullscreen',

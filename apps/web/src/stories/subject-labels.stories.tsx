@@ -6,7 +6,7 @@ import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths, pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Subjects/Personal Labels',
+  title: 'Subjects/Personal Labels',
   id: 'pages-subject-personal-labels',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;

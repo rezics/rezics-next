@@ -244,7 +244,8 @@ function PreparedJourney({ width, dark, caller, scenario }: Props) {
 }
 
 const meta = {
-  title: 'Pages/Community/Writing Inspection',
+  title: 'Community/Writing Inspection',
+  id: 'pages-community-writing-inspection',
   component: PreparedJourney,
   args: { width: 390, dark: false, caller: 'reply', scenario: 'writing' },
   parameters: {

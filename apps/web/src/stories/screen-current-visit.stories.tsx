@@ -125,7 +125,8 @@ function ScreenCurrentVisitStory({ state = 'selected-reading' }: { state?: Scree
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Screen correction visit',
+  title: 'Catalogue/Screen correction visit',
+  id: 'pages-catalogue-screen-correction-visit',
   component: ScreenCurrentVisitStory,
   parameters: {
     layout: 'fullscreen',

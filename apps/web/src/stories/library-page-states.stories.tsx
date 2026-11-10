@@ -8,7 +8,8 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageStory, libraryHeadingReady, pagePaths, pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Library/Personal Library',
+  title: 'Library/Personal Library Page',
+  id: 'pages-library-personal-library',
   parameters: {
     layout: 'fullscreen',
     admitted: ['selling', 'purchases', 'agent_verification', 'personal_library', 'reading_progress', 'collections'],

@@ -111,7 +111,8 @@ function ControlsExampleInstance() {
 }
 
 const meta = {
-  title: 'Pages/Zones/Owner controls family',
+  title: 'Zones/Owner controls family',
+  id: 'pages-zones-owner-controls-family',
   component: ControlsExample,
   parameters: {
     layout: 'fullscreen',

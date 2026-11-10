@@ -12,7 +12,8 @@ import { AppShell } from '../shell/shell';
 import { pagePaths, PatternStory } from './page';
 
 const meta = {
-  title: 'Pages/Catalogue/Context review',
+  title: 'Catalogue/Context review',
+  id: 'pages-catalogue-context-review',
   component: ContextCurationStory,
   decorators: [
     (Story) => (

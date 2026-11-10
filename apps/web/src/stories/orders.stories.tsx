@@ -10,7 +10,8 @@ import { PendingPage } from '../shell/pending';
 import { ErrorPage } from '../shell/shell';
 
 const meta = {
-  title: 'Pages/Commerce/Orders',
+  title: 'Commerce/Orders',
+  id: 'pages-commerce-orders',
   parameters: {
     layout: 'fullscreen',
     viewport: {

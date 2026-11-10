@@ -4,7 +4,8 @@ import { communityCurrentClaimStory } from '../../community-current-claim';
 import { chooseSubject, openPicker } from './realm-publication.stories';
 
 const meta = {
-  title: 'Pages/Community/Realm Publication',
+  title: 'Community/Realm Publication Page',
+  id: 'pages-community-realm-publication',
   parameters: { layout: 'fullscreen' },
   render: () => <PageStory visitor="Signed In" path="/spaces/atlas-member" />,
 } satisfies Meta;

@@ -77,7 +77,8 @@ function ResultStage({ snap, snapshot }: { snap: VndbJourneySnapshot; snapshot: 
 }
 
 const meta = {
-  title: 'Pages/Library/VNDB import',
+  title: 'Library/VNDB import',
+  id: 'pages-library-vndb-import',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

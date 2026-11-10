@@ -6,7 +6,7 @@ import type { InventoryPage, OwnedClient } from '../../../security-inventory';
 import type { InventorySource } from '../../../security-inventory-view';
 import { authLocale, reviewParameters, button, waitFor } from '../../accounts-operations/story';
 
-export default { title: 'Pages/Account/Owned applications', parameters: reviewParameters, decorators: [authLocale] };
+export default { title: 'Account/Owned applications', id: 'pages-account-owned-applications', parameters: reviewParameters, decorators: [authLocale] };
 
 const rows: OwnedClient[] = [
   {

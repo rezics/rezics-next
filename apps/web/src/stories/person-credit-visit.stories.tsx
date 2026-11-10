@@ -16,7 +16,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { ConnectedStory } from './connected-story';
 
-const meta = { title: 'Pages/Subjects/Person credit visit', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Subjects/Person credit visit', id: 'pages-subjects-person-credit-visit', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 type Mode = 'normal' | 'two' | 'concealed' | 'partial' | 'context' | 'replaced' | 'refused' | 'unavailable' | 'late';

@@ -101,7 +101,7 @@ function SourcesStoryPage({
   );
 }
 const meta = {
-  title: 'Pages/Subjects/Catalogue sources',
+  title: 'Subjects/Catalogue sources',
   id: 'pages-subject-selected-sources',
   component: SourcesStory,
   parameters: { layout: 'fullscreen' },

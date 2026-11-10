@@ -14,7 +14,8 @@ import { PatternStory } from './page';
 
 // UNRUN: dedicated supplied-reader stories and interactions; no visual, native or authority proof.
 const meta = {
-  title: 'Patterns/Library/Progress Log Reader Recovery',
+  title: 'Library/Progress Log Reader Recovery',
+  id: 'patterns-library-progress-log-reader-recovery',
   parameters: {
     layout: 'fullscreen',
     docs: {

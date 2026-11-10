@@ -120,7 +120,8 @@ function DirectedVisit({ state, locale, inverse }: Props) {
 }
 
 const meta = {
-  title: 'Pages/Work/Directed relations',
+  title: 'Subjects/Directed relations',
+  id: 'pages-work-directed-relations',
   component: DirectedVisit,
   args: { state: 'ready', locale: 'en', inverse: false },
   parameters: { layout: 'fullscreen' },

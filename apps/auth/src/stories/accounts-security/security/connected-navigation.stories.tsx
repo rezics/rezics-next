@@ -15,7 +15,8 @@ import {
 } from '../../accounts-operations/story';
 
 export default {
-  title: 'Pages/Account/Connected application navigation',
+  title: 'Account/Connected application navigation',
+  id: 'pages-account-connected-application-navigation',
   parameters: reviewParameters,
   decorators: [authLocale],
 };

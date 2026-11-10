@@ -20,7 +20,8 @@ const protectedPath = (filter: string, population = ratingPopulationId) => {
 };
 
 const meta = {
-  title: 'Pages/Discovery/Search/Scoped session',
+  title: 'Discovery/Search/Scoped session',
+  id: 'pages-discovery-search-scoped-session',
   parameters: {
     layout: 'fullscreen',
     viewport: {

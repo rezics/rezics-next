@@ -16,7 +16,8 @@ import { subjectHref } from '../subject/subject-href';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Pages/Subjects/Unavailable Qualified Credits',
+  title: 'Subjects/Unavailable Qualified Credits',
+  id: 'pages-subjects-unavailable-qualified-credits',
   parameters: {
     layout: 'fullscreen',
     viewport: {

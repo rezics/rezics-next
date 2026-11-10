@@ -29,7 +29,8 @@ function RecoveryStory({ outcome = 'invalid' }: { outcome?: 'invalid' | 'withhel
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Story arc recovery',
+  title: 'Catalogue/Story arc recovery',
+  id: 'pages-catalogue-story-arc-recovery',
   component: RecoveryStory,
   parameters: {
     layout: 'fullscreen',

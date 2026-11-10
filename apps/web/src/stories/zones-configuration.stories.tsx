@@ -10,7 +10,8 @@ import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Pages/Community/Zone configuration',
+  title: 'Community/Zone configuration',
+  id: 'pages-community-zone-configuration',
   parameters: {
     layout: 'fullscreen',
     docs: { description: { component: 'Contract-shaped fake API outcomes. Native and visual review remain pending.' } },

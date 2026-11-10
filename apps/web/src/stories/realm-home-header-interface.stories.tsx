@@ -198,7 +198,8 @@ function HeaderExamples() {
 }
 
 const meta = {
-  title: 'Patterns/Community/Realm Home Header Interface',
+  title: 'Community/Realm Home Header Interface',
+  id: 'patterns-community-realm-home-header-interface',
   component: RealmHomeHeader,
   parameters: {
     layout: 'fullscreen',

@@ -4,7 +4,7 @@ import { m } from '../paraglide/messages.js';
 import { inboxTriageStory, resetInboxTriageStory } from '../kernel/fake/notifications';
 import { PageStory } from './page';
 
-const meta = { title: 'Pages/Account/Inbox', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Account/Inbox Page', id: 'pages-account-inbox', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

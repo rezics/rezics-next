@@ -6,7 +6,8 @@ import { m } from '../paraglide/messages.js';
 import { PageStory, pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Library/Label Shelf',
+  title: 'Library/Label Shelf',
+  id: 'pages-library-label-shelf',
   parameters: {
     layout: 'fullscreen',
     viewport: {

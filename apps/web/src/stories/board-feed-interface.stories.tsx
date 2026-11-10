@@ -132,7 +132,8 @@ function FeedExamples({
 }
 
 const meta = {
-  title: 'Patterns/Community/Board Feed Interface',
+  title: 'Community/Board Feed Interface',
+  id: 'patterns-community-board-feed-interface',
   component: FeedExamples,
   parameters: {
     layout: 'fullscreen',

@@ -64,7 +64,8 @@ function CurrentGameVisit() {
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Game current assertion visit',
+  title: 'Catalogue/Game current assertion visit',
+  id: 'pages-catalogue-game-current-assertion-visit',
   component: CurrentGameVisit,
   parameters: {
     layout: 'fullscreen',

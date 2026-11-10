@@ -2,15 +2,16 @@
 
 ## Catalogue and ownership
 
-Storybook has three tiers: **Pages** in `apps/web` show route level states in the full site shell; **Patterns** in
-`apps/web` show connected compositions from the same recorded or fake data without the shell; **Components** in
-`packages/ui` show shared UI. A state confined to one region belongs to a pattern. Page stories cover populated states
-when the page frame differs by viewer, plus empty, unavailable and error outcomes.
+The Web sidebar is organized by product area, with Library, Subjects, Discovery, Community, Commerce and Account
+first, followed by Catalogue, Zones, Imports, Content, Moderation and Site Shell. Use area and feature names, such
+as `Library/Collections/Collection Editor`. Group full pages and their connected compositions under the same area;
+when they would have the same title, distinguish the page from the workflow in the folder name. Shared primitives
+remain in the composed UI catalogue.
 
-Keep one complete folder per page, component or pattern, with user facing nouns. Product areas retain Library,
-Subjects, Discovery, Community, Commerce and Account in that order, followed by integrated areas including Catalogue,
-Zones and Imports. Preserve supplied canonical folders and IDs, including shared folders such as
-`Patterns/Collection Editor`; a shared pattern does not require an extra product-area level. Name stories for persona
+Pages still show route level states in the full site shell. Connected compositions show regional states from the
+same recorded or fake data without the shell. Page stories cover populated states when the page frame differs by
+viewer, plus empty, unavailable and error outcomes. Preserve explicit meta IDs and story export names when
+renaming a folder so existing story and docs links keep working. Name stories for persona
 and outcome (`Signed out`, `Owner, empty`, `Filter sheet open`), not viewport, theme or locale. Keep the hierarchy
 compact and include every required behavior state, even when a folder needs more than eight. Regression only stories
 carry the `!dev` tag; do not use it to hide required states. Cross cutting exposure views use the `exposure` tag in

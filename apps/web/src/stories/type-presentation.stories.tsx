@@ -43,7 +43,7 @@ const value: RowValue = {
   spoilerShow: 'Show',
 };
 
-const meta = { title: 'Patterns/Type Presentation', parameters: { layout: 'padded' } } satisfies Meta;
+const meta = { title: 'Catalogue/Type Presentation', id: 'patterns-type-presentation', parameters: { layout: 'padded' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

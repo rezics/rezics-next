@@ -162,7 +162,8 @@ function Visit({ state, locale }: Props) {
 }
 
 const meta = {
-  title: 'Pages/Character/Identity and relationships',
+  title: 'Subjects/Identity and relationships',
+  id: 'pages-character-identity-and-relationships',
   component: Visit,
   args: { state: 'identity', locale: 'en' },
   parameters: { layout: 'fullscreen' },

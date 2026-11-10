@@ -9,7 +9,8 @@ import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory, pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Commerce/Creator Sales',
+  title: 'Commerce/Creator Sales',
+  id: 'pages-commerce-creator-sales',
   parameters: {
     layout: 'fullscreen',
     docs: {

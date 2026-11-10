@@ -8,7 +8,8 @@ import { AppShell } from '../../../../shell/shell';
 import { viewport } from '../fixtures';
 
 const meta = {
-  title: 'Pages/Account/Accounts',
+  title: 'Account/Accounts',
+  id: 'pages-account-accounts',
   parameters: { layout: 'fullscreen', viewport },
   render: () => <PageStory visitor="Signed In" path="/accounts" />,
 } satisfies Meta;

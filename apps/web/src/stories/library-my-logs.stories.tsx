@@ -9,7 +9,8 @@ import { PageStory } from './page';
 import { logPreviewJourney } from '../../tests/log-preview-journey.test';
 
 const meta = {
-  title: 'Pages/Library/My published logs',
+  title: 'Library/My published logs',
+  id: 'pages-library-my-published-logs',
   parameters: {
     layout: 'fullscreen',
     docs: {

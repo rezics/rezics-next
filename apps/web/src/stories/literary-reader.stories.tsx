@@ -3,7 +3,8 @@ import { LiteraryReader } from '../features/catalogue/literary-reader/view';
 import { literaryWorkExample } from '../features/catalogue/literary-reader/examples';
 
 const meta = {
-  title: 'Pages/Subjects/Literary work',
+  title: 'Subjects/Literary work',
+  id: 'pages-subjects-literary-work',
   component: LiteraryReader,
   args: literaryWorkExample,
 } satisfies Meta<typeof LiteraryReader>;

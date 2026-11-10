@@ -65,7 +65,8 @@ function CreateStory({
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Create subject',
+  title: 'Catalogue/Create subject',
+  id: 'pages-catalogue-create-subject',
   component: CreateStory,
   tags: ['autodocs'],
   parameters: {

@@ -94,7 +94,8 @@ function Example({ scenario }: { scenario: Scenario }) {
 }
 
 const meta = {
-  title: 'Patterns/Account/Verification current status',
+  title: 'Account/Verification current status',
+  id: 'patterns-account-verification-current-status',
   component: Example,
   parameters: {
     layout: 'padded',

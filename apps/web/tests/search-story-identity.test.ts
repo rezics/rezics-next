@@ -70,7 +70,7 @@ async function openStory(visitor: 'Signed In' | 'Signed Out', locale: string): P
       basename(candidate.importPath) === 'search-rating.stories.tsx' &&
       candidate.name === storyName,
   );
-  if (!entry) throw new Error(`Missing Pages/Discovery/Search ${storyName} story.`);
+  if (!entry) throw new Error(`Missing Discovery/Search ${storyName} story.`);
   browser ??= await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce' });
   const page = await context.newPage();
@@ -127,7 +127,7 @@ function subjectIdFromHref(href: string): string {
 }
 
 test(
-  'Pages/Search renders each actual localized transport subject once with its own route link',
+  'Discovery/Search renders each actual localized transport subject once with its own route link',
   async () => {
     for (const locale of ['en', 'zh-Hans']) {
       const transportSubjects = await storyTransportSubjects(locale);

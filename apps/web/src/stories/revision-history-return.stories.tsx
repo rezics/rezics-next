@@ -136,7 +136,8 @@ function ReturnJourney({ lostReceipt = false }: { lostReceipt?: boolean }) {
 }
 
 const meta = {
-  title: 'Interfaces/Community/Revision history return',
+  title: 'Community/Revision history return',
+  id: 'interfaces-community-revision-history-return',
   component: ReturnJourney,
   args: { lostReceipt: false },
   parameters: {

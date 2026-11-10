@@ -63,7 +63,7 @@ function CountUnavailablePageStory() {
   );
 }
 
-const meta = { title: 'Pages/Subjects/Subject', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Subjects/Subject', id: 'pages-subjects-subject', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

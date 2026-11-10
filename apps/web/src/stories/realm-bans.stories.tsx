@@ -12,7 +12,7 @@ import { communityCurrentClaim, communityCurrentClaimStory } from './community-c
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 
-const meta = { title: 'Pages/Community/Realm bans', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Community/Realm bans Page', id: 'pages-community-realm-bans', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 const page: SpacePageData = {

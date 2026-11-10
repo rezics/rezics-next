@@ -7,7 +7,8 @@ import { AppShell } from '../shell/shell';
 import { pagePaths, PatternStory } from './page';
 
 const meta = {
-  title: 'Pages/Subjects/Candidate Review',
+  title: 'Subjects/Candidate Review',
+  id: 'pages-subjects-candidate-review',
   component: CandidateStory,
   args: { page: true },
   decorators: [

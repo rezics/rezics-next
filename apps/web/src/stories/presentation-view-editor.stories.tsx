@@ -70,7 +70,8 @@ const transport: CurationEditorTransport = {
   publish: async () => ({ ok: false, reason: 'unavailable' }),
 };
 const meta = {
-  title: 'Pages/Curate/Presentation View Editor',
+  title: 'Catalogue/Presentation View Editor',
+  id: 'pages-curate-presentation-view-editor',
   component: PresentationViewEditor,
   parameters: {
     layout: 'fullscreen',

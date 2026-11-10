@@ -1,7 +1,7 @@
 # Storybook review builds
 
 The published review site combines two Storybooks into one entry point. The web Storybook is at `/`; it lists the
-page stories. The UI Storybook is built once into `/ui/` and composed into the same sidebar through a relative ref.
+product stories by area. The UI Storybook is built once into `/ui/` and composed into the same sidebar through a relative ref.
 During development, the ref uses the UI dev server at `http://localhost:6007`.
 Set `STORYBOOK_UI_URL` to the own-worktree UI origin when using isolated ports; Web's local source remains available
 when the composed catalogue is offline.
@@ -15,7 +15,8 @@ generator with deferred prop extraction for selected components. Server startup,
 separate stages; select canonical component/story IDs through the installed MCP documentation tools.
 
 The recursive story globs include nested owner modules. Keep each page or pattern's behavior states together under
-its supplied canonical folder and IDs, including `Patterns/Collection Editor`. Required states remain discoverable
+its product area, with stable IDs. For example, the Collection Editor lives under `Library/Collections/Collection Editor`.
+Required states remain discoverable
 even when a folder contains more than eight. Review the same IDs with the `phone390` and `desktop1280` viewport
 globals, locale and theme; see the [catalogue rules](../../../docs/development/storybook.md).
 

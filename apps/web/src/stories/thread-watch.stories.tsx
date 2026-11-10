@@ -117,7 +117,8 @@ function ThreadWatchPageStory({ example }: { example: Example }) {
 }
 
 const meta = {
-  title: 'Pages/Community/Thread watch',
+  title: 'Community/Thread watch',
+  id: 'pages-community-thread-watch',
   component: ThreadWatchPageStory,
   parameters: {
     viewport: {

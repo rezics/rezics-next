@@ -3,7 +3,8 @@ import { EditionPublicationExample } from './patterns/edition-publication/editio
 import * as pattern from './patterns/edition-publication/edition-publication.stories';
 
 const meta = {
-  title: 'Pages/Content/EditionPublication',
+  title: 'Content/EditionPublication Page',
+  id: 'pages-content-editionpublication',
   component: EditionPublicationExample,
   parameters: { layout: 'fullscreen' },
   args: { state: 'selection', shell: true },

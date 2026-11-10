@@ -8,7 +8,7 @@ import type { OrganizationDeletionLoad } from '../../../organization-deletion';
 import { m } from '../../../paraglide/messages.js';
 import { AuthStory, authLocale, reviewParameters, session, button, fill, waitFor } from '../story';
 
-export default { title: 'Pages/Account/Create organization', parameters: reviewParameters, decorators: [authLocale] };
+export default { title: 'Account/Create organization', id: 'pages-account-create-organization', parameters: reviewParameters, decorators: [authLocale] };
 const initial = session('organization');
 const page = (mode: 'success' | 'closed' | 'refused' | 'unknown' | 'unavailable' = 'success', returning = false) => (
   <AuthStory mode={mode} {...(returning ? { returning: 'organization' as const } : {})}>

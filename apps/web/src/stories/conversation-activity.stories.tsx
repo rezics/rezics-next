@@ -94,7 +94,8 @@ function ConversationActivityCards({ state }: { state: State }) {
 }
 
 const meta = {
-  title: 'Patterns/Feed/Conversation activity',
+  title: 'Community/Feed/Conversation activity',
+  id: 'patterns-feed-conversation-activity',
   component: ConversationActivityCards,
   parameters: {
     layout: 'fullscreen',

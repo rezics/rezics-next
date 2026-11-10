@@ -13,7 +13,7 @@ import {
   searchTypedReady,
 } from './page';
 
-const meta = { title: 'Pages/Discovery/Search', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Discovery/Search', id: 'pages-discovery-search', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

@@ -131,7 +131,8 @@ function Connected({
   );
 }
 const meta = {
-  title: 'Patterns/Curation/Presentation Draft Preview',
+  title: 'Catalogue/Presentation Draft Preview',
+  id: 'patterns-curation-presentation-draft-preview',
   globals: { locale: 'en', theme: 'light', viewport: { value: 'desktop1280', isRotated: false } },
   parameters: {
     layout: 'fullscreen',

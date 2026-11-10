@@ -151,7 +151,8 @@ function RealmRouter({
 }
 
 const meta = {
-  title: 'Components/Feeds/Shared Results',
+  title: 'Community/Feeds/Shared Results',
+  id: 'components-feeds-shared-results',
   parameters: {
     docs: {
       description: {

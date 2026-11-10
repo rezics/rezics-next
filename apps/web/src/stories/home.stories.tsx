@@ -5,7 +5,8 @@ import { PageStory, pagePaths, pageReady } from './page';
 import { holdHomeFeedContinuation } from '../kernel/fake/home-feed-stories';
 
 const meta = {
-  title: 'Pages/Discovery/Home',
+  title: 'Discovery/Home',
+  id: 'pages-discovery-home',
   parameters: {
     layout: 'fullscreen',
     docs: {

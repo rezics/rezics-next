@@ -12,7 +12,8 @@ import { PatternStory } from '../page';
 import { erasureStoryOperation } from '../patterns/author-erasure/author-erasure-preview';
 
 const meta = {
-  title: 'Pages/Account/Erasure progress',
+  title: 'Account/Erasure progress',
+  id: 'pages-account-erasure-progress',
   component: ErasureProgressView,
   parameters: {
     layout: 'fullscreen',

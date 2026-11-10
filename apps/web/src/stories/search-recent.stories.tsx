@@ -8,7 +8,8 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Patterns/Search/Recent',
+  title: 'Discovery/Search/Recent',
+  id: 'patterns-search-recent',
   parameters: { layout: 'padded' },
   decorators: [
     (Story) => (

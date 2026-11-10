@@ -99,7 +99,7 @@ async function profileShellReady(canvasElement: HTMLElement, heading: string = m
 }
 
 const meta = {
-  title: 'Pages/Account/Public profile',
+  title: 'Account/Public profile',
   id: 'pages-accounts-public-profile',
   parameters: {
     layout: 'fullscreen',

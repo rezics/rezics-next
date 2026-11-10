@@ -6,7 +6,8 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Patterns/Following/Follow control',
+  title: 'Community/Follow control',
+  id: 'patterns-following-follow-control',
   component: FollowControl,
   tags: ['autodocs'],
   parameters: { layout: 'padded' },

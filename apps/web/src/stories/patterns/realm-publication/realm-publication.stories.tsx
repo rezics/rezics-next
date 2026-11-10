@@ -9,7 +9,8 @@ import { pickText } from '@rezics/composition';
 import search from '../../../kernel/recorded/search.json';
 
 const meta = {
-  title: 'Patterns/Community/Realm Publication',
+  title: 'Community/Realm Publication Workflow',
+  id: 'patterns-community-realm-publication',
   component: RealmPublicationExample,
   excludeStories: ['openPicker', 'chooseSubject'],
   parameters: { layout: 'padded' },

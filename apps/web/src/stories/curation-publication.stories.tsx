@@ -77,7 +77,8 @@ function PublicationStory({ scenario }: { scenario: Scenario }) {
 }
 
 const meta = {
-  title: 'Patterns/Presentation/Curation publication',
+  title: 'Site Shell/Curation publication',
+  id: 'patterns-presentation-curation-publication',
   component: PublicationStory,
   decorators: [
     (Story) => (

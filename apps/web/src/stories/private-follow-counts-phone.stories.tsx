@@ -22,7 +22,8 @@ const routeReleases: (() => void)[] = [];
 let mountedJourney: ReturnType<typeof createJourney> | undefined;
 
 const meta = {
-  title: 'Pages/Library/Private follow counts',
+  title: 'Library/Private follow counts',
+  id: 'pages-library-private-follow-counts',
   parameters: {
     layout: 'fullscreen',
     docs: {

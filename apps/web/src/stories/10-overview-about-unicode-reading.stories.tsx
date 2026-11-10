@@ -92,7 +92,8 @@ function AboutReading({ paragraphs = false, spoiler = false }: { paragraphs?: bo
 }
 
 const meta = {
-  title: 'Pages/Subjects/About Unicode reading',
+  title: 'Subjects/About Unicode reading',
+  id: 'pages-subjects-about-unicode-reading',
   component: AboutReading,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof AboutReading>;

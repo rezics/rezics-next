@@ -21,7 +21,8 @@ const initial: FacetState = {
   },
 };
 const meta = {
-  title: 'Patterns/Discovery/Search Refinement',
+  title: 'Discovery/Search Refinement',
+  id: 'patterns-discovery-search-refinement',
   parameters: {
     layout: 'padded',
     docs: {

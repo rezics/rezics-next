@@ -9,7 +9,8 @@ const phone = { viewport: { ...reviewParameters.viewport, defaultViewport: 'phon
 const desktop = { viewport: { ...reviewParameters.viewport, defaultViewport: 'desktop1280' } };
 
 export default {
-  title: 'Pages/Account/Delete account return',
+  title: 'Account/Delete account return',
+  id: 'pages-account-delete-account-return',
   parameters: reviewParameters,
   decorators: [authLocale],
 };

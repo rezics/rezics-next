@@ -66,7 +66,7 @@ async function unavailable(context: { canvasElement: HTMLElement }) {
   await expect(menu.getByRole('button', { name: m.account_sign_out() })).toBeEnabled();
 }
 
-const meta = { title: 'Patterns/Account/Shell Account Menu' } satisfies Meta;
+const meta = { title: 'Account/Shell Account Menu', id: 'patterns-account-shell-account-menu' } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

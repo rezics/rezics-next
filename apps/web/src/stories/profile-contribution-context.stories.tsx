@@ -72,7 +72,8 @@ function Reading({
 }
 
 const meta = {
-  title: 'Pages/Account/Contribution context',
+  title: 'Account/Contribution context',
+  id: 'pages-account-contribution-context',
   component: Reading,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof Reading>;

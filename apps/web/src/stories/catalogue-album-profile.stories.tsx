@@ -107,7 +107,8 @@ function AlbumStory({
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Released album catalogue editor',
+  title: 'Catalogue/Released album catalogue editor',
+  id: 'pages-catalogue-released-album-catalogue-editor',
   component: AlbumStory,
   parameters: {
     layout: 'fullscreen',

@@ -58,7 +58,8 @@ function ScreenStory({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Film television and episode editor',
+  title: 'Catalogue/Film television and episode editor',
+  id: 'pages-catalogue-film-television-and-episode-editor',
   component: ScreenStory,
   parameters: {
     layout: 'fullscreen',

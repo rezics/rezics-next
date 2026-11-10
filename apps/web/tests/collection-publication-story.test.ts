@@ -13,7 +13,7 @@ test('Collection publication Pages stories enter the publish route through PageS
   const sidebar = source('../../../packages/ui/src/shadcn/sidebar.tsx');
   const view = source('../src/library/collection-publication-page.tsx');
 
-  expect(story).toContain("title: 'Pages/Library/Collection publication'");
+  expect(story).toContain("title: 'Library/Collection publication'");
   expect(story).toContain("import { PageStory, pageReady } from './page'");
   expect(page).toContain("import '../../.storybook/route-root'");
   expect(root).toContain('return <AppShell>{children}</AppShell>');

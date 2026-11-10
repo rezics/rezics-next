@@ -105,7 +105,8 @@ function StatusPage({ scenario = 'pending' }: { scenario?: StatusScenario }) {
   );
 }
 const meta = {
-  title: 'Pages/Community/Realm Claim Status',
+  title: 'Community/Realm Claim Status Page',
+  id: 'pages-community-realm-claim-status',
   component: StatusPage,
   parameters: {
     layout: 'fullscreen',

@@ -131,7 +131,8 @@ function ThreadMediaExample({ page }: { page?: ThreadReadingPage }) {
 }
 
 const meta = {
-  title: 'Pages/Community/Thread',
+  title: 'Community/Thread',
+  id: 'pages-community-thread',
   component: ThreadMediaExample,
   parameters: { layout: 'fullscreen' },
   render: (_, { loaded }) => <ThreadMediaExample page={loaded.page as ThreadReadingPage} />,

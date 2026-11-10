@@ -21,7 +21,8 @@ import { AppShell } from '../shell/shell';
 import { PatternStory, pageReady } from './page';
 
 const meta = {
-  title: 'Patterns/Commerce/Creator Payment Attestation',
+  title: 'Commerce/Creator Payment Attestation',
+  id: 'patterns-commerce-creator-payment-attestation',
   parameters: {
     layout: 'fullscreen',
     docs: {

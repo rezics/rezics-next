@@ -223,7 +223,8 @@ function Example({ state = 'rest', loadRealms }: { state?: State; loadRealms?: S
   );
 }
 const meta = {
-  title: 'Patterns/Phone Shell',
+  title: 'Site Shell/Phone Shell',
+  id: 'patterns-phone-shell',
   parameters: {
     layout: 'fullscreen',
     viewport: {

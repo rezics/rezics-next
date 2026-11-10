@@ -18,7 +18,8 @@ import { FeatureSlotsProvider } from '../shell/feature-slots';
 import { setStoryRequestContext } from '../../.storybook/react-start';
 
 const meta = {
-  title: 'Pages/Commerce/Subject purchase',
+  title: 'Commerce/Subject purchase',
+  id: 'pages-commerce-subject-purchase',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

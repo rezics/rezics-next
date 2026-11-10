@@ -15,7 +15,8 @@ import { collectionReadStoryIds } from '../kernel/fake/collection-read-stories';
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Pages/Library/Collection',
+  title: 'Library/Collection',
+  id: 'pages-library-collection',
   parameters: {
     layout: 'fullscreen',
     docs: {

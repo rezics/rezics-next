@@ -7,7 +7,8 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Patterns/Library/Private priority review',
+  title: 'Library/Private priority review',
+  id: 'patterns-library-private-priority-review',
   parameters: { layout: 'padded', admitted: ['personal_library'] },
 } satisfies Meta;
 export default meta;

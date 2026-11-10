@@ -4,7 +4,7 @@ import { PageStory } from './page';
 import { appearancePath } from '../kernel/fake/community';
 import { m } from '../paraglide/messages.js';
 
-const meta = { title: 'Pages/Community/Realm Appearance', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Community/Realm Appearance', id: 'pages-community-realm-appearance', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Management: Story = {

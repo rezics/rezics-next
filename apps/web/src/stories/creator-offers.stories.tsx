@@ -18,7 +18,8 @@ import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory } from './page';
 
 const meta = {
-  title: 'Pages/Commerce/Creator offers',
+  title: 'Commerce/Creator offers',
+  id: 'pages-commerce-creator-offers',
   parameters: {
     layout: 'fullscreen',
     docs: {

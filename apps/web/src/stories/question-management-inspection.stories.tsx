@@ -107,7 +107,8 @@ const captionHistory: QuestionManagementHistoryRead = {
 };
 
 const meta = {
-  title: 'Ratings/Realm question management',
+  title: 'Community/Realm question management',
+  id: 'ratings-realm-question-management',
   component: QuestionManagementContent,
   parameters: {
     layout: 'fullscreen',

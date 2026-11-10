@@ -7,7 +7,7 @@ import { ShareCardView } from '../media/share-card-view';
 import { locales } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 
-const meta = { title: 'Patterns/Media/Share Card', parameters: { layout: 'padded' } } satisfies Meta;
+const meta = { title: 'Content/Share Card', id: 'patterns-media-share-card', parameters: { layout: 'padded' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

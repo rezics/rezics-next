@@ -29,7 +29,8 @@ const meta = {
       </Toaster>
     ),
   ],
-  title: 'Patterns/Library/Entry layouts',
+  title: 'Library/Entry layouts',
+  id: 'patterns-library-entry-layouts',
   parameters: { layout: 'fullscreen', viewport: { options: viewports } },
 } satisfies Meta;
 export default meta;

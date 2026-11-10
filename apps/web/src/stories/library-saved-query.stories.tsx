@@ -8,7 +8,8 @@ import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths, pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Library/Saved query',
+  title: 'Library/Saved query',
+  id: 'pages-library-saved-query',
   parameters: {
     layout: 'fullscreen',
     docs: {

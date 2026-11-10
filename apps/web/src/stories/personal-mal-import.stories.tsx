@@ -6,7 +6,8 @@ import { MalConfirmPage } from '../library/personal-mal-import/confirm';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Families/Library/Personal MAL import',
+  title: 'Library/Personal MAL import',
+  id: 'families-library-personal-mal-import',
   parameters: {
     layout: 'fullscreen',
     docs: {

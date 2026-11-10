@@ -7,7 +7,7 @@ import { selectShellErrorStory, shellErrorOfferId, shellErrorReads } from '../ke
 import offer from '../kernel/recorded/offer.json';
 import { PageStory } from './page';
 
-const meta = { title: 'Pages/Shell/Errors', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Site Shell/Errors', id: 'pages-shell-errors', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

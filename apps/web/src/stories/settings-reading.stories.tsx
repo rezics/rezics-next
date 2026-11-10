@@ -5,7 +5,7 @@ import { m } from '../paraglide/messages.js';
 import { PageStory, pageReady } from './page';
 import { selectSettingsCategory } from './settings-category-navigation';
 
-const meta = { title: 'Pages/Settings/Reading and display', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Account/Reading and display', id: 'pages-settings-reading-and-display', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
 export const ReadingAndDisplay: Story = {

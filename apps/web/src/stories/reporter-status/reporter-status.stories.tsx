@@ -29,7 +29,8 @@ const fullEvidenceReport = {
 };
 
 const meta = {
-  title: 'Patterns/Reporter status',
+  title: 'Moderation/Reporter status Workflow',
+  id: 'patterns-reporter-status',
   component: ReporterStatusView,
   tags: ['autodocs'],
   parameters: {

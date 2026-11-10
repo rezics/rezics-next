@@ -25,7 +25,8 @@ import { ProfileNavigation } from '../../settings/profile-navigation';
 import { SettingsNavigationProvider } from '../../settings/reading-navigation';
 
 const meta = {
-  title: 'Patterns/Account/Reading preferences',
+  title: 'Account/Reading preferences',
+  id: 'patterns-account-reading-preferences',
   component: ReadingCard,
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof ReadingCard>;

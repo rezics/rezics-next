@@ -79,7 +79,8 @@ function GameStory({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Game and visual-novel work editor',
+  title: 'Catalogue/Game and visual-novel work editor',
+  id: 'pages-catalogue-game-and-visual-novel-work-editor',
   component: GameStory,
   tags: ['autodocs'],
   parameters: {

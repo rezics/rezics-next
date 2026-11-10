@@ -6,7 +6,8 @@ import { candidateProperty } from '../kernel/fake/subject-candidates';
 import { pagePaths, PatternStory } from './page';
 
 const meta = {
-  title: 'Patterns/Subject Candidate Review',
+  title: 'Catalogue/Subject Candidate Review',
+  id: 'patterns-subject-candidate-review',
   component: CandidateStory,
   decorators: [
     (Story) => (

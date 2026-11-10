@@ -14,7 +14,8 @@ import { contextsNavigation } from '../../features/contexts/navigation';
 import { zonesNavigation } from '../../features/zones/manage/navigation';
 
 const meta = {
-  title: 'Patterns/Navigation/Contributions',
+  title: 'Site Shell/Contributions',
+  id: 'patterns-navigation-contributions',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

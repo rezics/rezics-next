@@ -143,7 +143,8 @@ function Example({ layout = 'list', unavailable = false }: { layout?: 'list' | '
 }
 
 const meta = {
-  title: 'Pages/Library/Collection comparison',
+  title: 'Library/Collection comparison',
+  id: 'pages-library-collection-comparison',
   parameters: {
     layout: 'fullscreen',
     docs: {

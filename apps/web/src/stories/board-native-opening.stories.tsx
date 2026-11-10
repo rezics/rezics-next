@@ -76,7 +76,8 @@ function Example({ state = 'current' }: { state?: State }) {
   );
 }
 const meta = {
-  title: 'Pages/Community/Board native opening',
+  title: 'Community/Board native opening',
+  id: 'pages-community-board-native-opening',
   component: Example,
   parameters: {
     layout: 'fullscreen',

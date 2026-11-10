@@ -109,7 +109,7 @@ test('Collection editing, reordering, following and privacy keep their actual ow
     expect(story, `${reference} retains its behavior play`).toMatch(/\bplay\s*:/);
   }
   const editor = readFileSync(join(stories, 'library-collection-editor.stories.tsx'), 'utf8');
-  expect(editor).toContain("title: 'Patterns/Collection Editor'");
+  expect(editor).toContain("title: 'Library/Collections/Collection Editor'");
   expect(editor).toContain("from '../library/collection-page'");
   expect(editor).toContain('<CollectionPage');
 });

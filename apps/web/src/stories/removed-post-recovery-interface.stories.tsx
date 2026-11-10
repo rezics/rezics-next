@@ -168,7 +168,8 @@ function RecoveryInterface() {
 }
 
 const meta = {
-  title: 'Interfaces/Community/Removed post recovery',
+  title: 'Community/Removed post recovery',
+  id: 'interfaces-community-removed-post-recovery',
   component: RecoveryInterface,
   parameters: {
     layout: 'fullscreen',

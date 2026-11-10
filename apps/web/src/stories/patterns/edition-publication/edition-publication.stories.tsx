@@ -5,7 +5,8 @@ import { localizeHref } from '../../../paraglide/runtime.js';
 import { EditionPublicationExample, editionId, fixedText, imageAlt, subjectId } from './edition-publication-fixtures';
 
 const meta = {
-  title: 'Patterns/Content/EditionPublication',
+  title: 'Content/EditionPublication Workflow',
+  id: 'patterns-content-editionpublication',
   component: EditionPublicationExample,
   parameters: { layout: 'fullscreen' },
   args: { state: 'selection' },

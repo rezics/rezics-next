@@ -16,7 +16,8 @@ import realm from '../kernel/recorded/realm.json';
 import boards from '../kernel/recorded/realm-boards.json';
 
 const meta = {
-  title: 'Pages/Community/Realm Claim',
+  title: 'Community/Realm Claim Page',
+  id: 'pages-community-realm-claim',
   parameters: {
     layout: 'fullscreen',
     docs: {

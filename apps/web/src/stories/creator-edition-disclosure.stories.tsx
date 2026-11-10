@@ -12,7 +12,8 @@ import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Patterns/Commerce/Creator edition disclosure',
+  title: 'Commerce/Creator edition disclosure',
+  id: 'patterns-commerce-creator-edition-disclosure',
   parameters: {
     layout: 'fullscreen',
     docs: {

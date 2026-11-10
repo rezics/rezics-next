@@ -114,7 +114,8 @@ function suppliedOutcomes(outcome: Outcome) {
 }
 
 const meta = {
-  title: 'Patterns/Collection Editor',
+  title: 'Library/Collections/Collection Editor',
+  id: 'patterns-collection-editor',
   parameters: {
     layout: 'fullscreen',
     docs: {

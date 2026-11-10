@@ -77,7 +77,8 @@ function RecordingReaderStory({ admitted = true }: { admitted?: boolean }) {
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Recording reader',
+  title: 'Catalogue/Recording reader',
+  id: 'pages-catalogue-recording-reader',
   component: RecordingReaderStory,
   parameters: {
     layout: 'fullscreen',

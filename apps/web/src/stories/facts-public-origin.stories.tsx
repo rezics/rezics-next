@@ -40,7 +40,8 @@ function Example({ state = 'observed-global' }: { state?: State }) {
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Facts public correction origin',
+  title: 'Catalogue/Facts public correction origin',
+  id: 'pages-catalogue-facts-public-correction-origin',
   component: Example,
   parameters: {
     layout: 'fullscreen',

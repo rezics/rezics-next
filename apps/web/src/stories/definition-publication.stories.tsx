@@ -28,7 +28,8 @@ function PublicationStory({ scenario = 'review' }: { scenario?: PublicationScena
 }
 
 const meta = {
-  title: 'Pages/Catalogue/Definition publication',
+  title: 'Catalogue/Definition publication',
+  id: 'pages-catalogue-definition-publication',
   component: PublicationStory,
   tags: ['autodocs'],
   parameters: {

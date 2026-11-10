@@ -14,7 +14,8 @@ import { PatternStory } from './page';
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Patterns/Community/Realm Appearance Settings',
+  title: 'Community/Realm Appearance Settings',
+  id: 'patterns-community-realm-appearance-settings',
   component: RealmAppearanceSettings,
   tags: ['autodocs'],
   parameters: {

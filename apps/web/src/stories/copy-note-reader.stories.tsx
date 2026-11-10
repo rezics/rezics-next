@@ -9,7 +9,8 @@ import { PatternStory, pagePaths } from './page';
 
 // UNRUN: supplied-page presentation fixtures, not native or browser acceptance evidence.
 const meta = {
-  title: 'Patterns/Library/Copy note reader',
+  title: 'Library/Copy note reader',
+  id: 'patterns-library-copy-note-reader',
   parameters: {
     layout: 'fullscreen',
     viewport: {

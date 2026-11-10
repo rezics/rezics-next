@@ -42,7 +42,8 @@ function ViewerAdvice({ kind }: { kind: ViewerCase }) {
 }
 
 const meta = {
-  title: 'Patterns/Community/Realm Home Viewer Advice',
+  title: 'Community/Realm Home Viewer Advice',
+  id: 'patterns-community-realm-home-viewer-advice',
   component: ViewerAdvice,
   args: { kind: 'member' },
   parameters: {

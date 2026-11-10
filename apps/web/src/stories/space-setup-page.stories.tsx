@@ -3,7 +3,7 @@ import { expect, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { PageStory, pageReady } from './page';
 
-const meta = { title: 'Pages/Community/Space Setup', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Community/Space Setup Page', id: 'pages-community-space-setup', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const NewCommunity: Story = {

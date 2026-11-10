@@ -82,7 +82,8 @@ function StoryQueue({
   );
 }
 const meta = {
-  title: 'Patterns/Imports/Review decisions',
+  title: 'Imports/Review decisions',
+  id: 'patterns-imports-review-decisions',
   component: QueueStory,
   tags: ['autodocs'],
   parameters: {

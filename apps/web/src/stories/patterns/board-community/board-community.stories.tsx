@@ -12,7 +12,8 @@ import { PageStory, pagePaths } from '../../page';
 import { CommunityFixture } from './board-community-fixtures';
 
 const meta = {
-  title: 'Patterns/Community/Community Feed',
+  title: 'Community/Community Feed',
+  id: 'patterns-community-community-feed',
   component: BoardCommunity,
   parameters: {
     layout: 'fullscreen',

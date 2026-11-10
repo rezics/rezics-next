@@ -19,7 +19,7 @@ import {
   waitFor,
 } from '../../accounts-operations/story';
 
-export default { title: 'Pages/Account/Security departure', parameters: reviewParameters, decorators: [authLocale] };
+export default { title: 'Account/Security departure', id: 'pages-account-security-departure', parameters: reviewParameters, decorators: [authLocale] };
 const ready = initial as Extract<typeof initial, { kind: 'ready' }>;
 const sessions = (['last-credential', 'unavailable', 'step-up-required'] as const).map((revoke, i) => ({
   ...ready.sessions[0]!,

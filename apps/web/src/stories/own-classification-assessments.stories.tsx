@@ -146,7 +146,8 @@ function Story({ mode }: { mode: Mode }) {
   );
 }
 const meta = {
-  title: 'Pages/Library/My classification assessments',
+  title: 'Library/My classification assessments',
+  id: 'pages-library-my-classification-assessments',
   component: Story,
   parameters: {
     layout: 'fullscreen',

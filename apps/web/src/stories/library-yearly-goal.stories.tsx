@@ -4,7 +4,8 @@ import { YearlyGoalPage, type YearlyGoalPageApi, type YearlyGoalSnapshot } from 
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Pages/Library/Yearly completion goal',
+  title: 'Library/Yearly completion goal',
+  id: 'pages-library-yearly-completion-goal',
   component: YearlyGoalPage,
   parameters: { layout: 'fullscreen' },
   args: { year: 2026, sessionState: 'signed-in' },

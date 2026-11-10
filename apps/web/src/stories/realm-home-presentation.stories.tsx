@@ -105,7 +105,8 @@ function Home({ state }: { state: SourceState }) {
 }
 
 const meta = {
-  title: 'Patterns/Community/Realm Home Presentation',
+  title: 'Community/Realm Home Presentation',
+  id: 'patterns-community-realm-home-presentation',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;

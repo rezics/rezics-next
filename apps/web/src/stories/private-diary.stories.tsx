@@ -4,7 +4,8 @@ import type { ReportedYearSummary } from '../library/private-diary/native';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Pages/Library/Private diary',
+  title: 'Library/Private diary',
+  id: 'pages-library-private-diary',
   parameters: {
     layout: 'fullscreen',
     viewport: {

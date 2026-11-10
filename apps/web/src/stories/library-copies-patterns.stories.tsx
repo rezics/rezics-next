@@ -14,7 +14,8 @@ import { PatternStory, pagePaths } from './page';
 const recordedEdition = recording.copies[0]!.subject.label;
 
 const meta = {
-  title: 'Patterns/Library/Copies forms',
+  title: 'Library/Copies forms',
+  id: 'patterns-library-copies-forms',
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',

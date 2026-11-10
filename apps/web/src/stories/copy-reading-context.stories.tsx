@@ -12,7 +12,8 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory, pagePaths } from './page';
 
 const meta = {
-  title: 'Patterns/Library/Copy reading context',
+  title: 'Library/Copy reading context',
+  id: 'patterns-library-copy-reading-context',
   parameters: {
     layout: 'fullscreen',
     viewport: {

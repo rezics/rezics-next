@@ -210,7 +210,8 @@ function FactsReading({
 }
 
 const meta = {
-  title: 'Pages/Subjects/Factual reading',
+  title: 'Subjects/Factual reading',
+  id: 'pages-subjects-factual-reading',
   component: FactsReading,
   parameters: {
     layout: 'fullscreen',

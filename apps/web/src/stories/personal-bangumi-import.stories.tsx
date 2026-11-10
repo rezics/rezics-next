@@ -74,7 +74,7 @@ function Example() {
 }
 
 const meta = {
-  title: 'Pages/Library/Personal Bangumi import',
+  title: 'Library/Personal Bangumi import',
   id: 'personal-bangumi-import',
   component: Example,
   parameters: {

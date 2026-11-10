@@ -41,7 +41,8 @@ function MangaStory({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Manga series and volume editor',
+  title: 'Catalogue/Manga series and volume editor',
+  id: 'pages-catalogue-manga-series-and-volume-editor',
   component: MangaStory,
   parameters: {
     layout: 'fullscreen',

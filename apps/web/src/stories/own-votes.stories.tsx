@@ -208,7 +208,7 @@ function Story({ mode, locale = 'en' }: { mode: Mode; locale?: (typeof locales)[
   );
 }
 
-const meta = { title: 'Pages/Library/My ratings', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Library/My ratings', id: 'pages-library-my-ratings', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type StoryType = StoryObj<typeof meta>;
 

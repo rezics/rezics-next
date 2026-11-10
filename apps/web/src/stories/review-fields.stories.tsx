@@ -20,7 +20,8 @@ import { PatternStory } from './page';
 // Illustrative only: existing Storybook session/request and recorded vote fixtures, never native proof.
 // All plays, physical target/focus checks and 390/1280 locale/theme observations are authored UNRUN.
 const meta = {
-  title: 'Patterns/Review Fields',
+  title: 'Subjects/Review Fields',
+  id: 'patterns-review-fields',
   parameters: {
     layout: 'fullscreen',
     docs: {

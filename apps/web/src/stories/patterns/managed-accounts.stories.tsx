@@ -115,7 +115,8 @@ function Example({ scenario = 'independent' }: { scenario?: Scenario }) {
   );
 }
 const meta = {
-  title: 'Patterns/Account/Managed accounts',
+  title: 'Account/Managed accounts',
+  id: 'patterns-account-managed-accounts',
   component: Example,
   parameters: {
     layout: 'padded',

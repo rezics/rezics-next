@@ -122,7 +122,8 @@ function Example({
 }
 
 const meta = {
-  title: 'Pages/Account/Public Profile/Contributions',
+  title: 'Account/Public Profile/Contributions',
+  id: 'pages-account-public-profile-contributions',
   component: Example,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof Example>;

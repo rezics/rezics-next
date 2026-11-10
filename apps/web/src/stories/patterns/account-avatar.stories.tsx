@@ -132,7 +132,8 @@ function Example({ scenario = 'complete' }: { scenario?: Scenario }) {
 }
 
 const meta = {
-  title: 'Patterns/Account/Avatar',
+  title: 'Account/Avatar',
+  id: 'patterns-account-avatar',
   component: Example,
   parameters: {
     layout: 'fullscreen',

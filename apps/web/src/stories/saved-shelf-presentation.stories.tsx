@@ -29,7 +29,8 @@ const initialShelf: ShelfPreferences = {
 };
 
 const meta = {
-  title: 'Patterns/Library/Saved shelf presentation',
+  title: 'Library/Saved shelf presentation',
+  id: 'patterns-library-saved-shelf-presentation',
   parameters: { layout: 'fullscreen', admitted: ['personal_library', 'reading_progress'] },
 } satisfies Meta;
 export default meta;

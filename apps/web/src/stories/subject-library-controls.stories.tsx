@@ -18,7 +18,7 @@ const admitted = [
   'library_label.unassign',
 ];
 const meta = {
-  title: 'Pages/Subjects/Library Controls',
+  title: 'Subjects/Library Controls',
   id: 'pages-subject-library-controls',
   parameters: {
     layout: 'fullscreen',

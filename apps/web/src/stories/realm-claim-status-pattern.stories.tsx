@@ -4,7 +4,8 @@ import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 
 const meta = {
-  title: 'Patterns/Community/Realm Claim Status',
+  title: 'Community/Realm Claim Status Workflow',
+  id: 'patterns-community-realm-claim-status',
   component: RealmClaimStatusExample,
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof RealmClaimStatusExample>;

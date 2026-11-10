@@ -110,7 +110,8 @@ function GroupedWorkStory() {
   );
 }
 const meta = {
-  title: 'Pages/Subjects/Work franchise groups',
+  title: 'Subjects/Work franchise groups',
+  id: 'pages-subjects-work-franchise-groups',
   component: GroupedWorkStory,
   parameters: {
     layout: 'fullscreen',

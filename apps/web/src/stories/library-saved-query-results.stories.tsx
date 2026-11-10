@@ -6,7 +6,8 @@ import { m } from '../paraglide/messages.js';
 import { PageStory, PatternStory, pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Library/Saved query results',
+  title: 'Library/Saved query results',
+  id: 'pages-library-saved-query-results',
   parameters: {
     layout: 'fullscreen',
     docs: {

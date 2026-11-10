@@ -65,7 +65,8 @@ function Reading({ long = false }: { long?: boolean }) {
 }
 
 const meta = {
-  title: 'Patterns/Feed/Card reading',
+  title: 'Community/Feed/Card reading',
+  id: 'patterns-feed-card-reading',
   component: Reading,
   parameters: {
     layout: 'fullscreen',

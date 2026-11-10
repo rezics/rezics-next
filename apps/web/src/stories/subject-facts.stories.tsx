@@ -59,7 +59,8 @@ function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Edit facts',
+  title: 'Catalogue/Edit facts',
+  id: 'pages-catalogue-edit-facts',
   component: Example,
   tags: ['autodocs'],
   parameters: {

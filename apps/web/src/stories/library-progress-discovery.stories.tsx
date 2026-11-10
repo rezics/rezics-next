@@ -8,7 +8,8 @@ import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
 
 const meta = {
-  title: 'Pages/Library/Progress discovery',
+  title: 'Library/Progress discovery',
+  id: 'pages-library-progress-discovery',
   parameters: {
     layout: 'fullscreen',
     viewport: {

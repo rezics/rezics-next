@@ -118,7 +118,7 @@ function imageSrc(media: string): string {
 }
 
 const ratio = sharedRatio(tiles.map(({ subject }) => subject));
-const meta = { title: 'Patterns/Library/Cover wall', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Library/Cover wall', id: 'patterns-library-cover-wall', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

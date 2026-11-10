@@ -152,7 +152,8 @@ function Family({
   );
 }
 const meta = {
-  title: 'Pages/Catalogue/Game fields family',
+  title: 'Catalogue/Game fields family',
+  id: 'pages-catalogue-game-fields-family',
   component: Family,
   tags: ['autodocs'],
   globals: { viewport: { value: 'desktop1280', isRotated: false } },

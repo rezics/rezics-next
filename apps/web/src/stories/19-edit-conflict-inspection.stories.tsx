@@ -181,7 +181,8 @@ function ChangedInspectionExample({
 }
 
 const meta = {
-  title: 'Pages/Community/Edit Conflict Inspection',
+  title: 'Community/Edit Conflict Inspection',
+  id: 'pages-community-edit-conflict-inspection',
   component: ConflictExample,
   parameters: { layout: 'fullscreen' },
   args: { scenario: 'available', blocks: 10 },

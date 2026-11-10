@@ -63,7 +63,8 @@ function CurrentReview({ count = 1, concealed = false, context = true, long = fa
   );
 }
 const meta = {
-  title: 'Pages/Community/Realm Claim Current Review',
+  title: 'Community/Realm Claim Current Review',
+  id: 'pages-community-realm-claim-current-review',
   component: CurrentReview,
   parameters: {
     layout: 'fullscreen',
