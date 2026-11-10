@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { Elysia } from 'elysia';
 import { documentText, fromPlainText } from '@rezics/document';
 import bookStarter from '../../../../packages/definitions/presentation/book/zone.json';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { ProblemError } from '../../src/http/problem-error.ts';
 import { createNativeEditionFixture } from '../commerce/support/native-edition-fixture.ts';
 import { drainEffects } from '../support/account-deletion.ts';
 import { password } from './native-account-bindings-fixture.ts';
@@ -62,6 +63,12 @@ function plainBody(value: unknown): string | unknown {
 
 export async function createTerminalErasureDriver(): Promise<TerminalErasureDriver> {
   const world = await createTerminalErasureFixture();
+  const http = new Elysia()
+    .onError('global', ({ error }) => {
+      if (error instanceof ProblemError && error.code === 'dependency_unavailable') console.error(error.stack);
+    })
+    .use(world.kernel)
+    .compile();
   let worker: Awaited<ReturnType<World['startWorker']>> | undefined;
   let clockMs = Date.now();
   let published = { collectionId: '', aliceId: '' };
@@ -75,7 +82,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
 
   async function handle(actor: Actor, request: HttpRequest): Promise<Response> {
     const token = bearer(actor);
-    return world.kernel.handle(
+    return http.handle(
       new Request(`https://kernel.test${request.path}`, {
         method: request.method,
         headers: {
