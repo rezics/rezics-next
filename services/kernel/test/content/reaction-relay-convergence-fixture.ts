@@ -536,7 +536,26 @@ async function runReactionRelayWorker(): Promise<void> {
         intervalMs: 5,
         concurrency: Math.max(1, Math.min(2, (pool.options.max ?? 10) - 1)),
       });
-      // startRelays begins its first scan immediately; drain it before exposing the paused fixture.
+      // Finish setup deliveries before capturing any reaction-only partition baseline.
+      // Pausing a relay drains admission, but its enqueued effects can still append events.
+      const setupDeadline = Date.now() + 30_000;
+      for (;;) {
+        const { rows } = await pool.query<{ settled: boolean }>(
+          `SELECT NOT EXISTS (
+             SELECT 1 FROM core.partition AS p
+             LEFT JOIN core.consumer_checkpoint AS c
+               ON c.partition_no=p.partition_no AND c.consumer='effects'
+             WHERE p.position > COALESCE(c.position,0)
+           ) AND NOT EXISTS (
+             SELECT 1 FROM core.history_event_consumer
+             WHERE consumer=ANY($1::text[]) AND state='open'
+           ) AS settled`,
+          [registered.map((effect) => effect.name)],
+        );
+        if (rows[0]!.settled) break;
+        if (Date.now() >= setupDeadline) throw new Error('Reaction fixture setup effects did not settle');
+        await Bun.sleep(10);
+      }
       await relay.pause();
     }
     console.log('reaction-relay-ready');

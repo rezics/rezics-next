@@ -17,6 +17,7 @@ test('Subject threads retain native reaction totals, viewer isolation and final 
   let trace: ReturnType<typeof observeSql> | undefined;
   try {
     effects = await world.startEffects();
+    await effects.resume();
     const created = await world.command<{ thread: { id: string } }>('POST', '/v1/threads', {
       title: 'A Subject discussion',
       body: fromPlainText('Original opening'),
