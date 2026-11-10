@@ -51,6 +51,7 @@ export type PageDataRun = {
   classes: Record<PageDataClass, number>;
   sections: PageDataSection[];
   seed?: PageDataSeedStatus;
+  coverage?: { status: 'incomplete' };
 };
 export type PageDataSeedStatus = { status: 'publication-incomplete'; omissions: number };
 export type PageDataRepair = {
@@ -68,11 +69,15 @@ export type PageDataOptions = {
   inbox: Pick<ManagerInbox, 'deliver'>;
   routeDefect: (repair: PageDataRepair) => Promise<PageDataRepairRoute>;
   now?: () => Date;
-  runStack?: (head: string) => Promise<{
+  runStack?: (
+    head: string,
+    invocation: string,
+  ) => Promise<{
     output: string;
     exitCode: number;
     registry?: ReadonlyMap<string, SectionConfig>;
     stackOutput?: string;
+    diagnostics?: string;
     seed?: PageDataSeedStatus;
   }>;
 };
@@ -376,6 +381,39 @@ export function parsePageDataOutput(output: string, registry: ReadonlyMap<string
   return results;
 }
 
+/** The child process must finish this invocation, not merely print plausible section rows. */
+export function parsePageDataCompletion(
+  output: string,
+  registry: ReadonlyMap<string, SectionConfig>,
+  invocation: string,
+  exitCode: number,
+): { sections: PageDataSection[]; incomplete: boolean } {
+  const prefix = 'Page-data completed ';
+  const lines = output.split(/\r?\n/u).filter(Boolean);
+  const markers = lines.filter((line) => line.startsWith(prefix));
+  if (markers.length !== 1 || markers[0] !== lines.at(-1) || markers[0]!.length > 512)
+    throw new Error(
+      `page-data-check exited ${exitCode} without one final bounded completed-output marker: ${terminalErrorLine(output)}`,
+    );
+  const marker = JSON.parse(markers[0]!.slice(prefix.length)) as Record<string, unknown> | null;
+  if (
+    !marker ||
+    Array.isArray(marker) ||
+    Object.keys(marker).length !== 5 ||
+    marker.version !== 1 ||
+    marker.invocation !== invocation ||
+    marker.sections !== registry.size ||
+    !Number.isSafeInteger(marker.defects) ||
+    typeof marker.incomplete !== 'boolean'
+  )
+    throw new Error('page-data completed-output marker did not match this invocation');
+  const sections = parsePageDataOutput(lines.slice(0, -1).join('\n'), registry);
+  const defects = sections.filter((section) => PAGE_DATA_DEFECTS.has(section.class)).length;
+  if (marker.defects !== defects || exitCode !== (defects > 0 ? 1 : marker.incomplete ? 2 : 0))
+    throw new Error('page-data completed-output marker did not match the section results or exit code');
+  return { sections, incomplete: marker.incomplete };
+}
+
 function readLastCycle(db: Database): { at: string } | undefined {
   const row = db
     .query(
@@ -399,6 +437,7 @@ export function readLatestPageDataRun(db: Database): PageDataRun | undefined {
     head: string;
     classes: Record<PageDataClass, number>;
     seed?: PageDataSeedStatus;
+    coverage?: PageDataRun['coverage'];
   };
   const sections = db
     .query(
@@ -413,6 +452,7 @@ export function readLatestPageDataRun(db: Database): PageDataRun | undefined {
     classes: metadata.classes,
     sections: sections.map((value) => JSON.parse(value.detail) as PageDataSection),
     ...(metadata.seed ? { seed: metadata.seed } : {}),
+    ...(metadata.coverage ? { coverage: metadata.coverage } : {}),
   };
 }
 
@@ -478,7 +518,12 @@ function saveRun(db: Database, run: PageDataRun): void {
       stage: 'verification' as const,
       action: 'page-data-run',
       at: run.at,
-      detail: JSON.stringify({ head: run.head, classes: run.classes, ...(run.seed ? { seed: run.seed } : {}) }),
+      detail: JSON.stringify({
+        head: run.head,
+        classes: run.classes,
+        ...(run.seed ? { seed: run.seed } : {}),
+        ...(run.coverage ? { coverage: run.coverage } : {}),
+      }),
     },
     ...run.sections.map((section) => ({
       taskId: pageDataTaskId,
@@ -566,20 +611,25 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
     const head = firstParent(options.settings.mainCheckout, options.settings.integrationBranch);
     let output = '';
     let stackOutput = '';
+    let diagnostics = '';
+    const invocation = randomUUID();
+    let exitCode = -1;
     let seed: PageDataSeedStatus | undefined;
     let registryForRun: ReadonlyMap<string, SectionConfig> | undefined;
     try {
       const result = await (
-        options.runStack ?? ((sourceHead) => runDedicatedPageDataStack(options.settings, sourceHead))
-      )(head);
+        options.runStack ??
+        ((sourceHead, checkInvocation) => runDedicatedPageDataStack(options.settings, sourceHead, checkInvocation))
+      )(head, invocation);
       output = result.output;
       stackOutput = result.stackOutput ?? '';
+      diagnostics = result.diagnostics ?? '';
+      exitCode = result.exitCode;
       seed = result.seed;
-      if (result.exitCode !== 0 && result.exitCode !== 1) {
-        const line = result.output.trim()
-          ? terminalErrorLine(result.output)
-          : `page-data-check exited ${result.exitCode}`;
-        throw new PageDataStackError('check', line, line, combineFailureOutput(stackOutput, result.output));
+      if (![0, 1, 2].includes(result.exitCode)) {
+        const command = commandOutput(output, diagnostics);
+        const line = command.trim() ? terminalErrorLine(command) : `page-data-check exited ${result.exitCode}`;
+        throw new PageDataStackError('check', line, line, combineFailureOutput(stackOutput, command));
       }
       registryForRun = result.registry;
     } catch (error) {
@@ -595,12 +645,16 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
 
     const registry = registryForRun ?? sectionRegistry(options.settings.mainCheckout);
     let sections: PageDataSection[];
+    let incomplete: boolean;
     try {
-      sections = parsePageDataOutput(output, registry);
+      ({ sections, incomplete } = parsePageDataCompletion(output, registry, invocation, exitCode));
     } catch (error) {
-      const transcript = combineFailureOutput(stackOutput, output);
+      const transcript = combineFailureOutput(stackOutput, commandOutput(output, diagnostics));
       const logPath = writePageDataFailureLog(options.settings.stateDirectory, runId, 'check', transcript);
-      supermanagerNotice(options, 'check', head, errorMessage(error), logPath, at);
+      const detail = diagnostics.trim()
+        ? `${errorMessage(error)}; ${terminalErrorLine(diagnostics)}`
+        : errorMessage(error);
+      supermanagerNotice(options, 'check', head, detail, logPath, at);
       return 'failed';
     }
     const previous = loadLastSuccessfulRun(options.db);
@@ -656,8 +710,21 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
       classes: pageDataClassCounts(sections),
       sections,
       ...(seed ? { seed } : {}),
+      ...(incomplete ? { coverage: { status: 'incomplete' } } : {}),
     };
     saveRun(options.db, run);
+    if (incomplete) {
+      const transcript = combineFailureOutput(stackOutput, commandOutput(output, diagnostics));
+      const logPath = writePageDataFailureLog(options.settings.stateDirectory, runId, 'check', transcript);
+      supermanagerNotice(
+        options,
+        'check',
+        head,
+        `Incomplete page-data coverage: ${safeLine(diagnostics) || 'see section evidence'}`,
+        logPath,
+        at,
+      );
+    }
     return 'ran';
   } finally {
     lock.release();
@@ -1200,11 +1267,13 @@ async function prepareDedicatedPageDataStack(settings: Settings, head: string) {
 async function runDedicatedPageDataStack(
   settings: Settings,
   head: string,
+  invocation: string,
 ): Promise<{
   output: string;
   exitCode: number;
   registry: ReadonlyMap<string, SectionConfig>;
   stackOutput: string;
+  diagnostics: string;
   seed?: PageDataSeedStatus;
 }> {
   const { policy, worktree, config, names, env: preparedEnv } = await prepareDedicatedPageDataStack(settings, head);
@@ -1334,6 +1403,8 @@ async function runDedicatedPageDataStack(
       bun,
       [
         'scripts/page-data-check.ts',
+        '--invocation',
+        invocation,
         '--base-url',
         `http://127.0.0.1:${config.webPort}`,
         '--kernel',
@@ -1346,7 +1417,7 @@ async function runDedicatedPageDataStack(
       policy.checkTimeoutMs,
       policy.outputBytes,
       'check',
-      [0, 1],
+      [0, 1, 2],
       policy.stopTimeoutMs,
     );
     registry = sectionRegistry(worktree);
@@ -1383,6 +1454,7 @@ async function runDedicatedPageDataStack(
   const result = checked!;
   return {
     output: result.stdout,
+    diagnostics: result.stderr,
     exitCode: result.exitCode,
     registry: registry!,
     stackOutput: pageDataCaptureOutput(stackCapture, policy.outputBytes),

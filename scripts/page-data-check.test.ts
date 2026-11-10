@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { chromium } from '../packages/ui/node_modules/playwright/index.mjs';
+import { chromium, type Browser } from '../packages/ui/node_modules/playwright/index.mjs';
 import {
   classifySection,
   formatLine,
@@ -431,6 +431,8 @@ test('fixture pages exercise classification, reader readiness and coverage after
           reader: 'empty',
           seedCount: null,
           seedExpected: false,
+          nativeProbe: 'run',
+          browserProbe: 'run',
         },
       }),
     );
@@ -438,7 +440,7 @@ test('fixture pages exercise classification, reader readiness and coverage after
     expect(printed).toContain('api-503 anonymous down API');
     expect(printed).toContain('native-ready anonymous index UNAVAILABLE');
     expect(printed).toContain('seed-gap anonymous relations SEED');
-    expect(printed).toContain('web-hide member hidden WEB');
+    expect(printed).toContain('web-hide member hidden UNAVAILABLE');
     expect(printed).toContain('reader-states anonymous aria-label DATA');
     expect(printed).toContain('reader-states anonymous aria-labelledby DATA');
     expect(printed).toContain('reader-states anonymous empty-title-fallback DATA');
@@ -460,6 +462,103 @@ test('fixture pages exercise classification, reader readiness and coverage after
     kernel.stop(true);
   }
 }, 60_000);
+
+test.each([true, false])(
+  'member browser setup failure retains independent evidence (native token=%s)',
+  async (hasToken) => {
+    const requests: (string | null)[] = [];
+    const output: string[] = [];
+    let pagesClosed = 0;
+    let contextsClosed = 0;
+    let sqlReads = 0;
+    const browser = {
+      newContext: async () => ({
+        newPage: async () => ({
+          goto: async (url: string, options: { timeout: number }) => {
+            expect(options.timeout).toBe(50);
+            if (url.endsWith('/auth/sign-in')) throw new Error('navigation timed out password=hidden');
+          },
+          waitForFunction: async () => {},
+          evaluate: async () => page({ itemCount: 1 }),
+          close: async () => {
+            pagesClosed++;
+          },
+        }),
+        close: async () => {
+          contextsClosed++;
+        },
+      }),
+    } as unknown as Browser;
+    const result = await runPageDataCheck({
+      baseUrl: 'http://web.test',
+      kernel: 'http://kernel.test',
+      browser,
+      pageTimeoutMs: 50,
+      invocation: 'fixture-invocation',
+      ...(hasToken ? { memberToken: 'independent-token' } : {}),
+      signIn: { origin: 'http://auth.test', email: 'member@test.invalid', password: 'hidden' },
+      manifest: {
+        version: 1,
+        context: '',
+        question: '',
+        pages: [
+          {
+            id: 'home',
+            path: '/',
+            sections: ['feed', 'broken'].map((id) => ({
+              id,
+              name: id,
+              selector: '#feed',
+              native: { method: 'GET' as const, path: `/${id}`, items: '/items' },
+              sql: { text: 'SELECT 3 AS n', params: [] },
+            })),
+          },
+        ],
+      },
+      fetch: (async (request: Request) => {
+        if (request.url.includes('auth.test')) throw new Error('auth offline');
+        requests.push(request.headers.get('authorization'));
+        return request.url.endsWith('/broken')
+          ? Response.json({ code: 'internal_error' }, { status: 500 })
+          : Response.json({ items: ['one'] });
+      }) as typeof fetch,
+      queryCount: async () => {
+        sqlReads++;
+        return 3;
+      },
+      stdout: {
+        write: (line) => {
+          output.push(line);
+        },
+      },
+      stderr: { write() {} },
+    });
+    expect(result.results.map((row) => [row.persona, row.section, row.class])).toEqual([
+      ['anonymous', 'feed', 'DATA'],
+      ['anonymous', 'broken', 'API'],
+      ['member', 'feed', 'UNAVAILABLE'],
+      ['member', 'broken', hasToken ? 'API' : 'UNAVAILABLE'],
+    ]);
+    expect(result.results[2]?.evidence).toMatchObject({
+      nativeStatus: hasToken ? 200 : 0,
+      nativeItems: hasToken ? 1 : 0,
+      nativeProbe: hasToken ? 'run' : 'unrun',
+      browserProbe: 'unrun',
+      seedCount: 3,
+    });
+    expect(requests).toEqual(
+      hasToken ? [null, null, 'Bearer independent-token', 'Bearer independent-token'] : [null, null],
+    );
+    expect([pagesClosed, contextsClosed, sqlReads]).toEqual([2, 2, 4]);
+    expect(result.incomplete).toBe(true);
+    expect(output.slice(0, 4)).toEqual(result.results.map((row) => `${formatLine(row)}\n`));
+    expect(output.at(-1)).toContain('"sections":4,"defects":' + (hasToken ? 2 : 1) + ',"incomplete":true');
+    const diagnostics = result.diagnostics.join('\n');
+    expect(diagnostics).toContain('browser setup unavailable');
+    expect(diagnostics).toContain('SQL=3');
+    expect(diagnostics + output.join('')).not.toMatch(/hidden|independent-token/);
+  },
+);
 
 test('the tracked M1 manifest names the starting pages and seed counts', () => {
   const manifest = parseManifest(JSON.parse(readFileSync('scripts/page-data-sections.json', 'utf8')));

@@ -121,6 +121,7 @@ export type PageDataFlowRun = {
   head: string;
   classes: Partial<Record<PageDataClass, number>>;
   sections: Partial<Record<PageDataClass, PageDataReportSection[]>>;
+  coverage?: { status: 'incomplete' };
   seed?: { status: 'publication-incomplete'; omissions: number };
   failure?: { phase: 'boot' | 'check'; firstErrorLine: string };
 };
@@ -135,6 +136,7 @@ export function pageDataFlowRuns(
     const metadata = JSON.parse(event.detail ?? '{}') as {
       head?: string;
       classes?: Partial<Record<PageDataClass, number>>;
+      coverage?: { status: 'incomplete' };
       seed?: { status: 'publication-incomplete'; omissions: number };
     };
     const sections: Partial<Record<PageDataClass, PageDataReportSection[]>> = {};
@@ -151,6 +153,7 @@ export function pageDataFlowRuns(
       classes: metadata.classes ?? {},
       sections,
       ...(metadata.seed ? { seed: metadata.seed } : {}),
+      ...(metadata.coverage ? { coverage: metadata.coverage } : {}),
     };
   });
   for (const event of pageEvents.filter(
@@ -178,9 +181,10 @@ export function formatPageDataFlowRuns(runs: readonly PageDataFlowRun[]): string
     if (run.failure)
       return [`Page-data ${run.failure.phase} failure at ${run.at} (${run.head}): ${run.failure.firstErrorLine}`];
     const counts = PAGE_DATA_CLASSES.map((className) => `${className}=${run.classes[className] ?? 0}`).join(' ');
+    const coverage = run.coverage ? '; coverage=incomplete' : '';
     const seed = run.seed ? `; seed=${run.seed.status} omissions=${run.seed.omissions}` : '';
     return [
-      `Page-data run at ${run.at} (${run.head}): ${counts}${seed}.`,
+      `Page-data run at ${run.at} (${run.head}): ${counts}${coverage}${seed}.`,
       ...PAGE_DATA_CLASSES.map((className) => {
         const sections =
           run.sections[className]?.map((section) => `${section.page}/${section.persona}/${section.section}`) ?? [];
