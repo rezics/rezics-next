@@ -258,7 +258,11 @@ test('the policy interval, defect transition, section output and per-run report 
 test('a refused repair keeps its completed run, lets independent repairs route, and skips an immediate replay', async () => {
   const h = harness();
   try {
-    h.ensureDev();
+    const integrationRef = spawnSync('git', ['branch', 'dev', 'main'], {
+      cwd: h.settings.mainCheckout,
+      encoding: 'utf8',
+    });
+    expect(integrationRef.status).toBe(0);
     const start = new Date('2026-01-01T00:00:00.000Z');
     const interval = h.settings.policy?.pageData?.intervalMs ?? 7_200_000;
     const registry = new Map<string, SectionConfig>([
