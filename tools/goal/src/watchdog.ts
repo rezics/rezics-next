@@ -486,9 +486,12 @@ export function violations(
     const attempt = store.attempt({ taskId: task.id, attempt: task.currentAttempt });
     if (attempt.state !== 'exited' || !attempt.endedAt) continue;
     if (attempt.driver && sameProcess(attempt.driver)) continue;
-    const idle = now - Date.parse(attempt.endedAt);
-    if (idle < policy.watchdog.noWorkerMs) continue;
     const retry = pending.get(`${task.id}:${attempt.attempt}`);
+    const endedAt = Date.parse(attempt.endedAt);
+    const notBefore = Date.parse(retry?.options?.notBefore ?? '');
+    const eligibleAt = Number.isFinite(notBefore) ? Math.max(endedAt, notBefore) : endedAt;
+    const idle = now - eligibleAt;
+    if (idle < policy.watchdog.noWorkerMs) continue;
     const intent = retry !== undefined;
     if (task.state === 'ready' && !intent) continue;
     if (task.state === 'ready' && intent && waiting.has(task.id)) continue;
@@ -498,7 +501,7 @@ export function violations(
     found.push({
       key: `no-worker:${task.id}:${attempt.attempt}`,
       summary: intent
-        ? `Task ${task.id} (${task.brief.goal}) has had a pending retry for ${minutes} min that no process started.`
+        ? `Task ${task.id} (${task.brief.goal}) has had a pending retry for ${minutes} min of eligible time that no process started.`
         : `Task ${task.id} (${task.brief.goal}) is ${task.state} but its attempt ${attempt.attempt} ended ${minutes} min ago and nothing will start another.`,
     });
   }

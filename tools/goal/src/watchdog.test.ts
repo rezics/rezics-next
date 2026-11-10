@@ -84,6 +84,17 @@ test('a pending retry held for dependencies or a backoff is waiting by design, n
   expect(found.map((violation) => violation.key)).toEqual(['no-worker:lost:1']);
 });
 
+test('the watchdog starts counting missing-starter time after a retry backoff expires', () => {
+  const tasks = [{ id: 'paced', state: 'ready' as const, currentAttempt: 1 }];
+  const attempts = [{ taskId: 'paced', attempt: 1, state: 'exited' as const, endedAt: minutesAgo(30) }];
+  const intents = [{ taskId: 'paced', attempt: 1, status: 'pending' as const, options: { notBefore: minutesAgo(2) } }];
+  const fixture = store(tasks, attempts, intents);
+  expect(violations(fixture, now)).toEqual([]);
+  const found = violations(fixture, now + 9 * 60_000);
+  expect(found.map((item) => item.key)).toEqual(['no-worker:paced:1']);
+  expect(found[0]?.summary).toContain('11 min of eligible time');
+});
+
 test('an exited attempt with a live driver is not reported while its driver settles it', () => {
   const driver = processIdentity();
   expect(driver).not.toBeNull();

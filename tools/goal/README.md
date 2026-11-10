@@ -1616,7 +1616,8 @@ The watchdog runs with reminder delivery and reports running tasks, or ready tas
 have had no worker for ten minutes after an attempt ended and its recorded driver identity is no longer live. A reused
 PID does not count as the same driver. A live driver may still be settling the attempt, including running affected tests
 or waiting for a check-host slot. A pending retry that waits by design is not reported: one whose `after` dependencies
-are not yet integrated, whose backoff time has not come, or that waits out a check-host outage. `goal status` shows
+are not yet integrated, whose backoff time has not come, or that waits out a check-host outage. When a backoff expires,
+the missing-starter clock begins at that deadline if it is later than the attempt end. `goal status` shows
 such a retry's `pendingRetry` reason (`dependencies`, `backoff`, `check-hosts`, or `start` when it waits only for a
 starter or capacity). It also reports a `stabilize` branch that has stayed out of the integration branch for
 thirty minutes. Failure signatures from attempts ended in the previous thirty minutes are grouped: three matching
