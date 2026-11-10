@@ -94,7 +94,7 @@ export const Current: Story = {
 };
 export const Partial: Story = {
   args: { scenario: 'partial' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const first = await canvas.findByRole('link', { name: 'Volume Two' });
@@ -215,7 +215,7 @@ export const MissingAssertion: Story = {
 };
 export const LongMultilingual: Story = {
   args: { scenario: 'long-multilingual' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const heading = canvas.getByRole('heading', { name: longPartTitle, level: 2 });
@@ -396,12 +396,12 @@ async function readableComposition(canvasElement: HTMLElement) {
 }
 export const SuppliedCompositionPhone: Story = {
   render: () => <WorkPartsFamilyExample />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => readableComposition(canvasElement),
 };
 export const SuppliedCompositionDesktopRTL: Story = {
   render: () => <WorkPartsFamilyExample rtl />,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => readableComposition(canvasElement),
 };
 export const IndependentMounts: Story = {

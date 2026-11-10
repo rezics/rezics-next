@@ -230,82 +230,54 @@ export const NamedCurrentContext: Story = {
   },
 };
 
-export const NamedEnglishPhone390: Story = {
-  ...NamedCurrentContext,
-  globals: { locale: 'en', viewport: { value: 'phone390', isRotated: false } },
-};
+export const NamedEnglishPhone390: Story = { name: 'Named English', ...NamedCurrentContext, globals: { locale: 'en' } };
 
-export const NamedEnglishDesktop1280: Story = {
-  ...NamedCurrentContext,
-  globals: { locale: 'en', viewport: { value: 'desktop1280', isRotated: false } },
-};
+export const NamedEnglishDesktop1280: Story = { tags: ['!dev'], ...NamedCurrentContext, globals: { locale: 'en' } };
 
-export const NamedGermanPhone390: Story = {
-  ...NamedCurrentContext,
-  globals: { locale: 'de', viewport: { value: 'phone390', isRotated: false } },
-};
+export const NamedGermanPhone390: Story = { name: 'Named German', ...NamedCurrentContext, globals: { locale: 'de' } };
 
-export const NamedGermanDesktop1280: Story = {
-  ...NamedCurrentContext,
-  globals: { locale: 'de', viewport: { value: 'desktop1280', isRotated: false } },
-};
+export const NamedGermanDesktop1280: Story = { tags: ['!dev'], ...NamedCurrentContext, globals: { locale: 'de' } };
 
-export const NamedSpanishPhone390: Story = {
-  ...NamedCurrentContext,
-  globals: { locale: 'es', viewport: { value: 'phone390', isRotated: false } },
-};
+export const NamedSpanishPhone390: Story = { name: 'Named Spanish', ...NamedCurrentContext, globals: { locale: 'es' } };
 
-export const NamedSpanishDesktop1280: Story = {
-  ...NamedCurrentContext,
-  globals: { locale: 'es', viewport: { value: 'desktop1280', isRotated: false } },
-};
+export const NamedSpanishDesktop1280: Story = { tags: ['!dev'], ...NamedCurrentContext, globals: { locale: 'es' } };
 
-export const NamedFrenchPhone390: Story = {
-  ...NamedCurrentContext,
-  globals: { locale: 'fr', viewport: { value: 'phone390', isRotated: false } },
-};
+export const NamedFrenchPhone390: Story = { name: 'Named French', ...NamedCurrentContext, globals: { locale: 'fr' } };
 
-export const NamedFrenchDesktop1280: Story = {
-  ...NamedCurrentContext,
-  globals: { locale: 'fr', viewport: { value: 'desktop1280', isRotated: false } },
-};
+export const NamedFrenchDesktop1280: Story = { tags: ['!dev'], ...NamedCurrentContext, globals: { locale: 'fr' } };
 
 export const NamedJapanesePhone390: Story = {
+  name: 'Named Japanese',
   ...NamedCurrentContext,
-  globals: { locale: 'ja', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'ja' },
 };
 
-export const NamedJapaneseDesktop1280: Story = {
-  ...NamedCurrentContext,
-  globals: { locale: 'ja', viewport: { value: 'desktop1280', isRotated: false } },
-};
+export const NamedJapaneseDesktop1280: Story = { tags: ['!dev'], ...NamedCurrentContext, globals: { locale: 'ja' } };
 
-export const NamedKoreanPhone390: Story = {
-  ...NamedCurrentContext,
-  globals: { locale: 'ko', viewport: { value: 'phone390', isRotated: false } },
-};
+export const NamedKoreanPhone390: Story = { name: 'Named Korean', ...NamedCurrentContext, globals: { locale: 'ko' } };
 
-export const NamedKoreanDesktop1280: Story = {
-  ...NamedCurrentContext,
-  globals: { locale: 'ko', viewport: { value: 'desktop1280', isRotated: false } },
-};
+export const NamedKoreanDesktop1280: Story = { tags: ['!dev'], ...NamedCurrentContext, globals: { locale: 'ko' } };
 
 export const NamedSimplifiedChinesePhone390: Story = {
+  name: 'Named Simplified Chinese',
   ...NamedCurrentContext,
-  globals: { locale: 'zh-Hans', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'zh-Hans' },
 };
 
 export const NamedSimplifiedChineseDesktop1280: Story = {
+  tags: ['!dev'],
   ...NamedCurrentContext,
-  globals: { locale: 'zh-Hans', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'zh-Hans' },
 };
 
 export const NamedTraditionalChinesePhone390: Story = {
+  name: 'Named Traditional Chinese',
   ...NamedCurrentContext,
-  globals: { locale: 'zh-Hant', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'zh-Hant' },
 };
 
 export const NamedTraditionalChineseDesktop1280: Story = {
+  tags: ['!dev'],
   ...NamedCurrentContext,
-  globals: { locale: 'zh-Hant', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'zh-Hant' },
 };

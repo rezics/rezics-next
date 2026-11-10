@@ -138,13 +138,13 @@ async function journey({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(returned).toHaveTextContent(readingEnding);
 }
 
-export const PhoneLight: Story = { globals: { viewport: { value: 'phone390' }, theme: 'light' }, play: journey };
-export const PhoneDark: Story = { globals: { viewport: { value: 'phone390' }, theme: 'dark' }, play: journey };
-export const DesktopLight: Story = { globals: { viewport: { value: 'desktop1280' }, theme: 'light' }, play: journey };
-export const DesktopDark: Story = { globals: { viewport: { value: 'desktop1280' }, theme: 'dark' }, play: journey };
+export const PhoneLight: Story = { name: 'Default', globals: {}, play: journey };
+export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: journey };
+export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: journey };
+export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: journey };
 export const UnavailableMedia: Story = {
   args: { unavailable: true },
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: {},
   play: async (context) => {
     await journey(context);
     const canvas = within(context.canvasElement);

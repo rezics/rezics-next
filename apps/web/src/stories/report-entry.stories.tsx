@@ -82,7 +82,7 @@ const meta = {
   title: 'Community/Report entry',
   id: 'pages-community-report-entry',
   component: ConnectedReportEntry,
-  parameters: { layout: 'padded', viewport: { defaultViewport: 'desktop1280' } },
+  parameters: { layout: 'padded', viewport: {} },
   beforeEach: () => {
     const previousFetch = globalThis.fetch;
     const blob = new Blob([verificationSource], { type: 'text/javascript' });

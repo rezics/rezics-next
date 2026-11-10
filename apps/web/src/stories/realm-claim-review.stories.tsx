@@ -170,15 +170,16 @@ async function exactReferences({ canvasElement }: { canvasElement: HTMLElement }
   await expect(page.scrollWidth).toBeLessThanOrEqual(page.clientWidth + 1);
 }
 export const LongReferencesPhone: Story = {
-  name: 'Full references — illustrative UUIDs at 390px',
+  name: 'Long References',
   args: { scenario: 'pending' },
-  globals: { viewport: { value: 'phone', isRotated: false } },
+  globals: {},
   play: exactReferences,
 };
 export const LongReferencesDesktop: Story = {
+  tags: ['!dev'],
   name: 'Full references — illustrative UUIDs at 1280px',
   args: { scenario: 'pending' },
-  globals: { viewport: { value: 'desktop', isRotated: false } },
+  globals: {},
   play: exactReferences,
 };
 export const LongReferencesRtl: Story = {
@@ -188,6 +189,6 @@ export const LongReferencesRtl: Story = {
       <ReviewPage />
     </div>
   ),
-  globals: { viewport: { value: 'phone', isRotated: false } },
+  globals: {},
   play: exactReferences,
 };

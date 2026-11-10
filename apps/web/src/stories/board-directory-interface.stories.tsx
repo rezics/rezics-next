@@ -125,7 +125,7 @@ const meta = {
       },
     },
   },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
 } satisfies Meta<typeof DirectoryInterface>;
 export default meta;
 type Story = StoryObj<typeof meta>;

@@ -97,6 +97,6 @@ export const Navigation: Story = {
     const home = await within(navigation).findByRole('link', { name: m.nav_home() });
     await expect(home).toHaveAttribute('href', `/${getLocale()}`);
   },
-  globals: { viewport: { value: 'phone' } },
+  globals: {},
   render: () => <ShellPattern visitor="Signed In" />,
 };

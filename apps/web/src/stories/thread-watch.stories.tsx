@@ -122,7 +122,6 @@ const meta = {
   component: ThreadWatchPageStory,
   parameters: {
     viewport: {
-      defaultViewport: 'phone390',
       viewports: {
         phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
         desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
@@ -141,7 +140,7 @@ type Story = StoryObj<typeof meta>;
 
 export const NotWatching: Story = {
   args: { example: 'not-watching' },
-  globals: { locale: 'en', theme: 'light', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'en' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.thread_watch_watch() }));
@@ -152,14 +151,14 @@ export const NotWatching: Story = {
 };
 export const Watching: Story = {
   args: { example: 'watching' },
-  globals: { locale: 'de', theme: 'dark', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'de' },
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByRole('button', { name: m.thread_watch_stop() });
   },
 };
 export const CardSeededRefresh: Story = {
   args: { example: 'card-seeded' },
-  globals: { locale: 'en', theme: 'light', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'en' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.thread_watch_watch() }));
@@ -196,7 +195,7 @@ export const Refusal: Story = {
 };
 export const UnknownOutcome: Story = {
   args: { example: 'unknown' },
-  globals: { locale: 'zh-Hant', theme: 'dark', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'zh-Hant' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.thread_watch_watch() }));
@@ -216,37 +215,37 @@ export const SessionReplacement: Story = {
 };
 export const AccessLost: Story = {
   args: { example: 'access-lost' },
-  globals: { locale: 'ja', theme: 'light', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'ja' },
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByText(m.thread_watch_access_lost());
   },
 };
 export const AnonymousReader: Story = {
   args: { example: 'anonymous' },
-  globals: { locale: 'es', theme: 'light', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'es' },
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByText(m.thread_watch_anonymous());
   },
 };
-export const French: Story = { args: { example: 'not-watching' }, globals: { locale: 'fr', theme: 'dark' } };
-export const Korean: Story = { args: { example: 'watching' }, globals: { locale: 'ko', theme: 'light' } };
+export const French: Story = { args: { example: 'not-watching' }, globals: { locale: 'fr' } };
+export const Korean: Story = { args: { example: 'watching' }, globals: { locale: 'ko' } };
 export const SimplifiedChinese: Story = {
   args: { example: 'not-watching' },
-  globals: { locale: 'zh-Hans', theme: 'dark' },
+  globals: { locale: 'zh-Hans' },
 };
 export const GermanPhone: Story = {
   args: { example: 'watching' },
-  globals: { locale: 'de', theme: 'light', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'de' },
 };
 export const SpanishDesktop: Story = {
   args: { example: 'not-watching' },
-  globals: { locale: 'es', theme: 'dark', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'es' },
 };
 export const JapanesePhone: Story = {
   args: { example: 'watching' },
-  globals: { locale: 'ja', theme: 'dark', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'ja' },
 };
 export const TraditionalChineseDesktop: Story = {
   args: { example: 'not-watching' },
-  globals: { locale: 'zh-Hant', theme: 'light', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'zh-Hant' },
 };

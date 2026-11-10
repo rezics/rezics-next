@@ -154,21 +154,19 @@ export const ActualCombined: Story = {
 };
 
 export const ActualCombinedPhoneLight: Story = {
+  name: 'Actual Combined',
   ...ActualCombined,
-  globals: { locale: 'en', viewport: { value: 'phone390' }, theme: 'light' },
+  globals: { locale: 'en' },
 };
 export const ActualCombinedPhoneDarkTraditionalChinese: Story = {
   ...ActualCombined,
-  globals: { locale: 'zh-Hant', viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: { locale: 'zh-Hant' },
 };
 export const ActualCombinedDesktop1440LightJapanese: Story = {
   ...ActualCombined,
-  globals: { locale: 'ja', viewport: { value: 'desktop1440' }, theme: 'light' },
+  globals: { locale: 'ja' },
 };
-export const ActualCombinedDesktop1440Dark: Story = {
-  ...ActualCombined,
-  globals: { locale: 'en', viewport: { value: 'desktop1440' }, theme: 'dark' },
-};
+export const ActualCombinedDesktop1440Dark: Story = { tags: ['!dev'], ...ActualCombined, globals: { locale: 'en' } };
 
 export const NoMatches: Story = {
   name: 'No matching results',

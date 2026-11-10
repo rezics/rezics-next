@@ -178,10 +178,10 @@ async function visit({ canvasElement }: { canvasElement: HTMLElement }) {
   await canvas.findByRole('heading', { name: 'Choose a section and return' });
 }
 
-export const PhoneLight: Story = { globals: { viewport: { value: 'phone390' }, theme: 'light' }, play: visit };
-export const PhoneDark: Story = { globals: { viewport: { value: 'phone390' }, theme: 'dark' }, play: visit };
-export const DesktopLight: Story = { globals: { viewport: { value: 'desktop1280' }, theme: 'light' }, play: visit };
-export const DesktopDark: Story = { globals: { viewport: { value: 'desktop1280' }, theme: 'dark' }, play: visit };
+export const PhoneLight: Story = { name: 'Default', globals: {}, play: visit };
+export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: visit };
+export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: visit };
+export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: visit };
 
 async function unavailableVisit({ canvasElement }: { canvasElement: HTMLElement }) {
   const canvas = within(canvasElement);
@@ -199,17 +199,11 @@ async function unavailableVisit({ canvasElement }: { canvasElement: HTMLElement 
   await userEvent.click(canvas.getByRole('button', { name: 'Read as the next viewer' }));
   await expect(canvas.queryByRole('button', { name: m.post_sections_return() })).toBeNull();
 }
-export const PhoneUnavailable: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
-  play: unavailableVisit,
-};
-export const DesktopUnavailable: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
-  play: unavailableVisit,
-};
+export const PhoneUnavailable: Story = { name: 'Unavailable', globals: {}, play: unavailableVisit };
+export const DesktopUnavailable: Story = { tags: ['!dev'], globals: {}, play: unavailableVisit };
 export const VisibleOverflow: Story = {
   args: { state: 'overflow' },
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.post_sections_title() }));
@@ -222,7 +216,7 @@ export const VisibleOverflow: Story = {
 };
 export const ConcealedHeading: Story = {
   args: { state: 'concealed' },
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('button', { name: m.thread_reveal_spoiler() });
@@ -236,7 +230,7 @@ export const ConcealedHeading: Story = {
 };
 export const ShortPost: Story = {
   args: { state: 'no-headings' },
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('A short post stays ordinary reading without a decorative Sections panel.');

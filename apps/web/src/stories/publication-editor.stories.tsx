@@ -164,7 +164,7 @@ export const UnavailableRetry: Story = {
 };
 export const UncertainRetry: Story = {
   args: { scenario: 'uncertain' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: {
     docs: {
       description: {
@@ -430,38 +430,42 @@ const familyEvidence = {
   },
 };
 export const IndependentEditorsPhone: Story = {
+  name: 'Independent Editors',
   render: () => <PublicationFamilyStory />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: familyEvidence,
   play: async ({ canvasElement }) => independentFamily(canvasElement),
 };
 export const IndependentEditorsDesktop: Story = {
+  tags: ['!dev'],
   render: () => <PublicationFamilyStory />,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   parameters: familyEvidence,
   play: async ({ canvasElement }) => independentFamily(canvasElement),
 };
 export const IndependentEditorsRtl: Story = {
   render: () => <PublicationFamilyStory rtl />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: familyEvidence,
   play: async ({ canvasElement }) => independentFamily(canvasElement),
 };
 export const LongSuppliedNamesPhone: Story = {
+  name: 'Long Supplied Names',
   render: () => <PublicationFamilyStory longNames />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: familyEvidence,
   play: async ({ canvasElement }) => independentFamily(canvasElement, true),
 };
 export const LongSuppliedNamesDesktop: Story = {
+  tags: ['!dev'],
   render: () => <PublicationFamilyStory longNames />,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   parameters: familyEvidence,
   play: async ({ canvasElement }) => independentFamily(canvasElement, true),
 };
 export const LongSuppliedNamesRtl: Story = {
   render: () => <PublicationFamilyStory longNames rtl />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: familyEvidence,
   play: async ({ canvasElement }) => independentFamily(canvasElement, true),
 };

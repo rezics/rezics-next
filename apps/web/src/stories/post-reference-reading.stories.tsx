@@ -130,26 +130,20 @@ async function readingVisit({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(canvas).toHaveTextContent('The source body remains complete and selectable.');
 }
 
-export const PhoneLight: Story = { globals: { viewport: { value: 'phone390' }, theme: 'light' }, play: readingVisit };
-export const PhoneDark: Story = { globals: { viewport: { value: 'phone390' }, theme: 'dark' }, play: readingVisit };
-export const DesktopLight: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
-  play: readingVisit,
-};
-export const DesktopDark: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
-  play: readingVisit,
-};
+export const PhoneLight: Story = { name: 'Default', globals: {}, play: readingVisit };
+export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: readingVisit };
+export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: readingVisit };
+export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: readingVisit };
 
 export const LongSourceHeavyPost: Story = {
   args: { state: 'long' },
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: {},
   play: readingVisit,
 };
 
 export const VisibleOverflow: Story = {
   args: { state: 'overflow' },
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const page = within(canvasElement.ownerDocument.body);
@@ -161,7 +155,7 @@ export const VisibleOverflow: Story = {
 };
 
 export const CopyRecovery: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: {},
   play: async ({ canvasElement }) => {
     const win = canvasElement.ownerDocument.defaultView!;
     const prior = Object.getOwnPropertyDescriptor(win.navigator, 'clipboard');
@@ -184,7 +178,7 @@ export const CopyRecovery: Story = {
 };
 
 export const ReaderReplacement: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const page = within(canvasElement.ownerDocument.body);

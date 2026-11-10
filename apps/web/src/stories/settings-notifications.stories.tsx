@@ -114,7 +114,7 @@ async function toggle(canvasElement: HTMLElement) {
   return view;
 }
 export const OptionalNotices: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <Example />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -136,7 +136,7 @@ export const OptionalNotices: Story = {
   },
 };
 export const SavedAndRestored: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   render: () => <Example />,
   play: async ({ canvasElement }) => {
     const view = await toggle(canvasElement);
@@ -190,7 +190,7 @@ export const Refused: Story = {
   },
 };
 export const NativeRetryDelay: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <Example scenario="delayed" />,
   play: async ({ canvasElement }) => {
     const view = await toggle(canvasElement);

@@ -179,11 +179,11 @@ export const UntitledBoard: Story = { args: { realm: undefined, board: { ...boar
 export const ShortLabels: Story = { args: { realm: { ...realm, title: 'R' }, board: { ...board, title: 'B' } } };
 export const LongSuppliedTitlesPhone: Story = {
   args: { realm: longRealm, board: longBoard, prominent: true },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
 };
 export const LongSuppliedTitlesDesktop: Story = {
   ...LongSuppliedTitlesPhone,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
 };
 export const LongSuppliedTitlesRtlPhone: Story = {
   ...LongSuppliedTitlesPhone,
@@ -191,5 +191,5 @@ export const LongSuppliedTitlesRtlPhone: Story = {
 };
 export const LongSuppliedTitlesRtlDesktop: Story = {
   ...LongSuppliedTitlesRtlPhone,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
 };

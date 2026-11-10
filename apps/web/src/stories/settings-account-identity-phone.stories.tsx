@@ -26,7 +26,7 @@ type Story = StoryObj<typeof meta>;
 export const AccountIdentityAndSafety: Story = {
   name: 'Current account safety',
   tags: ['!dev'],
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   beforeEach: () => {
     calls.length = 0;
     unavailable = false;

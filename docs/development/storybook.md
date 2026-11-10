@@ -13,14 +13,17 @@ same recorded or fake data without the shell. Page stories cover populated state
 viewer, plus empty, unavailable and error outcomes. Preserve explicit meta IDs and story export names when
 renaming a folder so existing story and docs links keep working. Name stories for persona
 and outcome (`Signed out`, `Owner, empty`, `Filter sheet open`), not viewport, theme or locale. Keep the hierarchy
-compact and include every required behavior state, even when a folder needs more than eight. Regression only stories
-carry the `!dev` tag; do not use it to hide required states. Cross cutting exposure views use the `exposure` tag in
+compact and include every required behavior state, even when a folder needs more than eight. Regression stories and retired compatibility links
+carry the `!dev` tag; every distinct required state stays visible. Cross cutting exposure views use the `exposure` tag in
 the page they cover.
 
 Locale and theme are Storybook globals. Review the same canonical IDs at `phone390` and `desktop1280` using the
-viewport toolbar, with locale and theme globals; do not create width, locale or theme behavior variants. A phone only
-state can set `globals.viewport` at story level. Browser coverage runs at desktop and phone widths. Do not use the removed
-`parameters.viewport.defaultViewport` setting.
+viewport toolbar, with locale and theme globals; do not create width, locale or theme behavior variants. Stories
+must leave viewport and theme free for the toolbar. Use Controls for behavior or layout options independent of device
+width. Run browser coverage at desktop and phone widths by selecting viewport globals in the runner.
+A retired size-only export can remain hidden as a compatibility link. Do not use the removed
+`parameters.viewport.defaultViewport` setting. The preview canvas uses white in light mode and black in dark mode;
+shared application colors remain unchanged.
 
 The title and story name rules follow [Storybook naming](https://storybook.js.org/docs/writing-stories/naming-components-and-hierarchy),
 [tags](https://storybook.js.org/docs/writing-stories/tags), [globals](https://storybook.js.org/docs/essentials/toolbars-and-globals),

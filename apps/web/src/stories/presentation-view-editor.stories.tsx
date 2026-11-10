@@ -372,7 +372,7 @@ export const IndependentEditors: Story = {
 export const LongKeysPhoneFocus: Story = {
   args: { initial: longInitial, locale: 'en', transport: controlsTransport() },
   render,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.selectOptions(

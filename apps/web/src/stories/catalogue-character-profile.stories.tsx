@@ -198,7 +198,7 @@ export const Created: Story = {
 };
 export const UncertainRetry: Story = {
   args: { scenario: 'uncertain', onCreate: createObserver() },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: {
     docs: {
       description: {

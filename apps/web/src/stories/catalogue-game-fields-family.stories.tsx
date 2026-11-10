@@ -156,7 +156,7 @@ const meta = {
   id: 'pages-catalogue-game-fields-family',
   component: Family,
   tags: ['autodocs'],
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   parameters: {
     layout: 'fullscreen',
     viewport: {
@@ -445,24 +445,24 @@ export const GameCreation: Story = {
 };
 export const InitialPhone390: Story = {
   ...InitialFacts,
-  globals: { viewport: { value: 'phone390', isRotated: false }, locale: 'ja' },
+  globals: { locale: 'ja' },
 };
 export const InitialDesktop1280Rtl: Story = {
   ...IndependentSelectors,
   args: { ...IndependentSelectors.args, direction: 'rtl' },
-  globals: { viewport: { value: 'desktop1280', isRotated: false }, locale: 'zh-Hant' },
+  globals: { locale: 'zh-Hant' },
 };
 export const ProposedPhone390: Story = {
   ...Proposed,
-  globals: { viewport: { value: 'phone390', isRotated: false }, locale: 'ja' },
+  globals: { locale: 'ja' },
 };
 export const LongClassificationDesktop1280Rtl: Story = {
   ...LongClassification,
   args: { ...LongClassification.args, direction: 'rtl' },
-  globals: { viewport: { value: 'desktop1280', isRotated: false }, locale: 'zh-Hant' },
+  globals: { locale: 'zh-Hant' },
 };
 export const AddonPhone390Rtl: Story = {
   ...AddonCompatibility,
   args: { mode: 'addon', direction: 'rtl' },
-  globals: { viewport: { value: 'phone390', isRotated: false }, locale: 'ja' },
+  globals: { locale: 'ja' },
 };

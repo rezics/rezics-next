@@ -203,51 +203,51 @@ type Story = StoryObj<typeof meta>;
 
 export const FinalEmpty: Story = {
   args: { pages: [finalEmpty] },
-  globals: { locale: 'en', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'en' },
 };
 export const SparseEmpty: Story = {
   args: { pages: [sparseEmpty] },
-  globals: { locale: 'en', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
 };
-export const PopulatedWithNext: Story = { globals: { locale: 'en', viewport: { value: 'desktop1280' } } };
+export const PopulatedWithNext: Story = { globals: { locale: 'en' } };
 export const PopulatedWithoutNext: Story = {
   args: { pages: [{ ...populated, next: null }] },
-  globals: { locale: 'en', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
 };
 export const FinalEmptyTraditionalChinese: Story = {
   args: { pages: [finalEmpty] },
-  globals: { locale: 'zh-Hant', viewport: { value: 'phone390' } },
+  globals: { locale: 'zh-Hant' },
 };
 export const SparseEmptyTraditionalChinese: Story = {
   args: { pages: [sparseEmpty] },
-  globals: { locale: 'zh-Hant', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'zh-Hant' },
 };
-export const PopulatedTraditionalChinese: Story = { globals: { locale: 'zh-Hant', viewport: { value: 'phone390' } } };
+export const PopulatedTraditionalChinese: Story = { globals: { locale: 'zh-Hant' } };
 export const PopulatedWithoutNextTraditionalChinese: Story = {
   args: { pages: [{ ...populated, next: null }] },
-  globals: { locale: 'zh-Hant', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'zh-Hant' },
 };
 export const LongTextPhone: Story = {
   args: { pages: [longText] },
-  globals: { locale: 'zh-Hant', viewport: { value: 'phone390' } },
+  globals: { locale: 'zh-Hant' },
 };
 export const LongTextDesktop: Story = {
   args: { pages: [{ ...longText, next: null }] },
-  globals: { locale: 'en', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'en' },
 };
 export const SparseEmptyRtl: Story = {
   args: { pages: [sparseEmpty], direction: 'rtl' },
-  globals: { locale: 'en', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
 };
 export const MultipleInstancesRtl: Story = {
   args: { pages: [longText, { ...populated, next: null }], direction: 'rtl' },
-  globals: { locale: 'zh-Hant', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'zh-Hant' },
 };
 export const Unavailable: Story = {
   args: { pages: [], unavailable: true },
-  globals: { locale: 'en', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
 };
 export const UnavailableTraditionalChinese: Story = {
   args: { pages: [], unavailable: true },
-  globals: { locale: 'zh-Hant', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'zh-Hant' },
 };

@@ -150,8 +150,8 @@ export const LeavingPendingDecision = {
   play: ({ canvasElement }: { canvasElement: HTMLElement }) => reachHistory(canvasElement, true),
 };
 
-const phone = { viewport: { ...reviewParameters.viewport, defaultViewport: 'phone390' } };
-const desktop = { viewport: { ...reviewParameters.viewport, defaultViewport: 'desktop1280' } };
+const phone = { viewport: { ...reviewParameters.viewport } };
+const desktop = { viewport: { ...reviewParameters.viewport } };
 async function latest(canvas: HTMLElement, decision: 'approve' | 'decline') {
   await reachHistory(canvas);
   (

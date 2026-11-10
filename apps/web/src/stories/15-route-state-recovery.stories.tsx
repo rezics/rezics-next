@@ -17,8 +17,8 @@ const meta = {
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
-const phone = { viewport: { value: 'phone390' }, theme: 'light' };
-const desktop = { viewport: { value: 'desktop1280' }, theme: 'dark' };
+const phone = {};
+const desktop = {};
 
 async function keyboardRecovery(context: { canvasElement: HTMLElement }) {
   const main = await errorReady(context);
@@ -37,12 +37,12 @@ export const RetryPhone: Story = {
   play: keyboardRecovery,
 };
 export const RetryDesktop: Story = { ...RetryPhone, globals: desktop };
-export const FailedRetryPhone: Story = { ...StillUnavailable, globals: { ...phone, theme: 'dark' } };
-export const FailedRetryDesktop: Story = { ...StillUnavailable, globals: { ...desktop, theme: 'light' } };
-export const ClosedPhone: Story = { ...Closed, globals: phone };
-export const ClosedDesktop: Story = { ...Closed, globals: desktop };
-export const MissingPhone: Story = { ...NotFound, globals: { ...phone, theme: 'dark' } };
-export const MissingDesktop: Story = { ...NotFound, globals: { ...desktop, theme: 'light' } };
+export const FailedRetryPhone: Story = { ...StillUnavailable, globals: { ...phone } };
+export const FailedRetryDesktop: Story = { ...StillUnavailable, globals: { ...desktop } };
+export const ClosedPhone: Story = { name: 'Closed', ...Closed, globals: phone };
+export const ClosedDesktop: Story = { tags: ['!dev'], ...Closed, globals: desktop };
+export const MissingPhone: Story = { ...NotFound, globals: { ...phone } };
+export const MissingDesktop: Story = { ...NotFound, globals: { ...desktop } };
 
 /** Prepared shell states, without pretending that a recording is a native pending request. */
 function PreparedLoading({ layout }: { layout: PendingLayout }) {
@@ -80,19 +80,19 @@ async function pendingReady({ canvasElement }: { canvasElement: HTMLElement }) {
 export const FeedPhone: Story = { globals: phone, render: () => <PreparedLoading layout="feed" />, play: pendingReady };
 export const FeedDesktop: Story = { ...FeedPhone, globals: desktop };
 export const DetailPhone: Story = {
-  globals: { ...phone, theme: 'dark' },
+  globals: { ...phone },
   render: () => <PreparedLoading layout="detail" />,
   play: pendingReady,
 };
-export const DetailDesktop: Story = { ...DetailPhone, globals: { ...desktop, theme: 'light' } };
+export const DetailDesktop: Story = { ...DetailPhone, globals: { ...desktop } };
 export const FormPhone: Story = { globals: phone, render: () => <PreparedLoading layout="form" />, play: pendingReady };
 export const FormDesktop: Story = { ...FormPhone, globals: desktop };
 export const GenericPhone: Story = {
-  globals: { ...phone, theme: 'dark' },
+  globals: { ...phone },
   render: () => <PreparedLoading layout="page" />,
   play: pendingReady,
 };
-export const GenericDesktop: Story = { ...GenericPhone, globals: { ...desktop, theme: 'light' } };
+export const GenericDesktop: Story = { ...GenericPhone, globals: { ...desktop } };
 
 function LongRecovery() {
   return (
@@ -108,7 +108,7 @@ function LongRecovery() {
   );
 }
 export const LongStringsPhone: Story = {
-  globals: { ...phone, locale: 'de', theme: 'dark' },
+  globals: { ...phone, locale: 'de' },
   render: () => <LongRecovery />,
   play: async ({ canvasElement }) => {
     const main = await within(canvasElement).findByRole('main');
@@ -120,4 +120,4 @@ export const LongStringsPhone: Story = {
     await expect(main.scrollWidth).toBeLessThanOrEqual(main.clientWidth);
   },
 };
-export const LongStringsDesktop: Story = { ...LongStringsPhone, globals: { ...desktop, locale: 'de', theme: 'light' } };
+export const LongStringsDesktop: Story = { ...LongStringsPhone, globals: { ...desktop, locale: 'de' } };

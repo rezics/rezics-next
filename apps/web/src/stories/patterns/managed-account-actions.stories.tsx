@@ -180,7 +180,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const CurrentProfileOnly: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const link = await canvas.findByRole('link', { name: m.managed_actions_profile() });
@@ -195,7 +195,7 @@ export const CurrentProfileOnly: Story = {
 };
 export const Denied: Story = {
   args: { outcome: 'denied' },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.managed_actions_denied());
@@ -204,7 +204,7 @@ export const Denied: Story = {
 };
 export const Unavailable: Story = {
   args: { outcome: 'unavailable' },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.managed_actions_unavailable());
@@ -214,7 +214,7 @@ export const Unavailable: Story = {
 
 export const FailedThenReady: Story = {
   args: { outcome: 'failed-then-ready' },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const retry = await canvas.findByRole('button', { name: m.managed_actions_retry() });
@@ -231,7 +231,7 @@ export const FailedThenReady: Story = {
 
 export const DelayedRetry: Story = {
   args: { outcome: 'delayed-retry' },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('button', { name: m.managed_actions_retry() })).toBeDisabled();
@@ -246,7 +246,7 @@ export const DelayedRetry: Story = {
 
 export const SelfRename: Story = {
   args: { authEntry: 'self' },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const link = await canvas.findByRole('link', { name: m.managed_actions_rename() });
@@ -262,7 +262,7 @@ export const SelfRename: Story = {
 
 export const OrganizationWorkflows: Story = {
   args: { authEntry: 'organization' },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('link', { name: m.managed_actions_members() })).toHaveAttribute(
@@ -279,7 +279,7 @@ export const OrganizationWorkflows: Story = {
 
 export const SourceOperatorTransfer: Story = {
   args: { authEntry: 'transfer', outcome: 'unavailable' },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const link = await canvas.findByRole('link', { name: m.managed_actions_transfer() });
@@ -294,7 +294,7 @@ export const SourceOperatorTransfer: Story = {
 
 export const AuthEntryUndeployed: Story = {
   args: { authEntry: 'undeployed' },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('link', { name: m.managed_actions_profile() });
@@ -305,7 +305,7 @@ export const AuthEntryUndeployed: Story = {
 
 export const AuthEntriesUnavailable: Story = {
   args: { authEntry: 'unavailable' },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('link', { name: m.managed_actions_profile() });

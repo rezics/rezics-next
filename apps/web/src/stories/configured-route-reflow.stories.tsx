@@ -256,13 +256,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Phone320: Story = { globals: { locale: 'fr', viewport: { value: 'phone320', isRotated: false } } };
+export const Phone320: Story = { globals: { locale: 'fr' } };
 export const CompactPhone320: Story = { ...Phone320, args: { density: 'compact' } };
 export const LargeTextPhone320: Story = { ...Phone320, args: { largeText: true } };
 export const CompactLargeTextPhone320: Story = { ...Phone320, args: { density: 'compact', largeText: true } };
 export const NestedColumns: Story = {
   args: { width: 960 },
-  globals: { locale: 'fr', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'fr' },
 };
 export const CompactNestedColumns: Story = { ...NestedColumns, args: { width: 960, density: 'compact' } };
 export const PublishedPreviewPhone320: Story = { ...Phone320, args: { surface: 'published-preview' } };
@@ -277,7 +277,7 @@ export const PublishedPreviewCompactColumns: Story = {
 export const RightToLeftLargeText: Story = {
   ...Phone320,
   args: { rtl: true, largeText: true },
-  globals: { locale: 'ja', viewport: { value: 'phone320', isRotated: false } },
+  globals: { locale: 'ja' },
 };
 export const PublishedPreviewRightToLeft: Story = {
   ...RightToLeftLargeText,

@@ -170,7 +170,7 @@ function ConnectedCuration({
 const meta = {
   title: 'Catalogue/Presentation Resolution',
   id: 'patterns-curation-presentation-resolution',
-  globals: { locale: 'en', theme: 'light', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'en' },
   parameters: {
     layout: 'fullscreen',
     docs: {
@@ -275,11 +275,11 @@ export const IndependentForms: Story = {
 };
 export const IndependentFormsPhone: Story = {
   ...IndependentForms,
-  globals: { locale: 'zh-Hant', theme: 'dark', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'zh-Hant' },
 };
 export const RedirectPhone: Story = {
   render: () => <ConnectedCuration state="redirect" />,
-  globals: { locale: 'fr', theme: 'dark', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'fr' },
   play: async ({ canvasElement }) => {
     const preview = within(within(canvasElement).getByRole('region', { name: m.presentation_preview_title() }));
     const destination = preview.getByRole('link', { name: '@published-reader-with-long-name' });

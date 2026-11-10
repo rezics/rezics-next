@@ -38,7 +38,7 @@ const open: Story['play'] = async () => {
   await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
   await waitFor(() => expect(screen.queryByRole('menu') ?? screen.queryByRole('dialog')).not.toBeNull());
 };
-const phone = { viewport: { value: 'phone' } };
+const phone = {};
 const plain: MenuEntry[] = [
   { type: 'item', label: 'Open', onSelect: () => {} },
   { type: 'link', label: 'Visit subject', href: '/subjects/example' },
@@ -55,7 +55,7 @@ export const PlainEntries: Story = {
     await expect(labels).toEqual(['Open', 'Visit subject', 'Copy link']);
   },
 };
-export const PlainEntriesDark: Story = { ...PlainEntries, globals: { theme: 'dark' } };
+export const PlainEntriesDark: Story = { ...PlainEntries, globals: {} };
 export const SubmenuPage: Story = {
   args: {
     entries: [
@@ -108,7 +108,7 @@ export const RadioEntries: Story = {
 export const RadioDropdown: Story = {
   args: { entries: [] },
   render: () => <RadioExample />,
-  globals: { viewport: { value: 'desktop' } },
+  globals: {},
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
     await expect(await screen.findByRole('menuitemradio', { name: 'Planned' })).toBeChecked();
@@ -128,10 +128,10 @@ export const DestructiveEntry: Story = {
 };
 export const DesktopDropdown: Story = {
   args: { entries: plain },
-  globals: { viewport: { value: 'desktop' } },
+  globals: {},
   play: open,
 };
-export const DesktopDropdownDark: Story = { ...DesktopDropdown, globals: { theme: 'dark' } };
+export const DesktopDropdownDark: Story = { ...DesktopDropdown, globals: {} };
 
 const toolbarLabels = {
   sort: 'Sort by the most recently updated items in your personal collection',
@@ -449,7 +449,7 @@ export const ShelfToolbarCustomFormsDesktop: Story = {
   name: 'Shelf Toolbar Custom Forms Desktop',
   args: { entries: [] },
   render: () => <ShelfToolbarFormStory />,
-  globals: { viewport: { value: 'desktop' } },
+  globals: {},
   play: customFormRegression,
 };
 

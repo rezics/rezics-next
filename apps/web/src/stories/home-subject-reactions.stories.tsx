@@ -89,13 +89,13 @@ type Story = StoryObj<typeof meta>;
 
 export const SignedInSelected: Story = {
   args: { scenario: 'selected' },
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: {},
 };
 export const SignedOut: Story = {
   args: { scenario: 'signed-out' },
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
+  globals: {},
 };
 export const ProjectionUnavailable: Story = {
   args: { scenario: 'unavailable' },
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: {},
 };

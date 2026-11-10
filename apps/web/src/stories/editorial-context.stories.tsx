@@ -76,7 +76,7 @@ export const Ready: Story = {
 export const Empty: Story = { args: { scenario: 'create' } };
 export const Created: Story = {
   args: { scenario: 'create' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByRole('textbox', { name: m.catalogue_create_label() });
     await expectPhoneControls(canvasElement);
@@ -90,7 +90,7 @@ export const Created: Story = {
   },
 };
 export const Deleted: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const deleteButton = await canvas.findByRole('button', { name: m.editorial_delete() });
@@ -118,7 +118,7 @@ export const Deleted: Story = {
   },
 };
 export const Restored: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await remove(canvasElement);
     await expectPhoneControls(canvasElement);
@@ -157,7 +157,7 @@ export const Invalid: Story = {
 };
 export const Conflict: Story = {
   args: { scenario: 'conflict' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await create(canvasElement);
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.editorial_conflict());
@@ -187,7 +187,7 @@ export const Concealed: Story = {
 };
 export const Unavailable: Story = {
   args: { scenario: 'unavailable' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.editorial_unavailable());
@@ -199,7 +199,7 @@ export const Unavailable: Story = {
 };
 export const RetrySameCreation: Story = {
   args: { scenario: 'uncertain' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await create(canvasElement);
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.editorial_unavailable());
@@ -269,7 +269,7 @@ async function independentWorkspaceJourney(canvasElement: HTMLElement) {
 }
 export const IndependentWorkspacesPhone: Story = {
   render: () => <IndependentWorkspaces />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => independentWorkspaceJourney(canvasElement),
 };
 export const IndependentWorkspacesDesktopRtl: Story = {
@@ -278,7 +278,7 @@ export const IndependentWorkspacesDesktopRtl: Story = {
       <IndependentWorkspaces />
     </div>
   ),
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const workspaces = canvasElement.querySelectorAll<HTMLElement>('[data-editorial-workspace]');
     await expect(workspaces).toHaveLength(2);

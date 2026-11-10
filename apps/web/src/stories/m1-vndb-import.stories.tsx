@@ -21,8 +21,8 @@ import type { VndbJourneySnapshot } from '../library/personal-list-import/contro
 import type { ImportLibrarySnapshot } from '../library/showcase-import-return/browser';
 
 const noop = () => {};
-const phone = { viewport: { value: 'phone390', isRotated: false } };
-const desktop = { viewport: { value: 'desktop1280', isRotated: false } };
+const phone = {};
+const desktop = {};
 
 const preview = await vndbLifecyclePreviewSnapshot();
 const scoreReview = await vndbLifecycleScoreReviewSnapshot();

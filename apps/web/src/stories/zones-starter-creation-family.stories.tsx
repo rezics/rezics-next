@@ -151,7 +151,7 @@ async function save(canvasElement: HTMLElement) {
   return canvas;
 }
 export const Starter: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const select = await canvas.findByLabelText(m.zones_create_starter());
@@ -164,7 +164,7 @@ export const Starter: Story = {
     await expect(canvas.getByRole('button', { name: m.zones_create_submit() })).toHaveFocus();
   },
 };
-export const StarterPhone: Story = { ...Starter, globals: { viewport: { value: 'phone390', isRotated: false } } };
+export const StarterPhone: Story = { ...Starter, globals: {} };
 export const IndependentVisits: Story = {
   args: { independent: true },
   play: async ({ canvasElement }) => {
@@ -216,7 +216,7 @@ export const AuthoredNaming: Story = {
   },
 };
 export const LongLocalizedHelp: Story = {
-  globals: { locale: 'de', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'de' },
   play: async ({ canvasElement }) => {
     const canvas = await prepare(canvasElement);
     const longest = [...starterChoices].sort(

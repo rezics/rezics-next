@@ -35,17 +35,17 @@ export const ReferenceDetails = {
 } satisfies Story;
 export const Wrapping390: Story = {
   args: { scenario: 'pending' },
-  globals: { locale: 'de', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'de' },
   play: ReferenceDetails.play,
 };
 export const Wrapping1280: Story = {
   args: { scenario: 'approved' },
-  globals: { locale: 'de', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'de' },
   play: ReferenceDetails.play,
 };
 export const RightToLeft: Story = {
   args: { scenario: 'obsolete' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: (args) => (
     <div dir="rtl">
       <RealmClaimStatusExample {...args} />

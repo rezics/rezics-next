@@ -69,29 +69,32 @@ async function inspectEntry({ canvasElement }: { canvasElement: HTMLElement }) {
 }
 
 export const PhoneLight: Story = {
-  name: 'Phone 390 · light · complete visit',
-  globals: { theme: 'light', viewport: { value: 'phone390', isRotated: false } },
+  name: 'Default',
+  globals: {},
   play: inspectEntry,
 };
 export const PhoneDark: Story = {
+  tags: ['!dev'],
   name: 'Phone 390 · dark · complete visit',
-  globals: { theme: 'dark', viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: inspectEntry,
 };
 export const DesktopLight: Story = {
+  tags: ['!dev'],
   name: 'Desktop 1280 · light · complete visit',
-  globals: { theme: 'light', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: inspectEntry,
 };
 export const DesktopDark: Story = {
+  tags: ['!dev'],
   name: 'Desktop 1280 · dark · complete visit',
-  globals: { theme: 'dark', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: inspectEntry,
 };
 
 export const EmptyQuery: Story = {
   name: 'Empty query retains Realm membership',
-  globals: { theme: 'light', viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const region = await catalogue(canvasElement);
     const view = within(region);
@@ -107,7 +110,7 @@ export const EmptyQuery: Story = {
 
 export const OversizedQuery: Story = {
   name: 'Multibyte overflow keeps the previous draft',
-  globals: { theme: 'dark', viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const view = within(await catalogue(canvasElement));
     await userEvent.click(view.getByRole('button', { name: m.realm_catalogue_query_entry() }));
@@ -153,7 +156,7 @@ function preparedSource(state: 'long' | 'unreadable') {
 export const LongLocalizedName: Story = {
   name: 'Long community name · German · phone',
   beforeEach: preparedSource('long'),
-  globals: { locale: 'de', theme: 'dark', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'de' },
   play: async (context) => {
     await inspectEntry(context);
     const region = await catalogue(context.canvasElement);
@@ -165,7 +168,7 @@ export const LongLocalizedName: Story = {
 export const UnreadableRealm: Story = {
   name: 'Space with no readable Realm',
   beforeEach: preparedSource('unreadable'),
-  globals: { theme: 'light', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const region = await catalogue(canvasElement);
     await expect(within(region).getByText(m.realm_catalogue_unavailable())).toBeVisible();

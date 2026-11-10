@@ -90,7 +90,7 @@ const DeleteShelf = ({
 
 export const Default: Story = {
   render: () => <DeleteShelf />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   async play({ canvasElement }) {
     const trigger = within(canvasElement).getByRole('button', { name: 'Delete shelf' });
     await userEvent.click(trigger);
@@ -117,7 +117,7 @@ export const Cancel: Story = {
 
 export const ConfirmWithMedia: Story = {
   render: () => <DeleteShelf media size="sm" />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Delete shelf' }));
     const dialog = await settled(await screen.findByRole('alertdialog'));
@@ -147,7 +147,7 @@ export const LongAndCjkText: Story = {
       contentStyle={{ '--alert-dialog-caller-marker': 'preserved' } as CSSProperties}
     />
   ),
-  globals: { viewport: { value: 'phone390', isRotated: true } },
+  globals: {},
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Delete shelf' }));
     const dialog = await settled(await screen.findByRole('alertdialog', { name: /^刪除書架/ }));

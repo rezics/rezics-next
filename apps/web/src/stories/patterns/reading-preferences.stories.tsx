@@ -262,7 +262,7 @@ function ReadingLeaveExample() {
 }
 
 export const SingleDiscardDecision: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   render: () => <ReadingLeaveExample />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -316,5 +316,5 @@ export const SingleDiscardDecision: Story = {
 
 export const SingleDiscardDecisionPhone: Story = {
   ...SingleDiscardDecision,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
 };

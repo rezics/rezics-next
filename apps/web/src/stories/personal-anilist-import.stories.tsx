@@ -280,7 +280,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const ScoreReviewConsentAndReadback: Story = {
-  globals: { locale: 'en', viewport: { value: 'phone390' }, theme: 'light' },
+  globals: { locale: 'en' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const input = canvas.getByLabelText(m.library_anilist_file_label()) as HTMLInputElement;

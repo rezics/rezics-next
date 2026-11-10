@@ -7,7 +7,7 @@ import { PatternStory, pagePaths, pageReady } from './page';
 const meta = {
   title: 'Site Shell/CSP Rendering',
   id: 'patterns-app-shell-csp-rendering',
-  globals: { viewport: { value: 'phone' } },
+  globals: {},
   parameters: {
     layout: 'fullscreen',
     viewport: {

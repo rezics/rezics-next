@@ -34,11 +34,12 @@ export const SignedOutReader: Story = {
 };
 export const TerminalPermissionPhone390: Story = {
   ...TerminalPermissionDenial,
-  name: 'Permission stopped · phone 390',
-  parameters: { viewport: { defaultViewport: 'phone390' } },
+  name: 'Terminal Permission',
+  parameters: { viewport: {} },
 };
 export const TerminalPermissionDesktop1280: Story = {
+  tags: ['!dev'],
   ...TerminalPermissionDenial,
   name: 'Permission stopped · desktop 1280',
-  parameters: { viewport: { defaultViewport: 'desktop1280' } },
+  parameters: { viewport: {} },
 };

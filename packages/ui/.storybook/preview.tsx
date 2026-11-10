@@ -17,6 +17,7 @@ const preview: Preview = {
   initialGlobals: { theme: 'light', locale: 'en' },
   parameters: {
     a11y: { test: 'error' },
+    backgrounds: { disable: true },
     viewport: {
       options: {
         phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },

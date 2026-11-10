@@ -169,7 +169,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Populated: Story = {
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
     const inspect = view.getByRole('button', { name: m.moderation_history_open_receipt() });
@@ -180,7 +180,7 @@ export const Populated: Story = {
     );
   },
 };
-export const Narrow: Story = { globals: { viewport: { value: 'phone390' } } };
+export const Narrow: Story = { globals: {} };
 export const Withheld: Story = {
   args: {
     page: {

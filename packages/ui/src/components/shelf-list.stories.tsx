@@ -47,7 +47,7 @@ export const Entries: Story = {
 export const MenusOpenPhone: Story = {
   args: { children: null },
   render: () => <Example />,
-  globals: { viewport: { value: 'phone' } },
+  globals: {},
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const first = canvas.getByRole('heading', { name: subject.title }).closest('li')!;

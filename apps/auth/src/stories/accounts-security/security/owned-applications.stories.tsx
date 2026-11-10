@@ -6,7 +6,12 @@ import type { InventoryPage, OwnedClient } from '../../../security-inventory';
 import type { InventorySource } from '../../../security-inventory-view';
 import { authLocale, reviewParameters, button, waitFor } from '../../accounts-operations/story';
 
-export default { title: 'Account/Owned applications', id: 'pages-account-owned-applications', parameters: reviewParameters, decorators: [authLocale] };
+export default {
+  title: 'Account/Owned applications',
+  id: 'pages-account-owned-applications',
+  parameters: reviewParameters,
+  decorators: [authLocale],
+};
 
 const rows: OwnedClient[] = [
   {
@@ -75,8 +80,8 @@ async function disclose(canvas: HTMLElement, index: number) {
   (await waitFor(() => canvas.querySelectorAll<HTMLButtonElement>('[data-owned-control]')[index])).click();
   await waitFor(() => canvas.querySelector('[role="region"] h3'));
 }
-const phone = { viewport: { defaultViewport: 'phone390' } };
-const desktop = { viewport: { defaultViewport: 'desktop1280' } };
+const phone = { viewport: {} };
+const desktop = { viewport: {} };
 
 export const PhoneLightLongIdentity = {
   parameters: phone,

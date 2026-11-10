@@ -63,7 +63,11 @@ function CountUnavailablePageStory() {
   );
 }
 
-const meta = { title: 'Subjects/Subject', id: 'pages-subjects-subject', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Subjects/Subject',
+  id: 'pages-subjects-subject',
+  parameters: { layout: 'fullscreen' },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -159,7 +163,7 @@ export const SpoilerLongSummary: Story = {
 export const LibrarySlotMenuPhone: Story = {
   tags: ['!dev'],
   name: 'Collection menu open, drawer',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async (context) => {
     await subjectReady(context);
     const canvas = within(context.canvasElement);
@@ -176,7 +180,7 @@ export const LibrarySlotMenuPhone: Story = {
 export const LibrarySlotMenuDesktop: Story = {
   tags: ['!dev'],
   name: 'Collection menu open, popover',
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async (context) => {
     await subjectReady(context);
     const canvas = within(context.canvasElement);
@@ -190,7 +194,7 @@ export const LibrarySlotMenuDesktop: Story = {
 export const OverviewReactionsEnglishPhone: Story = {
   tags: ['!dev'],
   name: 'Overview / Full Reactions / English / Phone 390',
-  globals: { locale: 'en', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'en' },
   play: pageReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
 };
@@ -198,7 +202,7 @@ export const OverviewReactionsEnglishPhone: Story = {
 export const OverviewReactionsChinesePhone: Story = {
   tags: ['!dev'],
   name: 'Overview / Full Reactions / Chinese / Phone 390',
-  globals: { locale: 'zh-Hans', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'zh-Hans' },
   play: pageReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
 };

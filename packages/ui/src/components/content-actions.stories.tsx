@@ -170,7 +170,7 @@ export const MenuKeyboard: Story = {
 export const MenuOpenPhone: Story = {
   args: { onCopyLink: fn(), onReport: fn(async () => undefined), ownsContent: false, verified: true },
   render: () => <StrangerActions />,
-  globals: { viewport: { value: 'phone' } },
+  globals: {},
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'More actions' }));
     await expect(await screen.findByRole('dialog')).toBeVisible();

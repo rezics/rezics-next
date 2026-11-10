@@ -248,7 +248,7 @@ export const ExactReview: Story = {
 };
 export const UncertainRetry: Story = {
   args: { scenario: 'uncertain' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await change(canvasElement);
     const retry = await canvas.findByRole('button', { name: m.correction_retry() });
@@ -286,7 +286,7 @@ export const ValidTargetFiltering: Story = {
 };
 export const LongNamesAndEvidence: Story = {
   args: { long: true },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     await readable(canvasElement, 390);
     const canvas = await edit(canvasElement);
@@ -296,7 +296,7 @@ export const LongNamesAndEvidence: Story = {
 };
 export const RightToLeft: Story = {
   args: { long: true, rtl: true },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     await readable(canvasElement, 1280);
     await edit(canvasElement);

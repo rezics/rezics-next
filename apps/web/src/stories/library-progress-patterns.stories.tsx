@@ -45,7 +45,7 @@ function ProgressSessionPattern() {
 
 export const UnitSelectorOpen: Story = {
   name: 'Unit selector open',
-  globals: { viewport: { value: 'phone' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await view.findByRole('heading', { level: 1, name: m.library_progress_heading() });

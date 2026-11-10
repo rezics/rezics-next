@@ -169,20 +169,20 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const RetainedEvidence: Story = {
   args: { state: 'evidence' },
-  globals: { locale: 'en', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
 };
 export const NativeReview: Story = {
   args: { state: 'review' },
-  globals: { locale: 'en', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'en' },
   play: async ({ canvasElement }) => {
     await expect(within(canvasElement).getByText(m.library_anilist_labels_reviewed())).toBeVisible();
   },
 };
 export const CreatedAssignmentPending: Story = {
   args: { state: 'pending' },
-  globals: { locale: 'zh-Hant', viewport: { value: 'phone390' } },
+  globals: { locale: 'zh-Hant' },
 };
 export const CurrentAssignments: Story = {
   args: { state: 'current' },
-  globals: { locale: 'en', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'en' },
 };

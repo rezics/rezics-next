@@ -104,7 +104,7 @@ const select = async (canvasElement: HTMLElement, revision: number) => {
 };
 export const Revisions: Story = {};
 export const ContinueAndExplain: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: {
     docs: {
       description: {
@@ -394,7 +394,7 @@ function assertHistoryGeometry(page: HTMLElement) {
 }
 
 export const IndependentHistoryPhone: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: {
     docs: {
       description: {
@@ -454,7 +454,7 @@ export const IndependentHistoryPhone: Story = {
 
 export const IndependentHistoryDesktop: Story = {
   ...IndependentHistoryPhone,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 };
 
 export const IndependentHistoryRtl: Story = {
@@ -464,7 +464,7 @@ export const IndependentHistoryRtl: Story = {
 
 /** Explicit supplied presentation evidence; the original connected/native witnesses remain unchanged. */
 export const LongRevisionCurrentAndFields: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: {
     docs: {
       description: {
@@ -581,5 +581,5 @@ export const IndependentHistoryDesktopRtl: Story = {
 
 export const LongRevisionCurrentAndFieldsDesktop: Story = {
   ...LongRevisionCurrentAndFields,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 };

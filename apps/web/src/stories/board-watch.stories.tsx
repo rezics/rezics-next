@@ -24,7 +24,6 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
     viewport: {
-      defaultViewport: 'phone390',
       options: {
         phone390: { name: '390 × 844', styles: { width: '390px', height: '844px' } },
         desktop1280: { name: '1280 × 900', styles: { width: '1280px', height: '900px' } },
@@ -101,7 +100,7 @@ function Preview({ state }: { state: State }) {
 
 function story(state: State, viewport: Viewport): Story {
   return {
-    globals: { viewport: { value: viewport, isRotated: false }, theme: 'light' },
+    globals: {},
     render: () => <Preview state={state} />,
     play: async ({ canvasElement }) => {
       const canvas = within(canvasElement);

@@ -86,7 +86,7 @@ const meta = {
     },
   },
   args: { state: 'empty' },
-  globals: { locale: 'en', viewport: { value: 'phone320' } },
+  globals: { locale: 'en' },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
     const heading = await view.findByRole('heading', { level: 1 });

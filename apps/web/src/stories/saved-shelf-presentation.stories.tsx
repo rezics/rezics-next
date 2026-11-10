@@ -257,64 +257,66 @@ async function saveLayout(canvasElement: HTMLElement, layout: 'grid' | 'table') 
 }
 
 export const Phone390: Story = {
+  name: 'Default',
   render: () => <SavedShelfJourney />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => saveLayout(canvasElement, 'grid'),
 };
 
 export const Desktop1280: Story = {
+  tags: ['!dev'],
   render: () => <SavedShelfJourney />,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => saveLayout(canvasElement, 'grid'),
 };
 
 // Illustrative saved intent, using the same unavailable recovery as the retained native reader.
 export const SavedScoreLowest: Story = {
   render: () => <SavedShelfJourney scoreDirection="asc" />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
 };
 
 export const SavedScoreHighest: Story = {
   render: () => <SavedShelfJourney scoreDirection="desc" />,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
 };
 
 export const SavedViewPhone390: Story = {
   render: () => <SavedShelfJourney visitState="saved-view" />,
-  globals: { locale: 'en', theme: 'light', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
 };
 
 export const SavedViewDesktop1280: Story = {
   render: () => <SavedShelfJourney visitState="saved-view" />,
-  globals: { locale: 'zh-Hant', theme: 'dark', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'zh-Hant' },
 };
 
 export const CurrentUnavailablePhone390: Story = {
   render: () => <SavedShelfJourney visitState="current-unavailable" />,
-  globals: { locale: 'ja', theme: 'dark', viewport: { value: 'phone390' } },
+  globals: { locale: 'ja' },
 };
 
 export const CurrentUnavailableDesktop1280: Story = {
   render: () => <SavedShelfJourney visitState="current-unavailable" />,
-  globals: { locale: 'de', theme: 'light', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'de' },
 };
 
 export const RecoveredVisitPhone390: Story = {
   render: () => <SavedShelfJourney visitState="recovered-visit" />,
-  globals: { locale: 'fr', theme: 'light', viewport: { value: 'phone390' } },
+  globals: { locale: 'fr' },
 };
 
 export const RecoveredVisitDesktop1280: Story = {
   render: () => <SavedShelfJourney visitState="recovered-visit" />,
-  globals: { locale: 'es', theme: 'dark', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'es' },
 };
 
 export const SavedViewSimplifiedChinese: Story = {
   render: () => <SavedShelfJourney visitState="saved-view" />,
-  globals: { locale: 'zh-Hans', theme: 'light', viewport: { value: 'phone390' } },
+  globals: { locale: 'zh-Hans' },
 };
 
 export const SavedViewKorean: Story = {
   render: () => <SavedShelfJourney visitState="saved-view" />,
-  globals: { locale: 'ko', theme: 'dark', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'ko' },
 };

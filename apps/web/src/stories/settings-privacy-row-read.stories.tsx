@@ -19,7 +19,7 @@ const meta = {
   parameters: {
     layout: 'padded',
   },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   decorators: [
     (Story) => (
       <PatternStory visitor="Signed In" path="/settings#privacy">

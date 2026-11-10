@@ -109,19 +109,19 @@ const showRejectedRecovery: NonNullable<Story['play']> = async ({ canvasElement 
 };
 
 export const KoreanPhoneDark: Story = {
-  globals: { locale: 'ko', theme: 'dark', viewport: { value: 'phone390' } },
+  globals: { locale: 'ko' },
   play: retryCurrentPage,
 };
 export const GermanPhoneLight: Story = {
-  globals: { locale: 'de', theme: 'light', viewport: { value: 'phone390' } },
+  globals: { locale: 'de' },
 };
 export const FrenchDesktopDark: Story = {
-  globals: { locale: 'fr', theme: 'dark', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'fr' },
   args: { reject: true },
   play: showRejectedRecovery,
 };
 export const SpanishDesktopLight: Story = {
-  globals: { locale: 'es', theme: 'light', viewport: { value: 'desktop1280' } },
+  globals: { locale: 'es' },
 };
 
 function SelectedContextCorrectionUnsupported() {
@@ -142,5 +142,5 @@ function SelectedContextCorrectionUnsupported() {
 
 export const SelectedContextNeedsFreshGlobalVisit: Story = {
   render: () => <SelectedContextCorrectionUnsupported />,
-  globals: { locale: 'en', theme: 'light', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
 };

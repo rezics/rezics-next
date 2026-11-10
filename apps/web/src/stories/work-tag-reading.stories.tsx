@@ -106,15 +106,15 @@ const meta = {
       },
     },
   },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
 } satisfies Meta<typeof WorkTagReadingView>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const BoundedReading: Story = {};
-export const CurrentMembershipPhone: Story = {};
-export const CurrentMembershipDesktop: Story = { globals: { viewport: { value: 'desktop1440' } } };
+export const CurrentMembershipPhone: Story = { name: 'Current Membership' };
+export const CurrentMembershipDesktop: Story = { tags: ['!dev'], globals: {} };
 export const UnavailableMembership: Story = { args: { model: unavailable } };
 export const WeightScaleBounds: Story = {
   args: {

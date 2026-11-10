@@ -72,7 +72,7 @@ async function separated(first: HTMLElement, second: HTMLElement) {
 function correction(flow: 'facts' | 'identifiers', viewport: 'phone390' | 'desktop1280'): Story {
   return {
     args: { flow },
-    globals: { viewport: { value: viewport, isRotated: false } },
+    globals: {},
     play: async ({ canvasElement }) => {
       const canvas = within(canvasElement);
       const property = flow === 'facts' ? 'schema:inLanguage' : 'schema:sameAs';
@@ -108,7 +108,7 @@ function correction(flow: 'facts' | 'identifiers', viewport: 'phone390' | 'deskt
 function recipeCorrection(viewport: 'phone390' | 'desktop1280'): Story {
   return {
     args: { flow: 'recipe-correction' },
-    globals: { viewport: { value: viewport, isRotated: false } },
+    globals: {},
     play: async ({ canvasElement }) => {
       const canvas = within(canvasElement);
       for (const property of ['schema:recipeIngredient', 'schema:recipeYield'] as const) {
@@ -137,7 +137,7 @@ function recipeCorrection(viewport: 'phone390' | 'desktop1280'): Story {
 function languageRecovery(flow: 'album' | 'character' | 'recipe', viewport: 'phone390' | 'desktop1280'): Story {
   return {
     args: { flow, onCreate: createObserver() },
-    globals: { viewport: { value: viewport, isRotated: false } },
+    globals: {},
     play: async ({ canvasElement, args }) => {
       const canvas = within(canvasElement);
       const observed = args.onCreate as ReturnType<typeof createObserver>;

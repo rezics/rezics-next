@@ -93,13 +93,14 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const phone = { viewport: { value: 'phone390' } };
-const desktop = { viewport: { value: 'desktop1280' } };
+const phone = {};
+const desktop = {};
 
-export const MemberEntryPhone: Story = { globals: phone };
-export const MemberEntryDesktop: Story = { globals: desktop };
+export const MemberEntryPhone: Story = { name: 'Member Entry', globals: phone };
+export const MemberEntryDesktop: Story = { tags: ['!dev'], globals: desktop };
 
 export const SelectedLeavePendingPhone: Story = {
+  name: 'Selected Leave Pending',
   args: {
     page: { signedIn: true, realms: [selectedLeave], next: null },
     currentController: reviewController('pending'),
@@ -107,6 +108,7 @@ export const SelectedLeavePendingPhone: Story = {
   globals: phone,
 };
 export const SelectedLeavePendingDesktop: Story = {
+  tags: ['!dev'],
   args: {
     page: { signedIn: true, realms: [selectedLeave], next: null },
     currentController: reviewController('pending'),
@@ -115,6 +117,7 @@ export const SelectedLeavePendingDesktop: Story = {
 };
 
 export const UncertainExactRetryPhone: Story = {
+  name: 'Uncertain Exact Retry',
   args: {
     page: { signedIn: true, realms: [selectedLeave], next: null },
     currentController: reviewController('uncertain'),
@@ -122,6 +125,7 @@ export const UncertainExactRetryPhone: Story = {
   globals: phone,
 };
 export const UncertainExactRetryDesktop: Story = {
+  tags: ['!dev'],
   args: {
     page: { signedIn: true, realms: [selectedLeave], next: null },
     currentController: reviewController('uncertain'),

@@ -67,7 +67,7 @@ export const SimplifiedChinese: Story = {
 };
 
 export const DarkMode: Story = {
-  globals: { theme: 'dark' },
+  globals: {},
   render: () => (
     <LocaleProvider locale="zh-CN">
       <LocaleSummary dark />

@@ -131,17 +131,17 @@ function read(state: OwnMediaRead['state'], current: OwnMediaInventoryPage | nul
 }
 
 export const Empty: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <StoryRouter inventory={read('ready', page([]))} />,
 };
 
 export const SparseContinuation: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <StoryRouter inventory={read('ready', page([], 'opaque-next-cursor'))} />,
 };
 
 export const MixedLifecycleDesktop: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   render: () => (
     <StoryRouter
       inventory={read(
@@ -159,7 +159,7 @@ export const MixedLifecycleDesktop: Story = {
 };
 
 export const WithheldAndLongTextPhone: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false }, locale: 'zh-Hant' },
+  globals: { locale: 'zh-Hant' },
   render: () => (
     <StoryRouter
       inventory={read('ready', page([entry(mediaIds[2]!, 'available', { withheld: true, longType: true })]))}
@@ -168,7 +168,7 @@ export const WithheldAndLongTextPhone: Story = {
 };
 
 export const UnknownRemovalKeyboard: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   render: () => <StoryRouter inventory={read('ready', page([entry(mediaIds[2]!, 'available')]))} />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -183,17 +183,17 @@ export const UnknownRemovalKeyboard: Story = {
 };
 
 export const SessionPreparing: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <StoryRouter inventory={read('preparing', null)} />,
 };
 
 export const DependencyFailure: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   render: () => <StoryRouter inventory={read('unavailable', null)} />,
 };
 
 export const UnresolvedRemoval: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   render: () => (
     <StoryRouter inventory={read('ready', page([entry(mediaIds[0]!, 'available'), entry(mediaIds[1]!, 'uploaded')]))} />
   ),
@@ -210,5 +210,5 @@ export const UnresolvedRemoval: Story = {
 
 export const UnresolvedRemovalPhone: Story = {
   ...UnresolvedRemoval,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
 };

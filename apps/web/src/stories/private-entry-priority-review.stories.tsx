@@ -126,7 +126,7 @@ export const StaleIncarnation: Story = {
 };
 export const Uncertain: Story = {
   render: () => <Review scenario="uncertain" />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await setRank(canvasElement);
     await expect(await canvas.findByRole('button', { name: m.library_rich_entry_retry() })).toBeEnabled();

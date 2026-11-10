@@ -5,7 +5,11 @@ import { m } from '../../../../paraglide/messages.js';
 import { getLocale } from '../../../../paraglide/runtime.js';
 import { PageStory } from '../../../page';
 import { ready, reviewParameters } from '../support';
-const meta = { title: 'Account/Management/Accounts', id: 'pages-account-management-accounts', parameters: reviewParameters } satisfies Meta;
+const meta = {
+  title: 'Account/Management/Accounts',
+  id: 'pages-account-management-accounts',
+  parameters: reviewParameters,
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 function render(mode: Parameters<typeof selectManagementStory>[0]) {
@@ -117,12 +121,12 @@ async function directoryJourney({ canvasElement }: { canvasElement: HTMLElement 
 }
 export const CompletePhoneJourney: Story = {
   render: () => render('populated'),
-  globals: { locale: 'de', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'de' },
   play: directoryJourney,
 };
 export const CompleteDesktopJourney: Story = {
   ...CompletePhoneJourney,
-  globals: { locale: 'de', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'de' },
 };
 export const CompleteRtlJourney: Story = {
   ...CompletePhoneJourney,

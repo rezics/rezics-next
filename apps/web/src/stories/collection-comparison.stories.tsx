@@ -145,6 +145,8 @@ function Example({ layout = 'list', unavailable = false }: { layout?: 'list' | '
 const meta = {
   title: 'Library/Collection comparison',
   id: 'pages-library-collection-comparison',
+  component: Example,
+  argTypes: { layout: { control: 'inline-radio', options: ['list', 'grid'] } },
   parameters: {
     layout: 'fullscreen',
     docs: {
@@ -167,16 +169,15 @@ async function recoverExample(canvasElement: HTMLElement) {
   await expect(links[0]!.href).not.toBe(links[1]!.href);
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
-export const Phone390: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
-  render: () => <Example />,
-  play: async ({ canvasElement }) => recoverExample(canvasElement),
-};
 export const Desktop1280: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
-  render: () => <Example layout="grid" />,
+  name: 'Compare a recovered collection',
+  args: { layout: 'grid' },
   play: async ({ canvasElement }) => recoverExample(canvasElement),
 };
+
+// Keep old bookmarks while the catalogue presents this scenario once.
+export const Phone390: Story = { ...Desktop1280, args: { layout: 'list' }, tags: ['!dev'] };
+
 export const MissingDefinitionLabels: Story = {
   render: () => <Example unavailable />,
   play: async ({ canvasElement }) => recoverExample(canvasElement),

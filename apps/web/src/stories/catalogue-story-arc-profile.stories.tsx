@@ -144,7 +144,7 @@ export const Create: Story = {};
 export const CurrentArc: Story = { args: { existing: true } };
 export const PublicGlobalOrigin: Story = {
   args: { existing: true, publicOrigin: true },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     await expect(within(canvasElement).getByRole('link', { name: m.story_arc_return_public() })).toBeVisible();
   },
@@ -177,11 +177,11 @@ function UnsupportedOriginExample() {
 }
 export const UnsupportedPublicContext: Story = {
   render: () => <UnsupportedOriginExample />,
-  globals: { viewport: { value: 'desktop1440', isRotated: false } },
+  globals: {},
 };
 export const WorkOrder: Story = {
   args: { existing: true, work: true },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const article = canvas.getByRole('article');
@@ -217,7 +217,7 @@ async function create(canvasElement: HTMLElement) {
   return canvas;
 }
 export const Created: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await create(canvasElement);
     const link = await canvas.findByRole('link', { name: m.catalogue_create_open() });
@@ -368,7 +368,7 @@ export const WrongGrain: Story = { args: { scenario: 'wrong-type', existing: tru
 // Illustrative production compositions only. All added play assertions are authored UNRUN.
 export const LongWorkReference: Story = {
   args: { existing: true, work: true, workLabel: 'long' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('button', { name: m.fictional_work_choose_another() });

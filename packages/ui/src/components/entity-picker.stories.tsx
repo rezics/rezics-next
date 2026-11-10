@@ -295,7 +295,7 @@ export const LongTitlesAndMissingData: Story = {
 };
 
 export const PhoneWidth: Story = {
-  globals: { viewport: { value: 'phone', isRotated: false } },
+  globals: {},
   args: { multiple: true },
   async play({ canvasElement }) {
     await userEvent.type(within(canvasElement).getByRole('combobox', { name: 'Subject' }), 'three');

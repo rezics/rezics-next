@@ -234,7 +234,7 @@ const meta = {
       },
     },
   },
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   render: () => <Example />,
 } satisfies Meta;
 export default meta;
@@ -281,7 +281,7 @@ export const UnreadUnavailable: Story = {
   },
 };
 export const DesktopPersonalNavigation: Story = {
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async (context) => {
     await pageReady(context);
     const navigation = within(within(context.canvasElement).getByRole('navigation', { name: m.shell_navigation() }));
@@ -296,7 +296,7 @@ export const DesktopPersonalNavigation: Story = {
   },
 };
 export const DesktopPersonalUnavailable: Story = {
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   parameters: { admitted: [] },
   play: async (context) => {
     await pageReady(context);

@@ -141,13 +141,13 @@ async function inspectLong(canvasElement: HTMLElement) {
 export const LongLocalizedPhone: Story = {
   render: () => <LongReview />,
   parameters: { viewport: viewports },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => inspectLong(canvasElement),
 };
 export const LongLocalizedDesktopRtl: Story = {
   ...LongLocalizedPhone,
   render: () => <LongReview rtl />,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
 };
 
 export const IndependentReviewsAndActions: Story = {

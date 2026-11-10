@@ -10,7 +10,12 @@ import {
 } from '../../../organization-membership-roster-view';
 import { AuthStory, authLocale, reviewParameters } from '../story';
 
-export default { title: 'Account/Roster navigation', id: 'pages-account-roster-navigation', parameters: reviewParameters, decorators: [authLocale] };
+export default {
+  title: 'Account/Roster navigation',
+  id: 'pages-account-roster-navigation',
+  parameters: reviewParameters,
+  decorators: [authLocale],
+};
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const holders: Holder[] = [
   {
@@ -107,8 +112,8 @@ function RosterStory({ mode, dark = false }: { mode: Mode; dark?: boolean }) {
     </AuthStory>
   );
 }
-const phone = { ...reviewParameters, viewport: { ...reviewParameters.viewport, defaultViewport: 'phone390' } };
-const desktop = { ...reviewParameters, viewport: { ...reviewParameters.viewport, defaultViewport: 'desktop1280' } };
+const phone = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
+const desktop = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
 export const FirstPhoneLight = { parameters: phone, render: () => <RosterStory mode="first" /> };
 export const MiddleDesktopDark = { parameters: desktop, render: () => <RosterStory mode="middle" dark /> };
 export const BackwardsPhoneDark = { parameters: phone, render: () => <RosterStory mode="backwards" dark /> };

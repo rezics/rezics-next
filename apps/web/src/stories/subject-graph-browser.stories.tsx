@@ -156,7 +156,7 @@ const meta = {
     },
   },
   args: { state: 'pending' },
-  globals: { locale: 'en', viewport: { value: 'phone390' } },
+  globals: { locale: 'en' },
 } satisfies Meta<typeof GraphBrowserStory>;
 
 export default meta;

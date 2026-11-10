@@ -235,13 +235,13 @@ const comparisonViewports = {
 export const SuppliedLongComparisonPhone: Story = {
   render: () => <SuppliedComparisons />,
   parameters: { viewport: comparisonViewports },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => suppliedComparisonJourney(canvasElement),
 };
 export const SuppliedLongComparisonDesktopRtl: Story = {
   render: () => <SuppliedComparisons rtl />,
   parameters: { viewport: comparisonViewports },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => suppliedComparisonJourney(canvasElement),
 };
 

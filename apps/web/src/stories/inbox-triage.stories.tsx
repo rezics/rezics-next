@@ -4,7 +4,11 @@ import { m } from '../paraglide/messages.js';
 import { inboxTriageStory, resetInboxTriageStory } from '../kernel/fake/notifications';
 import { PageStory } from './page';
 
-const meta = { title: 'Account/Inbox Page', id: 'pages-account-inbox', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Account/Inbox Page',
+  id: 'pages-account-inbox',
+  parameters: { layout: 'fullscreen' },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -26,7 +30,7 @@ function expectPhoneControl(control: HTMLElement, canvasElement: HTMLElement) {
 
 export const TriageJourney: Story = {
   name: 'Unread triage and deliberate acknowledgement',
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   beforeEach: () => resetInboxTriageStory(),
   render: () => <PageStory visitor="Signed In" path="/inbox?fixture=triage-journey" />,
   play: async ({ canvasElement }) => {

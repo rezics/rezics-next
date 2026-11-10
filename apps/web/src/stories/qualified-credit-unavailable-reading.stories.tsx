@@ -216,22 +216,22 @@ const readingJourney: Story['play'] = async ({ canvasElement }) => {
 };
 
 export const Narrow320: Story = {
-  globals: { viewport: { value: 'phone320', isRotated: false } },
+  globals: {},
   render: () => <Reading />,
   play: readingJourney,
 };
 export const Text200Percent320: Story = {
-  globals: { viewport: { value: 'phone320', isRotated: false } },
+  globals: {},
   render: () => <Reading enlarged />,
   play: readingJourney,
 };
 export const RightToLeft320: Story = {
-  globals: { viewport: { value: 'phone320', isRotated: false } },
+  globals: {},
   render: () => <Reading rtl />,
   play: readingJourney,
 };
 export const Desktop: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   render: () => <Reading />,
   play: readingJourney,
 };

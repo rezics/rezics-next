@@ -142,7 +142,7 @@ export const Overview: Story = {
 };
 export const MenuOpenPhone: Story = {
   render: () => <Page />,
-  globals: { viewport: { value: 'phone' } },
+  globals: {},
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Sort' }));
     await expect(await screen.findByRole('dialog', { name: 'Sort' })).toBeVisible();

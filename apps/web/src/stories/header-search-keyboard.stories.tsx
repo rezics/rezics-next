@@ -54,7 +54,7 @@ export const KeyboardEntry: Story = {
 
 /** Exercises the signed-in Subject route through AppShell's actual default HeaderSearch owner. */
 export const SubjectDefaultCompositionNaming: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
   play: async (context) => {
     await pageReady(context);

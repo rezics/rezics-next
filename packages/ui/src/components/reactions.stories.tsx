@@ -27,13 +27,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const phone390 = {
-  viewports: {
-    phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-  },
-  defaultViewport: 'phone390',
-};
-
 const kindNames = ['Upvote', 'Downvote', 'Like', 'Love', 'Laugh', 'Insightful', 'Sad'] as const;
 
 function PendingReactions({
@@ -149,7 +142,7 @@ export const ChooseReaction: Story = {
 };
 export const MenuOpenPhone: Story = {
   render: () => <PendingReactions initialCounts={{ upvote: 8 }} initialValue={null} />,
-  globals: { viewport: { value: 'phone' } },
+  globals: {},
   async play({ canvasElement }) {
     const choices = await openChoices(canvasElement);
     await expect(within(choices).getByRole('button', { name: /^Like(?:\s|$)/ })).toBeVisible();
@@ -304,7 +297,6 @@ async function crowdedPhoneReady({ canvasElement }: { canvasElement: HTMLElement
 
 export const CrowdedGermanPhone: Story = {
   name: 'All reactions / German / Phone 390',
-  parameters: { viewport: phone390 },
   render: () => crowdedPhone('de'),
   play: crowdedPhoneReady,
 };
@@ -312,7 +304,6 @@ export const CrowdedGermanPhone: Story = {
 export const CrowdedChinesePhone: Story = {
   name: 'All reactions / Chinese / Phone 390',
   globals: { locale: 'zh-Hans' },
-  parameters: { viewport: phone390 },
   render: () => crowdedPhone('zh-Hans'),
   play: crowdedPhoneReady,
 };

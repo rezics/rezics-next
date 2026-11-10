@@ -103,7 +103,7 @@ async function activate(canvas: HTMLElement) {
 function story(journey: Journey, viewport: 'phone390' | 'desktop1280', dark = false) {
   return {
     render: () => <JourneyPage journey={journey} dark={dark} />,
-    globals: { viewport: { value: viewport, isRotated: false } },
+    globals: {},
     play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
       if (journey === 'ready' || journey === 'missing') return;
       await activate(canvasElement);

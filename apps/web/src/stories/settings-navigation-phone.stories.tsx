@@ -141,7 +141,7 @@ function SettingsNavigationPhoneExample() {
 export const DraftDecisionPhoneRecovery: Story = {
   name: 'Draft decision and retired Reading recovery',
   tags: ['!dev'],
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => <SettingsNavigationPhoneExample />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

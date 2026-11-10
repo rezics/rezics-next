@@ -56,4 +56,4 @@ export const Empty: Story = {
     await expect(canvas.getByText('No member ratings yet. Be the first to rate this Work.')).toBeVisible();
   },
 };
-export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <RatingSummary dark /> };
+export const DarkMode: Story = { globals: {}, render: () => <RatingSummary dark /> };

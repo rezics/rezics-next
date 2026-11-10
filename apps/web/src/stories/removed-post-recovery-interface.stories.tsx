@@ -186,7 +186,7 @@ type Story = StoryObj<typeof meta>;
 
 // Authored observations only: browser, geometry, keyboard and physical review remain UNRUN.
 export const Canonical: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const owner = canvasElement.querySelector<HTMLLIElement>('#recovery-author')!;

@@ -99,8 +99,8 @@ function ReturnStory({
     </AuthStory>
   );
 }
-const phone = { ...reviewParameters, viewport: { ...reviewParameters.viewport, defaultViewport: 'phone390' } };
-const desktop = { ...reviewParameters, viewport: { ...reviewParameters.viewport, defaultViewport: 'desktop1280' } };
+const phone = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
+const desktop = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
 export const UnsentPhoneLight = {
   parameters: phone,
   render: () => <ReturnStory initialHistory={['unsent']} current="empty" />,

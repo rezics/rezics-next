@@ -165,7 +165,7 @@ async function phoneGeometry(canvasElement: HTMLElement) {
 }
 export const Desktop: Story = {};
 export const Phone: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await draft(canvasElement);
     await phoneGeometry(canvasElement);
@@ -184,7 +184,7 @@ export const Phone: Story = {
 };
 export const LongFallbackPhone: Story = {
   args: { variant: 'long' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     await draft(canvasElement);
     await expect(canvasElement.querySelector('[data-slot="character-initial-fact"] legend')).toHaveAttribute(

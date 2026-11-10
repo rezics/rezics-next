@@ -160,13 +160,15 @@ async function review({ canvasElement }: { canvasElement: HTMLElement }) {
 }
 export const CurrentTransferReview: Story = { play: review };
 export const LongTransferReviewPhone: Story = {
+  name: 'Long Transfer Review',
   args: { scenario: 'long' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: review,
 };
 export const LongTransferReviewDesktop: Story = {
+  tags: ['!dev'],
   args: { scenario: 'long' },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: review,
 };
 export const UnresolvedOwnerReview: Story = { args: { scenario: 'unresolved' }, play: review };

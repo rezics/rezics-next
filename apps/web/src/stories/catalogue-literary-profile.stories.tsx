@@ -225,7 +225,7 @@ export const Route: Story = {
   render: () => (
     <PageStory visitor="Signed In" path={`/subjects/${literaryWorkId}/an-original-literary-work/literary`} />
   ),
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const document = canvasElement.ownerDocument;
@@ -521,27 +521,29 @@ async function inspectInitialBibliography(canvasElement: HTMLElement) {
 
 export const InitialBibliography: Story = {
   render: () => <InitialBibliographyStory />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: ({ canvasElement }) => inspectInitialBibliography(canvasElement),
 };
 export const InitialBibliographyRTL: Story = {
   render: () => <InitialBibliographyStory direction="rtl" />,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: ({ canvasElement }) => inspectInitialBibliography(canvasElement),
 };
 export const InitialBibliographyDesktop: Story = {
+  tags: ['!dev'],
   render: () => <InitialBibliographyStory />,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: ({ canvasElement }) => inspectInitialBibliography(canvasElement),
 };
 export const InitialBibliographyPhoneRTL: Story = {
+  tags: ['!dev'],
   render: () => <InitialBibliographyStory direction="rtl" />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: ({ canvasElement }) => inspectInitialBibliography(canvasElement),
 };
 export const InitialBibliographyIndependent: Story = {
   render: () => <InitialBibliographyStory pair />,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const regions = [

@@ -299,7 +299,7 @@ export const IndependentKeyboard: Story = {
 
 export const IndependentPhone: Story = {
   render: () => <IndependentExample />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: {
     docs: {
       description: {
@@ -367,7 +367,7 @@ export const LongSelectedEvidencePhone: Story = {
       </AppShell>
     </PatternStory>
   ),
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: {
     docs: {
       description: {

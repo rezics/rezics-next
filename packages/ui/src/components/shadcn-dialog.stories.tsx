@@ -258,7 +258,7 @@ const expectWithinViewport = (panel: HTMLElement) => {
 
 export const LongFormWorkflow: Story = {
   render: () => <LongProfileEdit />,
-  globals: { viewport: { value: 'phone390', isRotated: true } },
+  globals: {},
   async play({ canvasElement }) {
     const trigger = within(canvasElement).getByRole('button', { name: 'Edit profile' });
     const callbackCounts = () => {
@@ -378,7 +378,7 @@ function NestedCommandPalette() {
 
 export const NestedScrollCompatibility: Story = {
   render: () => <NestedCommandPalette />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   async play({ canvasElement }) {
     const trigger = within(canvasElement).getByRole('button', { name: 'Open command palette' });
     await userEvent.click(trigger);
@@ -444,7 +444,7 @@ function FullScreenCoverViewer() {
 
 export const FullScreenCoverCompatibility: Story = {
   render: () => <FullScreenCoverViewer />,
-  globals: { viewport: { value: 'phone390', isRotated: true } },
+  globals: {},
   async play({ canvasElement }) {
     const trigger = within(canvasElement).getByRole('button', { name: 'Open cover viewer' });
     await userEvent.click(trigger);

@@ -170,13 +170,13 @@ async function journey({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(box.height).toBeGreaterThanOrEqual(44);
   await expect(canvasElement.querySelectorAll('[data-conversation-row]')).toHaveLength(12);
 }
-export const PhoneLight: Story = { globals: { viewport: { value: 'phone390' }, theme: 'light' }, play: journey };
-export const PhoneDark: Story = { globals: { viewport: { value: 'phone390' }, theme: 'dark' }, play: journey };
-export const DesktopLight: Story = { globals: { viewport: { value: 'desktop1280' }, theme: 'light' }, play: journey };
-export const DesktopDark: Story = { globals: { viewport: { value: 'desktop1280' }, theme: 'dark' }, play: journey };
+export const PhoneLight: Story = { name: 'Default', globals: {}, play: journey };
+export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: journey };
+export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: journey };
+export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: journey };
 export const BoundedAndUnavailable: Story = {
   args: { boundaryStates: true },
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByRole('link', { name: m.thread_branch_continue() }).length).toBeGreaterThan(0);

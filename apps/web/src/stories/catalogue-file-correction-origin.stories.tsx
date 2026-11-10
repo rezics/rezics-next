@@ -152,29 +152,29 @@ const correctAndReturn: NonNullable<Story['play']> = async ({ canvasElement }) =
   await userEvent.click(await canvas.findByRole('link', { name: m.catalogue_file_reader_return() }));
   await expect(await canvas.findByRole('region', { name: m.catalogue_file_inspection_title() })).toBeVisible();
 };
-export const PublicEntry: Story = { globals: { locale: 'en', theme: 'light', viewport: { value: 'phone390' } } };
+export const PublicEntry: Story = { globals: { locale: 'en' } };
 export const CurrentScalarReturn: Story = {
-  globals: { locale: 'zh-Hant', theme: 'dark', viewport: { value: 'desktop1440' } },
+  globals: { locale: 'zh-Hant' },
   play: correctAndReturn,
 };
 export const Restart: Story = {
   args: { state: 'restart' },
-  globals: { locale: 'zh-Hans', theme: 'light', viewport: { value: 'phone390' } },
+  globals: { locale: 'zh-Hans' },
 };
 export const UnsupportedAndGlobal: Story = {
   args: { state: 'unsupported' },
-  globals: { locale: 'ja', theme: 'dark', viewport: { value: 'desktop1440' } },
+  globals: { locale: 'ja' },
 };
-export const KoreanEntry: Story = { globals: { locale: 'ko', theme: 'dark', viewport: { value: 'phone390' } } };
+export const KoreanEntry: Story = { globals: { locale: 'ko' } };
 export const GermanReturn: Story = {
-  globals: { locale: 'de', theme: 'light', viewport: { value: 'desktop1440' } },
+  globals: { locale: 'de' },
   play: correctAndReturn,
 };
 export const FrenchRestart: Story = {
   args: { state: 'restart' },
-  globals: { locale: 'fr', theme: 'dark', viewport: { value: 'phone390' } },
+  globals: { locale: 'fr' },
 };
 export const SpanishUnsupported: Story = {
   args: { state: 'unsupported' },
-  globals: { locale: 'es', theme: 'light', viewport: { value: 'desktop1440' } },
+  globals: { locale: 'es' },
 };

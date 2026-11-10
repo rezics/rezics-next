@@ -22,7 +22,6 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
     viewport: {
-      defaultViewport: 'slowMode390',
       options: {
         slowMode390: { name: '390 × 844', styles: { width: '390px', height: '844px' } },
         slowMode1280: { name: '1280 × 900', styles: { width: '1280px', height: '900px' } },

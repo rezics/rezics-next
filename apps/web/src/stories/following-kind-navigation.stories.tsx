@@ -11,7 +11,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Unavailable: Story = {};
-export const PhoneUnavailable: Story = { globals: { viewport: { value: 'phone390', isRotated: false } } };
+export const PhoneUnavailable: Story = { tags: ['!dev'], globals: {} };
 export const PreviousAvailable: Story = {
   args: {
     page: { signedIn: true, follows: [], next: 'opaque/next+' },

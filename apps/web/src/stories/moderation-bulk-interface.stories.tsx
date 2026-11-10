@@ -87,7 +87,7 @@ async function confirm(canvasElement: HTMLElement) {
 }
 
 export const SelectingReviewCancel: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement, args }) => {
     const view = within(bulk(canvasElement));
     const select = view.getByRole('button', { name: m.moderation_bulk_select_loaded() });
@@ -208,7 +208,7 @@ export const RefreshingReceipts: Story = {
     ...PartialResults.args,
     onRefresh: fn(() => new Promise<void>(() => {})),
   },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement, args }) => {
     const view = await review(canvasElement);
     await userEvent.click(view.getByRole('button', { name: m.moderation_bulk_confirm({ count: 3 }) }));
@@ -298,11 +298,11 @@ export const RetiredResults: Story = {
 
 export const LongLocalizedReview: Story = {
   ...ReviewConfirmation,
-  globals: { locale: 'fr', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'fr' },
 };
 export const LongLocalizedReviewDesktop: Story = {
   ...LongLocalizedReview,
-  globals: { locale: 'fr', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'fr' },
 };
 export const LongLocalizedReviewRtl: Story = {
   ...LongLocalizedReview,
@@ -331,7 +331,7 @@ export const LongLocalizedUncertain: Story = {
       throw new TypeError('Failed to fetch');
     }),
   },
-  globals: { locale: 'fr', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'fr' },
   play: async ({ canvasElement }) => {
     const view = await confirm(canvasElement);
     await expect(await view.findByRole('button', { name: m.moderation_bulk_retry() })).toBeVisible();
@@ -341,7 +341,7 @@ export const LongLocalizedUncertain: Story = {
 };
 export const LongLocalizedDesktop: Story = {
   ...LongLocalizedUncertain,
-  globals: { locale: 'fr', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'fr' },
 };
 export const LongLocalizedRtlPhone: Story = {
   ...LongLocalizedUncertain,
@@ -365,7 +365,7 @@ export const LongLocalizedRtlDesktop: Story = {
 };
 export const FailedRefreshRtl: Story = {
   ...FailedRefreshReceipts,
-  globals: { locale: 'fr', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'fr' },
   decorators: [
     (Story) => (
       <div dir="rtl">
@@ -376,7 +376,7 @@ export const FailedRefreshRtl: Story = {
 };
 export const FailedRefreshDesktop: Story = {
   ...FailedRefreshReceipts,
-  globals: { locale: 'fr', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'fr' },
 };
 export const FailedRefreshRtlDesktop: Story = {
   ...FailedRefreshDesktop,

@@ -87,8 +87,8 @@ function Fixture({ mode, dark }: { mode: Mode; dark: boolean }) {
 }
 
 const page = (mode: Mode, dark = false) => <Fixture mode={mode} dark={dark} />;
-const phone = { ...reviewParameters, viewport: { ...reviewParameters.viewport, defaultViewport: 'phone390' } };
-const desktop = { ...reviewParameters, viewport: { ...reviewParameters.viewport, defaultViewport: 'desktop1280' } };
+const phone = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
+const desktop = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
 
 async function retire(canvas: HTMLElement) {
   window.dispatchEvent(new PageTransitionEvent('pagehide'));

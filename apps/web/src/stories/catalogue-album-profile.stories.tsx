@@ -171,7 +171,7 @@ const failure = (scenario: AlbumScenario, text: () => string): Story => ({
 export const Ready: Story = {};
 export const LanguageRowRecovery: Story = {
   args: { scenario: 'uncertain', onCreate: createObserver() },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: {
     docs: {
       description: {

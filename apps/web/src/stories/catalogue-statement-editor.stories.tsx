@@ -141,7 +141,7 @@ export const Conflict: Story = {
 };
 export const Unavailable: Story = {
   args: { scenario: 'lost-response', onRequests: fn() },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: {
     docs: {
       description: {
@@ -488,19 +488,19 @@ const familyEvidence = {
 };
 export const FamilyPhone: Story = {
   render: () => <FamilyExample />,
-  globals: { viewport: { value: 'phone390', isRotated: false }, locale: 'de' },
+  globals: { locale: 'de' },
   parameters: familyEvidence,
   play: ({ canvasElement }) => familyJourney(canvasElement, 390),
 };
 export const FamilyDesktop: Story = {
   render: () => <FamilyExample />,
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   parameters: familyEvidence,
   play: ({ canvasElement }) => familyJourney(canvasElement, 1280),
 };
 export const FamilyRtl: Story = {
   render: () => <FamilyExample rtl />,
-  globals: { viewport: { value: 'phone390', isRotated: false }, locale: 'fr' },
+  globals: { locale: 'fr' },
   parameters: familyEvidence,
   play: async ({ canvasElement }) => {
     await familyJourney(canvasElement, 390);

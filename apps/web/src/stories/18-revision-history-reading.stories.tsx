@@ -151,26 +151,20 @@ async function readingVisit({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(region.scrollWidth).toBeLessThanOrEqual(region.clientWidth + 1);
 }
 
-export const PhoneLight: Story = { globals: { viewport: { value: 'phone390' }, theme: 'light' }, play: readingVisit };
-export const PhoneDark: Story = { globals: { viewport: { value: 'phone390' }, theme: 'dark' }, play: readingVisit };
-export const DesktopLight: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
-  play: readingVisit,
-};
-export const DesktopDark: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
-  play: readingVisit,
-};
+export const PhoneLight: Story = { name: 'Default', globals: {}, play: readingVisit };
+export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: readingVisit };
+export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: readingVisit };
+export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: readingVisit };
 
 export const LongMetadata: Story = {
   args: { long: true },
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: {},
   play: readingVisit,
 };
 
 export const RemovedDocument: Story = {
   args: { removed: true },
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.revision_history_inspect({ number: '2' }) }));
@@ -183,7 +177,7 @@ export const RemovedDocument: Story = {
 
 export const PartialPageRetry: Story = {
   args: { partialFailure: true },
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.revision_history_inspect({ number: '3' }) }));
@@ -199,10 +193,10 @@ export const PartialPageRetry: Story = {
   },
 };
 
-export const SuppliedOne: Story = { args: { count: 1 }, globals: { viewport: { value: 'phone390' } } };
+export const SuppliedOne: Story = { args: { count: 1 }, globals: {} };
 export const SuppliedHundred: Story = {
   args: { count: 100 },
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.selectOptions(canvas.getByLabelText(m.revision_history_choose()), '99');

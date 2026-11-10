@@ -38,13 +38,13 @@ const showToast = async (canvasElement: HTMLElement) => {
 };
 
 export const Light: Story = {
-  globals: { theme: 'light' },
+  globals: {},
   render: () => <Example />,
   async play({ canvasElement }) {
     await showToast(canvasElement);
   },
 };
-export const Dark: Story = { ...Light, globals: { theme: 'dark' } };
+export const Dark: Story = { ...Light, globals: {} };
 
 export const ReplacementAndUndo: Story = {
   render: () => <Example />,

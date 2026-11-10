@@ -6,7 +6,11 @@ import { getLocale } from '../../../../paraglide/runtime.js';
 import { AccountManagementPage } from '../../../../accounts/management/pages';
 import { PageStory, PatternStory } from '../../../page';
 import { ready, reviewParameters } from '../support';
-const meta = { title: 'Account/Management/Organization', id: 'pages-account-management-organization', parameters: reviewParameters } satisfies Meta;
+const meta = {
+  title: 'Account/Management/Organization',
+  id: 'pages-account-management-organization',
+  parameters: reviewParameters,
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 function render(mode: Parameters<typeof selectManagementStory>[0]) {
@@ -107,7 +111,7 @@ async function holdersGeometry({ canvasElement }: { canvasElement: HTMLElement }
 }
 export const LongHoldersPhoneRtl: Story = {
   render: () => suppliedHolders(),
-  globals: { locale: 'de', viewport: { value: 'phone390', isRotated: false } },
+  globals: { locale: 'de' },
   play: async (context) => {
     await holdersGeometry(context);
     const missing = within(context.canvasElement)
@@ -119,7 +123,7 @@ export const LongHoldersPhoneRtl: Story = {
 };
 export const LongHoldersDesktopRtl: Story = {
   ...LongHoldersPhoneRtl,
-  globals: { locale: 'de', viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { locale: 'de' },
 };
 export const EmptyCurrentHolderPage: Story = {
   ...LongHoldersPhoneRtl,

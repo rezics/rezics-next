@@ -131,7 +131,7 @@ export const Directory: Story = {
 };
 export const MultilingualDirectory: Story = {
   args: { scenario: 'directory-multilingual' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const list = within(canvasElement).getByRole('list', { name: m.ctxw_title() });
     const heading = within(list).getByRole('heading', { name: longContextTitle, level: 2 });
@@ -317,7 +317,7 @@ async function readTechnicalDetails({ canvasElement }: { canvasElement: HTMLElem
 function readerStory(locale: string, viewport: 'phone390' | 'desktop1280', theme: 'light' | 'dark'): Story {
   return {
     render: () => <ReaderExample />,
-    globals: { locale, theme, viewport: { value: viewport, isRotated: false } },
+    globals: { locale },
     play: readTechnicalDetails,
   };
 }
@@ -349,7 +349,7 @@ export const ReaderNoSettings: Story = { render: () => <ReaderExample empty="set
 export const ReaderNoDefaults: Story = { render: () => <ReaderExample empty="defaults" /> };
 export const IndependentReaders: Story = {
   render: () => <ReaderExample pair />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async (context) => {
     await readTechnicalDetails(context);
     const panels = context.canvasElement.querySelectorAll('article');

@@ -110,7 +110,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const SameImmutableRevision: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await readable(canvasElement.querySelector('main')!);
@@ -180,13 +180,13 @@ export const SameImmutableRevision: Story = {
 
 export const Phone390: Story = {
   ...SameImmutableRevision,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
 };
 export const RightToLeft: Story = { ...Phone390, args: { direction: 'rtl' } };
 
 const retry = fn();
 export const LocalStates: Story = {
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: () => (
     <main className="mx-auto flex min-w-0 max-w-3xl flex-col gap-10 p-4 sm:p-8">
       <ExactRevisionView identity={identity} page={{ state: 'loading' }} />

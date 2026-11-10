@@ -94,8 +94,8 @@ async function review({ canvasElement }: { canvasElement: HTMLElement }) {
   const action = await waitFor(() => button(canvasElement, m.auth_transfer_recovery_review()));
   action.click();
 }
-const phone = { ...reviewParameters, viewport: { ...reviewParameters.viewport, defaultViewport: 'phone390' } };
-const desktop = { ...reviewParameters, viewport: { ...reviewParameters.viewport, defaultViewport: 'desktop1280' } };
+const phone = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
+const desktop = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
 export const AcknowledgedPhoneLight = { parameters: phone, render: () => <ReturnStory />, play: review };
 export const AcknowledgedReadUnavailableDesktopDark = {
   parameters: desktop,

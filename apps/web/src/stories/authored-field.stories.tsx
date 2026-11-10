@@ -207,7 +207,7 @@ export const Conflict: Story = {
 };
 export const Unavailable: Story = {
   args: { scenario: 'lost-response' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   parameters: {
     docs: {
       description: {
@@ -503,7 +503,7 @@ export const LongSuppliedContent: Story = {
 export const PhoneAssociations: Story = {
   render: () => <IndependentExamples long />,
   parameters: unrun,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const { articles } = await independentForms(canvasElement);
     for (const article of articles) {
@@ -673,22 +673,26 @@ export const SelectedSynopsisComparison: Story = {
   play: async ({ canvasElement }) => selectedComparisonPlay(canvasElement),
 };
 export const SelectedSynopsisComparisonPhone: Story = {
+  tags: ['!dev'],
   render: () => <SelectedComparisonStory />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => selectedComparisonPlay(canvasElement),
 };
 export const SelectedSynopsisComparisonDesktop: Story = {
+  tags: ['!dev'],
   render: () => <SelectedComparisonStory />,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => selectedComparisonPlay(canvasElement),
 };
 export const SelectedSynopsisComparisonABAPhone: Story = {
+  name: 'Selected Synopsis Comparison ABA',
   render: () => <SelectedComparisonStory retryAba />,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   play: async ({ canvasElement }) => selectedComparisonAbaPlay(canvasElement),
 };
 export const SelectedSynopsisComparisonABADesktop: Story = {
+  tags: ['!dev'],
   render: () => <SelectedComparisonStory retryAba />,
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => selectedComparisonAbaPlay(canvasElement),
 };

@@ -84,5 +84,5 @@ const footprints: Story['play'] = async ({ canvasElement }) => {
   }
 };
 
-export const Light: Story = { globals: { theme: 'light' }, render: () => <Examples />, play: footprints };
-export const Dark: Story = { ...Light, globals: { theme: 'dark' } };
+export const Light: Story = { globals: {}, render: () => <Examples />, play: footprints };
+export const Dark: Story = { ...Light, globals: {} };

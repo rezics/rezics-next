@@ -122,18 +122,20 @@ async function observeWrappingAndControls(context: Parameters<NonNullable<Story[
 }
 
 export const FullReasonPhone390: Story = {
+  name: 'Full Reason',
   args: { scenario: 'current' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   play: observeWrappingAndControls,
 };
 export const FullReasonDesktop1280: Story = {
+  tags: ['!dev'],
   args: { scenario: 'current' },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: {},
   play: observeWrappingAndControls,
 };
 export const FullReasonRtl: Story = {
   args: { scenario: 'current' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
+  globals: {},
   render: (args) => (
     <div dir="rtl">
       <RealmBansExample {...args} />

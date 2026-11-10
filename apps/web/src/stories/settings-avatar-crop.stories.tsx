@@ -51,7 +51,7 @@ async function nonSquareImage(width: number, height: number, color: string, name
 }
 
 export const Default: Story = {
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
   render: () => <PageStory visitor="Signed In" path="/settings#reading" />,
   beforeEach: () => {
     traffic.media = [];

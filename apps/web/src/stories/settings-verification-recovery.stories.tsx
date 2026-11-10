@@ -127,7 +127,7 @@ async function readAgain(view: ReturnType<typeof within>) {
 
 export const CurrentStatusEmpty: Story = {
   args: { scenario: 'empty' },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await view.findByText(m.settings_verification_read_empty());
@@ -142,12 +142,12 @@ export const CurrentStatusEmpty: Story = {
 
 export const CurrentStatusEmptyPhone: Story = {
   ...CurrentStatusEmpty,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
 };
 
 export const CurrentStatusFailure: Story = {
   args: { scenario: 'failure' },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     const failure = await view.findByRole('alert');
@@ -163,12 +163,12 @@ export const CurrentStatusFailure: Story = {
 
 export const CurrentStatusFailurePhone: Story = {
   ...CurrentStatusFailure,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
 };
 
 export const CurrentStatusRecovered: Story = {
   args: { scenario: 'recovery' },
-  globals: { viewport: { value: 'desktop1280' } },
+  globals: {},
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await view.findByRole('alert');
@@ -180,7 +180,7 @@ export const CurrentStatusRecovered: Story = {
 
 export const CurrentStatusRecoveredPhone: Story = {
   ...CurrentStatusRecovered,
-  globals: { viewport: { value: 'phone390' } },
+  globals: {},
 };
 
 const readRecoveryFixtures = new WeakMap<Element, ReturnType<typeof readRecoveryTransport>>();

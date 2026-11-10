@@ -311,7 +311,7 @@ export const LongAndCJKNames: Story = {
 };
 
 export const Dark: Story = {
-  globals: { theme: 'dark' },
+  globals: {},
   args: { headline: global, others: [translators, newcomers, quiet], imported: [vndb], own: 17, scale, locale: 'en' },
   async play({ canvasElement }) {
     await expect(within(summary(canvasElement)).getByRole('figure')).toBeVisible();

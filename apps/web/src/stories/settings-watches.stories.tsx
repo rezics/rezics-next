@@ -118,7 +118,7 @@ function Preview({ view, attempts }: { view: View; attempts: StopWatch[] }) {
 function story(view: View, viewport: 'phone390' | 'desktop1280', theme: 'light' | 'dark' = 'light'): Story {
   const attempts: StopWatch[] = [];
   return {
-    globals: { viewport: { value: viewport, isRotated: false }, theme },
+    globals: {},
     render: () => (
       <PatternStory visitor="Signed In" path="/settings#watches">
         <AppShell>

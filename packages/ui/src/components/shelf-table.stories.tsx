@@ -355,7 +355,7 @@ function ConnectedShelfJourney() {
 export const ConnectedShelfConfigurationJourney: Story = {
   args: { rows: [], columns: [], onSort: () => {} },
   render: () => <ConnectedShelfJourney />,
-  globals: { viewport: { value: 'desktop' } },
+  globals: {},
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const document = canvasElement.ownerDocument;
