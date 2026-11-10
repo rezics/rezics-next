@@ -77,6 +77,7 @@ REZICS, AGPL-3.0-only: [interval pairing](../src/flow.ts#L187), [flow report han
 [telemetry owner](../README.md#delivery-flow-telemetry), and the timestamped SQLite tables named above.
 `export.ts` retains the handler call and `flowReport(readFlow(backup, start).filter(e => e.at < end), [], endMs)`.
 Gate costs sum `worker_events.body.hostMs` for `gate-outcome`; resolver cost subtracts detail.startedAt from event.at.
+Chain decline reasons use the JSON `detail.reason` field, not the entire serialized detail string.
 The report's window, counts and costs are checked against the retained backup and bounded export. No executable code
 changes; product suites, test wrapper and compiler are not required for this report-only audit and were not run.
 
