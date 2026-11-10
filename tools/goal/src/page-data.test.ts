@@ -359,13 +359,13 @@ test('a refused repair keeps its completed run, lets independent repairs route, 
         section: expect.objectContaining({ files: ['services/auth/src/authorization/permissions.ts'] }),
       }),
     );
-    expect(h.tasks.tasks().filter((task) => task.brief.markdown.includes('page-data-repair-key:'))).toHaveLength(1);
+    expect(h.store.tasks().filter((task) => task.brief.markdown.includes('page-data-repair-key:'))).toHaveLength(1);
     expect(inbox.read('web')).toHaveLength(1);
 
     expect(await runPageDataCycle(options)).toBe('skipped');
     expect(stackRuns).toBe(2);
     expect(routeAttempts).toEqual(['permissions', 'feed']);
-    expect(h.tasks.tasks().filter((task) => task.brief.markdown.includes('page-data-repair-key:'))).toHaveLength(1);
+    expect(h.store.tasks().filter((task) => task.brief.markdown.includes('page-data-repair-key:'))).toHaveLength(1);
     expect(inbox.read('web')).toHaveLength(1);
   } finally {
     await h.disposeAsync();
