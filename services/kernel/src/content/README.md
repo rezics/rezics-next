@@ -3652,7 +3652,8 @@ not issue refunds. Receipt replay repeats fresh native admission and source guar
 creatorAccountId, revisionId, sha256, licence }` under current `edition:read`. State is `draft`, `published` or
 `withdrawn`. Draft metadata additionally requires the creator's ordinary source read.
 `GET /v1/contentEditions/{id}/revision` returns exactly `{ editionId, revisionId, sha256, licence, body }`, where body is the
-canonical native DocumentSnapshot. Buying or granting `edition:read` never grants ordinary `post:read`.
+canonical native DocumentSnapshot. Revision delivery requires an authenticated account; an anonymous request
+returns 401 before looking up the selected edition. Buying or granting `edition:read` never grants ordinary `post:read`.
 Both reads use private, no-store responses; conditional headers never skip authorization or return an unchecked 304.
 Unknown, removed and hidden resources return 404; ordinary native refusals and retryable infrastructure errors retain
 their normal problem semantics.
