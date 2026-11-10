@@ -11,6 +11,7 @@ export declare const LINKS_CHANGED: 'com.rezics.semantic.links.changed.v1';
 export declare const LINK_KEYS_CHANGED: 'com.rezics.semantic.links.keys-changed.v1';
 export declare const LINKS_VISIBILITY_CHANGED: 'com.rezics.semantic.links.visibility-changed.v1';
 export declare const LINKS_PROJECTED: 'com.rezics.semantic.links.projected.v1';
+export declare const IDENTITY_SCOPE_RETIREMENT: 'com.rezics.semantic.identity-scope.retirement.v1';
 export declare const IDENTITY_SCOPE_NATIVE_ASSOCIATED: 'com.rezics.semantic.identity-scope.native-associated.v1';
 export declare const IDENTITY_SCOPE_DIRECTORY_ENROLLED: 'com.rezics.semantic.identity-scope.directory-enrolled.v1';
 export declare const IDENTITY_EPOCH_ADMITTED: 'com.rezics.semantic.identity-epoch.admitted.v1';
@@ -27,6 +28,13 @@ export declare const SUBJECT_PAGE_REPAIR_REQUESTED: 'com.rezics.semantic.subject
 export declare const SUBJECT_PAGE_WORK_COMMITTED: 'com.rezics.semantic.subject_page.work_committed.v1';
 /** Closed semantic event catalogue. Envelope identity and ordering belong to the kernel. */
 export declare const SEMANTIC_EVENTS: {
+    readonly "com.rezics.semantic.identity-scope.retirement.v1": Type.TObject<{
+        sourceKey: Type.TString;
+        scope: Type.TString;
+        registration: Type.TString;
+        captureId: Type.TString;
+        phase: Type.TUnion<Type.TLiteral<string>[]>;
+    }>;
     readonly "com.rezics.semantic.identity-scope.native-associated.v1": Type.TObject<{
         sourceKey: Type.TString;
         scope: Type.TString;
