@@ -4,6 +4,7 @@ import type { Preview } from '@storybook/react-vite';
 import { InboxAmbientProvider } from '../inbox/adapters/ambient-view.tsx';
 import { SettingsAmbientProvider } from '../settings/adapters/ambient-view.tsx';
 import { createPerformanceAmbient } from '../session/performance-ambient';
+import { RecentSearchBinding } from '../session/recent-search-binding';
 
 function StoryQueryClient({ children }: { children: ReactNode }) {
   const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } }));
@@ -15,12 +16,14 @@ function StoryPerformanceAmbient({ children }: { children: ReactNode }) {
   const [ambient] = useState(createPerformanceAmbient);
   return (
     <SettingsAmbientProvider ambient={ambient.settings}>
-      <InboxAmbientProvider ambient={ambient.inbox}>{children}</InboxAmbientProvider>
+      <InboxAmbientProvider ambient={ambient.inbox}>
+        <RecentSearchBinding>{children}</RecentSearchBinding>
+      </InboxAmbientProvider>
     </SettingsAmbientProvider>
   );
 }
 
-/** Supply only missing query context. Story-owned providers and their prepared/error states take precedence. */
+/** Supply missing query context and preview hosts; nested story providers retain their own state. */
 export function ConnectedStory({ storyId, children }: { storyId: string; children: ReactNode }) {
   const client = useContext(QueryClientContext);
   const tree = <StoryPerformanceAmbient>{children}</StoryPerformanceAmbient>;
