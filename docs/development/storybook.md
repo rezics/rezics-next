@@ -11,17 +11,17 @@ remain in the composed UI catalogue.
 Pages still show route level states in the full site shell. Connected compositions show regional states from the
 same recorded or fake data without the shell. Page stories cover populated states when the page frame differs by
 viewer, plus empty, unavailable and error outcomes. Preserve explicit meta IDs and story export names when
-renaming a folder so existing story and docs links keep working. Name stories for persona
+renaming a folder so existing story and docs links keep working, except when retiring a display-only ID. Name stories for persona
 and outcome (`Signed out`, `Owner, empty`, `Filter sheet open`), not viewport, theme or locale. Keep the hierarchy
-compact and include every required behavior state, even when a folder needs more than eight. Regression stories and retired compatibility links
-carry the `!dev` tag; every distinct required state stays visible. Cross cutting exposure views use the `exposure` tag in
+compact and include every required behavior state, even when a folder needs more than eight. Regression stories carry the `!dev` tag; every distinct required state stays visible. Cross cutting exposure views use the `exposure` tag in
 the page they cover.
 
 Locale and theme are Storybook globals. Review the same canonical IDs at `phone390` and `desktop1280` using the
 viewport toolbar, with locale and theme globals; do not create width, locale or theme behavior variants. Stories
 must leave viewport and theme free for the toolbar. Use Controls for behavior or layout options independent of device
 width. Run browser coverage at desktop and phone widths by selecting viewport globals in the runner.
-A retired size-only export can remain hidden as a compatibility link. Do not use the removed
+Do not encode a viewport in a story ID or retain a size-only export as a hidden alias. Keep distinct behavior
+under an outcome name and exercise it at supported widths on the same URL. Do not use the removed
 `parameters.viewport.defaultViewport` setting. The preview canvas uses white in light mode and black in dark mode;
 shared application colors remain unchanged. Project defaults belong in `initialGlobals`, so reviewers can override them.
 

@@ -72,6 +72,16 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 - Price every guard. A requirement that refuses, rejects, stops or fails work names the defect it prevents, where
   untrusted input enters, and why no agent could repair it in place. Without that, brief the repair.
 
+## External source
+
+- Access to source is not permission to copy it. Before copying or adapting external code, check the license for
+  the exact file and version, confirm it permits the intended use and distribution, and retain the required notices
+  and attribution. Record the upstream URL, revision, and license with the change.
+- If permission is absent, unclear, or incompatible, use the material to understand public behavior, design
+  patterns, and interfaces. Write an independent implementation without copying or translating the source, comments,
+  or other protected material. A public repository, visible browser source, or an accessible example is not an
+  exception. Apply the same rule to free and paid components, templates, assets, and snippets.
+
 ## Research
 
 - Research is a core part of the workflow. Research every complex abstraction design before briefing its
