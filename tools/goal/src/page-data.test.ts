@@ -27,6 +27,7 @@ import {
   runPageDataCycle,
   readLatestPageDataRun,
   type PageDataSection,
+  type PageDataUnrunEvidence,
   type PageDataRepair,
   type SectionConfig,
   dependencyFilesChanged,
@@ -643,7 +644,7 @@ test('page-data reconciliation requires the retained dedicated stack and never c
 
 test('page-data member authority provenance survives completion without hiding real forbidden defects', () => {
   const h = fixture();
-  const evidence = {
+  const evidence: PageDataUnrunEvidence = {
     version: 1,
     reason: 'member-authority-unavailable',
     scopes: ['follow:list'],
