@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { testFailureRepairBrief, type TestFailureRepair } from './dev-verifier.ts';
 import type { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerJob } from './job.ts';
-import type { PageDataRepair } from './page-data.ts';
+import type { PageDataRepair, PageDataRepairRoute } from './page-data.ts';
 import type { WorkerStore } from './store.ts';
 import type { WorkerTasks } from './tasks.ts';
 import type { Settings } from './types.ts';
@@ -123,7 +123,7 @@ export async function routePageDataRepair(
   inbox: RuntimeRepairRoutingDependencies['inbox'],
   settings: Pick<Settings, 'stateDirectory'>,
   repair: PageDataRepair,
-): Promise<'resumed' | 'dispatched'> {
+): Promise<PageDataRepairRoute> {
   if (await job.resumePageDataRepair(repair)) return 'resumed';
   const existing = store
     .tasks()
@@ -146,7 +146,17 @@ export async function routePageDataRepair(
     if (readFileSync(briefPath, 'utf8') !== markdown)
       throw new Error('page-data repair brief changed for an existing cause');
   } else writeFileSync(briefPath, markdown, { flag: 'wx', mode: 0o600 });
-  const task = tasks.dispatch(briefPath, null, true, 'verifier');
+  let task: ReturnType<typeof tasks.dispatch>;
+  try {
+    task = tasks.dispatch(briefPath, null, true, 'verifier');
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      /^declared paths touch undeclared risk area: [a-z0-9_-]+$/.test(error.message)
+    )
+      return { status: 'refused', reason: error.message };
+    throw error;
+  }
   inbox.deliver({
     managerId: task.brief.manager,
     taskId: task.id,

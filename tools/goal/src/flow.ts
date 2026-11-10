@@ -115,12 +115,19 @@ type PageDataReportSection = {
   class: PageDataClass;
   firstErrorLine?: string;
 };
+type PageDataRepairReport = {
+  repairKey: string;
+  route: 'resumed' | 'dispatched' | 'refused';
+  reason?: string;
+  section: PageDataReportSection & { goal: string; files: string[]; [key: string]: unknown };
+};
 export type PageDataFlowRun = {
   runId: number;
   at: string;
   head: string;
   classes: Partial<Record<PageDataClass, number>>;
   sections: Partial<Record<PageDataClass, PageDataReportSection[]>>;
+  repairs?: PageDataRepairReport[];
   coverage?: { status: 'incomplete' };
   seed?: { status: 'publication-incomplete'; omissions: number };
   failure?: { phase: 'boot' | 'check'; firstErrorLine: string };
@@ -146,12 +153,31 @@ export function pageDataFlowRuns(
       const section = JSON.parse(row.detail ?? '{}') as PageDataReportSection;
       (sections[section.class] ??= []).push(section);
     }
+    const repairs = pageEvents.flatMap((candidate) => {
+      if (candidate.attempt !== event.attempt || candidate.action !== 'page-data-repair') return [];
+      const detail = JSON.parse(candidate.detail ?? '{}') as {
+        repairKey?: string;
+        route?: PageDataRepairReport['route'];
+        reason?: string;
+        section?: unknown;
+      };
+      if (!detail.section || typeof detail.section !== 'object' || !detail.route) return [];
+      return [
+        {
+          repairKey: detail.repairKey ?? '',
+          route: detail.route,
+          ...(detail.reason ? { reason: detail.reason } : {}),
+          section: detail.section as PageDataRepairReport['section'],
+        },
+      ];
+    });
     return {
       runId: event.attempt,
       at: event.at,
       head: metadata.head ?? '',
       classes: metadata.classes ?? {},
       sections,
+      ...(repairs.length ? { repairs } : {}),
       ...(metadata.seed ? { seed: metadata.seed } : {}),
       ...(metadata.coverage ? { coverage: metadata.coverage } : {}),
     };
@@ -185,6 +211,10 @@ export function formatPageDataFlowRuns(runs: readonly PageDataFlowRun[]): string
     const seed = run.seed ? `; seed=${run.seed.status} omissions=${run.seed.omissions}` : '';
     return [
       `Page-data run at ${run.at} (${run.head}): ${counts}${coverage}${seed}.`,
+      ...(run.repairs ?? []).map(
+        (repair) =>
+          `  Repair ${repair.route} for ${repair.section.page}/${repair.section.persona}/${repair.section.section} (${repair.section.class})${repair.reason ? `: ${repair.reason}` : ''}.`,
+      ),
       ...PAGE_DATA_CLASSES.map((className) => {
         const sections =
           run.sections[className]?.map((section) => `${section.page}/${section.persona}/${section.section}`) ?? [];

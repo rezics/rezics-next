@@ -1536,6 +1536,11 @@ original matching behavior. Every intersected production risk area must be decla
 product modules. A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and asks
 that they be split into a dev task.
 
+Decision: completed page-data runs and section evidence are recorded before repair admission. A risk-area refusal stays a
+`refused` repair claim with its exact section and reason in the page-data flow report; the cycle continues routing
+independent defects. Only resumed or dispatched repairs become `routed`, and a refused claim suppresses an immediate
+replay without granting the repair any risk area.
+
 Decision: dispatch and retry refuse a brief whose `acceptance.requires` lists `native` or `browser` when another task of
 the same Goal with those requires is ready, running, held or landing. The error names that task and links
 [check selection](../../docs/development/verification.md#check-selection-and-failures). Verification, proof-run and
