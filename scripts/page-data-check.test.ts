@@ -594,6 +594,7 @@ const pages = {
     })</script>
   </body></html>`,
   readiness: `<!doctype html><html><body>
+    <p role="status">Preparing unrelated page content</p>
     <img src="/irrelevant.png" alt="">
     <section data-case="settled" data-state="ready"><h2>Settled reader</h2><ul><li data-item>visible row</li></ul></section>
     <section data-case="pending" aria-busy="true"><h2>Pending reader</h2><p role="status">Loading reader</p></section>
@@ -736,6 +737,256 @@ test('fixture pages exercise classification, reader readiness and coverage after
   } finally {
     releaseIrrelevantResource?.();
     if (irrelevantResourceStarted) await irrelevantResourceSettled;
+    await browser.close();
+    web.stop(true);
+    kernel.stop(true);
+  }
+}, 60_000);
+
+test('bounded native-page observation recovers redirects and context replacement with independent evidence', async () => {
+  const browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] });
+  let releaseIrrelevantResource: (() => void) | undefined;
+  let irrelevantResourceStarted = false;
+  let irrelevantResourceFinished = false;
+  let releaseLateRedirect: (() => void) | undefined;
+  let lateRedirectStartedAt = 0;
+  let lateTargetStarted = false;
+  let lateRecoveryElapsed = 0;
+  let finishLateRedirect: () => void = () => {};
+  const lateRedirectFinished = new Promise<void>((resolve) => {
+    finishLateRedirect = resolve;
+  });
+  let closeLostTarget = false;
+  const web = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const path = new URL(request.url).pathname;
+      if (path === '/en/redirect') return Response.redirect(new URL('/en/redirect-ready', request.url), 301);
+      if (path === '/en/redirect-ready') {
+        await new Promise((resolve) => setTimeout(resolve, 230));
+        return new Response(
+          '<section data-case="redirect" data-state="ready"><h2>Redirect reader</h2><ul><li data-item>current row</li></ul></section><img src="/irrelevant.png">',
+          { headers: { 'content-type': 'text/html' } },
+        );
+      }
+      if (path === '/en/context')
+        return new Response(
+          '<section data-case="context" data-state="loading">Loading reader</section><script>setTimeout(() => location.replace("/en/context-ready"), 35)</script>',
+          { headers: { 'content-type': 'text/html' } },
+        );
+      if (path === '/en/context-ready')
+        return new Response(
+          '<section data-case="context" data-state="ready"><h2>Replaced reader</h2><ul><li data-item>current context row</li></ul></section>',
+          { headers: { 'content-type': 'text/html' } },
+        );
+      if (path === '/en/readiness') {
+        return new Response(
+          '<p role="status">Preparing unrelated page content</p><img src="/irrelevant.png"><section data-case="ready" data-state="ready"><h2>Ready reader</h2><ul><li data-item>ready row</li></ul></section><section data-case="pending" data-state="loading">Loading this reader</section>',
+          { headers: { 'content-type': 'text/html' } },
+        );
+      }
+      if (path === '/en/empty')
+        return new Response(
+          '<section data-case="empty" data-state="empty"><h2>Empty reader</h2><p>No visible entries on this page.</p></section>',
+          { headers: { 'content-type': 'text/html' } },
+        );
+      if (path === '/en/redirect-late') return Response.redirect(new URL('/en/redirect-late-ready', request.url), 301);
+      if (path === '/en/redirect-late-ready') {
+        lateTargetStarted = true;
+        lateRedirectStartedAt = Date.now();
+        await new Promise<void>((resolve) => {
+          releaseLateRedirect = resolve;
+        });
+        finishLateRedirect();
+        return new Response(
+          '<section data-case="late" data-state="ready"><h2>Late reader</h2><ul><li data-item>late row</li></ul></section>',
+          { headers: { 'content-type': 'text/html' } },
+        );
+      }
+      if (path === '/en/target-loss') {
+        if (lateRedirectStartedAt) lateRecoveryElapsed = Date.now() - lateRedirectStartedAt;
+        return new Response('<section data-case="lost" data-state="loading">Waiting for a reader target</section>', {
+          headers: { 'content-type': 'text/html' },
+        });
+      }
+      if (path === '/irrelevant.png') {
+        irrelevantResourceStarted = true;
+        await new Promise<void>((resolve) => {
+          releaseIrrelevantResource = resolve;
+        });
+        irrelevantResourceFinished = true;
+        return new Response(new Uint8Array(), { headers: { 'content-type': 'image/png' } });
+      }
+      return new Response('missing', { status: 404 });
+    },
+  });
+  const kernel = Bun.serve({
+    port: 0,
+    fetch(request) {
+      const path = new URL(request.url).pathname;
+      if (path === '/v1/empty') return Response.json({ relations: [] });
+      return Response.json({ relations: [{ id: 'native-row' }] });
+    },
+  });
+  const fixtureBrowser = {
+    newContext: async (...args: Parameters<Browser['newContext']>) => {
+      const context = await browser.newContext(...args);
+      context.on('page', (page) => {
+        page.on('framenavigated', (frame) => {
+          if (frame !== page.mainFrame() || new URL(frame.url()).pathname !== '/en/target-loss') return;
+          closeLostTarget = true;
+          setTimeout(() => void page.close(), 45);
+        });
+      });
+      return context;
+    },
+  } as unknown as Browser;
+  const sqlCalls: string[] = [];
+  const sqlSection = (query: string) => ({ text: query, params: [] as const });
+  const section = (id: string, selector: string, nativePath = '/v1/data', sql?: string) => ({
+    id,
+    name: id,
+    selector,
+    itemSelector: 'li[data-item]',
+    native: { method: 'GET' as const, path: nativePath, items: '/relations' },
+    ...(sql === undefined ? {} : { sql: sqlSection(sql) }),
+  });
+  const anonymousPage = (id: string, path: string, sections: ReturnType<typeof section>[]) => ({
+    id,
+    path,
+    personas: ['anonymous'] as const,
+    sections,
+  });
+  const manifest = parseManifest({
+    version: 1,
+    context: 'context',
+    question: 'question',
+    pages: [
+      anonymousPage('redirect', '/en/redirect', [
+        section('ready', '[data-case="redirect"]', '/v1/data', 'SELECT 5 AS n'),
+      ]),
+      anonymousPage('context-replacement', '/en/context', [
+        section('ready', '[data-case="context"]', '/v1/data', 'SELECT 5 AS n'),
+      ]),
+      anonymousPage('independent-readers', '/en/readiness', [
+        section('ready', '[data-case="ready"]'),
+        section('pending-a', '[data-case="pending"]'),
+        section('pending-b', '[data-case="pending"]'),
+      ]),
+      anonymousPage('genuine-empty', '/en/empty', [
+        section('empty', '[data-case="empty"]', '/v1/empty', 'SELECT 0 AS n'),
+      ]),
+      anonymousPage('redirect-deadline', '/en/redirect-late', [
+        section('late', '[data-case="late"]', '/v1/data', 'SELECT 5 AS n'),
+      ]),
+      anonymousPage('target-loss', '/en/target-loss', [
+        section('lost', '[data-case="lost"]', '/v1/data', 'SELECT 5 AS n'),
+      ]),
+    ],
+  });
+  const output: string[] = [];
+  const pageTimeoutMs = 200;
+  const readerTimeoutMs = 300;
+  const startedAt = Date.now();
+  try {
+    const result = await runPageDataCheck({
+      baseUrl: web.url.href,
+      kernel: kernel.url.href,
+      manifest,
+      browser: fixtureBrowser,
+      pageTimeoutMs,
+      readerTimeoutMs,
+      requestTimeoutMs: 500,
+      queryCount: async (text) => {
+        sqlCalls.push(text);
+        return text === 'SELECT 0 AS n' ? 0 : 5;
+      },
+      stdout: { write: (chunk) => output.push(chunk) },
+      stderr: { write: (chunk) => output.push(chunk) },
+    });
+    const byKey = new Map(result.results.map((row) => [`${row.page}.${row.section}`, row]));
+    const redirected = byKey.get('redirect.ready')!;
+    expect(redirected).toMatchObject({
+      class: 'DATA',
+      evidence: {
+        nativeProbe: 'run',
+        nativeStatus: 200,
+        nativeItems: 1,
+        browserProbe: 'run',
+        reader: 'data',
+        pageItems: 1,
+        sqlProbe: 'run',
+        seedCount: 5,
+        readerDocument: { url: new URL('/en/redirect-ready', web.url).origin + '/en/redirect-ready' },
+      },
+    });
+    expect(redirected.evidence.readerDocument?.timeOrigin).toBeGreaterThan(0);
+    expect(byKey.get('context-replacement.ready')).toMatchObject({
+      class: 'DATA',
+      evidence: {
+        browserProbe: 'run',
+        reader: 'data',
+        pageItems: 1,
+        readerDocument: { url: new URL('/en/context-ready', web.url).origin + '/en/context-ready' },
+      },
+    });
+    expect(byKey.get('independent-readers.ready')).toMatchObject({
+      class: 'DATA',
+      evidence: { browserProbe: 'run', reader: 'data', pageItems: 1 },
+    });
+    for (const id of ['pending-a', 'pending-b']) {
+      expect(byKey.get(`independent-readers.${id}`)).toMatchObject({
+        class: 'UNAVAILABLE',
+        evidence: { browserProbe: 'run', reader: 'loading', nativeProbe: 'run' },
+      });
+    }
+    expect(byKey.get('genuine-empty.empty')).toMatchObject({
+      class: 'SEED',
+      evidence: {
+        browserProbe: 'run',
+        reader: 'empty',
+        pageItems: 0,
+        nativeProbe: 'run',
+        sqlProbe: 'run',
+        seedCount: 0,
+      },
+    });
+    expect(byKey.get('redirect-deadline.late')).toMatchObject({
+      class: 'UNAVAILABLE',
+      evidence: {
+        browserProbe: 'unrun',
+        reader: 'missing',
+        nativeProbe: 'run',
+        nativeItems: 1,
+        sqlProbe: 'run',
+        seedCount: 5,
+      },
+    });
+    expect(byKey.get('target-loss.lost')).toMatchObject({
+      class: 'UNAVAILABLE',
+      evidence: {
+        browserProbe: 'unrun',
+        reader: 'missing',
+        nativeProbe: 'run',
+        nativeStatus: 200,
+        sqlProbe: 'run',
+        seedCount: 5,
+      },
+    });
+    expect(result.diagnostics.some((line) => line.includes('reason=redirect-not-settled'))).toBe(true);
+    expect(result.diagnostics.some((line) => line.includes('reason=target-lost'))).toBe(true);
+    expect(result.diagnostics.some((line) => line.includes('reason=reader-remained-loading'))).toBe(true);
+    expect(sqlCalls).toHaveLength(5);
+    expect([irrelevantResourceStarted, irrelevantResourceFinished, closeLostTarget]).toEqual([true, false, true]);
+    expect(lateTargetStarted).toBe(true);
+    expect(lateRecoveryElapsed).toBeLessThanOrEqual(pageTimeoutMs + readerTimeoutMs + 250);
+    expect(Date.now() - startedAt).toBeLessThan(1800);
+    expect(output.join('')).not.toContain('irrelevant.png');
+    expect(result.incomplete).toBe(true);
+  } finally {
+    releaseIrrelevantResource?.();
+    releaseLateRedirect?.();
+    if (lateTargetStarted) await lateRedirectFinished;
     await browser.close();
     web.stop(true);
     kernel.stop(true);

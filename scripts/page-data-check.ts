@@ -17,6 +17,7 @@ import {
   chromium,
   type Browser,
   type BrowserContext,
+  type Frame,
   type Page,
   type Response as PlaywrightResponse,
 } from '../packages/ui/node_modules/playwright/index.js';
@@ -150,6 +151,12 @@ export type PageObservation = {
   text: string;
   dataState: string | null;
   busy: boolean;
+  document?: ReaderDocumentIdentity;
+};
+
+export type ReaderDocumentIdentity = {
+  url: string;
+  timeOrigin: number;
 };
 
 export type NativeKind = 'error' | 'unauthorized' | 'unavailable' | 'data' | 'empty';
@@ -171,6 +178,7 @@ export type SectionResult = {
     nativeProbe: 'run' | 'unrun';
     browserProbe: 'run' | 'unrun';
     sqlProbe: 'run' | 'unrun' | 'not-declared';
+    readerDocument?: ReaderDocumentIdentity;
     nativeProblem?: NativeProblemEvidence;
     unrun?: UnrunProbeEvidence;
   };
@@ -635,6 +643,7 @@ type SectionProbe = {
   text: string;
   dataState: string | null;
   busy: boolean;
+  document: ReaderDocumentIdentity;
 };
 
 type DocumentNavigation =
@@ -645,7 +654,7 @@ async function navigateToDocument(page: Page, url: string, timeoutMs: number): P
   let mainDocumentStatus: number | undefined;
   const observeResponse = (response: PlaywrightResponse) => {
     const request = response.request();
-    if (request.isNavigationRequest() && request.frame() === page.mainFrame() && request.redirectedTo() === null) {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
       mainDocumentStatus = response.status();
     }
   };
@@ -666,23 +675,317 @@ async function navigateToDocument(page: Page, url: string, timeoutMs: number): P
   }
 }
 
+type MainDocumentSnapshot = { revision: number; url: string };
+type AdmittedDocument = MainDocumentSnapshot & { identity: ReaderDocumentIdentity };
+
+type PageDocumentTracker = {
+  snapshot(): MainDocumentSnapshot;
+  waitForChange(afterRevision: number, timeoutMs: number): Promise<MainDocumentSnapshot>;
+  failure(): Error | undefined;
+  dispose(): void;
+};
+
+function pageDocumentTracker(page: Page): PageDocumentTracker {
+  let revision = 0;
+  let terminalError: Error | undefined;
+  const waiters = new Set<{
+    afterRevision: number;
+    resolve(snapshot: MainDocumentSnapshot): void;
+    reject(error: Error): void;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
+  const snapshot = (): MainDocumentSnapshot => ({ revision, url: page.mainFrame().url() });
+  const rejectWaiters = (error: Error) => {
+    terminalError ??= error;
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timer);
+      waiter.reject(terminalError);
+    }
+    waiters.clear();
+  };
+  const onFrameNavigated = (frame: Frame) => {
+    if (frame !== page.mainFrame()) return;
+    revision++;
+    const current = snapshot();
+    for (const waiter of waiters) {
+      if (revision <= waiter.afterRevision) continue;
+      clearTimeout(waiter.timer);
+      waiter.resolve(current);
+      waiters.delete(waiter);
+    }
+  };
+  const onCrash = () => rejectWaiters(new Error('Target crashed'));
+  const onClose = () => rejectWaiters(new Error('Target page, context or browser has been closed'));
+  page.on('framenavigated', onFrameNavigated);
+  page.on('crash', onCrash);
+  page.on('close', onClose);
+
+  return {
+    snapshot,
+    waitForChange(afterRevision, timeoutMs) {
+      if (terminalError) return Promise.reject(terminalError);
+      const current = snapshot();
+      if (current.revision > afterRevision) return Promise.resolve(current);
+      if (timeoutMs <= 0) {
+        const error = new Error('Timed out waiting for a current document navigation');
+        error.name = 'TimeoutError';
+        return Promise.reject(error);
+      }
+      return new Promise((resolve, reject) => {
+        const waiter = {
+          afterRevision,
+          resolve,
+          reject,
+          timer: setTimeout(() => {
+            waiters.delete(waiter);
+            const error = new Error('Timed out waiting for a current document navigation');
+            error.name = 'TimeoutError';
+            reject(error);
+          }, timeoutMs),
+        };
+        waiters.add(waiter);
+      });
+    },
+    failure: () => terminalError,
+    dispose() {
+      page.off('framenavigated', onFrameNavigated);
+      page.off('crash', onCrash);
+      page.off('close', onClose);
+      const error = new Error('Page document tracking ended');
+      for (const waiter of waiters) {
+        clearTimeout(waiter.timer);
+        waiter.reject(error);
+      }
+      waiters.clear();
+    },
+  };
+}
+
+function isExecutionContextReplacement(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /execution context was destroyed|cannot find context with specified id|context.*destroyed/i.test(error.message)
+  );
+}
+
+function readerFailureReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/target crashed/i.test(message)) return 'target-crashed';
+  if (/target page, context or browser has been closed|target.*closed|page.*closed/i.test(message))
+    return 'target-lost';
+  if (/execution context replacement did not settle/i.test(message)) return 'document-context-replaced';
+  if (isExecutionContextReplacement(error)) return 'document-context-replaced';
+  return redact(message);
+}
+
+async function captureAdmittedDocument(
+  page: Page,
+  tracker: PageDocumentTracker,
+  afterRevision: number,
+  requestedUrl: string | undefined,
+  deadline: number,
+): Promise<AdmittedDocument> {
+  let current = tracker.snapshot();
+  let contextReplaced = false;
+  while (remainingUntil(deadline) > 0) {
+    const terminal = tracker.failure();
+    if (terminal) throw terminal;
+    const redirectDestinationRequired = requestedUrl !== undefined;
+    const ready =
+      current.revision > afterRevision &&
+      current.url !== 'about:blank' &&
+      (!redirectDestinationRequired || current.url !== requestedUrl);
+    if (!ready) {
+      try {
+        current = await tracker.waitForChange(current.revision, remainingUntil(deadline));
+      } catch (error) {
+        if (!contextReplaced || !isTimeout(error)) throw error;
+        const recoveryError = new Error(
+          'Execution context replacement did not settle before the shared reader deadline',
+        );
+        recoveryError.name = 'TimeoutError';
+        throw recoveryError;
+      }
+      continue;
+    }
+    try {
+      const raw = await page.evaluate(() => ({ url: location.href, timeOrigin: performance.timeOrigin }));
+      const after = tracker.snapshot();
+      if (after.revision !== current.revision || after.url !== current.url || raw.url !== current.url) {
+        current = after;
+        continue;
+      }
+      const parsed = new URL(raw.url);
+      return {
+        ...after,
+        identity: { url: `${parsed.origin}${parsed.pathname}`, timeOrigin: raw.timeOrigin },
+      };
+    } catch (error) {
+      if (!isExecutionContextReplacement(error)) throw error;
+      contextReplaced = true;
+      const latest = tracker.snapshot();
+      if (latest.revision > current.revision) {
+        current = latest;
+      } else {
+        try {
+          current = await tracker.waitForChange(current.revision, remainingUntil(deadline));
+        } catch (waitError) {
+          if (!isTimeout(waitError)) throw waitError;
+          const recoveryError = new Error(
+            'Execution context replacement did not settle before the shared reader deadline',
+          );
+          recoveryError.name = 'TimeoutError';
+          throw recoveryError;
+        }
+      }
+    }
+  }
+  const error = new Error(
+    contextReplaced
+      ? 'Execution context replacement did not settle before the shared reader deadline'
+      : 'Current document did not settle before the shared reader deadline',
+  );
+  error.name = 'TimeoutError';
+  throw error;
+}
+
+async function navigateToReaderDocument(
+  page: Page,
+  tracker: PageDocumentTracker,
+  url: string,
+  pageTimeoutMs: number,
+  readerTimeoutMs: number,
+): Promise<{
+  responseReceived: boolean;
+  status?: number;
+  document?: AdmittedDocument;
+  error?: unknown;
+  reason?: string;
+  readerDeadline: number;
+}> {
+  const before = tracker.snapshot();
+  const navigation = await navigateToDocument(page, url, pageTimeoutMs);
+  const readerDeadline = performance.now() + readerTimeoutMs;
+  if (!navigation.responseReceived) return { ...navigation, readerDeadline };
+  const redirect = navigation.status >= 300 && navigation.status < 400;
+  try {
+    const document = await captureAdmittedDocument(
+      page,
+      tracker,
+      before.revision,
+      redirect ? url : undefined,
+      readerDeadline,
+    );
+    return {
+      responseReceived: true,
+      status: navigation.status,
+      document,
+      ...('error' in navigation ? { error: navigation.error } : {}),
+      readerDeadline,
+    };
+  } catch (error) {
+    const reason = readerFailureReason(error);
+    return {
+      responseReceived: true,
+      status: navigation.status,
+      error: 'error' in navigation ? navigation.error : error,
+      reason:
+        reason === 'target-crashed' || reason === 'target-lost' ? reason : redirect ? 'redirect-not-settled' : reason,
+      readerDeadline,
+    };
+  }
+}
+
 function remainingUntil(deadline: number): number {
   return Math.max(0, Math.ceil(deadline - performance.now()));
 }
 
 async function observeSection(
   page: Page,
+  tracker: PageDocumentTracker,
   section: ManifestSection,
   readerDeadline: number,
-): Promise<{ observation: PageObservation; timedOut: boolean }> {
-  let timedOut = false;
-  const timeoutMs = remainingUntil(readerDeadline);
-  if (timeoutMs === 0) {
-    timedOut = true;
-  } else {
+  admitted: AdmittedDocument,
+): Promise<{ observation: PageObservation; timedOut: boolean; readinessReason?: string }> {
+  let currentDocument = admitted;
+  while (true) {
+    const timeoutMs = remainingUntil(readerDeadline);
+    if (timeoutMs === 0) {
+      return {
+        observation: { present: false, itemCount: 0, text: '', dataState: null, busy: true },
+        timedOut: true,
+        readinessReason: 'shared-reader-deadline-elapsed',
+      };
+    }
     try {
-      await page.waitForFunction(
-        ({ selector, heading }) => {
+      const current = tracker.snapshot();
+      if (current.revision !== currentDocument.revision || current.url !== currentDocument.url) {
+        currentDocument = await captureAdmittedDocument(
+          page,
+          tracker,
+          currentDocument.revision,
+          undefined,
+          readerDeadline,
+        );
+      }
+      let timedOut = false;
+      try {
+        await page.waitForFunction(
+          ({ selector, heading }) => {
+            const loading = (element: HTMLElement): boolean => {
+              if (
+                element.getAttribute('aria-busy') === 'true' ||
+                element.getAttribute('data-state') === 'loading' ||
+                element.getAttribute('data-feed-result-state') === 'loading' ||
+                /\b(loading|preparing)\b/i.test(element.innerText ?? element.textContent ?? '')
+              )
+                return true;
+              return [
+                ...element.querySelectorAll<HTMLElement>(
+                  '[aria-busy="true"],[data-state="loading"],[data-feed-result-state="loading"],[role="status"],[aria-live]',
+                ),
+              ].some(
+                (child) =>
+                  child.getAttribute('aria-busy') === 'true' ||
+                  child.getAttribute('data-state') === 'loading' ||
+                  child.getAttribute('data-feed-result-state') === 'loading' ||
+                  /\b(loading|preparing)\b/i.test(child.innerText ?? child.textContent ?? ''),
+              );
+            };
+            const titleOf = (element: HTMLElement): string => {
+              const labelledBy = element
+                .getAttribute('aria-labelledby')
+                ?.split(/\s+/)
+                .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
+                .filter(Boolean)
+                .join(' ')
+                .trim();
+              if (labelledBy) return labelledBy;
+              const label = element.getAttribute('aria-label')?.trim();
+              if (label) return label;
+              const headingNode = element.querySelector<HTMLElement>('h1,h2,h3,h4,h5,h6,[role="heading"]');
+              if (headingNode?.textContent?.trim()) return headingNode.textContent.trim();
+              return element.matches('a[href],button,[role="link"],[role="button"]')
+                ? (element.textContent?.trim() ?? '')
+                : '';
+            };
+            const matches = [...document.querySelectorAll<HTMLElement>(selector)];
+            const wanted = heading?.trim().toLocaleLowerCase();
+            const node =
+              wanted === undefined
+                ? matches[0]
+                : matches.find((element) => titleOf(element).toLocaleLowerCase().includes(wanted));
+            return node !== undefined && !loading(node);
+          },
+          { selector: section.selector, heading: section.heading },
+          { timeout: timeoutMs },
+        );
+      } catch (error) {
+        if (!isTimeout(error)) throw error;
+        timedOut = true;
+      }
+      const observation = await page.evaluate(
+        ({ selector, heading, itemSelector, timedOut }) => {
           const loading = (element: HTMLElement): boolean => {
             if (
               element.getAttribute('aria-busy') === 'true' ||
@@ -726,75 +1029,78 @@ async function observeSection(
             wanted === undefined
               ? matches[0]
               : matches.find((element) => titleOf(element).toLocaleLowerCase().includes(wanted));
-          return node !== undefined && !loading(node);
+          const documentUrl = new URL(location.href);
+          const documentIdentity = {
+            url: `${documentUrl.origin}${documentUrl.pathname}`,
+            timeOrigin: performance.timeOrigin,
+          };
+          if (!node)
+            return {
+              present: false,
+              itemCount: 0,
+              text: '',
+              dataState: null,
+              busy: true,
+              documentIdentity,
+              documentHref: location.href,
+            };
+          const items = itemSelector
+            ? Number(node.matches(itemSelector)) + node.querySelectorAll(itemSelector).length
+            : 0;
+          const unsettled = loading(node);
+          return {
+            present: true,
+            itemCount: items,
+            text: (node.innerText ?? node.textContent ?? '').slice(0, 4000),
+            dataState: node.getAttribute('data-state') ?? node.getAttribute('data-feed-result-state'),
+            busy: timedOut || unsettled,
+            documentIdentity,
+            documentHref: location.href,
+          };
         },
-        { selector: section.selector, heading: section.heading },
-        { timeout: timeoutMs },
+        { selector: section.selector, heading: section.heading, itemSelector: section.itemSelector, timedOut },
       );
+      const after = tracker.snapshot();
+      if (
+        after.revision !== currentDocument.revision ||
+        after.url !== currentDocument.url ||
+        observation.documentHref !== after.url
+      ) {
+        currentDocument = await captureAdmittedDocument(
+          page,
+          tracker,
+          currentDocument.revision,
+          undefined,
+          readerDeadline,
+        );
+        continue;
+      }
+      const finalObservation: SectionProbe = {
+        present: observation.present,
+        itemCount: observation.itemCount,
+        text: observation.text,
+        dataState: observation.dataState,
+        busy: observation.busy,
+        document: observation.documentIdentity,
+      };
+      return {
+        observation: finalObservation,
+        timedOut,
+        ...(timedOut
+          ? { readinessReason: finalObservation.present ? 'reader-remained-loading' : 'reader-selector-not-found' }
+          : {}),
+      };
     } catch (error) {
-      if (!isTimeout(error)) throw error;
-      timedOut = true;
+      if (!isExecutionContextReplacement(error)) throw error;
+      currentDocument = await captureAdmittedDocument(
+        page,
+        tracker,
+        currentDocument.revision,
+        undefined,
+        readerDeadline,
+      );
     }
   }
-  const observation = await page.evaluate(
-    ({ selector, heading, itemSelector, timedOut }) => {
-      const loading = (element: HTMLElement): boolean => {
-        if (
-          element.getAttribute('aria-busy') === 'true' ||
-          element.getAttribute('data-state') === 'loading' ||
-          element.getAttribute('data-feed-result-state') === 'loading' ||
-          /\b(loading|preparing)\b/i.test(element.innerText ?? element.textContent ?? '')
-        )
-          return true;
-        return [
-          ...element.querySelectorAll<HTMLElement>(
-            '[aria-busy="true"],[data-state="loading"],[data-feed-result-state="loading"],[role="status"],[aria-live]',
-          ),
-        ].some(
-          (child) =>
-            child.getAttribute('aria-busy') === 'true' ||
-            child.getAttribute('data-state') === 'loading' ||
-            child.getAttribute('data-feed-result-state') === 'loading' ||
-            /\b(loading|preparing)\b/i.test(child.innerText ?? child.textContent ?? ''),
-        );
-      };
-      const titleOf = (element: HTMLElement): string => {
-        const labelledBy = element
-          .getAttribute('aria-labelledby')
-          ?.split(/\s+/)
-          .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
-          .filter(Boolean)
-          .join(' ')
-          .trim();
-        if (labelledBy) return labelledBy;
-        const label = element.getAttribute('aria-label')?.trim();
-        if (label) return label;
-        const headingNode = element.querySelector<HTMLElement>('h1,h2,h3,h4,h5,h6,[role="heading"]');
-        if (headingNode?.textContent?.trim()) return headingNode.textContent.trim();
-        return element.matches('a[href],button,[role="link"],[role="button"]')
-          ? (element.textContent?.trim() ?? '')
-          : '';
-      };
-      const matches = [...document.querySelectorAll<HTMLElement>(selector)];
-      const wanted = heading?.trim().toLocaleLowerCase();
-      const node =
-        wanted === undefined
-          ? matches[0]
-          : matches.find((element) => titleOf(element).toLocaleLowerCase().includes(wanted));
-      if (!node) return { present: false, itemCount: 0, text: '', dataState: null, busy: true };
-      const items = itemSelector ? Number(node.matches(itemSelector)) + node.querySelectorAll(itemSelector).length : 0;
-      const unsettled = loading(node);
-      return {
-        present: true,
-        itemCount: items,
-        text: (node.innerText ?? node.textContent ?? '').slice(0, 4000),
-        dataState: node.getAttribute('data-state') ?? node.getAttribute('data-feed-result-state'),
-        busy: timedOut || unsettled,
-      } satisfies SectionProbe;
-    },
-    { selector: section.selector, heading: section.heading, itemSelector: section.itemSelector, timedOut },
-  );
-  return { observation, timedOut };
 }
 
 async function clickSectionAction(page: Page, section: ManifestSection, readerDeadline: number): Promise<void> {
@@ -1175,6 +1481,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
       if (!pages.length) continue;
       let context: BrowserContext | undefined;
       let page: Page | undefined;
+      let documentTracker: PageDocumentTracker | undefined;
       try {
         // Native authorization and browser sign-in are independent prerequisites.
         if (browser && (persona === 'anonymous' || options.memberStorageState || signIn)) {
@@ -1188,6 +1495,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
             page = await context.newPage();
             if (persona === 'member' && signIn && !options.memberStorageState)
               await signInBrowser(page, base, signIn, pageTimeout, report);
+            documentTracker = pageDocumentTracker(page);
           } catch (error) {
             incomplete = true;
             report(`${persona} browser setup unavailable: ${displayError(error)}`);
@@ -1251,23 +1559,39 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
             continue;
           }
           const subject = identity?.status === 'resolved' ? identity.subjectId : '';
-          let navigationFailed = !page;
-          if (page) {
+          let readerDeadline = performance.now() + readerTimeout;
+          let navigationFailed = !page || !documentTracker;
+          let admittedDocument: AdmittedDocument | undefined;
+          if (page && documentTracker) {
             const route = expand(manifestPage.path, { subject });
-            const navigation = await navigateToDocument(page, new URL(route, base).href, pageTimeout);
-            navigationFailed = !navigation.responseReceived;
-            if ('error' in navigation) {
+            const navigation = await navigateToReaderDocument(
+              page,
+              documentTracker,
+              new URL(route, base).href,
+              pageTimeout,
+              readerTimeout,
+            );
+            readerDeadline = navigation.readerDeadline;
+            admittedDocument = navigation.document;
+            navigationFailed = !admittedDocument;
+            if (navigationFailed && 'error' in navigation) {
               incomplete = true;
               const outcome = isTimeout(navigation.error) ? 'timed out' : 'failed';
-              const response = navigation.responseReceived
-                ? `after document response status=${navigation.status}`
-                : 'before document response';
+              if (navigation.responseReceived) {
+                report(
+                  `Page navigation ${outcome} after document response status=${navigation.status} for ${manifestPage.id} ${persona}; reason=${navigation.reason ?? 'current-document-not-admitted'}; browser probes unrun: ${displayError(navigation.error)}`,
+                );
+              } else {
+                report(
+                  `Page navigation ${outcome} before document response for ${manifestPage.id} ${persona}; reason=${readerFailureReason(navigation.error)}; browser probes unrun: ${displayError(navigation.error)}`,
+                );
+              }
+            } else if ('error' in navigation) {
               report(
-                `Page navigation ${outcome} ${response} for ${manifestPage.id} ${persona}; ${navigation.responseReceived ? 'continuing bounded section coverage' : 'browser probes unrun'}: ${displayError(navigation.error)}`,
+                `Page navigation recovered after document response status=${navigation.status} for ${manifestPage.id} ${persona}; current document admitted`,
               );
             }
           }
-          const readerDeadline = performance.now() + readerTimeout;
 
           const evaluateSection = async (section: ManifestSection): Promise<SectionResult> => {
             const vars: Record<string, string> = {
@@ -1282,15 +1606,22 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
             };
             vars.filter = section.native.query?.filter ? expand(section.native.query.filter, vars) : NIL_UUID;
             let browserProbe: 'run' | 'unrun' = navigationFailed ? 'unrun' : 'run';
-            const readSection = async (): Promise<{ observation: PageObservation; timedOut: boolean }> => {
-              if (!page || navigationFailed) return { observation: unread(), timedOut: false };
+            const readSection = async (): Promise<{
+              observation: PageObservation;
+              timedOut: boolean;
+              readinessReason?: string;
+            }> => {
+              if (!page || !documentTracker || navigationFailed || !admittedDocument)
+                return { observation: unread(), timedOut: false };
               try {
                 if (section.native.action) await clickSectionAction(page, section, readerDeadline);
-                return await observeSection(page, section, readerDeadline);
+                return await observeSection(page, documentTracker, section, readerDeadline, admittedDocument);
               } catch (error) {
                 incomplete = true;
                 browserProbe = 'unrun';
-                report(`Reader unavailable for ${manifestPage.id} ${persona} ${section.id}: ${displayError(error)}`);
+                report(
+                  `Reader unavailable for ${manifestPage.id} ${persona} ${section.id}: reason=${readerFailureReason(error)}; ${displayError(error)}`,
+                );
                 return { observation: unread(), timedOut: false };
               }
             };
@@ -1347,7 +1678,9 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
             if (native?.error) report(`${manifestPage.id} ${persona} ${section.id}: ${native.error}`);
             if (read.timedOut) {
               incomplete = true;
-              report(`Reader readiness timed out for ${manifestPage.id} ${persona} ${section.id}`);
+              report(
+                `Reader readiness timed out for ${manifestPage.id} ${persona} ${section.id}: reason=${read.readinessReason ?? 'reader-not-ready-before-shared-deadline'}`,
+              );
             }
             const observed = read.observation;
             const classified = native
@@ -1383,6 +1716,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
                 nativeProbe: native ? 'run' : 'unrun',
                 browserProbe,
                 sqlProbe,
+                ...(observed.document ? { readerDocument: observed.document } : {}),
                 ...(nativeProblem ? { nativeProblem } : {}),
                 ...(authorityMissing && scopedRead
                   ? {
@@ -1417,6 +1751,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
           }
         }
       } finally {
+        documentTracker?.dispose();
         await close(`${persona} page`, page);
         await close(`${persona} context`, context);
       }
