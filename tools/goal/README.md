@@ -1750,6 +1750,12 @@ and teardown reason. Observed config output proves only that stage was reached; 
 A later teardown error stays in the transcript without replacing the pre-teardown cause. Content owns Web stage
 instrumentation and startup repair; page-data owns child/readiness capture. Logs and notices redact recognized credentials.
 
+Decision: a page-data seed with the seed owner's versioned publication-incomplete handoff runs route checks on the
+same stack and records its incomplete status and omission count in the page-data run. Only the exact current result
+path and exit code 1 are admitted; the seed command remains strict. A partial run does not create the seeded marker,
+so the next cycle retries. Existing cycle state has no exact source-input and database identity for safe partial
+artifact reuse.
+
 Decision: persist each bounded page-data boot/check transcript in a run-scoped state-directory log, name that path in the supermanager notice, retain the pre-teardown cause alongside cleanup and the final origin-specific readiness probe, and redact recognized credentials.
 
 Decision: before a dedicated page-data seed or resume, compare the live active Definitions digest with the bundled

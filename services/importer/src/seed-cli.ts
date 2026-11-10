@@ -109,6 +109,30 @@ export class SeedPublicationIncompleteError extends Error {
   }
 }
 
+export type SeedArtifactHandoff = Readonly<{
+  version: 1;
+  state: 'publication-incomplete';
+  artifact: string;
+  omissions: number;
+}>;
+
+/** Identify only the post-write publication refusal that leaves a usable source result. */
+export function seedArtifactHandoff(error: unknown): SeedArtifactHandoff | undefined {
+  return error instanceof SeedPublicationIncompleteError
+    ? {
+        version: 1,
+        state: 'publication-incomplete',
+        artifact: error.resultPath,
+        omissions: error.omissions,
+      }
+    : undefined;
+}
+
+export function formatSeedArtifactHandoff(error: unknown): string | undefined {
+  const handoff = seedArtifactHandoff(error);
+  return handoff ? `Cross-media seed artifact handoff ${JSON.stringify(handoff)}` : undefined;
+}
+
 /** Persist the report before enforcing strict publication completion. A publication refusal never removes it. */
 export async function finalizeSeedResult(input: {
   resultPath: string;

@@ -18,10 +18,12 @@ import {
   newlyDefectiveSections,
   pageDataClassCounts,
   parsePageDataOutput,
+  pageDataSeedStatus,
   PageDataStackError,
   firstSubstantiveErrorLine,
   terminalErrorLine,
   runPageDataCycle,
+  readLatestPageDataRun,
   type PageDataSection,
   type PageDataRepair,
   type SectionConfig,
@@ -197,6 +199,61 @@ test('the policy interval, defect transition, section output and per-run report 
       sections: { API: [{ page: 'home', section: 'feed', class: 'API' }] },
     });
     expect(formatPageDataFlowRuns(pageDataRuns).join('\n')).toContain('API (1): home/anonymous/feed');
+  } finally {
+    h.db.close();
+  }
+});
+
+test('fresh incomplete seed artifacts permit route checks while boot failures and stale files stay stops', async () => {
+  const h = fixture();
+  try {
+    const artifact = join(h.root, '.temp/cross-media-seed/result.json');
+    mkdirSync(join(h.root, '.temp/cross-media-seed'), { recursive: true });
+    writeFileSync(artifact, '{"published":507,"omissions":[{"code":"legacy-candidate-not-exact"}]}');
+    const handoff = `Cross-media seed artifact handoff ${JSON.stringify({
+      version: 1,
+      state: 'publication-incomplete',
+      artifact,
+      omissions: 1,
+    })}`;
+    const seed = pageDataSeedStatus(1, `${handoff}\nCross-media seed publication incomplete`, artifact);
+    expect(seed).toEqual({ status: 'publication-incomplete', omissions: 1 });
+    if (!seed) throw new Error('expected the fresh incomplete artifact handoff');
+    expect(pageDataSeedStatus(0, 'Cross-media seed completed', artifact)).toBeUndefined();
+    expect(() => pageDataSeedStatus(1, 'Error: issuer boot failed', artifact)).toThrow(PageDataStackError);
+    expect(() => pageDataSeedStatus(1, handoff, `${artifact}.stale`)).toThrow('did not match this fresh result');
+    expect(() => pageDataSeedStatus(2, handoff, artifact)).toThrow(
+      'without an admitted publication-incomplete artifact handoff',
+    );
+
+    const result = await runPageDataCycle({
+      settings: h.settings,
+      db: h.db,
+      tasks: { tasks: () => [] },
+      inbox: { deliver() {} },
+      now: () => new Date('2026-01-01T00:00:00.000Z'),
+      runStack: async () => ({
+        output: 'home anonymous feed DATA\n',
+        exitCode: 0,
+        registry: h.registry,
+        seed,
+      }),
+      routeDefect: async () => 'dispatched',
+    });
+    expect(result).toBe('ran');
+    expect(readLatestPageDataRun(h.db)).toMatchObject({
+      seed,
+      sections: [{ page: 'home', section: 'feed', class: 'DATA' }],
+    });
+    expect(flowReport(readFlow(h.db), []).pageDataRuns[0]).toMatchObject({ seed });
+    expect(formatPageDataFlowRuns(flowReport(readFlow(h.db), []).pageDataRuns).join('\n')).toContain(
+      'seed=publication-incomplete omissions=1',
+    );
+
+    writeFileSync(artifact, '{"old":true}');
+    expect(() => pageDataSeedStatus(1, 'Cross-media seed failed', artifact)).toThrow(
+      'without an admitted publication-incomplete artifact handoff',
+    );
   } finally {
     h.db.close();
   }
