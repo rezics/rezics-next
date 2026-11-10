@@ -115,6 +115,10 @@ Decision: enforce the six-task per-Goal limit at worker start admission; waiting
   work that needs its result. Keep a concrete independent repair ready while checks run, and dispatch it when an
   existing coding slot and allowance permit. If the coding queue is empty, report whether no independent repair is
   ready, planning missed one, or admission is limiting starts. Use existing telemetry and the hourly review.
+- The supermanager initiates efficiency work without a maintainer prompt. In the existing hourly review, identify the
+  largest evidenced avoidable loss, take the smallest action that addresses its cause, and report the action and
+  observed effect or the next measurement. When evidence is insufficient, name what is missing and collect the
+  smallest useful observation. Do not add a watcher or increase allowance or concurrency to meet this duty.
 - An alarm fires only on a real problem, and its receiver fixes the cause at once. An alarm that repeats for the same
   cause without a fix escalates to the supermanager. Throttling or batching an alarm hides the problem; fix the cause or
   the threshold.
