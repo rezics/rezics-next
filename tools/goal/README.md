@@ -3323,6 +3323,10 @@ notice and delivery acknowledgement commit together in the SQLite inbox, with fa
 later sweep. A new UTC day may dispatch again. The template grants only `tools/goal/reports/daily-step-audit-*.md`,
 which passes the existing risk ownership validator without granting product risk areas.
 
+Decision: the resident verifier checks the published control-plane revision at its existing cycle boundary.
+It finishes both owned verification cycles before retiring for newer code; systemd then starts a fresh process.
+An unreadable revision does not retire the process. No additional watcher is needed.
+
 User systemd owns the resident control plane. Install it from the main checkout:
 
 ```sh
