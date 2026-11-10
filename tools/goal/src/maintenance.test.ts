@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, wr
 import { join } from 'node:path';
 import type { Runtime } from './config.ts';
 import type { Settings } from './types.ts';
-import { maintenanceCommand, runMaintenance } from './maintenance.ts';
+import { maintenanceCommand, runMaintenance, runResidentVerifier } from './maintenance.ts';
 import { openDb } from './db.ts';
 import { WorkerStore } from './store.ts';
 import { git } from './merge.ts';
@@ -213,3 +213,23 @@ test.each(['integrated', 'cancelled'] as const)(
   },
   10_000,
 );
+
+test('a resident verifier finishes its owned cycle and exits before checking with stale code', async () => {
+  const settings = { mainCheckout: '/control-plane' } as Settings;
+  let published: string | undefined;
+  const events: string[] = [];
+  const verify = async () => {
+    events.push('cycle started');
+    published = 'new';
+    await Promise.resolve();
+    events.push('cycle finished');
+  };
+  const readVersion = async (checkout: string) => {
+    expect(checkout).toBe(settings.mainCheckout);
+    return published;
+  };
+  expect(await runResidentVerifier({ settings, verify, loadedCodeVersion: 'old' }, readVersion)).toBe(0);
+  expect(events).toEqual(['cycle started', 'cycle finished']);
+  expect(await runResidentVerifier({ settings, verify, loadedCodeVersion: 'old' }, readVersion)).toBe(0);
+  expect(events).toHaveLength(2);
+});

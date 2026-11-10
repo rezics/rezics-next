@@ -1,4 +1,5 @@
 import { defaultPolicy } from './policy.ts';
+import { currentCodeVersion } from './runtime-version.ts';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -194,16 +195,27 @@ if (import.meta.main) {
 
 /** systemd owns this process; each pass waits for verification to finish before the next starts. */
 export async function runResidentVerifier(
-  runtime: Pick<Runtime, 'verify'> & Partial<Pick<Runtime, 'settings'>>,
+  runtime: Pick<Runtime, 'verify'> & Partial<Pick<Runtime, 'settings' | 'loadedCodeVersion'>>,
+  readPublishedCode = currentCodeVersion,
 ): Promise<number> {
+  const loadedCode = runtime.loadedCodeVersion;
+  const checkout = runtime.settings?.mainCheckout;
+  const publicationChanged = async () => {
+    if (!loadedCode || !checkout) return false;
+    const published = await readPublishedCode(checkout);
+    return published !== undefined && published !== loadedCode;
+  };
   const controller = new AbortController();
   const stop = () => controller.abort();
   process.once('SIGTERM', stop);
   process.once('SIGINT', stop);
   try {
     while (!controller.signal.aborted) {
-      await runtime.verify?.();
+      if (await publicationChanged()) break;
       if (controller.signal.aborted) break;
+      await runtime.verify?.();
+      // Verification awaits both owned cycles. Systemd restarts this process after their leases are released.
+      if (controller.signal.aborted || (await publicationChanged())) break;
       await new Promise<void>((resolve) => {
         const finish = () => {
           clearTimeout(timer);
