@@ -348,9 +348,10 @@ test('a refused repair keeps its completed run, lets independent repairs route, 
     expect(formatPageDataFlowRuns([report]).join('\n')).toContain(
       'Repair refused for settings/anonymous/permissions (API): declared paths touch undeclared risk area: authorization',
     );
-    const claims = h.store.db
-      .query('SELECT status,detail FROM page_data_repairs')
-      .all() as { status: string; detail: string }[];
+    const claims = h.store.db.query('SELECT status,detail FROM page_data_repairs').all() as {
+      status: string;
+      detail: string;
+    }[];
     expect(claims.map(({ status }) => status).sort()).toEqual(['refused', 'routed']);
     expect(claims.map(({ detail }) => JSON.parse(detail))).toContainEqual(
       expect.objectContaining({

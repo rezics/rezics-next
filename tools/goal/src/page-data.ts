@@ -645,9 +645,10 @@ function repairKey(section: PageDataSection, owner: Task | undefined): string {
 }
 
 function readRepairClaim(db: Database, key: string): { status: string; detail: string } | undefined {
-  const row = db
-    .query('SELECT status,detail FROM page_data_repairs WHERE repair_key=? LIMIT 1')
-    .get(key) as { status: string; detail: string } | null;
+  const row = db.query('SELECT status,detail FROM page_data_repairs WHERE repair_key=? LIMIT 1').get(key) as {
+    status: string;
+    detail: string;
+  } | null;
   return row ?? undefined;
 }
 

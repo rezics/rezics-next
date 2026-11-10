@@ -150,10 +150,7 @@ export async function routePageDataRepair(
   try {
     task = tasks.dispatch(briefPath, null, true, 'verifier');
   } catch (error) {
-    if (
-      error instanceof Error &&
-      /^declared paths touch undeclared risk area: [a-z0-9_-]+$/.test(error.message)
-    )
+    if (error instanceof Error && /^declared paths touch undeclared risk area: [a-z0-9_-]+$/.test(error.message))
       return { status: 'refused', reason: error.message };
     throw error;
   }
