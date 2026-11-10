@@ -36,6 +36,7 @@ export {
 
 type NativeAuth = Awaited<ReturnType<typeof nativeFixture>>;
 type NativeWorker = Awaited<ReturnType<typeof startTerminalErasureWorker>>;
+type WorkerBoundary = { held: boolean; active: number; steps: Record<string, number> };
 
 /** Owns the isolated native Auth, Access, kernel and production worker resources for terminal erasure. */
 export async function createTerminalErasureFixture() {
@@ -53,6 +54,7 @@ export async function createTerminalErasureFixture() {
   let work: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   let worker: NativeWorker | undefined;
   let closing: Promise<void> | undefined;
+  const editionSubjectWrites: Array<WorkerBoundary & { sellerAccountId: string; subjectType: string }> = [];
 
   const close = () =>
     (closing ??= (async () => {
@@ -170,8 +172,23 @@ export async function createTerminalErasureFixture() {
         actions: ['subject:create', 'board:create'],
         valid: '(,)',
       });
-      const request: NativeEditionRequest = (method, path, body, headers) =>
-        command(actor, method, path, body, headers);
+      const request: NativeEditionRequest = async (method, path, body, headers) => {
+        const write = () => command(actor, method, path, body, headers);
+        if (method !== 'POST' || path !== '/v1/subjects' || !worker) return write();
+        // Observe the competing native steps before draining them. Never report the
+        // post-hold idle state as evidence of what was live at subject admission.
+        const [boundary] = await readOnly<WorkerBoundary>(
+          `SELECT held,active,steps FROM ${TERMINAL_ERASURE_BARRIER_TABLE} WHERE singleton=true`,
+        );
+        const evidence = {
+          ...boundary!,
+          sellerAccountId: actor.accountId,
+          subjectType: (body as { type: string }).type,
+        };
+        editionSubjectWrites.push(evidence);
+        console.info('Terminal erasure Edition subject-write boundary:', JSON.stringify(evidence));
+        return withWorkerHeld(write, boundary!);
+      };
       return createNativeEditionFixture(request);
     }
 
@@ -179,7 +196,8 @@ export async function createTerminalErasureFixture() {
       `CREATE TABLE ${TERMINAL_ERASURE_BARRIER_TABLE} (
          singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),
          held boolean NOT NULL DEFAULT false,
-         active integer NOT NULL DEFAULT 0 CHECK(active >= 0)
+         active integer NOT NULL DEFAULT 0 CHECK(active >= 0),
+         steps jsonb NOT NULL DEFAULT '{}'::jsonb
        )`,
     );
     await pool.query(`INSERT INTO ${TERMINAL_ERASURE_BARRIER_TABLE} (singleton) VALUES (true)`);
@@ -212,6 +230,22 @@ export async function createTerminalErasureFixture() {
       }
     }
 
+    async function withWorkerHeld<T>(action: () => Promise<T>, boundary?: WorkerBoundary): Promise<T> {
+      const nativeWorker = worker;
+      if (!nativeWorker) return action();
+      const [prior] = boundary
+        ? [boundary]
+        : await readOnly<WorkerBoundary>(
+            `SELECT held,active,steps FROM ${TERMINAL_ERASURE_BARRIER_TABLE} WHERE singleton=true`,
+          );
+      try {
+        await nativeWorker.hold(pool!);
+        return await action();
+      } finally {
+        if (!prior!.held) await nativeWorker.release(pool!);
+      }
+    }
+
     return {
       pool,
       auth,
@@ -224,25 +258,11 @@ export async function createTerminalErasureFixture() {
       json,
       subject,
       editions,
+      editionSubjectWrites,
       readOnly,
       async prepareSource(actor: Persona, collectionId: string) {
-        const nativeWorker = worker;
-        if (!nativeWorker) {
-          await prepareCollectionSource(sourceContext, actor.accountId, collectionId);
-          return;
-        }
-        const [barrier] = await readOnly<{ held: boolean }>(
-          `SELECT held FROM ${TERMINAL_ERASURE_BARRIER_TABLE} WHERE singleton=true`,
-        );
-        try {
-          // Capture commits enqueue library.canonicalSource continuations. Drain those
-          // steps and Semantic's scope repair before advancing the same Source here.
-          await nativeWorker.hold(pool!);
-          await prepareCollectionSource(sourceContext, actor.accountId, collectionId);
-        } finally {
-          // Restore the caller's gate even when hold or native preparation fails.
-          if (!barrier!.held) await nativeWorker.release(pool!);
-        }
+        // Canonical Source continuation and scope repair share this native owner.
+        await withWorkerHeld(() => prepareCollectionSource(sourceContext, actor.accountId, collectionId));
       },
       async prepareAccountAgent(actor: Persona) {
         const partition = partitionOf(routeOf(actor.accountId)!);

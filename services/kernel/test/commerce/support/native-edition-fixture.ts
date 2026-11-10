@@ -41,7 +41,10 @@ async function command<T>(
     ...headers,
   });
   const text = await response.text();
-  if (response.status !== status) throw new Error(`${method} ${path} returned ${response.status}: ${text}`);
+  if (response.status !== status) {
+    const phase = path === '/v1/subjects' ? ` ${(body as { type: string }).type}` : '';
+    throw new Error(`${method} ${path}${phase} returned ${response.status}: ${text}`);
+  }
   return JSON.parse(text) as T;
 }
 
