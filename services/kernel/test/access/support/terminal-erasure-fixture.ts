@@ -197,7 +197,23 @@ export async function createTerminalErasureFixture() {
       subject,
       readOnly,
       async prepareSource(actor: Persona, collectionId: string) {
-        await prepareCollectionSource(sourceContext, actor.accountId, collectionId);
+        const nativeWorker = worker;
+        if (!nativeWorker) {
+          await prepareCollectionSource(sourceContext, actor.accountId, collectionId);
+          return;
+        }
+        const [barrier] = await readOnly<{ held: boolean }>(
+          `SELECT held FROM ${TERMINAL_ERASURE_BARRIER_TABLE} WHERE singleton=true`,
+        );
+        try {
+          // Capture commits enqueue library.canonicalSource continuations. Drain those
+          // steps and Semantic's scope repair before advancing the same Source here.
+          await nativeWorker.hold(pool!);
+          await prepareCollectionSource(sourceContext, actor.accountId, collectionId);
+        } finally {
+          // Restore the caller's gate even when hold or native preparation fails.
+          if (!barrier!.held) await nativeWorker.release(pool!);
+        }
       },
       async prepareAccountAgent(actor: Persona) {
         const partition = partitionOf(routeOf(actor.accountId)!);

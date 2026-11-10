@@ -38,6 +38,7 @@ function addTask(
   currentAttempt: number,
   goal = 'goal-a',
   manager = goal,
+  after: string[] = [],
 ): void {
   db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(
     id,
@@ -48,7 +49,7 @@ function addTask(
       sequence,
       currentAttempt,
       state,
-      brief: { goal, manager, after: [] },
+      brief: { goal, manager, after },
     }),
   );
 }
@@ -177,7 +178,9 @@ test('concurrent and restarted sweeps deduplicate a bucket; high width and prote
   expect(first.snapshot.goals.find((goal) => goal.goal === 'wide-goal')?.running).toBe(10);
   expect(first.snapshot.goals.find((goal) => goal.goal === 'daily-step-audit')?.pendingStarts).toBe(1);
   expect(first.snapshot.goals.find((goal) => goal.goal === 'queued-goal')).toMatchObject({
-    ready: 1, pendingStarts: 1, actionableReady: 0,
+    ready: 1,
+    pendingStarts: 1,
+    actionableReady: 0,
   });
   expect(first.deliveredGoals).toEqual([]);
   expect(second.deliveredGoals).toEqual([]);
@@ -262,4 +265,22 @@ test('width policy overrides preserve paged counts, threshold boundaries and buc
   expect((await run(200)).deliveredGoals).toEqual(['goal-a']);
   expect(delivered[0]).toContain('within 2 minutes');
   expect(delivered[0]).toContain('at least 3 ready briefs');
+});
+
+test('held work waiting on a progressing predecessor stays visible without waking its manager', async () => {
+  const f = fixture();
+  addTask(f.db, 'active-predecessor', 1, 'running', 1, 'goal-a');
+  addAttempt(f.db, 'active-predecessor', 1, 'running', 'codex', null);
+  addTask(f.db, 'held-successor', 2, 'held', 0, 'goal-a', 'goal-a', ['active-predecessor']);
+  addTask(f.db, 'held-missing', 3, 'held', 0, 'goal-b', 'goal-b', ['active-predecessor', 'missing-predecessor']);
+
+  const result = await sweepWidthGovernor(f.db, f.inbox, Date.UTC(2026, 9, 31, 12));
+  expect(result.snapshot.goals.find((goal) => goal.goal === 'goal-a')).toMatchObject({
+    held: 1,
+    actionableHeld: 0,
+    unknownRunning: 1,
+  });
+  expect(result.deliveredGoals).toEqual(['goal-b']);
+  expect(f.inbox.pending('goal-a')).toHaveLength(0);
+  expect(f.inbox.pending('goal-b')).toHaveLength(1);
 });

@@ -39,6 +39,7 @@ export type WidthCounts = {
   actionableReady: number;
   pendingStarts: number;
   held: number;
+  actionableHeld: number;
   stopped: number;
   actionableStopped: number;
   waiting: number;
@@ -82,6 +83,7 @@ type WidthRow = {
   process_group: number | null;
   cli: string | null;
   pending_start: number;
+  progressing_dependencies: number;
 };
 
 type MutableCounts = WidthCounts;
@@ -98,6 +100,7 @@ function emptyCounts(): MutableCounts {
     actionableReady: 0,
     pendingStarts: 0,
     held: 0,
+    actionableHeld: 0,
     stopped: 0,
     actionableStopped: 0,
     waiting: 0,
@@ -146,7 +149,17 @@ function pageQuery(db: Database, afterSequence: number, limit: number, hasRetryI
         c.process_boot,
         c.process_group,
         c.cli,
-        CASE WHEN ${pendingStart} THEN 1 ELSE 0 END AS pending_start
+        CASE WHEN ${pendingStart} THEN 1 ELSE 0 END AS pending_start,
+        CASE WHEN c.task_state='held' THEN (
+          SELECT count(*) FILTER (WHERE d.task_state IN ('ready','running','landing')) > 0
+            AND count(*) FILTER (WHERE d.task_state IS NULL OR d.task_state NOT IN (
+              'ready','running','landing','integrated','merged','stopped','cancelled'
+            )) = 0
+          FROM worker_tasks AS held
+          JOIN json_each(held.body, '$.brief.after') AS dependency
+          LEFT JOIN worker_current_attempts AS d ON d.task_id=dependency.value
+          WHERE held.id=c.task_id
+        ) ELSE 0 END AS progressing_dependencies
       FROM worker_current_attempts AS c
       WHERE c.sequence > ?
         AND c.task_state IN ('ready', 'held', 'running', 'stopped')
@@ -199,8 +212,10 @@ function addRow(
   if (taskState === 'ready') {
     increment('ready');
     if (row.pending_start !== 1) increment('actionableReady');
-  } else if (taskState === 'held') increment('held');
-  else if (taskState === 'stopped') {
+  } else if (taskState === 'held') {
+    increment('held');
+    if (row.progressing_dependencies !== 1) increment('actionableHeld');
+  } else if (taskState === 'stopped') {
     increment('stopped');
     if (isActionableStop(db, row.task_id, row.current_attempt, row.stopped_action, policy))
       increment('actionableStopped');
@@ -309,7 +324,7 @@ function noLongerActiveManager(db: Database, managerId: string): boolean {
 }
 
 function hasUndispatchedWork(goal: WidthGoalSnapshot): boolean {
-  return goal.actionableReady > 0 || goal.held > 0 || goal.actionableStopped > 0;
+  return goal.actionableReady > 0 || goal.actionableHeld > 0 || goal.actionableStopped > 0;
 }
 
 function widthEventSummary(goal: WidthGoalSnapshot, policy: ControlPolicy): string {

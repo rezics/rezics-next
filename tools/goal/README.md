@@ -2577,9 +2577,10 @@ release checks belong to the native controller after source integration; typing 
 
 The independent manager-host sweep checks worker width every minute from the same `worker_current_attempts` projection
 used by host admission and delivers at most one wakeable width event per Goal in each UTC 15-minute bucket when fewer
-than ten current attempts have live process identities and known ready work without a durable start, held work, or
-actionable stopped work exists. A ready task with an existing start request stays visible but does not trigger a wake
-by itself; its wait belongs to queue admission. An explicit stop is an owner decision: keep its record visible and
+than ten current attempts have live process identities and known ready work without a durable start, actionable
+held work, or actionable stopped work exists. A ready task with an existing start request stays visible but does not trigger a wake
+by itself; its wait belongs to queue admission. Held work with a progressing predecessor stays visible without waking
+the manager. A missing predecessor remains actionable. An explicit stop is an owner decision: keep its record visible and
 await an explicit retry or cancellation instead of a width wake or expiry. The
 event reports the current running and Codex counts, unknown process evidence, and known work counts. Ready, held, waiting
 and stale-identity attempts do not count as running. The manager
