@@ -39,6 +39,41 @@ const page = (partial: Partial<PageObservation>): PageObservation => ({
   ...partial,
 });
 
+const browserPage = (options: {
+  navigate?: (url: string, navigation: { timeout?: number; waitUntil?: string }) => void | Promise<void>;
+  close?: () => void;
+}) => {
+  let url = 'about:blank';
+  const listeners = new Map<string, (value: unknown) => void>();
+  const frame = { url: () => url };
+  return {
+    mainFrame: () => frame,
+    on: (event: string, listener: (value: unknown) => void) => listeners.set(event, listener),
+    off: (event: string) => listeners.delete(event),
+    goto: async (nextUrl: string, navigation: { timeout?: number; waitUntil?: string }) => {
+      await options.navigate?.(nextUrl, navigation);
+      url = nextUrl;
+      listeners.get('framenavigated')?.(frame);
+      return { status: () => 200 };
+    },
+    waitForFunction: async () => {},
+    evaluate: async (_callback: unknown, argumentsValue?: unknown) => {
+      if (argumentsValue === undefined) return { url, timeOrigin: 1 };
+      const current = new URL(url);
+      return {
+        present: true,
+        itemCount: 1,
+        text: 'Fixture reader',
+        dataState: 'ready',
+        busy: false,
+        documentIdentity: { url: `${current.origin}${current.pathname}`, timeOrigin: 1 },
+        documentHref: url,
+      };
+    },
+    close: async () => options.close?.(),
+  };
+};
+
 test('a section that hides a successful native response is WEB', () => {
   expect(
     classifySection(
@@ -311,17 +346,12 @@ test('seeded pages bind exact source identities for Web, native and SQL, and lea
   const output: string[] = [];
   const browser = {
     newContext: async () => ({
-      newPage: async () => ({
-        on: () => {},
-        off: () => {},
-        goto: async (url: string) => {
-          visits.push(new URL(url).pathname);
-          return { status: () => 200 };
-        },
-        waitForFunction: async () => {},
-        evaluate: async () => page({ itemCount: 1, text: 'Book reader', dataState: 'ready' }),
-        close: async () => {},
-      }),
+      newPage: async () =>
+        browserPage({
+          navigate: async (url) => {
+            visits.push(new URL(url).pathname);
+          },
+        }),
       close: async () => {},
     }),
   } as unknown as Browser;
@@ -1080,20 +1110,16 @@ test.each([true, false])(
     let sqlReads = 0;
     const browser = {
       newContext: async () => ({
-        newPage: async () => ({
-          on: () => {},
-          off: () => {},
-          goto: async (url: string, options: { timeout: number }) => {
-            expect(options.timeout).toBe(50);
-            if (url.endsWith('/auth/sign-in')) throw new Error('navigation timed out password=hidden');
-            return { status: () => 200 };
-          },
-          waitForFunction: async () => {},
-          evaluate: async () => page({ itemCount: 1 }),
-          close: async () => {
-            pagesClosed++;
-          },
-        }),
+        newPage: async () =>
+          browserPage({
+            navigate: async (url, navigation) => {
+              expect(navigation.timeout).toBe(50);
+              if (url.endsWith('/auth/sign-in')) throw new Error('navigation timed out password=hidden');
+            },
+            close: () => {
+              pagesClosed++;
+            },
+          }),
         close: async () => {
           contextsClosed++;
         },
