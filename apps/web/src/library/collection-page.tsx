@@ -1,3 +1,4 @@
+import { CollectionLayoutSelect } from './collection-layout-select';
 import { CollectionPresentationSummary } from './showcase-collection/presentation';
 import { CollectionEditReview } from './showcase-collection/edit-review';
 import { collectionComparisonHref } from './collection-comparison/model';
@@ -371,6 +372,7 @@ type CollectionPageProps = {
   readEditorPage?: () => Promise<EditableCollectionPage>;
   cursor: string | undefined;
   layout?: 'grid' | 'list';
+  onLayoutChange?: (layout: 'grid' | 'list') => void;
   search?: Record<string, string | string[]>;
   /** An enclosing read lifetime can retire this editor; it never supplies viewer authority. */
   isCurrent?: () => boolean;
@@ -440,6 +442,7 @@ function CollectionPageLifetime({
   readEditorPage,
   cursor,
   layout = 'list',
+  onLayoutChange,
   search,
   isCurrent: sourceCurrent,
   current,
@@ -2083,26 +2086,11 @@ function CollectionPageLifetime({
                 viewerKey={session.state === 'signed-in' ? (session.subject ?? 'signed-in') : 'anonymous'}
               />
             ) : null}
-            <nav
-              aria-label={m.library_layout()}
-              data-slot="collection-layout"
-              className="ms-auto flex shrink-0 items-center gap-1 text-sm"
-            >
-              <a
-                className={buttonClass}
-                href={collectionViewAddress(page.id, 'list', cursor, search)}
-                aria-current={layout === 'list' ? 'page' : undefined}
-              >
-                {m.library_layout_list()}
-              </a>
-              <a
-                className={buttonClass}
-                href={collectionViewAddress(page.id, 'grid', cursor, search)}
-                aria-current={layout === 'grid' ? 'page' : undefined}
-              >
-                {m.library_layout_grid()}
-              </a>
-            </nav>
+            <CollectionLayoutSelect
+              value={layout}
+              href={(next) => collectionViewAddress(page.id, next, cursor, search)}
+              onValueChange={onLayoutChange}
+            />
           </div>
         ) : null}
         <CollectionFilterFeedback

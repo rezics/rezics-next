@@ -56,6 +56,8 @@ const listPresentations = Object.fromEntries(
 const source = `/collections/${id(1)}?cursor=same-page`;
 
 function Example({ layout = 'list', unavailable = false }: { layout?: 'list' | 'grid'; unavailable?: boolean }) {
+  const [layoutChoice, setLayoutChoice] = useState<{ initial: 'list' | 'grid'; value: 'list' | 'grid' }>();
+  const view = layoutChoice?.initial === layout ? layoutChoice.value : layout;
   const [replaced, replace] = useState(false);
   const [recovered, recover] = useState(false);
   const [reference, visit] = useState<{ href: string; via: string } | null>(null);
@@ -95,7 +97,7 @@ function Example({ layout = 'list', unavailable = false }: { layout?: 'list' | '
     comparisonDefinitions: unavailable ? {} : definitions.release.properties,
   };
   return (
-    <PatternStory visitor="Signed Out" path={reference ? reference.href : `${source}&layout=${layout}`}>
+    <PatternStory visitor="Signed Out" path={reference ? reference.href : `${source}&layout=${view}`}>
       <div
         className="mx-auto max-w-6xl space-y-4 p-4"
         onClickCapture={(event) => {
@@ -133,7 +135,8 @@ function Example({ layout = 'list', unavailable = false }: { layout?: 'list' | '
             page={page}
             queryKey={['comparison-example', page.id, page.revision]}
             cursor="same-page"
-            layout={layout}
+            layout={view}
+            onLayoutChange={(value) => setLayoutChoice({ initial: layout, value })}
             refreshPage={async () => page}
           />
         )}

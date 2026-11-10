@@ -1,3 +1,4 @@
+import { CollectionLayoutSelect } from './collection-layout-select';
 import { Cover } from '@rezics/ui/cover';
 import { coverSrc } from '../media/cover-src';
 import { FilteredLibraryRemovalControl } from './bulk-filtered-library-removal-view';
@@ -371,18 +372,12 @@ function DynamicCollectionPageLifetime({
               ? m.library_dynamic_retry_ready()
               : null}
         </p>
-        <nav aria-label={m.library_layout()} className="flex min-w-0 flex-wrap gap-2">
-          {(['list', 'grid'] as const).map((choice) => (
-            <a
-              key={choice}
-              href={savedQueryResultsAddress(locale, current.id, current.cursor, search, { layout: choice, returnTo })}
-              aria-current={(layout ?? 'list') === choice ? 'true' : undefined}
-              className="inline-flex min-h-11 items-center rounded-lg border border-border px-4 py-2 text-primary aria-[current=true]:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2"
-            >
-              {choice === 'list' ? m.library_layout_list() : m.library_layout_grid()}
-            </a>
-          ))}
-        </nav>
+        <CollectionLayoutSelect
+          value={layout ?? 'list'}
+          href={(next) =>
+            savedQueryResultsAddress(locale, current.id, current.cursor, search, { layout: next, returnTo })
+          }
+        />
         {current.cursorRestarted ? <p role="status">{m.library_collections_cursor_reset()}</p> : null}
         {saved && viewerId && current.curatorAccountId === viewerId ? (
           <DynamicRuleResultsReview
