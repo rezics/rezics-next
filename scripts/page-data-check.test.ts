@@ -1,11 +1,13 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { createHash, generateKeyPairSync, verify } from 'node:crypto';
 import { chromium, type Browser } from '../packages/ui/node_modules/playwright/index.mjs';
 import {
   classifySection,
   formatLine,
   hasItems,
   nativeKind,
+  memberReadScopes,
   nativeProblemEvidence,
   pageKind,
   parseArgs,
@@ -902,4 +904,177 @@ test('the tracked M1 manifest names the starting pages and seed counts', () => {
     ),
   ).toBe('SEED');
   expect(sections['collections.discovery']?.sql).toBeUndefined();
+});
+
+test.each([
+  'website',
+  'missing-key',
+  'missing-scope',
+  'registration',
+  'consent',
+  'foreign-state',
+  'supplied',
+  'identity-token',
+  'following-only',
+])('member native read authority: %s', async (mode) => {
+  const manifest = parseManifest(
+    JSON.parse(readFileSync(new URL('./page-data-sections.json', import.meta.url), 'utf8')),
+  );
+  const reads = [
+    ...manifest.pages
+      .find((entry) => entry.id === 'home')!
+      .sections.filter((entry) => ['home-feed', 'following-feed', 'follows'].includes(entry.id)),
+    manifest.pages.find((entry) => entry.id === 'library')!.sections[0]!,
+  ];
+  expect(reads.map((entry) => memberReadScopes(entry.native))).toEqual([
+    ['feed_item:list', 'follow:list', 'library_entry:list', 'progress_session:list'],
+    ['feed_item:list', 'follow:list'],
+    ['follow:list'],
+    ['library_entry:list'],
+  ]);
+  const scopes = [...new Set(reads.flatMap((entry) => memberReadScopes(entry.native)))].sort();
+  const bearer = `eyJhbGciOiJFUzI1NiJ9.${Buffer.from(
+    JSON.stringify({
+      client_id: 'rezics-website',
+      scope:
+        mode === 'identity-token' ? '' : mode === 'following-only' ? 'feed_item:list follow:list' : scopes.join(' '),
+    }),
+  ).toString('base64url')}.signature-secret`;
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const key = { ...privateKey.export({ format: 'jwk' }), kid: 'local-website' };
+  let challenge = '';
+  let issuerCalls = 0;
+  const nativePaths: string[] = [];
+  const output: string[] = [];
+  const run = await runPageDataCheck({
+    baseUrl: 'http://web.test',
+    kernel: 'http://kernel.test',
+    manifest: {
+      version: 1,
+      context: '',
+      question: '',
+      pages: [
+        {
+          id: 'member-reads',
+          path: '/',
+          personas: ['member'],
+          sections: [
+            ...reads,
+            {
+              id: 'unaffected',
+              name: 'unaffected',
+              selector: 'main',
+              native: { method: 'GET', path: '/unaffected', items: '/items' },
+            },
+          ],
+        },
+      ],
+    },
+    ...(mode === 'supplied' || mode === 'identity-token' ? { memberToken: bearer } : {}),
+    signIn: {
+      origin: 'http://auth.test',
+      email: 'member@test.invalid',
+      password: 'password-secret',
+      ...(mode === 'missing-key' ? {} : { website: { key, resource: 'https://api.rezics.test' } }),
+    },
+    browser: {
+      newContext: async () => {
+        throw new Error('browser unavailable');
+      },
+    } as unknown as Browser,
+    fetch: (async (request: Request) => {
+      const url = new URL(request.url);
+      if (url.hostname === 'kernel.test') {
+        nativePaths.push(url.pathname);
+        if (url.pathname === '/unaffected') return Response.json({ items: [] });
+        expect(request.headers.get('authorization')).toBe(`Bearer ${bearer}`);
+        return url.pathname === '/v1/follows'
+          ? Response.json({ code: 'forbidden', token: bearer }, { status: 403 })
+          : Response.json({ feedItems: [], libraryEntries: [] });
+      }
+      issuerCalls++;
+      if (url.pathname === '/signin') {
+        expect(await request.json()).toEqual(signInRequestBody('member@test.invalid', 'password-secret'));
+        return Response.json({}, { headers: { 'set-cookie': 'identity=cookie-secret; HttpOnly' } });
+      }
+      if (url.pathname === '/authorize') {
+        expect(request.redirect).toBe('manual');
+        expect(url.searchParams.get('client_id')).toBe('rezics-website');
+        expect(url.searchParams.get('scope')).toBe(scopes.join(' '));
+        expect(url.searchParams.get('resource')).toBe('https://api.rezics.test');
+        expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+        expect(request.headers.get('cookie')).toBe('identity=cookie-secret');
+        challenge = url.searchParams.get('code_challenge')!;
+        if (mode === 'registration') return Response.json({ error: 'invalid_client' }, { status: 400 });
+        const callback = new URL(mode === 'consent' ? 'http://auth.test/consent' : 'http://web.test/auth/callback');
+        callback.searchParams.set('state', mode === 'foreign-state' ? 'foreign' : url.searchParams.get('state')!);
+        callback.searchParams.set('code', 'code-secret');
+        return new Response(null, { status: 302, headers: { location: callback.href } });
+      }
+      expect(url.pathname).toBe('/token');
+      if (request.headers.get('content-type') === 'application/json')
+        return Response.json({ access_token: 'identity-only-secret' });
+      const body = new URLSearchParams(await request.text());
+      expect(body.get('grant_type')).toBe('authorization_code');
+      expect(body.get('redirect_uri')).toBe('http://web.test/auth/callback');
+      expect(body.get('resource')).toBe('https://api.rezics.test');
+      expect(createHash('sha256').update(body.get('code_verifier')!).digest('base64url')).toBe(challenge);
+      const [header, payload, signature] = body.get('client_assertion')!.split('.');
+      expect(JSON.parse(Buffer.from(header!, 'base64url').toString())).toEqual({ alg: 'ES256', kid: key.kid });
+      expect(JSON.parse(Buffer.from(payload!, 'base64url').toString())).toMatchObject({
+        iss: 'rezics-website',
+        sub: 'rezics-website',
+        aud: 'http://auth.test',
+      });
+      expect(
+        verify(
+          'sha256',
+          Buffer.from(`${header}.${payload}`),
+          {
+            key: publicKey,
+            dsaEncoding: 'ieee-p1363',
+          },
+          Buffer.from(signature!, 'base64url'),
+        ),
+      ).toBe(true);
+      return Response.json({ access_token: mode === 'missing-scope' ? 'identity-only-secret' : bearer });
+    }) as typeof fetch,
+    stdout: {
+      write: (line) => {
+        output.push(line);
+      },
+    },
+    stderr: {
+      write: (line) => {
+        output.push(line);
+      },
+    },
+  });
+  const available = mode === 'website' || mode === 'supplied';
+  const partial = mode === 'following-only';
+  expect(nativePaths.toSorted()).toEqual(
+    (available
+      ? ['/v1/feedItems', '/v1/feedItems', '/v1/follows', '/v1/libraryEntries', '/unaffected']
+      : partial
+        ? ['/v1/feedItems', '/v1/follows', '/unaffected']
+        : ['/unaffected']
+    ).toSorted(),
+  );
+  expect(run.results.slice(0, 4).map((row) => row.evidence.nativeProbe)).toEqual(
+    partial ? ['unrun', 'run', 'run', 'unrun'] : Array(4).fill(available ? 'run' : 'unrun'),
+  );
+  expect(run.defects).toBe(available || partial ? 1 : 0);
+  expect(run.incomplete).toBe(true);
+  if (!available && !partial) {
+    expect(run.results.slice(0, 4).every((row) => row.class === 'UNAVAILABLE')).toBe(true);
+    expect(run.results[0]!.evidence.unrun).toEqual({
+      version: 1,
+      reason: 'member-authority-unavailable',
+      scopes: memberReadScopes(reads[0]!.native),
+      probes: { native: 'unrun' },
+    });
+  }
+  if (mode === 'supplied' || mode === 'identity-token') expect(issuerCalls).toBe(0);
+  for (const secret of [bearer, 'cookie-secret', 'code-secret', 'password-secret', key.d!])
+    expect(output.join('')).not.toContain(secret);
 });

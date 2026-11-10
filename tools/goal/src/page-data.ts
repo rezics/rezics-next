@@ -48,7 +48,15 @@ export type PageDataSection = {
   nativeProblem?: PageDataNativeProblem;
 };
 type PageDataNativeProblem = { code?: string; pointer?: string };
-export type PageDataUnrunEvidence = {
+export type PageDataUnrunEvidence =
+  | {
+      version: 1;
+      reason: 'member-authority-unavailable';
+      scopes: string[];
+      probes: { native: 'unrun' };
+    }
+  | PageDataSeedUnrunEvidence;
+export type PageDataSeedUnrunEvidence = {
   version: 1;
   provider: 'bangumi' | 'vndb';
   sourceKey: string;
@@ -405,6 +413,21 @@ function parseUnrunEvidence(token: string): PageDataUnrunEvidence {
   }
   if (!isRecord(value) || value.version !== 1 || !isRecord(value.probes))
     throw new Error('invalid page-data unrun provenance');
+  if (value.reason === 'member-authority-unavailable') {
+    const readScopes = new Set(['feed_item:list', 'follow:list', 'library_entry:list', 'progress_session:list']);
+    if (
+      Object.keys(value).length !== 4 ||
+      Object.keys(value.probes).length !== 1 ||
+      value.probes.native !== 'unrun' ||
+      !Array.isArray(value.scopes) ||
+      !value.scopes.length ||
+      value.scopes.length > readScopes.size ||
+      new Set(value.scopes).size !== value.scopes.length ||
+      value.scopes.some((scope) => !readScopes.has(scope))
+    )
+      throw new Error('invalid page-data unrun provenance');
+    return value as PageDataUnrunEvidence;
+  }
   const allowedReasons = [
     'artifact-missing',
     'artifact-invalid',
@@ -486,6 +509,8 @@ export function parsePageDataOutput(output: string, registry: ReadonlyMap<string
         nativeProblem = parseNativeProblem(evidence.slice('nativeProblem='.length));
       else throw new Error(`invalid page-data evidence for ${page}/${persona}/${section}`);
     }
+    if (unrun?.reason === 'member-authority-unavailable' && persona !== 'member')
+      throw new Error('invalid page-data member authority persona');
     seen.add(key);
     const classValue = className as PageDataClass;
     results.push({
