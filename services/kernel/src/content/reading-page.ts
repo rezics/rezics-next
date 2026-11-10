@@ -24,7 +24,7 @@ import {
   threadPostSelectionWitness,
 } from './reads.ts';
 import type { ContentReadDependencies, PostEntry, ThreadView, ViewerReactionKind } from './reads.ts';
-import type { AnchoredPosition } from './model.ts';
+import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import type { ViewerActionResources } from '../access/viewer-actions.ts';
 import { ItemViewSchema, ErasedPlaceholderSchema, ThreadViewSchema } from './schemas.ts';
 import { routeOf } from '../route/route.ts';
@@ -823,6 +823,13 @@ export async function createContentReadingCardBatch(
   selected: readonly SelectedReadingCardReference[],
   actor: Actor,
   deadline: number,
+  options: Readonly<{
+    /** Native caller-owned disclosure; preparation and finish each get a fresh observation. */
+    observeThreads?: (
+      ids: readonly string[],
+      context: ReadContext,
+    ) => Promise<ReadonlyMap<string, Anchored<ThreadView | null>>>;
+  }> = {},
 ): Promise<ContentReadingCardBatch> {
   const references = normalizeSelectedReadingCardReferences(selected);
   let actionRuntime: ReadingPageViewerActionRuntime | undefined;
@@ -859,8 +866,11 @@ export async function createContentReadingCardBatch(
 
   const places = new Map<string, SelectedPlaceSource>();
   const context = { actor, deadline };
+  const initialThreads = await options.observeThreads?.([...groups.keys()], context);
   for (const group of groups.values()) {
-    const thread = await readSelectedThread(dependencies, group.threadId, group.subjectId, actor, deadline);
+    const thread = initialThreads
+      ? initialThreads.get(group.threadId)!
+      : await readSelectedThread(dependencies, group.threadId, group.subjectId, actor, deadline);
     if (!thread.value || thread.value.firstPost.availability === 'withheld' || thread.value.boardId !== group.placeId)
       continue;
     let placeSource = places.get(group.placeId);
@@ -1085,9 +1095,15 @@ export async function createContentReadingCardBatch(
       return (finishPromise ??= (async () => {
         const finalPlaces = new Map<string, SelectedPlaceSource>();
         const finalAnchors: AnchoredPosition[] = [];
+        const finalThreads = await options.observeThreads?.(
+          [...groups.values()].filter((group) => group.state === 'current').map((group) => group.threadId),
+          context,
+        );
         for (const group of groups.values()) {
           if (group.state !== 'current') continue;
-          const thread = await readSelectedThread(dependencies, group.threadId, group.subjectId, actor, deadline);
+          const thread = finalThreads
+            ? finalThreads.get(group.threadId)!
+            : await readSelectedThread(dependencies, group.threadId, group.subjectId, actor, deadline);
           if (
             !thread.value ||
             thread.value.firstPost.availability === 'withheld' ||

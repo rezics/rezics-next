@@ -45,13 +45,18 @@ async function subject(visibility = 'visible') {
   return id;
 }
 
-async function board(conceptId: string, visibility = 'published', realmId: string | null = null) {
+async function board(
+  conceptId: string,
+  visibility = 'published',
+  realmId: string | null = null,
+  purpose = 'discussion',
+) {
   const id = newId(boardRoute);
   await db.admin.query(
     `INSERT INTO content.board
-     (route,board_id,realm_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-     VALUES ($1,$2,$3,$4,'Subject thread board',$5,1,$2)`,
-    [boardRoute, id, realmId, conceptId, visibility],
+     (route,board_id,realm_id,subject_id,title,visibility,security_revision,recorded_transaction_id,purpose)
+     VALUES ($1,$2,$3,$4,'Subject thread board',$5,1,$2,$6)`,
+    [boardRoute, id, realmId, conceptId, visibility, purpose],
   );
   return id;
 }
@@ -69,9 +74,18 @@ async function thread(
   try {
     await db.admin.query(
       `INSERT INTO content.thread
-       (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id,created_at)
-       VALUES ($1,$2,$3,$4,'Thread title',$5,1,$2,$6,$7)`,
-      [threadRoute, id, authorId, boardId, options.visibility ?? 'published', postId, options.activityAt],
+       (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id,created_at,kind)
+       VALUES ($1,$2,$3,$4,'Thread title',$5,1,$2,$6,$7,$8)`,
+      [
+        threadRoute,
+        id,
+        authorId,
+        boardId,
+        options.visibility ?? 'published',
+        postId,
+        options.activityAt,
+        options.kind ?? 'discussion',
+      ],
     );
     await db.admin.query(
       `INSERT INTO content.post
@@ -295,4 +309,37 @@ test('thread disclosure changes take effect before the next page is returned', a
   expect(next.body.threads).toEqual([]);
   expect(next.body.next).toBeNull();
   expect(next.body.threads.map((value: { id: string }) => value.id)).not.toContain(secondId);
+});
+
+test('anonymous six-review previews use the production deadline and retain their continuation', async () => {
+  const subjectId = await subject();
+  const boardId = await board(subjectId, 'published', null, 'reviews');
+  const ids: string[] = [];
+  for (let index = 0; index < 7; index++)
+    ids.push(await thread(subjectId, boardId, { kind: 'review', activityAt: `2026-10-27T01:00:0${6 - index}.000Z` }));
+  const production = createKernel({ pool: db.pool, routeKey, tokens, receiptKeys: testReceiptKeys() });
+  production.compile();
+  const read = async (cursor?: string) => {
+    const response = await production.handle(
+      new Request(
+        `http://kernel.test${path(subjectId, {
+          place: GLOBAL_CONTEXT,
+          kind: 'review',
+          limit: '6',
+          ...(cursor ? { cursor } : {}),
+        })}`,
+      ),
+    );
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    return body;
+  };
+  const first = await read();
+  expect(first.threads.map((entry: { id: string }) => entry.id)).toEqual(ids.slice(0, 6));
+  expect(first.threads.every((entry: { card: { state: string } }) => entry.card.state === 'current')).toBe(true);
+  expect(first.context).toMatchObject({ subject: { id: subjectId }, place: { id: GLOBAL_CONTEXT }, kind: 'review' });
+  expect(first.next).toEqual(expect.any(String));
+  const final = await read(first.next);
+  expect(final.threads.map((entry: { id: string }) => entry.id)).toEqual(ids.slice(6));
+  expect(final.next).toBeNull();
 });

@@ -3,7 +3,7 @@ import type { FeedItem, FeedReactionCounts } from './feed-contract.ts';
 import { projectFeedReactions } from './feed-reactions.ts';
 import type { AnchoredPosition, FeedReviewContext, ReadContext } from './model.ts';
 import {
-  readSubjectThread,
+  readSubjectThreads,
   type ContentReadDependencies,
   type ReactionCountFreshness,
   type ThreadView,
@@ -51,10 +51,17 @@ export async function projectSubjectThreadReactions(
   const summaries = new Map(projected.items.map((item) => [item.id, item.summary]));
   const entries: SubjectThreadWithReactions[] = [];
   const anchors: AnchoredPosition[] = [];
-  for (const original of selected) {
-    // Release reaction homes before observing each source again. Keep the actual
+  const currentThreads = await readSubjectThreads(
+    dependencies,
+    selected.map((thread) => thread.id),
+    subjectId,
+    placeId,
+    context,
+  );
+  for (const [index, original] of selected.entries()) {
+    // Release reaction homes before observing the sources again. Keep the actual
     // final native value and anchor, including original recorded review citations.
-    const current = await readSubjectThread(dependencies, original.id, subjectId, placeId, context);
+    const current = currentThreads[index]!;
     anchors.push(current.anchor);
     if (!current.value) continue;
     if (JSON.stringify(original) !== JSON.stringify(current.value)) throw new ProblemError('dependency_unavailable');

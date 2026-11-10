@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
-import { readSubjectThread } from '../../src/content/reads.ts';
+import { readSubjectThread, readSubjectThreads } from '../../src/content/reads.ts';
 import { projectSubjectThreadReactions } from '../../src/content/subject-threads-reactions.ts';
 import viewerReactions from '../../src/content/reaction-viewer.sql';
 import reactionCounts from '../../src/content/reaction-count-page.sql';
 import { routeOf } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createReactionRelayBase } from './reaction-relay-convergence-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
 
@@ -55,6 +56,15 @@ test('Subject threads retain native reaction totals, viewer isolation and final 
     const context = { actor: { kind: 'anonymous' as const }, deadline: Date.now() + 60_000 };
     const selected = await readSubjectThread(deps, threadId, world.conceptId, world.mainTarget.realmId, context);
     expect(selected.value).not.toBeNull();
+    const batched = await readSubjectThreads(deps, [threadId], world.conceptId, world.mainTarget.realmId, context);
+    expect(batched.map((item) => item.value)).toEqual([selected.value]);
+    for (const [subjectId, placeId] of [
+      [world.conceptId, GLOBAL_CONTEXT],
+      [world.schemeId, world.mainTarget.realmId],
+    ] as const) {
+      const wrongScope = await readSubjectThreads(deps, [threadId], subjectId, placeId, context);
+      expect(wrongScope.map((item) => item.value)).toEqual([null]);
+    }
     await pool.query('UPDATE content.thread SET title=$3 WHERE route=$1 AND thread_id=$2', [
       routeOf(threadId),
       threadId,
