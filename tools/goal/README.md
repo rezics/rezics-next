@@ -1762,6 +1762,8 @@ readers, SQL counts and independently token-authorized member native reads runni
 A missing member token skips member native calls; a missing browser sign-in skips member readers. Neither falls back
 to anonymous authority. Retain declared section order, available evidence and actual API/WEB/SEED defects. Browser
 setup, navigation, reader and cleanup failures report incomplete coverage rather than discarding other settled probes.
+Section records retain only bounded native problem codes and validation pointers; the controller rejects other response
+fields and preserves the remaining evidence for a valid completed invocation.
 The checker ends stdout with one `Page-data completed` JSON marker (at most 512 characters) containing `version: 1`,
 the caller's fresh `--invocation`, section and defect counts, and `incomplete`. The caller accepts only this final
 marker, the exact manifest coverage and the corresponding exit (defects: 1; otherwise incomplete: 2; otherwise: 0).

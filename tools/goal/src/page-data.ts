@@ -45,7 +45,9 @@ export type PageDataSection = {
   files: string[];
   firstErrorLine?: string;
   unrun?: PageDataUnrunEvidence;
+  nativeProblem?: PageDataNativeProblem;
 };
+type PageDataNativeProblem = { code?: string; pointer?: string };
 export type PageDataUnrunEvidence = {
   version: 1;
   provider: 'bangumi' | 'vndb';
@@ -434,13 +436,36 @@ function parseUnrunEvidence(token: string): PageDataUnrunEvidence {
   return value as PageDataUnrunEvidence;
 }
 
+function parseNativeProblem(encoded: string): PageDataNativeProblem {
+  const invalid = () => new Error('invalid page-data native problem evidence');
+  if (encoded.length > 1024) throw invalid();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(decodeURIComponent(encoded));
+  } catch {
+    throw invalid();
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw invalid();
+  const { code, pointer, ...unknown } = parsed as Record<string, unknown>;
+  if (
+    Object.keys(unknown).length > 0 ||
+    (code === undefined && pointer === undefined) ||
+    (code !== undefined && (typeof code !== 'string' || code.length > 64 || !/^[a-z][a-z0-9_]*$/u.test(code))) ||
+    (pointer !== undefined &&
+      (typeof pointer !== 'string' ||
+        pointer.length > 128 ||
+        (pointer !== '' && !/^\/(?:[A-Za-z0-9_-]|~[01])+(?:\/(?:[A-Za-z0-9_-]|~[01])+){0,15}$/u.test(pointer))))
+  )
+    throw invalid();
+  return { ...(typeof code === 'string' ? { code } : {}), ...(typeof pointer === 'string' ? { pointer } : {}) };
+}
+
 export function parsePageDataOutput(output: string, registry: ReadonlyMap<string, SectionConfig>): PageDataSection[] {
   const results: PageDataSection[] = [];
   const seen = new Set<string>();
   for (const line of output.split(/\r?\n/).filter(Boolean)) {
     const [page, persona, section, className, ...extra] = line.trim().split(/\s+/);
-    if (!page || !persona || !section || !className)
-      throw new Error(`invalid page-data output: ${safeLine(line)}`);
+    if (!page || !persona || !section || !className) throw new Error(`invalid page-data output: ${safeLine(line)}`);
     const key = `${page}\t${persona}\t${section}`;
     const source = registry.get(key);
     if (!source) throw new Error(`page-data output named an unknown section: ${safeLine(line)}`);
@@ -448,10 +473,18 @@ export function parsePageDataOutput(output: string, registry: ReadonlyMap<string
       throw new Error(`page-data output has an unknown class: ${safeLine(line)}`);
     if (seen.has(key)) throw new Error(`page-data output repeated ${page}/${persona}/${section}`);
     let unrun: PageDataUnrunEvidence | undefined;
+    let nativeProblem: PageDataNativeProblem | undefined;
     if (extra.length) {
-      if (extra.length !== 1 || !extra[0]!.startsWith('unrun=') || className !== 'UNAVAILABLE')
-        throw new Error(`invalid page-data output: ${safeLine(line)}`);
-      unrun = parseUnrunEvidence(extra[0]!.slice('unrun='.length));
+      const evidence = extra[0]!;
+      if (extra.length === 1 && evidence.startsWith('unrun=') && className === 'UNAVAILABLE')
+        unrun = parseUnrunEvidence(evidence.slice('unrun='.length));
+      else if (
+        extra.length === 1 &&
+        evidence.startsWith('nativeProblem=') &&
+        ['API', 'UNAVAILABLE', 'UNAUTHORIZED'].includes(className)
+      )
+        nativeProblem = parseNativeProblem(evidence.slice('nativeProblem='.length));
+      else throw new Error(`invalid page-data evidence for ${page}/${persona}/${section}`);
     }
     seen.add(key);
     const classValue = className as PageDataClass;
@@ -459,6 +492,7 @@ export function parsePageDataOutput(output: string, registry: ReadonlyMap<string
       ...source,
       class: classValue,
       ...(unrun ? { unrun } : {}),
+      ...(nativeProblem ? { nativeProblem } : {}),
       ...(PAGE_DATA_DEFECTS.has(classValue) ? { firstErrorLine: safeLine(line) } : {}),
     });
   }

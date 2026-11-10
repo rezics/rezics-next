@@ -156,6 +156,25 @@ test('terminal stack diagnostics prefer the process-ending error over surviving 
   ).toBe('fatal: kernel listener exited after address already in use');
 });
 
+test('a completed run retains bounded native problem evidence but rejects extra response fields', () => {
+  const h = fixture();
+  try {
+    const row = (problem: object, kind = 'API') =>
+      `home anonymous feed ${kind} nativeProblem=${encodeURIComponent(JSON.stringify(problem))}\n`;
+    const problem = { code: 'deadline_exceeded', pointer: '/query/limit' };
+    expect(parsePageDataOutput(row(problem), h.registry)[0]?.nativeProblem).toEqual(problem);
+    expect(parsePageDataOutput(row({ code: 'index_not_ready' }, 'UNAVAILABLE'), h.registry)[0]?.nativeProblem).toEqual({
+      code: 'index_not_ready',
+    });
+    expect(() => parsePageDataOutput(row({ ...problem, body: 'untrusted' }), h.registry)).toThrow(
+      'invalid page-data native problem evidence',
+    );
+    expect(() => parsePageDataOutput(row(problem, 'DATA'), h.registry)).toThrow('invalid page-data evidence');
+  } finally {
+    h.db.close();
+  }
+});
+
 test('the policy interval, defect transition, section output and per-run report preserve page classes', async () => {
   const h = fixture();
   try {
