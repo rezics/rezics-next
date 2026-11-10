@@ -552,7 +552,7 @@ test('the recent-attempt store query excludes attempts outside the requested win
   }
 });
 
-test('a long attempt whose last command spans lines is reported once, on one line', () => {
+test('a long attempt reports progress once per interval even when commands or commits change', () => {
   const root = mkdtempSync(join(tmpdir(), 'goal-watchdog-'));
   const git = (...args: string[]) => spawnSync('git', args, { cwd: root, encoding: 'utf8' }).stdout.trim();
   try {
@@ -571,6 +571,8 @@ test('a long attempt whose last command spans lines is reported once, on one lin
           id: 'long',
           state: 'running' as const,
           currentAttempt: 1,
+          worktree: root,
+          base: git('rev-parse', 'HEAD'),
           brief: { goal: 'web', manager: 'web' } as Task['brief'],
         },
       ],
@@ -592,6 +594,17 @@ test('a long attempt whose last command spans lines is reported once, on one lin
       async () => [],
       () => 60_000,
     );
+    git(
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=f@example.invalid',
+      'commit',
+      '-q',
+      '--allow-empty',
+      '-m',
+      'progress',
+    );
     watch(
       tasks,
       root,
@@ -605,6 +618,19 @@ test('a long attempt whose last command spans lines is reported once, on one lin
     const longAttempts = delivered.filter((summary) => summary.startsWith('Long attempt:'));
     expect(longAttempts).toHaveLength(1);
     expect(longAttempts[0]).toContain("zsh -lc 'set -e bun test'");
+    watch(
+      tasks,
+      root,
+      branches,
+      root,
+      deliver,
+      now + 3_600_000,
+      async () => [],
+      () => 60_000,
+    );
+    const after = delivered.filter((summary) => summary.startsWith('Long attempt:'));
+    expect(after).toHaveLength(2);
+    expect(after[1]).toContain('with 1 commits');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
