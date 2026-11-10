@@ -2140,7 +2140,40 @@ async function originalJ04(stack: Origins): Promise<string> {
   return `password replaced HTTP ${changed.status}`;
 }
 
-async function originalJ10(stack: Origins, bindings: Record<string, string>, websiteKey: JWK): Promise<string> {
+/** Use the same issuer discovery and confidential request contract as the Website session owner. */
+export async function revokeWebsiteRefresh(
+  stack: Origins,
+  bindings: Record<string, string>,
+  websiteKey: JWK,
+  refresh: string,
+) {
+  const discovery = await send(`${stack.issuer}/.well-known/openid-configuration`, {
+    method: 'GET',
+    timeout: 30_000,
+  });
+  const metadata = requireStatus(discovery, 'website issuer discovery', 200);
+  if (metadata.issuer !== stack.issuer)
+    throw new Error('website discovery issuer does not match the configured issuer');
+  if (typeof metadata.revocation_endpoint !== 'string' || !metadata.revocation_endpoint)
+    throw new Error('website discovery omitted revocation_endpoint');
+  const endpoint = new URL(metadata.revocation_endpoint);
+  return send(endpoint.href, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    encoded: new URLSearchParams({
+      client_id: WEBSITE_CLIENT_ID,
+      client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+      client_assertion: await websiteAssertion(stack, websiteKey),
+      resource: bindings.API_RESOURCE ?? WEBSITE_AUDIENCE,
+      token: refresh,
+      token_type_hint: 'refresh_token',
+    }).toString(),
+    timeout: 30_000,
+  });
+}
+
+/** Root may run this single journey against a retained native stack without starting a walk. */
+export async function originalJ10(stack: Origins, bindings: Record<string, string>, websiteKey: JWK): Promise<string> {
   capturePhase('independent persona signup');
   const person = await signup(stack, 'j10');
   capturePhase('website OAuth');
@@ -2152,19 +2185,7 @@ async function originalJ10(stack: Origins, bindings: Record<string, string>, web
   requireStatus(before, 'consented profile', 200);
   if (!granted.refresh) throw new Error('website token omitted refresh_token');
   capturePhase('website refresh-family revoke');
-  const revoked = await send(`${stack.native}/revoke`, {
-    method: 'POST',
-    headers: { origin: stack.issuer, 'content-type': 'application/x-www-form-urlencoded' },
-    encoded: new URLSearchParams({
-      client_id: WEBSITE_CLIENT_ID,
-      client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
-      client_assertion: await websiteAssertion(stack, websiteKey),
-      resource: bindings.API_RESOURCE ?? WEBSITE_AUDIENCE,
-      token: granted.refresh,
-      token_type_hint: 'refresh_token',
-    }).toString(),
-    timeout: 30_000,
-  });
+  const revoked = await revokeWebsiteRefresh(stack, bindings, websiteKey, granted.refresh);
   if (revoked.status !== 200)
     throw new Error(`website revoke returned HTTP ${revoked.status}: ${summarize(revoked.value)}`);
   capturePhase('formerly admitted Kernel bearer denial');

@@ -284,14 +284,14 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         body: 'Bob sale copy',
       });
       const offerMarker = marker('offer');
-      const offer = await json<{ offer: { id: string; revision: number } }>('alice', 'POST', '/v1/offers', {
+      const offer = await json<{ offer: { id: string } }>('alice', 'POST', '/v1/offers', {
         contentEditionId: aliceEdition.contentEditionId,
         title: offerMarker,
         currency: 'usd',
         unitAmountMinor: 1200,
         taxCode: 'txcd_10302000',
       });
-      const bobOffer = await json<{ offer: { id: string; revision: number } }>('bob', 'POST', '/v1/offers', {
+      const bobOffer = await json<{ offer: { id: string } }>('bob', 'POST', '/v1/offers', {
         contentEditionId: bobEdition.contentEditionId,
         title: marker('bob-offer'),
         currency: 'usd',
@@ -299,10 +299,8 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         taxCode: 'txcd_10302000',
       });
       const orderMarker = marker('order');
-      const order = await json<{ order: { id: string } }>('alice', 'POST', '/v1/orders', {
-        offerId: bobOffer.offer.id,
-        expectedOfferRevision: bobOffer.offer.revision,
-      });
+      await grant(aliceId, { route: routeOf(bobOffer.offer.id)!, id: bobOffer.offer.id }, ['order:create']);
+      const order = await world.createOrder(alicePerson, bobOffer.offer.id);
 
       const prepared = await json<{ exportId: string }>('alice', 'POST', '/v1/libraryExports');
       const zoneMarker = marker('zone');

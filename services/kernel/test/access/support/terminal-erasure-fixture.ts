@@ -5,6 +5,8 @@ import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { bootstrapLocalShowcaseBoardCreation } from '../../../src/access/bootstrap-governance.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { bindExecutionContract } from '../../../src/command/execution-contract.ts';
+import { createCommerceWork } from '../../../src/commerce/enqueue.ts';
+import { createStripePort } from '../../../src/commerce/stripe.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { historyExecutionPort } from '../../../src/history/application/index.ts';
 import { bindCanonicalSourceWork } from '../../../src/library/canonical-source-store.ts';
@@ -15,6 +17,7 @@ import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import type { WorkContext } from '../../../src/work/registry.ts';
 import { workExecutionPort } from '../../../src/work/selected-runtime.ts';
 import { prepareCollectionSource } from '../../library/support/collection-source-preparation.ts';
+import { startFakeStripe } from '../../commerce/support/fake-stripe.ts';
 import {
   createNativeEditionFixture,
   type NativeEditionRequest,
@@ -53,6 +56,7 @@ export async function createTerminalErasureFixture() {
   let auth: NativeAuth | undefined;
   let work: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   let worker: NativeWorker | undefined;
+  let stripe: ReturnType<typeof startFakeStripe> | undefined;
   let closing: Promise<void> | undefined;
   const subjectWrites: Array<WorkerBoundary & { actorAccountId: string; subjectType: string }> = [];
 
@@ -76,7 +80,11 @@ export async function createTerminalErasureFixture() {
                 try {
                   if (created) await dropTestDatabase(admin, databaseName);
                 } finally {
-                  await admin.end();
+                  try {
+                    stripe?.stop();
+                  } finally {
+                    await admin.end();
+                  }
                 }
               }
             }
@@ -98,6 +106,7 @@ export async function createTerminalErasureFixture() {
     await work.registerQueue('maintenance', WORK_QUEUES.maintenance);
     const service = auth.host.service;
     const consent = createCurrentConsentReader({ database: auth.authPool });
+    stripe = startFakeStripe();
     const kernel = testKernel({
       pool,
       workClient: work,
@@ -105,6 +114,21 @@ export async function createTerminalErasureFixture() {
       auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
       content: {
         readConsent: ({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId }),
+      },
+      commerce: {
+        stripe: createStripePort({
+          apiKey: 'sk_test_terminal_erasure',
+          managedPayments: false,
+          host: '127.0.0.1',
+          port: stripe.port,
+          protocol: 'http',
+          maxNetworkRetries: 0,
+          clock: () => new Date(),
+        }),
+        successUrl: 'https://web.test/orders/{ORDER_ID}',
+        cancelUrl: 'https://web.test/orders/{ORDER_ID}',
+        webhookSecrets: [stripe.webhookSecret],
+        work: createCommerceWork(work),
       },
       writeRate: createWriteRateLimiter({
         secret: 'terminal-erasure-native-write-rate-secret',
@@ -260,6 +284,22 @@ export async function createTerminalErasureFixture() {
       editions,
       subjectWrites,
       readOnly,
+      stripe,
+      async createOrder(buyer: Persona, offerId: string) {
+        // Creation returns presentation fields; only the buyer's admitted read supplies
+        // the revision they accept. Keep both requests on that exact native credential.
+        const { offer } = await json<{ offer: { id: string; revision: number } }>(
+          buyer,
+          'GET',
+          `/v1/offers/${offerId}`,
+        );
+        return json<{ order: { id: string; offerId: string; checkoutUrl: string | null } }>(
+          buyer,
+          'POST',
+          '/v1/orders',
+          { offerId: offer.id, expectedOfferRevision: offer.revision },
+        );
+      },
       async prepareSource(actor: Persona, collectionId: string) {
         // Canonical Source continuation and scope repair share this native owner.
         await withWorkerHeld(() => prepareCollectionSource(sourceContext, actor.accountId, collectionId));

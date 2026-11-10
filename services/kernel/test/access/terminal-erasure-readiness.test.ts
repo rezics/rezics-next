@@ -1,8 +1,69 @@
 import { expect, test } from 'bun:test';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
+import { routeOf } from '../../src/route/route.ts';
 import { TERMINAL_ERASURE_BARRIER_TABLE } from './support/terminal-erasure-worker.ts';
 import { createTerminalErasureFixture } from './support/terminal-erasure-fixture.ts';
+
+test('terminal erasure order prerequisite reads the offer as the buyer and creates controlled native Checkout', async () => {
+  const world = await createTerminalErasureFixture();
+  try {
+    await world.startWorker();
+    const { alice, bob, staff } = world.people;
+    await world.prepareAccountAgent(alice);
+    for (const group of ['selling', 'purchases'])
+      await world.json(staff, 'POST', `/v1/platform/exposure/${group}:open`);
+    await world.json(staff, 'POST', '/v1/grants', {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: bob.accountId },
+      actions: ['offer:create'],
+      valid: '(,)',
+    });
+    const publisher = await world.editions(bob);
+    const edition = await publisher.publish({ title: 'Retained order edition', body: 'Bob sale copy' });
+    const created = await world.json<{ offer: { id: string; revision?: number } }>(bob, 'POST', '/v1/offers', {
+      contentEditionId: edition.contentEditionId,
+      title: edition.title,
+      currency: 'usd',
+      unitAmountMinor: 900,
+      taxCode: 'txcd_10302000',
+    });
+    expect(created.offer.revision).toBeUndefined();
+    const offerId = created.offer.id;
+    const { offer } = await world.json<{ offer: { revision: number } }>(alice, 'GET', `/v1/offers/${offerId}`);
+    const denied = await world.command(alice, 'POST', '/v1/orders', {
+      offerId,
+      expectedOfferRevision: offer.revision,
+    });
+    expect({ status: denied.status, body: denied.status === 404 ? null : await denied.text() }).toEqual({
+      status: 404,
+      body: null,
+    });
+    expect(world.stripe.requests).toHaveLength(0);
+    await world.json(staff, 'POST', '/v1/grants', {
+      resource: { route: routeOf(offerId)!, id: offerId },
+      subject: { kind: 'account', id: alice.accountId },
+      actions: ['order:create'],
+      valid: '(,)',
+    });
+    const { order } = await world.createOrder(alice, offerId);
+    expect(order.offerId).toBe(offerId);
+    expect(order.checkoutUrl).toBeString();
+    const read = await world.json(alice, 'GET', `/v1/orders/${order.id}`);
+    expect(read).toMatchObject({ order: { id: order.id, checkoutUrl: order.checkoutUrl } });
+    const [stored] = await world.readOnly<{ buyer: string; seller: string; revision: number }>(
+      `SELECT buyer_account_id::text AS buyer, creator_account_id::text AS seller, offer_revision AS revision
+       FROM commerce.purchase_order WHERE order_id=$1`,
+      [order.id],
+    );
+    expect(stored).toEqual({ buyer: alice.accountId, seller: bob.accountId, revision: offer.revision });
+    expect(world.stripe.requests.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: 'POST', path: '/v1/checkout/sessions' },
+    ]);
+  } finally {
+    await world.close();
+  }
+}, 180_000);
 
 test('terminal erasure combined subject and Edition prerequisites publish and capture each native seller independently', async () => {
   const world = await createTerminalErasureFixture();
