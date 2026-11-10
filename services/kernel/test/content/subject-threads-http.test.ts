@@ -69,29 +69,31 @@ async function thread(
   const id = newId(threadRoute);
   const postId = newId(threadRoute);
   const revisionId = newId(threadRoute);
+  const threadAuthorId = options.kind === 'review' ? newId(threadRoute) : authorId;
   const body = Buffer.from(JSON.stringify(fromPlainText(`Thread ${id}`)));
   await db.admin.query('BEGIN');
   try {
     await db.admin.query(
       `INSERT INTO content.thread
-       (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id,created_at,kind)
-       VALUES ($1,$2,$3,$4,'Thread title',$5,1,$2,$6,$7,$8)`,
+       (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id,first_post_id,created_at,kind,review_subject_id)
+       VALUES ($1,$2,$3,$4,'Thread title',$5,1,$2,$6,$7,$8,$9)`,
       [
         threadRoute,
         id,
-        authorId,
+        threadAuthorId,
         boardId,
         options.visibility ?? 'published',
         postId,
         options.activityAt,
         options.kind ?? 'discussion',
+        options.kind === 'review' ? subjectId : null,
       ],
     );
     await db.admin.query(
       `INSERT INTO content.post
        (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
        VALUES ($1,$2,$3,$4,$5,'published',1,$3)`,
-      [threadRoute, id, postId, authorId, revisionId],
+      [threadRoute, id, postId, threadAuthorId, revisionId],
     );
     await db.admin.query(
       `INSERT INTO content.revision

@@ -1903,7 +1903,7 @@ export function readSubjectThreads(
   placeId: string,
   context: ReadContext,
 ): Promise<readonly Anchored<ThreadView | null>[]> {
-  return discloseThreads(dependencies, threadIds, context, { subjectId, placeId });
+  return discloseThreadBatch(dependencies, threadIds, context, { subjectId, placeId });
 }
 /** Internal exact-opening evidence. This shares the ordinary native resources,
  * board observation, ancestry, account fences and Access evaluator. It loads no
@@ -2283,6 +2283,14 @@ export async function listPostRevisions(
 }
 
 export async function discloseThreads(
+  dependencies: ContentReadDependencies,
+  threadIds: readonly ThreadId[],
+  context: ReadContext,
+): Promise<readonly Anchored<ThreadView | null>[]> {
+  return discloseThreadBatch(dependencies, threadIds, context);
+}
+
+async function discloseThreadBatch(
   dependencies: ContentReadDependencies,
   threadIds: readonly ThreadId[],
   context: ReadContext,
