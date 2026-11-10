@@ -10,6 +10,7 @@ test('terminal erasure order prerequisite reads the offer as the buyer and creat
   try {
     await world.startWorker();
     const { alice, bob, staff } = world.people;
+    await world.prepareAccountAgent(alice);
     for (const group of ['selling', 'purchases'])
       await world.json(staff, 'POST', `/v1/platform/exposure/${group}:open`);
     await world.json(staff, 'POST', '/v1/grants', {
@@ -34,7 +35,10 @@ test('terminal erasure order prerequisite reads the offer as the buyer and creat
       offerId,
       expectedOfferRevision: offer.revision,
     });
-    expect(denied.status).toBe(404);
+    expect({ status: denied.status, body: denied.status === 404 ? null : await denied.text() }).toEqual({
+      status: 404,
+      body: null,
+    });
     expect(world.stripe.requests).toHaveLength(0);
     await world.json(staff, 'POST', '/v1/grants', {
       resource: { route: routeOf(offerId)!, id: offerId },
