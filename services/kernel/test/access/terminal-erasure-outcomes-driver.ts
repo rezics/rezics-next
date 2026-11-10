@@ -265,6 +265,9 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
       const followMarker = marker('follow');
       const followCountMarker = marker('follow-count');
       await json('alice', 'PUT', `/v1/follows/${subjectId}`);
+      // Account agents are created by the committed activation effect, before they can be followed.
+      worker = await world.startWorker();
+      await drainAlice(aliceId);
       await json('bob', 'PUT', `/v1/follows/${aliceAgent}`);
 
       const staffRequest: Parameters<typeof createNativeEditionFixture>[0] = async (method, path, body, headers) =>
@@ -441,7 +444,6 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
         visibility: 'private',
       });
 
-      worker = await world.startWorker();
       await drainAlice(aliceId);
 
       const opened = await handle('alice', {
