@@ -77,7 +77,7 @@ function ReaderSurface({ journey }: { journey: Journey }) {
           role="alertdialog"
           aria-modal="true"
           aria-labelledby="locale-departure-title"
-          className="space-y-3 rounded-xl border border-border p-4"
+          className="space-y-3 border-t border-border pt-4"
         >
           <h2 id="locale-departure-title" className="font-semibold">
             Leave this reader?

@@ -1,6 +1,12 @@
 import { useId, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { Field, FieldContent, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
@@ -49,17 +55,17 @@ export function PublicViewsCard({
     realms: m.settings_public_realms(),
   };
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
+    <ContentSection>
+      <ContentSectionHeader>
+        <ContentSectionTitle>
           <h2>{m.settings_public_activity_heading()}</h2>
-        </CardTitle>
-        <CardDescription>
+        </ContentSectionTitle>
+        <ContentSectionDescription>
           {m.settings_public_activity_text()} {m.settings_profile_visibility_help()}
-        </CardDescription>
-        <CardDescription>{m.settings_public_activity_save_help()}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4" aria-busy={busy}>
+        </ContentSectionDescription>
+        <ContentSectionDescription>{m.settings_public_activity_save_help()}</ContentSectionDescription>
+      </ContentSectionHeader>
+      <ContentSectionBody className="space-y-4" aria-busy={busy}>
         <ProfileFeedback editor={editor} scope="views" writable={writable} readable={canRead} showReaderReload />
         <div role="status" aria-live="polite" aria-atomic="true" className="text-sm font-medium">
           {changed && !closed && !busy && !state.attempt && state.phase !== 'uncertain'
@@ -115,7 +121,7 @@ export function PublicViewsCard({
             ) : null}
           </>
         ) : null}
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }

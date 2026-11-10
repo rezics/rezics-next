@@ -1,7 +1,12 @@
 import { withManagedReadDeadline } from './managed-read-deadline';
 import { useEffect, useId, useLayoutEffect, useSyncExternalStore, useMemo, useRef, useState } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { Separator } from '@rezics/ui/shadcn/separator';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
@@ -351,13 +356,13 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
   const actionClass =
     'h-auto min-h-11 w-full min-w-0 max-w-full whitespace-normal py-2 text-center [overflow-wrap:anywhere]';
   return (
-    <Card className="min-w-0 max-w-full">
-      <CardHeader>
-        <CardTitle>
+    <ContentSection className="min-w-0 max-w-full">
+      <ContentSectionHeader>
+        <ContentSectionTitle>
           <h2 id="settings-account-heading">{m.settings_account_heading()}</h2>
-        </CardTitle>
-      </CardHeader>
-      <CardContent
+        </ContentSectionTitle>
+      </ContentSectionHeader>
+      <ContentSectionBody
         className="min-w-0 max-w-full space-y-6 [overflow-wrap:anywhere]"
         onClickCapture={navigationGuard}
         onAuxClickCapture={navigationGuard}
@@ -437,8 +442,8 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
             </div>
           </>
         )}
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }
 

@@ -1070,7 +1070,7 @@ function LiteraryCorrection({
                 ))}
               </dl>
             </details>
-            <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
+            <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 border-t border-border pt-4">
               <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
                 {m.specialist_identity_reference({}, o)}
               </summary>

@@ -1,7 +1,13 @@
 import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
@@ -127,22 +133,22 @@ export function NotificationsCard({
   const waitDescription = waiting ? `${ids}-retry-wait` : undefined;
 
   return (
-    <Card className="min-w-0 max-w-full">
-      <CardHeader>
-        <CardTitle>
+    <ContentSection className="min-w-0 max-w-full">
+      <ContentSectionHeader>
+        <ContentSectionTitle>
           <h2 id="settings-notifications-heading">{m.settings_notifications_heading()}</h2>
-        </CardTitle>
-        <CardDescription>{m.settings_notifications_text()}</CardDescription>
+        </ContentSectionTitle>
+        <ContentSectionDescription>{m.settings_notifications_text()}</ContentSectionDescription>
         {state.currentAdvice && !canEdit ? (
-          <CardDescription>{m.settings_notifications_read_only()}</CardDescription>
+          <ContentSectionDescription>{m.settings_notifications_read_only()}</ContentSectionDescription>
         ) : null}
-        <CardDescription>
+        <ContentSectionDescription>
           {localEdit || state.intent !== undefined
             ? m.settings_notifications_draft_help()
             : m.settings_automatic_save_help()}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="min-w-0 space-y-4">
+        </ContentSectionDescription>
+      </ContentSectionHeader>
+      <ContentSectionBody className="min-w-0 space-y-4">
         <div role="group" aria-label={m.settings_notifications_heading()} className="space-y-4">
           <WatchNotificationGuide />
           <FieldGroup>
@@ -537,7 +543,7 @@ export function NotificationsCard({
             <p className="text-sm text-muted-foreground">{m.settings_notifications_mandatory()}</p>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }

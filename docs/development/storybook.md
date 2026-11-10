@@ -23,7 +23,11 @@ must leave viewport and theme free for the toolbar. Use Controls for behavior or
 width. Run browser coverage at desktop and phone widths by selecting viewport globals in the runner.
 A retired size-only export can remain hidden as a compatibility link. Do not use the removed
 `parameters.viewport.defaultViewport` setting. The preview canvas uses white in light mode and black in dark mode;
-shared application colors remain unchanged.
+shared application colors remain unchanged. Project defaults belong in `initialGlobals`, so reviewers can override them.
+
+Group ordinary content with headings, spacing, and a horizontal divider where adjacent sections need separation.
+Do not frame ordinary sections with an outline, raised surface, or decorative card. Controls and focus indicators
+retain their own boundaries.
 
 The title and story name rules follow [Storybook naming](https://storybook.js.org/docs/writing-stories/naming-components-and-hierarchy),
 [tags](https://storybook.js.org/docs/writing-stories/tags), [globals](https://storybook.js.org/docs/essentials/toolbars-and-globals),

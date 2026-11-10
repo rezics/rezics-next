@@ -1712,7 +1712,7 @@ function CollectionPageLifetime({
     <div className="w-full min-w-0 text-foreground">
       {draftNavigation}
       <article className="w-full min-w-0 space-y-4 sm:space-y-5">
-        <header data-slot="collection-hero" className="min-w-0 space-y-3 rounded-2xl bg-card p-4 sm:p-5">
+        <header data-slot="collection-hero" className="min-w-0 space-y-3 py-4">
           <div className="flex min-w-0 items-start gap-3">
             <div className="w-16 shrink-0 sm:w-24" data-collection-cover-source={page.coverSource}>
               <Cover

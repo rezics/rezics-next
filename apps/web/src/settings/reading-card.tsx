@@ -1,7 +1,13 @@
 import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import {
   Field,
   FieldContent,
@@ -585,19 +591,19 @@ export function ReadingCard({
                     ? m.settings_failed_title()
                     : m.settings_conflict_title();
   return (
-    <Card className="min-w-0 max-w-full">
-      <CardHeader>
-        <CardTitle>
+    <ContentSection className="min-w-0 max-w-full">
+      <ContentSectionHeader>
+        <ContentSectionTitle>
           <h2 id="settings-reading-heading">{m.settings_reading_heading()}</h2>
-        </CardTitle>
-        <CardDescription>{m.settings_reading_text()}</CardDescription>
+        </ContentSectionTitle>
+        <ContentSectionDescription>{m.settings_reading_text()}</ContentSectionDescription>
         {choicesReady ? (
-          <CardDescription>
+          <ContentSectionDescription>
             {ownerMayChange ? m.settings_automatic_save_help() : m.settings_reading_read_only_text()}
-          </CardDescription>
+          </ContentSectionDescription>
         ) : null}
-      </CardHeader>
-      <CardContent className="flex min-w-0 flex-col gap-4">
+      </ContentSectionHeader>
+      <ContentSectionBody className="flex min-w-0 flex-col gap-4">
         {choicesReady ? (
           <>
             <FieldGroup>
@@ -808,7 +814,7 @@ export function ReadingCard({
             </AlertDescription>
           </Alert>
         ) : null}
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }

@@ -237,7 +237,7 @@ function LoanCard({
   const [returnedOn, setReturnedOn] = useState(today ?? '');
   const fieldsId = useId();
   return (
-    <li className="min-w-0 space-y-3 rounded-xl border border-border p-4">
+    <li className="min-w-0 space-y-3 border-t border-border pt-4">
       <p className="font-medium [overflow-wrap:anywhere]">{copyTitle(item, locale)}</p>
       <p className="text-sm text-muted-foreground">
         {item.loan.direction === 'lent' ? m.library_loans_lent() : m.library_loans_borrowed()}
@@ -335,7 +335,7 @@ function LoanCreateForm({
   const fieldsId = useId();
   return (
     <form
-      className="space-y-3 rounded-xl border border-border p-4"
+      className="space-y-3 border-t border-border pt-4"
       onSubmit={(event) => {
         event.preventDefault();
         onCreate({

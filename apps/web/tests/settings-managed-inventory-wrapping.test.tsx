@@ -191,7 +191,9 @@ function geometryContract(host: Element) {
     expect(control.classList.contains('whitespace-nowrap')).toBe(false);
     expect(control.closest('a')).toBeNull();
   }
-  for (const card of host.querySelectorAll('[data-slot="card"], [data-slot="card-header"], [data-slot="card-content"]'))
+  for (const card of host.querySelectorAll(
+    '[data-slot="content-section"], [data-slot="content-section-header"], [data-slot="content-section-body"]',
+  ))
     expect(card.classList.contains('min-w-0')).toBe(true);
   for (const badge of host.querySelectorAll('[data-slot="badge"]')) {
     expect(badge.classList.contains('h-auto')).toBe(true);

@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { Card, CardContent } from '@rezics/ui/shadcn/card';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@rezics/ui/shadcn/carousel';
 import { withSurface } from '../stories/support.tsx';
 
@@ -21,11 +20,7 @@ const Shelf = ({ titles = slides, ...props }: { titles?: string[] } & React.Comp
       <CarouselContent>
         {titles.map((title) => (
           <CarouselItem key={title}>
-            <Card>
-              <CardContent className="grid aspect-square place-items-center text-center text-lg font-medium">
-                {title}
-              </CardContent>
-            </Card>
+            <div className="grid aspect-square place-items-center text-center text-lg font-medium">{title}</div>
           </CarouselItem>
         ))}
       </CarouselContent>
@@ -74,9 +69,7 @@ export const Vertical: Story = {
         <CarouselContent className="h-48">
           {slides.map((title) => (
             <CarouselItem key={title} className="basis-1/2">
-              <Card size="sm">
-                <CardContent className="text-center font-medium">{title}</CardContent>
-              </Card>
+              <div className="text-center font-medium">{title}</div>
             </CarouselItem>
           ))}
         </CarouselContent>

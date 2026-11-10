@@ -302,7 +302,7 @@ export function OperationFeedback({
     if (operation.result) feedback.current?.focus();
   }, [operation.result]);
   return (
-    <div ref={feedback} tabIndex={-1} className="space-y-3 rounded-xl border border-border p-4 empty:hidden">
+    <div ref={feedback} tabIndex={-1} className="space-y-3 border-t border-border pt-4 empty:hidden">
       {operation.result && (
         <p role={operation.result.state === 'accepted' ? 'status' : 'alert'}>{resultLabel(operation.result)}</p>
       )}

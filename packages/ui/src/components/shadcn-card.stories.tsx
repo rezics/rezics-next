@@ -3,43 +3,43 @@ import { MoreHorizontalIcon } from 'lucide-react';
 import { expect, within } from 'storybook/test';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@rezics/ui/shadcn/card';
+  ContentSection,
+  ContentSectionAction,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { withSurface } from '../stories/support.tsx';
 import { metaText } from './meta-line.tsx';
 
 const meta = {
-  title: 'shadcn/Card',
-  component: Card,
+  title: 'Components/Content section',
+  id: 'shadcn-card',
+  component: ContentSection,
   tags: ['autodocs'],
   decorators: [withSurface],
-} satisfies Meta<typeof Card>;
+} satisfies Meta<typeof ContentSection>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 const Shelf = ({ title, description, body }: { title: string; description: string; body: string }) => (
-  <Card className="max-w-sm">
-    <CardHeader>
-      <CardTitle>{title}</CardTitle>
-      <CardDescription>{description}</CardDescription>
-      <CardAction>
+  <ContentSection className="max-w-sm">
+    <ContentSectionHeader>
+      <ContentSectionTitle>{title}</ContentSectionTitle>
+      <ContentSectionDescription>{description}</ContentSectionDescription>
+      <ContentSectionAction>
         <Button variant="ghost" size="icon" aria-label="Shelf actions">
           <MoreHorizontalIcon />
         </Button>
-      </CardAction>
-    </CardHeader>
-    <CardContent>{body}</CardContent>
-    <CardFooter className="gap-2">
+      </ContentSectionAction>
+    </ContentSectionHeader>
+    <ContentSectionBody>{body}</ContentSectionBody>
+    <div className="flex flex-wrap items-center gap-2">
       <Button>Open shelf</Button>
       <Button variant="outline">Share</Button>
-    </CardFooter>
-  </Card>
+    </div>
+  </ContentSection>
 );
 
 export const Default: Story = {
@@ -60,16 +60,14 @@ export const Default: Story = {
 
 export const Small: Story = {
   render: () => (
-    <Card size="sm" className="max-w-xs">
-      <CardHeader>
-        <CardTitle>Reading goal</CardTitle>
-        <CardDescription>You are 3 books ahead of schedule.</CardDescription>
-      </CardHeader>
-    </Card>
+    <ContentSection className="max-w-xs space-y-2 pt-3">
+      <ContentSectionHeader>
+        <ContentSectionTitle>Reading goal</ContentSectionTitle>
+        <ContentSectionDescription>You are 3 books ahead of schedule.</ContentSectionDescription>
+      </ContentSectionHeader>
+    </ContentSection>
   ),
   async play({ canvasElement }) {
-    const card = canvasElement.querySelector('[data-slot="card"]')!;
-    await expect(card).toHaveAttribute('data-size', 'sm');
     await expect(within(canvasElement).getByText('Reading goal')).toBeVisible();
   },
 };
@@ -79,7 +77,7 @@ export const LongAndCjkText: Story = {
     <div className="flex flex-col gap-4">
       <Shelf
         title="Hard science fiction and space opera that I intend to finish before the end of the year"
-        description="A shelf title this long wraps instead of pushing the actions out of the card"
+        description="A shelf title this long wraps instead of pushing the actions out of the section"
         body="Ken Liu’s translation of The Three-Body Problem, followed by Dune, Hyperion and A Fire Upon the Deep."
       />
       <Shelf

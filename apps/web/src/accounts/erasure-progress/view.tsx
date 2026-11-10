@@ -1,5 +1,11 @@
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionHeader,
+  ContentSectionTitle,
+  ContentSectionDescription,
+  ContentSectionBody,
+} from '@rezics/ui/content-section';
 import { useId, useRef } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, locales } from '../../paraglide/runtime.js';
@@ -114,10 +120,10 @@ export function ErasureProgressView({
         className="flex scroll-mt-6 flex-col gap-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
       >
         {value ? (
-          <Card>
-            <CardHeader>
+          <ContentSection>
+            <ContentSectionHeader>
               <p className="font-medium">{m.erasure_accepted()}</p>
-              <CardTitle>
+              <ContentSectionTitle>
                 <h2>
                   {value.state === 'complete'
                     ? m.erasure_complete()
@@ -125,16 +131,16 @@ export function ErasureProgressView({
                       ? m.erasure_retention()
                       : m.erasure_pending()}
                 </h2>
-              </CardTitle>
-              <CardDescription id={statusId}>
+              </ContentSectionTitle>
+              <ContentSectionDescription id={statusId}>
                 {value.state === 'retention-outstanding'
                   ? m.erasure_retention_help()
                   : value.state === 'complete'
                     ? m.erasure_complete_help()
                     : m.erasure_pending_help()}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
+              </ContentSectionDescription>
+            </ContentSectionHeader>
+            <ContentSectionBody className="flex flex-col gap-4">
               <dl className="grid gap-4">
                 <div className="grid gap-1">
                   <dt className="font-medium">{m.erasure_barrier()}</dt>
@@ -217,8 +223,8 @@ export function ErasureProgressView({
                   ))}
                 </dl>
               </details>
-            </CardContent>
-          </Card>
+            </ContentSectionBody>
+          </ContentSection>
         ) : (
           <p id={statusId} role="status">
             {sessionRecovery && page.status === 'unavailable'

@@ -3,7 +3,13 @@ import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { m } from '../paraglide/messages.js';
 import type { SettingsContentFailureReader } from './ports/content';
 import { useAccounts } from './managed-account-capabilities';
@@ -233,8 +239,8 @@ export function ManagedAccountDetailCard({
   const busy = state.pending || members.pending || responsibilities.pending;
   const waiting = usePreferenceRetry(undefined, state.retryAt ?? 0);
   return (
-    <Card className="min-w-0 max-w-full wrap-anywhere">
-      <CardHeader className="min-w-0">
+    <ContentSection className="min-w-0 max-w-full wrap-anywhere">
+      <ContentSectionHeader className="min-w-0">
         <a
           className="flex min-h-11 min-w-11 w-fit max-w-full items-center py-2 text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
           href={backHref}
@@ -242,12 +248,12 @@ export function ManagedAccountDetailCard({
         >
           {m.managed_back()}
         </a>
-        <CardTitle className="min-w-0">
+        <ContentSectionTitle className="min-w-0">
           <h2 id="settings-account-heading">{m.managed_detail_title()}</h2>
-        </CardTitle>
-        <CardDescription>{m.settings_managed_read_only()}</CardDescription>
-      </CardHeader>
-      <CardContent className="min-w-0 space-y-6">
+        </ContentSectionTitle>
+        <ContentSectionDescription>{m.settings_managed_read_only()}</ContentSectionDescription>
+      </ContentSectionHeader>
+      <ContentSectionBody className="min-w-0 space-y-6">
         {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
         {state.pending || (reader && !detail && !state.failure) ? (
           <p role="status">{m.settings_managed_detail_loading()}</p>
@@ -410,8 +416,8 @@ export function ManagedAccountDetailCard({
             ) : null}
           </>
         ) : null}
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }
 

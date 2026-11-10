@@ -10,7 +10,12 @@ import {
 } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
@@ -289,19 +294,21 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
         <p className="text-muted-foreground">{m.lifecycle_intro()}</p>
       </header>
       {page.status === 'ready' ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="break-words [overflow-wrap:anywhere]">{identityLabel(page.account)}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
+        <ContentSection>
+          <ContentSectionHeader>
+            <ContentSectionTitle className="break-words [overflow-wrap:anywhere]">
+              {identityLabel(page.account)}
+            </ContentSectionTitle>
+          </ContentSectionHeader>
+          <ContentSectionBody className="flex flex-col gap-3">
             {page.account.displayName && page.account.handle && (
               <p className="break-words [overflow-wrap:anywhere]">@{page.account.handle}</p>
             )}
             <AccountDetails accountId={page.account.id} />
             <p>{m.lifecycle_state_unavailable()}</p>
             {offered.length === 0 && <p>{m.lifecycle_capability_unavailable()}</p>}
-          </CardContent>
-        </Card>
+          </ContentSectionBody>
+        </ContentSection>
       ) : (
         <p role="status">{statusText(page.status)}</p>
       )}

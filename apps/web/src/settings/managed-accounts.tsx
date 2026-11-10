@@ -13,7 +13,13 @@ import { useLocation, useRouter } from '@tanstack/react-router';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { ContentItem, ContentItemHeading } from '@rezics/ui/content-item';
 import { m } from '../paraglide/messages.js';
@@ -410,15 +416,20 @@ export function ManagedAccountsView({
       }}
       onAuxClickCapture={visit}
     >
-      <Card className="min-w-0 max-w-full" role="region" aria-labelledby={viewerHeadingId} aria-busy={snapshot.loading}>
-        <CardHeader className="min-w-0">
-          <CardTitle className="min-w-0 wrap-anywhere">
+      <ContentSection
+        className="min-w-0 max-w-full"
+        role="region"
+        aria-labelledby={viewerHeadingId}
+        aria-busy={snapshot.loading}
+      >
+        <ContentSectionHeader className="min-w-0">
+          <ContentSectionTitle className="min-w-0 wrap-anywhere">
             <ContentItemHeading level={3} id={viewerHeadingId} tabIndex={-1}>
               {m.managed_your_account()}
             </ContentItemHeading>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="min-w-0">
+          </ContentSectionTitle>
+        </ContentSectionHeader>
+        <ContentSectionBody className="min-w-0">
           {snapshot.loading || (!account && !snapshot.failure) ? (
             <p role="status" aria-labelledby={viewerHeadingId}>
               {m.settings_managed_loading()}
@@ -467,25 +478,27 @@ export function ManagedAccountsView({
               </Button>
             </div>
           ) : null}
-        </CardContent>
-      </Card>
+        </ContentSectionBody>
+      </ContentSection>
       {account ? (
         <>
-          <Card
+          <ContentSection
             className="min-w-0 max-w-full"
             role="region"
             aria-labelledby={organizationsHeadingId}
             aria-busy={organizations.busy || snapshot.loading}
           >
-            <CardHeader className="min-w-0">
-              <CardTitle className="min-w-0 wrap-anywhere">
+            <ContentSectionHeader className="min-w-0">
+              <ContentSectionTitle className="min-w-0 wrap-anywhere">
                 <ContentItemHeading level={3} id={organizationsHeadingId} tabIndex={-1}>
                   {m.managed_organizations_title()}
                 </ContentItemHeading>
-              </CardTitle>
-              <CardDescription className="min-w-0 wrap-anywhere">{m.managed_membership_text()}</CardDescription>
-            </CardHeader>
-            <CardContent className="min-w-0 space-y-4">
+              </ContentSectionTitle>
+              <ContentSectionDescription className="min-w-0 wrap-anywhere">
+                {m.managed_membership_text()}
+              </ContentSectionDescription>
+            </ContentSectionHeader>
+            <ContentSectionBody className="min-w-0 space-y-4">
               {organizations.state === 'preparing' ? (
                 <p role="status" aria-labelledby={organizationsHeadingId}>
                   {m.managed_preparing_text()}
@@ -522,25 +535,25 @@ export function ManagedAccountsView({
                 headingId={organizationsHeadingId}
                 waiting={waiting}
               />
-            </CardContent>
-          </Card>
-          <Card
+            </ContentSectionBody>
+          </ContentSection>
+          <ContentSection
             className="min-w-0 max-w-full"
             role="region"
             aria-labelledby={responsibilitiesHeadingId}
             aria-busy={responsibilities.busy || snapshot.loading}
           >
-            <CardHeader className="min-w-0">
-              <CardTitle className="min-w-0 wrap-anywhere">
+            <ContentSectionHeader className="min-w-0">
+              <ContentSectionTitle className="min-w-0 wrap-anywhere">
                 <ContentItemHeading level={3} id={responsibilitiesHeadingId} tabIndex={-1}>
                   {m.managed_operated_title()}
                 </ContentItemHeading>
-              </CardTitle>
-              <CardDescription className="min-w-0 wrap-anywhere">
+              </ContentSectionTitle>
+              <ContentSectionDescription className="min-w-0 wrap-anywhere">
                 {m.managed_responsibility_text()} {m.settings_managed_authority_text()}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="min-w-0 space-y-4">
+              </ContentSectionDescription>
+            </ContentSectionHeader>
+            <ContentSectionBody className="min-w-0 space-y-4">
               {responsibilities.items.length ? (
                 <ul className="min-w-0 max-w-full" aria-label={m.managed_operated_title()}>
                   {responsibilities.items.map((item) =>
@@ -588,8 +601,8 @@ export function ManagedAccountsView({
                 headingId={responsibilitiesHeadingId}
                 waiting={waiting}
               />
-            </CardContent>
-          </Card>
+            </ContentSectionBody>
+          </ContentSection>
         </>
       ) : null}
     </div>

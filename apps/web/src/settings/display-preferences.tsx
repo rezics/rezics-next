@@ -1,20 +1,26 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { m } from '../paraglide/messages.js';
 import { useSettingsShell } from './adapters/shell';
 
 export function DisplayPreferences() {
   const { AppearanceControls } = useSettingsShell();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
+    <ContentSection>
+      <ContentSectionHeader>
+        <ContentSectionTitle>
           <h2 id="settings-display-heading">{m.settings_display_heading()}</h2>
-        </CardTitle>
-        <CardDescription>{m.settings_display_text()}</CardDescription>
-      </CardHeader>
-      <CardContent>
+        </ContentSectionTitle>
+        <ContentSectionDescription>{m.settings_display_text()}</ContentSectionDescription>
+      </ContentSectionHeader>
+      <ContentSectionBody>
         <AppearanceControls />
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }

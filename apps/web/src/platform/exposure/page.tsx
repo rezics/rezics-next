@@ -1,6 +1,11 @@
 import { useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { PageHeading } from '../../shell/page-heading';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -87,14 +92,14 @@ function ExposureView({
               <p className="text-muted-foreground">{m.exposure_partial_inventory()}</p>
               {discovered.length === 0 && <p>{m.exposure_no_visible_groups()}</p>}
               {rows.map(({ group }) => (
-                <Card key={group}>
-                  <CardHeader>
-                    <CardTitle className="break-all">{group}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
+                <ContentSection key={group}>
+                  <ContentSectionHeader>
+                    <ContentSectionTitle className="break-all">{group}</ContentSectionTitle>
+                  </ContentSectionHeader>
+                  <ContentSectionBody>
                     <p>{m.exposure_unknown()}</p>
-                  </CardContent>
-                </Card>
+                  </ContentSectionBody>
+                </ContentSection>
               ))}
             </section>
           )}
@@ -124,11 +129,11 @@ function ExposureView({
           {offered.length === 0 && <p>{m.exposure_actions_unavailable()}</p>}
           {page.current.exposureGroups.length === 0 && <p>{m.exposure_no_visible_groups()}</p>}
           {rows.map(({ group, open, at }) => (
-            <Card key={group}>
-              <CardHeader>
-                <CardTitle className="break-all">{group}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <ContentSection key={group}>
+              <ContentSectionHeader>
+                <ContentSectionTitle className="break-all">{group}</ContentSectionTitle>
+              </ContentSectionHeader>
+              <ContentSectionBody className="space-y-4">
                 <p>
                   {open === undefined
                     ? m.exposure_unknown()
@@ -154,8 +159,8 @@ function ExposureView({
                     </Button>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
+              </ContentSectionBody>
+            </ContentSection>
           ))}
         </section>
       )}

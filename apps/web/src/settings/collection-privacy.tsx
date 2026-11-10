@@ -22,7 +22,13 @@ import {
 } from '@rezics/ui/shadcn/alert-dialog';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionDescription,
+  ContentSectionHeader,
+  ContentSectionTitle,
+} from '@rezics/ui/content-section';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { m } from '../paraglide/messages.js';
@@ -465,17 +471,17 @@ export function CollectionPrivacyView({
   }, [state.failure, state.loading, state.nativeFailure, state.next]);
   return (
     <section id="privacy" aria-labelledby="settings-privacy-heading" className="scroll-mt-6">
-      <Card className="min-w-0 max-w-full">
-        <CardHeader>
-          <CardTitle>
+      <ContentSection className="min-w-0 max-w-full">
+        <ContentSectionHeader>
+          <ContentSectionTitle>
             <h2 id="settings-privacy-heading">{m.settings_privacy_heading()}</h2>
-          </CardTitle>
-          <CardDescription>
+          </ContentSectionTitle>
+          <ContentSectionDescription>
             {m.settings_privacy_text()} {m.settings_privacy_members()}
-          </CardDescription>
-          <CardDescription>{m.settings_automatic_save_help()}</CardDescription>
-        </CardHeader>
-        <CardContent className="min-w-0 space-y-4">
+          </ContentSectionDescription>
+          <ContentSectionDescription>{m.settings_automatic_save_help()}</ContentSectionDescription>
+        </ContentSectionHeader>
+        <ContentSectionBody className="min-w-0 space-y-4">
           {state.loading ? <p role="status">{m.settings_privacy_loading()}</p> : null}
           {state.failure ? (
             <Alert variant="destructive">
@@ -561,8 +567,8 @@ export function CollectionPrivacyView({
               {state.loading ? m.settings_privacy_loading() : m.settings_privacy_load_more()}
             </Button>
           ) : null}
-        </CardContent>
-      </Card>
+        </ContentSectionBody>
+      </ContentSection>
     </section>
   );
 }

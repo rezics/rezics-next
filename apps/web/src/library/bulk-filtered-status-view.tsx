@@ -137,11 +137,7 @@ function FilteredStatusForm({
     owner.operationCurrent('library_operation.outcomes');
   const result = state?.read;
   return (
-    <section
-      className="space-y-3 rounded-xl border border-border p-4"
-      aria-labelledby={`${id}-heading`}
-      aria-busy={busy}
-    >
+    <section className="space-y-3 border-t border-border pt-4" aria-labelledby={`${id}-heading`} aria-busy={busy}>
       <h2 id={`${id}-heading`} className="font-semibold">
         {m.library_filtered_status_heading()}
       </h2>

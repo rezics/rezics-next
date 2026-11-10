@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react';
 import { ContentItem, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@rezics/ui/shadcn/card';
+import {
+  ContentSection,
+  ContentSectionBody,
+  ContentSectionHeader,
+  ContentSectionTitle,
+  ContentSectionDescription,
+} from '@rezics/ui/content-section';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Tombstone } from '@rezics/ui/tombstone';
@@ -148,20 +154,20 @@ function Responsibilities({
   navigation?: WindowNavigation | undefined;
 }) {
   return (
-    <Card
+    <ContentSection
       role="region"
       aria-label={m.managed_operated_title()}
       tabIndex={-1}
       data-management-feed="operatorsCursor"
       className={regionClass}
     >
-      <CardHeader>
-        <CardTitle>
+      <ContentSectionHeader>
+        <ContentSectionTitle>
           <ContentItemHeading level={2}>{m.managed_operated_title()}</ContentItemHeading>
-        </CardTitle>
-        <CardDescription>{m.managed_responsibility_text()}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </ContentSectionTitle>
+        <ContentSectionDescription>{m.managed_responsibility_text()}</ContentSectionDescription>
+      </ContentSectionHeader>
+      <ContentSectionBody className="space-y-4">
         {page.items.length ? (
           <ul>
             {page.items.map((item) => (
@@ -190,8 +196,8 @@ function Responsibilities({
           <p className="text-muted-foreground">{m.managed_no_responsibilities()}</p>
         )}
         <WindowControls navigation={navigation} cursor={page.next} field="operatorsCursor" cursors={cursors} />
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }
 export function ManagedAccountsPage({
@@ -220,13 +226,13 @@ export function ManagedAccountsPage({
   const create = page.organizationsAvailable === true ? issuerPage(page.issuer, '/organizations/new') : null;
   return (
     <Frame title={m.managed_title()}>
-      <Card>
-        <CardHeader>
-          <CardTitle>
+      <ContentSection>
+        <ContentSectionHeader>
+          <ContentSectionTitle>
             <ContentItemHeading level={2}>{m.managed_your_account()}</ContentItemHeading>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+          </ContentSectionTitle>
+        </ContentSectionHeader>
+        <ContentSectionBody className="space-y-3">
           <IdentityLink account={page.value.account} />
           <nav aria-label={m.av_accounts()} className="flex flex-wrap gap-x-6 gap-y-2">
             <a
@@ -242,22 +248,22 @@ export function ManagedAccountsPage({
               {m.av_applicant_settings()}
             </a>
           </nav>
-        </CardContent>
-      </Card>
-      <Card
+        </ContentSectionBody>
+      </ContentSection>
+      <ContentSection
         role="region"
         aria-label={m.managed_organizations_title()}
         tabIndex={-1}
         data-management-feed="organizationsCursor"
         className={regionClass}
       >
-        <CardHeader>
-          <CardTitle>
+        <ContentSectionHeader>
+          <ContentSectionTitle>
             <ContentItemHeading level={2}>{m.managed_organizations_title()}</ContentItemHeading>
-          </CardTitle>
-          <CardDescription>{m.managed_membership_text()}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          </ContentSectionTitle>
+          <ContentSectionDescription>{m.managed_membership_text()}</ContentSectionDescription>
+        </ContentSectionHeader>
+        <ContentSectionBody className="space-y-4">
           {page.value.organizations.state === 'preparing' ? (
             <p role="status">{m.managed_preparing_text()}</p>
           ) : page.value.organizations.items.length ? (
@@ -300,8 +306,8 @@ export function ManagedAccountsPage({
               {page.organizationsAvailable === false ? m.managed_creation_closed() : m.managed_creation_unavailable()}
             </p>
           )}
-        </CardContent>
-      </Card>
+        </ContentSectionBody>
+      </ContentSection>
       <Responsibilities page={page.value.responsibilities} cursors={cursors} navigation={navigation} />
       <AutomationEntries issuer={page.issuer} />
       <Button className={retryClass} variant="outline" onClick={retry}>
@@ -342,20 +348,20 @@ export function AccountManagementPage({
           {m.managed_back()}
         </a>
       </nav>
-      <Card>
-        <CardHeader>
-          <CardTitle>
+      <ContentSection>
+        <ContentSectionHeader>
+          <ContentSectionTitle>
             <ContentItemHeading level={2}>{m.managed_target_title()}</ContentItemHeading>
-          </CardTitle>
-          <CardDescription>
+          </ContentSectionTitle>
+          <ContentSectionDescription>
             {value.account.kind === 'organization'
               ? m.managed_organization_identity()
               : value.relation
                 ? m.managed_automated_identity()
                 : m.managed_human_identity()}
-          </CardDescription>
-        </CardHeader>
-        <CardContent data-slot="account-management-identity" className="grid min-w-0 gap-3">
+          </ContentSectionDescription>
+        </ContentSectionHeader>
+        <ContentSectionBody data-slot="account-management-identity" className="grid min-w-0 gap-3">
           {value.account.handle ? (
             <a className={linkClass} href={`/${getLocale()}/@${encodeURIComponent(value.account.handle)}`}>
               @{value.account.handle}
@@ -388,23 +394,23 @@ export function AccountManagementPage({
               {m.managed_edit_profile()}
             </a>
           ) : null}
-        </CardContent>
-      </Card>
+        </ContentSectionBody>
+      </ContentSection>
       {value.account.kind === 'organization' ? (
-        <Card
+        <ContentSection
           role="region"
           aria-label={m.managed_holders_title()}
           tabIndex={-1}
           data-management-feed="membersCursor"
           className={regionClass}
         >
-          <CardHeader>
-            <CardTitle>
+          <ContentSectionHeader>
+            <ContentSectionTitle>
               <ContentItemHeading level={2}>{m.managed_holders_title()}</ContentItemHeading>
-            </CardTitle>
-            <CardDescription>{m.managed_holders_text()}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            </ContentSectionTitle>
+            <ContentSectionDescription>{m.managed_holders_text()}</ContentSectionDescription>
+          </ContentSectionHeader>
+          <ContentSectionBody className="space-y-4">
             {value.members.state === 'denied' ? (
               <p>{m.managed_holders_denied()}</p>
             ) : value.members.items.length ? (
@@ -438,19 +444,19 @@ export function AccountManagementPage({
               field="membersCursor"
               cursors={cursors}
             />
-          </CardContent>
-        </Card>
+          </ContentSectionBody>
+        </ContentSection>
       ) : null}
       {value.responsibilities ? (
         <Responsibilities page={value.responsibilities} cursors={cursors} navigation={navigation} />
       ) : null}
-      <Card>
-        <CardHeader>
-          <CardTitle>
+      <ContentSection>
+        <ContentSectionHeader>
+          <ContentSectionTitle>
             <ContentItemHeading level={2}>{m.managed_changes_title()}</ContentItemHeading>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm text-muted-foreground">
+          </ContentSectionTitle>
+        </ContentSectionHeader>
+        <ContentSectionBody className="space-y-4 text-sm text-muted-foreground">
           <a className={linkClass} href={managedAccountHref(`/${getLocale()}/settings`, value.account.id)}>
             {m.managed_options()}
           </a>
@@ -482,8 +488,8 @@ export function AccountManagementPage({
               {m.managed_delete_self()}
             </a>
           ) : null}
-        </CardContent>
-      </Card>
+        </ContentSectionBody>
+      </ContentSection>
       <Button className={retryClass} variant="outline" onClick={retry}>
         {m.managed_refresh()}
       </Button>
@@ -495,13 +501,13 @@ function AutomationEntries({ issuer }: { issuer: string | null }) {
   const create = issuerPage(issuer, '/automated/new');
   const open = issuerPage(issuer, '/automated/open');
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
+    <ContentSection>
+      <ContentSectionHeader>
+        <ContentSectionTitle>
           <ContentItemHeading level={2}>{m.managed_automation_title()}</ContentItemHeading>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
+        </ContentSectionTitle>
+      </ContentSectionHeader>
+      <ContentSectionBody className="space-y-3">
         <p className="text-sm text-muted-foreground">{m.managed_actions_selection()}</p>
         <nav aria-label={m.managed_automation_title()} className="flex flex-wrap gap-x-6 gap-y-2">
           {create ? (
@@ -516,7 +522,7 @@ function AutomationEntries({ issuer }: { issuer: string | null }) {
           ) : null}
           {!create && !open ? <p>{m.managed_actions_unavailable()}</p> : null}
         </nav>
-      </CardContent>
-    </Card>
+      </ContentSectionBody>
+    </ContentSection>
   );
 }

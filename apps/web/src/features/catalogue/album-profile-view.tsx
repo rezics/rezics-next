@@ -503,7 +503,7 @@ function AlbumCorrectionWorkspaceLive({
               ))}
             </dl>
           </details>
-          <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
+          <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 border-t border-border pt-4">
             <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
               {m.specialist_identity_reference({}, o)}
             </summary>
@@ -605,7 +605,7 @@ function AlbumCorrectionWorkspaceLive({
             );
           })}
           {visible && (
-            <div className="space-y-3 rounded-xl border border-border p-4">
+            <div className="space-y-3 border-t border-border pt-4">
               <p>{m.facts_selection({ count: changed.length, limit: factLimit }, o)}</p>
               {drafts.length >= factLimit && <p role="status">{m.album_selection_limit({}, o)}</p>}
               {staleDraft && <EditorFailure reason="stale" locale={locale} />}
@@ -699,7 +699,7 @@ function AlbumCorrectionWorkspaceLive({
         )
       )}
       {visible && !!fields!.authored.length && (
-        <section className="space-y-3 rounded-xl border border-border p-4 sm:p-5">
+        <section className="space-y-3 border-t border-border pt-4 sm:p-5">
           <h2 className="text-xl font-semibold">{m.album_summary({}, o)}</h2>
           <p className="text-sm text-muted-foreground">{m.album_summary_help({}, o)}</p>
           <AuthoredFieldEntry id={subject!.id} title={title} locale={locale} />
@@ -733,7 +733,7 @@ function AlbumWithdrawnCommand({
     if (recovered && lifetime.active()) status.current?.focus();
   }, [recovered]);
   return (
-    <section aria-label={draft.property} className="min-w-0 space-y-3 rounded-xl border border-border p-4">
+    <section aria-label={draft.property} className="min-w-0 space-y-3 border-t border-border pt-4">
       <h3 className="break-words font-semibold">{draft.property}</h3>
       <p>{m.facts_private({}, o)}</p>
       <EditorFailure reason="stale" locale={locale} />
