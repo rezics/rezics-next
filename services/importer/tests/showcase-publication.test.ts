@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchStatement, BatchWriteResult } from '@rezics/definitions/bulk';
@@ -24,6 +24,7 @@ import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '@rezics/conversion
 import {
   captureShowcaseCommands,
   publishShowcase,
+  resolveLegacyCandidates,
   publishShowcaseVocabulary,
   adoptResumeKeys,
   sendDurableAdopt,
@@ -33,7 +34,7 @@ import {
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
 import { prepareShowcaseTags } from '../src/showcase-tags.ts';
-import { formatSeedError, SeedFinalization } from '../src/seed-cli.ts';
+import { finalizeSeedResult, formatSeedError, SeedFinalization } from '../src/seed-cli.ts';
 
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
@@ -436,6 +437,51 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         return Response.json(responseValue);
       }) as typeof fetch,
     });
+    const recoveryExisting = journal.acknowledgedCommands();
+    const recoveryInput = { plan, result, aliases: crossMediaAliases, existing: recoveryExisting };
+    expect(
+      await resolveLegacyCandidates({
+        ...recoveryInput,
+        review: {
+          reviewedCandidates: async () => {
+            throw new Error('scoped receipts must not enter legacy recovery');
+          },
+        },
+      }),
+    ).toEqual({ acknowledgements: recoveryExisting, omissions: [] });
+    const target = recoveryExisting.find(
+      (ack) => ack.command.op === 'propose' && ack.command.statement.property.id === 'schema:abstract',
+    )!;
+    if (target.command.op !== 'propose') throw new Error('Missing synopsis proposal');
+    const recoveryReceipts = recoveryExisting.filter((ack) => ack !== target);
+    for (const mode of ['exact', 'missing', 'ambiguous', 'source', 'statement', 'partial'] as const) {
+      const candidate = {
+        id: target.candidateId!,
+        source: target.command.source,
+        statement: target.command.statement,
+        head: null,
+        rank: null,
+      };
+      if (mode === 'source') candidate.source = { ...candidate.source, field_group: 'facts' };
+      if (mode === 'statement') candidate.statement = { ...candidate.statement, references: [] };
+      const rows =
+        mode === 'missing' ? [] : mode === 'ambiguous' ? [candidate, { ...candidate, id: randomUUID() }] : [candidate];
+      let page = 0;
+      const recovered = await resolveLegacyCandidates({
+        ...recoveryInput,
+        existing: recoveryReceipts,
+        review: {
+          reviewedCandidates: async (_id, query) =>
+            ({
+              candidates: query.cursor ? [] : rows,
+              adoption: null,
+              next: mode === 'partial' ? String(page++) : null,
+            }) as never,
+        },
+      });
+      expect(recovered.omissions.length, mode).toBe(mode === 'exact' ? 0 : 1);
+      expect(recovered.acknowledgements.length, mode).toBe(recoveryReceipts.length + (mode === 'exact' ? 1 : 0));
+    }
     let tagOptions = {
       tagAssociations: preparedTags.associationBindings,
       tagAssociationRefreshes: preparedTags.associationRefreshes,
@@ -1553,11 +1599,43 @@ test('result-write failure retains its original error and reports only fixed rem
   progress.enter('result-write');
   progress.failed(failure);
   expect(lines).toEqual([
-    'Cross-media seed finalization state=started scope=seed phase=result-write remaining=result-write',
-    'Cross-media seed finalization state=failed scope=seed phase=result-write remaining=result-write',
+    'Cross-media seed finalization state=started scope=seed phase=result-write remaining=result-write,publication-completion',
+    'Cross-media seed finalization state=failed scope=seed phase=result-write remaining=result-write,publication-completion',
   ]);
   expect(formatSeedError(failure)).toBe(
-    'Cross-media seed failed finalization{scope=seed phase=result-write remaining=result-write}',
+    'Cross-media seed failed finalization{scope=seed phase=result-write remaining=result-write,publication-completion}',
   );
   expect(formatSeedError(new Error('phase=result-write secret'))).toBe('Cross-media seed failed');
+});
+
+test('incomplete publication preserves the written seed artifact and reports completion separately from I/O', async () => {
+  const temporary = join(import.meta.dir, '../../../.temp');
+  await mkdir(temporary, { recursive: true });
+  const directory = await mkdtemp(join(temporary, 'seed-result-'));
+  const resultPath = join(directory, 'result.json'),
+    lines: string[] = [];
+  const progress = new SeedFinalization('seed', (line) => lines.push(line));
+  const publication = { status: 'incomplete' as const, omissions: [{ code: 'legacy-candidate-not-exact' }] };
+  const report = { showcase: publication, published: 507 };
+  let written = false;
+  try {
+    const failure = await finalizeSeedResult({
+      resultPath,
+      report,
+      publication,
+      progress,
+      onWritten: () => {
+        written = true;
+      },
+    }).catch((error: unknown) => error);
+    progress.failed(failure);
+    expect(written).toBe(true);
+    expect(JSON.parse(await readFile(resultPath, 'utf8'))).toEqual(report);
+    expect(formatSeedError(failure)).toContain('publication incomplete result-write=completed');
+    expect(formatSeedError(failure)).toContain(`artifact=${JSON.stringify(resultPath)} bounded-omissions=1`);
+    expect(lines.at(-1)).toContain('state=failed scope=seed phase=publication-completion');
+    expect(lines.some((line) => line.includes('state=completed'))).toBe(false);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

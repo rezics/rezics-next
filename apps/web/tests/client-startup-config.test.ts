@@ -61,6 +61,9 @@ test('installed serve composition discovers client dependencies on visits withou
           const rules = await routes.environments.ssr.transformRequest('/src/community/realm-rules-authoring/panel.tsx');
           assert.ok(rules.code.includes('/paraglide/messages/realm_rules_authoring_open.js'));
           assert.ok(!rules.code.includes('/paraglide/messages.js'), 'rules labels do not load the full catalogue');
+          const publicViews = await routes.environments.ssr.transformRequest('/src/settings/public-views.tsx');
+          assert.ok(publicViews.code.includes('/paraglide/messages/settings_public_posts.js'));
+          assert.ok(!publicViews.code.includes('/paraglide/messages.js'), 'public views do not load the full catalogue');
         } finally { await routes.close(); }
         const root = await mkdtemp(resolve('../../.temp/generated-message-map-'));
         await mkdir(resolve(root, 'src/paraglide/messages'), { recursive: true });
