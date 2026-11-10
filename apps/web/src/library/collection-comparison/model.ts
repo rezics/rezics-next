@@ -1,13 +1,12 @@
 import { pickText } from '@rezics/composition';
 import { listKeyFacts } from '../../media/type-presentation';
-import { type ResultFactDefinitions } from '../../search/work-context/facts';
 import { subjectHref } from '../../subject/subject-href';
 import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
 import { collectionMemberReturnAddress, collectionViewerActionHref } from '../collection-viewer/model';
 import type { CollectionMember } from '../reads';
 import type { CollectionListPresentations } from '../collection-presentation';
 
-export type CollectionComparisonDefinitions = ResultFactDefinitions;
+export type CollectionComparisonDefinitions = Readonly<Record<string, { labels?: Record<string, string> }>>;
 
 /** Project labels for at most four selected properties per row from the one admitted page release. */
 export function collectionComparisonDefinitions(
