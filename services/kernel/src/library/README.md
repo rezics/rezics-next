@@ -779,6 +779,13 @@ unavailable. The final owning transaction compares the complete native header/ru
 and revalidates scope before receipt lookup. No foreign home is opened while the parent is held. Relevant changes
 roll back the entire command and leave the prior selected output active.
 
+Decision: retain the first prepared header/rule as this request's comparison across Core serialization retries.
+Each attempt reacquires current owner/private authority; a changed definition returns conflict before requesting
+its replacement Source. A new request and an authorized exact receipt replay still prepare from current evidence.
+The existing real source-fence race pins rollback and conflict; the replay/replacement cases retain their assertions.
+The replacement read walks ordinary one-key cursors because the shared fixture retains earlier owner facts, and
+the accepted-release case reads its already prepared Source without starting an unrelated preparation worker.
+
 Decision: reuse the selected publisher with saved population and accepted meaning; incorporate the catalogue
 producer at the existing binding, never through another adapter. One causal regression covers release changes,
 fresh publication and currently authorized exact replay. Catalogue membership/properties must affect fresh private B;
