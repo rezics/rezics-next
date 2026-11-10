@@ -6,7 +6,6 @@ import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
 import { ProblemError } from '../../src/http/problem-error.ts';
-import { createNativeEditionFixture } from '../commerce/support/native-edition-fixture.ts';
 import { drainEffects } from '../support/account-deletion.ts';
 import { password } from './native-account-bindings-fixture.ts';
 import { createTerminalErasureFixture } from './support/terminal-erasure-fixture.ts';
@@ -185,7 +184,7 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
       ])
         await json('staff', 'POST', `/v1/platform/exposure/${group}:open`);
       await grant(people().staff.accountId, PLATFORM_RESOURCE, ['offer:create', 'zone:create']);
-      await grant(aliceId, PLATFORM_RESOURCE, ['subject:create', 'offer:create', 'zone:create']);
+      await grant(aliceId, PLATFORM_RESOURCE, ['offer:create', 'zone:create']);
       await grant(bobId, PLATFORM_RESOURCE, ['offer:create']);
 
       const profileMarker = marker('profile');
@@ -274,24 +273,13 @@ export async function createTerminalErasureDriver(): Promise<TerminalErasureDriv
       await json('alice', 'PUT', `/v1/follows/${subjectId}`);
       await json('bob', 'PUT', `/v1/follows/${aliceAgent}`);
 
-      const staffRequest: Parameters<typeof createNativeEditionFixture>[0] = async (method, path, body, headers) =>
-        world.kernel.handle(
-          new Request(`https://kernel.test${path}`, {
-            method,
-            headers: {
-              authorization: `Bearer ${people().staff.bearer}`,
-              ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-              ...(headers ?? {}),
-            },
-            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-          }),
-        );
-      const editions = await createNativeEditionFixture(staffRequest);
-      const aliceEdition = await editions.publish({
+      const aliceEditions = await world.editions(alicePerson);
+      const bobEditions = await world.editions(bobPerson);
+      const aliceEdition = await aliceEditions.publish({
         title: marker('alice-edition'),
         body: 'Alice sale copy',
       });
-      const bobEdition = await editions.publish({
+      const bobEdition = await bobEditions.publish({
         title: marker('bob-edition'),
         body: 'Bob sale copy',
       });

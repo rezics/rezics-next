@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
+import { bootstrapLocalShowcaseBoardCreation } from '../../../src/access/bootstrap-governance.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { bindExecutionContract } from '../../../src/command/execution-contract.ts';
 import { createPool } from '../../../src/database/pool.ts';
@@ -14,6 +15,10 @@ import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import type { WorkContext } from '../../../src/work/registry.ts';
 import { workExecutionPort } from '../../../src/work/selected-runtime.ts';
 import { prepareCollectionSource } from '../../library/support/collection-source-preparation.ts';
+import {
+  createNativeEditionFixture,
+  type NativeEditionRequest,
+} from '../../commerce/support/native-edition-fixture.ts';
 import { drainEffects, readLiveAccountHandle } from '../../support/account-deletion.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { createPersonas, type Persona } from '../../support/personas.ts';
@@ -90,11 +95,15 @@ export async function createTerminalErasureFixture() {
     work = bindExecutionContract(await createWorkClient(databaseUrl, pool), workExecutionPort(), historyExecutionPort);
     await work.registerQueue('maintenance', WORK_QUEUES.maintenance);
     const service = auth.host.service;
+    const consent = createCurrentConsentReader({ database: auth.authPool });
     const kernel = testKernel({
       pool,
       workClient: work,
       requestDeadlineMs: 120_000,
       auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
+      content: {
+        readConsent: ({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId }),
+      },
       writeRate: createWriteRateLimiter({
         secret: 'terminal-erasure-native-write-rate-secret',
         overrides: JSON.stringify({
@@ -103,7 +112,6 @@ export async function createTerminalErasureFixture() {
       }),
     });
     const people = await createPersonas(kernel, { version: 1, pool, auth });
-    const consent = createCurrentConsentReader({ database: auth.authPool });
     const sourceContext: WorkContext = {
       pool,
       client: work,
@@ -119,7 +127,13 @@ export async function createTerminalErasureFixture() {
     };
     bindCanonicalSourceWork(sourceContext);
 
-    async function command(actor: Persona, method: string, path: string, body?: unknown) {
+    async function command(
+      actor: Persona,
+      method: string,
+      path: string,
+      body?: unknown,
+      headers?: Readonly<Record<string, string>>,
+    ) {
       return kernel.handle(
         new Request(`https://kernel.test${path}`, {
           method,
@@ -127,6 +141,7 @@ export async function createTerminalErasureFixture() {
             authorization: `Bearer ${actor.bearer}`,
             'idempotency-key': JSON.stringify(randomUUID()),
             ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+            ...headers,
           },
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         }),
@@ -146,6 +161,19 @@ export async function createTerminalErasureFixture() {
       actions: ['subject:create'],
       valid: '(,)',
     });
+    await bootstrapLocalShowcaseBoardCreation(pool, people.staff.accountId);
+
+    async function editions(actor: Persona) {
+      await json(people.staff, 'POST', '/v1/grants', {
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: actor.accountId },
+        actions: ['subject:create', 'board:create'],
+        valid: '(,)',
+      });
+      const request: NativeEditionRequest = (method, path, body, headers) =>
+        command(actor, method, path, body, headers);
+      return createNativeEditionFixture(request);
+    }
 
     await pool.query(
       `CREATE TABLE ${TERMINAL_ERASURE_BARRIER_TABLE} (
@@ -195,6 +223,7 @@ export async function createTerminalErasureFixture() {
       command,
       json,
       subject,
+      editions,
       readOnly,
       async prepareSource(actor: Persona, collectionId: string) {
         const nativeWorker = worker;
