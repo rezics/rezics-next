@@ -18,6 +18,15 @@ export const PAGE_DATA_DEFECTS: ReadonlySet<PageDataClass> = new Set(['API', 'WE
 const previousHealthy = new Set<PageDataClass>(['DATA', 'EMPTY', 'UNAUTHORIZED', 'UNAVAILABLE']);
 const pageDataTaskId = 'page-data';
 
+const pageDataSeedProducerFiles = [
+  'scripts/datasets/cross-media-seed.ts',
+  'services/importer/src/cross-media-seed.ts',
+  'services/importer/src/showcase-*.ts',
+  'services/importer/tests/showcase-*.test.ts',
+  'services/importer/README.md',
+  'services/importer/seed-diagnostics.md',
+];
+
 type PageDataPolicy = typeof defaultPolicy.pageData;
 type PageManifest = {
   version: 1;
@@ -103,6 +112,11 @@ export type PageDataRepairRoute =
       status: 'refused';
       reason: string;
     };
+/** Seed results describe the fixture producer. The section retains the observed consumer and its paths. */
+export function pageDataRepairTarget(section: PageDataSection): Pick<PageDataSection, 'goal' | 'files'> {
+  return section.class === 'SEED' ? { goal: 'imports', files: pageDataSeedProducerFiles } : section;
+}
+
 export type PageDataOptions = {
   settings: Settings;
   db: Database;
@@ -922,7 +936,9 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
     const changes = previous?.head ? projectChanges(options.settings.mainCheckout, previous.head, head) : [];
     const tasks = options.tasks.tasks();
     for (const section of sections.filter((candidate) => PAGE_DATA_DEFECTS.has(candidate.class))) {
-      const owner = latestSectionOwner(tasks, changes, section.files);
+      const target = pageDataRepairTarget(section);
+      const candidates = section.class === 'SEED' ? tasks.filter((task) => task.brief.goal === target.goal) : tasks;
+      const owner = latestSectionOwner(candidates, changes, target.files);
       const key = repairKey(section, owner);
       const claim = readRepairClaim(options.db, key);
       if (claim?.status === 'routed' || claim?.status === 'refused') continue;
@@ -948,7 +964,12 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
         : false;
       const dispatched = options.tasks
         .tasks()
-        .some((task) => task.brief.markdown.includes(`page-data-repair-key: ${key}`));
+        .some(
+          (task) =>
+            task.state !== 'cancelled' &&
+            (section.class !== 'SEED' || task.brief.goal === target.goal) &&
+            task.brief.markdown.includes(`page-data-repair-key: ${key}`),
+        );
       if (resumed || dispatched) {
         finishRepair(options.db, key);
         continue;

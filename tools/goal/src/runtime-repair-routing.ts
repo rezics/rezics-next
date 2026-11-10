@@ -5,12 +5,18 @@ import { classifyRiskAreas, readRiskOwnership, riskAreaRulesFor } from './briefs
 import { testFailureRepairBrief, type TestFailureRepair } from './dev-verifier.ts';
 import type { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerJob } from './job.ts';
-import { isPageDataRiskRefusal, type PageDataRepair, type PageDataRepairRoute } from './page-data.ts';
+import {
+  isPageDataRiskRefusal,
+  pageDataRepairTarget,
+  type PageDataRepair,
+  type PageDataRepairRoute,
+} from './page-data.ts';
 import type { WorkerStore } from './store.ts';
 import type { WorkerTasks } from './tasks.ts';
 import type { Settings } from './types.ts';
 
 type RoutingSettings = Pick<Settings, 'stateDirectory' | 'riskAreasFile'> & {
+  integration: Pick<Settings['integration'], 'supermanager'>;
   policy?: Pick<NonNullable<Settings['policy']>, 'verifier' | 'brief'>;
 };
 
@@ -97,13 +103,19 @@ function dispatchTestFailureRepair(dependencies: RuntimeRepairRoutingDependencie
   );
 }
 
-function pageDataRepairBrief(repair: PageDataRepair, goal: string, manager: string, riskAreas: string[]): string {
+function pageDataRepairBrief(
+  repair: PageDataRepair,
+  goal: string,
+  manager: string,
+  riskAreas: string[],
+  paths = repair.section.files,
+): string {
   return `---\n${JSON.stringify(
     {
       goal,
       manager,
       kind: 'implementation',
-      paths: repair.section.files,
+      paths,
       riskAreas,
       urgent: true,
       acceptance: { failing: true },
@@ -125,12 +137,20 @@ export async function routePageDataRepair(
   settings: RoutingSettings,
   repair: PageDataRepair,
 ): Promise<PageDataRepairRoute> {
-  if (await job.resumePageDataRepair(repair)) return 'resumed';
+  const target = pageDataRepairTarget(repair.section);
+  const seed = repair.section.class === 'SEED';
+  const owner = seed && repair.owner?.brief.goal !== target.goal ? undefined : repair.owner;
   const existing = store
     .tasks()
-    .find((task) => task.brief.markdown.includes(`page-data-repair-key: ${repair.repairKey}`));
-  const goal = repair.owner?.brief.goal ?? repair.section.goal;
-  const manager = repair.owner?.brief.manager ?? goal;
+    .find(
+      (task) =>
+        task.state !== 'cancelled' &&
+        (!seed || task.brief.goal === target.goal) &&
+        task.brief.markdown.includes(`page-data-repair-key: ${repair.repairKey}`),
+    );
+  if (!existing && owner && (await job.resumePageDataRepair({ ...repair, owner }))) return 'resumed';
+  const goal = owner?.brief.goal ?? target.goal;
+  const manager = owner?.brief.manager ?? (seed ? settings.integration.supermanager : goal);
   if (existing) {
     inbox.deliver({
       managerId: existing.brief.manager,
@@ -142,21 +162,19 @@ export async function routePageDataRepair(
   }
   const policy = settings.policy?.brief;
   const rules = riskAreaRulesFor(readRiskOwnership(settings.riskAreasFile, policy));
-  const riskAreas = [
-    ...new Set(repair.section.files.flatMap((path) => classifyRiskAreas(path, rules, 'pattern', policy))),
-  ];
-  const markdown = pageDataRepairBrief(repair, goal, manager, riskAreas);
+  const riskAreas = [...new Set(target.files.flatMap((path) => classifyRiskAreas(path, rules, 'pattern', policy)))];
+  const markdown = pageDataRepairBrief(repair, goal, manager, riskAreas, target.files);
   const briefPath = join(settings.stateDirectory, 'page-data-repairs', `${repair.repairKey}.brief.md`);
   mkdirSync(dirname(briefPath), { recursive: true });
   if (existsSync(briefPath)) {
     const previous = readFileSync(briefPath, 'utf8');
     if (previous !== markdown) {
-      // The retained refusal authorizes only replacement of the generator's empty risk declaration.
-      if (
-        !repair.reconcileRiskRefusal ||
-        !riskAreas.length ||
-        previous !== pageDataRepairBrief(repair, goal, manager, [])
-      )
+      // Replace only the exact unadmitted brief emitted by the previous generator.
+      const previousGoal = repair.owner?.brief.goal ?? repair.section.goal;
+      const previousManager = repair.owner?.brief.manager ?? previousGoal;
+      const previousEmpty = pageDataRepairBrief(repair, previousGoal, previousManager, []);
+      const currentEmpty = pageDataRepairBrief(repair, goal, manager, [], target.files);
+      if (!repair.reconcileRiskRefusal || (previous !== previousEmpty && previous !== currentEmpty))
         throw new Error('page-data repair brief changed for an existing cause');
       const staged = `${briefPath}.${randomUUID()}.tmp`;
       try {
