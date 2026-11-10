@@ -11,5 +11,5 @@ export {
   NoResults,
   Loading,
   Error,
-  PhoneSheet,
+  Sheet,
 } from '../stories/header-search/header-search.stories';

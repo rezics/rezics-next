@@ -436,10 +436,11 @@ async function familyJourney(canvasElement: HTMLElement) {
   // Actual browser rectangles and full text runs, authored only. DOM construction is not this proof.
   for (const panel of [family, first, second])
     await expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+  const minimumTargetHeight = family.ownerDocument.defaultView!.matchMedia('(max-width: 767px)').matches ? 44 : 32;
   for (const target of family.querySelectorAll<HTMLElement>('input, select, button[data-slot="button"]')) {
     const rect = target.getBoundingClientRect();
     const panel = target.closest('[data-family-editor], article')!.getBoundingClientRect();
-    await expect(rect.height).toBeGreaterThanOrEqual(width === 390 ? 44 : 32);
+    await expect(rect.height).toBeGreaterThanOrEqual(minimumTargetHeight);
     await expect(rect.width).toBeGreaterThanOrEqual(44);
     await expect(rect.left).toBeGreaterThanOrEqual(panel.left - 1);
     await expect(rect.right).toBeLessThanOrEqual(panel.right + 1);

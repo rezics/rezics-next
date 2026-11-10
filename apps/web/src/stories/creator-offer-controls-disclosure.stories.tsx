@@ -128,7 +128,7 @@ export const DraftRemainsVisible: Story = {
   },
 };
 export const LongTitleManagement: Story = {
-  render: () => <Example variant="narrow" />,
+  render: () => <Example variant="long-title" />,
   play: async ({ canvasElement }) => {
     const { view } = await openManagement(canvasElement, longTitle);
     const heading = view.getByRole('heading', { name: longTitle });
