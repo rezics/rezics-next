@@ -1755,7 +1755,9 @@ patch-only changes refresh the pinned install before boot. It runs `bun scripts/
 its mapped files when its retained session can resume; otherwise one repair task is dispatched to that section's
 Goal. A `SEED` defect uses the cross-media fixture producer's Imports ownership and source paths. Its recorded section
 and consumer paths remain available as evidence. One run groups pending seed observations for the same producer owner before routing.
-Retained risk refusals use the same grouping, and each section keeps its own cause and evidence. Boot and check failures write their bounded captured stack output, plus failing command output when present, to
+Retained risk refusals use the same grouping, and each section keeps its own cause and evidence. Subject relation and inbound link API failures
+use the Semantic producer's ownership and source paths. One run groups observations for that producer with the
+same page, persona, problem code and pointer. Each section retains its own evidence. Boot and check failures write their bounded captured stack output, plus failing command output when present, to
 `stateDirectory/page-data-failures/<runId>-<phase>.log`; the supermanager notice includes that log path. When the stack
 exits, the notice retains the first substantive pre-teardown cause and skips Task command echoes. When readiness
 expires without a producer error, the notice uses the final failed probe with its origin and HTTP status or error.

@@ -27,6 +27,18 @@ const pageDataSeedProducerFiles = [
   'services/importer/seed-diagnostics.md',
 ];
 
+const subjectRelationNativePaths = new Set(['/v1/subjects/{subject}/relations', '/v1/subjects/{subject}/links']);
+const subjectRelationProducerFiles = [
+  'services/kernel/src/semantic/http/subjects.ts',
+  'services/kernel/src/semantic/current-relations.ts',
+  'services/kernel/src/semantic/current-relations-*.sql',
+  'services/kernel/src/semantic/links.ts',
+  'services/kernel/src/semantic/list-*-links*.sql',
+  'services/kernel/test/semantic/context-relations.test.ts',
+  'services/kernel/test/semantic/subjects-http.test.ts',
+  'services/kernel/test/semantic/growth-relations.test.ts',
+];
+
 type PageDataPolicy = typeof defaultPolicy.pageData;
 type PageManifest = {
   version: 1;
@@ -52,6 +64,7 @@ export type PageDataSection = {
   class: PageDataClass;
   goal: string;
   files: string[];
+  nativePath?: string;
   firstErrorLine?: string;
   unrun?: PageDataUnrunEvidence;
   nativeProblem?: PageDataNativeProblem;
@@ -136,9 +149,17 @@ export type PageDataRepairRoute =
       status: 'refused';
       reason: string;
     };
-/** Seed results describe the fixture producer. The section retains the observed consumer and its paths. */
-export function pageDataRepairTarget(section: PageDataSection): Pick<PageDataSection, 'goal' | 'files'> {
-  return section.class === 'SEED' ? { goal: 'imports', files: pageDataSeedProducerFiles } : section;
+type PageDataRepairTarget = Pick<PageDataSection, 'goal' | 'files'> & {
+  producer?: 'cross-media-seed' | 'subject-relations';
+};
+
+/** Route known producer defects by the native probe contract while retaining the observed consumer. */
+export function pageDataRepairTarget(section: PageDataSection): PageDataRepairTarget {
+  if (section.class === 'SEED')
+    return { goal: 'imports', files: pageDataSeedProducerFiles, producer: 'cross-media-seed' };
+  if (section.class === 'API' && section.nativePath && subjectRelationNativePaths.has(section.nativePath))
+    return { goal: 'semantic', files: subjectRelationProducerFiles, producer: 'subject-relations' };
+  return section;
 }
 
 export type PageDataOptions = {
@@ -161,7 +182,10 @@ export type PageDataOptions = {
   }>;
 };
 
-export type SectionConfig = Pick<PageDataSection, 'page' | 'persona' | 'section' | 'name' | 'goal' | 'files'>;
+export type SectionConfig = Pick<
+  PageDataSection,
+  'page' | 'persona' | 'section' | 'name' | 'goal' | 'files' | 'nativePath'
+>;
 type CommitChange = { commit: string; position: number; files: string[] };
 type StackConfig = {
   version: 1;
@@ -421,6 +445,7 @@ function sectionRegistry(cwd: string): Map<string, SectionConfig> {
           section: section.id,
           name: section.name,
           goal: fallbackGoal(page.id, section.native.path),
+          nativePath: section.native.path,
           files: sectionFiles(page.id, section.id, section.native.path, section.sql?.text ?? ''),
         };
         const key = sectionKey(item);
@@ -690,7 +715,20 @@ function repairKey(section: PageDataSection, owner: Task | undefined): string {
 function groupPageDataRepairs(repairs: PageDataRepair[]): PageDataRepair[][] {
   const groups = new Map<string, PageDataRepair[]>();
   for (const repair of repairs) {
-    const key = repair.section.class === 'SEED' ? `seed:${repair.owner?.id ?? 'imports'}` : repair.repairKey;
+    const { section } = repair;
+    const target = pageDataRepairTarget(section);
+    const owner = repair.owner?.id ?? target.goal;
+    let key = repair.repairKey;
+    if (target.producer === 'cross-media-seed') key = `seed:${owner}`;
+    if (target.producer === 'subject-relations' && section.nativeProblem?.code)
+      key = JSON.stringify([
+        target.producer,
+        owner,
+        section.page,
+        section.persona,
+        section.nativeProblem.code,
+        section.nativeProblem.pointer,
+      ]);
     const group = groups.get(key) ?? [];
     group.push(repair);
     groups.set(key, group);
@@ -996,7 +1034,7 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
     const pendingRepairs: PageDataRepair[] = [];
     for (const section of sections.filter((candidate) => PAGE_DATA_DEFECTS.has(candidate.class))) {
       const target = pageDataRepairTarget(section);
-      const candidates = section.class === 'SEED' ? tasks.filter((task) => task.brief.goal === target.goal) : tasks;
+      const candidates = target.producer ? tasks.filter((task) => task.brief.goal === target.goal) : tasks;
       const owner = latestSectionOwner(candidates, changes, target.files);
       const key = repairKey(section, owner);
       const claim = readRepairClaim(options.db, key);
@@ -1026,7 +1064,7 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
         .some(
           (task) =>
             task.state !== 'cancelled' &&
-            (section.class !== 'SEED' || task.brief.goal === target.goal) &&
+            (!target.producer || task.brief.goal === target.goal) &&
             task.brief.markdown.includes(`page-data-repair-key: ${key}`),
         );
       if (resumed || dispatched) {

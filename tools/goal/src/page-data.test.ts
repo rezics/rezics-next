@@ -902,3 +902,73 @@ test('one run routes and reconciles its related fixture defects as a single prod
     h.db.close();
   }
 });
+
+test('native relation and link failures route together to Semantic while distinct probes retain their own cause', async () => {
+  const h = harness();
+  try {
+    expect(spawnSync('git', ['branch', 'dev', 'main'], { cwd: h.settings.mainCheckout }).status).toBe(0);
+    const start = new Date('2026-01-01T00:00:00.000Z');
+    const interval = h.settings.policy?.pageData?.intervalMs ?? 7_200_000;
+    let now = start;
+    let failing = false;
+    const observations = [
+      ['related-edition-of', '/v1/subjects/{subject}/relations', { code: 'deadline_exceeded' }],
+      ['related-alternative', '/v1/subjects/{subject}/links', { code: 'deadline_exceeded' }],
+      ['related-characters', '/v1/subjects/{subject}/relations', { code: 'invalid', pointer: '/property' }],
+      ['tags', '/v1/pages:read', { code: 'deadline_exceeded' }],
+    ] as const;
+    const registry = new Map<string, SectionConfig>(
+      observations.map(([section, nativePath]) => [
+        `vn\tanonymous\t${section}`,
+        {
+          page: 'vn',
+          persona: 'anonymous',
+          section,
+          name: section,
+          goal: 'web',
+          nativePath,
+          files: ['apps/web/src/routes/index.tsx'],
+        },
+      ]),
+    );
+    const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
+    const job = { resumePageDataRepair: async () => false };
+    const options = {
+      settings: h.settings,
+      db: h.store.db,
+      tasks: h.store,
+      inbox,
+      now: () => now,
+      runStack: async (_head: string, invocation: string) => ({
+        output: completed(
+          invocation,
+          observations
+            .map(
+              ([section, _path, problem]) =>
+                `vn anonymous ${section} ${failing ? `API nativeProblem=${encodeURIComponent(JSON.stringify(problem))}` : 'DATA'}\n`,
+            )
+            .join(''),
+        ),
+        exitCode: failing ? 1 : 0,
+        registry,
+      }),
+      routeDefect: (repair: PageDataRepair) => routePageDataRepair(h.tasks, h.store, job, inbox, h.settings, repair),
+    };
+    expect(await runPageDataCycle(options)).toBe('ran');
+    now = new Date(start.getTime() + interval);
+    failing = true;
+    expect(await runPageDataCycle(options)).toBe('ran');
+    const repairs = h.store.tasks().map(({ id }) => h.store.task(id));
+    expect(repairs.map(({ brief }) => brief.goal).sort()).toEqual(['semantic', 'semantic', 'web']);
+    const grouped = repairs.find(({ brief }) => brief.markdown.includes('related-edition-of'))!;
+    expect(grouped.brief.markdown).toContain('related-alternative');
+    expect(grouped.brief.paths).toContain('services/kernel/src/semantic/http/subjects.ts');
+    expect(grouped.brief.paths.includes('apps/web/src/routes/index.tsx')).toBe(false);
+    expect(readLatestPageDataRun(h.store.db)?.sections).toHaveLength(4);
+    now = new Date(now.getTime() + interval);
+    expect(await runPageDataCycle(options)).toBe('ran');
+    expect(h.store.tasks()).toHaveLength(3);
+  } finally {
+    await h.disposeAsync();
+  }
+});

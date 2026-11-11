@@ -140,20 +140,19 @@ export async function routePageDataRepair(
   repair: PageDataRepair,
 ): Promise<PageDataRepairRoute> {
   const target = pageDataRepairTarget(repair.section);
-  const seed = repair.section.class === 'SEED';
-  const owner = seed && repair.owner?.brief.goal !== target.goal ? undefined : repair.owner;
+  const owner = target.producer && repair.owner?.brief.goal !== target.goal ? undefined : repair.owner;
   const existing = store
     .tasks()
     .find(
       (task) =>
         task.state !== 'cancelled' &&
-        (!seed || task.brief.goal === target.goal) &&
+        (!target.producer || task.brief.goal === target.goal) &&
         (task.brief.markdown.includes(`page-data-repair-key: ${repair.repairKey}`) ||
-          (seed && task.id === owner?.id && ['ready', 'running', 'held', 'landing'].includes(task.state))),
+          (target.producer && task.id === owner?.id && ['ready', 'running', 'held', 'landing'].includes(task.state))),
     );
   if (!existing && owner && (await job.resumePageDataRepair({ ...repair, owner }))) return 'resumed';
   const goal = owner?.brief.goal ?? target.goal;
-  const manager = owner?.brief.manager ?? (seed ? settings.integration.supermanager : goal);
+  const manager = owner?.brief.manager ?? (target.producer ? settings.integration.supermanager : goal);
   if (existing) {
     const evidence = pageDataRepairEvidence(repair);
     const evidencePath = join(settings.stateDirectory, 'page-data-repairs', `${repair.repairKey}.observed.md`);
