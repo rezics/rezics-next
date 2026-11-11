@@ -9,6 +9,7 @@ The active definitions are:
 - [Semantic catalogue and Zones](semantic.md)
 - [Search and composition](search.md)
 - [Content and communities](content.md)
+- [Subject-connected knowledge workspaces](knowledge-workspaces.md) — coordinated by the existing Content manager
 - [Commerce](commerce.md)
 - [Library and Collections](library.md) — same commerce manager; separate owner documentation
 - [Imports](imports.md)

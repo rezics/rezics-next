@@ -1937,6 +1937,20 @@
       "researcher": "codex",
       "state": "adopted",
       "decision": "docs/goals/accounts.capabilities.md#post-seed-api-capture"
+    },
+    {
+      "path": "docs/research/knowledge-workspaces-model-astra.md",
+      "topic": "knowledge-workspaces",
+      "researcher": "gpt-6-astra",
+      "state": "adopted",
+      "decision": "docs/knowledge-workspaces.md#research-adoption"
+    },
+    {
+      "path": "docs/research/knowledge-workspaces-product-astra.md",
+      "topic": "knowledge-workspaces",
+      "researcher": "gpt-6-astra",
+      "state": "adopted",
+      "decision": "docs/knowledge-workspaces.md#research-adoption"
     }
   ]
 }
