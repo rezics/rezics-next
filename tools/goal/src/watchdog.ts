@@ -487,9 +487,12 @@ export function violations(
     if (attempt.state !== 'exited' || !attempt.endedAt) continue;
     if (attempt.driver && sameProcess(attempt.driver)) continue;
     const retry = pending.get(`${task.id}:${attempt.attempt}`);
-    const endedAt = Date.parse(attempt.endedAt);
-    const notBefore = Date.parse(retry?.options?.notBefore ?? '');
-    const eligibleAt = Number.isFinite(notBefore) ? Math.max(endedAt, notBefore) : endedAt;
+    const eligibleAt = Math.max(
+      ...[attempt.endedAt, retry?.queuedAt, retry?.options?.notBefore]
+        .map((time) => Date.parse(time ?? ''))
+        .filter(Number.isFinite),
+    );
+    if (!Number.isFinite(eligibleAt)) continue;
     const idle = now - eligibleAt;
     if (idle < policy.watchdog.noWorkerMs) continue;
     const intent = retry !== undefined;

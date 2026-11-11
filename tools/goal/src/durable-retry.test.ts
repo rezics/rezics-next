@@ -80,6 +80,8 @@ test('a product retry still waiting to start takes an amended brief and keeps it
     writeFileSync(join(h.settings.stateDirectory, 'capacity.json'), JSON.stringify({ maxWorkers: 0 }));
     const ref = { taskId: task.id, attempt: 1 };
     h.store.saveRetryIntent(ref, { evidence: 'controller-evidence', escalation: 'new-failure', fixRound: 3 });
+    const queuedAt = h.store.retryIntent(ref)?.queuedAt;
+    expect(queuedAt).toBeString();
     h.tasks.queueRetry(other.id);
     const changed = join(h.root, '.temp/goal/amended-pending.md');
     writeFileSync(
@@ -92,6 +94,7 @@ test('a product retry still waiting to start takes an amended brief and keeps it
     expect(h.store.task(task.id).brief.markdown).toContain('Write the amended result');
     expect(h.store.retryIntent(ref)).toMatchObject({
       status: 'pending',
+      queuedAt,
       options: { evidence: 'controller-evidence', escalation: 'new-failure', fixRound: 3 },
     });
     expect(

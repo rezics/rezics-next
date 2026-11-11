@@ -1810,11 +1810,11 @@ export class WorkerStore implements AttemptFence {
         }
         task.state = 'ready';
         this.saveTask(task);
-        const intent: RetryIntent = { ...ref, options, status: 'pending' };
+        const at = new Date().toISOString();
+        const intent: RetryIntent = { ...ref, options, status: 'pending', queuedAt: at };
         this.db
           .query('INSERT OR REPLACE INTO worker_retry_intents VALUES (?,?,?)')
           .run(ref.taskId, ref.attempt, JSON.stringify(intent));
-        const at = new Date().toISOString();
         this.db
           .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
           .run(ref.taskId, ref.attempt, 'orphaned-landing-recovered', at, JSON.stringify({ failure, options }));
@@ -1883,7 +1883,7 @@ export class WorkerStore implements AttemptFence {
       .transaction(() => {
         const existing = this.retryIntent(ref);
         if (!existing) {
-          const intent: RetryIntent = { ...ref, options, status: 'pending' };
+          const intent: RetryIntent = { ...ref, options, status: 'pending', queuedAt: new Date().toISOString() };
           this.db
             .query('INSERT INTO worker_retry_intents VALUES (?,?,?)')
             .run(ref.taskId, ref.attempt, JSON.stringify(intent));
@@ -2008,7 +2008,7 @@ export class WorkerStore implements AttemptFence {
             .run(JSON.stringify(existing), ref.taskId, ref.attempt);
           return;
         }
-        const intent: RetryIntent = { ...ref, options, status: 'pending' };
+        const intent: RetryIntent = { ...ref, options, status: 'pending', queuedAt: new Date().toISOString() };
         this.db
           .query('INSERT OR REPLACE INTO worker_retry_intents VALUES (?,?,?)')
           .run(ref.taskId, ref.attempt, JSON.stringify(intent));
