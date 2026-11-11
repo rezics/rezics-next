@@ -19,10 +19,12 @@ import type {
   PublicFilterConsumerCaptureInput,
   PublicFilterConsumerJob,
   PublicFilterConsumerOperations,
+  PublicFilterConsumerRefill,
   PublicFilterQueriedObservation,
 } from '../../src/search/public-filter-consumer-contract.ts';
 import { capture, costOf, isControlStatement, withoutCatalogStatements, type Capture } from '../support/growth.ts';
 import {
+  assertPageCapture,
   complete,
   capturedStep,
   fixture,
@@ -132,6 +134,27 @@ async function execute(n: Native, queried: PublicFilterQueriedObservation) {
   expect(result.queried.consumer).toEqual(queried.consumer);
   expect(result.queried.snapshot.observation).toBe(queried.snapshot.observation);
   return result;
+}
+async function measuredQuery(
+  n: Native,
+  queried: PublicFilterQueriedObservation,
+  refill?: PublicFilterConsumerRefill,
+) {
+  return capture(
+    n.f.db,
+    async () => {
+      const query = await n.operations.query(queried, context(), refill);
+      if (query.status !== 'queried') return { status: 'withheld' as const, query };
+      expect(query.queried.consumer).toEqual(queried.consumer);
+      expect(query.queried.snapshot.observation).toBe(queried.snapshot.observation);
+      return {
+        status: 'queried' as const,
+        query,
+        final: await status(n.operations, query.queried, query.execution),
+      };
+    },
+    { includeBackends: true },
+  );
 }
 async function liveDocument(n: Native, subject: string) {
   return (
@@ -533,6 +556,289 @@ test('native query revalidation detects a reduction even when repair is acknowle
       repaired.resolve();
       clearTimeout(timer);
       await Promise.allSettled([measured, started.promise, repaired.promise]);
+    }
+  } finally {
+    await n.close();
+  }
+}, 600_000);
+
+test('native delayed foreign projection blocks a retained page and continuation while an unrelated finite scope remains useful', async () => {
+  const n = await setup();
+  try {
+    const author = await n.f.create();
+    const dependentBooks: string[] = [];
+    for (let attempt = 0; attempt < 8; attempt++) {
+      dependentBooks.push(
+        await n.f.create('schema:Book', { 'schema:author': [statement('schema:author', author)] }),
+      );
+      if (dependentBooks.length >= 2 && dependentBooks.some((book) => home(book) !== home(author))) break;
+    }
+    expect(dependentBooks.length).toBeGreaterThanOrEqual(2);
+    expect(dependentBooks.some((book) => home(book) !== home(author))).toBe(true);
+
+    const independentBook = await n.f.create('schema:Book', {
+      'schema:inLanguage': [statement('schema:inLanguage', 'en')],
+    });
+    const affected = await captured(n, { ...positive(author), size: 2, pageSize: 1 });
+    const unaffected = await captured(n, {
+      sort: 'id',
+      size: 20,
+      pageSize: 1,
+      text: undefined,
+      filterDocument: { statement: { property: 'schema:inLanguage', in: ['en'] } },
+    });
+
+    const started = Promise.withResolvers<Awaited<ReturnType<typeof execute>>>();
+    const repaired = Promise.withResolvers<void>();
+    const timer = setTimeout(() => {
+      const error = new Error('Native delayed foreign projection barrier timed out');
+      started.reject(error);
+      repaired.reject(error);
+    }, 60_000);
+    void started.promise.catch(() => {});
+    void repaired.promise.catch(() => {});
+    const measuredPage = capture(
+      n.f.db,
+      async () => {
+        const page = await execute(n, affected.queried);
+        started.resolve(page);
+        await repaired.promise;
+        return { page, final: await status(n.operations, page.queried, page.execution) };
+      },
+      { includeBackends: true },
+    );
+    void measuredPage.catch((error: unknown) => started.reject(error));
+
+    const preparationCosts: Awaited<ReturnType<PublicFilterConsumerOperations['repairStep']>>['cost'][] = [];
+    let pendingPageEvidence: unknown;
+    let pendingContinuationEvidence: unknown;
+    let unrelatedPageEvidence: unknown;
+    let completedContinuationEvidence: unknown;
+    let delayedHitIds: string[] = [];
+    function recordPreparation(cost: (typeof preparationCosts)[number]) {
+      preparationCosts.push(cost);
+      for (const value of Object.values(cost)) expect(Number.isSafeInteger(value) && value >= 0).toBe(true);
+      expect(cost.inputKeys).toBeLessThanOrEqual(1000);
+      expect(cost.candidates).toBeLessThanOrEqual(cost.inputKeys);
+      expect(cost.accessPoints + cost.dependencyPoints).toBeLessThanOrEqual(8 * cost.inputKeys);
+      expect(cost.resultWrites).toBeLessThanOrEqual(1000);
+      expect(cost.frontierWrites).toBeLessThanOrEqual(1);
+      expect(cost.engineSearches).toBeLessThanOrEqual(4);
+    }
+    async function finishRepair(job: PublicFilterConsumerJob) {
+      for (let step = 0; step < 256; step++) {
+        const result = await capturedStep(n.f.db, () => n.operations.repairStep(job, context()));
+        expect(['progress', 'settled']).toContain(result.status);
+        if (result.status !== 'progress' && result.status !== 'settled')
+          throw new Error(`Native background repair ${result.status}`);
+        recordPreparation(result.cost);
+        if (result.status === 'settled') return;
+      }
+      throw new Error('Finite native delayed foreign repair did not settle');
+    }
+
+    try {
+      const page = await started.promise;
+      const pageIds = page.result.hits.map((hit) => hit.id);
+      expect(pageIds).toHaveLength(2);
+      expect(pageIds.every((book) => dependentBooks.includes(book))).toBe(true);
+      expect(page.window.positions).toHaveLength(2);
+      const continuation = {
+        execution: page.execution,
+        consumed: page.window.positions[0]! + 1,
+        size: 1,
+      } as const;
+      expect(continuation.consumed).toBeLessThan(page.window.examined);
+
+      const beforeHead = await head(n.source, home(author));
+      const beforeDocuments = await Promise.all(dependentBooks.map((book) => liveDocument(n, book)));
+      for (const document of beforeDocuments)
+        expect(document._source.statements).toContain(`schema:author=${author}`);
+
+      await n.f.post(`/v1/subjects/${author}:hide`, { reason: 'Foreign target privacy reduction' });
+      const reduction = await head(n.source, home(author));
+      expect(reduction.partition).toBe(home(author));
+      expect(reduction.position > beforeHead.position).toBe(true);
+      expect(dependentBooks.some((book) => home(book) !== reduction.partition)).toBe(true);
+
+      const gate = n.consumer.arm('write');
+      let repairing:
+        | Promise<{
+            value: Awaited<ReturnType<PublicFilterConsumerOperations['repairStep']>>;
+          } | { error: unknown }>
+        | undefined;
+      try {
+        repairing = n.operations.repairStep(affected.repair, context()).then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+        const reached = await gate.reached;
+        expect(reached.stage).toBe('before_send');
+        expect(['write', 'bulk_wait_for']).toContain(reached.kind);
+        expect(await head(n.source, home(author))).toEqual(reduction);
+        const heldDocuments = await Promise.all(dependentBooks.map((book) => liveDocument(n, book)));
+        expect(heldDocuments.map((document) => document._version)).toEqual(
+          beforeDocuments.map((document) => document._version),
+        );
+        for (const document of heldDocuments)
+          expect(document._source.statements).toContain(`schema:author=${author}`);
+
+        const snapshot = page.queried.snapshot;
+        if (snapshot.kind !== 'pit') throw new Error('Expected retained native PIT for delayed page');
+        const oldHits = await n.search.request<{
+          timed_out: boolean;
+          _shards: { failed: number };
+          hits: { hits: { _id: string }[] };
+        }>('POST', '/_search', {
+          size: 2,
+          sort: [{ id: { order: 'asc' } }],
+          pit: { id: snapshot.pit, keep_alive: '1m' },
+          query: compileFilter(positive(author).filterDocument!, { prefix: 'f', relationOverflow: true }).query,
+        });
+        expect(oldHits.body.timed_out).toBe(false);
+        expect(oldHits.body._shards.failed).toBe(0);
+        delayedHitIds = oldHits.body.hits.hits.map((hit) => hit._id);
+        expect(delayedHitIds.sort()).toEqual(pageIds.slice().sort());
+
+        const pendingPage = await measuredQuery(n, page.queried);
+        pendingPageEvidence = { capture: pendingPage.capture, value: pendingPage.value };
+        if (pendingPage.value.status === 'queried') {
+          const query = pendingPage.value.query;
+          const final = pendingPage.value.final;
+          await assertPageCapture('public-filter-delayed-page-pending', pendingPage.capture, query, final, 1);
+          expect(query.result.hits.map((hit) => hit.id)).toEqual(pageIds);
+          expect(final.pending).toContainEqual(reduction);
+          expect(final.blocking).toContainEqual({ head: reduction, phase: 'pending', scope: 'filter_or_order' });
+        } else {
+          expect(pendingPage.value.query.status).toBe('preparing');
+        }
+
+        const pendingContinuation = await measuredQuery(n, page.queried, continuation);
+        pendingContinuationEvidence = { capture: pendingContinuation.capture, value: pendingContinuation.value };
+        if (pendingContinuation.value.status === 'queried') {
+          const query = pendingContinuation.value.query;
+          const final = pendingContinuation.value.final;
+          await assertPageCapture(
+            'public-filter-delayed-continuation-pending',
+            pendingContinuation.capture,
+            query,
+            final,
+            1,
+          );
+          expect(query.result.hits.map((hit) => hit.id)).toEqual([pageIds[1]]);
+          expect(final.pending).toContainEqual(reduction);
+          expect(final.blocking).toContainEqual({ head: reduction, phase: 'pending', scope: 'filter_or_order' });
+        } else {
+          expect(pendingContinuation.value.query.status).toBe('preparing');
+        }
+
+        const unrelatedPage = await measuredQuery(n, unaffected.queried);
+        unrelatedPageEvidence = { capture: unrelatedPage.capture, value: unrelatedPage.value };
+        expect(unrelatedPage.value.status).toBe('queried');
+        if (unrelatedPage.value.status !== 'queried') throw new Error('Unrelated finite scope did not query');
+        await assertPageCapture(
+          'public-filter-delayed-unaffected-scope',
+          unrelatedPage.capture,
+          unrelatedPage.value.query,
+          unrelatedPage.value.final,
+          1,
+        );
+        expect(unrelatedPage.value.query.result.hits.map((hit) => hit.id)).toContain(independentBook);
+        expect(unrelatedPage.value.final.blocking).toEqual([]);
+      } finally {
+        gate.release();
+      }
+
+      if (!repairing) throw new Error('Native delayed foreign repair was not started');
+      const firstRepair = await repairing;
+      if ('error' in firstRepair) throw firstRepair.error;
+      expect(['progress', 'settled']).toContain(firstRepair.value.status);
+      if (firstRepair.value.status !== 'progress' && firstRepair.value.status !== 'settled')
+        throw new Error(`Native delayed foreign repair ${firstRepair.value.status}`);
+      recordPreparation(firstRepair.value.cost);
+      if (firstRepair.value.status !== 'settled') await finishRepair(affected.repair);
+
+      const afterDocuments = await Promise.all(dependentBooks.map((book) => liveDocument(n, book)));
+      expect(
+        afterDocuments
+          .map((document) => document._version)
+          .every((version, index) => version > beforeDocuments[index]!._version),
+      ).toBe(true);
+      for (const document of afterDocuments)
+        expect(document._source.statements).not.toContain(`schema:author=${author}`);
+
+      const completedContinuation = await measuredQuery(n, page.queried, continuation);
+      completedContinuationEvidence = { capture: completedContinuation.capture, value: completedContinuation.value };
+      if (completedContinuation.value.status === 'queried') {
+        const query = completedContinuation.value.query;
+        const final = completedContinuation.value.final;
+        await assertPageCapture(
+          'public-filter-delayed-continuation-acknowledged',
+          completedContinuation.capture,
+          query,
+          final,
+          1,
+        );
+        expect(query.result.hits.map((hit) => hit.id)).toEqual([pageIds[1]]);
+        expect(final.pending).toEqual([]);
+        expect(final.changed).toContainEqual(reduction);
+        expect(final.blocking).toContainEqual({ head: reduction, phase: 'changed', scope: 'filter_or_order' });
+      } else {
+        expect(completedContinuation.value.query.status).toBe('preparing');
+      }
+
+      const fresh = await captured(n, { ...negative(author), pageSize: 1 });
+      const freshPage = await measuredQuery(n, fresh.queried);
+      expect(freshPage.value.status).toBe('queried');
+      if (freshPage.value.status !== 'queried') throw new Error('Fresh traversal did not query');
+      await assertPageCapture(
+        'public-filter-delayed-fresh-traversal',
+        freshPage.capture,
+        freshPage.value.query,
+        freshPage.value.final,
+        1,
+      );
+      const freshIds = new Set(freshPage.value.query.result.hits.map((hit) => hit.id));
+      expect(dependentBooks.some((book) => freshIds.has(book))).toBe(true);
+      expect(freshPage.value.final.pending).toEqual([]);
+      expect(freshPage.value.final.blocking).toEqual([]);
+
+      repaired.resolve();
+      const { value, capture: whole } = await measuredPage;
+      await assertPageCapture(
+        'public-filter-delayed-original-page-acknowledged',
+        whole,
+        value.page,
+        value.final,
+        1,
+      );
+      expect(value.final.pending).toEqual([]);
+      expect(value.final.changed).toContainEqual(reduction);
+      expect(value.final.blocking).toContainEqual({ head: reduction, phase: 'changed', scope: 'filter_or_order' });
+
+      const evidence = new URL('../../../../.temp/goal/public-filter-delayed-cross-home.json', import.meta.url);
+      await Bun.write(
+        evidence,
+        JSON.stringify(
+          {
+            homes: { author: home(author), dependentBooks: dependentBooks.map(home) },
+            reduction,
+            delayedHitIds,
+            originalPage: value,
+            pendingPage: pendingPageEvidence,
+            pendingContinuation: pendingContinuationEvidence,
+            unaffectedPage: unrelatedPageEvidence,
+            completedContinuation: completedContinuationEvidence,
+            freshPage,
+            preparationCosts,
+          },
+          (_, item) => (typeof item === 'bigint' ? item.toString() : item),
+        ),
+      );
+    } finally {
+      repaired.resolve();
+      clearTimeout(timer);
+      await Promise.allSettled([measuredPage, started.promise, repaired.promise]);
     }
   } finally {
     await n.close();

@@ -1474,6 +1474,12 @@
       "decision": "docs/development/documentation.md"
     },
     {
+      "path": "docs/research/public-filter-finite-scope-gpt-6-luna.md",
+      "topic": "public-filter-finite-scope",
+      "researcher": "gpt-6-luna",
+      "state": "open"
+    },
+    {
       "path": "docs/research/public-filter-native-cut-current.md",
       "topic": "public-filter-native-cut",
       "researcher": "current",

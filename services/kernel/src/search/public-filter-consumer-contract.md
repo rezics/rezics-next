@@ -278,6 +278,8 @@ subject-wide protection. Transport gates retain pending barriers for delayed/fai
 changed dependent versions, late registration and competing native repair exercise the actual publication race.
 Tuple and consent cases require dependent SOURCE keys to disappear before a fresh observation is clean.
 
+Finite-scope witness choice: hide an author outside the admitted Book population, hold the real cross-home OpenSearch repair write, recheck the old page and retained continuation before and after ACK, and keep an unrelated language-filtered query useful; see the [research report](../../../../docs/research/public-filter-finite-scope-gpt-6-luna.md).
+
 One inclusive native capture surrounds the entire `query` and its final `readStatus`, including engine execution,
 immutable definition/execution/start/result bookkeeping, metadata, current own rows and every backend operation.
 In the ACK-before-final race, a bounded barrier exposes the actual original query execution to the fixture
