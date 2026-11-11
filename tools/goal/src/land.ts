@@ -133,11 +133,12 @@ export class SqliteLandingQueue implements LandingQueue {
     this.db
       .transaction(() => {
         this.fence.assertCurrent(request);
-        this.db
+        const insert = this.db
           .query(
             'INSERT INTO landing_queue(task, attempt, request) VALUES (?, ?, ?) ON CONFLICT(task, attempt) DO NOTHING',
           )
           .run(request.taskId, request.attempt, JSON.stringify(request));
+        if (insert.changes === 0) return;
         recordFlow(this.db, {
           taskId: request.taskId,
           attempt: request.attempt,

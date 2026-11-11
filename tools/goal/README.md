@@ -1172,6 +1172,10 @@ integrations. Verify the new producer with two complete UTC days: one enqueue pe
 start/terminal coverage for the terminal cohort. Compare throughput at comparable offered work; the old
 counts do not establish time or allowance saved.
 
+The November 10 daily audit at `907b6f2929` recorded 52 enqueue events for 26 attempt identities and complete
+same-day landing intervals for two of 26 integrations. An enqueue now records its event only when it inserts the queue
+row. Start and terminal timing by operation remain the next part of the existing delivery contract.
+
 ### Hourly delivery report
 
 `bun tools/goal/scripts/efficiency-report.ts [--bucket <UTC-hour-start>]` prints the most recently completed UTC hour
