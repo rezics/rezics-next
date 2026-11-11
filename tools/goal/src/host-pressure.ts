@@ -25,6 +25,7 @@ export function readHostPressure(): PressureSample {
 export const CODE_WORKER_MIB = 2048;
 export const HEAVY_WORKER_MIB = 4096;
 const MIB = 1024 ** 2;
+export const WORKER_SLICE_ROOT = `/sys/fs/cgroup/user.slice/user-${process.getuid?.()}.slice/user@${process.getuid?.()}.service/rezics.slice/rezics-workers.slice`;
 /** Initial working-set reservation; hard safety limits are deliberately not expected working sets. */
 export function workerReservationMiB(goal?: string): number {
   return goal && goal !== 'control-plane' ? CODE_WORKER_MIB : HEAVY_WORKER_MIB;
@@ -32,7 +33,8 @@ export function workerReservationMiB(goal?: string): number {
 /** A finite operator slice opts in. Account for support services' actual use and workers' measured peaks. */
 export function workerHeadroomMiB(
   running: number,
-  root = `/sys/fs/cgroup/user.slice/user-${process.getuid?.()}.slice/user@${process.getuid?.()}.service/rezics.slice/rezics-workers.slice`,
+  root = WORKER_SLICE_ROOT,
+  parkedScopes: ReadonlySet<string> = new Set(),
 ): number {
   const read = (path: string) => Number(readFileSync(path, 'utf8').trim());
   let maximum: number;
@@ -50,6 +52,9 @@ export function workerHeadroomMiB(
       const scope = join(root, entry.name);
       try {
         const current = read(join(scope, 'memory.current'));
+        // Aggregate memory.current already charges parked checks in full. Only a reconciled owned scope may
+        // relinquish its writing reserve, and it cannot stand in for a missing running worker below.
+        if (parkedScopes.has(entry.name)) continue;
         const peak = read(join(scope, 'memory.peak'));
         reserved += Math.max(0, Math.max(HEAVY_WORKER_MIB * MIB, peak) - current);
         scopes++;

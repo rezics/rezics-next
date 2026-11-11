@@ -1,15 +1,20 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { hostname } from 'node:os';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
-import { processIdentity, sameProcess } from './process.ts';
+import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import type { Attempt, Task } from './types.ts';
+import type { WorkerStore } from './store.ts';
+import type { CheckRecord, CheckPhysicalRecord } from '../../../scripts/worker-check.ts';
+import { physicalHistoryPath, sameRunnerIdentity, validateRunnerIdentity } from '../../../scripts/check-custody.ts';
 import {
   pressureBrake,
   readHostPressure,
   workerHeadroomMiB,
   workerReservationMiB,
   HEAVY_WORKER_MIB,
+  WORKER_SLICE_ROOT,
   type PressureBrake,
   type PressureSample,
 } from './host-pressure.ts';
@@ -18,6 +23,8 @@ export type HostCapacity = { maxWorkers: number; minAvailableMiB: number; urgent
 export type CapacityRelease = () => void;
 /** Store methods admission reads; callers pass the live WorkerStore. */
 export type HostCapacityStore = {
+  /** The indexed current-attempt projection is optional only for older or synthetic callers. */
+  db?: WorkerStore['db'];
   capacityAttemptsCount(urgent: boolean, taskId?: string, attempt?: number): number;
   attempts(taskId: string): ReadonlyArray<Pick<Attempt, 'attempt' | 'state'>>;
   goalInFlightCount?(goal: string, excludeTaskId?: string): number;
@@ -25,6 +32,73 @@ export type HostCapacityStore = {
   taskSequence?(taskId: string): number | undefined;
   goalReadyTaskIdsBefore?(goal: string, sequence: number): readonly string[];
 };
+
+type WorkerScopes = { parked: Set<string>; writers: Set<string> };
+function attemptKey(taskId: string, attempt: number): string {
+  return JSON.stringify([taskId, attempt]);
+}
+/** Require both process identity and its exact current owned cgroup; unit-name resemblance is insufficient. */
+function ownedWorkerScope(identity: ProcessIdentity, taskId: string, attempt: number): string | undefined {
+  if (!sameProcess(identity)) return undefined;
+  const group = /^0::(.+)$/m.exec(readFileSync(`/proc/${identity.pid}/cgroup`, 'utf8'))?.[1];
+  const safeTask = taskId.replace(/[^A-Za-z0-9:_.-]/g, '-').replace(/^-+|-+$/g, '') || 'task';
+  if (!group || !sameProcess(identity)) return undefined;
+  const scope = basename(group);
+  if (
+    join('/sys/fs/cgroup', group) !== join(WORKER_SLICE_ROOT, scope) ||
+    !scope.startsWith(`rezics-worker-${safeTask}-${attempt}-`) ||
+    !/^[a-z0-9]+\.scope$/.test(scope.slice(`rezics-worker-${safeTask}-${attempt}-`.length))
+  ) return undefined;
+  return scope;
+}
+/** Read only indexed live generations; unreconciled checks and scopes retain their writing reserve. */
+function workerScopes(store: HostCapacityStore): WorkerScopes {
+  const result: WorkerScopes = { parked: new Set(), writers: new Set() };
+  if (!store.db) return result;
+  const rows = store.db.query(`
+    SELECT c.task_id, c.current_attempt, c.attempt_state, a.body, json_extract(t.body, '$.worktree') AS worktree
+    FROM worker_current_attempts AS c INDEXED BY worker_current_attempts_state
+    JOIN worker_attempts AS a ON a.task_id=c.task_id AND a.attempt=c.current_attempt
+    JOIN worker_tasks AS t ON t.id=c.task_id AND t.current_attempt=c.current_attempt
+    WHERE c.attempt_state IN ('running', 'waiting') AND c.task_state='running'
+  `).all() as { task_id: string; current_attempt: number; attempt_state: string; body: string; worktree: string }[];
+  for (const row of rows) {
+    try {
+      const attempt = JSON.parse(row.body) as Attempt;
+      if (attempt.taskId !== row.task_id || attempt.attempt !== row.current_attempt || attempt.state !== row.attempt_state)
+        continue;
+      const writer = attempt.process && ownedWorkerScope(attempt.process, row.task_id, row.current_attempt);
+      if (attempt.state === 'running') {
+        if (!writer) continue;
+        result.writers.add(attemptKey(row.task_id, row.current_attempt));
+      } else if (attempt.process !== null) continue;
+      for (const id of attempt.checks ?? []) {
+        if (!/^[0-9a-f-]{36}$/i.test(id)) continue;
+        try {
+          const record = JSON.parse(readFileSync(join(row.worktree, '.temp/goal/checks/results', `${id}.json`), 'utf8')) as CheckRecord;
+          if (record.id !== id || record.cwd !== row.worktree || record.status !== 'running' ||
+              record.ownership?.taskId !== row.task_id || record.ownership.attempt !== row.current_attempt ||
+              record.runnerHost !== hostname() || !record.runnerIdentity || !record.physicalRunId) continue;
+          const identity = validateRunnerIdentity(record.runnerIdentity);
+          const physical = JSON.parse(readFileSync(physicalHistoryPath(row.worktree, id, record.physicalRunId), 'utf8')) as CheckPhysicalRecord;
+          if (physical.id !== id || physical.physicalRunId !== record.physicalRunId || physical.status !== 'running' ||
+              physical.ownership?.taskId !== row.task_id || physical.ownership.attempt !== row.current_attempt ||
+              physical.runnerHost !== record.runnerHost || !physical.remoteExpected ||
+              !sameRunnerIdentity(physical.runnerIdentity, identity)) continue;
+          const scope = ownedWorkerScope(identity, row.task_id, row.current_attempt);
+          // A running session can share a scope with its check. It releases no writing reserve until parked,
+          // or until a resumed writer is positively identified in a different, newly launched scope.
+          if (scope && scope !== writer) result.parked.add(scope);
+        } catch {
+          // Missing, stale or legacy custody is deliberately conservative.
+        }
+      }
+    } catch {
+      // Unknown worker identity cannot release a reservation.
+    }
+  }
+  return result;
+}
 
 /** Whether one more worker may start: below the worker cap and above the memory floor. */
 export function hasCapacity(running: number, availableMiB: number, capacity: HostCapacity): boolean {
@@ -50,6 +124,7 @@ export function capacityAvailable(
     /* Defaults. */
   }
   const running = store.capacityAttemptsCount(false) + store.capacityAttemptsCount(true);
+  const scopes = workerScopes(store);
   return (
     hasCapacity(
       running + admittedStarts(stateDirectory) + admittedStarts(stateDirectory, true),
@@ -57,7 +132,8 @@ export function capacityAvailable(
       capacity,
     ) &&
     !pressureBrake(readPressureBrake(stateDirectory), readHostPressure(), Date.now()).paused &&
-    workerHeadroomMiB(running) >= admittedMemoryMiB(stateDirectory) + HEAVY_WORKER_MIB
+    workerHeadroomMiB(running, WORKER_SLICE_ROOT, scopes.parked) >=
+      admittedMemoryMiB(stateDirectory, scopes.writers) + HEAVY_WORKER_MIB
   );
 }
 /** Stabilize and critical-path starts receive a bounded queue head start while respecting host capacity. */
@@ -89,9 +165,11 @@ export async function awaitHostCapacity(
     goalSequence?: number | undefined;
     goalMaxInFlight?: number | undefined;
     excludeTaskId?: string | undefined;
+    /** A check wake launches a new scope and must reserve its full active minimum before spawning. */
+    resume?: boolean;
     availableMiB?: () => number;
     pressure?: () => PressureSample;
-    workerHeadroomMiB?: (running: number) => number;
+    workerHeadroomMiB?: typeof workerHeadroomMiB;
   } = {},
 ): Promise<CapacityRelease> {
   const policy = options.policy ?? defaultPolicy.capacity;
@@ -119,9 +197,10 @@ export async function awaitHostCapacity(
     JSON.stringify({
       ...owner,
       taskId,
+      attempt: targetAttempt,
       goal: options.goal,
       goalSequence,
-      memoryMiB: workerReservationMiB(options.goal ?? (taskId ? store.taskGoal?.(taskId) : undefined)),
+      memoryMiB: options.resume ? HEAVY_WORKER_MIB : workerReservationMiB(options.goal ?? (taskId ? store.taskGoal?.(taskId) : undefined)),
     }),
   );
   let reported = false;
@@ -166,10 +245,11 @@ export async function awaitHostCapacity(
           options.now?.() ?? Date.now(),
         );
         if (hostCapacity) writeFileSync(join(stateDirectory, 'capacity-pressure.json'), JSON.stringify(brake));
-        const memoryReservation = workerReservationMiB(options.goal ?? (taskId ? store.taskGoal?.(taskId) : undefined));
+        const scopes = workerScopes(store);
+        const memoryReservation = options.resume ? HEAVY_WORKER_MIB : workerReservationMiB(options.goal ?? (taskId ? store.taskGoal?.(taskId) : undefined));
         const sliceAvailable =
-          (options.workerHeadroomMiB ?? workerHeadroomMiB)(running + otherRunning) >=
-          admittedMemoryMiB(stateDirectory) + memoryReservation;
+          (options.workerHeadroomMiB ?? workerHeadroomMiB)(running + otherRunning, WORKER_SLICE_ROOT, scopes.parked) >=
+          admittedMemoryMiB(stateDirectory, scopes.writers) + memoryReservation;
         const ahead = hostCapacity ? waitersAhead(queue, ticket) : 0;
         const limit = urgent ? capacity.urgentSlots : capacity.maxWorkers;
         const memory = hostCapacity ? (options.availableMiB ?? availableMiB)() : Number.POSITIVE_INFINITY;
@@ -232,7 +312,7 @@ function readPressureBrake(stateDirectory: string): PressureBrake {
     return { paused: false };
   }
 }
-function admittedMemoryMiB(stateDirectory: string): number {
+function admittedMemoryMiB(stateDirectory: string, writers: ReadonlySet<string>): number {
   let total = 0;
   for (const lane of ['capacity-queue', 'urgent-capacity-queue']) {
     const queue = join(stateDirectory, lane);
@@ -241,6 +321,10 @@ function admittedMemoryMiB(stateDirectory: string): number {
       if (!name.endsWith('.admitted') || !liveTicket(queue, name)) continue;
       try {
         const value = JSON.parse(readFileSync(join(queue, name), 'utf8'));
+        // Once the exact current writer has a reconciled scope, headroom owns its reserve. Pending/waiting,
+        // unknown identities and old tickets keep their charge until explicit release or observed start.
+        if (typeof value.taskId === 'string' && Number.isSafeInteger(value.attempt) &&
+            writers.has(attemptKey(value.taskId, value.attempt))) continue;
         total += value.memoryMiB === 2048 ? 2048 : HEAVY_WORKER_MIB;
       } catch {
         total += HEAVY_WORKER_MIB;
