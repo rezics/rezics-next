@@ -4,8 +4,9 @@ This is the owner contract selected for Auth's remaining delivery, diagnostic an
 restore surfaces under [account erasure](../../../docs/deletion.md). It specifies
 adoption; it does not announce a provider, deployed backup system, new runtime
 export or terminal Auth acknowledgement. Native progress already exists in
-`auth_erasure`; external custody and restore admission do not. The executable
-future cases are [external custody](../test/external-custody-contract.test.ts) and
+`auth_erasure`; bounded Source replay and isolated restore admission are delivered,
+while physical receiving and external deployment custody remain pending. The executable
+cases are [external custody](../test/external-custody-contract.test.ts) and
 [restore erasure](../test/restore-erasure-contract.test.ts). Missing producers fail
 explicitly rather than supplying a mock deletion certificate.
 
@@ -189,9 +190,11 @@ before T and a restore from an older lineage must be represented explicitly.
 The independent surviving authority is the existing Access permanent obligation,
 not a second Auth ledger in the same backup. The database/deployment owner must
 prevent normal traffic, issuer startup, scheduled workflow recovery, mail/log
-writers and replica promotion before restore reconciliation. Auth alone cannot
-guarantee this through `createAuthService`, which currently has no restore hook.
-Keep restore targets isolated and unreadable until the following completes:
+writers and replica promotion before restore reconciliation. `createAuthRestoreHost`
+provides bounded isolated reconciliation without a handler, signer, SDK recovery or
+maintenance writer; `createAuthService` checks admission before signer construction.
+Neither proves physical deployment isolation. Keep restore targets isolated and
+unreadable until the following completes:
 
 1. Bind the restored database/copy generation to its actual inventory entry and
    verified capture boundary. Source Access must be current and independent of
@@ -204,8 +207,10 @@ Keep restore targets isolated and unreadable until the following completes:
    The feed visits the existing fixed 4,096 routing partitions one per step,
    seeks an owner-indexed immutable ordinal (never an account-ID cursor), and
    returns at most 48 obligations / 64 KiB, with each locator at most 1 KiB.
-   Access owns the necessary native index and source closure proof; this contract
-   does not supply foreign SQL or claim an existing feed export.
+   Access owns the native index and source closure proof through
+   `createAuthErasureObligationBindings` and `createAuthErasureLiveBindings`.
+   The trusted native Access composition exports the obligation feed; the isolated
+   Auth host binds it without copying Kernel SQL or adding a second authority.
    Reconcile through a source-owned sealed high-water boundary; subsequent
    confirmations use the same live producer fence/feed before traffic can race
    cutover. Do not enumerate all living users or read kernel SQL from Auth.
@@ -254,18 +259,18 @@ backup, replica or provider certificate.
 
 ## Adoption and rollout boundary
 
-The precise missing interfaces are:
+Delivered source interfaces and remaining owner adoption are:
 
-| Owner / current surface                                                                                             | Required adoption (not a delivered export)                                                                                                                                                                                                                                                                                                                                                                       |
-| ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Access / `packages/auth-contract/src/index.ts:SharedAccessPorts.readErasureAccount`, native Access bindings         | Current result is `AccessAccount`, containing state/fence/epoch but no source route/version/T. Supply exact permanent obligation resolution and the sealed, bounded Auth obligation replay feed and its source floor binding. Original Auth due/checkpoint recovery belongs to the database owner, not a new Access database read. Per-account polling cannot discover deletions absent from an old Auth backup. |
-| Auth / `startNativeErasure`, `auth_erasure`, `host.ts` startup                                                      | Persist immutable source tuple beside the native floor; bind restored generation/checkpoints without replacing the original obligation. Compose admission before any handler, DBOS recovery, issuer or writer opens. Existing local progress/locks/consent pages remain the implementation primitives.                                                                                                           |
-| Auth + Better Auth native producer / `recovery-delivery.ts` hooks and `AuthServiceOptions.recoveryDelivery.deliver` | Atomic intent/typed copy locator, stable `deliveryId` and verified receiving result binding. Current `Promise<void>` has no custody/result/erasure boundary. The pre-existing in-memory callback test fixture cannot certify external copies.                                                                                                                                                                    |
-| Actual mail and diagnostic receiving owners                                                                         | Actual sink identity, generation/copy inventory, fence, exact result recovery, bounded delete/minimize/verify API and retained-copy/exception disclosure. No vendor or universal sink API is selected by this repository.                                                                                                                                                                                        |
-| Shared-runtime / Better Auth and DBOS diagnostics                                                                   | Source emission allowlist or atomic typed personal-copy hook, including error/cause and stream forwarding. Warn level and generic stdout interception do not establish closure.                                                                                                                                                                                                                                  |
-| Shared-history / Auth DBOS producers                                                                                | Actual supported atomic durable-copy recorders, bounded locator handoff and native minimizers for all message/result/input/step forms. Do not copy shared-history SQL or replace the SDK.                                                                                                                                                                                                                        |
-| Database/deployment / restore orchestration                                                                         | Real backups/WAL/replicas/exports inventory, independent surviving source boundary, isolated restore lifecycle wired to Auth bootstrap, recoverable committed native progress beyond the old snapshot, irreversible deletion verification, and admission fencing of all old/new issuers and collectors. There is no deployed restore implementation or source API here.                                          |
-| Accounts composition / `TrustedAccessPorts`, coordinator status                                                     | Trusted final Auth acknowledgement after all prior obligations, and separate external/backup outstanding disclosure. No synthetic ACK, `none`, readiness flag or permanent-unavailable placeholder fills the boundary.                                                                                                                                                                                           |
+| Owner / current surface                                                                                             | Delivered behavior / remaining adoption                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Access / `packages/auth-contract/src/index.ts:SharedAccessPorts.readErasureAccount`, native Access bindings         | The account reader retains `AccessAccount` state/fence/epoch. Separate delivered obligation and live ports carry exact permanent route/version/T, source floor and bounded replay enrollment. Original Auth due/checkpoint recovery belongs to the database owner, not a new Access database read. Per-account polling cannot discover deletions absent from an old Auth backup.                                                                         |
+| Auth / `startNativeErasure`, `auth_erasure`, `host.ts` startup                                                      | Delivered native progress binds the immutable source tuple and floor; restored checkpoints retain the original obligation. The isolated host binds trusted Access before replay. Physical receiving and external deployment closure remain pending before ordinary admission.                                                                                                                                                                            |
+| Auth + Better Auth native producer / `recovery-delivery.ts` hooks and `AuthServiceOptions.recoveryDelivery.deliver` | Atomic intent/typed copy locator, stable `deliveryId` and verified receiving result binding. Current `Promise<void>` has no custody/result/erasure boundary. The pre-existing in-memory callback test fixture cannot certify external copies.                                                                                                                                                                                                            |
+| Actual mail and diagnostic receiving owners                                                                         | Actual sink identity, generation/copy inventory, fence, exact result recovery, bounded delete/minimize/verify API and retained-copy/exception disclosure. No vendor or universal sink API is selected by this repository.                                                                                                                                                                                                                                |
+| Shared-runtime / Better Auth and DBOS diagnostics                                                                   | Source emission allowlist or atomic typed personal-copy hook, including error/cause and stream forwarding. Warn level and generic stdout interception do not establish closure.                                                                                                                                                                                                                                                                          |
+| Shared-history / Auth DBOS producers                                                                                | Actual supported atomic durable-copy recorders, bounded locator handoff and native minimizers for all message/result/input/step forms. Do not copy shared-history SQL or replace the SDK.                                                                                                                                                                                                                                                                |
+| Database/deployment / restore orchestration                                                                         | Real backups/WAL/replicas/exports inventory, independent surviving source boundary, isolated restore lifecycle wired to Auth bootstrap, recoverable committed native progress beyond the old snapshot, irreversible deletion verification, and admission fencing of all old/new issuers and collectors. The native Source API and isolated Auth host are delivered; production restore orchestration and physical receiving evidence remain unavailable. |
+| Accounts composition / `TrustedAccessPorts`, coordinator status                                                     | Trusted final Auth acknowledgement after all prior obligations, and separate external/backup outstanding disclosure. No synthetic ACK, `none`, readiness flag or permanent-unavailable placeholder fills the boundary.                                                                                                                                                                                                                                   |
 
 Roll out owner-native indexed storage and atomic producer recording while writers
 are quiesced; record every enabled and retired destination generation and reject
@@ -278,10 +283,11 @@ writers/traffic. Record operator adoption and remaining external conditions in
 the owning runbook without credentials. This specification does not publish or
 operate any resource.
 
-Native tests below freeze observable outcomes with real PostgreSQL fixtures,
-actual Access deletion where needed and the existing native page/crash
-primitives. Cases needing an absent producer/receiver/restore orchestrator fail
-at an explicit named adoption boundary; no skipped test or in-memory provider
+Native tests pin observable Source and isolated-host outcomes with real PostgreSQL
+fixtures, actual Access deletion and existing native page/crash primitives. They
+receive the delivered producers through `test/support/erasure-native.ts` and assert
+the real receiving-pending boundary. The remaining deployment/backup scenarios
+still fail at their named missing adoption boundary; no in-memory provider
 certificate is treated as acceptance. The specification is complete while those
 implementation and infrastructure adoptions remain open.
 

@@ -9,9 +9,10 @@ import type {
 export function securityEnvelope(
   accountId: string,
   sessions: Array<
-    Omit<SecurityPageSession, 'revoke' | 'client_display_name'> & { client_display_name?: string | null }
+    Omit<SecurityPageSession, 'revoke' | 'client_display_name'> &
+      Partial<Pick<SecurityPageSession, 'revoke' | 'client_display_name'>>
   >,
-  passkeys: Array<Omit<SecurityPagePasskey, 'remove'>>,
+  passkeys: Array<Omit<SecurityPagePasskey, 'remove'> & Partial<Pick<SecurityPagePasskey, 'remove'>>>,
   fresh = true,
 ): SecurityPageEnvelope {
   const credential = fresh ? ('allowed' as const) : ('step-up-required' as const);
@@ -25,14 +26,14 @@ export function securityEnvelope(
       rows: sessions.map((row) => ({
         ...row,
         client_display_name: row.client_display_name ?? null,
-        revoke: 'allowed',
+        revoke: row.revoke ?? 'allowed',
       })),
     },
     passkeys: {
       kind: 'ready',
       limit: 32,
       truncated: passkeys.length > 32,
-      rows: passkeys.slice(0, 32).map((row) => ({ ...row, remove: credential })),
+      rows: passkeys.slice(0, 32).map((row) => ({ ...row, remove: row.remove ?? credential })),
     },
     actions: { change_password: credential, register_passkey: passkeys.length >= 32 ? 'capacity' : credential },
   };

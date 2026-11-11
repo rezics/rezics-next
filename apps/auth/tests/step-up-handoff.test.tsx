@@ -1,13 +1,10 @@
-import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { createElement } from 'react';
-import { renderToString } from 'react-dom/server';
+import { join } from 'node:path';
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { creationFixture, dom, flush } from './creation-page-fixture';
 
 creationFixture();
-// TanStack restores scroll after each load; the happy-dom fixture has no scroll implementation.
-const previousScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
-Object.defineProperty(globalThis, 'scrollTo', { value: () => {}, configurable: true, writable: true });
 const { createBrowserHistory, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { hydrateRoot } = await import('react-dom/client');
 const { Route: rootRoute } = await import('../src/routes/__root');
@@ -29,10 +26,6 @@ function installDocumentElement(state: DocumentElementState) {
 }
 const original = documentElementState(document.documentElement);
 afterEach(() => installDocumentElement(original));
-afterAll(() => {
-  if (previousScrollTo) Object.defineProperty(globalThis, 'scrollTo', previousScrollTo);
-  else Reflect.deleteProperty(globalThis, 'scrollTo');
-});
 
 // Only the step-up advice read matters here; other reads fail closed so their presentation stays out of the way.
 function advice(gate: Promise<void>) {
@@ -52,33 +45,52 @@ async function handoff() {
   const route = Route.update({ id: '/step-up', path: '/step-up', getParentRoute: () => rootRoute } as never);
   const history = createBrowserHistory({ window: dom as unknown as Window });
   const router = createRouter({ routeTree: rootRoute.addChildren([route]), history });
-  await flush(() => router.load());
-  const serverDocument = new dom.DOMParser().parseFromString(
-    renderToString(createElement(RouterProvider, { router })),
-    'text/html',
-  ).documentElement;
-  installDocumentElement(documentElementState(serverDocument));
   const errors: string[] = [];
   let root: { unmount(): void } | undefined;
-  await flush(() => {
-    root = hydrateRoot(document, createElement(RouterProvider, { router }), {
-      onRecoverableError: (error: unknown) => errors.push(String((error as Error)?.message ?? error)),
-    });
-  });
-  return {
-    errors,
-    async close() {
+  const close = async () => {
+    try {
       await flush(() => root?.unmount());
+    } finally {
       history.destroy();
-    },
+    }
   };
+  try {
+    // Render in the server realm, independent of this file's browser globals and module doubles.
+    const child = Bun.spawn([process.execPath, join(import.meta.dir, 'server-render-fixture.tsx'), 'step-up'], {
+      cwd: join(import.meta.dir, '..'),
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [stdout, stderr, exit] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    expect(exit, stderr).toBe(0);
+    const server = JSON.parse(stdout) as { window: string; html: string };
+    expect(server.window).toBe('undefined');
+    expect(server.html).not.toContain('<!--$!-->');
+    await flush(() => router.load());
+    const serverDocument = new dom.DOMParser().parseFromString(server.html, 'text/html').documentElement;
+    installDocumentElement(documentElementState(serverDocument));
+    await flush(() => {
+      root = hydrateRoot(document, createElement(RouterProvider, { router }), {
+        onRecoverableError: (error: unknown) => errors.push(String((error as Error)?.message ?? error)),
+      });
+    });
+    return { errors, close };
+  } catch (error) {
+    await close();
+    throw error;
+  }
 }
 
 test('step-up confirmation stays unusable until the server advice is read after hydration', async () => {
   let release = () => {};
   const fetches = advice(new Promise<void>((resolve) => (release = resolve)));
-  const mounted = await handoff();
+  let mounted: Awaited<ReturnType<typeof handoff>> | undefined;
   try {
+    mounted = await handoff();
     const submit = () => document.querySelector<HTMLButtonElement>('button[type=submit]');
     expect(submit()?.disabled).toBe(true);
     await flush(() => release());
@@ -87,7 +99,10 @@ test('step-up confirmation stays unusable until the server advice is read after 
     expect(submit()?.disabled).toBe(false);
     expect(mounted.errors).toEqual([]);
   } finally {
-    await mounted.close();
-    fetches.mockRestore();
+    try {
+      await mounted?.close();
+    } finally {
+      fetches.mockRestore();
+    }
   }
 });

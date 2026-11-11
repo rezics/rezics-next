@@ -1,12 +1,18 @@
-import { expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { createElement } from 'react';
 import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
-import { creationFixture, open } from './creation-page-fixture';
+import { creationFixture, flush, open } from './creation-page-fixture';
 import { parseRegistrationPage, type RegistrationPage } from '../src/registration-page';
+import * as registration from '../src/registration-page';
 import { Route } from '../src/routes/signup';
 import { signInTarget } from '../src/sign-in';
 
 creationFixture();
+let advice: { mockRestore(): void } | undefined;
+afterEach(() => {
+  advice?.mockRestore();
+  advice = undefined;
+});
 
 const requirements = {
   handle: { minLength: 3, maxLength: 64 },
@@ -112,13 +118,17 @@ test('production registration advice bounds BFF completion and cancellation with
   expect(exit, output + error).toBe(0);
 });
 
-async function mount(page: RegistrationPage, query = '?client_id=showcase&scope=openid&return_to=%2Fwork%2Fseeded') {
+async function mount(
+  page: RegistrationPage | Promise<RegistrationPage>,
+  query = '?client_id=showcase&scope=openid&return_to=%2Fwork%2Fseeded',
+) {
+  const read = spyOn(registration, 'readRegistrationPage').mockImplementation(async () => page);
+  advice = read;
   const root = createRootRoute({ component: Outlet });
   const route = Route.update({
     id: '/signup',
     path: '/signup',
     getParentRoute: () => root,
-    loader: () => page,
   } as never);
   const router = createRouter({
     routeTree: root.addChildren([route]),
@@ -126,7 +136,7 @@ async function mount(page: RegistrationPage, query = '?client_id=showcase&scope=
   });
   await router.load();
   const view = await open(createElement(RouterProvider, { router }), {});
-  return { ...view, router, query };
+  return { ...view, router, query, read };
 }
 
 test('the Auth boundary only offers registration from native advice and preserves native password limits', () => {
@@ -212,8 +222,39 @@ test('the registration form renders native field limits and verification advice'
   expect(page.host.querySelector<HTMLInputElement>('input[name="handle"]')?.maxLength).toBe(64);
   expect(page.host.querySelector<HTMLInputElement>('input[name="password"]')?.minLength).toBe(10);
   expect(page.host.querySelector<HTMLInputElement>('input[name="password"]')?.maxLength).toBe(96);
+  expect(page.host.querySelector<HTMLInputElement>('input[name="confirm"]')?.minLength).toBe(10);
+  expect(page.host.querySelector<HTMLInputElement>('input[name="confirm"]')?.maxLength).toBe(96);
   expect(page.host.textContent).toContain('Use 3 to 64 characters: letters a–z, numbers, hyphens or underscores.');
   expect(page.host.textContent).toContain('Use an email address up to 254 characters.');
   expect(page.host.textContent).toContain('Use 10 to 96 characters.');
   expect(page.host.textContent).toContain('Complete the security check before creating your account.');
+});
+
+test('a replaced registration request retires pending advice and reads the new request before showing controls', async () => {
+  const pending = Promise.withResolvers<RegistrationPage>();
+  const view = await mount(pending.promise);
+  const signal = view.read.mock.calls[0]![0]!;
+  expect(view.host.querySelector('input')).toBeNull();
+  view.read.mockResolvedValue({
+    kind: 'unavailable',
+    reason: 'dependency',
+    actions: { register: false, continue: false },
+  });
+  const query = '?client_id=replacement&return_to=%2Fsecurity';
+  await flush(() => view.router.history.replace(`/signup${query}`));
+  expect(signal.aborted).toBe(true);
+  expect(view.read).toHaveBeenCalledTimes(2);
+  await flush(() =>
+    pending.resolve({
+      kind: 'already-signed-in',
+      viewer: { account_id: 'obsolete-account' },
+      requirements,
+      verification: { configured: false },
+      actions: { register: false, continue: true },
+    }),
+  );
+  expect(view.host.querySelector('[role="alert"]')?.textContent).toContain('Registration is temporarily unavailable');
+  expect(view.host.querySelector('[role="status"]')?.textContent ?? '').not.toContain('already signed in');
+  expect(view.host.querySelector('input')).toBeNull();
+  expect(view.host.querySelector<HTMLAnchorElement>(`a[href="/login${query}"]`)?.textContent).toBe('Sign in');
 });

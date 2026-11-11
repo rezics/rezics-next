@@ -64,6 +64,7 @@ Object.assign(globals, {
   requestAnimationFrame: dom.requestAnimationFrame.bind(dom),
   cancelAnimationFrame: dom.cancelAnimationFrame.bind(dom),
   getComputedStyle: dom.getComputedStyle.bind(dom),
+  scrollTo: dom.scrollTo.bind(dom),
 });
 for (const [key, value] of Object.entries(globals)) {
   previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
@@ -92,17 +93,27 @@ const { createRoot } = await import('react-dom/client');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 overwriteGetLocale(() => 'en');
 export const flush = (action: () => void) => act(async () => action());
-let close: (() => Promise<void>) | undefined;
+const roots = new Set<ReturnType<typeof createRoot>>();
+function installBrowser() {
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+}
 export function creationFixture() {
-  beforeAll(() => {
-    for (const [key, value] of Object.entries(globals))
-      Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
-  });
+  // A cached fixture module may follow a file whose afterAll restored the host realm.
+  // Install now as well as in the hook: document-level setup runs during file evaluation.
+  installBrowser();
+  beforeAll(installBrowser);
   afterEach(async () => {
-    await close?.();
-    close = undefined;
-    document.body.replaceChildren();
-    window.sessionStorage.clear();
+    try {
+      await flush(() => {
+        for (const root of roots) root.unmount();
+      });
+    } finally {
+      roots.clear();
+      document.body.replaceChildren();
+      window.sessionStorage.clear();
+      globalThis.fetch = globals.fetch;
+    }
   });
   afterAll(async () => {
     for (const [key, descriptor] of previous) {
@@ -162,7 +173,8 @@ export async function open(page: ReactNode, sessionBody: object) {
   const host = document.body.appendChild(document.createElement('div'));
   const root = createRoot(host);
   const render = (next: ReactNode) => flush(() => root.render(next));
-  close = () => flush(() => root.unmount());
+  // Own the root before rendering, including a render that rejects during setup.
+  roots.add(root);
   await render(page);
   return { host, calls, render };
 }
