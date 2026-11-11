@@ -4,7 +4,7 @@ import type { Database } from 'bun:sqlite';
 import { Buffer } from 'node:buffer';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import type { ManagerEvent, ManagerInbox } from './contracts.ts';
+import type { AttemptRef, ManagerEvent, ManagerInbox } from './contracts.ts';
 import { migrate } from './db.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import {
@@ -66,7 +66,7 @@ export { backlogDirectory };
 export const BACKLOG_LOW_WATER = defaultPolicy.backlog.lowWater;
 /** At most one low-backlog wake per Goal in this interval. */
 export const BACKLOG_WAKE_INTERVAL_MS = defaultPolicy.backlog.wakeIntervalMs;
-/** A product task stopped this long without a manager action is cancelled into its Goal's failed backlog. */
+/** Ordinary product stops expire after this interval; compiler-only stops first reconcile their same attempt. */
 export const STOPPED_TASK_LIMIT_MS = defaultPolicy.backlog.stoppedTaskLimitMs;
 /** At most this many stopped tasks per Goal are cancelled in one run, oldest first, so owners get them in batches. */
 export const STOPPED_TASKS_PER_GOAL_PER_RUN = defaultPolicy.backlog.stoppedTasksPerGoalPerRun;
@@ -124,6 +124,11 @@ export type BacklogRuntime = {
   cancel(taskId: string): Promise<void>;
   /** Chained dispatch of landed sessions; omitted runtimes never chain. */
   chain?: ChainRuntime;
+  /** Controller-only reconciliation of an expired compiler-evidence stop under the current task lease. */
+  recoverTyping?: (ref: AttemptRef) => Promise<{
+    status: 'landing' | 'pending' | 'typing-failure';
+    result?: string;
+  }>;
   now?: () => number;
   policy?: ControlPolicy | undefined;
   /** Configured supermanager; when set, the sweep honours that manager's urgent grants. */
@@ -1082,10 +1087,53 @@ function blocker(db: Database, taskId: string, attempt: number): string {
   return 'The stopped attempt recorded no blocker.';
 }
 
+function hasTypingRecoveryAction(db: Database, taskId: string, attempt: number): boolean {
+  return Boolean(
+    db
+      .query("SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-actionable'")
+      .get(taskId, attempt),
+  );
+}
+
+function recordTypingRecoveryAction(
+  runtime: BacklogRuntime,
+  task: StoppedTask,
+  attempt: number,
+  result: string | undefined,
+  now: number,
+): void {
+  const command = `bun tools/goal/src/cli.ts typing-recover ${task.id} --expected-attempt ${attempt}`;
+  const event: ManagerEvent = {
+    managerId: task.brief!.manager!,
+    goalId: task.brief!.goal!,
+    taskId: task.id,
+    kind: 'instruction',
+    summary:
+      `Completed source task ${task.id} (attempt ${attempt}) is waiting only for compiler evidence. ` +
+      `Run \`${command}\` from the authenticated owning or operations manager session; it will reconcile evidence ` +
+      'or return the exact typing-only check. The controller does not start a source writer.',
+  };
+  runtime.db
+    .transaction(() => {
+      if (hasTypingRecoveryAction(runtime.db, task.id, attempt)) return;
+      runtime.db
+        .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+        .run(
+          task.id,
+          attempt,
+          'typing-recovery-actionable',
+          new Date(now).toISOString(),
+          JSON.stringify({ command, result }),
+        );
+      runtime.inbox.deliver(event);
+    })
+    .immediate();
+}
+
 /**
- * A product task stopped for more than an hour without a manager action is cancelled; its brief and blocker go to
- * `backlog/<goal>/failed/`, and its owner receives one event per run. At most 20 per Goal go per run, longest stopped
- * first; control-plane and stabilize work is exempt.
+ * Ordinary product stops past this limit are cancelled into `backlog/<goal>/failed/`. Compiler-only stops first
+ * reconcile their same attempt; pending evidence stays actionable with one authenticated recovery instruction. At
+ * most 20 cancellations per Goal run, longest stopped first; control-plane and stabilize work is exempt.
  */
 async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise<BacklogSweep['expired']> {
   const { db } = runtime;
@@ -1098,7 +1146,13 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
     .all() as StoppedRow[];
   const expired: BacklogSweep['expired'] = [];
   const byOwner = new Map<string, { goal: string; tasks: string[] }>();
-  const candidates: { row: StoppedRow; task: StoppedTask; goal: string; manager: string; since: number }[] = [];
+  const candidates: {
+    row: StoppedRow;
+    task: StoppedTask;
+    goal: string;
+    manager: string;
+    since: number;
+  }[] = [];
   for (const row of rows) {
     let task: StoppedTask;
     try {
@@ -1119,7 +1173,21 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
     candidates.push({ row, task, goal, manager, since });
   }
   const perGoal = new Map<string, number>();
+  const typingPerGoal = new Map<string, number>();
   for (const { row, task, goal, manager, since } of candidates.sort((a, b) => a.since - b.since)) {
+    if (row.stopped_action === 'typing-recovery') {
+      if (hasTypingRecoveryAction(db, task.id, row.current_attempt)) continue;
+      const count = typingPerGoal.get(goal) ?? 0;
+      if (count >= (runtime.policy ?? defaultPolicy).backlog.stoppedTasksPerGoalPerRun) continue;
+      typingPerGoal.set(goal, count + 1);
+      const recovered = await runtime.recoverTyping?.({ taskId: task.id, attempt: row.current_attempt });
+      if (!recovered || recovered.status === 'pending') {
+        recordTypingRecoveryAction(runtime, task, row.current_attempt, recovered?.result, now);
+        continue;
+      }
+      if (recovered.status === 'landing') continue;
+      // A matching stamp can reveal a real compiler failure. It leaves typing-only custody and keeps ordinary expiry.
+    }
     const count = perGoal.get(goal) ?? 0;
     if (count >= (runtime.policy ?? defaultPolicy).backlog.stoppedTasksPerGoalPerRun) continue;
     perGoal.set(goal, count + 1);
@@ -1225,9 +1293,10 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
 }
 
 /**
- * One controller run, in a child process the manager host starts each minute: cancel stopped tasks past their
- * limit, chain landed sessions into overlapping briefs, dispatch briefs that have an allowed pool now (then others)
- * round-robin across Goals while active tasks are below the cap, and wake managers with a low backlog.
+ * One controller run, in a child process the manager host starts each minute: reconcile expired compiler-only stops,
+ * cancel ordinary stopped tasks past their limit, chain landed sessions into overlapping briefs, dispatch briefs that
+ * have an allowed pool now (then others) round-robin across Goals while active tasks are below the cap, and wake managers
+ * with a low backlog.
  */
 export async function sweepBacklog(runtime: BacklogRuntime): Promise<BacklogSweep> {
   // One run at a time, across host restarts too: claim recovery assumes no other run holds a claim.

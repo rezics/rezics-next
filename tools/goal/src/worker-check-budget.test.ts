@@ -4,6 +4,8 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { startWorkerCheck, workerCheckNeedsStack } from '../../../scripts/worker-check.ts';
 import { openDb } from './db.ts';
+import { STOPPED_TASK_LIMIT_MS, sweepBacklog } from './backlog.ts';
+import { SqliteManagerInbox } from './inbox.ts';
 import { settle } from './settle.ts';
 import { recoverWorkerTyping } from './typing-recovery.ts';
 import { WorkerJob } from './job.ts';
@@ -750,6 +752,60 @@ test('missing compiler evidence parks completed source without a model retry, th
       },
     });
     expect(landing).toEqual([]);
+    const now = Date.now();
+    const old = new Date(now - STOPPED_TASK_LIMIT_MS - 1_000).toISOString();
+    h.store.updateTask(retained.ref, (current) => {
+      current.createdAt = old;
+    });
+    h.store.updateAttempt(retained.ref, (current) => {
+      current.endedAt = old;
+    });
+    h.store.db
+      .query('UPDATE worker_events SET at=? WHERE task_id=? AND attempt=?')
+      .run(old, retained.task.id, retained.ref.attempt);
+    const inbox = new SqliteManagerInbox(h.store.db, h.settings.stateDirectory, () => now);
+    let recoveryCalls = 0;
+    let sweepWriterCalls = 0;
+    const backlogRuntime = {
+      db: h.store.db,
+      stateDirectory: h.settings.stateDirectory,
+      inbox,
+      now: () => now,
+      workerCap: 0,
+      async dispatch() {
+        throw new Error('unexpected dispatch');
+      },
+      async continueTask() {},
+      async cancel() {
+        throw new Error('typing-only source must remain recoverable');
+      },
+      async recoverTyping(ref: typeof retained.ref) {
+        recoveryCalls++;
+        return recoverWorkerTyping(h.tasks, job.landing, ref);
+      },
+    };
+    const originalSweepRetry = h.tasks.retry;
+    h.tasks.retry = async () => {
+      sweepWriterCalls++;
+      throw new Error('expiry recovery must not invoke a source writer');
+    };
+    try {
+      expect((await sweepBacklog(backlogRuntime)).expired).toEqual([]);
+      expect((await sweepBacklog({ ...backlogRuntime, now: () => now + STOPPED_TASK_LIMIT_MS + 1_000 })).expired).toEqual(
+        [],
+      );
+    } finally {
+      h.tasks.retry = originalSweepRetry;
+    }
+    expect(recoveryCalls).toBe(1);
+    expect(sweepWriterCalls).toBe(0);
+    expect(h.store.task(retained.task.id)).toMatchObject({ currentAttempt: 1, state: 'stopped' });
+    expect(h.store.attempt(retained.ref).typingEvidencePending).toMatchObject({ command });
+    const recoveryNotices = inbox.pending('fixture').filter(({ event }) => event.summary.includes('typing-recover'));
+    expect(recoveryNotices).toHaveLength(1);
+    expect(recoveryNotices[0]!.event.summary).toContain(
+      `typing-recover ${retained.task.id} --expected-attempt ${retained.ref.attempt}`,
+    );
     await expect(
       runWorkerCommand('typing-recover', [retained.task.id, '--expected-attempt', '1'], { tasks: h.tasks, env: {} }),
     ).rejects.toThrow('authenticated owning or operations');

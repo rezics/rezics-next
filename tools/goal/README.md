@@ -2636,8 +2636,9 @@ event reports the current running and Codex counts, unknown process evidence, an
 and stale-identity attempts do not count as running. The manager
 is alerted based on confirmed live workers only; unknown process identities remain explicit evidence and do not
 suppress a low-width notice. Events retain their Goal metadata for shared inbox queries. The event tells the manager
-to recover, reshape or dispatch real work, to act on each actionable stopped task within an hour (retry with a rewritten brief,
-split or cancel) and to keep at least eight ready briefs in its backlog. Runtime metadata cannot observe unsubmitted
+to recover, reshape or dispatch real work, and to keep at least eight ready briefs in its backlog. Within the existing
+stopped-task hour, recover completed source waiting only for compiler typing evidence first; then handle actual stopped
+source work as before by retrying with a rewritten brief, splitting or cancelling it. Runtime metadata cannot observe unsubmitted
 work, so Markdown files outside the task inventory are not counted. The notice uses the existing manager turn
 allowance, with at most one width event per Goal per 15-minute bucket; an identical event within the hour folds into
 the earlier one (see [shared inbox](#shared-inbox)). Paused, budget-limited and completed managers are protected.
@@ -2802,6 +2803,8 @@ the tree and retained prepared dependency inputs still match. Modern physical ca
 a rejected artifact, changed legacy input or missing modern receipt never becomes a pass. True compiler failures retain
 their verdict and log. Unavailable evidence parks completed source with `typingEvidencePending`, preserving the attempt,
 commits and check IDs instead of creating a source-writing retry.
+
+Decision: at the existing stopped-task expiry, the sweep reconciles compiler-only pending source under its current task lease, lands matching evidence, or records one per-attempt actionable event naming the authenticated `typing-recover` action; the stop remains visible to width reporting, no check is minted or compiler started, and explicit stop/cancel, real compiler failures and ordinary stale stops keep their current outcomes.
 
 Authenticated owning or operations managers reconcile that same attempt without starting a model:
 

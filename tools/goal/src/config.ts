@@ -36,6 +36,7 @@ import { WorkerStore } from './store.ts';
 import { WorkerTasks } from './tasks.ts';
 import { TrainResolver } from './train-resolver.ts';
 import { WorkerJob } from './job.ts';
+import { recoverWorkerTyping } from './typing-recovery.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { requestManagerLanding } from './manager-landing.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -443,6 +444,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
           tasks.queueBacklogContinuation(task.id, goal, continuation.expectedAttempt, briefFile, actor);
         },
         cancel: (taskId) => tasks.cancel(taskId),
+        recoverTyping: (ref) => recoverWorkerTyping(tasks, queue, ref),
         routing: {
           table: readRouting(settings.routingFile, settings.policy?.routing),
           ownership: readRiskOwnership(settings.riskAreasFile, settings.policy?.brief),

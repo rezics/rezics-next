@@ -353,7 +353,7 @@ function widthEventSummary(goal: WidthGoalSnapshot, policy: ControlPolicy): stri
     `current work counts: ready ${goal.ready}, durable pending starts ${goal.pendingStarts}, held ${goal.held}, stopped ${goal.stopped}, waiting ${goal.waiting}; actionable stops ${goal.actionableStopped}. ` +
     'Recover, reshape, or dispatch real work. ' +
     (goal.actionableStopped
-      ? `Act on each actionable stopped task within ${stoppedAge}: retry with a rewritten brief, split it, or cancel it. `
+      ? `Within ${stoppedAge}, recover completed source waiting only for compiler typing evidence first; then handle actual stopped source as before: retry with a rewritten brief, split it, or cancel it. `
       : '') +
     `Keep at least ${policy.backlog.lowWater} ready briefs in your backlog. ` +
     'Unsubmitted work is not observable from runtime metadata.'
