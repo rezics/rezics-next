@@ -288,6 +288,18 @@ export declare function contentDeclaredEvents(): Readonly<{
         sourceEpoch: import("typebox").TInteger;
         sourcePosition: import("typebox").TString;
     }>;
+    'com.rezics.content.hosted-catalogue.create.v1': import("typebox").TObject<{
+        catalogueId: import("typebox").TString;
+        revisionId: import("typebox").TString;
+    }>;
+    'com.rezics.content.hosted-catalogue.revise.v1': import("typebox").TObject<{
+        catalogueId: import("typebox").TString;
+        revisionId: import("typebox").TString;
+    }>;
+    'com.rezics.content.hosted-catalogue.publish.v1': import("typebox").TObject<{
+        catalogueId: import("typebox").TString;
+        revisionId: import("typebox").TString;
+    }>;
     'com.rezics.content.report-reporter.projected.v1': import("typebox").TObject<{
         reportId: import("typebox").TString;
     }>;

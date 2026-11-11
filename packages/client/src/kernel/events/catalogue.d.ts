@@ -1216,6 +1216,18 @@ export declare function EVENT_TYPES(): Readonly<{
         sourceEpoch: Type.TInteger;
         sourcePosition: Type.TString;
     }>;
+    readonly 'com.rezics.content.hosted-catalogue.create.v1': Type.TObject<{
+        catalogueId: Type.TString;
+        revisionId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.hosted-catalogue.revise.v1': Type.TObject<{
+        catalogueId: Type.TString;
+        revisionId: Type.TString;
+    }>;
+    readonly 'com.rezics.content.hosted-catalogue.publish.v1': Type.TObject<{
+        catalogueId: Type.TString;
+        revisionId: Type.TString;
+    }>;
     readonly 'com.rezics.content.report-reporter.projected.v1': Type.TObject<{
         reportId: Type.TString;
     }>;
