@@ -1,5 +1,6 @@
 import { ResponsiveDialog } from '@rezics/ui/responsive-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { useRef } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -95,23 +96,18 @@ export function SelectionReviewView({
       {actionMeaning ? <p>{actionMeaning}</p> : null}
       <SelectionReviewList items={items} labelledBy={m.library_selection_heading()} />
       <section aria-label={m.library_menu_status()} className="space-y-2">
-        <label className="grid gap-2 text-sm">
-          {m.library_selection_state()}
-          <select
-            aria-label={m.library_selection_state()}
-            className="min-h-11 w-full rounded-md border bg-background px-3"
-            value={statusValue}
-            disabled={!statusAllowed || statusBlocked || pending || !hydrated}
-            onChange={(event) => onStatusChange(event.target.value)}
-          >
-            <option value="">{m.library_selection_choose()}</option>
-            {statusChoices.map((choice) => (
-              <option key={choice.id} value={choice.id} lang={choice.label.lang}>
-                {choice.label.text}
-              </option>
-            ))}
-          </select>
-        </label>
+        <ChoiceSelect
+          label={m.library_selection_state()}
+          fieldClassName="grid gap-2 text-sm"
+          value={statusValue || null}
+          triggerClassName="min-h-11 w-full rounded-md border bg-background px-3"
+          disabled={!statusAllowed || statusBlocked || pending || !hydrated}
+          onValueChange={(value) => onStatusChange(value ?? '')}
+          options={[
+            { value: null, label: m.library_selection_choose() },
+            ...statusChoices.map((choice) => ({ value: choice.id, label: choice.label.text, lang: choice.label.lang })),
+          ]}
+        />
         {!statusAllowed ? <p role="status">{m.library_selection_status_unavailable()}</p> : null}
         {statusAllowed && statusBlocked ? <p role="status">{m.library_selection_unknown()}</p> : null}
         {statusAllowed && !statusBlocked && !statusChoices.length ? (

@@ -1,6 +1,7 @@
 import { publicCollectionDirectoryHref } from '../../search/contracts/collection-directory';
 import type { FormEvent, MouseEvent, Ref, ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { PageHeading } from '../../shell/page-heading';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
@@ -119,17 +120,18 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
             className="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
           />
         </label>
-        <label className="grid min-w-0 gap-1 text-sm font-medium">
-          {m.collection_discovery_order_label({}, options)}
-          <select
-            name="order"
-            defaultValue={selection.order ?? 'recent'}
-            className="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
-          >
-            <option value="recent">{m.collection_discovery_order_recent({}, options)}</option>
-            <option value="popular">{m.collection_discovery_order_popular({}, options)}</option>
-          </select>
-        </label>
+        <ChoiceSelect
+          label={m.collection_discovery_order_label({}, options)}
+          fieldClassName="grid min-w-0 gap-1 text-sm font-medium"
+          labelClassName="font-medium"
+          triggerClassName="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
+          name="order"
+          defaultValue={selection.order ?? 'recent'}
+          options={[
+            { value: 'recent', label: m.collection_discovery_order_recent({}, options) },
+            { value: 'popular', label: m.collection_discovery_order_popular({}, options) },
+          ]}
+        />
         <div className="flex items-end">
           <Button type="submit" className="min-h-11 w-full">
             {m.collection_discovery_apply({}, options)}

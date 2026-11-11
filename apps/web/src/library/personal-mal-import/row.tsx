@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { m } from '../../paraglide/messages.js';
 import type {
   MalLabelSelection,
@@ -407,36 +408,31 @@ export function MalRowReview({
               </label>
               {draft.score?.action === 'adopt' ? (
                 <div className="space-y-3">
-                  <label className="block space-y-1" htmlFor={`${base}-units`}>
-                    <span className="font-medium">{m.library_mal_score_units()}</span>
-                    <select
-                      id={`${base}-units`}
-                      className="min-h-11 w-full rounded-md border bg-background px-3"
-                      value={draft.score.units ?? ''}
-                      disabled={busy}
-                      onChange={(event) =>
-                        onChange({
-                          ...draft,
-                          score: {
-                            ...draft.score!,
-                            ...(event.currentTarget.value
-                              ? { units: Number(event.currentTarget.value) }
-                              : { units: undefined }),
-                          },
-                        })
-                      }
-                    >
-                      <option value="">{m.library_mal_score_choose_units()}</option>
-                      {Array.from(
+                  <ChoiceSelect
+                    id={`${base}-units`}
+                    label={m.library_mal_score_units()}
+                    fieldClassName="block space-y-1"
+                    labelClassName="font-medium"
+                    triggerClassName="min-h-11 w-full rounded-md border bg-background px-3"
+                    value={draft.score.units === undefined ? null : String(draft.score.units)}
+                    disabled={busy}
+                    onValueChange={(value) =>
+                      onChange({
+                        ...draft,
+                        score: {
+                          ...draft.score!,
+                          ...(value ? { units: Number(value) } : { units: undefined }),
+                        },
+                      })
+                    }
+                    options={[
+                      { value: null, label: m.library_mal_score_choose_units() },
+                      ...Array.from(
                         { length: (question.scale.max - question.scale.min) / question.scale.displayStep + 1 },
                         (_, index) => question.scale.min + index * question.scale.displayStep,
-                      ).map((units) => (
-                        <option key={units} value={units}>
-                          {units}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      ).map((units) => ({ value: String(units), label: String(units) })),
+                    ]}
+                  />
                   <MalCheck
                     id={`${base}-replace-vote`}
                     checked={draft.score.replaceCurrent === true}

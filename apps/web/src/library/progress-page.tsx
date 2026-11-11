@@ -5,7 +5,7 @@ import { ProgressAddressCorrection } from './progress-address-correction';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { Input } from '@rezics/ui/shadcn/input';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import type { CoverRatio } from '@rezics/ui/cover';
@@ -1211,63 +1211,61 @@ function ProgressIndexPageContent({
               </Button>
             ) : null}
             <div className="min-w-48 flex-1">
-              <label htmlFor={filterKindId} className="text-sm font-medium">
-                {m.library_progress_discovery_filter_by()}
-              </label>
-              <NativeSelect
+              <ChoiceSelect
                 id={filterKindId}
-                className="min-h-11"
+                label={m.library_progress_discovery_filter_by()}
+                fieldClassName="min-w-48 flex-1 gap-1"
+                labelClassName="text-sm font-medium"
+                triggerClassName="min-h-11"
                 value={filterKind}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
+                onValueChange={(value) => {
                   if (value === 'none' || value === 'state' || value === 'mode' || value === 'profile') {
                     setFilterKind(value);
                     setFilterValue('');
                   }
                 }}
-              >
-                <NativeSelectOption value="none">{m.library_progress_discovery_any_filter()}</NativeSelectOption>
-                <NativeSelectOption value="state">{m.library_progress_discovery_state_filter()}</NativeSelectOption>
-                <NativeSelectOption value="mode">{m.library_progress_discovery_mode_filter()}</NativeSelectOption>
-                <NativeSelectOption value="profile">{m.library_progress_discovery_profile_filter()}</NativeSelectOption>
-              </NativeSelect>
+                options={[
+                  { value: 'none', label: m.library_progress_discovery_any_filter() },
+                  { value: 'state', label: m.library_progress_discovery_state_filter() },
+                  { value: 'mode', label: m.library_progress_discovery_mode_filter() },
+                  { value: 'profile', label: m.library_progress_discovery_profile_filter() },
+                ]}
+              />
             </div>
             {filterKind === 'state' ? (
               <div className="min-w-48 flex-1">
-                <label htmlFor={filterValueId} className="text-sm font-medium">
-                  {m.library_progress_discovery_filter_value()}
-                </label>
-                <NativeSelect
+                <ChoiceSelect
                   id={filterValueId}
-                  className="min-h-11"
-                  value={filterValue}
-                  onChange={(event) => setFilterValue(event.currentTarget.value)}
-                >
-                  <NativeSelectOption value="">{m.library_progress_discovery_any_filter()}</NativeSelectOption>
-                  <NativeSelectOption value="active">{m.library_progress_state_active()}</NativeSelectOption>
-                  <NativeSelectOption value="completed">{m.library_progress_state_completed()}</NativeSelectOption>
-                  <NativeSelectOption value="abandoned">{m.library_progress_state_abandoned()}</NativeSelectOption>
-                </NativeSelect>
+                  label={m.library_progress_discovery_filter_value()}
+                  fieldClassName="min-w-48 flex-1 gap-1"
+                  labelClassName="text-sm font-medium"
+                  triggerClassName="min-h-11"
+                  value={filterValue || null}
+                  onValueChange={(value) => setFilterValue(value ?? '')}
+                  options={[
+                    { value: null, label: m.library_progress_discovery_any_filter() },
+                    { value: 'active', label: m.library_progress_state_active() },
+                    { value: 'completed', label: m.library_progress_state_completed() },
+                    { value: 'abandoned', label: m.library_progress_state_abandoned() },
+                  ]}
+                />
               </div>
             ) : null}
             {filterKind === 'mode' ? (
               <div className="min-w-48 flex-1">
-                <label htmlFor={filterValueId} className="text-sm font-medium">
-                  {m.library_progress_discovery_filter_value()}
-                </label>
-                <NativeSelect
+                <ChoiceSelect
                   id={filterValueId}
-                  className="min-h-11"
-                  value={filterValue}
-                  onChange={(event) => setFilterValue(event.currentTarget.value)}
-                >
-                  <NativeSelectOption value="">{m.library_progress_discovery_any_filter()}</NativeSelectOption>
-                  {modeChoices.map((choice) => (
-                    <NativeSelectOption key={choice.value} value={choice.value}>
-                      {choice.label()}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  label={m.library_progress_discovery_filter_value()}
+                  fieldClassName="min-w-48 flex-1 gap-1"
+                  labelClassName="text-sm font-medium"
+                  triggerClassName="min-h-11"
+                  value={filterValue || null}
+                  onValueChange={(value) => setFilterValue(value ?? '')}
+                  options={[
+                    { value: null, label: m.library_progress_discovery_any_filter() },
+                    ...modeChoices.map((choice) => ({ value: choice.value, label: choice.label() })),
+                  ]}
+                />
               </div>
             ) : null}
             {filterKind === 'profile' ? (
@@ -1507,23 +1505,21 @@ function ProgressIndexPageContent({
                 </fieldset>
                 <div className="grid grid-cols-2 gap-4">
                   <Field>
-                    <FieldLabel htmlFor="progress-unit">{m.library_progress_unit()}</FieldLabel>
-                    <NativeSelect
+                    <FieldLabel id="progress-unit-label" htmlFor="progress-unit">
+                      {m.library_progress_unit()}
+                    </FieldLabel>
+                    <ChoiceSelect
                       id="progress-unit"
+                      ariaLabelledBy="progress-unit-label"
                       name="unit"
                       disabled={draftLocked}
                       value={unit}
-                      onChange={(event) => {
-                        const value = event.currentTarget.value;
-                        changeDraft(() => setUnit(value));
+                      triggerClassName="min-h-11 w-full"
+                      onValueChange={(value) => {
+                        if (value !== null) changeDraft(() => setUnit(value));
                       }}
-                    >
-                      {units.map((choice) => (
-                        <NativeSelectOption key={choice.id} value={choice.id}>
-                          {choice.label}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                      options={units.map((choice) => ({ value: choice.id, label: choice.label }))}
+                    />
                   </Field>
                   {acceptsTotal ? (
                     <Field>

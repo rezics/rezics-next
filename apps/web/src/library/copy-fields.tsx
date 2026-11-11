@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { CalendarDayField } from './calendar-day-field';
@@ -352,25 +352,20 @@ function CopyConditionSelect({
     );
   }
   return (
-    <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <NativeSelect
-        id={id}
-        name={field}
-        className={`${inputClass} [&_select]:min-h-11 [&_select]:text-base`}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      >
-        <NativeSelectOption value="">{m.library_copy_condition_omit()}</NativeSelectOption>
-        <NativeSelectOption value={COPY_CONDITION_CLEAR}>{m.library_copy_condition_cleared()}</NativeSelectOption>
-        {choices.map((choice) => (
-          <NativeSelectOption key={choice.id} value={choice.id}>
-            {choice.label}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
-    </Field>
+    <ChoiceSelect
+      id={id}
+      name={field}
+      label={label}
+      triggerClassName={`${inputClass} min-h-11 text-base`}
+      value={value || null}
+      disabled={disabled}
+      onValueChange={(next) => onChange(next ?? '')}
+      options={[
+        { value: null, label: m.library_copy_condition_omit() },
+        { value: COPY_CONDITION_CLEAR, label: m.library_copy_condition_cleared() },
+        ...choices.map((choice) => ({ value: choice.id, label: choice.label })),
+      ]}
+    />
   );
 }
 
@@ -390,22 +385,15 @@ export function CopyChoiceField({
   const id = useId();
   const selected = choices.find((choice) => choice.id === value);
   return (
-    <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <NativeSelect
-        id={id}
-        name={name}
-        className={`${inputClass} [&_select]:min-h-11 [&_select]:text-base`}
-        value={value}
-        lang={selected?.labelLanguage}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      >
-        {choices.map((choice) => (
-          <NativeSelectOption key={choice.id} value={choice.id} lang={choice.labelLanguage}>
-            {choice.label}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
-    </Field>
+    <ChoiceSelect
+      id={id}
+      name={name}
+      label={label}
+      triggerClassName={`${inputClass} min-h-11 text-base`}
+      value={value}
+      triggerLang={selected?.labelLanguage}
+      onValueChange={(next) => next !== null && onChange(next)}
+      options={choices.map((choice) => ({ value: choice.id, label: choice.label, lang: choice.labelLanguage }))}
+    />
   );
 }

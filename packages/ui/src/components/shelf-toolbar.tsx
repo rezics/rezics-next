@@ -3,8 +3,7 @@ import { Button } from '../shadcn/button.tsx';
 import { ToggleGroup, ToggleGroupItem } from '../shadcn/toggle-group.tsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shadcn/tabs.tsx';
 import { Badge } from '../shadcn/badge.tsx';
-import { Field, FieldLabel } from '../shadcn/field.tsx';
-import { NativeSelect, NativeSelectOption } from '../shadcn/native-select.tsx';
+import { ChoiceSelect } from './choice-select.tsx';
 import { Menu } from './menu.tsx';
 import { LayoutSelect } from './layout-select.tsx';
 
@@ -139,37 +138,33 @@ export function ShelfToolbar(p: Props) {
   const directionId = useId();
   const sort = (
     <div className="grid min-w-0 gap-3">
-      <Field className="min-w-0 gap-1">
-        <FieldLabel htmlFor={sortId} className="min-w-0 max-w-full whitespace-normal break-words text-sm">
-          {l.sort}
-        </FieldLabel>
-        <NativeSelect
-          id={sortId}
-          className="w-full min-w-0 max-w-full [&>select]:h-11 [&>select]:min-h-11 sm:[&>select]:h-8 sm:[&>select]:min-h-8"
-          value={p.sort}
-          onChange={(e) => p.onSortChange(e.target.value, p.direction)}
-        >
-          {p.sorts.map((o) => (
-            <NativeSelectOption key={o.value} value={o.value}>
-              {o.label}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </Field>
-      <Field className="min-w-0 gap-1">
-        <FieldLabel htmlFor={directionId} className="min-w-0 max-w-full whitespace-normal break-words text-sm">
-          {l.direction}
-        </FieldLabel>
-        <NativeSelect
-          id={directionId}
-          className="w-full min-w-0 max-w-full [&>select]:h-11 [&>select]:min-h-11 sm:[&>select]:h-8 sm:[&>select]:min-h-8"
-          value={p.direction}
-          onChange={(e) => p.onSortChange(p.sort, e.target.value as 'asc' | 'desc')}
-        >
-          <NativeSelectOption value="asc">{l.ascending}</NativeSelectOption>
-          <NativeSelectOption value="desc">{l.descending}</NativeSelectOption>
-        </NativeSelect>
-      </Field>
+      <ChoiceSelect
+        id={sortId}
+        label={l.sort}
+        fieldClassName="min-w-0 gap-1"
+        labelClassName="min-w-0 max-w-full whitespace-normal break-words text-sm"
+        triggerClassName="w-full min-w-0 max-w-full h-11 min-h-11 md:h-8 md:min-h-8"
+        value={p.sort}
+        onValueChange={(value) => {
+          if (value !== null) p.onSortChange(value, p.direction);
+        }}
+        options={p.sorts}
+      />
+      <ChoiceSelect
+        id={directionId}
+        label={l.direction}
+        fieldClassName="min-w-0 gap-1"
+        labelClassName="min-w-0 max-w-full whitespace-normal break-words text-sm"
+        triggerClassName="w-full min-w-0 max-w-full h-11 min-h-11 md:h-8 md:min-h-8"
+        value={p.direction}
+        onValueChange={(value) => {
+          if (value === 'asc' || value === 'desc') p.onSortChange(p.sort, value);
+        }}
+        options={[
+          { value: 'asc', label: l.ascending },
+          { value: 'desc', label: l.descending },
+        ]}
+      />
     </div>
   );
   const filter = (

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import type { GatedOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { CalendarDayField } from './calendar-day-field';
@@ -238,18 +239,20 @@ export function CopyLoanPanel({
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">{m.library_loans_create()}</p>
           <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-            <label className="min-w-0 space-y-1">
-              <span className="text-sm">{m.library_loans_direction()}</span>
-              <select
-                className={field}
-                value={direction}
-                disabled={busy}
-                onChange={(event) => current() && setDirection(event.currentTarget.value as 'lent' | 'borrowed')}
-              >
-                <option value="lent">{m.library_loans_lent()}</option>
-                <option value="borrowed">{m.library_loans_borrowed()}</option>
-              </select>
-            </label>
+            <ChoiceSelect
+              label={m.library_loans_direction()}
+              fieldClassName="min-w-0 gap-1"
+              triggerClassName={field}
+              value={direction}
+              disabled={busy}
+              onValueChange={(value) => {
+                if ((value === 'lent' || value === 'borrowed') && current()) setDirection(value);
+              }}
+              options={[
+                { value: 'lent', label: m.library_loans_lent() },
+                { value: 'borrowed', label: m.library_loans_borrowed() },
+              ]}
+            />
             <label className="min-w-0 space-y-1">
               <span className="text-sm">{m.library_loans_counterparty()}</span>
               <input

@@ -1,4 +1,5 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { useEffect, useId, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type { VndbScoreNotice } from './controller';
@@ -221,28 +222,26 @@ export function VndbScoreReview({
           </div>
           {choice === 'vote' && question ? (
             <Field>
-              <FieldLabel htmlFor={`${id}-units`} className="min-h-11 items-center">
+              <FieldLabel id={`${id}-units-label`} htmlFor={`${id}-units`} className="min-h-11 items-center">
                 {m.library_vndb_score_units()}
               </FieldLabel>
-              <select
+              <ChoiceSelect
                 id={`${id}-units`}
-                className="min-h-11 w-full rounded-md border bg-background px-3"
-                value={units}
-                onChange={(event) => {
-                  setUnits(event.currentTarget.value);
+                ariaLabelledBy={`${id}-units-label`}
+                triggerClassName="min-h-11 w-full rounded-md border bg-background px-3"
+                value={units || null}
+                onValueChange={(value) => {
+                  setUnits(value ?? '');
                   setConsent(false);
                 }}
-              >
-                <option value="">{m.library_vndb_score_select_units()}</option>
-                {Array.from(
-                  { length: Math.floor((question.scale.max - question.scale.min) / question.scale.step) + 1 },
-                  (_, index) => question.scale.min + index * question.scale.step,
-                ).map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: null, label: m.library_vndb_score_select_units() },
+                  ...Array.from(
+                    { length: Math.floor((question.scale.max - question.scale.min) / question.scale.step) + 1 },
+                    (_, index) => question.scale.min + index * question.scale.step,
+                  ).map((value) => ({ value: String(value), label: String(value) })),
+                ]}
+              />
             </Field>
           ) : null}
           {currentSet ? (

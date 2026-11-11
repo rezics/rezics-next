@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import type { CoverSummary } from '@rezics/ui/cover';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { pageText } from '../../features/pages/shared';
@@ -70,8 +71,8 @@ export function CollectionPresentationFields({
   const [handoffUnavailable, setHandoffUnavailable] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const kindControl = useRef<HTMLSelectElement>(null);
-  const coverControl = useRef<HTMLSelectElement>(null);
+  const kindControl = useRef<HTMLButtonElement>(null);
+  const coverControl = useRef<HTMLButtonElement>(null);
   const focusAfterRender = useRef<'heading' | 'trigger' | 'kind' | 'cover' | null>(null);
   const coverOptions = loadedCoverOptions(members);
   const savedType = presentationTypeChoice(savedKind, savedKind, types, listPresentations);
@@ -143,28 +144,27 @@ export function CollectionPresentationFields({
       </div>
       <div className="grid max-w-3xl min-w-0 gap-4 sm:grid-cols-2">
         <div className="min-w-0 space-y-2">
-          <label htmlFor={`${id}-type`} className="block font-medium">
-            {m.library_collection_kind()}
-          </label>
-          <select
-            ref={kindControl}
+          <ChoiceSelect
             id={`${id}-type`}
-            className={selectClass}
-            value={kind ?? ''}
+            label={m.library_collection_kind()}
+            fieldClassName="min-w-0 gap-2"
+            triggerRef={kindControl}
+            triggerClassName={selectClass}
+            value={kind}
             disabled={disabled}
-            aria-describedby={`${id}-type-help`}
-            onChange={(event) => changeKind(event.target.value || null)}
-          >
-            <option value="">{m.library_collection_mixed_label()}</option>
-            {kind && !types?.some((type) => type.id === kind) ? (
-              <option value={kind}>{m.collection_choice_type_unavailable()}</option>
-            ) : null}
-            {types?.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.label || m.collection_choice_type_unavailable()}
-              </option>
-            ))}
-          </select>
+            ariaDescribedBy={`${id}-type-help`}
+            onValueChange={changeKind}
+            options={[
+              { value: null, label: m.library_collection_mixed_label() },
+              ...(kind && !types?.some((type) => type.id === kind)
+                ? [{ value: kind, label: m.collection_choice_type_unavailable() }]
+                : []),
+              ...(types ?? []).map((type) => ({
+                value: type.id,
+                label: type.label || m.collection_choice_type_unavailable(),
+              })),
+            ]}
+          />
           <div id={`${id}-type-help`} className="space-y-2 text-sm text-muted-foreground">
             <p>
               {kind === null ? m.collection_choice_automatic_type_help() : m.collection_choice_explicit_type_help()}
@@ -201,28 +201,27 @@ export function CollectionPresentationFields({
         </div>
         {onCoverChange ? (
           <div className="min-w-0 space-y-2">
-            <label htmlFor={`${id}-cover`} className="block font-medium">
-              {m.subject_cover()}
-            </label>
-            <select
-              ref={coverControl}
+            <ChoiceSelect
               id={`${id}-cover`}
-              className={selectClass}
-              value={coverMediaId ?? ''}
+              label={m.subject_cover()}
+              fieldClassName="min-w-0 gap-2"
+              triggerRef={coverControl}
+              triggerClassName={selectClass}
+              value={coverMediaId}
               disabled={disabled}
-              aria-describedby={`${id}-cover-help`}
-              onChange={(event) => changeCover(event.target.value || null)}
-            >
-              <option value="">{m.library_collection_auto()}</option>
-              {coverMediaId && !coverOptions.some((option) => option.mediaId === coverMediaId) ? (
-                <option value={coverMediaId}>{m.collection_choice_selected_cover_unavailable()}</option>
-              ) : null}
-              {coverOptions.map((option) => (
-                <option key={option.mediaId} value={option.mediaId}>
-                  {pageText(libraryTitleValue(option.subject.label), getLocale()).text}
-                </option>
-              ))}
-            </select>
+              ariaDescribedBy={`${id}-cover-help`}
+              onValueChange={changeCover}
+              options={[
+                { value: null, label: m.library_collection_auto() },
+                ...(coverMediaId && !coverOptions.some((option) => option.mediaId === coverMediaId)
+                  ? [{ value: coverMediaId, label: m.collection_choice_selected_cover_unavailable() }]
+                  : []),
+                ...coverOptions.map((option) => ({
+                  value: option.mediaId,
+                  label: pageText(libraryTitleValue(option.subject.label), getLocale()).text,
+                })),
+              ]}
+            />
             <div id={`${id}-cover-help`} className="space-y-2 text-sm text-muted-foreground">
               <p>{m.library_collection_cover_existing()}</p>
               {coverPreview.kind === 'unavailable' ? (

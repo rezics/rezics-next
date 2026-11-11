@@ -1,4 +1,5 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
@@ -32,13 +33,17 @@ export function MineCollectionsAddressRecovery({ address }: { address: MineColle
       {badLayout ? <p>{m.library_owned_collections_address_layout_restart()}</p> : null}
       <form action={action} method="get" className="flex flex-wrap items-end gap-3">
         {badLayout ? (
-          <label>
-            {m.library_owned_collections_address_layout()}
-            <select name="layout" defaultValue="rows" className="block rounded border p-2">
-              <option value="rows">{m.library_owned_collections_address_rows()}</option>
-              <option value="previews">{m.library_owned_collections_address_previews()}</option>
-            </select>
-          </label>
+          <ChoiceSelect
+            label={m.library_owned_collections_address_layout()}
+            fieldClassName="w-fit gap-1"
+            triggerClassName="w-fit block rounded border p-2"
+            name="layout"
+            defaultValue="rows"
+            options={[
+              { value: 'rows', label: m.library_owned_collections_address_rows() },
+              { value: 'previews', label: m.library_owned_collections_address_previews() },
+            ]}
+          />
         ) : (
           <>
             <input type="hidden" name="layout" value={address.layout} />

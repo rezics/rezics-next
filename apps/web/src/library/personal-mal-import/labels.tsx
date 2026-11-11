@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { m } from '../../paraglide/messages.js';
 import type { MalAssignment, MalLabelReview, MalLabelSelection, MalPreviewRow } from './contract';
 import { useMalImportPort } from './port';
@@ -79,18 +80,21 @@ function LabelTarget({
   const target = selection.target;
   return (
     <div className="grid min-w-0 gap-2">
-      <label htmlFor={`${id}-mode`}>{m.library_mal_label_target()}</label>
-      <select
+      <ChoiceSelect
         id={`${id}-mode`}
-        className="min-h-11 w-full border"
+        label={m.library_mal_label_target()}
+        fieldClassName="gap-2"
+        triggerClassName="min-h-11 w-full border"
         value={'name' in target ? 'new' : 'existing'}
-        onChange={(e) =>
-          onChange({ ...selection, target: e.target.value === 'new' ? { name: '' } : { labelId: '', revision: 1 } })
-        }
-      >
-        <option value="new">{m.library_mal_label_new()}</option>
-        <option value="existing">{m.library_mal_label_existing()}</option>
-      </select>
+        onValueChange={(value) => {
+          if (value === 'new' || value === 'existing')
+            onChange({ ...selection, target: value === 'new' ? { name: '' } : { labelId: '', revision: 1 } });
+        }}
+        options={[
+          { value: 'new', label: m.library_mal_label_new() },
+          { value: 'existing', label: m.library_mal_label_existing() },
+        ]}
+      />
       {'name' in target ? (
         <>
           <label htmlFor={`${id}-name`}>{m.library_mal_label_name()}</label>

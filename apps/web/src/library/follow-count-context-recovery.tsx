@@ -1,4 +1,5 @@
 import { Button } from '@rezics/ui/shadcn/button';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 
@@ -16,23 +17,21 @@ export function FollowCountContextRecovery() {
       <p className="max-w-prose text-sm text-muted-foreground">{m.library_follow_count_context_id_help()}</p>
       <form action={destination} method="get" className="max-w-xl space-y-4">
         <div className="space-y-2">
-          <label htmlFor="follow-count-context-type" className="text-sm font-medium">
-            {m.library_follow_count_context_type_label()}
-          </label>
-          <select
+          <ChoiceSelect
             id="follow-count-context-type"
             name="targetType"
             required
-            defaultValue=""
-            className="flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
-          >
-            <option value="" disabled>
-              {m.library_follow_count_context_select_type()}
-            </option>
-            <option value="subject">{m.library_follow_count_context_subject()}</option>
-            <option value="collection">{m.library_follow_count_context_collection()}</option>
-            <option value="space">{m.library_follow_count_context_space()}</option>
-          </select>
+            label={m.library_follow_count_context_type_label()}
+            fieldClassName="gap-2"
+            triggerClassName="flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
+            defaultValue={null}
+            options={[
+              { value: null, label: m.library_follow_count_context_select_type(), disabled: true },
+              { value: 'subject', label: m.library_follow_count_context_subject() },
+              { value: 'collection', label: m.library_follow_count_context_collection() },
+              { value: 'space', label: m.library_follow_count_context_space() },
+            ]}
+          />
         </div>
         <div className="space-y-2">
           <label htmlFor="follow-count-context-id" className="text-sm font-medium">

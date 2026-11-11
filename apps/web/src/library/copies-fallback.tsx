@@ -4,7 +4,7 @@ import type { CopiesPageData } from './copies-read';
 import { m } from '../paraglide/messages.js';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { copyConditionChoices, kindAdmitsCondition } from './copy-condition';
 
 const submitTarget =
@@ -52,50 +52,39 @@ export function CopiesFallback({ page, csrfToken }: { page: CopiesPageData; csrf
                   <FieldLegend id={kindId} className="max-w-full whitespace-normal break-words">
                     {kind.label}
                   </FieldLegend>
-                  <Field className="min-w-0">
-                    <FieldLabel htmlFor={statusId} className="whitespace-normal break-words">
-                      {metaText([kind.label, m.library_copy_status()])}
-                    </FieldLabel>
-                    <NativeSelect id={statusId} name="status" className="w-full [&_select]:min-h-11">
-                      {kind.statuses.map((status) => (
-                        <NativeSelectOption key={status.id} value={status.id}>
-                          {status.label}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </Field>
+                  <ChoiceSelect
+                    id={statusId}
+                    name="status"
+                    label={metaText([kind.label, m.library_copy_status()])}
+                    fieldClassName="min-w-0"
+                    triggerClassName="w-full"
+                    defaultValue={kind.statuses[0]?.id ?? null}
+                    options={kind.statuses.map((status) => ({ value: status.id, label: status.label }))}
+                  />
                   {kindAdmitsCondition(kind.condition) ? (
                     <>
-                      <Field className="min-w-0">
-                        <FieldLabel htmlFor={`${kindId}-media`}>{m.library_copy_condition_media()}</FieldLabel>
-                        <NativeSelect
-                          id={`${kindId}-media`}
-                          name="mediaCondition"
-                          className="w-full [&_select]:min-h-11"
-                        >
-                          <NativeSelectOption value="">{m.library_copy_condition_omit()}</NativeSelectOption>
-                          {copyConditionChoices().map((choice) => (
-                            <NativeSelectOption key={choice.id} value={choice.id}>
-                              {choice.label}
-                            </NativeSelectOption>
-                          ))}
-                        </NativeSelect>
-                      </Field>
-                      <Field className="min-w-0">
-                        <FieldLabel htmlFor={`${kindId}-packaging`}>{m.library_copy_condition_packaging()}</FieldLabel>
-                        <NativeSelect
-                          id={`${kindId}-packaging`}
-                          name="packagingCondition"
-                          className="w-full [&_select]:min-h-11"
-                        >
-                          <NativeSelectOption value="">{m.library_copy_condition_omit()}</NativeSelectOption>
-                          {copyConditionChoices().map((choice) => (
-                            <NativeSelectOption key={choice.id} value={choice.id}>
-                              {choice.label}
-                            </NativeSelectOption>
-                          ))}
-                        </NativeSelect>
-                      </Field>
+                      <ChoiceSelect
+                        id={`${kindId}-media`}
+                        name="mediaCondition"
+                        label={m.library_copy_condition_media()}
+                        fieldClassName="min-w-0"
+                        triggerClassName="w-full"
+                        options={[
+                          { value: null, label: m.library_copy_condition_omit() },
+                          ...copyConditionChoices().map((choice) => ({ value: choice.id, label: choice.label })),
+                        ]}
+                      />
+                      <ChoiceSelect
+                        id={`${kindId}-packaging`}
+                        name="packagingCondition"
+                        label={m.library_copy_condition_packaging()}
+                        fieldClassName="min-w-0"
+                        triggerClassName="w-full"
+                        options={[
+                          { value: null, label: m.library_copy_condition_omit() },
+                          ...copyConditionChoices().map((choice) => ({ value: choice.id, label: choice.label })),
+                        ]}
+                      />
                     </>
                   ) : null}
                   <button type="submit" className={submitTarget}>

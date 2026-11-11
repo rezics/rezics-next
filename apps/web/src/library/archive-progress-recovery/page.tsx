@@ -1,6 +1,7 @@
 import { useRecoveryLifetime } from '../recovery-lifetime';
 import { useLocation } from '@tanstack/react-router';
 import { useEffect, useReducer, useState } from 'react';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -373,48 +374,50 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
           {!pairs.length ? (
             <p>{m.library_archive_progress_unsupported()}</p>
           ) : (
-            <label className="block space-y-2">
-              <span>{m.library_archive_progress_pair()}</span>
-              <select
-                className={`${action} w-full`}
-                value={pair}
-                disabled={locked}
-                onChange={(event) => {
-                  setPair(event.target.value);
-                  setAdditional({});
-                  setIds([]);
-                  changed();
-                }}
-              >
-                <option value="">{m.library_archive_progress_choose()}</option>
-                {pairs.map((item) => (
-                  <option key={`${item.mode}:${item.id}`} value={`${item.mode}:${item.id}`}>
-                    {item.mode} · {item.label || item.id}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ChoiceSelect
+              label={m.library_archive_progress_pair()}
+              fieldClassName="block space-y-2"
+              triggerClassName={`${action} w-full`}
+              value={pair || null}
+              disabled={locked}
+              onValueChange={(value) => {
+                setPair(value ?? '');
+                setAdditional({});
+                setIds([]);
+                changed();
+              }}
+              options={[
+                { value: null, label: m.library_archive_progress_choose() },
+                ...pairs.map((item) => ({
+                  value: `${item.mode}:${item.id}`,
+                  label: `${item.mode} · ${item.label || item.id}`,
+                })),
+              ]}
+            />
           )}
         </>
       ) : null}
       {choice?.mode === 'scalar_amount'
         ? (source.additional_measures ?? []).map((measure) => (
-            <label className="block space-y-2" key={measure.unit}>
-              <span>
-                {measure.unit} · {measure.amount ?? m.library_progress_measure_absent()} /{' '}
-                {measure.total ?? m.library_progress_measure_absent()}
-              </span>
-              <select
-                className={`${action} w-full`}
-                disabled={locked}
-                value={additional[measure.unit] ?? ''}
-                onChange={(event) => {
-                  setAdditional({ ...additional, [measure.unit]: event.target.value });
-                  changed();
-                }}
-              >
-                <option value="">{m.library_archive_progress_omit()}</option>
-                {pairs
+            <ChoiceSelect
+              key={measure.unit}
+              label={
+                <>
+                  {measure.unit} · {measure.amount ?? m.library_progress_measure_absent()} /{' '}
+                  {measure.total ?? m.library_progress_measure_absent()}
+                </>
+              }
+              fieldClassName="block space-y-2"
+              triggerClassName={`${action} w-full`}
+              disabled={locked}
+              value={additional[measure.unit] || null}
+              onValueChange={(value) => {
+                setAdditional({ ...additional, [measure.unit]: value ?? '' });
+                changed();
+              }}
+              options={[
+                { value: null, label: m.library_archive_progress_omit() },
+                ...pairs
                   .filter(
                     (item) =>
                       item.mode === 'scalar_amount' &&
@@ -423,13 +426,9 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
                         ([sourceUnit, unit]) => sourceUnit !== measure.unit && unit === item.id,
                       ),
                   )
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label || item.id}
-                    </option>
-                  ))}
-              </select>
-            </label>
+                  .map((item) => ({ value: item.id, label: item.label || item.id })),
+              ]}
+            />
           ))
         : null}
       <details open={choice?.mode === 'completed_units'}>

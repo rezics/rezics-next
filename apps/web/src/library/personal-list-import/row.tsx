@@ -1,5 +1,6 @@
 import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { useEffect, useId, useState } from 'react';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
@@ -224,23 +225,21 @@ export function VndbRowReview({
           />
           {targetId && action === 'state' ? (
             <Field>
-              <FieldLabel htmlFor={`${id}-state`} className="min-h-11 items-center">
+              <FieldLabel id={`${id}-state-label`} htmlFor={`${id}-state`} className="min-h-11 items-center">
                 {m.library_vndb_state_label()}
               </FieldLabel>
-              <select
+              <ChoiceSelect
                 id={`${id}-state`}
-                className="min-h-11 w-full rounded-md border bg-background px-3"
-                value={stateId}
+                ariaLabelledBy={`${id}-state-label`}
+                triggerClassName="min-h-11 w-full rounded-md border bg-background px-3"
+                value={stateId || null}
                 disabled={busy || loading || states.length === 0}
-                onChange={(event) => setStateId(event.currentTarget.value)}
-              >
-                <option value="">{m.library_vndb_state_choose()}</option>
-                {states.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(value) => setStateId(value ?? '')}
+                options={[
+                  { value: null, label: m.library_vndb_state_choose() },
+                  ...states.map((item) => ({ value: item.id, label: item.label })),
+                ]}
+              />
               {loading ? <p role="status">{m.library_vndb_states_loading()}</p> : null}
               {!loading && states.length === 0 ? <p role="status">{m.library_vndb_states_unavailable()}</p> : null}
             </Field>

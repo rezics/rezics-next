@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import {
@@ -181,24 +182,25 @@ function OwnerShelfTypeDefaults({
         </p>
       ) : null}
       {scopes.length ? (
-        <label className="grid gap-1 text-sm">
-          {m.settings_shelf_type()}
-          <select
-            className="min-h-11 w-full min-w-0 rounded-md border bg-background px-3 py-2"
-            value={knownScope ? selected : ''}
-            disabled={!currentChoice() || busy}
-            onChange={(event) => {
-              if (currentChoice()) setSelected(event.currentTarget.value);
-            }}
-          >
-            <option value="">{m.settings_shelf_type_choose()}</option>
-            {scopes.map((scope) => (
-              <option key={scope} value={scope}>
-                {choices.find((item) => item.type === scope)?.label ?? m.settings_shelf_type_unknown({ type: scope })}
-              </option>
-            ))}
-          </select>
-        </label>
+        <ChoiceSelect
+          label={m.settings_shelf_type()}
+          labelClassName="grid gap-1 text-sm"
+          fieldClassName="gap-1"
+          triggerClassName="min-h-11 w-full min-w-0 rounded-md border bg-background px-3 py-2"
+          value={knownScope ? selected : null}
+          disabled={!currentChoice() || busy}
+          onValueChange={(value) => {
+            if (currentChoice()) setSelected(value ?? '');
+          }}
+          options={[
+            { value: null, label: m.settings_shelf_type_choose() },
+            ...scopes.map((scope) => ({
+              value: scope,
+              label:
+                choices.find((item) => item.type === scope)?.label ?? m.settings_shelf_type_unknown({ type: scope }),
+            })),
+          ]}
+        />
       ) : null}
       {knownScope ? (
         <div className="space-y-3">
@@ -211,32 +213,27 @@ function OwnerShelfTypeDefaults({
           </p>
           {pending ? <p className="text-sm">{m.settings_shelf_type_unsaved()}</p> : null}
           {canSet ? (
-            <label className="grid gap-1 text-sm">
-              {m.settings_shelf_type_layout()}
-              <select
-                className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
-                value={override ?? ''}
-                disabled={disabled || !currentChoice()}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
-                  if (!currentChoice() || (atLimit && value)) return;
-                  const layout = supportedLayouts.find((candidate) => candidate === value);
-                  if (!value || layout) onChange(selected, layout);
-                }}
-              >
-                <option value="">{m.settings_shelf_type_inherit()}</option>
-                {override && !supportedLayouts.includes(override) ? (
-                  <option value={override} disabled>
-                    {layoutLabel(override)}
-                  </option>
-                ) : null}
-                {supportedLayouts.map((layout) => (
-                  <option key={layout} value={layout} disabled={atLimit}>
-                    {layoutLabel(layout)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ChoiceSelect
+              label={m.settings_shelf_type_layout()}
+              labelClassName="grid gap-1 text-sm"
+              fieldClassName="gap-1"
+              triggerClassName="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+              value={override}
+              disabled={disabled || !currentChoice()}
+              onValueChange={(next) => {
+                const value = next ?? '';
+                if (!currentChoice() || (atLimit && value)) return;
+                const layout = supportedLayouts.find((candidate) => candidate === value);
+                if (!value || layout) onChange(selected, layout);
+              }}
+              options={[
+                { value: null, label: m.settings_shelf_type_inherit() },
+                ...(override && !supportedLayouts.includes(override)
+                  ? [{ value: override, label: layoutLabel(override), disabled: true }]
+                  : []),
+                ...supportedLayouts.map((layout) => ({ value: layout, label: layoutLabel(layout), disabled: atLimit })),
+              ]}
+            />
           ) : null}
           {atLimit || (choice && !canSet) ? <p className="text-sm">{m.settings_shelf_type_limit()}</p> : null}
           {override ? (

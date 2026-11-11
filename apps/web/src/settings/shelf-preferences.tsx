@@ -11,6 +11,7 @@ import {
 } from '@rezics/ui/content-section';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import {
@@ -1066,69 +1067,75 @@ export function ShelfPreferencesCard({
               </Alert>
             )}
             <fieldset disabled={disabled} className="space-y-5">
-              <label className="grid gap-1 text-sm">
-                {m.settings_shelf_layout()}
-                <span className="text-muted-foreground">
-                  {state.current
-                    ? state.known.shelf.layouts?.all
-                      ? m.settings_shelf_saved({ value: layoutName(state.known.shelf.layouts.all) })
-                      : m.settings_shelf_inherited()
-                    : m.settings_shelf_choices_unavailable_text()}
-                </span>
-                <select
-                  className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
-                  value={state.draft.layout}
-                  onChange={(event) =>
-                    controller.edit({ layout: event.currentTarget.value as ShelfDraft['layout'] }, 'layout')
-                  }
-                >
-                  {(offeredLayouts.includes(state.draft.layout)
-                    ? offeredLayouts
-                    : [state.draft.layout, ...offeredLayouts]
-                  ).map((layout) => (
-                    <option key={layout} value={layout} disabled={!offeredLayouts.includes(layout)}>
-                      {layoutName(layout)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm">
-                {m.settings_shelf_size()}
-                <span className="text-muted-foreground">
-                  {state.current
-                    ? state.known.shelf.gridSize
-                      ? m.settings_shelf_saved({
-                          value:
-                            state.known.shelf.gridSize === 'small'
-                              ? m.library_size_small()
-                              : state.known.shelf.gridSize === 'large'
-                                ? m.library_size_large()
-                                : m.library_size_medium(),
-                        })
-                      : m.settings_shelf_inherited()
-                    : m.settings_shelf_choices_unavailable_text()}
-                </span>
-                <select
-                  className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
-                  value={state.draft.gridSize}
-                  onChange={(event) =>
-                    controller.edit({ gridSize: event.currentTarget.value as ShelfDraft['gridSize'] }, 'gridSize')
-                  }
-                >
-                  {(offeredSizes.includes(state.draft.gridSize)
-                    ? offeredSizes
-                    : [state.draft.gridSize, ...offeredSizes]
-                  ).map((size) => (
-                    <option key={size} value={size}>
-                      {size === 'small'
-                        ? m.library_size_small()
-                        : size === 'large'
-                          ? m.library_size_large()
-                          : m.library_size_medium()}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <ChoiceSelect
+                label={
+                  <>
+                    {m.settings_shelf_layout()}
+                    <span className="text-muted-foreground">
+                      {state.current
+                        ? state.known.shelf.layouts?.all
+                          ? m.settings_shelf_saved({ value: layoutName(state.known.shelf.layouts.all) })
+                          : m.settings_shelf_inherited()
+                        : m.settings_shelf_choices_unavailable_text()}
+                    </span>
+                  </>
+                }
+                labelClassName="grid gap-1 text-sm"
+                fieldClassName="gap-1"
+                triggerClassName="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                value={state.draft.layout}
+                onValueChange={(value) => {
+                  if (value !== null) controller.edit({ layout: value as ShelfDraft['layout'] }, 'layout');
+                }}
+                options={(offeredLayouts.includes(state.draft.layout)
+                  ? offeredLayouts
+                  : [state.draft.layout, ...offeredLayouts]
+                ).map((layout) => ({
+                  value: layout,
+                  label: layoutName(layout),
+                  disabled: !offeredLayouts.includes(layout),
+                }))}
+              />
+              <ChoiceSelect
+                label={
+                  <>
+                    {m.settings_shelf_size()}
+                    <span className="text-muted-foreground">
+                      {state.current
+                        ? state.known.shelf.gridSize
+                          ? m.settings_shelf_saved({
+                              value:
+                                state.known.shelf.gridSize === 'small'
+                                  ? m.library_size_small()
+                                  : state.known.shelf.gridSize === 'large'
+                                    ? m.library_size_large()
+                                    : m.library_size_medium(),
+                            })
+                          : m.settings_shelf_inherited()
+                        : m.settings_shelf_choices_unavailable_text()}
+                    </span>
+                  </>
+                }
+                labelClassName="grid gap-1 text-sm"
+                fieldClassName="gap-1"
+                triggerClassName="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                value={state.draft.gridSize}
+                onValueChange={(value) => {
+                  if (value !== null) controller.edit({ gridSize: value as ShelfDraft['gridSize'] }, 'gridSize');
+                }}
+                options={(offeredSizes.includes(state.draft.gridSize)
+                  ? offeredSizes
+                  : [state.draft.gridSize, ...offeredSizes]
+                ).map((size) => ({
+                  value: size,
+                  label:
+                    size === 'small'
+                      ? m.library_size_small()
+                      : size === 'large'
+                        ? m.library_size_large()
+                        : m.library_size_medium(),
+                }))}
+              />
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">{m.settings_shelf_columns()}</legend>
                 <p className="text-sm text-muted-foreground">
@@ -1166,45 +1173,53 @@ export function ShelfPreferencesCard({
               {tabs.map((tab) => {
                 const current = state.draft.sorts[tab];
                 return (
-                  <label key={tab} className="grid gap-1 text-sm">
-                    {m.settings_shelf_order({ tab: tabLabel(tab) })}
-                    <span className="text-muted-foreground">
-                      {state.current
-                        ? state.known.shelf.sorts?.[tab]
-                          ? m.settings_shelf_saved_choice()
-                          : m.settings_shelf_inherited()
-                        : m.settings_shelf_choices_unavailable_text()}
-                    </span>
-                    <select
-                      className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
-                      value={current}
-                      onChange={(event) => controller.editSort(tab, event.currentTarget.value)}
-                    >
-                      {current.startsWith('unsupported:') ? (
-                        <option value={current} disabled>
-                          {m.settings_shelf_unavailable_option({
-                            field:
-                              state.known.shelf.sorts?.[tab]?.field === 'rating'
-                                ? `${m.library_score_order()} · ${state.known.shelf.sorts[tab].direction === 'desc' ? m.library_score_highest() : m.library_score_lowest()}`
-                                : current.slice('unsupported:'.length).replaceAll('_', ' '),
-                          })}
-                        </option>
-                      ) : null}
-                      <option value={defaultSortChoice}>{m.settings_shelf_order_application_default()}</option>
-                      {offeredSorts.flatMap((field) =>
+                  <ChoiceSelect
+                    key={tab}
+                    label={
+                      <>
+                        {m.settings_shelf_order({ tab: tabLabel(tab) })}
+                        <span className="text-muted-foreground">
+                          {state.current
+                            ? state.known.shelf.sorts?.[tab]
+                              ? m.settings_shelf_saved_choice()
+                              : m.settings_shelf_inherited()
+                            : m.settings_shelf_choices_unavailable_text()}
+                        </span>
+                      </>
+                    }
+                    labelClassName="grid gap-1 text-sm"
+                    fieldClassName="gap-1"
+                    triggerClassName="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                    value={current}
+                    onValueChange={(value) => {
+                      if (value !== null) controller.editSort(tab, value);
+                    }}
+                    options={[
+                      ...(current.startsWith('unsupported:')
+                        ? [
+                            {
+                              value: current,
+                              label: m.settings_shelf_unavailable_option({
+                                field:
+                                  state.known.shelf.sorts?.[tab]?.field === 'rating'
+                                    ? `${m.library_score_order()} · ${state.known.shelf.sorts[tab].direction === 'desc' ? m.library_score_highest() : m.library_score_lowest()}`
+                                    : current.slice('unsupported:'.length).replaceAll('_', ' '),
+                              }),
+                              disabled: true,
+                            },
+                          ]
+                        : []),
+                      { value: defaultSortChoice, label: m.settings_shelf_order_application_default() },
+                      ...offeredSorts.flatMap((field) =>
                         (['desc', 'asc'] as const)
                           .filter((direction) => shelfAdvice.supported.sortDirections.includes(direction))
                           .map((direction) => {
                             const choice = `${field}:${direction}`;
-                            return (
-                              <option key={choice} value={choice}>
-                                {sortLabel(field, direction)}
-                              </option>
-                            );
+                            return { value: choice, label: sortLabel(field, direction) };
                           }),
-                      )}
-                    </select>
-                  </label>
+                      ),
+                    ]}
+                  />
                 );
               })}
             </fieldset>

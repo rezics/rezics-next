@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from 'react';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { m } from '../../paraglide/messages.js';
 import type { AniListRow, AniListLabelSelection, AniListLabelTargetsResult, AniListRowMeta } from './contract';
 import { AniListAction, AniListCheck } from './controls';
@@ -145,32 +146,28 @@ export function AniListLabelAdoption({
                   />
                   {selection ? (
                     <>
-                      <label htmlFor={`${id}-${value.key}-target`}>{m.library_anilist_labels_mapping()}</label>
-                      <select
+                      <ChoiceSelect
                         id={`${id}-${value.key}-target`}
-                        className="min-h-11 w-full rounded border px-3"
+                        label={m.library_anilist_labels_mapping()}
+                        triggerClassName="min-h-11 w-full rounded border px-3"
                         disabled={locked}
                         value={'name' in selection.target ? 'new' : selection.target.labelId}
-                        onChange={(event) =>
-                          target(
-                            value.key,
-                            event.target.value === 'new' ? { name: value.value } : { labelId: event.target.value },
-                          )
-                        }
-                      >
-                        <option value="new">{m.library_anilist_labels_new()}</option>
-                        {'labelId' in selection.target &&
-                        !targets?.labels.some(
-                          (item) => item.id === ('labelId' in selection.target ? selection.target.labelId : ''),
-                        ) ? (
-                          <option value={selection.target.labelId}>{selection.target.labelId}</option>
-                        ) : null}
-                        {targets?.labels.map((label) => (
-                          <option key={label.id} value={label.id}>
-                            {label.name} · {label.id}
-                          </option>
-                        ))}
-                      </select>
+                        onValueChange={(next) => {
+                          if (next !== null)
+                            target(value.key, next === 'new' ? { name: value.value } : { labelId: next });
+                        }}
+                        options={[
+                          { value: 'new', label: m.library_anilist_labels_new() },
+                          ...('labelId' in selection.target &&
+                          !targets?.labels.some((item) => item.id === selection.target.labelId)
+                            ? [{ value: selection.target.labelId, label: selection.target.labelId }]
+                            : []),
+                          ...(targets?.labels ?? []).map((label) => ({
+                            value: label.id,
+                            label: `${label.name} · ${label.id}`,
+                          })),
+                        ]}
+                      />
                       {'name' in selection.target ? (
                         <>
                           <label htmlFor={`${id}-${value.key}-name`}>{m.library_anilist_labels_new()}</label>

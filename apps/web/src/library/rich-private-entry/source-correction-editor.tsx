@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { m } from '../../paraglide/messages.js';
 import type {
   PersonalEntryObservation,
@@ -202,19 +203,22 @@ function ModeSelect({
   onChange: (value: CorrectionOperation) => void;
 }) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-medium">{label}</span>
-      <select
-        className="min-h-11 w-full rounded-md border bg-background px-3"
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.currentTarget.value as CorrectionOperation)}
-      >
-        <option value="preserve">{m.library_rich_entry_preserve()}</option>
-        <option value="clear">{m.library_rich_entry_clear_fact()}</option>
-        <option value="set">{m.library_rich_entry_set_fact()}</option>
-      </select>
-    </label>
+    <ChoiceSelect
+      label={label}
+      fieldClassName="block gap-1"
+      labelClassName="mb-1 block text-sm font-medium"
+      triggerClassName="min-h-11 w-full rounded-md border bg-background px-3"
+      value={value}
+      disabled={disabled}
+      onValueChange={(next) => {
+        if (next === 'preserve' || next === 'clear' || next === 'set') onChange(next);
+      }}
+      options={[
+        { value: 'preserve', label: m.library_rich_entry_preserve() },
+        { value: 'clear', label: m.library_rich_entry_clear_fact() },
+        { value: 'set', label: m.library_rich_entry_set_fact() },
+      ]}
+    />
   );
 }
 
@@ -247,22 +251,24 @@ function PrivacyCorrectionField({
       />
       {draft.operation === 'set' ? (
         <>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_value_kind()}</span>
-            <select
-              className="min-h-11 w-full rounded-md border bg-background px-3"
-              value={valueForPrivacy(draft)}
-              disabled={disabled}
-              onChange={(event) =>
-                onChange({ ...draft, choice: event.currentTarget.value as PrivacyChoice, sourceValue: '' })
-              }
-            >
-              <option value="private">{m.library_rich_source_private()}</option>
-              <option value="source_visible">{m.library_rich_source_visible()}</option>
-              <option value="unknown">{m.library_rich_source_unknown()}</option>
-              <option value="absent">{m.library_rich_source_not_supplied()}</option>
-            </select>
-          </label>
+          <ChoiceSelect
+            label={m.library_rich_entry_value_kind()}
+            fieldClassName="block gap-1"
+            labelClassName="mb-1 block text-sm font-medium"
+            triggerClassName="min-h-11 w-full rounded-md border bg-background px-3"
+            value={valueForPrivacy(draft)}
+            disabled={disabled}
+            onValueChange={(value) => {
+              if (value === 'private' || value === 'source_visible' || value === 'unknown' || value === 'absent')
+                onChange({ ...draft, choice: value as PrivacyChoice, sourceValue: '' });
+            }}
+            options={[
+              { value: 'private', label: m.library_rich_source_private() },
+              { value: 'source_visible', label: m.library_rich_source_visible() },
+              { value: 'unknown', label: m.library_rich_source_unknown() },
+              { value: 'absent', label: m.library_rich_source_not_supplied() },
+            ]}
+          />
           {draft.choice === 'unknown' ? (
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_raw_privacy_value()}</span>
@@ -325,27 +331,28 @@ function TimestampCorrectionField({
       />
       {draft.operation === 'set' ? (
         <>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_value_kind()}</span>
-            <select
-              className="min-h-11 w-full rounded-md border bg-background px-3"
-              value={valueForTimestamp(draft)}
-              disabled={disabled}
-              onChange={(event) => {
-                const choice = event.currentTarget.value as TimestampChoice;
-                onChange({
-                  ...draft,
-                  choice,
-                  value: choice === 'known' ? draft.value : '',
-                  sourceValue: choice === 'unknown' ? draft.sourceValue : '',
-                });
-              }}
-            >
-              <option value="known">{m.library_rich_entry_known_timestamp()}</option>
-              <option value="unknown">{m.library_rich_entry_unknown_timestamp()}</option>
-              <option value="absent">{m.library_rich_source_not_supplied()}</option>
-            </select>
-          </label>
+          <ChoiceSelect
+            label={m.library_rich_entry_value_kind()}
+            fieldClassName="block gap-1"
+            labelClassName="mb-1 block text-sm font-medium"
+            triggerClassName="min-h-11 w-full rounded-md border bg-background px-3"
+            value={valueForTimestamp(draft)}
+            disabled={disabled}
+            onValueChange={(choice) => {
+              if (choice !== 'known' && choice !== 'unknown' && choice !== 'absent') return;
+              onChange({
+                ...draft,
+                choice: choice as TimestampChoice,
+                value: choice === 'known' ? draft.value : '',
+                sourceValue: choice === 'unknown' ? draft.sourceValue : '',
+              });
+            }}
+            options={[
+              { value: 'known', label: m.library_rich_entry_known_timestamp() },
+              { value: 'unknown', label: m.library_rich_entry_unknown_timestamp() },
+              { value: 'absent', label: m.library_rich_source_not_supplied() },
+            ]}
+          />
           {draft.choice === 'known' ? (
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_timestamp_text()}</span>

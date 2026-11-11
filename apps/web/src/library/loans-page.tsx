@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import type { Loan } from '@rezics/client';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { Exposure, type GatedOperation } from '../kernel/exposure';
@@ -372,18 +373,20 @@ function LoanCreateForm({
             onChange={(event) => current() && setCopyRevision(event.currentTarget.value)}
           />
         </label>
-        <label className="min-w-0 space-y-1">
-          <span className="text-sm">{m.library_loans_direction()}</span>
-          <select
-            className={field}
-            value={direction}
-            disabled={disabled}
-            onChange={(event) => current() && setDirection(event.currentTarget.value as 'lent' | 'borrowed')}
-          >
-            <option value="lent">{m.library_loans_lent()}</option>
-            <option value="borrowed">{m.library_loans_borrowed()}</option>
-          </select>
-        </label>
+        <ChoiceSelect
+          label={m.library_loans_direction()}
+          fieldClassName="min-w-0 gap-1"
+          triggerClassName={field}
+          value={direction}
+          disabled={disabled}
+          onValueChange={(value) => {
+            if ((value === 'lent' || value === 'borrowed') && current()) setDirection(value);
+          }}
+          options={[
+            { value: 'lent', label: m.library_loans_lent() },
+            { value: 'borrowed', label: m.library_loans_borrowed() },
+          ]}
+        />
         <label className="min-w-0 space-y-1">
           <span className="text-sm">{m.library_loans_counterparty()}</span>
           <input

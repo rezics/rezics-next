@@ -7,7 +7,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Field, FieldLabel, FieldGroup, FieldDescription } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import type { SavedQueryConditionInput, SavedQueryOwnerExtension } from './saved-query-editor/presentation';
 import { pickText } from '@rezics/composition';
 import { m } from '../paraglide/messages.js';
@@ -60,31 +60,52 @@ function Choice({
   const retained = selected.filter((id) => id && !choices.some((choice) => choice.id === id));
   const unavailableName = (id: string) => m.library_rule_unavailable_choice({ number: retained.indexOf(id) + 1 });
   const hasDetails = selected.some(Boolean) || references.some(({ value }) => value);
-  return (
-    <Field className="min-w-0">
-      <FieldLabel htmlFor={fieldId}>{label}</FieldLabel>
-      <NativeSelect
+  const options = [
+    ...(!multiple ? [{ value: null, label: m.condition_choose_value() }] : []),
+    ...retained.map((id) => ({ value: id, label: `${unavailableName(id)} · ${m.library_rule_retained()}` })),
+    ...choices.map((choice) => ({ value: choice.id, label: choice.name })),
+  ];
+  const popup = (
+    <>
+      <SelectTrigger
         id={fieldId}
-        className="w-full min-w-0"
-        style={multiple ? { height: 'auto' } : undefined}
-        multiple={multiple}
-        value={multiple ? [...selected] : (selected[0] ?? '')}
+        aria-labelledby={`${fieldId}-label`}
         aria-describedby={help || retained.length ? `${fieldId}-help` : undefined}
         aria-details={hasDetails ? `${fieldId}-details` : undefined}
-        onChange={(event) => onChange(Array.from(event.currentTarget.selectedOptions, (option) => option.value))}
+        className="min-h-11 h-auto w-full min-w-0"
+        style={multiple ? { height: 'auto' } : undefined}
       >
-        {!multiple && <NativeSelectOption value="">{m.condition_choose_value()}</NativeSelectOption>}
-        {retained.map((id) => (
-          <NativeSelectOption key={id} value={id}>
-            {unavailableName(id)} · {m.library_rule_retained()}
-          </NativeSelectOption>
-        ))}
-        {choices.map((choice) => (
-          <NativeSelectOption key={choice.id} value={choice.id}>
-            {choice.name}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
+        <SelectValue placeholder={m.condition_choose_value()} />
+      </SelectTrigger>
+      <SelectContent alignItemWithTrigger={false}>
+        <SelectGroup>
+          {options.map((option) => (
+            <SelectItem key={option.value ?? 'empty'} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </>
+  );
+  return (
+    <Field className="min-w-0">
+      <FieldLabel id={`${fieldId}-label`} htmlFor={fieldId}>
+        {label}
+      </FieldLabel>
+      {multiple ? (
+        <Select<string, true> multiple items={options} value={selected} onValueChange={onChange}>
+          {popup}
+        </Select>
+      ) : (
+        <Select<string, false>
+          items={options}
+          value={selected[0] ?? null}
+          onValueChange={(next) => onChange(next === null ? [] : [next])}
+        >
+          {popup}
+        </Select>
+      )}
       {(help || retained.length > 0) && (
         <FieldDescription id={`${fieldId}-help`}>{help ?? m.library_rule_retained_help()}</FieldDescription>
       )}

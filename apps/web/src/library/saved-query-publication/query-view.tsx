@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ChoiceSelect } from '@rezics/ui/choice-select';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { publicationReadWithin } from '../collection-publication';
@@ -131,18 +132,20 @@ export function QueryPublicationView({
       <p>{m.library_publication_privacy()}</p>
       {!attempt ? (
         <>
-          <label className="flex flex-wrap items-center gap-3">
-            {m.library_query_publication_visibility()}
-            <select
-              value={target}
-              onChange={(event) => setTarget(event.target.value as 'public' | 'unlisted')}
-              className="min-h-11 rounded-md border border-border bg-background px-3"
-              disabled={busy}
-            >
-              <option value="unlisted">{m.library_visibility_unlisted()}</option>
-              <option value="public">{m.library_visibility_public()}</option>
-            </select>
-          </label>
+          <ChoiceSelect
+            label={m.library_query_publication_visibility()}
+            fieldClassName="min-w-0 flex-row flex-wrap items-center gap-3"
+            triggerClassName="min-h-11 rounded-md border border-border bg-background px-3"
+            value={target}
+            disabled={busy}
+            onValueChange={(value) => {
+              if (value === 'public' || value === 'unlisted') setTarget(value);
+            }}
+            options={[
+              { value: 'unlisted', label: m.library_visibility_unlisted() },
+              { value: 'public', label: m.library_visibility_public() },
+            ]}
+          />
           <label className="flex items-start gap-3">
             <input
               type="checkbox"
