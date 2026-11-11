@@ -1,7 +1,5 @@
 import type { ContentReadDependencies } from './reads.ts';
-export declare const HOSTED_PLACEMENT_LIMIT = 512;
-export declare const HOSTED_DEPTH_LIMIT = 16;
-export declare const HOSTED_PAGE_LIMIT = 20;
+export { HOSTED_PLACEMENT_LIMIT, HOSTED_DEPTH_LIMIT, HOSTED_PAGE_LIMIT } from './hosted-chapters-limits.ts';
 export type HostedDependencies = ContentReadDependencies;
 export type HostedCommandContext = Readonly<{
     idempotencyKey: string;
@@ -141,4 +139,3 @@ export declare class InvalidHostedCursorError extends Error {
 export declare class InvalidHostedStructureError extends Error {
     constructor(message?: string);
 }
-export {};

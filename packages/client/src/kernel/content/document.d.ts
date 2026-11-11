@@ -1,5 +1,5 @@
 import { type DocumentSnapshot } from '@rezics/document';
-export declare const MAX_DOCUMENT_BYTES: number;
+export { MAX_DOCUMENT_BYTES } from './document-limits.ts';
 export declare class InvalidDocumentError extends Error {
     constructor(message?: string);
 }
