@@ -652,6 +652,7 @@
       "publicEntries": [
         "services/kernel/src/library/follows.ts",
         "services/kernel/src/library/index.ts",
+        "services/kernel/src/library/viewer-personal-actions-schema.ts",
         "services/kernel/src/library/builtin-runtime.ts",
         "services/kernel/src/library/collection-discovery-source.ts",
         "services/kernel/src/library/collection-discovery-summaries.ts",
@@ -1004,6 +1005,7 @@
         "services/kernel/src/history/command-evidence.ts",
         "services/kernel/src/http/problem-error.ts",
         "services/kernel/src/http/problem-schema.ts",
+        "services/kernel/src/http/route-metadata.ts",
         "services/kernel/src/http/idempotency-key.ts",
         "services/kernel/src/http/body.ts",
         "services/kernel/src/http/kernel.ts",

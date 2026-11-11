@@ -8,8 +8,9 @@ import {
   type DocumentSnapshot,
 } from '@rezics/document';
 import { routeOf } from '../route/route.ts';
+import { MAX_DOCUMENT_BYTES } from './document-limits.ts';
 
-export const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
+export { MAX_DOCUMENT_BYTES } from './document-limits.ts';
 
 const licenseIds = new Set(spdxLicenseIds);
 const licenseReference = /^LicenseRef-[A-Za-z0-9.-]+$/;
