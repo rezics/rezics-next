@@ -6,6 +6,10 @@ Every mounted route declares `x-exposure` as `public` or `gate:<group>`. Group n
 Decision: mounted route declarations keep the underscore-only group grammar, while native opening and gate-action
 inputs keep the existing underscore-or-hyphen grammar; neither profile changes its admitted set.
 
+Decision: gate acceptance fixtures configure the dedicated receipt ring on every command pool and pass it to each
+composed Kernel before fixture commands; admission growth asserts the measured account-first erasure indexes, and
+discovery growth relies on `checkGrowth`'s per-scale settle and `ANALYZE` instead of repeating fixture scans.
+
 `@rezics/access` is the pure public policy surface for normalized declarations, the installed exposure catalogue and
 the shared public/open/closed combining rule. Kernel's `declaration.ts` adapter reads trusted mounted metadata and
 passes only the explicit `x-exposure` value to the package. `visibility.ts` adapts the installed operation

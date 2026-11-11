@@ -10,6 +10,7 @@ import {
 
 await import('reylo/register');
 const { actorFixture } = await import('../actor-side-fixture.ts');
+const { configureTestReceiptKeys, testReceiptKeys } = await import('../../support/receipt-keys.ts');
 const { createAccess, visibleOperations } = await import('../../../src/access/index.ts');
 const { newId, routeOf } = await import('../../../src/route/route.ts');
 const { createKernel } = await import('../../../src/http/kernel.ts');
@@ -18,6 +19,7 @@ const appModule = await import('../../../src/http/app.ts');
 
 const fixedTime = new Date('2026-01-15T12:00:00.000Z');
 const rowsPerScaleUnit = 500;
+const receiptKeys = testReceiptKeys();
 const routeKey = new Uint8Array(32).fill(103);
 const tag = Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) => String.fromCharCode(97 + (byte % 26))).join(
   '',
@@ -70,6 +72,7 @@ function expectIndex(plans: readonly unknown[], expected: string): void {
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool);
   const fixture = await actorFixture(db.pool, db.admin);
   actorId = fixture.actorId;
   const route = routeOf(actorId);
@@ -97,6 +100,7 @@ beforeAll(async () => {
   kernel = createKernel({
     pool: db.pool,
     routeKey,
+    receiptKeys,
     clock: () => new Date(fixedTime),
     writeRate: {
       async spend() {
@@ -177,7 +181,6 @@ test('discovery stays bounded as unrelated accounts, gate grants, and openings g
          SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
         [accountRoute, ids, Bun.randomUUIDv7()],
       );
-      await database.admin.query('ANALYZE access.account');
     },
     operation: discover,
   });
@@ -230,10 +233,6 @@ test('discovery stays bounded as unrelated accounts, gate grants, and openings g
          FROM unnest($1::uuid[]) id`,
         [ids, Bun.randomUUIDv7()],
       );
-      await database.admin.query('ANALYZE access.account');
-      await database.admin.query('ANALYZE access.resource_grant');
-      await database.admin.query('ANALYZE access.resource_role_grant');
-      await database.admin.query('ANALYZE access.resource_denial');
     },
     operation: discover,
   });
@@ -256,7 +255,6 @@ test('discovery stays bounded as unrelated accounts, gate grants, and openings g
          FROM unnest($1::text[]) AS group_name`,
         [names, Bun.randomUUIDv7()],
       );
-      await database.admin.query('ANALYZE access.exposure_opening');
     },
     operation: discover,
   });

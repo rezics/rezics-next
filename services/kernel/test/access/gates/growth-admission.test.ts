@@ -4,6 +4,7 @@ import { capture, checkGrowth, openGrowthDatabase, type GrowthDatabase } from '.
 
 await import('reylo/register');
 const { actorFixture } = await import('../actor-side-fixture.ts');
+const { configureTestReceiptKeys, testReceiptKeys } = await import('../../support/receipt-keys.ts');
 const { createAccess } = await import('../../../src/access/index.ts');
 const { newId, routeOf } = await import('../../../src/route/route.ts');
 const { createKernel } = await import('../../../src/http/kernel.ts');
@@ -16,6 +17,7 @@ const groupAction = `gate:${group}`;
 const fixtureAction = 'fixture:read';
 const fixedTime = new Date('2026-01-15T12:00:00.000Z');
 const rowsPerScaleUnit = 500;
+const receiptKeys = testReceiptKeys();
 let db: GrowthDatabase;
 let kernel: ReturnType<typeof createKernel>;
 let actorId: string;
@@ -58,6 +60,7 @@ function expectIndex(plans: readonly unknown[], expected: string): void {
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool);
   const fixture = await actorFixture(db.pool, db.admin);
   actorId = fixture.actorId;
   transactionId = fixture.transactionId;
@@ -100,6 +103,7 @@ beforeAll(async () => {
   kernel = createKernel({
     pool: db.pool,
     routeKey,
+    receiptKeys,
     clock: () => new Date(fixedTime),
     writeRate: {
       async spend() {
@@ -177,8 +181,10 @@ test('checkGrowth keeps gate admission bounded as unrelated accounts, grants, an
     operation: fixedRequest,
   });
   const accountPlans = await capture(db, fixedRequest);
-  expectIndex(accountPlans.capture.plans, 'account_pkey');
-  expectIndex(accountPlans.capture.plans, 'membership_inverse_pkey');
+  // Current Access predicates probe account_id first; these reverse erasure indexes cover the same logical
+  // account and inverse-membership identities as their forward primary keys while preserving selective probes.
+  expectIndex(accountPlans.capture.plans, 'erasure_account_account_id');
+  expectIndex(accountPlans.capture.plans, 'erasure_membership_inverse_account_id');
 
   await checkGrowth(db, {
     name: 'Gate admission with unrelated gate grant growth',

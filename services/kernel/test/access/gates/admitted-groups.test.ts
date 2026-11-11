@@ -4,6 +4,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 await import('reylo/register');
 const { actorFixture } = await import('../actor-side-fixture.ts');
 const { createPool } = await import('../../../src/database/pool.ts');
+const { configureTestReceiptKeys, testReceiptKeys } = await import('../../support/receipt-keys.ts');
 const { createAccess, visibleOperations } = await import('../../../src/access/index.ts');
 const { GLOBAL_CONTEXT } = await import('../../../src/access/gates/catalogue.ts');
 const { parseExposure } = await import('../../../src/access/gates/declaration.ts');
@@ -13,6 +14,7 @@ const { actionCatalogue } = await import('../../../src/http/request.ts');
 const appModule = await import('../../../src/http/app.ts');
 
 const pool = createPool(process.env.DATABASE_URL!);
+const receiptKeys = testReceiptKeys();
 const instant = new Date();
 let now = new Date(instant);
 const groups = {
@@ -114,6 +116,7 @@ async function read(token?: string): Promise<string[]> {
 }
 
 beforeAll(async () => {
+  configureTestReceiptKeys(pool);
   fixture = await actorFixture(pool);
   ordinaryId = newId(0x1234);
   await fixture.account(ordinaryId);
@@ -154,6 +157,7 @@ beforeAll(async () => {
     kernel = createKernel({
       pool,
       routeKey: new Uint8Array(32).fill(107),
+      receiptKeys,
       clock: () => new Date(now),
       access: (config) => {
         access = createAccess({
