@@ -312,7 +312,7 @@ function supervise(parent: OutcomeRpc) {
     let onDisconnect!: () => void;
     let onExit!: (code: number | null, signal: string | null) => void;
     let readySettled = false;
-    const ready = new Promise<void>((resolve, reject) => {
+    const ipcReady = new Promise<void>((resolve, reject) => {
       const cleanup = () => {
         child.off('message', onMessage);
         child.off('error', onError);
@@ -340,7 +340,7 @@ function supervise(parent: OutcomeRpc) {
       child.once('disconnect', onDisconnect);
       child.once('exit', onExit);
     });
-    void ready.catch(() => {});
+    void ipcReady.catch(() => {});
     const output = (chunk: unknown) => {
       observation.workerOutput = (observation.workerOutput + String(chunk)).slice(-65_536);
     };
@@ -389,7 +389,7 @@ function supervise(parent: OutcomeRpc) {
     );
     if (!child.pid) throw new Error('Worker has no process identity');
     await own({ kind: 'worker_process', pid: child.pid });
-    await ready;
+    await ipcReady;
     const stats = await workerRpc.request<WorkerStats>('init', { env });
     observation.workerStats = stats;
     return stats;
