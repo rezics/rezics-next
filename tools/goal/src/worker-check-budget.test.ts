@@ -754,6 +754,8 @@ test('missing compiler evidence parks completed source without a model retry, th
     expect(landing).toEqual([]);
     const now = Date.now();
     const old = new Date(now - STOPPED_TASK_LIMIT_MS - 1_000).toISOString();
+    const originalCreatedAt = h.store.task(retained.task.id).createdAt;
+    const originalEndedAt = h.store.attempt(retained.ref).endedAt!;
     h.store.updateTask(retained.ref, (current) => {
       current.createdAt = old;
     });
@@ -797,6 +799,12 @@ test('missing compiler evidence parks completed source without a model retry, th
     } finally {
       h.tasks.retry = originalSweepRetry;
     }
+    h.store.updateTask(retained.ref, (current) => {
+      current.createdAt = originalCreatedAt;
+    });
+    h.store.updateAttempt(retained.ref, (current) => {
+      current.endedAt = originalEndedAt;
+    });
     expect(recoveryCalls).toBe(1);
     expect(sweepWriterCalls).toBe(0);
     expect(h.store.task(retained.task.id)).toMatchObject({ currentAttempt: 1, state: 'stopped' });
