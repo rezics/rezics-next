@@ -11609,5 +11609,15 @@
   "collection_reading_copy_reference": "참조 링크 복사",
   "collection_reading_copy_pending": "링크 복사 중…",
   "collection_reading_copy_done": "링크를 복사했습니다.",
-  "collection_reading_copy_unavailable": "링크를 복사하지 못했습니다. 참조 대상을 열거나 다시 시도하세요."
+  "collection_reading_copy_unavailable": "링크를 복사하지 못했습니다. 참조 대상을 열거나 다시 시도하세요.",
+  "books_catalogue_title": "도서 라이브러리",
+  "books_catalogue_intro": "책, 도서 시리즈, 판본을 찾아보세요. 항목을 열면 작품의 상세 정보와 서지 정보를 읽을 수 있습니다.",
+  "books_catalogue_return": "카탈로그와 개인 책장은 새 탭에서 열립니다. 원래 탭으로 돌아오면 보던 위치에서 계속할 수 있습니다.",
+  "books_catalogue_new_tab": "새 탭에서 열림",
+  "books_catalogue_shelf": "이 유형의 내 책장",
+  "books_catalogue_kind": "유형",
+  "books_catalogue_browse": "카탈로그 둘러보기",
+  "books_catalogue_missing": "현재 공개된 유형이 아닙니다.",
+  "books_catalogue_unavailable": "현재 이 유형을 이용할 수 없습니다.",
+  "books_catalogue_retry": "카탈로그 선택지 새로고침"
 }

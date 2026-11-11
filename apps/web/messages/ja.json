@@ -11609,5 +11609,15 @@
   "collection_reading_copy_reference": "参照リンクをコピー",
   "collection_reading_copy_pending": "リンクをコピー中…",
   "collection_reading_copy_done": "リンクをコピーしました。",
-  "collection_reading_copy_unavailable": "リンクをコピーできませんでした。参照先を開くか、もう一度お試しください。"
+  "collection_reading_copy_unavailable": "リンクをコピーできませんでした。参照先を開くか、もう一度お試しください。",
+  "books_catalogue_title": "本のライブラリ",
+  "books_catalogue_intro": "本、シリーズ、版を探せます。項目を開くと、作品の詳細と書誌情報を読めます。",
+  "books_catalogue_return": "カタログと個人の本棚は新しいタブで開きます。元のタブに戻ると、同じ位置から再開できます。",
+  "books_catalogue_new_tab": "新しいタブで開きます",
+  "books_catalogue_shelf": "この種類の自分の本棚",
+  "books_catalogue_kind": "種類",
+  "books_catalogue_browse": "カタログを見る",
+  "books_catalogue_missing": "この種類は現在公開されていません。",
+  "books_catalogue_unavailable": "この種類は現在利用できません。",
+  "books_catalogue_retry": "カタログの選択肢を再読み込み"
 }

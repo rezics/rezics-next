@@ -305,6 +305,7 @@ export function LiteraryReaderEntry({
       retired={readingRetired}
       recoveryHref={recoveryHref}
       sourcesHref={sourcesHref}
+      shelfType={descriptorState === 'released' && grain ? work.type : undefined}
       scopeText={m.literary_grain_scope({}, o)}
       grainLabel={
         type.text ? (

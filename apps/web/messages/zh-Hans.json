@@ -11609,5 +11609,15 @@
   "collection_reading_copy_reference": "复制引用链接",
   "collection_reading_copy_pending": "正在复制链接…",
   "collection_reading_copy_done": "链接已复制。",
-  "collection_reading_copy_unavailable": "无法复制链接。请打开引用或重试。"
+  "collection_reading_copy_unavailable": "无法复制链接。请打开引用或重试。",
+  "books_catalogue_title": "图书馆",
+  "books_catalogue_intro": "发现图书、丛书和版本。打开条目，阅读作品详情与书目信息。",
+  "books_catalogue_return": "目录和个人书架会在新标签页中打开。返回原标签页即可保留浏览位置。",
+  "books_catalogue_new_tab": "在新标签页中打开",
+  "books_catalogue_shelf": "我的此类书架",
+  "books_catalogue_kind": "类型",
+  "books_catalogue_browse": "浏览目录",
+  "books_catalogue_missing": "此类型目前尚未发布。",
+  "books_catalogue_unavailable": "此类型暂时不可用。",
+  "books_catalogue_retry": "重新加载目录选项"
 }

@@ -11609,5 +11609,15 @@
   "collection_reading_copy_reference": "複製引用連結",
   "collection_reading_copy_pending": "正在複製連結…",
   "collection_reading_copy_done": "已複製連結。",
-  "collection_reading_copy_unavailable": "無法複製連結。請開啟引用或重試。"
+  "collection_reading_copy_unavailable": "無法複製連結。請開啟引用或重試。",
+  "books_catalogue_title": "圖書館",
+  "books_catalogue_intro": "探索圖書、叢書與版本。開啟條目，閱讀作品詳情與書目資訊。",
+  "books_catalogue_return": "目錄與個人書架會在新分頁中開啟。返回原分頁即可保留瀏覽位置。",
+  "books_catalogue_new_tab": "在新分頁中開啟",
+  "books_catalogue_shelf": "我的此類書架",
+  "books_catalogue_kind": "類型",
+  "books_catalogue_browse": "瀏覽目錄",
+  "books_catalogue_missing": "此類型目前尚未發布。",
+  "books_catalogue_unavailable": "此類型暫時無法使用。",
+  "books_catalogue_retry": "重新載入目錄選項"
 }
