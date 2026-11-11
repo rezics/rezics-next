@@ -455,9 +455,11 @@ export async function createReleasedDiscoveryFixture(
       while (!control.chronologyReady) {
         const previous = control.activityAfter;
         await runOwnerIndexPage(accountId, control.frontier, false);
-        control = await readOwnerIndexControl(accountId);
-        if (!control.chronologyReady && control.activityAfter === previous)
+        const nextControl = await readOwnerIndexControl(accountId);
+        if (nextControl === null) throw new Error('Owner chronology workflow lost its native control row');
+        if (!nextControl.chronologyReady && nextControl.activityAfter === previous)
           throw new Error('Owner chronology workflow did not advance its native frontier');
+        control = nextControl;
       }
       let pin = await withConnection(ownerIndexPool(), (client) => nextOwnerPin(client, accountId));
       while (pin !== undefined) {
