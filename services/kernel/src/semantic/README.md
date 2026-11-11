@@ -2268,12 +2268,16 @@ on the same client; Global has no personal owner. Creator, adopter, provenance a
 
 #### Candidate page and disclosure owner checks
 
-- Touches: one bounded batch joining each returned proposal candidate to its exact revision transaction, editorial
-  principal and Access account primary key; direct Content disclosure checks use the same exact candidate and owner
-  evidence. Missing owner evidence fails closed on candidate pages.
+- Decision: candidate owner reads use the candidate row's exact revision transaction when expanded, or the latest
+  authored assertion transaction from the compact fact index when no candidate row exists. Both paths retain the
+  same write-basis, account, audience, fence and erasure checks; missing owner evidence fails closed.
+- Touches: one bounded batch resolving each returned proposal or authored compact candidate to its revision
+  transaction, editorial principal and Access account primary key; direct Content disclosure checks use the same
+  exact candidate and owner evidence.
 - Bound: one additional statement for a candidate page with at most the requested page size plus one indexed
-  transaction and account join per candidate; one additional indexed join for a point disclosure read. Rows are
-  O(page size), independent of unrelated subjects and account count. No subject or history sweep is used.
+  candidate or compact-fact lookup, transaction join and account join per candidate; one additional indexed join
+  for a point disclosure read. Rows are O(page size), independent of unrelated subjects and account count. No
+  subject or history sweep is used.
 - Growth check: `test/semantic/account-erasure-user-cases.test.ts`: `native T fences a live moderator private candidate overlay while retaining the communal subject` and
   `native T fences disclosed personal consent at the Semantic source before consumer catchup`.
 

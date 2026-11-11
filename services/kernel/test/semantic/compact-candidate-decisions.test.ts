@@ -9,6 +9,15 @@ const statement = (property: string, content: unknown) => ({
   property: { id: property },
   value: { type: 'value', content },
 });
+async function listedCandidate(subject: string, property: string, candidate: string) {
+  const result = await driver.request(
+    'editor',
+    'GET',
+    `/v1/subjects/${subject}/candidates?property=${encodeURIComponent(property)}`,
+  );
+  expect(result.status).toBe(200);
+  return (result.body.candidates as { id: string }[]).find((row) => row.id === candidate);
+}
 beforeAll(async () => {
   driver = await createSemanticDriver();
 }, 180_000);
@@ -45,7 +54,12 @@ for (const property of ['schema:inLanguage', 'schema:author'] as const) {
               calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
             }),
           ],
-          [property]: [statement(property, property === 'schema:author' ? author.id : 'ja')],
+          [property]: [
+            {
+              ...statement(property, property === 'schema:author' ? author.id : 'ja'),
+              rank: property === 'schema:author' ? 'preferred' : 'normal',
+            },
+          ],
         },
       },
       key(),
@@ -55,6 +69,14 @@ for (const property of ['schema:inLanguage', 'schema:author'] as const) {
     expect(subject.revision).toBe(1);
     const first = subject.statements['schema:datePublished']![0]!.id;
     const second = subject.statements[property]![0]!.id;
+    const compactOriginal = await listedCandidate(subject.id, property, second);
+    expect(compactOriginal).toMatchObject({
+      id: second,
+      revision: 1,
+      decision: 'accepted',
+      head: 1,
+      rank: property === 'schema:author' ? 'preferred' : 'normal',
+    });
     const contextResponse = await driver.request(
       'editor',
       'POST',
@@ -93,6 +115,7 @@ for (const property of ['schema:inLanguage', 'schema:author'] as const) {
       acceptance: { context, candidate: second, decision: 'reject', head: 1 },
       revision: 3,
     });
+    expect(await listedCandidate(subject.id, property, second)).toEqual(compactOriginal);
     const revisions = await driver.inspect.revisions(subject.id);
     expect(revisions.map((row) => row.revision)).toEqual([1, 2, 3]);
     expect(new Set(revisions.map((row) => row.transactionId)).size).toBe(3);
