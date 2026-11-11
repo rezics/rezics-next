@@ -1812,6 +1812,7 @@ Decision: run `bun scripts/page-data-check.ts` and its Chromium child inside a u
 under `rezics-check.slice`, separate from `rezics-workers.slice`, reusing the existing 12 GiB `MemoryMax` and setting
 `OOMPolicy=continue` so a killed browser can leave the checker to report independent evidence. The in-scope wrapper
 reads `memory.events` after the checker exits because a continuing scope does not reliably finish with `Result=oom-kill`.
+The scope inherits the launcher's output streams; `--pipe` is incompatible with scope mode.
 Keep the existing one-hour check timeout. A scope launch failure stops the check without an unbounded retry. An OOM
 records valid emitted sections as `coverage=incomplete`, writes the existing diagnostic log and notice, and cannot
 count as full coverage. Stop and reset only that exact scope after each outcome; retain the page-data lease and stack

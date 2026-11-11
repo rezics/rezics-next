@@ -626,21 +626,20 @@ test('an owned page-data scope preserves emitted sections when MemoryMax is exha
     const scopeRegistry = new Map(h.registry).set(`${second.page}\t${second.persona}\t${second.section}`, second);
     expect(pageDataCheckScopeUnit(invocation)).toBe(`rezics-page-data-${invocation}.scope`);
     const scopeArgs = pageDataCheckScopeArguments(invocation, 'bun', ['scripts/page-data-check.ts']);
-    expect(scopeArgs.slice(0, 9)).toEqual([
+    expect(scopeArgs.slice(0, 8)).toEqual([
       '--user',
       '--scope',
       '--collect',
-      '--pipe',
       '--quiet',
       `--slice=${CHECK_SLICE}`,
       `--property=MemoryMax=${WORKER_SCOPE_MEMORY_MAX}`,
       '--property=OOMPolicy=continue',
       `--unit=rezics-page-data-${invocation}.scope`,
     ]);
-    expect(scopeArgs.slice(9, 11)).toEqual(['/bin/sh', '-c']);
-    expect(scopeArgs[11]).toContain('/sys/fs/cgroup$cgroup/memory.events');
-    expect(scopeArgs[11]).toContain('REZICS_PAGE_DATA_SCOPE_OOM_KILLS=');
-    expect(scopeArgs.slice(12)).toEqual(['page-data-check-scope', 'bun', 'scripts/page-data-check.ts']);
+    expect(scopeArgs.slice(8, 10)).toEqual(['/bin/sh', '-c']);
+    expect(scopeArgs[10]).toContain('/sys/fs/cgroup$cgroup/memory.events');
+    expect(scopeArgs[10]).toContain('REZICS_PAGE_DATA_SCOPE_OOM_KILLS=');
+    expect(scopeArgs.slice(11)).toEqual(['page-data-check-scope', 'bun', 'scripts/page-data-check.ts']);
 
     const notices: { summary: string }[] = [];
     const output = 'home anonymous feed DATA\nhome anonymous details';
