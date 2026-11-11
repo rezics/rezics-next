@@ -1352,7 +1352,7 @@ function SubjectTermsPageLive({
                               {m.catalogue_terms_action({}, options)}
                             </FieldLabel>
                             <Select
-                              value={row[field].mode === '' ? null : row[field].mode}
+                              value={row[field].mode}
                               onValueChange={(nextSelectValue) =>
                                 update(field, { mode: (nextSelectValue ?? '') as LanguageDraft[TermField]['mode'] })
                               }

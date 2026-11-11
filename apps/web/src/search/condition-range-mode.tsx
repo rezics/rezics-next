@@ -35,7 +35,7 @@ export function ConditionRangeMode({
       <Field>
         <FieldLabel htmlFor={id}>{m.condition_range_mode({}, options)}</FieldLabel>
         <Select
-          value={mode === '' ? null : mode}
+          value={mode}
           onValueChange={(nextSelectValue) => {
             const next = (nextSelectValue ?? '') === 'calendar' ? 'calendar' : 'year';
             if (next === mode) return;

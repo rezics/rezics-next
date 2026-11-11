@@ -97,7 +97,7 @@ function ItemTargetControl({
       <Field className="min-w-0">
         <FieldLabel>{m.correction_value_state({}, o)}</FieldLabel>
         <Select
-          value={part.value.type === '' ? null : part.value.type}
+          value={part.value.type}
           disabled={disabled}
           onValueChange={(nextSelectValue) => {
             const state = nextSelectValue ?? '';

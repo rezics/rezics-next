@@ -201,7 +201,7 @@ export function TypeDirectoryPicker({
         <div className="min-w-0 space-y-2">
           <FieldLabel htmlFor="create-type-search-mode">{m.catalogue_create_type_search_mode({}, options)}</FieldLabel>
           <Select
-            value={mode === '' ? null : mode}
+            value={mode}
             disabled={disabled}
             onValueChange={(nextSelectValue) => {
               setMode((nextSelectValue ?? '') as 'prefix' | 'id');

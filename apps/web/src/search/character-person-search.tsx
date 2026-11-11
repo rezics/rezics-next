@@ -126,7 +126,7 @@ function CharacterPersonForm({
         <span>{m.character_person_mode({}, options)}</span>
         <Select
           name="mode"
-          value={mode === '' ? null : mode}
+          value={mode}
           onValueChange={(nextSelectValue) => {
             const next = formMode(nextSelectValue ?? '');
             setMode(next);

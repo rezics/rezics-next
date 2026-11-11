@@ -764,13 +764,7 @@ function CharacterProfileCreateLive({
                         {m.candidate_rank({}, o)}
                       </FieldLabel>
                       <Select
-                        value={
-                          (fact.rank === 'preferred' ? 'preferred' : 'normal') === ''
-                            ? null
-                            : fact.rank === 'preferred'
-                              ? 'preferred'
-                              : 'normal'
-                        }
+                        value={fact.rank === 'preferred' ? 'preferred' : 'normal'}
                         onValueChange={(nextSelectValue) => {
                           const admitted = () =>
                             isCurrent() &&

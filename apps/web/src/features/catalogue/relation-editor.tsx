@@ -2096,7 +2096,7 @@ function RelationEditorLive({
                                 <Field>
                                   <FieldLabel htmlFor={`${formId}-rank`}>{m.relation_rank({}, options)}</FieldLabel>
                                   <Select
-                                    value={rank === '' ? null : rank}
+                                    value={rank}
                                     disabled={frozen}
                                     onValueChange={(nextSelectValue) =>
                                       editable() && setRank((nextSelectValue ?? '') as 'normal' | 'preferred')

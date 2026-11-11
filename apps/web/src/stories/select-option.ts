@@ -1,7 +1,5 @@
 import { expect, userEvent, within } from 'storybook/test';
 
-type OptionSelection = string | string[] | HTMLOptionElement | HTMLOptionElement[];
-
 function submittedValueInput(trigger: HTMLElement) {
   const submittedValue = trigger.nextElementSibling;
   if (submittedValue?.tagName !== 'INPUT' || submittedValue.getAttribute('aria-hidden') !== 'true') {
@@ -11,27 +9,22 @@ function submittedValueInput(trigger: HTMLElement) {
 }
 
 export function readSelectValue(trigger: HTMLElement) {
-  return trigger.tagName === 'SELECT' ? (trigger as HTMLSelectElement).value : submittedValueInput(trigger).value;
+  return trigger.tagName === 'SELECT'
+    ? (trigger as unknown as { value: string }).value
+    : submittedValueInput(trigger).value;
 }
 
-export async function chooseSelectValue(trigger: HTMLElement, selection: OptionSelection) {
+export async function chooseSelectValue(trigger: HTMLElement, selection: string) {
   if (trigger.tagName === 'SELECT') {
-    await userEvent.selectOptions(
-      trigger as HTMLSelectElement,
-      selection as string | string[] | HTMLOptionElement | HTMLOptionElement[],
-    );
+    const nativeSelect = trigger as unknown as Parameters<typeof userEvent.selectOptions>[0];
+    await userEvent.selectOptions(nativeSelect, selection as Parameters<typeof userEvent.selectOptions>[1]);
     return;
   }
 
-  const values = (Array.isArray(selection) ? selection : [selection]).map((item) =>
-    typeof item === 'string' ? item : item.value,
-  );
-  if (values.length !== 1) throw new Error('A single Select cannot choose multiple values');
-  const value = values[0]!;
   const body = within(trigger.ownerDocument.body);
   await userEvent.click(trigger);
-  const option = (await body.findAllByRole('option')).find((item) => item.getAttribute('data-value') === value);
-  if (!option) throw new Error(`Select option not found for value: ${value}`);
+  const option = (await body.findAllByRole('option')).find((item) => item.getAttribute('data-value') === selection);
+  if (!option) throw new Error(`Select option not found for value: ${selection}`);
   await userEvent.click(option);
 }
 
@@ -43,8 +36,9 @@ export async function chooseSelectOptionByName(trigger: HTMLElement, name: strin
 
 export async function chooseCurrentSelectOption(trigger: HTMLElement) {
   if (trigger.tagName === 'SELECT') {
-    const select = trigger as HTMLSelectElement;
-    await userEvent.selectOptions(select, select.value);
+    const value = (trigger as unknown as { value: string }).value;
+    const nativeSelect = trigger as unknown as Parameters<typeof userEvent.selectOptions>[0];
+    await userEvent.selectOptions(nativeSelect, value);
     return;
   }
 
@@ -63,9 +57,7 @@ export async function expectSelectValue(trigger: HTMLElement, value: string) {
 
 export async function expectSelectOptionAvailability(trigger: HTMLElement, value: string, available: boolean) {
   if (trigger.tagName === 'SELECT') {
-    const present = [...(trigger as HTMLSelectElement).querySelectorAll('option')].some(
-      (option) => option.value === value,
-    );
+    const present = [...trigger.querySelectorAll('option')].some((option) => option.getAttribute('value') === value);
     expect(present).toBe(available);
     return;
   }

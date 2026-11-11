@@ -301,7 +301,7 @@ function ScalarControl({
           {m.correction_value_state({}, o)}
         </FieldLabel>
         <Select
-          value={part.value.type === '' ? null : part.value.type}
+          value={part.value.type}
           onValueChange={(nextSelectValue) => {
             const type = nextSelectValue ?? '';
             if (type === 'somevalue' || type === 'novalue') onChange({ type });
@@ -406,7 +406,7 @@ function ScalarControl({
                 {m.correction_precision({}, o)}
               </FieldLabel>
               <Select
-                value={(precision ?? '') === '' ? null : (precision ?? '')}
+                value={precision == null ? null : String(precision)}
                 onValueChange={(nextSelectValue) => setDate(0, date?.[1] ?? '', Number(nextSelectValue ?? ''))}
               >
                 <SelectTrigger
@@ -421,7 +421,7 @@ function ScalarControl({
                   <SelectGroup>
                     <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
                     {typeof precision === 'number' && ![9, 10, 11].includes(precision) && (
-                      <SelectItem value={precision}>
+                      <SelectItem value={String(precision)}>
                         {m.time_unsupported_precision({ precision: String(precision) }, o)}
                       </SelectItem>
                     )}

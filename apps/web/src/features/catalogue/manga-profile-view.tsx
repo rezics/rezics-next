@@ -726,7 +726,7 @@ function MangaCreate({
             <Field className="min-w-0">
               <FieldLabel htmlFor="manga-type">{m.manga_grain({}, o)}</FieldLabel>
               <Select
-                value={type === '' ? null : type}
+                value={type}
                 onValueChange={(nextSelectValue) => {
                   const nextType = (nextSelectValue ?? '') as MangaType;
                   addFocusIntent.current = null;

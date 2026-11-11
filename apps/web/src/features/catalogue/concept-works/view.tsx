@@ -295,7 +295,7 @@ function ConceptWorksVisit({
         <Field>
           <FieldLabel htmlFor="concept-work-sort">{m.search_sort_label({}, options)}</FieldLabel>
           <Select
-            value={(route.sort ?? 'name') === '' ? null : (route.sort ?? 'name')}
+            value={route.sort ?? 'name'}
             onValueChange={(nextSelectValue) => {
               const value = nextSelectValue ?? '';
               if (value === 'name' || value === 'rating') onChange?.({ sort: value, cursor: undefined });

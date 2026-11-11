@@ -1052,7 +1052,7 @@ function NodeEditor({
             >
               {(props) => (
                 <Select
-                  value={direction === '' ? null : direction}
+                  value={direction}
                   onValueChange={(nextSelectValue) => {
                     const next = nextSelectValue ?? '';
                     if (next !== 'direct' && next !== 'inverse') return;
