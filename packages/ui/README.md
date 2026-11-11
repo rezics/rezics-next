@@ -279,8 +279,8 @@ available localized facts and links.
 
 `MemberReadingItem` is the compact Collection composition for either `list` or `grid`. It uses the same
 proportional thumbnail, semantic title and supplied summary. Horizontal reading rows have a bounded width and a
-12 rem maximum from `sm`. The summary is limited to four lines; the full facts stay in Inspect and any overflow
-from interactive evidence remains scrollable. The caller
+12 rem maximum from `sm`. The summary is limited to four lines. Full facts and secondary action evidence belong
+in Inspect detail, leaving the default row compact without an inner scroll area. The caller
 supplies occurrence identity, position, an explicit Inspect action and essential action evidence. A grid keeps
 that evidence and the Inspect action outside `CoverCard`'s action row. `MemberListRow` remains the adapter for
 existing Search and other list consumers.

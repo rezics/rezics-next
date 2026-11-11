@@ -95,7 +95,7 @@ export interface MemberReadingItemProps {
   occurrenceLabel: string;
   position: ReactNode;
   metadata: ReactNode;
-  /** Essential availability, permission and action outcomes remain visible in either layout. */
+  /** Evidence shown on grid items; the list uses a bounded summary and keeps this in the Inspect detail. */
   evidence?: ReactNode;
   detailId: string;
   expanded: boolean;
@@ -188,7 +188,7 @@ export function MemberReadingItem({
       title={title}
       {...(titleLang ? { titleLang } : {})}
       titleDataSlot="member-list-row-title"
-      className="max-w-4xl [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:max-h-48 sm:overflow-y-auto"
+      className="max-w-4xl [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:max-h-48"
       visual={
         cover ? (
           <div
@@ -204,12 +204,9 @@ export function MemberReadingItem({
       }
       metadata={<div className="line-clamp-4 min-w-0 w-full space-y-1">{metadata}</div>}
       preview={
-        <div className="min-w-0 space-y-1">
-          <p data-slot="collection-member-position" className="text-xs text-muted-foreground">
-            {position}
-          </p>
-          {evidence}
-        </div>
+        <p data-slot="collection-member-position" className="line-clamp-1 text-xs text-muted-foreground">
+          {position}
+        </p>
       }
       actions={opener}
     />
