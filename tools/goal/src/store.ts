@@ -1090,6 +1090,46 @@ export class WorkerStore implements AttemptFence {
     } | null;
     return row?.sequence;
   }
+  /** Current task and attempt states let capacity reconcile old live tickets without reading their worktrees. */
+  capacityLifecycle(taskId: string):
+    | {
+        currentAttempt: number;
+        taskState: string;
+        attemptState?: string;
+        attemptStartedAt?: string;
+        priorityHeadStart?: boolean;
+      }
+    | undefined {
+    const row = this.db
+      .query(`
+        SELECT t.current_attempt AS current_attempt,
+               json_extract(t.body, '$.state') AS task_state,
+               json_extract(a.body, '$.state') AS attempt_state,
+               json_extract(a.body, '$.startedAt') AS attempt_started_at,
+               CASE WHEN json_extract(t.body, '$.taskClass') = 'critical-path'
+                          OR json_extract(t.body, '$.brief.criticalPath') = 1
+                          OR json_extract(t.body, '$.brief.target') = 'stabilize'
+                    THEN 1 ELSE 0 END AS priority_head_start
+        FROM worker_tasks AS t
+        LEFT JOIN worker_attempts AS a ON a.task_id=t.id AND a.attempt=t.current_attempt
+        WHERE t.id=?
+      `)
+      .get(taskId) as {
+        current_attempt: number;
+        task_state: string | null;
+        attempt_state: string | null;
+        attempt_started_at: string | null;
+        priority_head_start: number;
+      } | null;
+    if (!row || typeof row.task_state !== 'string') return undefined;
+    return {
+      currentAttempt: row.current_attempt,
+      taskState: row.task_state,
+      ...(typeof row.attempt_state === 'string' ? { attemptState: row.attempt_state } : {}),
+      ...(typeof row.attempt_started_at === 'string' ? { attemptStartedAt: row.attempt_started_at } : {}),
+      priorityHeadStart: row.priority_head_start === 1,
+    };
+  }
   /** Ready, nonurgent tasks accepted earlier than one queued start for the same Goal. */
   goalReadyTaskIdsBefore(goal: string, sequence: number): string[] {
     return (

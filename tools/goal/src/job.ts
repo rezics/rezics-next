@@ -1640,7 +1640,7 @@ export class WorkerJob implements GateOutcomeSink {
       const graceMs =
         this.policy.worker.orphanStartGraceMultiplier *
         (this.tasks.settings.startGraceMs ?? this.policy.worker.startGraceMs);
-      const waiting = capacityWaiters(this.tasks.settings.stateDirectory);
+      const waiting = capacityWaiters(this.tasks.settings.stateDirectory, store);
       for (const task of store.activeTasks()) {
         await yieldSweep();
         if (

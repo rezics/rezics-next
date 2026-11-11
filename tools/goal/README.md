@@ -85,6 +85,20 @@ stand in for an unidentified current writer. Check wakes use the existing capaci
 the active minimum before launch. That ticket's memory charge transfers to the reconciled current writer's scope;
 pending or unreconciled launches keep their ticket charge until start or explicit release. Memory floors, PSI,
 worker caps and check slots remain independent limits.
+Decision: Admission folds tickets by task generation and operation, and may request one bounded reclaim from clean
+inactive file cache per slice-deficit episode.
+Every new ticket records its target attempt and whether it starts a new generation or resumes the exact parked one.
+The oldest live, lifecycle-valid ticket owns the operation; duplicates remain successors without consuming FIFO
+positions or a second reservation. When its process ends, the next valid ticket takes over. Old tickets remain
+readable: a missing generation denotes the initial start. For a legacy ticket targeting the current waiting attempt,
+its queue timestamp is compared with that attempt's start time so an older first-start ticket is discarded while a
+later check wake remains its exact resume. A ticket for an already advanced start is discarded from the task's
+current-attempt projection, without consulting worktree presence or clearing another generation's reservation.
+If host limits, system memory and PSI permit admission but a finite worker-slice reserve alone blocks it, the host
+may request up to 4 GiB from clean inactive file pages with `swappiness=0`. Dirty and writeback pages are excluded.
+The shared admission lease is released before the request; the host re-samples slice headroom before launching. One
+durable latch coalesces requests until headroom recovers for a heavy worker. Unsupported or unwritable reclaim is
+ignored, and ordinary memory, PSI, lane and Goal limits continue to gate starts.
 Urgent admission enforces its limits even without `capacity.json`; ordinary admission retains its opt-in behaviour.
 `status`, `report`, `report --flow` and the hourly report mark urgent work and count its outcomes separately from
 ordinary throughput. Resource usage totals still include urgent work.

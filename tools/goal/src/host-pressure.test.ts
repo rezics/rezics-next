@@ -1,7 +1,13 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { pressureBrake, workerHeadroomMiB, workerReservationMiB } from './host-pressure.ts';
+import {
+  pressureBrake,
+  reclaimableFileMiB,
+  reclaimCleanFileCache,
+  workerHeadroomMiB,
+  workerReservationMiB,
+} from './host-pressure.ts';
 import { temporaryDirectory } from './test-support.ts';
 
 const healthy = { memoryFull: 0, ioFull: 0 };
@@ -73,6 +79,44 @@ test('five worker scopes retain actual usage and active reserves while proven pa
     expect(parked).toBeCloseTo(11.63 * 1024, 1);
     expect(parked).toBeGreaterThan(workerReservationMiB('imports'));
     expect(contradictory).toBeCloseTo(parked - 3.96 * 1024, 1);
+  } finally {
+    directory.close();
+  }
+});
+
+test('file-cache reclaim is bounded by the deficit, four GiB and clean inactive-file evidence', () => {
+  const directory = temporaryDirectory();
+  const gib = 1024 ** 3;
+  const mib = 1024 ** 2;
+  const stat = (inactive: number, dirty: number, writeback = 0) =>
+    writeFileSync(
+      join(directory.path, 'memory.stat'),
+      `inactive_file ${inactive}\nfile_dirty ${dirty}\nfile_writeback ${writeback}\n`,
+    );
+  try {
+    stat(11.5 * gib, 64 * mib, 0);
+    writeFileSync(join(directory.path, 'memory.reclaim'), '');
+    expect(reclaimableFileMiB(directory.path)).toBe(Math.floor((11.5 * gib - 64 * mib) / mib));
+    expect(reclaimCleanFileCache(8192, directory.path)).toBe(4096);
+    expect(readFileSync(join(directory.path, 'memory.reclaim'), 'utf8')).toBe(`${4096 * mib} swappiness=0`);
+
+    stat(3 * gib, 1 * gib, 1 * gib);
+    writeFileSync(join(directory.path, 'memory.reclaim'), '');
+    expect(reclaimCleanFileCache(8192, directory.path)).toBe(1024);
+    expect(readFileSync(join(directory.path, 'memory.reclaim'), 'utf8')).toBe(`${1024 * mib} swappiness=0`);
+  } finally {
+    directory.close();
+  }
+});
+
+test('unsupported reclaim files and fully dirty inactive pages produce no request', () => {
+  const directory = temporaryDirectory();
+  try {
+    writeFileSync(join(directory.path, 'memory.stat'), `inactive_file ${1024 ** 3}\nfile_dirty ${1024 ** 3}\n`);
+    writeFileSync(join(directory.path, 'memory.reclaim'), '');
+    expect(reclaimCleanFileCache(4096, directory.path)).toBe(0);
+    expect(readFileSync(join(directory.path, 'memory.reclaim'), 'utf8')).toBe('');
+    expect(reclaimCleanFileCache(4096, join(directory.path, 'unsupported'))).toBe(0);
   } finally {
     directory.close();
   }
