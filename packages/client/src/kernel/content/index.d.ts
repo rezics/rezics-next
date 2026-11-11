@@ -13,3 +13,7 @@ export type { HostedCommandDependencies } from './hosted-chapters-commands.ts';
 export { readHostedCatalogue, listHostedChildren, navigateHostedChapters, resolveHostedOccurrence, } from './hosted-chapters-reads.ts';
 export { listOwnHostedCatalogues, readOwnHostedCatalogue } from './hosted-chapters-owner.ts';
 export type { HostedCreateInput, HostedReviseInput, HostedPublishInput, HostedPlacement, HostedChapterTarget, HostedReadSelection, HostedChildrenInput, HostedNavigationInput, HostedCommandContext, HostedCommandValue, HostedRevisionView, HostedOccurrenceView, HostedPageView, HostedResolutionView, HostedOwnerInventoryScope, HostedOwnerInventoryInput, HostedOwnerInventoryEntry, HostedOwnerInventoryView, } from './hosted-chapters-model.ts';
+/** Native notebook commands and current-source reads. Search owns any candidate ordering or usefulness page. */
+export { createKnowledgeNotebook, createKnowledgeDocument, reviseKnowledgeDocument, setKnowledgePublication, } from './knowledge-commands.ts';
+export { readKnowledgePrivateDocument, readKnowledgePublicDocument } from './knowledge-reads.ts';
+export type { KnowledgeCommandContext, KnowledgeCommandValue, KnowledgeCreateDocumentInput, KnowledgeCreateNotebookInput, KnowledgeDependencies, KnowledgeDocumentInput, KnowledgeDocumentView, KnowledgePublicationInput, KnowledgePublicDocumentView, KnowledgeReadContext, KnowledgeReviseDocumentInput, } from './knowledge-model.ts';
