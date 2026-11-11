@@ -411,82 +411,116 @@ export function authorizeProof(
   const integrationHead = proofGit(root, ['rev-parse', `refs/heads/${integrationBranch}`], policy);
   if (registration?.expectedIntegrationHead && integrationHead !== registration.expectedIntegrationHead)
     throw new ProofCaptureMovedError(registration.expectedIntegrationHead, integrationHead);
-  if (integrationHead !== proof.sourceCommit) {
-    if (registration?.expectedIntegrationHead) throw new ProofCaptureMovedError(proof.sourceCommit, integrationHead);
-    throw new Error('proof source must be the captured integration head');
-  }
-  if (proofGit(root, ['rev-parse', `${proof.sourceCommit}^{commit}`], policy) !== proof.sourceCommit)
-    throw new Error('proof source is not a captured commit');
-  const originals = proof.sourceTasks.map((id) => {
-    const task = store.task(id);
-    const commit = task.integratedCommit ?? task.mergedCommit;
+  try {
+    if (integrationHead !== proof.sourceCommit) {
+      if (registration?.expectedIntegrationHead) throw new ProofCaptureMovedError(proof.sourceCommit, integrationHead);
+      throw new Error('proof source must be the captured integration head');
+    }
+    if (proofGit(root, ['rev-parse', `${proof.sourceCommit}^{commit}`], policy) !== proof.sourceCommit)
+      throw new Error('proof source is not a captured commit');
+    const originals = proof.sourceTasks.map((id) => {
+      const task = store.task(id);
+      const commit = task.integratedCommit ?? task.mergedCommit;
+      if (
+        task.brief.goal !== brief.goal ||
+        task.brief.manager !== brief.manager ||
+        task.brief.kind === 'verification' ||
+        !['integrated', 'merged'].includes(task.state) ||
+        !commit
+      )
+        throw new Error(`proof source ${id} must be a same-Goal integrated original`);
+      if (proofGit(root, ['merge-base', commit, proof.sourceCommit], policy) !== commit)
+        throw new Error(`proof source commit does not contain ${id}`);
+      return { taskId: id, commit, argv: [...task.brief.acceptance.command] };
+    });
     if (
-      task.brief.goal !== brief.goal ||
-      task.brief.manager !== brief.manager ||
-      task.brief.kind === 'verification' ||
-      !['integrated', 'merged'].includes(task.state) ||
-      !commit
+      !originalCommandMatches(
+        brief.acceptance.command,
+        originals.map((original) => original.argv),
+      )
     )
-      throw new Error(`proof source ${id} must be a same-Goal integrated original`);
-    if (proofGit(root, ['merge-base', commit, proof.sourceCommit], policy) !== commit)
-      throw new Error(`proof source commit does not contain ${id}`);
-    return { taskId: id, commit, argv: [...task.brief.acceptance.command] };
-  });
-  if (
-    !originalCommandMatches(
-      brief.acceptance.command,
-      originals.map((original) => original.argv),
-    )
-  )
-    throw new Error('proof command must retain every whole original argv or its exact deduplicated file union');
-  const missing = preflightProof(root, brief, policy);
-  if (missing.length) throw new Error(`proof command inputs are missing at the captured source: ${missing.join(', ')}`);
-  const finalHead = proofGit(root, ['rev-parse', `refs/heads/${integrationBranch}`], policy);
-  if (finalHead !== integrationHead) throw new ProofCaptureMovedError(integrationHead, finalHead);
-  return {
-    integrationBranch,
-    fingerprint: proofFingerprint(brief),
-    manager: actor.id,
-    sessionId: actor.sessionId,
-    sourceTree: proofGit(root, ['rev-parse', `${proof.sourceCommit}^{tree}`], policy),
-    originals,
-    ...(registration?.backlogProposal
-      ? {
-          backlogProposal: {
-            ...registration.backlogProposal,
-            sourceTasks: [...registration.backlogProposal.sourceTasks],
-          },
-        }
-      : {}),
-  };
+      throw new Error('proof command must retain every whole original argv or its exact deduplicated file union');
+    const missing = preflightProof(root, brief, policy);
+    if (missing.length)
+      throw new ProofUnavailableError(`proof command inputs are missing at the captured source: ${missing.join(', ')}`);
+    const finalHead = proofGit(root, ['rev-parse', `refs/heads/${integrationBranch}`], policy);
+    if (finalHead !== integrationHead) throw new ProofCaptureMovedError(integrationHead, finalHead);
+    return {
+      integrationBranch,
+      fingerprint: proofFingerprint(brief),
+      manager: actor.id,
+      sessionId: actor.sessionId,
+      sourceTree: proofGit(root, ['rev-parse', `${proof.sourceCommit}^{tree}`], policy),
+      originals,
+      ...(registration?.backlogProposal
+        ? {
+            backlogProposal: {
+              ...registration.backlogProposal,
+              sourceTasks: [...registration.backlogProposal.sourceTasks],
+            },
+          }
+        : {}),
+    };
+  } catch (error) {
+    if (error instanceof ProofCaptureMovedError) throw error;
+    const finalHead = proofGit(root, ['rev-parse', `refs/heads/${integrationBranch}`], policy);
+    if (finalHead !== integrationHead) throw new ProofCaptureMovedError(integrationHead, finalHead);
+    throw error;
+  }
 }
 /** Read captured Git objects only. Explicit command files, including shell-contained originals, must exist. */
 export function preflightProof(root: string, brief: Brief, policy = defaultPolicy.proof): string[] {
   if (!brief.proof) return ['proof metadata unavailable'];
   const commands = explicitFileCommands(brief.acceptance.command);
-  const tokens = commands
-    ? commands.flatMap((command) => command.files.map((file) => `${command.cwd}${file}`))
-    : brief.acceptance.command.flatMap(
-        (word) => word.match(/[A-Za-z0-9_./-]+\.(?:[cm]?[jt]sx?|sh|json|sql)\b/g) ?? [],
-      );
   let cwd = '';
   const argv = brief.acceptance.command;
   if (!commands) {
+    const tokens = brief.acceptance.command.flatMap(
+      (word) => word.match(/[A-Za-z0-9_./-]+\.(?:[cm]?[jt]sx?|sh|json|sql)\b/g) ?? [],
+    );
     const cwdIndex = argv.indexOf('--cwd');
     if (cwdIndex >= 0) cwd = `${argv[cwdIndex + 1]}/`;
     else cwd = (argv.find((word) => word.startsWith('--cwd='))?.slice(6) ?? '') + '/';
-  }
-  if (cwd === '/') cwd = '';
-  return [...new Set(tokens)].filter((file) => {
-    if (file.startsWith('-') || file.includes('..') || file.startsWith('/')) return true;
-    return (
-      spawnSync('git', ['cat-file', '-e', `${brief.proof!.sourceCommit}:${cwd}${file}`], {
-        cwd: root,
-        stdio: 'ignore',
-        timeout: policy.commandTimeoutMs,
-      }).status !== 0
+    if (cwd === '/') cwd = '';
+    return missingProofFiles(
+      root,
+      brief.proof.sourceCommit,
+      tokens.map((file) => ({ file, treePath: `${cwd}${file}` })),
+      policy,
     );
-  });
+  }
+  const composite = commands.length > 1;
+  return missingProofFiles(
+    root,
+    brief.proof.sourceCommit,
+    commands.flatMap((command) =>
+      command.files.map((file) => ({
+        file: composite ? `${command.cwd}${file}` : file,
+        treePath: `${command.cwd}${file}`,
+      })),
+    ),
+    policy,
+  );
+}
+function missingProofFiles(
+  root: string,
+  sourceCommit: string,
+  inputs: { file: string; treePath: string }[],
+  policy: typeof defaultPolicy.proof,
+): string[] {
+  const unique = [...new Map(inputs.map((input) => [input.treePath, input])).values()];
+  return unique
+    .filter(({ file, treePath }) => {
+      if (file.startsWith('-') || file.includes('..') || file.startsWith('/')) return true;
+      return (
+        spawnSync('git', ['cat-file', '-e', `${sourceCommit}:${treePath}`], {
+          cwd: root,
+          stdio: 'ignore',
+          timeout: policy.commandTimeoutMs,
+        }).status !== 0
+      );
+    })
+    .map(({ file }) => file);
 }
 export function newProofBinding(task: Task, attempt: number): ProofBinding {
   if (!task.brief.proof || task.proofAuthorization?.fingerprint !== proofFingerprint(task.brief))
