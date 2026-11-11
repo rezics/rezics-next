@@ -43,7 +43,7 @@ function discovery(type: BookCatalogueType, locale: string): DiscoveryPage {
         descriptions: work.descriptions,
       },
     ],
-    kinds: { values: [{ id: type, labels: bundledRelease.types[type]!.labels }], next: null },
+    kinds: { values: [{ id: type, labels: bundledRelease.types[type]!.labels, icon: 'book' }], next: null },
     next: null,
     as_of: '2026-11-12T00:00:00Z',
   };
@@ -82,7 +82,7 @@ function CatalogueResult({ address, sparse, unavailable }: { address: string; sp
     <SearchPage
       query={state.query}
       locale={locale}
-      cursor={state.cursor}
+      {...(state.cursor === undefined ? {} : { cursor: state.cursor })}
       searchHref={address}
       data={{ ...searchUnavailablePage(state), ...outcome }}
       onRetry={() => setRetry((value) => value + 1)}

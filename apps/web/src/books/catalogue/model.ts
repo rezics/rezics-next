@@ -26,10 +26,10 @@ type DescriptorRead =
     };
 
 /** Finite released metadata only. The destination applications own their page requests. */
-export async function readBookCatalogue(
-  locale: string,
+export async function readBookCatalogue<Locale extends string>(
+  locale: Locale,
   readDescriptor: (type: BookCatalogueType, locale: string) => Promise<DescriptorRead>,
-): Promise<{ locale: string; choices: BookCatalogueChoice[] }> {
+): Promise<{ locale: Locale; choices: BookCatalogueChoice[] }> {
   const choices = await Promise.all(
     bookCatalogueTypes.map(async (type): Promise<BookCatalogueChoice> => {
       const result = await readDescriptor(type, locale);
