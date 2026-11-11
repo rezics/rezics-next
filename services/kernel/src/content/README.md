@@ -31,6 +31,9 @@ including Board, Realm, ancestry, erasure and revision disclosure. Unavailable c
 parent, order and kind only; their title, target, digest and attribution are withheld. Available resolution delivers
  canonical Document bytes, SHA-256, original Post author and licence. No bodies are copied into hosted storage.
 
+Decision: books and columns share ordinary Post ownership and publication boundaries; the book profile adds immutable
+placements and release snapshots, and a release never publishes a target Post or grants draft access.
+
 Children and directional chapter navigation inspect at most 20 raw occurrences per page. Continuations bind the
 catalogue, selected revision, parent/direction, original frontier and actor; sparse results never refill or lose
 progress. Moving an occurrence changes only its address in the new revision, preserving old exact links.

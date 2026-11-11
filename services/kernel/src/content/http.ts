@@ -31,7 +31,8 @@ export function mountContentHttp(
 }
 
 /** The route surface Content contributes to the kernel's composed type. */
-export type ContentHttpRoutes = ReturnType<typeof hostedChapterRoutes> &
+export type ContentHttpRoutes = ReturnType<typeof contentRoutes> &
+  ReturnType<typeof hostedChapterRoutes> &
   ReturnType<typeof noticeRoutes> &
   ReturnType<typeof subjectReactionRoutes> &
   ReturnType<typeof mediaRoutes>;
