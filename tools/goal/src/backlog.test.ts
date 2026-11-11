@@ -480,11 +480,48 @@ test('a product task stopped for over an hour without action is cancelled into i
   f.db
     .query('INSERT INTO worker_retry_intents(task_id, attempt, body) VALUES (?, 1, ?)')
     .run('retrying', JSON.stringify({ status: 'pending', options: {} }));
+  task(f.db, 'typing', 'stopped', { goal: 'web', manager: 'web', markdown: 'Completed source' }, 8);
+  f.db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)').run(
+    'typing',
+    JSON.stringify({
+      state: 'exited',
+      endedAt: new Date(old).toISOString(),
+      exitCode: 0,
+      failureKind: null,
+      blocker: null,
+      typingEvidencePending: {
+        result: 'Compiler input closure is unavailable for the last check-host typecheck.',
+        command: ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'],
+      },
+    }),
+  );
+  event(f.db, 'typing', 'typing-evidence-pending', old);
+  task(f.db, 'compiler-failed', 'stopped', { goal: 'web', manager: 'web', markdown: 'Compiler failure' }, 9);
+  f.db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)').run(
+    'compiler-failed',
+    JSON.stringify({
+      state: 'exited',
+      endedAt: new Date(old).toISOString(),
+      exitCode: 0,
+      failureKind: 'tool',
+      result: 'Last check-host run failed its typecheck.',
+    }),
+  );
+  event(f.db, 'compiler-failed', 'worker-exited', old);
+  const typingRecoveryCalls: { taskId: string; attempt: number }[] = [];
+  f.runtime.recoverTyping = async (ref) => {
+    typingRecoveryCalls.push(ref);
+    return { status: 'pending', result: 'Compiler input closure is unavailable for the last check-host typecheck.' };
+  };
 
   const sweep = await sweepBacklog(f.runtime);
 
-  expect(sweep.expired.map((entry) => entry.taskId)).toEqual(['expired', 'second']);
-  expect(f.cancelled).toEqual(['expired', 'second']);
+  expect(sweep.expired.map((entry) => entry.taskId)).toEqual(['expired', 'second', 'compiler-failed']);
+  expect(f.cancelled).toEqual(['expired', 'second', 'compiler-failed']);
+  expect(typingRecoveryCalls).toEqual([{ taskId: 'typing', attempt: 1 }]);
+  expect(f.db.query('SELECT current_attempt FROM worker_tasks WHERE id=?').get('typing')).toMatchObject({
+    current_attempt: 1,
+  });
   const failed = join(f.state, 'backlog', 'web', 'failed');
   expect(readFileSync(join(failed, 'expired.md'), 'utf8')).toBe(markdown);
   const reason = readFileSync(join(failed, 'expired.reason'), 'utf8');
@@ -492,12 +529,16 @@ test('a product task stopped for over an hour without action is cancelled into i
   expect(reason).toContain('spec-conflict: two requirements disagree');
   expect(existsSync(join(f.state, 'backlog', 'control-plane'))).toBe(false);
   const events = f.inbox.pending('web');
-  expect(events).toHaveLength(1);
-  expect(events[0]!.event.summary).toContain('Stopped-task limit: 2 task(s)');
-  expect(events[0]!.event.summary).toContain('expired, second');
+  expect(
+    events.some(({ event: delivered }) => delivered.summary.includes('typing-recover typing --expected-attempt 1')),
+  ).toBe(true);
+  const expiryNotice = events.find(({ event: delivered }) => delivered.summary.includes('Stopped-task limit:'));
+  expect(expiryNotice?.event.summary).toContain('Stopped-task limit: 3 task(s)');
+  expect(expiryNotice?.event.summary).toContain('expired, second, compiler-failed');
 
   // A cancelled task is no longer stopped, so the next sweep does nothing more.
   expect((await sweepBacklog(f.runtime)).expired).toEqual([]);
+  expect(typingRecoveryCalls).toHaveLength(1);
 });
 
 test('a running manager below eight ready briefs is woken at most once an hour', async () => {

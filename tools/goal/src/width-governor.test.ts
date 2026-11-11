@@ -132,7 +132,9 @@ test('a low-width active Goal receives accurate, durable wakeable counts once pe
   expect(pending[0]?.event.summary).toContain('Codex subset 1 confirmed live');
   expect(pending[0]?.event.summary).toContain('ready 2, durable pending starts 1, held 1, stopped 1, waiting 1');
   expect(pending[0]?.event.summary).toContain('Recover, reshape, or dispatch real work');
-  expect(pending[0]?.event.summary).toContain('Act on each actionable stopped task within an hour');
+  expect(pending[0]?.event.summary).toContain(
+    'recover completed source waiting only for compiler typing evidence first',
+  );
   expect(pending[0]?.event.summary).not.toContain('do not restart stopped work');
   expect(pending[0]?.event.summary).toContain('Unsubmitted work is not observable');
 

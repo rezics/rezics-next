@@ -7,7 +7,7 @@ import type { WorkerEvent } from './store.ts';
 import type { Task } from './types.ts';
 import { nativeCheckId, observeOrdinaryProof } from './verification.ts';
 
-export type StoppedActionHint = 'actionable' | 'preserved' | 'inspect-proof';
+export type StoppedActionHint = 'actionable' | 'preserved' | 'inspect-proof' | 'typing-recovery';
 
 /** Compact indexed facts for a stopped row. Only a legacy preservation decision needs a receipt read. */
 export function stoppedActionHint(
@@ -29,6 +29,17 @@ export function stoppedActionHint(
         AND e.kind='owner-contract-decision-accepted'
     ) THEN 'inspect-proof'`
     : `WHEN coalesce(json_extract(s.body, '$.brief.kind'), '')='verification' THEN 'actionable'`;
+  const typingRecovery = `
+      coalesce(json_extract(a.body, '$.state'), '')='exited'
+      AND json_extract(a.body, '$.exitCode')=0
+      AND coalesce(json_extract(a.body, '$.failureKind'), '')=''
+      AND coalesce(json_extract(a.body, '$.blocker'), '')=''
+      AND json_extract(a.body, '$.terminationIntent') IS NULL
+      AND (
+        json_type(a.body, '$.typingEvidencePending')='object'
+        OR coalesce(json_extract(a.body, '$.result'), '') LIKE 'Compiler input closure is unavailable for the last check-host typecheck.%'
+        OR coalesce(json_extract(a.body, '$.result'), '') LIKE 'Worktree content changed after the last check-host typecheck.%'
+      )`;
   return `(SELECT CASE
     WHEN json_extract(a.body, '$.terminationIntent.operation')='stop'
       AND coalesce(json_extract(a.body, '$.terminationIntent.requestedAt'), '')!='' THEN 'preserved'
@@ -36,6 +47,7 @@ export function stoppedActionHint(
       coalesce(json_extract(a.body, '$.terminationIntent.state'), '')!='complete' OR
       coalesce(json_extract(a.body, '$.terminationIntent.settledAt'), '')=''
     ) THEN 'preserved'
+    WHEN coalesce(json_extract(s.body, '$.brief.kind'), '')!='verification' AND (${typingRecovery}) THEN 'typing-recovery'
     WHEN coalesce(json_extract(s.body, '$.brief.kind'), '')!='verification' THEN 'actionable'
     ${verificationDecision}
     ELSE 'actionable' END

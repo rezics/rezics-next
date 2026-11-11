@@ -71,6 +71,10 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
     terminal('unreviewed-proof');
     event('unreviewed-proof', 'proof-failure-routed', { managerId: 'former-owner' });
     stopped('ordinary-stop', 'ordinary');
+    stopped('typing-only', 'typing', false, {
+      exitCode: 0,
+      typingEvidencePending: { result: 'Compiler input closure is unavailable for the last check-host typecheck.' },
+    });
     for (const [taskId, goal, owned] of [
       ['historical-proof', 'preserved', true],
       ['wrong-receipt', 'unreviewed', false],
@@ -101,12 +105,12 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
       );
     }
     const width = await sweepWidthGovernor(db, inbox, now);
-    expect(width.snapshot.system).toMatchObject({ stopped: 7, actionableStopped: 3 });
+    expect(width.snapshot.system).toMatchObject({ stopped: 8, actionableStopped: 4 });
     expect(width.snapshot.goals.find(({ goal }) => goal === 'preserved')).toMatchObject({
       stopped: 4,
       actionableStopped: 0,
     });
-    expect(width.deliveredGoals).toEqual(['ordinary', 'unreviewed']);
+    expect(width.deliveredGoals).toEqual(['ordinary', 'typing', 'unreviewed']);
     const cancelled: string[] = [];
     const backlog = await sweepBacklog({
       db,
@@ -123,6 +127,12 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
     });
     expect(backlog.expired).toEqual([{ goal: 'ordinary', taskId: 'ordinary-stop' }]);
     expect(cancelled).toEqual(['ordinary-stop']);
+    const typingEvents = inbox.pending('typing');
+    expect(
+      typingEvents.some(({ event: delivered }) =>
+        delivered.summary.includes('typing-recover typing-only --expected-attempt 1'),
+      ),
+    ).toBe(true);
     const row = db
       .query<{ body: string }, [string]>('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=1')
       .get('cancel-pending');
