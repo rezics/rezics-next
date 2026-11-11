@@ -3472,7 +3472,8 @@ Current receiving operations (authenticated owning manager or configured operati
   `bun tools/goal/src/cli.ts retry <task> --proof-start --expected-attempt <generation> [--brief <file>] [--remove-after <lane>]`
   saves the exact registered original and one durable start intent. It returns `created`, `waiting` or `pending`.
   A stopped/exited current attempt can capture fresh current dev directly, including when old native reservations
-  remain UNKNOWN; no separate logical-release operation or custody disposition is required.
+  remain UNKNOWN; no separate logical-release operation or custody disposition is required. A resident driver that
+  has finished routing an exited proof's outcome no longer fences that attempt; live workers and helpers still do.
 - `WorkerTasks.releaseProof(taskId, expectedAttempt, actor)` or
   `bun tools/goal/src/cli.ts retry <task> --release-proof --expected-attempt <generation>`
   optionally reconciles the current stopped or exited run's logical reservation. It returns `status: released` and the retained check UUIDs;

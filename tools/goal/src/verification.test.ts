@@ -2607,11 +2607,26 @@ test('ordinary exited command-ready proof retries without reconciliation and ref
       driver: processIdentity(),
     }));
     h.store.event(liveRef, 'proof-command-ready', { argv: submitted.brief.acceptance.command });
-    h.store.close(liveRef, 'stopped');
+    h.store.updateAttempt(liveRef, (value) => {
+      value.state = 'exited';
+      value.endedAt = new Date().toISOString();
+    });
+    h.store.updateTask(liveRef, (value) => {
+      value.state = 'stopped';
+    });
     expect(() => h.tasks.releaseProof(live.id, 1, h.actor)).toThrow('live or uncertain');
     expect(h.store.releaseExitedProofReservations(liveRef)).toEqual([]);
     expect(h.store.events(live.id, 1).some((event) => event.kind === 'proof-logical-reconciled')).toBe(false);
     expect(() => h.tasks.queueProofStart(live.id, { expectedAttempt: 1 }, h.actor)).toThrow('stale');
+    h.store.updateAttempt(liveRef, (value) => {
+      value.process = processIdentity();
+    });
+    h.store.event(liveRef, 'proof-failure-routed', {});
+    expect(() => h.tasks.queueProofStart(live.id, { expectedAttempt: 1 }, h.actor)).toThrow('stale');
+    h.store.updateAttempt(liveRef, (value) => {
+      value.process = null;
+    });
+    expect(h.tasks.queueProofStart(live.id, { expectedAttempt: 1 }, h.actor).status).toBe('created');
   } finally {
     h.dispose();
   }
