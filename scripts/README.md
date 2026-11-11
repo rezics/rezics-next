@@ -256,6 +256,8 @@ Remote worker checks preserve any existing local `GROWTH_PROFILE` lines and appe
 
 The version 1 `CheckRunInvocationBinding` has exactly these fields: `sourceRevision`, `indexTree`, `sourceSha256`, `argvSha256`, workspace-relative `cwd`, `semanticEnvironmentSha256`, `relocatedEnvironmentSha256`, `producerClosureSha256`, `hostsSha256`, `preparationCommandsSha256`, and `returnsSha256`. Hashes are SHA-256 over canonical JSON or the trusted source closure. Environment values never appear in invocation status records, descriptors, FD 3 messages, stdout or stderr. The separate owner-only prepared-execution file stores the exact original and relocated environment privately so a later process can run the same preparation. The source manifest verifies each frozen file or symlink, mode, deletion, candidate commit and index before preparation. A separate host receipt hashes the actual prepared source and generated file bytes after preparation; an unavailable receipt stays unavailable.
 
+Parallel checks read a clean candidate's committed tree without locking its index. Staged inputs are hashed through a private index copy; check preparation never waits on or removes another Git operation's index lock.
+
 ### Out-of-process prepared handoff
 
 The additive producer API is:

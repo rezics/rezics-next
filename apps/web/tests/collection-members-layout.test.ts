@@ -3,6 +3,8 @@ import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { renderToString } from 'react-dom/server';
+import { dirname } from 'node:path';
+import { m } from '../src/paraglide/messages.js';
 import type { EditableCollectionPage } from '../src/library/collection-load';
 import { collectionPageAddress } from '../src/library/collection-presentation';
 import { collectionComparisonReturnState } from '../src/library/collection-comparison/return';
@@ -296,15 +298,29 @@ test('mixed reading keeps occurrence positions and notes independent and returns
   expect(laterKey).not.toBe(listKey);
 });
 
-test('curator, member count and updated time share one metadata line', async () => {
+test('collection header presents the linked curator identity and readable count and update metadata', async () => {
   const html = await render();
-  const metadata = /<p\b(?=[^>]*data-slot="collection-metadata")[\s\S]*?<\/p>/.exec(html)?.[0] ?? '';
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window();
+  try {
+    window.document.body.innerHTML = html;
+    const owner = window.document.querySelector('[data-collection-owner]');
+    expect(owner?.textContent).toContain('Ada Lovelace');
+    expect(owner?.textContent).toContain('@ada');
+    expect(owner?.querySelector('a')?.getAttribute('href')).toBe('/en/@ada');
 
-  expect(metadata).toContain('Ada Lovelace');
-  expect(metadata).toContain('@ada');
-  expect(metadata).toContain('2 members');
-  expect(metadata).toContain(`dateTime="${stamp}"`);
-  expect((metadata.match(/aria-hidden="true">·<\/span>/g) ?? []).length).toBe(2);
+    const visibleMetadata = window.document.body.textContent ?? '';
+    expect(visibleMetadata).toContain(m.library_member_count({ count: 2 }));
+    expect(visibleMetadata).toContain(m.library_collection_updated());
+    const update = [...window.document.querySelectorAll('span')].find(
+      (element) => element.textContent?.includes(m.library_collection_updated()) && element.querySelector('time'),
+    );
+    expect(update?.querySelector('time')?.getAttribute('datetime')).toBe(stamp);
+  } finally {
+    await window.happyDOM.close();
+  }
 });
 
 test('comparison return admits one normalized same-locale Library directory intent', () => {

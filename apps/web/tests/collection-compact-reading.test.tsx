@@ -5,6 +5,8 @@ import { m } from '../src/paraglide/messages.js';
 import type { CollectionReadMember } from '../src/library/collection-member-details';
 import type { CollectionMember } from '../src/library/reads';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
+import { collectionPageAddress } from '../src/library/collection-presentation';
+import { collectionMemberReturnAddress } from '../src/subject/collection-return';
 import * as start from '../.storybook/react-start';
 
 mock.module('@tanstack/react-start', () => start);
@@ -12,7 +14,13 @@ mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
 const { CollectionReadMembers } = await import('../src/library/collection-page');
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-const address = `/en/collections/${id(1)}?cursor=next%2B%2F%3D&type=work&f.genre=fiction&l.genre=Fiction&returnTo=%2Fen%2Flibrary`;
+const search = { type: 'work', 'f.genre': 'fiction', 'l.genre': 'Fiction' };
+const directoryReturn = '/en/library/collections?cursor=directory-next&layout=previews';
+const address = (layout: 'list' | 'grid', cursor = 'next+/=') => {
+  const route = new URL(collectionPageAddress('en', id(1), cursor, search, layout), 'https://rezics.invalid');
+  route.searchParams.set('returnTo', directoryReturn);
+  return `${route.pathname}${route.search}`;
+};
 const note = `  Supplied note\n\n\t${'界'.repeat(600)}\n `;
 const members: CollectionMember[] = [2, 3].map((n) => ({
   id: id(n),
@@ -33,7 +41,9 @@ for (const layout of ['list', 'grid'] as const) {
     const { Window } = await import(
       Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
     );
-    const window = new Window({ url: `https://rezics.test${address}&layout=${layout}`, width: 390 });
+    const currentHref = address(layout);
+    const alternateLayout = layout === 'list' ? 'grid' : 'list';
+    const window = new Window({ url: `https://rezics.test${currentHref}`, width: 390 });
     const globals = {
       window,
       document: window.document,
@@ -72,7 +82,7 @@ for (const layout of ['list', 'grid'] as const) {
     const source = {};
     const render = (
       rows: readonly CollectionReadMember[] = members,
-      href = address,
+      href = currentHref,
       returnSource = source,
       view: 'list' | 'grid' = layout,
     ) =>
@@ -128,8 +138,10 @@ for (const layout of ['list', 'grid'] as const) {
         expect(via.searchParams.get('type')).toBe('work');
         expect(via.searchParams.getAll('f.genre')).toEqual(['fiction']);
         expect(via.searchParams.getAll('l.genre')).toEqual(['Fiction']);
-        expect(via.searchParams.get('layout')).toBe(layout);
-        expect(via.searchParams.get('returnTo')).toBe('/en/library/collections');
+        expect(via.searchParams.get('layout')).toBe(layout === 'grid' ? 'grid' : null);
+        expect(via.searchParams.get('layout') ?? 'list').toBe(layout);
+        expect(viaAddress).toBe(collectionMemberReturnAddress(currentHref, id(2)));
+        expect(via.searchParams.get('returnTo')).toBe(directoryReturn);
         expect(via.hash).toBe(`#collection-member-${id(2)}`);
         expect(subjectVisitReturn(viaAddress, 'en')).toBe(viaAddress);
         const copy = detail()!.querySelector<HTMLButtonElement>(`[data-copy-reference="${id(10 + index)}"]`)!;
@@ -157,10 +169,10 @@ for (const layout of ['list', 'grid'] as const) {
 
       // Address, native observation and layout replacement retire detail without restoring stale opener focus.
       for (const replace of [
-        () => render(members, address.replace('cursor=next', 'cursor=other')),
-        () => render(members, address, {}),
+        () => render(members, address(layout, 'other-cursor')),
+        () => render(members, currentHref, {}),
         () => render(members.map((member) => ({ ...member }))),
-        () => render(members, address, source, layout === 'list' ? 'grid' : 'list'),
+        () => render(members, address(alternateLayout), source, alternateLayout),
       ]) {
         await render();
         const opener = await open(0);
@@ -174,7 +186,7 @@ for (const layout of ['list', 'grid'] as const) {
       delayCopy = true;
       await act(async () => detail()!.querySelector<HTMLButtonElement>('[data-copy-reference]')!.click());
       expect(detail()!.textContent).toContain(m.collection_reading_copy_pending());
-      await render(members, address, {});
+      await render(members, currentHref, {});
       await act(async () => finishCopy!());
       expect(detail()).toBeNull();
       expect(host.textContent).not.toContain(m.collection_reading_copy_done());
@@ -183,8 +195,10 @@ for (const layout of ['list', 'grid'] as const) {
       expect(host.querySelector('[data-collection-member-id]')).toBeNull();
       await open(1);
       const projectionLink = detail()!.querySelector<HTMLAnchorElement>('[data-comparison-reference]')!;
-      const projectionVia = new URL(new URL(projectionLink.href).searchParams.get('via')!, 'https://rezics.test');
-      expect(projectionVia.searchParams.get('returnTo')).toBe('/en/library/collections');
+      const projectionViaAddress = new URL(projectionLink.href).searchParams.get('via')!;
+      expect(projectionViaAddress).toBe(collectionMemberReturnAddress(currentHref));
+      const projectionVia = new URL(projectionViaAddress, 'https://rezics.test');
+      expect(projectionVia.searchParams.get('returnTo')).toBe(directoryReturn);
       expect(projectionVia.hash).toBe('');
       expect(detail()!.querySelector('[data-slot="collection-member-note"]')).toBeNull();
 

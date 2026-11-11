@@ -26,6 +26,11 @@ never scans other pages or substitutes the same subject at a different occurrenc
 Decision: each comparison departure or fragment navigation admits one return; native page, reader or address
 replacement retires it, and moving focus elsewhere consumes it even if focus later returns to the document body.
 
+Decision: compact-reading Web fixtures derive `currentHref` from `collectionPageAddress` for the active cursor,
+filters and canonical layout, then retain a valid same-locale Collection-directory return. Occurrence and projection
+references assert the `collectionMemberReturnAddress` owner preserves its normalized destination. Header acceptance
+checks linked curator identity separately from the readable member count and native update time.
+
 Source evidence: `docs/research/page-needs-api-render-audit.md` (A06 and Collection), `web-component-parity.md`,
 `api-first-platform-coverage.md`, and `seeded-core-page-review.md`; read-only `legacy-final` work-page/credits.tsx
 and library/library-list.tsx; earlier checkout collection-detail-page.tsx, collection-items-page.tsx,
