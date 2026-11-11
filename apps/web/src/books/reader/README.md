@@ -56,7 +56,9 @@ Publication/current-structure admission, target access and prepared-viewer repla
 object and notify synchronously, including equal-value and A/B/A replacement. Replacements cannot recycle an old
 snapshot. `HostedBookSource` has the same incarnation rule. Source/session/address/locale/viewer retirement removes
 bodies, rows, return coordinates, pending requests and late focus effects. Transport cancellation is advisory;
-queued dispatch, completion and focus also check their original visit. Retired readings require deliberate reopen.
+queued dispatch, completion and focus also check their original visit. Deliberate reopen rereads the active exact
+address, never the host's earlier initial chapter or a retained payload. Replacing the host visit discards that
+reopen address, including A/B/A replacement.
 
 Native reading observes both frozen and current releases, resolves the selected exact body and current occurrence,
 reads only its bounded ancestor path, and requests at most one neighbour in each direction. It rechecks both

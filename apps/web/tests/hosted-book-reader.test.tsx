@@ -169,6 +169,12 @@ test('nested levels read one window per activation; reused bodies keep distinct 
   expect(document.activeElement).toBe(selected);
   expect(host.querySelector('article')).toBeNull();
   expect(client.isFetching()).toBe(0);
+  await click(button(m.book_reader_return_chapter()));
+  await act(async () => book.replace());
+  expect(host.querySelector('article')).toBeNull();
+  await click(button(m.book_reader_retry()));
+  expect(source.read.mock.calls.at(-1)![0].address).toEqual(reused);
+  expect(host.querySelector('h1')?.textContent).toBe('Dawn, an echo / 再読');
 });
 
 test('sparse continuation, failure and retry retain the opaque cursor and the selected exact return', async () => {
