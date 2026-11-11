@@ -22,7 +22,12 @@ import { createRatedSubjectSource } from '../../../src/search/rated-source.ts';
 import { closeOwnedSemanticAuth, type OwnedSemanticResource } from '../../semantic/outcome-auth.ts';
 import { createSemanticDriver, type SemanticOutcomeDriver } from '../../semantic/outcome-driver.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
-import { createOutcomeRpc, type OutcomeRpc } from './outcome-rpc.ts';
+import {
+  createOutcomeRpc,
+  isOutcomeWorkerReadyMessage,
+  outcomeWorkerProcessEnvironment,
+  type OutcomeRpc,
+} from './outcome-rpc.ts';
 import type { WorkerStats } from './outcome-worker.ts';
 import { createReleasedBookImport } from './released-imports.ts';
 import { assertNativeGenerationCoverage } from './native-generation.ts';
@@ -296,17 +301,46 @@ function supervise(parent: OutcomeRpc) {
   async function launchWorker(env: Record<string, string | undefined>) {
     const child = fork(`${import.meta.dir}/outcome-worker.ts`, [], {
       execPath: process.execPath,
-      env: {
-        ...Object.fromEntries(
-          Object.entries(process.env).filter(([key]) => /^(PATH|HOME|TMPDIR|TEMP|LANG|TZ|BUN_.+)$/.test(key)),
-        ),
-        // SQL modules load before the IPC init handler: use this same world's database at import time too.
-        ...env,
-      },
+      // SQL modules load before the IPC init handler: use this world's database and its prepared analysis cache.
+      env: outcomeWorkerProcessEnvironment(env),
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     });
     worker = child;
     exited = false;
+    let onMessage!: (packet: unknown) => void;
+    let onError!: (error: Error) => void;
+    let onDisconnect!: () => void;
+    let onExit!: (code: number | null, signal: string | null) => void;
+    let readySettled = false;
+    const ready = new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        child.off('message', onMessage);
+        child.off('error', onError);
+        child.off('disconnect', onDisconnect);
+        child.off('exit', onExit);
+      };
+      const settle = (error?: Error) => {
+        if (readySettled) return;
+        readySettled = true;
+        cleanup();
+        if (error) reject(error);
+        else resolve();
+      };
+      onMessage = (packet) => {
+        if (isOutcomeWorkerReadyMessage(packet)) settle();
+      };
+      onError = (error) => settle(error);
+      onDisconnect = () => settle(new Error(`Worker IPC disconnected before ready: ${observation.workerOutput}`));
+      onExit = (code, signal) =>
+        settle(
+          new Error(`Worker exited before IPC ready: ${JSON.stringify({ code, signal })}: ${observation.workerOutput}`),
+        );
+      child.on('message', onMessage);
+      child.once('error', onError);
+      child.once('disconnect', onDisconnect);
+      child.once('exit', onExit);
+    });
+    void ready.catch(() => {});
     const output = (chunk: unknown) => {
       observation.workerOutput = (observation.workerOutput + String(chunk)).slice(-65_536);
     };
@@ -355,6 +389,7 @@ function supervise(parent: OutcomeRpc) {
     );
     if (!child.pid) throw new Error('Worker has no process identity');
     await own({ kind: 'worker_process', pid: child.pid });
+    await ready;
     const stats = await workerRpc.request<WorkerStats>('init', { env });
     observation.workerStats = stats;
     return stats;

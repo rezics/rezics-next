@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
-import { createOutcomeRpc, type OutcomeRpc, type OutcomeRpcTransport } from './support/outcome-rpc.ts';
+import {
+  createOutcomeRpc,
+  outcomeWorkerProcessEnvironment,
+  type OutcomeRpc,
+  type OutcomeRpcTransport,
+} from './support/outcome-rpc.ts';
 
 type Packet = Record<string, unknown>;
 type Handler = (method: string, params: unknown) => unknown;
@@ -80,6 +85,26 @@ function unexpected(method: string): never {
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+test('native outcome workers inherit the check SQL analysis config without broadening their environment', () => {
+  expect(
+    outcomeWorkerProcessEnvironment(
+      { DATABASE_URL: 'postgres://worker/fixture', OPENSEARCH_URL: 'http://search.test' },
+      {
+        PATH: '/usr/bin',
+        BUN_DEBUG: '1',
+        REYLO_CONFIG: '/private/check/.reylo.yaml',
+        AWS_SECRET_ACCESS_KEY: 'must-not-cross',
+      },
+    ),
+  ).toEqual({
+    PATH: '/usr/bin',
+    BUN_DEBUG: '1',
+    REYLO_CONFIG: '/private/check/.reylo.yaml',
+    DATABASE_URL: 'postgres://worker/fixture',
+    OPENSEARCH_URL: 'http://search.test',
+  });
+});
 
 /** Tracks how many times a promise settled and how. */
 function track<T>(promise: Promise<T>) {
