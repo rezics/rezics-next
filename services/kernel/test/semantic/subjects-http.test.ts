@@ -221,7 +221,8 @@ test('a read returns the subject, its session token and the labels of its proper
 });
 
 test('anonymous inverse relation pages keep current summaries and continuation across source homes', async () => {
-  const person = (await create({ type: 'schema:Person', labels: { en: 'Cross-home author' } })).body.subject.id as string;
+  const person = (await create({ type: 'schema:Person', labels: { en: 'Cross-home author' } })).body.subject
+    .id as string;
   const homes = new Set<number>();
   const books: string[] = [];
   for (let index = 0; index < 3; index++) {
@@ -259,9 +260,9 @@ test('anonymous inverse relation pages keep current summaries and continuation a
   expect(second.body.next).toBeNull();
   const links = [...first.body.links, ...second.body.links];
   expect(new Set(links.map((link) => link.subject))).toEqual(new Set(books));
-  expect(
-    links.every((link) => link.summary?.type === 'schema:Book' && link.label.startsWith('Cross-home book ')),
-  ).toBe(true);
+  expect(links.every((link) => link.summary?.type === 'schema:Book' && link.label.startsWith('Cross-home book '))).toBe(
+    true,
+  );
 });
 
 test('a malformed, missing or unreadable subject is the same 404', async () => {
