@@ -7,6 +7,7 @@ import {
 } from './worker-host-custody.ts';
 import { processIdentity, sameProcess } from './process.ts';
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { agentAdapter } from './agents.ts';
@@ -25,7 +26,7 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerJob } from './job.ts';
 import { defaultPolicy } from './policy.ts';
 import { settle } from './settle.ts';
-import { harness } from './test-support.ts';
+import { brief, harness } from './test-support.ts';
 import {
   lastTransportFailure,
   listOpenToolIncidents,
@@ -36,6 +37,8 @@ import {
 import type { Attempt } from './types.ts';
 import { workerCheckBudgetDirectory } from './worker-check-budget.ts';
 import { runWorkerCommand } from './worker-commands.ts';
+import { authorizeProof, type ProofReservation } from './verification.ts';
+import { git } from './tasks.ts';
 
 const TLS = 'Error: [aborted] Client network socket disconnected before secure TLS connection was established';
 const CONNECTION_LOST = 'Connection lost, reconnecting to https://agentn.global.api5.cursor.sh';
@@ -203,6 +206,105 @@ function runningAttempt(h: ReturnType<typeof harness>, stderr: string, logEvents
   return h.store.attempt(attempt);
 }
 
+function registeredProofAttempt(h: ReturnType<typeof harness>): {
+  taskId: string;
+  attempt: Attempt;
+  checkId: string;
+} {
+  const commit = git(h.root, ['rev-parse', 'HEAD']);
+  git(h.root, ['branch', 'dev', commit]);
+  h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+  const actor = { id: 'operations', sessionId: 'proof-owner-session' };
+  h.store.db
+    .query('INSERT INTO manager_sessions VALUES (?,?)')
+    .run(actor.id, JSON.stringify({ status: 'running', threadId: actor.sessionId }));
+  const sourceBrief = brief();
+  sourceBrief.acceptance.command = ['bun', 'test', 'original.test.ts'];
+  const source = h.store.createTask(
+    sourceBrief,
+    { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: commit },
+    'implementation',
+  );
+  h.store.updateTask({ taskId: source.id, attempt: 0 }, (task) => {
+    task.state = 'integrated';
+    task.integratedCommit = commit;
+  });
+  const proofBrief = {
+    ...sourceBrief,
+    kind: 'verification' as const,
+    paths: [],
+    proof: { journey: 'Original journey', sourceTasks: [source.id], sourceCommit: commit },
+  };
+  const authorization = authorizeProof(h.store, h.root, proofBrief, actor, 'operations', 'dev');
+  const proof = h.store.createTask(
+    proofBrief,
+    { briefPath: h.briefFile, worktree: h.root, branch: 'main', base: commit },
+    'implementation',
+  );
+  h.store.updateTask({ taskId: proof.id, attempt: 0 }, (task) => {
+    task.proofAuthorization = authorization;
+  });
+  const attempt = h.store.nextAttempt({ taskId: proof.id, attempt: 0 }, (number): Attempt => ({
+    taskId: proof.id,
+    attempt: number,
+    state: 'running',
+    profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' },
+    pool: 'fixture',
+    tableVersion: 'fixture',
+    experiment: null,
+    startedAt: new Date().toISOString(),
+    endedAt: null,
+    process: null,
+    driver: null,
+    session: 'proof-session',
+    logPath: join(h.settings.stateDirectory, 'runs', proof.id, `${number}.jsonl`),
+    evidencePath: join(h.settings.stateDirectory, 'evidence', proof.id, String(number)),
+    auxiliaryProcesses: [],
+    fixRound: 0,
+    consulted: false,
+    previousFailure: null,
+    failure: null,
+    escalation: null,
+    before: null,
+    after: null,
+    exitCode: null,
+    result: '',
+    blocker: null,
+    approaches: [],
+  }));
+  mkdirSync(join(attempt.logPath, '..'), { recursive: true });
+  writeFileSync(attempt.logPath, `${JSON.stringify({ type: 'thread.started', thread_id: 'proof-session' })}\n`);
+  h.store.updateTask(attempt, (task) => {
+    task.state = 'running';
+  });
+  const checkId = randomUUID();
+  return { taskId: proof.id, attempt, checkId };
+}
+
+function writeOwnedWrapperResult(
+  h: ReturnType<typeof harness>,
+  taskId: string,
+  checkId: string,
+  status: 'running' | 'finished',
+): void {
+  const directory = join(h.root, '.temp/goal/checks/results');
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(
+    join(directory, `${checkId}.json`),
+    JSON.stringify({
+      custodyVersion: 1,
+      id: checkId,
+      cwd: h.root,
+      argv: ['bun', 'test', 'original.test.ts'],
+      ownership: { taskId, attempt: 1 },
+      status,
+      ...(status === 'finished' ? { exitCode: 0 } : {}),
+      physicalRunId: randomUUID(),
+      log: '.temp/goal/checks/original.log',
+    }),
+  );
+}
+
 test('an empty or unparsed result records the last stderr line after the worker-ended prefix', async () => {
   const h = settleHarness();
   try {
@@ -217,6 +319,78 @@ test('an empty or unparsed result records the last stderr line after the worker-
     await settle(h.tasks, { attempt: empty, exited: Promise.resolve({ code: 1, signal: null }) }, { enqueue() {} });
     expect(h.store.attempt(empty).result).toBe('Worker ended without a success report (exit 1): ');
     expect(blockerFingerprint(h.store.attempt(empty))).toBe('');
+  } finally {
+    h.dispose();
+  }
+}, 15_000);
+
+test('a lost ordinary proof worker waits on the owned UUID when logical release omitted linked checks', async () => {
+  const h = settleHarness();
+  try {
+    const { attempt, taskId, checkId } = registeredProofAttempt(h);
+    writeOwnedWrapperResult(h, taskId, checkId, 'running');
+    await settle(h.tasks, { attempt, exited: Promise.resolve({ code: null, signal: 'SIGTERM' }) }, { enqueue() {} });
+    expect(h.store.attempt(attempt)).toMatchObject({ state: 'waiting', checks: [checkId], session: 'proof-session' });
+    expect(h.store.task(taskId).currentAttempt).toBe(1);
+  } finally {
+    h.dispose();
+  }
+}, 15_000);
+
+test('an exact terminal ordinary proof settles successfully after worker loss without a structured report', async () => {
+  const h = settleHarness();
+  try {
+    const { attempt, taskId, checkId } = registeredProofAttempt(h);
+    writeOwnedWrapperResult(h, taskId, checkId, 'finished');
+    await settle(h.tasks, { attempt, exited: Promise.resolve({ code: null, signal: 'SIGTERM' }) }, { enqueue() {} });
+    expect(h.store.task(taskId).state).toBe('verified');
+    expect(h.store.record(attempt)?.proof).toMatchObject({
+      status: 'terminal',
+      passed: true,
+      record: { id: checkId, ownership: { taskId, attempt: 1 }, exitCode: 0 },
+    });
+    expect(h.store.record(attempt)?.outcome).toBe('verified');
+  } finally {
+    h.dispose();
+  }
+}, 15_000);
+
+test('worker loss cannot use an ordinary wrapper result to bypass native proof custody', async () => {
+  const h = settleHarness();
+  try {
+    const { attempt, taskId, checkId } = registeredProofAttempt(h);
+    const task = h.store.task(taskId);
+    const sourceCommit = task.brief.proof!.sourceCommit;
+    const sourceTree = git(h.root, ['rev-parse', `${sourceCommit}^{tree}`]);
+    const nativeRun: ProofReservation = {
+      binding: {
+        version: 1,
+        reservationToken: randomUUID(),
+        checkId: randomUUID(),
+        goal: task.brief.goal,
+        taskId,
+        attempt: 1,
+        sourceCommit,
+        sourceTree,
+        argv: [...task.brief.acceptance.command],
+        cwd: task.worktree,
+      },
+      status: 'unknown',
+      observation: {
+        status: 'unknown',
+        passed: false,
+        cause: 'Native observer did not prove terminality',
+        record: null,
+        physical: [],
+      },
+    };
+    h.store.updateTask(attempt, (current) => {
+      current.proofRun = nativeRun;
+    });
+    writeOwnedWrapperResult(h, taskId, checkId, 'finished');
+    await settle(h.tasks, { attempt, exited: Promise.resolve({ code: null, signal: 'SIGTERM' }) }, { enqueue() {} });
+    expect(h.store.task(taskId).state).toBe('stopped');
+    expect(h.store.record(attempt)?.outcome).not.toBe('verified');
   } finally {
     h.dispose();
   }

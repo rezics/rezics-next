@@ -15,7 +15,12 @@ import {
 import { dirname, join, resolve } from 'node:path';
 import { hostname } from 'node:os';
 import { acquireStackSlot } from './stack-lease.ts';
-import { requestExecutionCancellation } from './remote-check.ts';
+import {
+  remoteCheckCustodyCallbacks,
+  requestExecutionCancellation,
+  type RemoteCheckSettlement,
+  type RemotePhysicalRunReceipt,
+} from './remote-check.ts';
 import {
   processTreeCpuTicks,
   readWorkerCheckHistory,
@@ -42,6 +47,10 @@ import {
   registrationPath,
   runnerCommandMatches,
   sameProcess,
+  initializeRemoteRunCustody,
+  physicalHistoryPath,
+  processIdentity,
+  remoteRunCustodyPath,
   validControllerProofRegistration,
   withCheckFence,
   writeAtomicJson,
@@ -71,6 +80,9 @@ function restoreWorkerEnvironment(old: NodeJS.ProcessEnv): void {
     'WORKER_REMOTE_ARGS',
     'WORKER_REMOTE_MODE',
     'WORKER_REMOTE_CANCEL_ID',
+    'REZICS_CHECK_REMOTE_CUSTODY_FILE',
+    'REZICS_CHECK_REMOTE_CUSTODY_ID',
+    'REZICS_CHECK_PHYSICAL_RUN_ID',
     'KERNEL_CHECK_REMOTE',
     'KERNEL_CHECK_ON_REMOTE',
     'WORKER_WRAPPER_MARKER',
@@ -611,6 +623,135 @@ function writeRunningRecord(
   );
 }
 
+async function deadRunnerIdentity() {
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    detached: true,
+    stdio: 'ignore',
+  });
+  if (!child.pid) throw new Error('fixture runner did not start');
+  const identity = processIdentity(child.pid);
+  if (!identity) throw new Error('fixture runner identity was unavailable');
+  child.kill('SIGKILL');
+  await new Promise<void>((resolveWait, reject) => {
+    child.once('exit', () => resolveWait());
+    child.once('error', reject);
+  });
+  await untilRecorded(() => processGroupMembers(identity.group).length === 0);
+  return identity;
+}
+
+async function writeLostRemoteCheck(
+  root: string,
+  state: 'pending' | 'terminal' | 'empty' | 'missing' | 'mismatched',
+): Promise<{ id: string; physicalRunId: string; runnerIdentity: Awaited<ReturnType<typeof deadRunnerIdentity>> }> {
+  const id = randomUUID();
+  const physicalRunId = randomUUID();
+  const taskId = randomUUID();
+  const ownership = { taskId, attempt: 1 };
+  const argv = ['bun', 'test', 'proof.test.ts'];
+  const remoteArgv = ['env', 'REZICS_CHECK_TASK_ID=' + taskId, 'bun', 'test', 'proof.test.ts'];
+  const runnerIdentity = await deadRunnerIdentity();
+  const log = `.temp/goal/checks/worker-check-${id}.log`;
+  mkdirSync(join(root, '.temp/goal/checks/results'), { recursive: true });
+  writeFileSync(join(root, log), 'remote check reserved\n');
+  writeAtomicJson(join(root, '.temp/goal/checks/results', `${id}.json`), {
+    custodyVersion: 1,
+    id,
+    cwd: root,
+    argv,
+    ownership,
+    status: 'running',
+    log,
+    physicalRunId,
+    runnerIdentity,
+    runnerPid: runnerIdentity.pid,
+    runnerHost: hostname(),
+  });
+  writeAtomicJson(physicalHistoryPath(root, id, physicalRunId), {
+    version: 1,
+    id,
+    cwd: root,
+    argv,
+    remoteArgv,
+    ownership,
+    physicalRunId,
+    runnerHost: hostname(),
+    runnerIdentity,
+    log,
+    status: state === 'terminal' ? 'finished' : 'running',
+    remoteExpected: true,
+    createdAt: new Date().toISOString(),
+    ...(state === 'terminal' ? { exitCode: 0, finishedAt: new Date().toISOString() } : {}),
+  });
+  if (state !== 'missing') {
+    initializeRemoteRunCustody(root, physicalRunId, { checkId: id, ownership, argv, remoteArgv });
+    const binding = {
+      checkId: id,
+      ownership,
+      argv,
+      remoteArgv,
+    };
+    const attempts =
+      state === 'pending'
+        ? [{ host: 'check-a', id: 'reservation-pending', status: 'running', startedAt: new Date().toISOString() }]
+        : state === 'terminal'
+          ? [
+              {
+                host: 'check-a',
+                id: 'reservation-abandoned',
+                status: 'not-started',
+                startedAt: new Date().toISOString(),
+                endedAt: new Date().toISOString(),
+              },
+              retainedAttempt('check-b', 'reservation-terminal'),
+            ]
+          : [];
+    writeAtomicJson(remoteRunCustodyPath(root, physicalRunId), {
+      version: 1,
+      physicalRunId: state === 'mismatched' ? randomUUID() : physicalRunId,
+      binding,
+      status: state === 'terminal' ? 'terminal' : 'running',
+      attempts,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  return { id, physicalRunId, runnerIdentity };
+}
+
+function retainedAttempt(host: string, run: string) {
+  const native = { schema: 1, host, run, exitCode: 0, lifetimeFailure: null, resources: null };
+  const settlement = {
+    schema: 1,
+    host,
+    run,
+    native,
+    preparedInputs: null,
+    returns: { schema: 1, status: 'empty', entries: [], missing: [], failures: [] },
+    cleanup: {
+      schema: 1,
+      host,
+      run,
+      status: 'verified',
+      supervisorStopped: true,
+      commandGroupTerminal: true,
+      containersRemoved: true,
+      runDirectoryRemoved: true,
+      failures: [],
+    },
+    transportChildReaped: true,
+  };
+  return {
+    host,
+    id: run,
+    status: 'terminal',
+    startedAt: new Date().toISOString(),
+    endedAt: new Date().toISOString(),
+    native,
+    settlement,
+    cleanup: settlement.cleanup,
+  };
+}
+
 async function withIsolatedTask(root: string, run: () => Promise<void>): Promise<void> {
   const old = { ...process.env };
   const registry = join(root, 'registry');
@@ -727,6 +868,54 @@ test('worker-check --wait reruns once when the runner is gone but its result sti
   });
 });
 
+test('a lost wrapper waits on its exact remote reservation without starting a replacement check', async () => {
+  const root = mkdtempSync(join(suiteRoot, 'worker-check-retained-pending-'));
+  dirs.push(root);
+  const { id, physicalRunId } = await writeLostRemoteCheck(root, 'pending');
+  const out: string[] = [];
+  expect(await waitWorkerCheck(id, root, 30, { pollMs: 5, write: (chunk) => out.push(chunk) })).toBe(75);
+  expect(out.join('')).toContain('owned remote run remains pending');
+  expect(readWorkerCheckRecord(id, root).status).toBe('running');
+  expect(readWorkerCheckHistory(id, physicalRunId, root)?.status).toBe('running');
+  expect(readFileSync(remoteRunCustodyPath(root, physicalRunId), 'utf8')).toContain('reservation-pending');
+  expect(existsSync(join(root, 'rerun-marker'))).toBe(false);
+});
+
+test('a retained terminal result survives host move and duplicate wake without another physical run', async () => {
+  const root = mkdtempSync(join(suiteRoot, 'worker-check-retained-terminal-'));
+  dirs.push(root);
+  const { id, physicalRunId } = await writeLostRemoteCheck(root, 'terminal');
+  expect(readWorkerCheckHistory(id, physicalRunId, root)?.status).toBe('finished');
+  const first: string[] = [];
+  expect(await waitWorkerCheck(id, root, 100, { pollMs: 5, write: (chunk) => first.push(chunk) })).toBe(0);
+  const record = readWorkerCheckRecord(id, root);
+  expect(record.status).toBe('finished');
+  expect(record.physicalRun).toMatchObject({ host: 'check-b', run: 'reservation-terminal', exitCode: 0 });
+  expect(readWorkerCheckHistory(id, physicalRunId, root)?.terminalProof).toMatchObject({
+    local: true,
+    remote: true,
+    resultKnown: true,
+  });
+  expect(await waitWorkerCheck(id, root, 0, { write: () => {} })).toBe(0);
+  expect(readWorkerCheckRecord(id, root).physicalRun).toEqual(record.physicalRun);
+  expect(record.reruns).toBeUndefined();
+  expect(existsSync(join(root, 'rerun-marker'))).toBe(false);
+});
+
+test('missing, empty or mismatched physical identity keeps a lost remote check unknown', async () => {
+  for (const state of ['missing', 'empty', 'mismatched'] as const) {
+    const root = mkdtempSync(join(suiteRoot, `worker-check-retained-${state}-`));
+    dirs.push(root);
+    const { id, physicalRunId } = await writeLostRemoteCheck(root, state);
+    const out: string[] = [];
+    expect(await waitWorkerCheck(id, root, 100, { pollMs: 5, write: (chunk) => out.push(chunk) })).toBe(75);
+    expect(out.join('')).toContain('physical custody is unknown');
+    expect(readWorkerCheckRecord(id, root).status).toBe('running');
+    expect(readWorkerCheckHistory(id, physicalRunId, root)?.status).toBe('running');
+    expect(existsSync(join(root, 'rerun-marker'))).toBe(false);
+  }
+});
+
 test('a check whose log has been silent for 10 minutes is stopped and rerun once with host and log reported', async () => {
   const root = mkdtempSync(join(suiteRoot, 'worker-check-stalled-runner-'));
   dirs.push(root);
@@ -819,19 +1008,29 @@ function workerFixture(): {
   const localMarker = join(root, 'local-marker');
   writeFileSync(
     join(scripts, 'remote-check.ts'),
-    `import { appendFileSync, cpSync, existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+    `import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { requestExecutionCancellation } from ${JSON.stringify(join(repository, 'scripts/remote-check.ts'))};
 appendFileSync(process.env.WORKER_REMOTE_EVENTS!, 'remote\\n');
 appendFileSync(process.env.WORKER_REMOTE_EVENTS! + '.args', JSON.stringify(process.argv.slice(2)));
-const markRemoteTerminal = (started = false) => {
+const custodyFile = process.env.REZICS_CHECK_REMOTE_CUSTODY_FILE;
+if (custodyFile) {
+  if (!existsSync(custodyFile)) throw new Error('remote reservation was not persisted before command dispatch');
+  const custody = JSON.parse(readFileSync(custodyFile, 'utf8'));
+  if (custody.status !== 'running' || custody.physicalRunId !== process.env.REZICS_CHECK_PHYSICAL_RUN_ID || custody.binding?.checkId !== process.env.REZICS_CHECK_REMOTE_CUSTODY_ID || custody.attempts.length !== 0)
+    throw new Error('remote reservation binding was not initialized for this physical check');
+  appendFileSync(process.env.WORKER_REMOTE_EVENTS! + '.custody-start', JSON.stringify(custody.binding));
+}
+const markRemoteTerminal = (started = false, exitCode = 0) => {
   const file = process.env.REZICS_CHECK_REMOTE_CUSTODY_FILE;
   const physicalRunId = process.env.REZICS_CHECK_PHYSICAL_RUN_ID;
   if (!file || !physicalRunId) return;
-  mkdirSync(dirname(file), { recursive: true });
+  const custody = JSON.parse(readFileSync(file, 'utf8'));
   const now = new Date().toISOString();
-  const attempts = started ? [{ host: 'check-a', id: 'fixture-run', status: 'terminal', startedAt: now, endedAt: now }] : [];
-  writeFileSync(file, JSON.stringify({ version: 1, physicalRunId, status: 'terminal', attempts, updatedAt: now }));
+  const native = { schema: 1, host: 'check-a', run: 'fixture-run', exitCode, lifetimeFailure: null, resources: null };
+  const settlement = { schema: 1, host: 'check-a', run: 'fixture-run', native, preparedInputs: null, returns: { schema: 1, status: 'empty', entries: [], missing: [], failures: [] }, cleanup: { schema: 1, host: 'check-a', run: 'fixture-run', status: 'verified', supervisorStopped: true, commandGroupTerminal: true, containersRemoved: true, runDirectoryRemoved: true, failures: [] }, transportChildReaped: true };
+  const attempts = [{ host: 'check-a', id: 'fixture-run', status: started ? 'terminal' : 'not-started', startedAt: now, endedAt: now, ...(started ? { native, settlement, cleanup: settlement.cleanup } : {}) }];
+  writeFileSync(file, JSON.stringify({ ...custody, status: 'terminal', attempts, updatedAt: now }));
 };
 writeFileSync(process.env.WORKER_REMOTE_ARGS!, JSON.stringify(Bun.argv.slice(2)));
 if (process.env.WORKER_REMOTE_PROFILE_OUTPUT) {
@@ -891,7 +1090,7 @@ if (mode === 'artifact') {
   cpSync(remoteStage, localStage, { recursive: true });
   rmSync(remoteRoot, { recursive: true, force: true });
   appendFileSync(process.env.WORKER_REMOTE_EVENTS! + '.artifact-cleanup', 'removed\\n');
-  markRemoteTerminal(true);
+  markRemoteTerminal(true, code);
   process.exit(code);
 }
 const waitForRelease = async () => {
@@ -924,8 +1123,8 @@ if (mode === 'telemetry') {
   console.error('remote-check: command 0.500 s on check-a');
   process.stdout.write('x'.repeat(20_000) + '\\n');
 }
-if (process.env.WORKER_REMOTE_MODE === 'failure') { markRemoteTerminal(true); process.exit(7); }
-if (process.env.WORKER_REMOTE_MODE === 'failure-75') { markRemoteTerminal(true); process.exit(75); }
+if (process.env.WORKER_REMOTE_MODE === 'failure') { markRemoteTerminal(true, 7); process.exit(7); }
+if (process.env.WORKER_REMOTE_MODE === 'failure-75') { markRemoteTerminal(true, 75); process.exit(75); }
 if (process.env.WORKER_REMOTE_MODE === 'queued') {
   console.error('remote-check: every check slot is busy; waiting for a free one (check-a 0/1 free)');
   console.error('remote-check: every check slot is busy; waiting for a free one (check-a 0/1 free)');
@@ -1324,6 +1523,81 @@ test('stack-free placement: native command still reaches existing remote admissi
     expect(await runWorkerCheck(command, fixture.root, false)).toBe(0);
     expect(readFileSync(marker, 'utf8')).toBe('local');
     expect(existsSync(fixture.remoteEvents)).toBe(false);
+  } finally {
+    restoreWorkerEnvironment(old);
+  }
+});
+
+test('managed remote command starts only after its exact wrapper and physical custody is durable', async () => {
+  const fixture = workerFixture();
+  const hosts = writeHosts(fixture);
+  const checkId = randomUUID();
+  const physicalRunId = randomUUID();
+  const ownership = { taskId: randomUUID(), attempt: 1 };
+  const argv = ['bun', 'test', 'services/kernel/test/native-placement.test.ts'];
+  const remoteArgv = ['env', `REZICS_CHECK_PHYSICAL_RUN_ID=${physicalRunId}`, ...argv];
+  const custodyFile = remoteRunCustodyPath(fixture.root, physicalRunId);
+  const commandStarted = join(fixture.root, 'remote-command-started');
+  const old = { ...process.env };
+  try {
+    initializeRemoteRunCustody(fixture.root, physicalRunId, { checkId, ownership, argv, remoteArgv });
+    process.env.REZICS_CHECK_REMOTE_CUSTODY_FILE = custodyFile;
+    process.env.REZICS_CHECK_REMOTE_CUSTODY_ID = checkId;
+    process.env.REZICS_CHECK_PHYSICAL_RUN_ID = physicalRunId;
+    const callbacks = remoteCheckCustodyCallbacks(remoteArgv, [], hosts);
+    expect(callbacks.allocated).toBeDefined();
+    expect(callbacks.completed).toBeDefined();
+    expect(callbacks.settled).toBeDefined();
+    await callbacks.allocated!({ host: 'check-a', run: 'fixture-run' });
+
+    const beforeCommand = JSON.parse(readFileSync(custodyFile, 'utf8'));
+    expect(beforeCommand).toMatchObject({
+      physicalRunId,
+      binding: { checkId, ownership, argv, remoteArgv, hostsFile: hosts, returns: [] },
+      status: 'running',
+    });
+    expect(beforeCommand.attempts).toHaveLength(1);
+    expect(beforeCommand.attempts[0]).toMatchObject({ host: 'check-a', id: 'fixture-run', status: 'running' });
+    expect(existsSync(commandStarted)).toBe(false);
+    writeFileSync(commandStarted, 'started');
+    expect(readFileSync(commandStarted, 'utf8')).toBe('started');
+
+    const native: RemotePhysicalRunReceipt = {
+      schema: 1,
+      host: 'check-a',
+      run: 'fixture-run',
+      exitCode: 0,
+      lifetimeFailure: null,
+      resources: null,
+    };
+    const cleanup = {
+      schema: 1 as const,
+      host: 'check-a',
+      run: 'fixture-run',
+      status: 'verified' as const,
+      supervisorStopped: true,
+      commandGroupTerminal: true,
+      containersRemoved: true,
+      runDirectoryRemoved: true,
+      failures: [],
+    };
+    const settlement: RemoteCheckSettlement = {
+      schema: 1,
+      host: 'check-a',
+      run: 'fixture-run',
+      native,
+      preparedInputs: null,
+      returns: { schema: 1, status: 'empty', entries: [], missing: [], failures: [] },
+      cleanup,
+      transportChildReaped: true,
+    };
+    await callbacks.completed!(native);
+    await callbacks.settled!(settlement);
+    const terminal = JSON.parse(readFileSync(custodyFile, 'utf8'));
+    expect(terminal).toMatchObject({
+      status: 'terminal',
+      attempts: [{ status: 'terminal', native, settlement, cleanup }],
+    });
   } finally {
     restoreWorkerEnvironment(old);
   }
