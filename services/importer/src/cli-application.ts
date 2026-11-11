@@ -522,7 +522,7 @@ async function executeOrdinaryImport(
         authOrigin: config.auth,
         scopes:
           config.source === 'vndb'
-            ? [...VNDB_IMPORTER_SCOPES, 'subject:read']
+            ? [...VNDB_IMPORTER_SCOPES]
             : config.source === 'bangumi'
               ? [...IMPORTER_SCOPES, 'subject:read']
               : IMPORTER_SCOPES,
@@ -575,7 +575,7 @@ async function executeOrdinaryImport(
       authOrigin: config.auth,
       scopes:
         config.source === 'vndb'
-          ? [...VNDB_IMPORTER_SCOPES, 'subject:read']
+          ? [...VNDB_IMPORTER_SCOPES]
           : config.source === 'bangumi'
             ? [...IMPORTER_SCOPES, 'subject:read']
             : IMPORTER_SCOPES,
@@ -665,7 +665,10 @@ async function executeOrdinaryImport(
       input: Parameters<ReturnType<ImportCliHost['createTransport']>['setSourceRecordMetadata']>[0],
     ) => track(() => liveTransport().setSourceRecordMetadata(input, signal)),
     batchWrite: (request: Parameters<ReturnType<ImportCliHost['createTransport']>['batch']>[0]) =>
-      track(() => liveTransport().batch(request, signal)),
+      track(async () => {
+        const pages = await liveTransport().batches(request.commands, signal);
+        return { results: pages.flatMap((page) => page.results) };
+      }),
     clearSourceStatistic: (
       input: Parameters<ReturnType<ImportCliHost['createTransport']>['clearSourceStatistic']>[0],
     ) => track(() => liveTransport().clearSourceStatistic(input, signal)),

@@ -7,6 +7,7 @@ import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bu
 import type { Exchange, Observation, VndbStatisticsDriver } from '../../../../specs/imports-vndb-statistics-driver.ts';
 import { readArchive } from '../../../importer/src/archive.ts';
 import { DEFAULT_DUMP_CHUNK_BYTES } from '../../../importer/src/dumps-bytes.ts';
+import { VNDB_IMPORTER_SCOPES } from '../../../importer/src/credentials.ts';
 import { createImportTransport } from '../../../importer/src/import-client.ts';
 import { Importer } from '../../../importer/src/importer.ts';
 import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
@@ -275,7 +276,9 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
     const path = join(directory, 'import.sqlite');
     const capture = captureVndbStatistics(runtime);
     const support = identitySupport(runtime.identity);
-    let credential = runtime.identity.bulk;
+    const importerCredential = await support.issue(runtime.identity.bulk.accountId, [...VNDB_IMPORTER_SCOPES]);
+    const importerIdentity = { ...runtime.identity, bulk: importerCredential };
+    let credential = importerCredential;
     const transport = createImportTransport({
       origin: VNDB_API_ORIGIN,
       tokenProvider: async () => credential.bearer,
@@ -286,7 +289,9 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
         path,
         transport: {
           setSourceRecordMetadata: transport.setSourceRecordMetadata,
-          batchWrite: (request) => transport.batch(request),
+          batchWrite: async (request) => ({
+            results: (await transport.batches(request.commands)).flatMap((page) => page.results),
+          }),
           readFence: (tuple) =>
             transport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),
           writeSourceStatistic: (input, signal) => transport.writeSourceStatistic(input, signal),
@@ -297,14 +302,14 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
       });
     importer = open();
     return {
-      identity: runtime.identity,
+      identity: importerIdentity,
       issue: (scopes) => support.issue(runtime.identity.bulk.accountId, scopes),
       setStatisticGrant: (enabled) => support.setStatisticGrant(enabled),
       async run(input, options = {}) {
         const registration = createSourceRegistration('vndb', {
           ...(options.sourceSnapshotAsOf === undefined ? {} : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
         });
-        credential = options.credential ?? runtime.identity.bulk;
+        credential = options.credential ?? importerCredential;
         const exchanges = capture.begin(options.loseStatisticResponse);
         const sourceRecords: Awaited<ReturnType<VndbStatisticsDriver['run']>>['sourceRecords'] = [];
         const tables = new VndbTablesStore(importer!.session.store.database);
