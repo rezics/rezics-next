@@ -54,7 +54,7 @@ import { classifyFailure, estimateOverrun } from './failures.ts';
 import { ensureGateOutcomeRefusal, guardIdsForFailure, isDevLandingRepairGuard, type GuardId } from './guards.ts';
 import { controlPlaneReleaseBrief, devProductBrief, matchesPath } from './briefs.ts';
 import { blockerFingerprint, noProgressTwice, toolRetryDelay } from './attempt-progress.ts';
-import { checkHostsInOutage } from './watchdog.ts';
+import { checkHostsBlockingRetry } from './watchdog.ts';
 import { evidenceBundle } from './evidence.ts';
 import { consult } from './consult.ts';
 import {
@@ -355,9 +355,8 @@ export class WorkerJob implements GateOutcomeSink {
       const incident = toolIncidentForRetry(store, ref);
       const incidentProbe = incident !== null;
       if (incident && !toolIncidentRetryAllowed(store, ref)) return;
-      // A backed-off retry waits for its time, and a check-host transport failure until the watchdog's probes see
-      // every check host answer again: relaunching into a broken host repeats the failure. The intent stays pending,
-      // and the host's recovery sweep tries it again every minute.
+      // A backed-off retry waits for its time, and a check-host transport failure only when every eligible host is in
+      // outage. The intent stays pending, and the host's recovery sweep tries it again every minute.
       if (
         !incidentProbe &&
         intent.options.notBefore &&
@@ -365,7 +364,7 @@ export class WorkerJob implements GateOutcomeSink {
       )
         return;
       if (intent.options.awaitCheckHosts) {
-        const hosts = checkHostsInOutage(this.tasks.settings.stateDirectory, this.policy);
+        const hosts = checkHostsBlockingRetry(this.tasks.settings.stateDirectory, this.policy);
         if (hosts.length) {
           if (!store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'retry-awaits-check-hosts'))
             store.event(ref, 'retry-awaits-check-hosts', { hosts });
@@ -708,8 +707,6 @@ export class WorkerJob implements GateOutcomeSink {
           currentAttempt.state !== 'waiting'
         )
           return;
-        const pool = this.tasks.settings.pools.find((candidate) => candidate.name === currentAttempt.pool);
-        if (!pool) throw new Error(`Waiting attempt refers to missing pool ${currentAttempt.pool}`);
         const canResume = agentAdapter(currentAttempt.profile.cli).canResume && !!currentAttempt.session;
         if (currentTask.brief.kind === 'verification' && !canResume) {
           await this.endAsEnvironment(
@@ -747,11 +744,18 @@ export class WorkerJob implements GateOutcomeSink {
                 `The checks you started have finished or could not be found. ${message}`,
                 'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
               ].join('\n\n');
+        const resumePool = this.tasks.resumePool(currentAttempt);
+        if (!resumePool) {
+          this.tasks.store.updateAttempt(ref, (current) => {
+            if (current.driver && sameProcess(current.driver)) current.driver = null;
+          });
+          return;
+        }
         worker = await launch(
           this.tasks.store,
           currentTask,
           currentAttempt,
-          pool,
+          resumePool,
           prompt,
           this.tasks.settings.codex,
           canResume ? currentAttempt.session! : undefined,

@@ -377,7 +377,7 @@ export type RetryIntent = AttemptRef & {
     notBefore?: string;
     /** Start the next attempt in a new provider session while preserving its branch and worktree. */
     freshSession?: boolean;
-    /** A check-host transport failure retries only while no check host is in a probed outage. */
+    /** A check-host transport retry waits only while every eligible performance host is in a probed outage. */
     awaitCheckHosts?: boolean;
     profile?: Profile;
     /** Exact dev-landing compiler feedback for the same-session continuation. */

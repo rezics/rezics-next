@@ -1,9 +1,53 @@
 import { expect, test } from 'bun:test';
-import { lstatSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LandingRequest } from './contracts.ts';
 import { newestWorktreeMtime, WorkerJob } from './job.ts';
-import { harness, tempDirectory } from './test-support.ts';
+import { harness, reading, tempDirectory } from './test-support.ts';
+
+function waitingResumeCli(checkId: string): string {
+  const waiting = JSON.stringify({ status: 'waiting', summary: 'check is running', checks: [checkId] });
+  return `#!/usr/bin/env bun
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+const root = process.cwd();
+if (process.argv.includes('resume')) {
+  writeFileSync(join(root, '.temp/goal/resume-args.json'), JSON.stringify(process.argv));
+  writeFileSync(join(root, '.temp/goal/resume-started'), 'yes');
+  writeFileSync('result.txt', 'accepted');
+  spawnSync('git', ['add', 'result.txt']);
+  spawnSync('git', ['commit', '-qm', 'Resume check session']);
+  console.log(JSON.stringify({type:'thread.started',thread_id:'wake-session'}));
+  console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
+} else {
+  console.log(JSON.stringify({type:'thread.started',thread_id:'wake-session'}));
+  console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:${JSON.stringify(waiting)}}}));
+}
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
+`;
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let step = 0; step < 200; step += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('timed out waiting for capacity ticket');
+}
+
+function poolReading(
+  pool: ReturnType<typeof harness>['settings']['pools'][number],
+  used: number,
+  resetsAt: number,
+) {
+  const value = reading(pool, used);
+  value.at = value.observedAt = new Date().toISOString();
+  value.windows[0]!.minutes = 10080;
+  value.windows[0]!.resetsAt = resetsAt;
+  return value;
+}
 
 test('newest worktree mtime ignores node_modules and .temp', async () => {
   const root = tempDirectory();
@@ -86,5 +130,98 @@ test('A worker whose run log stays empty but whose worktree files or branch head
     expect(first.result).toBe('stalled: no output for 1 minute');
   } finally {
     await idle.disposeAsync();
+  }
+}, 30_000);
+
+test('a queued check wake rechecks its original pool and resumes the same session after its allowance window resets', async () => {
+  const checkId = randomUUID();
+  const h = harness(waitingResumeCli(checkId));
+  const capacityFile = join(h.settings.stateDirectory, 'capacity.json');
+  let recovery: Promise<void> | undefined;
+  try {
+    const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8')) as {
+      pools: Array<{ policy: Record<string, unknown> }>;
+    };
+    local.pools[0]!.policy = { ...local.pools[0]!.policy, allowUnknown: false, maxBurnPerHour: 0.6, maxConcurrent: 1 };
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    const policy = structuredClone(h.settings.policy!);
+    policy.capacity.pollIntervalMs = 5;
+    h.settings.policy = policy;
+
+    let used = 50;
+    let resetsAt = Date.now() + 8 * 60 * 60_000;
+    let occupied = false;
+    Object.defineProperty(h.tasks, 'reader', {
+      value: (pool: (typeof h.settings.pools)[number]) => poolReading(pool, used, resetsAt),
+    });
+    Object.defineProperty(h.store, 'runningAttemptsByPool', {
+      value: () => (occupied ? { [h.settings.pools[0]!.name]: 1 } : {}),
+    });
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.start(task.id);
+    await job.drain();
+    const ref = { taskId: task.id, attempt: 1 };
+    const original = h.store.attempt(ref);
+    expect(original.state).toBe('waiting');
+    occupied = true;
+
+    const results = join(task.worktree, '.temp/goal/checks/results');
+    mkdirSync(results, { recursive: true });
+    writeFileSync(join(results, `${checkId}.json`), JSON.stringify({ status: 'finished', exitStatus: 0 }));
+    writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 0, minAvailableMiB: 0 }));
+    recovery = job.recoverOrphans();
+    const queue = join(h.settings.stateDirectory, 'capacity-queue');
+    await waitFor(() => existsSync(queue) && readdirSync(queue).some((name) => name.includes(task.id)));
+
+    local.pools.push({
+      ...local.pools[0]!,
+      name: 'alternate',
+      allowanceKey: 'alternate',
+      configDirectory: '/fixture/alternate',
+    });
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+
+    const previous = poolReading(h.settings.pools[0]!, 50, resetsAt);
+    previous.at = previous.observedAt = new Date(Date.now() - 2 * 60_000).toISOString();
+    writeFileSync(
+      join(h.settings.stateDirectory, 'pool-readings.json'),
+      JSON.stringify({ version: 1, readings: [previous] }),
+    );
+    writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
+    await recovery;
+    recovery = undefined;
+    expect(h.store.attempt(ref)).toMatchObject({
+      state: 'waiting',
+      pool: original.pool,
+      session: original.session,
+      driver: null,
+    });
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+    expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
+    expect(readdirSync(queue)).toHaveLength(0);
+
+    occupied = false;
+    used = 51;
+    recovery = job.recoverOrphans();
+    await recovery;
+    recovery = undefined;
+    expect(h.store.attempt(ref)).toMatchObject({ state: 'waiting', pool: original.pool, session: original.session });
+    expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
+
+    resetsAt += 7 * 24 * 60 * 60_000;
+    recovery = job.recoverOrphans();
+    await recovery;
+    recovery = undefined;
+    const args = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/resume-args.json'), 'utf8')) as string[];
+    expect(args).toContain(original.session!);
+    expect(h.store.attempt(ref).state).toBe('exited');
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+  } finally {
+    if (recovery) {
+      writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 1, minAvailableMiB: 0 }));
+      await recovery;
+    }
+    await h.disposeAsync();
   }
 }, 30_000);

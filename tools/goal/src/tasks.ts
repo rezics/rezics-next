@@ -53,7 +53,7 @@ import {
 import { attemptSession, readMeasurement, makeRecord } from './records.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerStore } from './store.ts';
-import type { Attempt, Brief, Profile, Settings, Task } from './types.ts';
+import type { Attempt, Brief, Pool, Profile, Settings, Task } from './types.ts';
 import { parseFrozenFiles } from './frozen.ts';
 import {
   branchHead,
@@ -331,7 +331,7 @@ export type RetryOptions = {
   conflictFiles?: string[];
   /** A backed-off retry starts no earlier than this ISO time. */
   notBefore?: string;
-  /** A check-host transport failure retries only while no check host is in a probed outage. */
+  /** A check-host transport retry waits only while every eligible performance host is in a probed outage. */
   awaitCheckHosts?: boolean;
   /** Start only while this is still the current attempt: a retry another process already started is not repeated. */
   expectedAttempt?: number;
@@ -402,6 +402,27 @@ export class WorkerTasks {
       history: retainPoolReadings(this.settings.stateDirectory, readings, now, spanMs),
       running: this.store.runningAttemptsByPool(),
     };
+  }
+  /** A retained wake may use only its original configured pool, after current allowance and occupancy admission. */
+  resumePool(attempt: Pick<Attempt, 'pool' | 'profile' | 'before'>): Pool | undefined {
+    const current = this.resolverPools();
+    const pool = current.pools.find((candidate) => candidate.name === attempt.pool);
+    if (
+      !pool ||
+      pool.cli !== attempt.profile.cli ||
+      !pool.classes.includes(attempt.profile.poolClass) ||
+      (attempt.before && attempt.before.allowanceKey !== pool.allowanceKey)
+    )
+      return undefined;
+    return poolAllowed(pool, current.readings, {
+      now: current.now,
+      spanMs: current.spanMs,
+      history: current.history,
+      policy: this.settings.policy?.provider,
+      running: current.running,
+    })
+      ? pool
+      : undefined;
   }
   /** Metadata-only manager wake admission using the current pool policy and retained allowance history. */
   managerTurnAllowed(poolName: string, engine: 'codex' | 'claude'): boolean {
