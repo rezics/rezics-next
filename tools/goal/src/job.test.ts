@@ -37,11 +37,7 @@ async function waitFor(predicate: () => boolean): Promise<void> {
   throw new Error('timed out waiting for capacity ticket');
 }
 
-function poolReading(
-  pool: ReturnType<typeof harness>['settings']['pools'][number],
-  used: number,
-  resetsAt: number,
-) {
+function poolReading(pool: ReturnType<typeof harness>['settings']['pools'][number], used: number, resetsAt: number) {
   const value = reading(pool, used);
   value.at = value.observedAt = new Date().toISOString();
   value.windows[0]!.minutes = 10080;

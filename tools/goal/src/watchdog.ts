@@ -355,7 +355,11 @@ export function checkHostsInOutage(stateDirectory: string, policy: ControlPolicy
 /** A retry waits only when every performance-approved host that can take it is in the watchdog's outage set. */
 export function checkHostsBlockingRetry(stateDirectory: string, policy: ControlPolicy = defaultPolicy): string[] {
   const eligible = [
-    ...new Set(checkHosts(stateDirectory).filter((host) => host.performance === true).map(({ name }) => name)),
+    ...new Set(
+      checkHosts(stateDirectory)
+        .filter((host) => host.performance === true)
+        .map(({ name }) => name),
+    ),
   ];
   if (!eligible.length) return [];
   const outages = new Set(checkHostsInOutage(stateDirectory, policy));
@@ -469,7 +473,8 @@ export function retryWait(
   if (waitingFor.length) return { reason: 'dependencies', waitingFor };
   const until = intent.options?.notBefore;
   if (until && Date.parse(until) > now) return { reason: 'backoff', until };
-  const hosts = intent.options?.awaitCheckHosts && stateDirectory ? checkHostsBlockingRetry(stateDirectory, policy) : [];
+  const hosts =
+    intent.options?.awaitCheckHosts && stateDirectory ? checkHostsBlockingRetry(stateDirectory, policy) : [];
   return hosts.length ? { reason: 'check-hosts', hosts } : null;
 }
 

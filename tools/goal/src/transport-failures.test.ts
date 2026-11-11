@@ -431,7 +431,16 @@ test('an open transport incident parks its probe after the same blocker repeats 
       result: TLS,
     });
 
-    const job = new WorkerJob(h.tasks, { enqueue() {} }, inbox, undefined, undefined, undefined, undefined, () => false);
+    const job = new WorkerJob(
+      h.tasks,
+      { enqueue() {} },
+      inbox,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => false,
+    );
     job.onAttemptExit(ref);
     await job.drain();
 
