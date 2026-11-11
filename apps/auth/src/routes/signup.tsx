@@ -289,7 +289,13 @@ function SignupPage() {
       setReturnState(returnController.state);
     };
     replaceJourney.current = replace;
-    const unsubscribe = history.subscribe(() => replace());
+    const unsubscribe = history.subscribe(() => {
+      // A read from the previous request cannot publish advice into its replacement.
+      cancelPageRead();
+      setPage(null);
+      replace();
+      if (history.location.pathname === '/signup') refreshAdvice.current();
+    });
     const refreshReturnedPage = (readId: number) => {
       void readPage().then((result) => finishRead(readId, result));
     };

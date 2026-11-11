@@ -363,12 +363,11 @@ its original destination is captured before submission. Replacement and departur
 Focused source/mounted fixtures do not establish native or browser acceptance; broader acceptance is deferred
 until integration.
 
-Decision: mounted sign-up tests control `readRegistrationPage`, the current advice boundary, rather than an unused
-route loader; login advice stays a separate `/signin/page` read. Fixtures fill password confirmation, restore their
-read doubles, fetch and DOM globals, and retire every mounted root even when setup fails. Existing assertions follow
-the native closed-envelope and uncertainty rules above: explicit original-attempt retry preserves key/input with a
-fresh token, unsupported registration 429 stays unknown, and departure keeps generic history without reopening fields.
-Step-up retains its opaque authorization assertions; readiness diagnostics precede teardown and never read credentials.
+Decision: Auth fixtures own browser globals and native advice doubles; registration advice retires on request replacement, and Security tests select named sessions and preserve native per-target advice.
+
+Mounted sign-up tests control `readRegistrationPage`; login advice stays a separate `/signin/page` read. Shared
+fixtures install browser globals before document setup, restore fetch/globals and retire every root even when setup
+fails. Step-up hydrates a document rendered without browser globals; its opaque authorization assertions remain.
 
 Decision: the signup browser fixture serves signed-out `/signin/page` advice through the existing native DTO fixture,
 matching login. Root hydration alone does not settle that read or its layout. The first failing signup visit recorded
@@ -538,7 +537,7 @@ parsing/migration and native journey qualification remain separate work.
 The security page has Password, Passkeys, Sessions and Organizations sections, followed by Delete account, in a
 content column up to 42rem wide. Organizations links to `/organizations/new`; Delete account explains the result and
 links to `/account/delete` with a destructive outline control. It reads the
-current viewer, validated session/passkey inventories and per-target action advice from one native `GET /security-page`, through the existing private BFF. The view makes no kernel reads. A password change uses three Auth calls.
+current viewer, validated session/passkey inventories and per-target action advice from one native `GET /security-page`, through the existing private BFF. One separate native `GET /registration-page` supplies password length limits. The view makes no kernel reads. A password change uses three Auth calls.
 
 Decision: exact-target removal reuses the admitted account-session reader and trusted
 `AUTH_SECURITY_SCOPE_CONFIGURATION`; only a complete endpoint-specific native envelope settles a command.
@@ -584,7 +583,7 @@ inventory proves only current presence or absence, never which earlier action ra
 absence. Same-account retry needs a fresh native review and confirmation of that same target; Retry itself and
 readback send zero removals. Changed authority hides private target data while generic outcome history remains.
 
-Whole-call costs remain bounded: the page uses one native `GET /security-page` read; each action uses one native
+Whole-call costs remain bounded: entry uses one native `GET /security-page` and one `GET /registration-page` for password limits; each action uses one native
 `GET /session` preflight and one exact-key removal command (two Auth requests, zero kernel reads); each deliberate
 current-state check uses one native Security page read and zero commands. Pagehide, return, focus and notice dismissal
 add no Auth or kernel calls, inventory scans or per-row reads.
