@@ -13,7 +13,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { useSession } from '../../session/query';
 import { viewerExposureQuery, type ViewerExposure } from '../../kernel/viewer-exposure';
 import { draftFetch } from '../composer';
-import { erasePost, revisePost } from '../actions';
+import { erasePost, revisePost, startThread, type ThreadCreated } from '../actions';
 import { publishOwnDraft, readOwnDraftPost } from './actions';
 import type {
   OwnDraftCommands,
@@ -23,11 +23,23 @@ import type {
   OwnDraftReadback,
   OwnDraftWriteInput,
   OwnDraftEraseInput,
+  OwnDraftStudioCreateInput,
+  OwnDraftStudioRevisionInput,
 } from './model';
 import { ownDraftReaderForVisit } from './native-reader';
 import type { EditFailure, RevisedPost, WriteFailure } from '../actions';
 
 export type OwnDraftCommandTransport = Readonly<{
+  create?: (
+    input: OwnDraftStudioCreateInput,
+    csrfToken: string,
+    signal: AbortSignal,
+  ) => Promise<{ ok: true; thread: ThreadCreated['thread'] } | WriteFailure>;
+  revise?: (
+    input: OwnDraftStudioRevisionInput,
+    csrfToken: string,
+    signal: AbortSignal,
+  ) => Promise<{ ok: true; post: RevisedPost } | EditFailure>;
   write: (
     input: OwnDraftWriteInput,
     csrfToken: string,
@@ -38,6 +50,41 @@ export type OwnDraftCommandTransport = Readonly<{
 }>;
 
 export const ownDraftNativeCommandTransport: OwnDraftCommandTransport = {
+  create(input, csrfToken, signal) {
+    return startThread({
+      data: {
+        boardId: input.boardId,
+        title: input.title,
+        body: input.body,
+        licence: input.licence,
+        subjectIds: [...input.subjectIds],
+        mediaIds: [...input.mediaIds],
+        visibility: 'draft',
+        idempotencyKey: input.idempotencyKey,
+      },
+      headers: { 'X-CSRF-Token': csrfToken },
+      signal,
+      fetch: draftFetch(input.body),
+    });
+  },
+  revise(input, csrfToken, signal) {
+    return revisePost({
+      data: {
+        postId: input.postId,
+        revisionId: input.revisionId,
+        body: input.body,
+        mediaIds: [...input.mediaIds],
+        boardId: input.boardId,
+        licence: input.licence,
+        subjectIds: [...input.subjectIds],
+        visibility: input.visibility,
+        idempotencyKey: input.idempotencyKey,
+      },
+      headers: { 'X-CSRF-Token': csrfToken },
+      signal,
+      fetch: draftFetch(input.body),
+    });
+  },
   write(input, csrfToken, signal) {
     const data = {
       postId: input.postId,
@@ -106,15 +153,14 @@ function clientId(client: object): number {
 function retainedCommandCredentials(
   lease: ReturnType<typeof operationLease<string>>,
 ): (method: string, key: string) => string | null {
-  const credentials = new Map<string, string>();
+  let retained: { intent: string; credential: string } | null = null;
   return (method, key) => {
     if (!lease.current()) return null;
     const intentKey = JSON.stringify([method, key]);
-    const retained = credentials.get(intentKey);
-    if (retained) return retained;
+    if (retained?.intent === intentKey) return retained.credential;
     const credential = lease.credential();
     if (!credential) return null;
-    credentials.set(intentKey, credential);
+    retained = { intent: intentKey, credential };
     return credential;
   };
 }
@@ -123,6 +169,8 @@ function commandAdapters(
   current: () => boolean,
   csrfToken: string | null,
   transport: OwnDraftCommandTransport,
+  scope: string,
+  addressName: string,
 ): OwnDraftCommands | undefined {
   if (!csrfToken) return undefined;
 
@@ -131,13 +179,31 @@ function commandAdapters(
     const owned = ownedSessionCsrfToken();
     return owned === csrfToken ? owned : null;
   };
-  const read = readLease('own-drafts-command-readback', addressLease(current), current);
-  const writeLease = operationLease(read, 'own-drafts-write', current, credential);
-  const eraseLease = operationLease(read, 'own-drafts-erase', current, credential);
+  const read = readLease(`${scope}-${addressName}-command-readback`, addressLease(current), current);
+  const createLease = operationLease(read, `${scope}-create`, current, credential);
+  const revisionLease = operationLease(read, `${scope}-revision`, current, credential);
+  const writeLease = operationLease(read, `${scope}-write`, current, credential);
+  const eraseLease = operationLease(read, `${scope}-erase`, current, credential);
+  const createCredential = retainedCommandCredentials(createLease);
+  const revisionCredential = retainedCommandCredentials(revisionLease);
   const writeCredential = retainedCommandCredentials(writeLease);
   const eraseCredential = retainedCommandCredentials(eraseLease);
 
   return {
+    async create(input, signal) {
+      if (!transport.create) return { ok: false, reason: 'unavailable' };
+      const token = createCredential('create', input.idempotencyKey);
+      if (!token || signal.aborted) return { ok: false, reason: 'unavailable' };
+      const result = await transport.create(input, token, signal);
+      return signal.aborted || !createLease.current() ? { ok: false, reason: 'unavailable' } : result;
+    },
+    async revise(input, signal) {
+      if (!transport.revise) return { ok: false, reason: 'unavailable' };
+      const token = revisionCredential(input.visibility, input.idempotencyKey);
+      if (!token || signal.aborted) return { ok: false, reason: 'unavailable' };
+      const result = await transport.revise(input, token, signal);
+      return signal.aborted || !revisionLease.current() ? { ok: false, reason: 'unavailable' } : result;
+    },
     async write(input, signal) {
       const token = writeCredential(input.action, input.idempotencyKey);
       if (!token || signal.aborted) return { ok: false, reason: 'unavailable' };
@@ -163,19 +229,19 @@ export function useOwnDraftVisit(
   reader: OwnDraftReader,
   localWritingReader: OwnDraftLocalWritingReader,
   transport: OwnDraftCommandTransport,
+  options: Readonly<{ scope?: string; source?: string; address?: string }> = {},
 ): OwnDraftVisit {
   // Keep the browser session owner mounted so its installed credential accessor has this QueryClient.
   const session = useSession();
   const client = useQueryClient();
   const locale = getLocale();
-  const navigationVisit = useReaderVisit('own-drafts', locale, getLocale);
+  const scope = options.scope ?? 'own-drafts';
+  const sourceName = options.source ?? 'content';
+  const addressName = options.address ?? '/drafts';
+  const navigationVisit = useReaderVisit(scope, locale, getLocale);
   const observation = useMemo(() => browserObservation(client), [client]);
   const sessionSource = useMemo(() => readerSessionSource(client), [client]);
-  const observed = useSyncExternalStore(
-    observation.subscribe,
-    observation.getSnapshot,
-    observation.getServerSnapshot,
-  );
+  const observed = useSyncExternalStore(observation.subscribe, observation.getSnapshot, observation.getServerSnapshot);
   const sessionRevision = useSyncExternalStore(
     sessionSource.subscribe,
     sessionSource.snapshot,
@@ -211,8 +277,8 @@ export function useOwnDraftVisit(
       authnEpoch: null,
       callerEpoch,
       locale: capturedLocale,
-      source: 'content',
-      address: '/drafts',
+      source: sourceName,
+      address: addressName,
     };
     const exposureKey =
       observed.state === 'signed-in'
@@ -237,7 +303,12 @@ export function useOwnDraftVisit(
     const inspectExposure = () => {
       if (exposureKey[2] === 'closed') return;
       const query = client.getQueryCache().find({ queryKey: exposureKey, exact: true });
-      if (!query || query.state.status !== 'success' || query.state.fetchStatus !== 'idle' || query.state.isInvalidated) {
+      if (
+        !query ||
+        query.state.status !== 'success' ||
+        query.state.fetchStatus !== 'idle' ||
+        query.state.isInvalidated
+      ) {
         if (exposureWitness) retire();
         return;
       }
@@ -281,7 +352,11 @@ export function useOwnDraftVisit(
     };
     address = addressLease(parentCurrent);
     const read = readLease(
-      JSON.stringify([callerEpoch, capturedAccountId, capturedObservation.state === 'signed-in' ? capturedObservation.observation.id : 0]),
+      JSON.stringify([
+        callerEpoch,
+        capturedAccountId,
+        capturedObservation.state === 'signed-in' ? capturedObservation.observation.id : 0,
+      ]),
       address,
       () => ready && parentCurrent(),
     );
@@ -291,7 +366,7 @@ export function useOwnDraftVisit(
       return value && !retired;
     };
     const boundReader = ownDraftReaderForVisit(reader, identity, current);
-    const commands = commandAdapters(current, capturedCsrfToken, transport);
+    const commands = commandAdapters(current, capturedCsrfToken, transport, scope, addressName);
 
     return {
       identity,
@@ -331,6 +406,9 @@ export function useOwnDraftVisit(
     sessionSource,
     transport,
     locale,
+    scope,
+    sourceName,
+    addressName,
   ]);
   useSyncExternalStore(visit.subscribe, visit.snapshot, visit.serverSnapshot);
   return { ...visit, active: ready && visit.current() };

@@ -1,5 +1,7 @@
 import { checkDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import { editionDocumentDigest } from '../content-editions/edition-model';
+import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { bookPublicationTarget, bookTocRows } from './book-toc';
 import {
   sameExact,
@@ -19,6 +21,7 @@ import {
   type StudioResult,
   type StudioRevision,
   type StudioSelection,
+  type NativeDraftCreate,
 } from './contract';
 
 export type VersionSummary = Omit<StudioRevision, 'body' | 'mediaIds'>;
@@ -45,6 +48,7 @@ export type StudioState = Readonly<{
   busy: string | null;
   issue: StudioFailure | null;
   message: string;
+  failedDocumentCursor: string | null;
 }>;
 const unavailable: StudioFailure = { kind: 'unavailable', message: 'This read is unavailable. Try again.' };
 const uncertain: StudioFailure = {
@@ -70,8 +74,18 @@ function sameTarget(a: PublicationTarget, b: PublicationTarget): boolean {
   );
 }
 function reviewMatches(review: PublicationReview, target: PublicationTarget, source: BookStructure | null): boolean {
-  if (!review.reviewId || !sameTarget(review.target, target) || !Number.isFinite(Date.parse(review.expiresAt)))
-    return false;
+  if (!sameTarget(review.target, target)) return false;
+  if (target.kind === 'article' && review.authority === 'local')
+    return (
+      review.reviewId === '' &&
+      review.bookOutline === null &&
+      !!review.articleSnapshot?.boardId &&
+      !!review.articleSnapshot.licence &&
+      review.entries.length === 1 &&
+      review.entries[0]?.occurrenceId === null &&
+      sameExact(review.entries[0].document, target.document)
+    );
+  if (!review.reviewId || !Number.isFinite(Date.parse(review.expiresAt)) || review.authority === 'local') return false;
   if (target.kind === 'article')
     return (
       review.bookOutline === null &&
@@ -181,6 +195,7 @@ export class StudioController {
   private editorSequence = 0;
   private saveAttempt: DraftSave | null = null;
   private createAttempt: { projectId: string; title: string; idempotencyKey: string } | null = null;
+  private nativeCreateAttempt: (NativeDraftCreate & { projectId: string; idempotencyKey: string }) | null = null;
   private organizeAttempt: Parameters<BookOrganizerPort['change']>[0] | null = null;
   private publishAttempt: Parameters<StudioPort['publish']>[0] | null = null;
 
@@ -202,6 +217,7 @@ export class StudioController {
       busy: null,
       issue: null,
       message: '',
+      failedDocumentCursor: null,
     };
   }
   snapshot = (): StudioState => this.state;
@@ -231,7 +247,9 @@ export class StudioController {
     return this.current() && !this.state.busy && !this.hasUnresolvedCommand();
   }
   hasUnresolvedCommand = (): boolean =>
-    Boolean(this.saveAttempt || this.createAttempt || this.organizeAttempt || this.publishAttempt);
+    Boolean(
+      this.saveAttempt || this.createAttempt || this.nativeCreateAttempt || this.organizeAttempt || this.publishAttempt,
+    );
   canOrganize = (): boolean => Boolean(this.bookPort && this.state.structure?.canOrganize);
   private async run<T>(
     name: string,
@@ -270,7 +288,7 @@ export class StudioController {
       ...this.state.documents,
       items: prior
         ? this.state.documents.items.map((entry) => (entry.postId === row.postId ? row : entry))
-        : [row, ...this.state.documents.items],
+        : [row, ...this.state.documents.items].slice(0, this.input.nativeDrafts ? 20 : undefined),
     };
   }
   private edit(patch: Partial<WorkingDocument>) {
@@ -380,6 +398,16 @@ export class StudioController {
         body: selected.body,
         mediaIds: this.documentMediaIds(selected.body),
         idempotencyKey: crypto.randomUUID(),
+        ...(selected.source.native
+          ? {
+              native: {
+                boardId: selected.source.native.boardId,
+                licence: selected.source.native.licence,
+                subjectIds: [...selected.source.native.subjectIds],
+                visibility: 'draft' as const,
+              },
+            }
+          : {}),
       };
     }
     const attempt = this.saveAttempt;
@@ -437,10 +465,73 @@ export class StudioController {
   loadDocuments = async () => {
     const cursor = this.state.documents.nextCursor;
     if (!cursor || this.hasUnresolvedCommand()) return;
-    await this.run(
+    const loaded = await this.run(
       'Loading drafts',
       (signal) => this.port.documents({ projectId: this.input.projectId, cursor }, signal),
-      (documents) => this.patch({ documents }),
+      (documents) => {
+        this.patch({ documents, failedDocumentCursor: null });
+      },
+    );
+    if (!loaded) this.patch({ failedDocumentCursor: cursor });
+  };
+  failedPageCursor = (): string | null => this.state.failedDocumentCursor;
+  createNativeDraft = async (input: NativeDraftCreate): Promise<boolean> => {
+    if (
+      !this.current() ||
+      this.state.busy ||
+      !this.input.canCreateDraft ||
+      !this.input.nativeDrafts ||
+      !this.port.createNativeDraft ||
+      this.state.selected?.dirty ||
+      this.state.selected?.uploading ||
+      (this.hasUnresolvedCommand() && !this.nativeCreateAttempt)
+    )
+      return false;
+    if (!this.nativeCreateAttempt) {
+      if (!input.boardId.trim() || !input.title.trim() || !input.licence.trim() || !checkDocument(input.body))
+        return false;
+      this.nativeCreateAttempt = {
+        projectId: this.input.projectId,
+        ...structuredClone(input),
+        boardId: input.boardId.trim(),
+        title: input.title.trim(),
+        licence: input.licence.trim(),
+        subjectIds: [...input.subjectIds],
+        mediaIds: [...input.mediaIds],
+        idempotencyKey: crypto.randomUUID(),
+      };
+    }
+    const attempt = this.nativeCreateAttempt;
+    return this.run<StudioSelection>(
+      'Creating private draft',
+      async (signal) => {
+        const result = await this.port.createNativeDraft!(attempt, signal);
+        if (!result.ok) {
+          if (result.error.kind !== 'uncertain' && result.error.kind !== 'unavailable') this.nativeCreateAttempt = null;
+          return result;
+        }
+        if (
+          result.value.visibility !== 'draft' ||
+          !result.value.native ||
+          !result.value.permissions.edit ||
+          !(await validRevision(result.value.revision)) ||
+          serializeDocument(result.value.revision.body) !== serializeDocument(attempt.body)
+        )
+          return { ok: false, error: uncertain };
+        return result;
+      },
+      (selection) => {
+        this.nativeCreateAttempt = null;
+        this.patch({
+          selected: working(selection, ++this.editorSequence),
+          documents: this.updateSummary(selection),
+          versions: null,
+          historical: null,
+          review: null,
+          message: m.studio_account_created({}, { locale: getLocale() }),
+        });
+      },
+      true,
     );
   };
   loadVersions = async (more = false) => {
@@ -581,7 +672,7 @@ export class StudioController {
         if (
           result.ok &&
           (!reviewMatches(result.value, target, this.state.structure) ||
-            Date.parse(result.value.expiresAt) <= Date.now())
+            (result.value.authority !== 'local' && Date.parse(result.value.expiresAt) <= Date.now()))
         )
           return { ok: false, error: invalid };
         return result;
@@ -615,7 +706,7 @@ export class StudioController {
         selected?.snapshotPending ||
         selected?.uploading ||
         selected?.invalid ||
-        Date.parse(review.expiresAt) <= Date.now()
+        (review.authority !== 'local' && Date.parse(review.expiresAt) <= Date.now())
       ) {
         this.patch({
           review: null,
@@ -638,28 +729,41 @@ export class StudioController {
           return result;
         }
         const entries = result.value.entries;
-        if (
-          result.value.state !== 'published' ||
-          entries.length !== attempt.review.entries.length ||
-          !entries.every((entry, index) => {
-            const reviewed = attempt.review.entries[index];
-            return (
-              reviewed?.occurrenceId === entry.occurrenceId &&
-              reviewed.title === entry.title &&
-              sameExact(entry.document, reviewed.document)
-            );
-          })
-        )
-          return { ok: false, error: uncertain };
+        const localArticle = attempt.review.authority === 'local' && attempt.review.target.kind === 'article';
+        const validLocalReadback = localArticle
+          ? entries.length === 1 &&
+            entries[0]?.occurrenceId === null &&
+            entries[0]?.title === attempt.review.entries[0]?.title &&
+            entries[0]?.document.postId === attempt.review.target.document.postId &&
+            !!result.value.readbackSelection &&
+            result.value.readbackSelection.visibility === 'published' &&
+            sameExact(entries[0].document, result.value.readbackSelection.revision.exact) &&
+            (await validRevision(result.value.readbackSelection.revision))
+          : entries.length === attempt.review.entries.length &&
+            entries.every((entry, index) => {
+              const reviewed = attempt.review.entries[index];
+              return (
+                reviewed?.occurrenceId === entry.occurrenceId &&
+                reviewed.title === entry.title &&
+                sameExact(entry.document, reviewed.document)
+              );
+            });
+        if (result.value.state !== 'published' || !validLocalReadback) return { ok: false, error: uncertain };
         return result;
       },
       (published) => {
         this.publishAttempt = null;
         const ids = new Set(published.entries.map((entry) => entry.document.postId));
         this.patch({
+          ...(published.readbackSelection && this.state.selected
+            ? { selected: { ...this.state.selected, source: published.readbackSelection, dirty: false } }
+            : {}),
           published,
           review: null,
-          message: 'The reviewed versions were published.',
+          message:
+            attempt.review.authority === 'local'
+              ? m.studio_account_published({}, { locale: getLocale() })
+              : 'The reviewed versions were published.',
           documents: {
             ...this.state.documents,
             items: this.state.documents.items.map((row) =>
@@ -692,6 +796,8 @@ export class StudioController {
   retry = async () => {
     if (this.saveAttempt) return this.save();
     if (this.createAttempt) return this.createDraft(this.createAttempt.title);
+    if (this.nativeCreateAttempt) return this.createNativeDraft(this.nativeCreateAttempt);
+    if (this.state.failedDocumentCursor) return this.loadDocuments();
     if (this.organizeAttempt) return this.organize(this.organizeAttempt.change);
     if (this.publishAttempt) return this.publish();
     return false;

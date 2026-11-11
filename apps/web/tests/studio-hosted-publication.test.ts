@@ -50,7 +50,7 @@ const publication: HostedBook = {
 };
 const ok = <T>(value: T): StudioResult<T> => ({ ok: true, value });
 
-test('book publication sends only selected exact chapter occurrences and their required ancestor parts', async () => {
+test('hosted Book publication freezes only selected exact chapter occurrences and required ancestors', async () => {
   let sent: HostedPublish | null = null;
   const native: HostedBookNative = {
     listOwn: async () => ok({ accountId: catalogueId, authnEpoch: 1, items: [], nextCursor: null }),
@@ -87,6 +87,12 @@ test('book publication sends only selected exact chapter occurrences and their r
   const target = bookPublicationTarget(loaded.value, new Set([firstChapterId]));
   expect(target).not.toBeNull();
   if (!target || target.kind !== 'book') return;
+  expect(target.chapters).toEqual([
+    {
+      occurrenceId: firstChapterId,
+      document: { postId: firstPostId, revisionId: firstPostRevisionId, sha256: digest },
+    },
+  ]);
 
   const result = await adapter.publish(
     { target, expectedPublicationId: null, idempotencyKey: '019a8c75-4e19-8d2f-8a36-94dd410dd880' },

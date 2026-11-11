@@ -23,9 +23,15 @@ export type {
 export { ownDraftBrowserWritingReader } from './own-drafts/browser-writing';
 export { OwnDraftsPage } from './own-drafts/page';
 export { ownDraftNativeReader } from './own-drafts/native-reader';
-export { ownDraftNativeCommandTransport, useOwnDraftVisit } from './own-drafts/visit';
-export type { OwnDraftCommandTransport } from './own-drafts/visit';
-export type {
-  OwnDraftLocalWritingReader,
-  OwnDraftReader,
+export { ownDraftNativeCommandTransport, useOwnDraftVisit, type OwnDraftCommandTransport } from './own-drafts/visit';
+export {
+  readSelectedOwnDraft,
+  indexOwnDraftPage,
+  type OwnDraftEntry,
+  type OwnDraftIdentity,
+  type OwnDraftSelection,
+  type OwnDraftPageData,
+  type OwnDraftCommands,
+  type OwnDraftReader,
 } from './own-drafts/model';
+export type { OwnDraftLocalWritingReader } from './own-drafts/model';

@@ -14,6 +14,12 @@ Decision: Keep only the current coordinate and up to eight accepted predecessors
 The typed `OwnDraftReader` binds the installed generated account drafts list and exact selected-read methods
 through the existing authenticated server transport, with abort signals and private/no-store responses.
 
+Studio composes that same bounded reader for its account inventory and exact selected resume. Its visit supplies a
+separate scope and `/studio` address to the shared lifetime owner, so Studio and `/drafts` retire independently while
+using the same installed list, resume, create and conditional revision operations. Studio does not infer workspace
+membership from a row or maintain another account draft inventory. Its private creation operands and publication
+review belong to Studio; the native account command adapter remains the only write boundary.
+
 Decision: Keep browser and server writing as independent sources after every command acknowledgement. Require a
 named body choice before opening the editor, retain the browser copy, and report a later current read separately.
 

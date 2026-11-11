@@ -1182,10 +1182,13 @@ function BoundOwnDraftsPage({
                   >
                     {m.own_drafts_inspect({}, { locale })}
                   </Button>
-                  {entry.documentKind === 'opening' ? (
+                  {entry.kind === 'discussion' && entry.documentKind === 'opening' ? (
                     <a
                       className={`${control} mt-3 inline-flex items-center rounded-md border border-border px-3 py-2 underline underline-offset-2`}
-                      href={localizeHref(`/studio?postId=${encodeURIComponent(entry.id)}`, { locale })}
+                      href={localizeHref(
+                        `/studio?postId=${encodeURIComponent(entry.id)}${page.coordinate === null ? '' : `&draftCursor=${encodeURIComponent(page.coordinate)}`}`,
+                        { locale },
+                      )}
                     >
                       {m.own_drafts_open_studio({}, { locale })}
                     </a>

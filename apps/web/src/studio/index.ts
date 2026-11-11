@@ -1,4 +1,9 @@
 export { StudioWorkspace, type StudioWorkspaceProps } from './workspace';
+export { createStudioAccountPort } from './account-port';
+export { createPostDocumentPort } from './post-document-port';
+export { listHostedBooks, readOwnedHostedBook } from './hosted-actions';
+export { hostedFailure } from './hosted-native';
+export { hostedId } from './hosted-contract';
 export type {
   StudioInput,
   StudioPort,
@@ -12,6 +17,8 @@ export type {
   StudioPage,
   ExactDocument,
   DraftSave,
+  NativeDraftCreate,
+  ArticleReviewSnapshot,
   PublicationTarget,
   PublicationReview,
   PublicationRecord,
@@ -33,6 +40,8 @@ export {
 } from './hosted-workspace';
 export type {
   HostedBook,
+  HostedOwnerBook,
+  HostedOwnerInventory,
   HostedBookNative,
   HostedCreate,
   HostedRevise,

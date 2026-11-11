@@ -1,5 +1,8 @@
 import { useEffect, useId, useState } from 'react';
+import { documentText } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
+import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { ExactVersionDetails } from './revisions';
 import { bookTocRows } from './book-toc';
 import type { StudioController, StudioState } from './controller';
@@ -12,7 +15,7 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
   useEffect(() => {
     setConfirmed(false);
     setNow(Date.now());
-    if (!review) return;
+    if (!review || review.authority === 'local') return;
     const delay = Math.max(0, Date.parse(review.expiresAt) - Date.now());
     // One local expiry timer, without network polling or background work.
     const timer = window.setTimeout(
@@ -24,7 +27,7 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
     );
     return () => window.clearTimeout(timer);
   }, [review]);
-  const expired = review ? Date.parse(review.expiresAt) <= now : false;
+  const expired = review ? review.authority !== 'local' && Date.parse(review.expiresAt) <= now : false;
   const selected = state.selected;
   const unresolved = controller.hasUnresolvedCommand();
   const blocked = Boolean(state.busy) || unresolved;
@@ -96,9 +99,39 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
           {review.notices.map((notice, index) => (
             <p key={index}>{notice}</p>
           ))}
-          <p className="studio-help">
-            Review expires <time dateTime={review.expiresAt}>{review.expiresAt}</time>.
-          </p>
+          {review.authority === 'local' && review.articleSnapshot ? (
+            <section className="studio-native-review studio-stack" aria-label="Acknowledged article revision details">
+              <p>
+                <strong>{m.studio_account_review_destination({}, { locale: getLocale() })}:</strong>{' '}
+                {review.articleSnapshot.boardId}
+              </p>
+              <p>
+                <strong>{m.studio_account_review_licence({}, { locale: getLocale() })}:</strong>{' '}
+                {review.articleSnapshot.licence}
+              </p>
+              <p>
+                <strong>{m.own_drafts_subjects({}, { locale: getLocale() })}:</strong>{' '}
+                {review.articleSnapshot.subjectIds.length
+                  ? review.articleSnapshot.subjectIds.join(', ')
+                  : m.own_drafts_no_references({}, { locale: getLocale() })}
+              </p>
+              <p>
+                <strong>{m.own_drafts_media({}, { locale: getLocale() })}:</strong>{' '}
+                {review.articleSnapshot.mediaIds.length
+                  ? review.articleSnapshot.mediaIds.join(', ')
+                  : m.own_drafts_no_references({}, { locale: getLocale() })}
+              </p>
+              <div>
+                <h4>{m.studio_account_review_body({}, { locale: getLocale() })}</h4>
+                <pre className="studio-reviewed-body">{documentText(review.articleSnapshot.body)}</pre>
+              </div>
+            </section>
+          ) : null}
+          {review.authority !== 'local' ? (
+            <p className="studio-help">
+              Review expires <time dateTime={review.expiresAt}>{review.expiresAt}</time>.
+            </p>
+          ) : null}
           {expired ? <p role="status">The review expired. Prepare a fresh review.</p> : null}
           <label className="studio-confirm" htmlFor={confirmationId}>
             <input
@@ -108,7 +141,11 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
               disabled={blocked || expired}
               onChange={(event) => setConfirmed(event.target.checked)}
             />
-            <span>I have reviewed these exact versions and want to publish this release.</span>
+            <span>
+              {review.authority === 'local'
+                ? m.studio_account_confirm({}, { locale: getLocale() })
+                : 'I have reviewed these exact versions and want to publish this release.'}
+            </span>
           </label>
           <div className="studio-action-row">
             <Button

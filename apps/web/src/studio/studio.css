@@ -97,7 +97,8 @@
 }
 .studio-workspace button,
 .studio-workspace input:not([type='checkbox']),
-.studio-workspace select {
+.studio-workspace select,
+.studio-workspace textarea {
   min-block-size: 2.75rem;
 }
 .studio-workspace button {
@@ -121,7 +122,19 @@
   padding-inline: 0.75rem;
   font: inherit;
 }
-.studio-workspace :where(button, input, select, summary, a, [tabindex]):focus-visible {
+.studio-workspace textarea {
+  inline-size: 100%;
+  min-inline-size: 0;
+  border: 1px solid var(--input);
+  border-radius: 0.5rem;
+  background: var(--background);
+  color: var(--foreground);
+  padding: 0.75rem;
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+}
+.studio-workspace :where(button, input, select, textarea, summary, a, [tabindex]):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 3px;
 }
@@ -187,7 +200,7 @@
   border-radius: 0.75rem;
 }
 .studio-preview-notice {
-  border-inline-start: 3px solid var(--primary);
+  border-inline-start: 2px solid var(--border);
   padding-inline-start: 0.75rem;
   color: var(--muted-foreground);
 }
@@ -259,10 +272,32 @@
   padding-inline: 0.6rem;
 }
 .studio-placement-form,
-.studio-new-draft {
+.studio-new-draft,
+.studio-native-create {
   margin-block-start: 1rem;
   padding-block-start: 0.75rem;
   border-block-start: 1px solid var(--border);
+}
+.studio-native-create > h2 {
+  margin-block-end: 0.25rem;
+}
+.studio-native-body {
+  min-block-size: 8rem;
+}
+.studio-native-review {
+  min-inline-size: 0;
+  border-block-start: 1px solid var(--border);
+  padding-block-start: 0.75rem;
+}
+.studio-reviewed-body {
+  max-inline-size: 70ch;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.6;
+  padding: 0.75rem;
+  border-inline-start: 2px solid var(--border);
+  background: var(--muted);
 }
 .studio-draft-list,
 .studio-version-list,
