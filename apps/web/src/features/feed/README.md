@@ -6,8 +6,13 @@ anonymous before the separate member read. Install Worker bindings before import
 Decision: Home omits conversation activity when the optional native summary field is absent; only an explicit
 withheld result shows unavailable activity and its native retry destination. A current exact zero remains visible.
 
-Decision: Home's mounted feed window bounds every browser feed read to 2,000 ms. Expiry aborts that generation and
-settles through the existing retryable deadline state; a late response cannot replace that terminal result.
+Decision: Home keeps the current feed generation eligible until its browser read settles. A client deadline only
+changes a pending read into failure and cannot explain why the server-function request or mounted reader stayed
+loading. The retained page-data run showed a busy Home region, but did not record browser request settlement or a
+client mount notification; its separate native HTTP result does not establish either stage. Home exposes its client
+mount notification and current result state, while page-data diagnostics record same-origin ServerFn start,
+response, settlement, failure and pending counts separately from the selected reader DOM. A settled current read
+updates the mounted window; replaced generations still retire and ignore late results.
 
 `FeedResults<T>` is the shared ordered list, availability, empty-state and recovery region. It renders one named
 `section` and an `ol` or `ul` of `ContentItem` rows. It does not add a page landmark. The caller keeps its page

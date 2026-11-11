@@ -95,6 +95,7 @@ export function HomeFeed({
   onRestart?: () => void;
 }) {
   const options = { locale: locale as Locale };
+  const [mounted, setMounted] = useState(false);
   const filterId = useId();
   const boundary = useRef<HTMLElement>(null);
   const advancing = useRef<{ request: string | null } | null>(null);
@@ -117,6 +118,7 @@ export function HomeFeed({
     filterPanel.current
       ?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href], select:not(:disabled)')
       ?.focus();
+  useEffect(() => setMounted(true), []);
   useEffect(() => {
     if (!filtersOpen || !focusFilters.current) return;
     focusFilters.current = false;
@@ -152,7 +154,9 @@ export function HomeFeed({
   return (
     <main
       className="mx-auto w-full max-w-3xl space-y-4 text-foreground"
-      aria-busy={busy}
+      aria-busy={busy || result.state === 'loading'}
+      data-home-feed-mounted={mounted ? 'true' : 'false'}
+      data-home-feed-state={result.state}
       data-feed-source-state={
         page
           ? Object.entries(page.sources)

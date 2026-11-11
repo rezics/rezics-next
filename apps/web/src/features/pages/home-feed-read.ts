@@ -26,7 +26,6 @@ export type HomeFeedNavigationDescriptor = {
 export type FeedFailure = 'request' | 'auth' | 'denied' | 'closed' | 'cursor' | 'deadline' | 'unavailable';
 export type HomeFeedResult = { state: 'ready'; page: FeedPage } | { state: FeedFailure | 'loading'; code: string };
 export const HOME_FEED_LIMIT = 20;
-export const HOME_FEED_READ_DEADLINE_MS = 2_000;
 
 function failure(status: number, value: unknown): HomeFeedResult {
   const code =
@@ -124,43 +123,11 @@ export function loadPublicHomeFeed(
 }
 
 export type FeedWindow = { result: HomeFeedResult; busy: boolean; input: FeedInput };
-type FeedReadOutcome = { state: 'result'; result: HomeFeedResult } | { state: 'failure' | 'deadline' | 'aborted' };
-
-/** Bound both response settlement and the lifetime of an abandoned reader generation. */
-function readFeedWithinDeadline(
-  read: (input: FeedInput, signal: AbortSignal) => Promise<HomeFeedResult>,
-  input: FeedInput,
-  signal: AbortSignal,
-  deadlineMs: number,
-): Promise<FeedReadOutcome> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let removeAbortListener = () => {};
-  const aborted = new Promise<{ state: 'aborted' }>((resolve) => {
-    const onAbort = () => resolve({ state: 'aborted' });
-    signal.addEventListener('abort', onAbort, { once: true });
-    removeAbortListener = () => signal.removeEventListener('abort', onAbort);
-    if (signal.aborted) onAbort();
-  });
-  const deadline = new Promise<{ state: 'deadline' }>((resolve) => {
-    timer = setTimeout(() => resolve({ state: 'deadline' }), deadlineMs);
-  });
-  const request = Promise.resolve()
-    .then(() => read(input, signal))
-    .then(
-      (result) => ({ state: 'result' as const, result }),
-      () => ({ state: 'failure' as const }),
-    );
-  return Promise.race([request, deadline, aborted]).finally(() => {
-    if (timer !== undefined) clearTimeout(timer);
-    removeAbortListener();
-  });
-}
 
 /** A single displayed page. Replaced pages and late responses never accumulate in a query cache. */
 export function createHomeFeedWindow(
   initial: HomeFeedResult,
   read: (input: FeedInput, signal: AbortSignal) => Promise<HomeFeedResult>,
-  deadlineMs = HOME_FEED_READ_DEADLINE_MS,
 ) {
   let snapshot: FeedWindow = { result: initial, busy: false, input: { stream: 'home' } };
   let generation = 0;
@@ -243,17 +210,14 @@ export function createHomeFeedWindow(
       emit();
       void (async () => {
         try {
-          const outcome = await readFeedWithinDeadline(read, input, controller.signal, deadlineMs);
-          if (generation !== current || outcome.state === 'aborted') return;
-          const timedOut = outcome.state === 'deadline';
-          if (timedOut) controller.abort();
+          let result: HomeFeedResult;
+          try {
+            result = await read(input, controller.signal);
+          } catch {
+            result = { state: 'unavailable', code: 'dependency_unavailable' };
+          }
+          if (generation !== current) return;
           pending = undefined;
-          const result: HomeFeedResult =
-            outcome.state === 'result'
-              ? outcome.result
-              : outcome.state === 'failure'
-                ? { state: 'unavailable', code: 'dependency_unavailable' }
-                : { state: 'deadline', code: 'deadline_exceeded' };
           snapshot = { result, busy: false, input };
           emit();
         } finally {

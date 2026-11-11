@@ -1,11 +1,13 @@
 import { expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { KernelClient } from '@rezics/client';
 import { ContentItem } from '@rezics/ui/content-item';
 import type { HomeSpaceResult } from '../src/features/pages/home-feed-spaces';
 import type { FeedInput, FeedItem, FeedPage, HomeFeedResult } from '../src/features/pages/home-feed-read';
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { HomeFeed } = await import('../src/features/pages/home-feed');
+const { HomeFeed, HomeFeedConsumer } = await import('../src/features/pages/home-feed');
 const { homeFeedItemPresentation } = await import('../src/features/feed/home-feed-item');
 const { createHomeSpaceSelection } = await import('../src/features/pages/home-feed-spaces');
 const { discoveryCollectionCard } = await import('../src/kernel/fake/discovery-collection-card');
@@ -211,8 +213,8 @@ test('selection replacement retires the old page and ignores its late response',
   const book = controller.load({ stream: 'home', kind: 'schema:Book' });
   const movie = controller.load({ stream: 'home', kind: 'schema:Movie' });
   expect(requests.get('schema:Book')!.signal.aborted).toBe(true);
-  await book;
   requests.get('schema:Book')!.resolve(page('stale-book'));
+  await book;
   expect(controller.snapshot()).toMatchObject({
     busy: true,
     result: { state: 'loading' },
@@ -223,26 +225,107 @@ test('selection replacement retires the old page and ignores its late response',
   expect(controller.snapshot().result).toEqual(page('current-movie'));
 });
 
-test('a home read deadline aborts the request and ignores a late native response', async () => {
-  let resolveRead!: (result: HomeFeedResult) => void;
-  let signal!: AbortSignal;
-  const controller = createHomeFeedWindow(
-    { state: 'loading', code: 'loading' },
-    (_input, current) => {
-      signal = current;
-      return new Promise<HomeFeedResult>((resolve) => (resolveRead = resolve));
-    },
-    10,
+test('the mounted default Home consumer renders current anonymous and prepared member reads after two seconds', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  await controller.load({ stream: 'home' });
-  expect(signal.aborted).toBe(true);
-  expect(controller.snapshot()).toMatchObject({
-    busy: false,
-    result: { state: 'deadline', code: 'deadline_exceeded' },
+  const browser = new Window({ url: 'https://example.test/en/' });
+  const globals = {
+    window: browser,
+    document: browser.document,
+    navigator: browser.navigator,
+    HTMLElement: browser.HTMLElement,
+    HTMLButtonElement: browser.HTMLButtonElement,
+    Element: browser.Element,
+    Node: browser.Node,
+    Document: browser.Document,
+    ShadowRoot: browser.ShadowRoot,
+    DocumentFragment: browser.DocumentFragment,
+    MutationObserver: browser.MutationObserver,
+    ResizeObserver: browser.ResizeObserver,
+    getComputedStyle: browser.getComputedStyle.bind(browser),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const host = browser.document.createElement('div');
+  browser.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const rows = mixedRows();
+  const readyPage = (feedItems: FeedItem[], following: 'ready' | 'not_requested'): HomeFeedResult => ({
+    state: 'ready',
+    page: {
+      feedItems,
+      next: null,
+      asOf: '2026-11-03T00:00:00Z',
+      sources: { discovery: 'ready', following, continue: 'not_requested' },
+    },
   });
-  resolveRead(page('late'));
-  await Promise.resolve();
-  expect(controller.snapshot().result).toEqual({ state: 'deadline', code: 'deadline_exceeded' });
+  const results = {
+    anonymous: readyPage(
+      rows.filter((item) => item.source === 'discovery'),
+      'not_requested',
+    ),
+    member: readyPage(rows, 'ready'),
+  } satisfies Record<'anonymous' | 'member', HomeFeedResult>;
+  const pending: Array<{ identity: 'anonymous' | 'member'; resolve: (result: HomeFeedResult) => void }> = [];
+  const props = (identity: 'anonymous' | 'member') => ({
+    initial: { state: 'loading' as const, code: 'loading' },
+    locale: 'en',
+    signedIn: identity === 'member',
+    reader: identity === 'member' ? 'reader' : null,
+    credentialEpoch: identity === 'member' ? 'reader:prepared' : null,
+    origin: 'https://example.test',
+    read: () => new Promise<HomeFeedResult>((resolve) => pending.push({ identity, resolve })),
+    readKinds: async () => ({ status: 'unavailable' as const }),
+    readSpace: async () => ({ status: 'unavailable' as const }),
+    readQuestions: async () => ({ status: 'unavailable' as const, code: 'unavailable' }),
+    readQuestion: async () => ({ status: 'unavailable' as const, code: 'unavailable' }),
+  });
+  try {
+    await act(async () =>
+      root.render(
+        <>
+          <div data-identity="anonymous">
+            <HomeFeedConsumer {...props('anonymous')} />
+          </div>
+          <div data-identity="member">
+            <HomeFeedConsumer {...props('member')} />
+          </div>
+        </>,
+      ),
+    );
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(pending.map(({ identity }) => identity)).toEqual(['anonymous', 'member']);
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 2_050)));
+    for (const identity of ['anonymous', 'member'] as const) {
+      const reader = host.querySelector(`[data-identity="${identity}"] main`)!;
+      expect(reader.getAttribute('aria-busy')).toBe('true');
+      expect(reader.getAttribute('data-home-feed-mounted')).toBe('true');
+    }
+    await act(async () => {
+      for (const request of pending) request.resolve(results[request.identity]);
+      await Promise.resolve();
+    });
+    for (const identity of ['anonymous', 'member'] as const) {
+      const reader = host.querySelector(`[data-identity="${identity}"] main`)!;
+      const expected = identity === 'anonymous' ? rows.filter((item) => item.source === 'discovery') : rows;
+      expect(reader.getAttribute('aria-busy')).toBe('false');
+      expect(reader.getAttribute('data-home-feed-state')).toBe('ready');
+      expect([...reader.querySelectorAll('[data-feed-id]')].map((item) => item.getAttribute('data-feed-id'))).toEqual(
+        expected.map((item) => item.id),
+      );
+    }
+  } finally {
+    await act(async () => root.unmount());
+    await browser.happyDOM.close();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
 });
 
 test('return revalidates Space access and shows restart for an expired native frontier', async () => {

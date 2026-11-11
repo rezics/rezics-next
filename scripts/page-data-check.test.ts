@@ -36,6 +36,9 @@ const page = (partial: Partial<PageObservation>): PageObservation => ({
   text: '',
   dataState: null,
   busy: false,
+  homeMounted: null,
+  homeState: null,
+  homeBusy: null,
   ...partial,
 });
 
@@ -66,6 +69,9 @@ const browserPage = (options: {
         text: 'Fixture reader',
         dataState: 'ready',
         busy: false,
+        homeMounted: null,
+        homeState: null,
+        homeBusy: null,
         documentIdentity: { url: `${current.origin}${current.pathname}`, timeOrigin: 1 },
         documentHref: url,
       };
@@ -779,6 +785,8 @@ test('bounded native-page observation recovers redirects and context replacement
   let irrelevantResourceStarted = false;
   let irrelevantResourceFinished = false;
   let releaseLateRedirect: (() => void) | undefined;
+  const releaseServerFunctions: (() => void)[] = [];
+  const serverFunctionSettlements: Promise<void>[] = [];
   let lateRedirectStartedAt = 0;
   let lateTargetStarted = false;
   let lateRecoveryElapsed = 0;
@@ -791,6 +799,15 @@ test('bounded native-page observation recovers redirects and context replacement
     port: 0,
     async fetch(request) {
       const path = new URL(request.url).pathname;
+      if (path === '/_serverFn/ready') return Response.json({ result: 'ready' });
+      if (path === '/_serverFn/fail') return Response.json({ result: 'failed' }, { status: 503 });
+      if (path === '/_serverFn/pending') {
+        const pending = new Promise<Response>((resolve) => {
+          releaseServerFunctions.push(() => resolve(Response.json({ result: 'late' })));
+        });
+        serverFunctionSettlements.push(pending.then(() => undefined));
+        return await pending;
+      }
       if (path === '/en/redirect') return Response.redirect(new URL('/en/redirect-ready', request.url), 301);
       if (path === '/en/redirect-ready') {
         await new Promise((resolve) => setTimeout(resolve, 230));
@@ -811,10 +828,25 @@ test('bounded native-page observation recovers redirects and context replacement
         );
       if (path === '/en/readiness') {
         return new Response(
-          '<p role="status">Preparing unrelated page content</p><img src="/irrelevant.png"><section data-case="ready" data-state="ready"><h2>Ready reader</h2><ul><li data-item>ready row</li></ul></section><section data-case="pending" data-state="loading">Loading this reader</section>',
+          '<main data-home-feed-mounted="true" data-home-feed-state="loading" aria-busy="true"><p role="status">Preparing unrelated page content</p><img src="/irrelevant.png"><section data-case="ready" data-state="ready"><h2>Ready reader</h2><ul><li data-item>ready row</li></ul></section><section data-case="pending" data-state="loading">Loading this reader</section><button type="button">Open Following</button></main><script>fetch("/_serverFn/ready", { headers: { "x-tsr-serverFn": "true" } }); fetch("/_serverFn/fail", { headers: { "x-tsr-serverFn": "true" } }); fetch("/_serverFn/pending", { headers: { "x-tsr-serverFn": "true" } });</script>',
           { headers: { 'content-type': 'text/html' } },
         );
       }
+      if (path === '/en/selector-missing')
+        return new Response(
+          '<main data-home-feed-mounted="true" data-home-feed-state="ready" aria-busy="false"><p>Mounted Home reader without the selected target.</p></main>',
+          { headers: { 'content-type': 'text/html' } },
+        );
+      if (path === '/en/native-unsettled')
+        return new Response(
+          '<main data-home-feed-mounted="true" data-home-feed-state="loading" aria-busy="true"><section data-case="pending" data-state="loading">Loading this reader</section></main>',
+          { headers: { 'content-type': 'text/html' } },
+        );
+      if (path === '/en/home-mount-unobserved')
+        return new Response(
+          '<main data-home-feed-mounted="false" data-home-feed-state="loading" aria-busy="true"><p>Home mount effect has not notified.</p></main>',
+          { headers: { 'content-type': 'text/html' } },
+        );
       if (path === '/en/empty')
         return new Response(
           '<section data-case="empty" data-state="empty"><h2>Empty reader</h2><p>No visible entries on this page.</p></section>',
@@ -873,12 +905,18 @@ test('bounded native-page observation recovers redirects and context replacement
   } as unknown as Browser;
   const sqlCalls: string[] = [];
   const sqlSection = (query: string) => ({ text: query, params: [] as const });
-  const section = (id: string, selector: string, nativePath = '/v1/data', sql?: string) => ({
+  const section = (
+    id: string,
+    selector: string,
+    nativePath = '/v1/data',
+    sql?: string,
+    action?: { role: 'button'; name: string },
+  ) => ({
     id,
     name: id,
     selector,
     itemSelector: 'li[data-item]',
-    native: { method: 'GET' as const, path: nativePath, items: '/relations' },
+    native: { method: 'GET' as const, path: nativePath, items: '/relations', ...(action ? { action } : {}) },
     ...(sql === undefined ? {} : { sql: sqlSection(sql) }),
   });
   const anonymousPage = (id: string, path: string, sections: ReturnType<typeof section>[]) => ({
@@ -901,9 +939,23 @@ test('bounded native-page observation recovers redirects and context replacement
       anonymousPage('independent-readers', '/en/readiness', [
         section('ready', '[data-case="ready"]'),
         section('pending-a', '[data-case="pending"]'),
-        section('pending-b', '[data-case="pending"]'),
+      ]),
+      anonymousPage('selector-missing', '/en/selector-missing', [
         section('selector-missing', '[data-case="selector-missing"]'),
+      ]),
+      anonymousPage('native-unsettled', '/en/native-unsettled', [
         section('native-unsettled', '[data-case="pending"]', '/v1/offline'),
+      ]),
+      anonymousPage('home-mount-unobserved', '/en/home-mount-unobserved', [
+        section('home-mount-unobserved', '[data-case="home-mount-unobserved"]'),
+      ]),
+      anonymousPage('following-action-unstarted', '/en/readiness', [
+        section('ready', '[data-case="ready"]'),
+        section('pending-a', '[data-case="pending"]'),
+        section('following', '[data-case="following"]', '/v1/data', undefined, {
+          role: 'button',
+          name: 'Open Following',
+        }),
       ]),
       anonymousPage('genuine-empty', '/en/empty', [
         section('empty', '[data-case="empty"]', '/v1/empty', 'SELECT 0 AS n'),
@@ -970,12 +1022,42 @@ test('bounded native-page observation recovers redirects and context replacement
       class: 'DATA',
       evidence: { browserProbe: 'run', reader: 'data', pageItems: 1 },
     });
-    for (const id of ['pending-a', 'pending-b']) {
-      expect(byKey.get(`independent-readers.${id}`)).toMatchObject({
-        class: 'UNAVAILABLE',
-        evidence: { browserProbe: 'run', reader: 'loading', nativeProbe: 'run' },
-      });
-    }
+    expect(byKey.get('independent-readers.pending-a')).toMatchObject({
+      class: 'UNAVAILABLE',
+      evidence: {
+        browserProbe: 'run',
+        reader: 'loading',
+        nativeProbe: 'run',
+        homeMounted: true,
+        homeState: 'loading',
+        homeBusy: true,
+        browserServerFunctions: { started: 3, responses: 2, settled: 2, failed: 1, pending: 1, truncated: false },
+      },
+    });
+    expect(byKey.get('selector-missing.selector-missing')).toMatchObject({
+      class: 'UNAVAILABLE',
+      evidence: { browserProbe: 'run', reader: 'missing', homeMounted: true, homeState: 'ready', homeBusy: false },
+    });
+    expect(byKey.get('native-unsettled.native-unsettled')).toMatchObject({
+      class: 'UNAVAILABLE',
+      evidence: { nativeProbe: 'run', nativeStatus: 0, browserProbe: 'run', reader: 'loading', homeMounted: true },
+    });
+    expect(byKey.get('home-mount-unobserved.home-mount-unobserved')).toMatchObject({
+      class: 'UNAVAILABLE',
+      evidence: { reader: 'missing', homeMounted: false, homeState: 'loading', homeBusy: true },
+    });
+    expect(byKey.get('following-action-unstarted.following')).toMatchObject({
+      class: 'UNAVAILABLE',
+      evidence: {
+        nativeProbe: 'run',
+        nativeStatus: 200,
+        browserProbe: 'unrun',
+        action: 'not-started',
+        homeMounted: null,
+        homeState: null,
+        homeBusy: null,
+      },
+    });
     expect(byKey.get('genuine-empty.empty')).toMatchObject({
       class: 'SEED',
       evidence: {
@@ -1011,23 +1093,33 @@ test('bounded native-page observation recovers redirects and context replacement
     });
     expect(result.diagnostics.some((line) => line.includes('reason=redirect-not-settled'))).toBe(true);
     expect(result.diagnostics.some((line) => line.includes('reason=target-lost'))).toBe(true);
-    expect(result.diagnostics).toEqual(
-      expect.arrayContaining([
-        'Reader readiness timed out for independent-readers anonymous pending-a: reason=reader-remained-loading; native=settled:200 reader=present state=loading busy=true',
-        'Reader readiness timed out for independent-readers anonymous selector-missing: reason=reader-selector-not-found; native=settled:200 reader=missing state=none busy=true',
-        'Reader readiness timed out for independent-readers anonymous native-unsettled: reason=reader-remained-loading; native=unsettled reader=present state=loading busy=true',
-      ]),
+    expect(result.diagnostics).toContain(
+      'Reader readiness timed out for independent-readers anonymous pending-a: reason=reader-remained-loading; independentNative=settled:200 browserServerFn=started:3,responses:2,settled:2,failed:1,pending:1 action=not-required homeMountNotification=received homeState=loading homeBusy=true; reader=present state=loading busy=true',
+    );
+    expect(result.diagnostics).toContain(
+      'Reader readiness timed out for selector-missing anonymous selector-missing: reason=reader-selector-not-found; independentNative=settled:200 browserServerFn=started:0,responses:0,settled:0,failed:0,pending:0 action=not-required homeMountNotification=received homeState=ready homeBusy=false; reader=missing state=none busy=true',
+    );
+    expect(result.diagnostics).toContain(
+      'Reader readiness timed out for native-unsettled anonymous native-unsettled: reason=reader-remained-loading; independentNative=unsettled browserServerFn=started:0,responses:0,settled:0,failed:0,pending:0 action=not-required homeMountNotification=received homeState=loading homeBusy=true; reader=present state=loading busy=true',
+    );
+    expect(result.diagnostics).toContain(
+      'Reader readiness timed out for home-mount-unobserved anonymous home-mount-unobserved: reason=home-mount-notification-unobserved; independentNative=settled:200 browserServerFn=started:0,responses:0,settled:0,failed:0,pending:0 action=not-required homeMountNotification=not-received homeState=loading homeBusy=true; reader=missing state=none busy=true',
+    );
+    expect(result.diagnostics).toContain(
+      'Browser action not started for following-action-unstarted anonymous following: reason=Reader readiness deadline elapsed before section action; independentNative=settled:200 browserServerFn=started:3,responses:2,settled:2,failed:1,pending:1 action=not-started homeMountNotification=unobserved homeState=none homeBusy=unobserved; reader=unobserved state=unobserved busy=unobserved',
     );
     expect(sqlCalls).toHaveLength(5);
     expect([irrelevantResourceStarted, irrelevantResourceFinished, closeLostTarget]).toEqual([true, false, true]);
     expect(lateTargetStarted).toBe(true);
     expect(lateRecoveryElapsed).toBeLessThanOrEqual(pageTimeoutMs + readerTimeoutMs + 250);
-    expect(Date.now() - startedAt).toBeLessThan(1800);
+    expect(Date.now() - startedAt).toBeLessThan(2300);
     expect(output.join('')).not.toContain('irrelevant.png');
     expect(result.incomplete).toBe(true);
   } finally {
     releaseIrrelevantResource?.();
     releaseLateRedirect?.();
+    for (const release of releaseServerFunctions) release();
+    await Promise.all(serverFunctionSettlements);
     if (lateTargetStarted) await lateRedirectFinished;
     await browser.close();
     web.stop(true);
