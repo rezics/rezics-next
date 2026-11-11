@@ -510,6 +510,8 @@ async function runReactionRelayWorker(): Promise<void> {
   const { installNativeHistoryPreload } = await import('../../src/composition/preload.ts');
   installNativeHistoryPreload();
   const pool = new Pool({ connectionString: databaseUrl, max: 10 });
+  const { composeLibraryDomain } = await import('../../src/composition/library.ts');
+  composeLibraryDomain({ pool });
   const client = await createWorkClient(databaseUrl, pool);
   const registered: Effect[] = [];
   const observedModule = observedContentModule(registered);
