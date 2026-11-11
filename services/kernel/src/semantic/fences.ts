@@ -5,9 +5,11 @@ import type { CommandTransaction } from '../command/command.ts';
 import type { ContentImportedFieldGroup, ContentQueryClient } from './contract/domain-ports.ts';
 import { importedTupleRouteOf } from './adapters/imported-route.ts';
 import { readFences, type SourceFence, type SourceFenceTuple } from '../content/source-fences.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { partitionOf } from '../route/route.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import { withReadTransaction } from './read.ts';
 
 const FIELD_GROUPS = new Set<ContentImportedFieldGroup>(['facts', 'summary', 'cover']);
 
@@ -122,22 +124,13 @@ export async function readAnchoredFences(
   pool: Pool,
   partition: number,
   tuples: readonly SourceFenceTuple[],
+  deadline = deadlineFor(DEFAULT_REQUEST_DEADLINE_MS),
 ): Promise<readonly SourceFence[]> {
-  return withConnection(pool, async (connection) => {
-    await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const fences = await readFences(await partitionReadClient(connection, partition), tuples);
-      await connection.query('COMMIT');
-      return fences;
-    } catch (error) {
-      try {
-        await connection.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(connection, rollbackError as Error);
-      }
-      throw error;
-    }
-  });
+  return withReadTransaction(
+    pool,
+    async (client) => readFences(await partitionReadClient(client, partition), tuples),
+    deadline,
+  );
 }
 
 export function rememberFences(plan: SourceFencePlan, fences: readonly SourceFence[]): void {

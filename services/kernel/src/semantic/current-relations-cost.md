@@ -6,6 +6,12 @@ expanded slots, and `C` the selected live candidates. The work is `O(U + H + C)`
 compact slot has at most 33 fact-log rows, and each expanded selection admits at most 32 candidates. The selected
 candidate and history budgets are the native limits; unrelated Subjects and obsolete revisions add no term.
 
+The retained native stack run `67948204-8af7-455b-89d2-6952bf2460a6` used source
+`9a019391f3e547a236d78f78fc2b953c62f6445d` and command `services/auth/scripts/dev-stack.ts start`. Its six anonymous VN
+`/relations` and `/links` reads returned HTTP 503 `deadline_exceeded` at 1,165–1,174 ms in `before_command`; access
+preparation and transaction phases were zero. This establishes a pre-command request deadline, not its precise startup
+or scheduling cause. SQL candidate counts are separate readbacks and do not establish successful native page responses.
+
 The live-candidate statement batches `U` JSON keys and point-reads candidate primary keys. When the caller supplies a
 slot, its compact fallback reads the latest `(route, subject, slot, statement)` fact through
 `fact_current_relation_key_seek`; an inverse caller without a slot uses the existing
@@ -28,8 +34,9 @@ the page. `readAnchoredFences` opens one checkout per distinct source partition 
 COMMIT controls; those batches are independent of Subject population.
 
 Decision: HTTP relation and link reads carry the original request deadline through release resolution and page reads.
-Read snapshot checkout and SQL obey that deadline. Freshness polling uses at most half the remaining request time; if
-it expires, the response reports `caught_up: false` and leaves the remaining budget for the current page read.
+Read snapshot and source-fence checkout and SQL obey that deadline. Freshness polling uses at most half the remaining
+request time; if it expires, the response reports `caught_up: false` and leaves the remaining budget for the current
+page read.
 
 Input bytes are linear in `U`: route integers, UUID keys, property/context IDs and bounded defaults. Provenance batches
 carry at most 256 route/Subject/candidate/slot UUID tuples. Expanded output carries at most 32 selected statement

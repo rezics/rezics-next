@@ -912,7 +912,7 @@ async function currentRelationStatements(
             candidate: entry.statement,
           })),
           ...(await statementAudience(client)),
-        }),
+        }), deadline,
       )) as typeof rows),
     );
   }
@@ -933,7 +933,7 @@ async function currentRelationStatements(
   for (const [home, group] of tupleHomes)
     for (let offset = 0; offset < group.length; offset += 100) {
       requireAccessDeadline(deadline);
-      for (const fence of await readAnchoredFences(pool, home, group.slice(offset, offset + 100)))
+      for (const fence of await readAnchoredFences(pool, home, group.slice(offset, offset + 100), deadline))
         if (fence.takenDown) gone.add(fenceKey(fence));
     }
   const releases = new Map<string, Release>();
@@ -942,7 +942,7 @@ async function currentRelationStatements(
     if (row.source && 'field_group' in row.source && gone.has(fenceKey(sourceTuple(routeKey, row.source)))) continue;
     let release = releases.get(row.release);
     if (!release) {
-      release = (await readRelease(pool, row.release)) ?? undefined;
+      release = (await withReadTransaction(pool, (client) => readRelease(client, row.release), deadline)) ?? undefined;
       if (!release) continue;
       releases.set(row.release, release);
     }
@@ -1106,6 +1106,7 @@ export async function listSubjectLinks(
   if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
     throw new RangeError('Invalid links page limit');
   if (options.qualifier && options.limit > 20) throw new RangeError('Qualified link pages accept at most 20 rows');
+  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   const context = options.context ?? GLOBAL_CONTEXT;
   const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
   if (context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
@@ -1125,8 +1126,9 @@ export async function listSubjectLinks(
       release: options.releasePin ?? (options.release ? releaseDigest(options.release) : null),
     },
   };
-  const release =
-    options.type || options.filter ? (options.release ?? (await activeRelease(pool))?.release) : undefined;
+  const release = options.type || options.filter
+    ? (options.release ?? (await withReadTransaction(pool, (client) => activeRelease(client), deadline))?.release)
+    : undefined;
   const matches = (type: string) => !options.type || (!!release && matchesTarget(release, type, [options.type]));
   let cursor: { epoch: number; after: CursorKey[] } | null = null;
   if (options.cursor !== undefined) {
@@ -1135,7 +1137,6 @@ export async function listSubjectLinks(
     if (!validAfter(decoded.after, options.property)) throw new PageCursorError('invalid');
     cursor = decoded;
   }
-  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   let caughtUp = options.caughtUp ?? (await waitForSubjectLinks(pool, options.seen, options.subject, deadline));
   const readPage = async (refreshAuthorization = true) => {
     if (refreshAuthorization) await refreshStatementReaderAuthorization();
@@ -1323,10 +1324,10 @@ export async function listSubjectLinks(
         },
         scannedMembers,
       };
-    });
+    }, deadline);
   };
   let snapshot = await readPage(options.caughtUp === undefined);
-  let pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers);
+  let pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers, deadline);
   while (pendingMembers.length) {
     if (Date.now() >= deadline) {
       caughtUp = false;
@@ -1341,14 +1342,14 @@ export async function listSubjectLinks(
       snapshot.page.freshness.caught_up = false;
       break;
     }
-    pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers);
+    pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers, deadline);
   }
   const page = snapshot.page;
   const statements = await currentRelationStatements(pool, page.links, context, options.routeKey, deadline);
   const includeLabels = options.includeLabels ?? options.property !== null;
   const summaryRelease =
     includeLabels || options.type || options.authorizeSummary
-      ? (options.release ?? (await activeRelease(pool))?.release)
+      ? (options.release ?? (await withReadTransaction(pool, (client) => activeRelease(client), deadline))?.release)
       : undefined;
   const relatedIds = [
     ...new Set([...page.links.map((link) => link.subject), ...[...statements.values()].flatMap(statementItems)]),
@@ -1517,6 +1518,7 @@ export async function listSubjectRelations(
   if (route === null) throw new SubjectNotFoundError();
   if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
     throw new RangeError('Invalid relation page limit');
+  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   const context = options.context ?? GLOBAL_CONTEXT;
   const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
   if (context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
@@ -1541,7 +1543,6 @@ export async function listSubjectRelations(
     if (!validRelationAfter(decoded.after)) throw new PageCursorError('invalid');
     cursor = decoded;
   }
-  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   const caughtUp = options.caughtUp ?? (await waitForSubjectLinks(pool, options.seen, options.subject, deadline));
   if (options.caughtUp === undefined) await refreshStatementReaderAuthorization();
   const authorize =
@@ -1686,7 +1687,7 @@ export async function listSubjectRelations(
           : null,
       component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
     };
-  });
+  }, deadline);
   const statements = await currentRelationStatements(
     pool,
     page.relations.map((entry) => ({

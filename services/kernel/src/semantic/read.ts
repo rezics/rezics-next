@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
-import { deadlineClient } from '../access/deadline.ts';
+import { deadlineClient, within } from '../access/deadline.ts';
 import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -35,34 +35,36 @@ export function withReadTransaction<T>(
       return result;
     })();
   }
-  return withConnection(pool, async (connection) => {
-    // Keep the native client lifetime/discard owner; all queries use its real connection
-    // with the original request's remaining budget, including native Access queries.
-    const client = deadlineClient(connection, deadline) as PoolClient;
-    const snapshot = { client, deadline, live: true };
-    try {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      requireAccessDeadline(deadline);
-      const remaining = Math.max(1, Math.floor(deadline - Date.now()));
-      await client.query(`SET LOCAL statement_timeout = '${remaining}ms'`);
-      const next = new Map(snapshots.getStore());
-      next.set(pool, snapshot);
-      const result = await snapshots.run(next, () => read(client));
-      requireAccessDeadline(deadline);
-      await client.query('COMMIT');
-      requireAccessDeadline(deadline);
-      return result;
-    } catch (error) {
+  return within(deadline, () =>
+    withConnection(pool, async (connection) => {
+      // Keep the native client lifetime/discard owner; all queries use its real connection
+      // with the original request's remaining budget, including native Access queries.
+      const client = deadlineClient(connection, deadline) as PoolClient;
+      const snapshot = { client, deadline, live: true };
       try {
-        // Cleanup must still run after the request expires.
-        await connection.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(connection, rollbackError as Error);
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        requireAccessDeadline(deadline);
+        const remaining = Math.max(1, Math.floor(deadline - Date.now()));
+        await client.query(`SET LOCAL statement_timeout = '${remaining}ms'`);
+        const next = new Map(snapshots.getStore());
+        next.set(pool, snapshot);
+        const result = await snapshots.run(next, () => read(client));
+        requireAccessDeadline(deadline);
+        await client.query('COMMIT');
+        requireAccessDeadline(deadline);
+        return result;
+      } catch (error) {
+        try {
+          // Cleanup must still run after the request expires.
+          await connection.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardConnection(connection, rollbackError as Error);
+        }
+        requireAccessDeadline(deadline);
+        throw error;
+      } finally {
+        snapshot.live = false;
       }
-      requireAccessDeadline(deadline);
-      throw error;
-    } finally {
-      snapshot.live = false;
-    }
-  });
+    }),
+  );
 }

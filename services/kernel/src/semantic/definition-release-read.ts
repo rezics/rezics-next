@@ -17,6 +17,7 @@ import readCommunity from './context-read-community.sql';
 import readContextOwner from './context-read-creator.sql';
 import pointer from './extension-active.sql';
 import read from './extension-read.sql';
+import { withReadTransaction } from './read.ts';
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const releases = new Map<string, Release>();
@@ -187,11 +188,16 @@ export async function effectiveRelease(
   pool: Pool,
   context: string = GLOBAL_CONTEXT,
   persist = false,
+  deadline?: number,
 ): Promise<{ digest: string; head: number; release: Release } | null> {
-  const active = await activeRelease(pool);
-  if (!active) return null;
-  const layer = await layeredRelease(pool, active, context, persist);
-  return { ...active, digest: layer.digest, release: layer.release };
+  const resolve = async (db: Db) => {
+    const active = await activeRelease(db);
+    if (!active) return null;
+    const layer = await layeredRelease(db, active, context, persist);
+    return { ...active, digest: layer.digest, release: layer.release };
+  };
+  if (deadline === undefined || persist) return resolve(pool);
+  return withReadTransaction(pool, (client) => resolve(client), deadline);
 }
 
 /** The Context whose extension a statement on `property` would use, when the property is a Context term. */

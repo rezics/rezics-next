@@ -305,6 +305,14 @@ test('Person occupation is a native Concept relation while other classifications
       )
     ).relations.map((row: any) => row.target),
   ).toEqual([concept.id]);
+  expect(
+    (
+      await call(
+        'GET',
+        `/v1/subjects/${concept.id}/links?property=wdt:P106&language=en&limit=12&context=${GLOBAL_CONTEXT}`,
+      )
+    ).links.map((row: any) => [row.subject, row.property]),
+  ).toEqual([[person.id, 'wdt:P106']]);
   const refused = await kernel.handle(
     new Request(
       `http://kernel.test/v1/subjects/${person.id}/relations?property=ex:classification&context=${GLOBAL_CONTEXT}`,

@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { SessionComponent } from '../tokens/session.ts';
@@ -25,7 +25,11 @@ function covers(
   return epoch > component.epoch || (epoch === component.epoch && position >= component.position);
 }
 
-export async function pendingMergeSources(pool: Pool, members: readonly string[]): Promise<string[]> {
+export async function pendingMergeSources(
+  pool: Pool,
+  members: readonly string[],
+  deadline = deadlineFor(FRESHNESS_WAIT_MS),
+): Promise<string[]> {
   const groups = new Map<number, string[]>();
   for (const id of new Set(members)) {
     const route = routeOf(id);
@@ -37,9 +41,11 @@ export async function pendingMergeSources(pool: Pool, members: readonly string[]
   }
   const pending: string[] = [];
   for (const [partition, group] of groups) {
-    const found = await withReadTransaction(pool, async (client) => {
-      return readProjectionPending.run(client, { partition_no: partition, members: group });
-    });
+    const found = await withReadTransaction(
+      pool,
+      async (client) => readProjectionPending.run(client, { partition_no: partition, members: group }),
+      deadline,
+    );
     pending.push(...found.map((row) => row.member_id));
   }
   return pending;
@@ -53,43 +59,41 @@ export async function linksCaughtUp(
   members: readonly string[] = [],
   yieldAdmission?: YieldAdmission,
 ): Promise<boolean> {
-  while (Date.now() < deadline) {
-    const covered = await withConnection(pool, async (client) => {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        let caughtUp = true;
-        for (const component of seen) {
-          const row = await readLinkCheckpoint.run(client, {
-            partition_no: component.partition,
-            consumer: LINKS_CONSUMER,
-          });
-          if (!covers(row, component)) {
-            caughtUp = false;
-            break;
+  try {
+    while (Date.now() < deadline) {
+      const covered = await withReadTransaction(
+        pool,
+        async (client) => {
+          let caughtUp = true;
+          for (const component of seen) {
+            const row = await readLinkCheckpoint.run(client, {
+              partition_no: component.partition,
+              consumer: LINKS_CONSUMER,
+            });
+            if (!covers(row, component)) {
+              caughtUp = false;
+              break;
+            }
           }
-        }
-        if (caughtUp) {
-          const pending = await readPendingMember.run(client, { route: routeOf(subject)!, subject_id: subject });
-          caughtUp = pending === null;
-        }
-        await client.query('COMMIT');
-        return caughtUp;
-      } catch (error) {
-        try {
-          await client.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(client, rollbackError as Error);
-        }
-        throw error;
-      }
-    });
-    const pendingMembers = covered && members.length ? await pendingMergeSources(pool, members) : [];
-    if (covered && pendingMembers.length === 0) return true;
-    if (deadline - Date.now() < FRESHNESS_POLL_MS) return false;
-    // The database connection is released before this wait; yield the request's admission permit too.
-    await (yieldAdmission ? yieldAdmission(() => sleep(FRESHNESS_POLL_MS)) : sleep(FRESHNESS_POLL_MS));
+          if (caughtUp) {
+            const pending = await readPendingMember.run(client, { route: routeOf(subject)!, subject_id: subject });
+            caughtUp = pending === null;
+          }
+          return caughtUp;
+        },
+        deadline,
+      );
+      const pendingMembers = covered && members.length ? await pendingMergeSources(pool, members, deadline) : [];
+      if (covered && pendingMembers.length === 0) return true;
+      if (deadline - Date.now() < FRESHNESS_POLL_MS) return false;
+      // The database connection is released before this wait; yield the request's admission permit too.
+      await (yieldAdmission ? yieldAdmission(() => sleep(FRESHNESS_POLL_MS)) : sleep(FRESHNESS_POLL_MS));
+    }
+    return false;
+  } catch (error) {
+    if (error instanceof AccessUnavailableError && error.reason === 'deadline') return false;
+    throw error;
   }
-  return false;
 }
 
 export function waitForSubjectLinks(
