@@ -248,6 +248,31 @@ test('manager role templates keep their budget and oversized manager renders lau
   expect(rendered.manifest.overBudget).toEqual(['role', 'opening']);
 });
 
+test('the native check budget defers ordinary tests even without the local minimal-mode file', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'prompt-check-admission-'));
+  const worktree = resolve(import.meta.dir, '../../..');
+  try {
+    const ordinary = renderWorkerPrompt({
+      task: worker(contract(), { worktree }),
+      mainCheckout: MAIN,
+      stateDirectory: directory,
+    });
+    expect(Object.keys(ordinary.manifest.conditions)).toContain('minimal-verification');
+    expect(ordinary.prompt).toContain('Tests run after landing in the dev verifier.');
+    expect(ordinary.prompt).not.toContain('After your last edit, run the test files you created or changed');
+
+    const exempt = renderWorkerPrompt({
+      task: worker(contract({ urgent: true }), { worktree }),
+      mainCheckout: MAIN,
+      stateDirectory: directory,
+    });
+    expect(Object.keys(exempt.manifest.conditions)).toContain('wrapper');
+    expect(exempt.prompt).not.toContain('Tests run after landing in the dev verifier.');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('a minimal-verification launch of a brief that requires browser checks records deferredAcceptance and names that item', () => {
   const directory = mkdtempSync(join(tmpdir(), 'prompt-minimal-'));
   try {
