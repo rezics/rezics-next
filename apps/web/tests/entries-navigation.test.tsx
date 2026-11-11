@@ -178,15 +178,14 @@ test('sort and display navigate complete queries; history restores the controls 
   const select = (name: string) => host.querySelector<HTMLSelectElement>(`select[name="${name}"]`)!;
   const button = (text: string) =>
     [...host.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent === text)!;
-  const chooseLayout = (value: string) => {
-    const control = host.querySelector<HTMLSelectElement>('[data-slot="layout-select"]')!;
-    control.value = value;
-    control.dispatchEvent(new window.Event('change', { bubbles: true }));
+  const chooseLayout = async (value: string) => {
+    await run(() => host.querySelector<HTMLButtonElement>('[data-slot="layout-select"]')!.click());
+    await run(() => document.querySelector<HTMLElement>(`[data-layout-option="${value}"]`)!.click());
   };
   const search = () => validateShelfSearch(f.router.state.location.search);
   try {
     await run(() => root.render(f.element));
-    await run(() => chooseLayout('list'));
+    await chooseLayout('list');
     expect(search()).toEqual({ ...initial, layout: 'list' });
     select('orderBy').value = 'finishedAt';
     select('direction').value = 'desc';
@@ -207,7 +206,7 @@ test('sort and display navigate complete queries; history restores the controls 
     expect(select('orderBy').value).toBe('finishedAt');
     await run(() => f.router.history.back());
     await run(() => f.respond({ cursorReset: true }));
-    await run(() => chooseLayout('grid'));
+    await chooseLayout('grid');
     expect(search()).not.toHaveProperty('cursor');
     expect(search().state).toBe('planned');
     expect(search().type).toBe(initial.type);

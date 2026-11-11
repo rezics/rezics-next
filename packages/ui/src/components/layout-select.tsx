@@ -1,4 +1,4 @@
-import { NativeSelect, NativeSelectOption } from '../shadcn/native-select.tsx';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '../shadcn/select.tsx';
 import { cn } from '../utils.ts';
 
 export function LayoutSelect<Layout extends string>({
@@ -15,21 +15,35 @@ export function LayoutSelect<Layout extends string>({
   className?: string;
 }) {
   return (
-    <NativeSelect
-      aria-label={label}
-      data-slot="layout-select"
+    <Select
       value={value}
-      className={cn('min-w-0 max-w-full [&>select]:min-h-11 sm:[&>select]:min-h-8', className)}
-      onChange={(event) => {
-        const selected = options.find((option) => option.value === event.currentTarget.value);
+      items={options}
+      onValueChange={(next) => {
+        const selected = options.find((option) => option.value === next);
         if (selected) onValueChange(selected.value);
       }}
     >
-      {options.map((option) => (
-        <NativeSelectOption key={option.value} value={option.value} className={option.className}>
-          {option.label}
-        </NativeSelectOption>
-      ))}
-    </NativeSelect>
+      <SelectTrigger
+        aria-label={label}
+        data-slot="layout-select"
+        className={cn('min-h-11 min-w-0 max-w-full sm:min-h-8', className)}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align="end" alignItemWithTrigger={false}>
+        <SelectGroup>
+          {options.map((option) => (
+            <SelectItem
+              key={option.value}
+              value={option.value}
+              data-layout-option={option.value}
+              className={option.className}
+            >
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
   );
 }
