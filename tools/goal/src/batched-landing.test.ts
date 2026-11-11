@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { MergeTrain, type IntegrationCheck } from './merge-train.ts';
 import { git } from './merge.ts';
 import { TrainResolver } from './train-resolver.ts';
+import { readFlow } from './flow.ts';
 import { integrationHarness } from './test-support.ts';
 
 function setChecks(h: ReturnType<typeof integrationHarness>, checks: IntegrationCheck[]): void {
@@ -42,6 +43,11 @@ test('the dev lane batches eligible dev entries without worker-side affected res
     expect(
       h.outcomes.filter(({ taskId }) => [first.id, second.id].includes(taskId)).map(({ passed }) => passed),
     ).toEqual([true, true]);
+    for (const taskId of [first.id, second.id]) {
+      const operationEvents = readFlow(h.store.db).filter((event) => event.taskId === taskId && event.operationId);
+      expect(operationEvents.map((event) => event.action)).toEqual(['enqueued', 'started', 'finished']);
+      expect(new Set(operationEvents.map((event) => event.operationId)).size).toBe(1);
+    }
     const controlPlaneLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === controlPlane.id)!.logPath, 'utf8');
     const stabilizeLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === stabilize.id)!.logPath, 'utf8');
     const affectedLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === affected.id)!.logPath, 'utf8');

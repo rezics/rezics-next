@@ -1,6 +1,12 @@
 import type { Database } from 'bun:sqlite';
 import { migrate } from './db.ts';
-import { ensureFlow } from './flow.ts';
+import {
+  ensureFlow,
+  readLandingOperations,
+  summarizeLandingOperations,
+  unavailableLandingOperationSummary,
+  type LandingOperationSummary,
+} from './flow.ts';
 import { completeRebaseConflictContext, completeWorkerSourceBaseline } from './conflict-progress.ts';
 import { readWidthSnapshot, type WidthSnapshot } from './width-governor.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
@@ -109,6 +115,8 @@ export type LifecycleMetrics = {
     endsAt: string;
     durationMs: number;
   };
+  /** Terminal landing operations in [startsAt, endsAt), paired to their own recorded start. */
+  landingOperations: LandingOperationSummary;
   /** Worker-start flow events are launches; repeated starts of one attempt are reported as resumes. */
   attemptsPerTaskPerTrailingHour: {
     total: number;
@@ -823,6 +831,9 @@ function lifecycleMetricsWithWidth(
     width,
     trailingHour: { startsAt: start.toISOString(), endsAt: now.toISOString(), durationMs: HOUR_MS },
     attemptsPerTaskPerTrailingHour: launchCounts(db, start.toISOString(), now.toISOString()),
+    landingOperations: summarizeLandingOperations(
+      readLandingOperations(db, start.toISOString(), now.toISOString()),
+    ),
     waiting: {
       count: entries.length,
       oldestAgeMs: unknownAgeCount ? null : Math.max(0, ...knownAges),
@@ -868,5 +879,6 @@ export function readHourlyLifecycleMetrics(
   if (!row) return null;
   const metrics = JSON.parse(row.body) as LifecycleMetrics;
   metrics.conflicts ??= unavailableConflicts('This historical snapshot did not record conflict metrics.');
+  metrics.landingOperations ??= unavailableLandingOperationSummary();
   return { hourBucket: row.hour_bucket, emittedAt: row.emitted_at, metrics };
 }

@@ -25,6 +25,7 @@ export type FlowEvent = {
   action: string;
   at: string;
   detail?: string;
+  operationId?: string;
 };
 export const flowMigrations = [
   {
@@ -62,27 +63,74 @@ export const flowMigrations = [
     version: 7,
     sql: `ALTER TABLE flow_alarm_sends ADD COLUMN fingerprint TEXT; ALTER TABLE flow_alarm_sends ADD COLUMN active INTEGER NOT NULL DEFAULT 1;`,
   },
+  {
+    module: 'flow',
+    version: 8,
+    sql: `ALTER TABLE flow_events ADD COLUMN operation_id TEXT;
+      CREATE INDEX flow_events_operation_window ON flow_events(operation_id, at, sequence);
+      CREATE TABLE landing_operations (
+        operation_id TEXT PRIMARY KEY,
+        queue_id INTEGER NOT NULL,
+        task_id TEXT NOT NULL,
+        attempt INTEGER NOT NULL,
+        enqueued_at TEXT NOT NULL,
+        started_at TEXT,
+        terminal_at TEXT,
+        terminal_action TEXT,
+        terminal_outcome TEXT
+      );
+      CREATE INDEX landing_operations_terminal_window ON landing_operations(terminal_at, operation_id);`,
+  },
 ];
 export function ensureFlow(db: Database): void {
   migrate(db, flowMigrations);
 }
 export function recordFlow(db: Database, event: FlowEvent): void {
   ensureFlow(db);
-  db.query('INSERT INTO flow_events(task_id,attempt,stage,action,at,detail) VALUES (?,?,?,?,?,?)').run(
+  db.query('INSERT INTO flow_events(task_id,attempt,stage,action,at,detail,operation_id) VALUES (?,?,?,?,?,?,?)').run(
     event.taskId,
     event.attempt,
     event.stage,
     event.action,
     event.at,
     event.detail ?? null,
+    event.operationId ?? null,
   );
 }
-export function readFlow(db: Database, since = '0000-01-01T00:00:00.000Z'): FlowEvent[] {
+
+function canonicalUtc(value: string): string {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) throw new Error('flow window requires valid timestamps');
+  return new Date(timestamp).toISOString();
+}
+
+export function readFlow(
+  db: Database,
+  since = '0000-01-01T00:00:00.000Z',
+  until?: string,
+): FlowEvent[] {
   ensureFlow(db);
+  const start = canonicalUtc(since);
+  const end = until === undefined ? undefined : canonicalUtc(until);
+  const rows = end
+    ? db
+        .query(
+          'SELECT task_id,attempt,stage,action,at,detail,operation_id FROM flow_events WHERE at >= ? AND at < ? ORDER BY at,sequence',
+        )
+        .all(start, end)
+    : db
+        .query('SELECT task_id,attempt,stage,action,at,detail,operation_id FROM flow_events WHERE at >= ? ORDER BY at,sequence')
+        .all(start);
   return (
-    db
-      .query('SELECT task_id,attempt,stage,action,at,detail FROM flow_events WHERE at >= ? ORDER BY at,sequence')
-      .all(since) as any[]
+    rows as {
+      task_id: string;
+      attempt: number;
+      stage: FlowStage;
+      action: string;
+      at: string;
+      detail: string | null;
+      operation_id: string | null;
+    }[]
   ).map((r) => ({
     taskId: r.task_id,
     attempt: r.attempt,
@@ -90,7 +138,185 @@ export function readFlow(db: Database, since = '0000-01-01T00:00:00.000Z'): Flow
     action: r.action,
     at: r.at,
     ...(r.detail === null ? {} : { detail: r.detail }),
+    ...(r.operation_id === null ? {} : { operationId: r.operation_id }),
   }));
+}
+
+export type LandingOperation = {
+  operationId: string | null;
+  taskId: string;
+  attempt: number;
+  enqueuedAt: string | null;
+  startedAt: string | null;
+  terminalAt: string;
+  terminalAction: string;
+  terminalOutcome: string | null;
+};
+
+export type LandingOperationSummary = {
+  terminalCount: number | null;
+  measuredCount: number | null;
+  unknownDurationCount: number | null;
+  totalDurationMs: number | null;
+  p50DurationMs: number | null;
+  p90DurationMs: number | null;
+  outcomes: Record<string, number> | null;
+};
+
+/** Read terminal operations in the fixed half-open window; legacy flow rows remain visible without invented joins. */
+export function readLandingOperations(db: Database, since: string, until: string): LandingOperation[] {
+  ensureFlow(db);
+  const start = canonicalUtc(since);
+  const end = canonicalUtc(until);
+  const operations = db
+    .query(
+      `SELECT operation_id AS operationId, task_id AS taskId, attempt,
+              enqueued_at AS enqueuedAt, started_at AS startedAt, terminal_at AS terminalAt,
+              terminal_action AS terminalAction, terminal_outcome AS terminalOutcome
+       FROM landing_operations
+       WHERE terminal_at >= ? AND terminal_at < ?
+       ORDER BY terminal_at, operation_id`,
+    )
+    .all(start, end) as Array<Omit<LandingOperation, 'operationId'> & { operationId: string }>;
+  const legacy = db
+    .query(
+      `SELECT NULL AS operationId, task_id AS taskId, attempt, NULL AS enqueuedAt,
+              NULL AS startedAt, at AS terminalAt, action AS terminalAction, detail AS terminalOutcome
+       FROM flow_events INDEXED BY flow_events_at_window
+       WHERE stage='landing' AND action IN ('finished','resolver-requeued','acknowledged')
+         AND operation_id IS NULL AND at >= ? AND at < ?
+       ORDER BY at, sequence`,
+    )
+    .all(start, end) as LandingOperation[];
+  return [...(operations as LandingOperation[]), ...legacy].sort(
+    (a, b) => a.terminalAt.localeCompare(b.terminalAt) || (a.operationId ?? '').localeCompare(b.operationId ?? ''),
+  );
+}
+
+export function summarizeLandingOperations(operations: readonly LandingOperation[]): LandingOperationSummary {
+  const durations: number[] = [];
+  const outcomes: Record<string, number> = {};
+  for (const operation of operations) {
+    outcomes[operation.terminalAction] = (outcomes[operation.terminalAction] ?? 0) + 1;
+    if (!operation.operationId || !operation.startedAt) continue;
+    const start = Date.parse(operation.startedAt);
+    const end = Date.parse(operation.terminalAt);
+    if (Number.isFinite(start) && Number.isFinite(end) && end >= start) durations.push(end - start);
+  }
+  const sample = summarize(durations);
+  return {
+    terminalCount: operations.length,
+    measuredCount: durations.length,
+    unknownDurationCount: operations.length - durations.length,
+    totalDurationMs: sample.totalMs,
+    p50DurationMs: sample.p50Ms,
+    p90DurationMs: sample.p90Ms,
+    outcomes,
+  };
+}
+
+export function unavailableLandingOperationSummary(): LandingOperationSummary {
+  return {
+    terminalCount: null,
+    measuredCount: null,
+    unknownDurationCount: null,
+    totalDurationMs: null,
+    p50DurationMs: null,
+    p90DurationMs: null,
+    outcomes: null,
+  };
+}
+
+/** Persist a queue-created operation and its enqueue event from the caller's transaction. */
+export function recordLandingOperationEnqueued(
+  db: Database,
+  operation: { operationId: string; queueId: number; taskId: string; attempt: number; at: string },
+): void {
+  db.query(
+    'INSERT INTO landing_operations(operation_id,queue_id,task_id,attempt,enqueued_at) VALUES (?,?,?,?,?)',
+  ).run(operation.operationId, operation.queueId, operation.taskId, operation.attempt, operation.at);
+  recordFlow(db, {
+    taskId: operation.taskId,
+    attempt: operation.attempt,
+    stage: 'landing',
+    action: 'enqueued',
+    at: operation.at,
+    operationId: operation.operationId,
+  });
+}
+
+/** Persist the first queue selection as the operation start and emit its event once. */
+export function recordLandingOperationStarted(
+  db: Database,
+  operationId: string,
+  at: string,
+): boolean {
+  const operation = db
+    .query('SELECT task_id,attempt,started_at,terminal_at FROM landing_operations WHERE operation_id=?')
+    .get(operationId) as {
+    task_id: string;
+    attempt: number;
+    started_at: string | null;
+    terminal_at: string | null;
+  } | null;
+  if (!operation) throw new Error(`Landing operation ${operationId} is missing`);
+  if (operation.started_at !== null || operation.terminal_at !== null) return false;
+  const changed = db
+    .query('UPDATE landing_operations SET started_at=? WHERE operation_id=? AND started_at IS NULL AND terminal_at IS NULL')
+    .run(at, operationId);
+  if (changed.changes !== 1) return false;
+  recordFlow(db, {
+    taskId: operation.task_id,
+    attempt: operation.attempt,
+    stage: 'landing',
+    action: 'started',
+    at,
+    operationId,
+  });
+  return true;
+}
+
+/** Persist one terminal queue transition and its flow event from the caller's transaction. */
+export function recordLandingOperationTerminal(
+  db: Database,
+  operationId: string,
+  at: string,
+  action: string,
+  outcome: string | null,
+  detail?: string,
+): boolean {
+  const operation = db
+    .query('SELECT task_id,attempt,terminal_at,terminal_action,terminal_outcome FROM landing_operations WHERE operation_id=?')
+    .get(operationId) as {
+    task_id: string;
+    attempt: number;
+    terminal_at: string | null;
+    terminal_action: string | null;
+    terminal_outcome: string | null;
+  } | null;
+  if (!operation) throw new Error(`Landing operation ${operationId} is missing`);
+  if (operation.terminal_at !== null) {
+    if (
+      operation.terminal_action !== action ||
+      operation.terminal_outcome !== outcome ||
+      operation.terminal_at !== at
+    )
+      throw new Error(`Landing operation ${operationId} already has a different terminal outcome`);
+    return false;
+  }
+  db.query(
+    'UPDATE landing_operations SET terminal_at=?,terminal_action=?,terminal_outcome=? WHERE operation_id=? AND terminal_at IS NULL',
+  ).run(at, action, outcome, operationId);
+  recordFlow(db, {
+    taskId: operation.task_id,
+    attempt: operation.attempt,
+    stage: 'landing',
+    action,
+    at,
+    operationId,
+    ...(detail === undefined ? {} : { detail }),
+  });
+  return true;
 }
 
 const percentile = (values: number[], p: number): number | null =>
@@ -472,24 +698,49 @@ export function readFlowTasks(db: Database): FlowTask[] {
     }));
 }
 
-export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.now()) {
+export type FlowReportOptions = {
+  /** Historical windows may describe only observations inside their bounds, never today's live queue state. */
+  historical?: boolean;
+  landingOperations?: readonly LandingOperation[];
+  window?: { since: string; until: string };
+};
+
+export function flowReport(
+  events: FlowEvent[],
+  tasks: FlowTask[],
+  now = Date.now(),
+  options: FlowReportOptions = {},
+) {
+  const historical = options.historical === true;
   const ordered = [...events].sort((a, b) => a.at.localeCompare(b.at));
   const currentAttempts = new Map<string, number>();
-  for (const task of tasks)
+  for (const task of historical ? [] : tasks)
     if (typeof task.currentAttempt === 'number' && Number.isSafeInteger(task.currentAttempt))
       currentAttempts.set(task.id, task.currentAttempt);
   const { byTask, nextQueueAt, nextWaitAt, integrationCloses, currentAttemptEvent } = projectFlow(
     ordered,
     currentAttempts,
   );
-  const stageSummaries = FLOW_STAGES.map((stage) => ({
-    stage,
-    ...summarize(
+  const landingOperations =
+    options.landingOperations === undefined ? undefined : summarizeLandingOperations(options.landingOperations);
+  const stageSummaries = FLOW_STAGES.map((stage) => {
+    const summary = summarize(
       [...new Set(ordered.filter((e) => e.stage === stage).map((e) => e.taskId))].flatMap((id) =>
         stageDurations(byTask.get(id) ?? [], stage),
       ),
-    ),
-  }));
+    );
+    return {
+      stage,
+      ...(stage === 'landing' && landingOperations
+        ? {
+            count: landingOperations.measuredCount ?? 0,
+            totalMs: landingOperations.totalDurationMs ?? 0,
+            p50Ms: landingOperations.p50DurationMs,
+            p90Ms: landingOperations.p90DurationMs,
+          }
+        : summary),
+    };
+  });
   const taskRows = tasks.map((task) => {
     const es = byTask.get(task.id) ?? [];
     const dispatch = es.find((e) => e.stage === 'dispatch' && e.action === 'dispatched');
@@ -517,10 +768,12 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
   const terminalByStage = Object.fromEntries(
     queueStages.map((stage) => [
       stage,
-      new Set(tasks.filter((task) => terminalCloses(task.terminalState, stage)).map((task) => task.id)),
+      new Set(
+        historical ? [] : tasks.filter((task) => terminalCloses(task.terminalState, stage)).map((task) => task.id),
+      ),
     ]),
   ) as Record<QueueStage, Set<string>>;
-  const queues = queueStages.map((stage) => {
+  const queues = historical ? [] : queueStages.map((stage) => {
     const terminal = terminalByStage[stage];
     const pending: FlowEvent[] = [];
     for (let i = 0; i < ordered.length; i++) {
@@ -651,7 +904,7 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       })),
     };
   });
-  const bottleneck =
+  const bottleneck = historical ? null :
     [...queues]
       .map((q) => {
         const terminal = terminalByStage[q.stage];
@@ -699,6 +952,8 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       declined[key] = (declined[key] ?? 0) + 1;
     }
   return {
+    ...(options.window ? { window: { ...options.window, startInclusive: true, endExclusive: true } } : {}),
+    ...(landingOperations ? { landingOperations } : {}),
     chain: {
       offered: ordered.filter((e) => e.stage === 'chain' && e.action === 'offered').length,
       chained: chainGroup(true),

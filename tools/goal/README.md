@@ -1106,7 +1106,11 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 
 ### Delivery flow telemetry
 
-`report --flow [--since <time>] [--json]` reads durable flow events. Its `chain` section counts offers, chained and unchained
+`report --flow [--since <time>] [--until <time>] [--json]` reads durable flow events. `--since` is inclusive and
+`--until` is exclusive; together they select a fixed UTC window. A bounded report counts terminal landing operations
+inside that window, pairs each to its own start even when the start precedes midnight, and excludes later events and
+current task-state evidence. Legacy operations without their own identity and complete boundaries remain untimed.
+Its `chain` section counts offers, chained and unchained
 tasks (integrated, landed lines, worker-hours and lines per worker-hour) and declined offers by reason; see
 [Chained briefs](#chained-briefs). Decision: after one stable sort, `flowReport`
 builds one in-memory next-boundary and integration index; no per-request history rescan or second event store. It
@@ -1173,13 +1177,21 @@ start/terminal coverage for the terminal cohort. Compare throughput at comparabl
 counts do not establish time or allowance saved.
 
 The November 10 daily audit at `907b6f2929` recorded 52 enqueue events for 26 attempt identities and complete
-same-day landing intervals for two of 26 integrations. An enqueue now records its event only when it inserts the queue
-row. Start and terminal timing by operation remain the next part of the existing delivery contract.
+same-day landing intervals for two of 26 integrations. The enqueue insertion guard already records events only for
+new queue rows; the operation ledger below adds durable start and terminal boundaries with a distinct identity per
+genuine requeue.
+
+Decision: assign each landing operation a durable UUID and persist its enqueue, first actual queue start, and terminal
+outcome boundaries with their flow events in one SQLite transaction. A resolver requeue closes the current operation
+and creates a new operation identity in that transaction. Bounded reports use `[start, end)`, pair each terminal
+operation with its own start, and keep legacy or incomplete timing unknown; a historical report ignores current task
+state.
 
 ### Hourly delivery report
 
 `bun tools/goal/scripts/efficiency-report.ts [--bucket <UTC-hour-start>]` prints the most recently completed UTC hour
-by default. It joins timestamped integrations to task and attempt identities, names the last useful landing, and reads
+by default. Its landing-operation count and duration summary use the same `[start, end)` observations as the bounded
+flow report. It joins timestamped integrations to task and attempt identities, names the last useful landing, and reads
 current waits, orphaned landings, promotion state, quarantines and shared tool incidents from their existing durable
 records. Missing source history is `unknown`; an empty counter is not inferred from missing evidence. Landing counts
 are task outcomes, not changed-line volume. Worker diff churn is labeled separately and is not presented as delivered

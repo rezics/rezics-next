@@ -111,6 +111,29 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
         JSON.stringify({ taskId: 'queued', attempt: 1, declaredPaths: ['services/sample/src/index.ts'] }),
       );
     const at = (minute: number) => new Date(Date.parse(bucket) + minute * 60_000).toISOString();
+    h.db
+      .query(
+        `INSERT INTO landing_operations(operation_id,queue_id,task_id,attempt,enqueued_at,started_at,terminal_at,terminal_action,terminal_outcome)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        'hourly-cross-boundary',
+        1,
+        'landed',
+        2,
+        '2026-10-31T00:45:00.000Z',
+        '2026-10-31T00:50:00.000Z',
+        at(20),
+        'finished',
+        '{}',
+      );
+    h.db
+      .query(
+        `INSERT INTO landing_operations(operation_id,queue_id,task_id,attempt,enqueued_at,started_at,terminal_at,terminal_action,terminal_outcome)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run('at-hour-end', 2, 'landed', 2, bucket, at(55), '2026-10-31T02:00:00.000Z', 'finished', '{}');
+    recordFlow(h.db, { taskId: 'legacy-finish', attempt: 1, stage: 'landing', action: 'finished', at: at(30) });
     task(h.db, 'guarded', 'integrated', 'fixture');
     recordFlow(h.db, {
       taskId: 'landed',
@@ -140,6 +163,9 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
 
     const report = await renderHourlyEfficiencyReport(h.db, { bucket, now });
     expect(report).toContain('Landings in UTC hour: dev 1; stabilize 0; main 0; unknown 0 (each task counted once).');
+    expect(report).toContain(
+      'Landing operations in UTC hour: 2 terminal; 1 timed; 1 unknown duration; p50 1800000 ms; p90 1800000 ms.',
+    );
     expect(report).toContain('Backlog returns in bucket: 0.');
     expect(report).toContain('Landing identities: landed#2 at 2026-10-31T01:10:00.000Z (dev).');
     expect(report).toContain('Last useful landing: landed#2 at 2026-10-31T01:10:00.000Z.');

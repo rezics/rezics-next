@@ -22,7 +22,7 @@ export type ParsedWorkerCommandArguments =
   | { command: 'typing-recover'; taskId: string; expectedAttempt: number }
   | { command: 'status'; taskId?: string }
   | ({ command: 'attempts' } & AttemptsArguments)
-  | { command: 'report'; flow: boolean; json: boolean; since?: string }
+  | { command: 'report'; flow: boolean; json: boolean; since?: string; until?: string }
   | {
       command: 'retry';
       taskId: string;
@@ -146,20 +146,35 @@ export function parseWorkerCommandArguments(command: string, argv: string[]): Pa
       return { command, ...parseAttemptsArguments(argv) };
     case 'report': {
       let since: string | undefined;
-      const accepted = new Set(['--json', '--flow', '--since']);
+      let until: string | undefined;
+      const accepted = new Set(['--json', '--flow', '--since', '--until']);
       for (let index = 0; index < argv.length; index++) {
         const flag = argv[index]!;
-        if (!accepted.has(flag)) throw new Error('usage: report [--flow] [--since <time>] [--json]');
-        if (flag === '--since') {
-          since = argv[++index];
-          if (!since || !Number.isFinite(Date.parse(since))) throw new Error('--since requires a valid time');
+        if (!accepted.has(flag)) throw new Error('usage: report [--flow] [--since <time>] [--until <time>] [--json]');
+        if (flag === '--since' || flag === '--until') {
+          const value = argv[++index];
+          if (!value || !Number.isFinite(Date.parse(value))) throw new Error(`${flag} requires a valid time`);
+          const normalized = new Date(Date.parse(value)).toISOString();
+          if (flag === '--since') {
+            if (since !== undefined) throw new Error('usage: report [--flow] [--since <time>] [--until <time>] [--json]');
+            since = normalized;
+          } else {
+            if (until !== undefined) throw new Error('usage: report [--flow] [--since <time>] [--until <time>] [--json]');
+            until = normalized;
+          }
         }
       }
+      const flow = argv.includes('--flow');
+      if (until !== undefined && !flow)
+        throw new Error('usage: report [--flow] [--since <time>] [--until <time>] [--json]');
+      if (since !== undefined && until !== undefined && Date.parse(since) > Date.parse(until))
+        throw new Error('--since must be at or before --until');
       return {
         command,
-        flow: argv.includes('--flow'),
+        flow,
         json: argv.includes('--json'),
         ...(since ? { since } : {}),
+        ...(until ? { until } : {}),
       };
     }
     case 'retry': {

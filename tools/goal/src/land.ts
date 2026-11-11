@@ -1,4 +1,5 @@
 import type { Database } from 'bun:sqlite';
+import { randomUUID } from 'node:crypto';
 import type {
   AttemptFence,
   LandingQueue,
@@ -8,12 +9,19 @@ import type {
 } from './contracts.ts';
 import type { GateResult } from './merge.ts';
 import { migrate } from './db.ts';
-import { recordFlow } from './flow.ts';
+import {
+  ensureFlow,
+  recordFlow,
+  recordLandingOperationEnqueued,
+  recordLandingOperationStarted,
+  recordLandingOperationTerminal,
+} from './flow.ts';
 import { controlPlaneReleaseBrief } from './briefs.ts';
 import { identityLive, type ProcessIdentity } from './process.ts';
 
 export type LandingEntry = {
   id: number;
+  operationId?: string | null;
   request: LandingRequest;
   outcome: GateOutcome | null;
   delivered: number;
@@ -29,6 +37,7 @@ export class SqliteLandingQueue implements LandingQueue {
     readonly db: Database,
     private readonly fence: AttemptFence,
   ) {
+    ensureFlow(db);
     migrate(db, [
       {
         module: 'landing',
@@ -101,6 +110,11 @@ export class SqliteLandingQueue implements LandingQueue {
         version: 9,
         sql: 'ALTER TABLE landing_queue ADD COLUMN resolving INTEGER NOT NULL DEFAULT 0;',
       },
+      {
+        module: 'landing',
+        version: 10,
+        sql: 'ALTER TABLE landing_queue ADD COLUMN operation_id TEXT;',
+      },
     ]);
   }
   controlPlaneRefContinuation(batchId: string): string | undefined {
@@ -133,18 +147,20 @@ export class SqliteLandingQueue implements LandingQueue {
     this.db
       .transaction(() => {
         this.fence.assertCurrent(request);
+        const operationId = randomUUID();
+        const at = new Date().toISOString();
         const insert = this.db
           .query(
-            'INSERT INTO landing_queue(task, attempt, request) VALUES (?, ?, ?) ON CONFLICT(task, attempt) DO NOTHING',
+            'INSERT INTO landing_queue(task, attempt, request, operation_id) VALUES (?, ?, ?, ?) ON CONFLICT(task, attempt) DO NOTHING',
           )
-          .run(request.taskId, request.attempt, JSON.stringify(request));
+          .run(request.taskId, request.attempt, JSON.stringify(request), operationId);
         if (insert.changes === 0) return;
-        recordFlow(this.db, {
+        recordLandingOperationEnqueued(this.db, {
+          operationId,
+          queueId: Number(insert.lastInsertRowid),
           taskId: request.taskId,
           attempt: request.attempt,
-          stage: 'landing',
-          action: 'enqueued',
-          at: new Date().toISOString(),
+          at,
         });
       })
       .immediate();
@@ -169,6 +185,7 @@ export class SqliteLandingQueue implements LandingQueue {
       .query('SELECT * FROM landing_queue WHERE task=? AND attempt=?')
       .get(ref.taskId, ref.attempt) as {
       id: number;
+      operation_id: string | null;
       request: string;
       outcome: string | null;
       delivered: number;
@@ -178,6 +195,7 @@ export class SqliteLandingQueue implements LandingQueue {
     return row
       ? {
           ...row,
+          operationId: row.operation_id,
           batchId: row.batch,
           request: JSON.parse(row.request),
           outcome: row.outcome ? JSON.parse(row.outcome) : null,
@@ -259,6 +277,7 @@ export class SqliteLandingQueue implements LandingQueue {
             stage: 'landing',
             action: transfer ? 'cohort-readmitted' : 'cohort-claimed',
             at,
+            ...(entry.operationId ? { operationId: entry.operationId } : {}),
             detail: JSON.stringify({ batchId, previousBatchId: entry.batchId ?? null }),
           });
         }
@@ -318,6 +337,7 @@ export class SqliteLandingQueue implements LandingQueue {
             stage: 'landing',
             action: 'cohort-deferred-to-dev',
             at: new Date().toISOString(),
+            ...(entry.operationId ? { operationId: entry.operationId } : {}),
             detail: JSON.stringify({
               previousBatchId: handoff.previousBatchId,
               replacementBatchId: handoff.replacementBatchId,
@@ -372,54 +392,115 @@ export class SqliteLandingQueue implements LandingQueue {
         "COALESCE((SELECT json_extract(body, '$.brief.criticalPath') = 1 OR json_extract(body, '$.brief.target') = 'stabilize' FROM worker_tasks WHERE id = task), 0) DESC, "
       : '';
     const excluded = excludedIds.length ? ` AND id NOT IN (${excludedIds.map(() => '?').join(',')})` : '';
-    const rows = this.db
-      .query(
-        `SELECT * FROM landing_queue WHERE delivered = 0 AND batch IS NULL AND resolving = 0${laneFilter}${excluded} ORDER BY CASE WHEN json_type(request, '$.devResolution') = 'object' THEN 0 ELSE 1 END, ${priority}id LIMIT ?`,
-      )
-      .all(...excludedIds, limit) as {
-      id: number;
-      request: string;
-      outcome: string | null;
-      delivered: number;
-      candidate: string | null;
-    }[];
-    return rows.map((row) => {
-      const request = JSON.parse(row.request) as LandingRequest;
-      recordFlow(this.db, {
-        taskId: request.taskId,
-        attempt: request.attempt,
-        stage: 'landing',
-        action: 'started',
-        at: new Date().toISOString(),
-      });
-      return {
-        ...row,
-        request,
-        outcome: row.outcome ? JSON.parse(row.outcome) : null,
-      };
-    });
+    return this.db
+      .transaction(() => {
+        const rows = this.db
+          .query(
+            `SELECT * FROM landing_queue WHERE delivered = 0 AND batch IS NULL AND resolving = 0${laneFilter}${excluded} ORDER BY CASE WHEN json_type(request, '$.devResolution') = 'object' THEN 0 ELSE 1 END, ${priority}id LIMIT ?`,
+          )
+          .all(...excludedIds, limit) as {
+          id: number;
+          request: string;
+          outcome: string | null;
+          delivered: number;
+          candidate: string | null;
+          operation_id: string | null;
+        }[];
+        return rows.map((row) => {
+          const request = JSON.parse(row.request) as LandingRequest;
+          if (row.outcome === null) {
+            const at = new Date().toISOString();
+            if (row.operation_id) recordLandingOperationStarted(this.db, row.operation_id, at);
+            else
+              recordFlow(this.db, {
+                taskId: request.taskId,
+                attempt: request.attempt,
+                stage: 'landing',
+                action: 'started',
+                at,
+              });
+          }
+          return {
+            ...row,
+            operationId: row.operation_id,
+            request,
+            outcome: row.outcome ? JSON.parse(row.outcome) : null,
+          };
+        });
+      })
+      .immediate();
   }
   candidate(id: number, commit: string): void {
     this.db.query('UPDATE landing_queue SET candidate = ? WHERE id = ?').run(commit, id);
   }
   finish(id: number, outcome: GateOutcome): void {
-    this.db.query('UPDATE landing_queue SET outcome = ?, resolving = 0 WHERE id = ?').run(JSON.stringify(outcome), id);
+    const body = JSON.stringify(outcome);
+    this.db
+      .transaction(() => {
+        const row = this.db
+          .query('SELECT task,attempt,outcome,operation_id FROM landing_queue WHERE id=?')
+          .get(id) as {
+          task: string;
+          attempt: number;
+          outcome: string | null;
+          operation_id: string | null;
+        } | null;
+        if (!row) return false;
+        if (row.outcome !== null) {
+          if (row.outcome !== body) throw new Error(`Landing ${id} already has a different outcome`);
+          this.db.query('UPDATE landing_queue SET resolving=0 WHERE id=?').run(id);
+          return false;
+        }
+        const at = new Date().toISOString();
+        const update = this.db
+          .query('UPDATE landing_queue SET outcome=?,resolving=0 WHERE id=? AND outcome IS NULL')
+          .run(body, id);
+        if (update.changes !== 1) return false;
+        if (row.operation_id)
+          recordLandingOperationTerminal(this.db, row.operation_id, at, 'finished', body);
+        else
+          recordFlow(this.db, {
+            taskId: row.task,
+            attempt: row.attempt,
+            stage: 'landing',
+            action: 'finished',
+            at,
+          });
+        return true;
+      })
+      .immediate();
     this.resolving.delete(id);
-    const row = this.db.query('SELECT task,attempt FROM landing_queue WHERE id=?').get(id) as {
-      task: string;
-      attempt: number;
-    } | null;
-    if (row)
-      recordFlow(this.db, {
-        taskId: row.task,
-        attempt: row.attempt,
-        stage: 'landing',
-        action: 'finished',
-        at: new Date().toISOString(),
-      });
   }
   acknowledge(id: number): void {
-    this.db.query('UPDATE landing_queue SET delivered = 1, resolving = 0 WHERE id = ?').run(id);
+    this.db
+      .transaction(() => {
+        const row = this.db
+          .query('SELECT task,attempt,outcome,delivered,operation_id FROM landing_queue WHERE id=?')
+          .get(id) as {
+          task: string;
+          attempt: number;
+          outcome: string | null;
+          delivered: number;
+          operation_id: string | null;
+        } | null;
+        if (!row || row.delivered) return false;
+        const at = new Date().toISOString();
+        this.db.query('UPDATE landing_queue SET delivered=1,resolving=0 WHERE id=? AND delivered=0').run(id);
+        if (row.outcome === null && row.operation_id)
+          recordLandingOperationTerminal(this.db, row.operation_id, at, 'acknowledged', null);
+        else if (row.outcome === null && !row.operation_id) {
+          // Old queue records do not have enough identity to assign a measured terminal boundary.
+          recordFlow(this.db, {
+            taskId: row.task,
+            attempt: row.attempt,
+            stage: 'landing',
+            action: 'acknowledged',
+            at,
+          });
+        }
+        return true;
+      })
+      .immediate();
     this.resolving.delete(id);
   }
   beginResolution(id: number): void {
@@ -439,45 +520,87 @@ export class SqliteLandingQueue implements LandingQueue {
       .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'worker_events'")
       .get();
     if (!hasEvents) return 0;
-    const rows = this.db
-      .query('SELECT id, task, attempt FROM landing_queue WHERE resolving = 1 AND delivered = 0 AND outcome IS NULL')
-      .all() as { id: number; task: string; attempt: number }[];
-    let released = 0;
-    for (const row of rows) {
-      if (this.resolving.has(row.id)) continue;
-      const identity = killedResolverIdentity(this.db, row.task, row.attempt);
-      if (!identity || identityLive(identity)) continue;
-      const result = this.db.query('UPDATE landing_queue SET resolving = 0 WHERE id = ? AND resolving = 1').run(row.id);
-      if (result.changes !== 1) continue;
-      released++;
-      recordFlow(this.db, {
-        taskId: row.task,
-        attempt: row.attempt,
-        stage: 'landing',
-        action: 'resolution-abandoned',
-        at: new Date().toISOString(),
-      });
-    }
-    return released;
+    return this.db
+      .transaction(() => {
+        const rows = this.db
+          .query(
+            'SELECT id, task, attempt, operation_id FROM landing_queue WHERE resolving = 1 AND delivered = 0 AND outcome IS NULL',
+          )
+          .all() as { id: number; task: string; attempt: number; operation_id: string | null }[];
+        let released = 0;
+        for (const row of rows) {
+          if (this.resolving.has(row.id)) continue;
+          const identity = killedResolverIdentity(this.db, row.task, row.attempt);
+          if (!identity || identityLive(identity)) continue;
+          const result = this.db.query('UPDATE landing_queue SET resolving = 0 WHERE id = ? AND resolving = 1').run(row.id);
+          if (result.changes !== 1) continue;
+          released++;
+          recordFlow(this.db, {
+            taskId: row.task,
+            attempt: row.attempt,
+            stage: 'landing',
+            action: 'resolution-abandoned',
+            at: new Date().toISOString(),
+            ...(row.operation_id ? { operationId: row.operation_id } : {}),
+          });
+        }
+        return released;
+      })
+      .immediate();
   }
   requeueResolved(id: number, request: LandingRequest, candidate?: string): void {
     this.db
       .transaction(() => {
         this.fence.assertCurrent(request);
+        const row = this.db
+          .query('SELECT task,attempt,request,outcome,delivered,candidate,operation_id FROM landing_queue WHERE id=?')
+          .get(id) as {
+          task: string;
+          attempt: number;
+          request: string;
+          outcome: string | null;
+          delivered: number;
+          candidate: string | null;
+          operation_id: string | null;
+        } | null;
+        if (!row) throw new Error(`Cannot requeue resolved landing ${id}`);
+        const nextRequest = JSON.stringify(request);
+        const nextCandidate = candidate ?? null;
+        if (
+          row.request === nextRequest &&
+          row.outcome === null &&
+          row.delivered === 0 &&
+          row.candidate === nextCandidate
+        )
+          return false;
+        const at = new Date().toISOString();
+        const detail = JSON.stringify({ commit: request.devResolution?.commit, attempts: request.devResolution?.attempts });
+        if (row.operation_id)
+          recordLandingOperationTerminal(this.db, row.operation_id, at, 'resolver-requeued', detail, detail);
+        else
+          recordFlow(this.db, {
+            taskId: request.taskId,
+            attempt: request.attempt,
+            stage: 'landing',
+            action: 'resolver-requeued',
+            at,
+            detail,
+          });
+        const operationId = randomUUID();
         const result = this.db
           .query(
-            'UPDATE landing_queue SET request = ?, outcome = NULL, delivered = 0, candidate = ?, batch = NULL, resolving = 0 WHERE id = ?',
+            'UPDATE landing_queue SET request=?,outcome=NULL,delivered=0,candidate=?,batch=NULL,resolving=0,operation_id=? WHERE id=?',
           )
-          .run(JSON.stringify(request), candidate ?? null, id);
+          .run(nextRequest, nextCandidate, operationId, id);
         if (result.changes !== 1) throw new Error(`Cannot requeue resolved landing ${id}`);
-        recordFlow(this.db, {
+        recordLandingOperationEnqueued(this.db, {
+          operationId,
+          queueId: id,
           taskId: request.taskId,
           attempt: request.attempt,
-          stage: 'landing',
-          action: 'resolver-requeued',
-          at: new Date().toISOString(),
-          detail: JSON.stringify({ commit: request.devResolution?.commit, attempts: request.devResolution?.attempts }),
+          at,
         });
+        return true;
       })
       .immediate();
     this.resolving.delete(id);
