@@ -1511,16 +1511,25 @@ export class WorkerTasks {
       return { hold: false, first: startsFirst(this.store.task(taskId)) };
     }
   }
-  /** Refuse stale captures and missing original inputs before creating an ordinary proof attempt. */
+  /** Keep the authorized snapshot when ordinary integration advances while a proof is queued. */
+  private assertProofCaptureReachable(task: Task): void {
+    const source = task.brief.proof!.sourceCommit;
+    const head = branchHead(this.settings, this.settings.integrationBranch, false);
+    if (head === source) return;
+    try {
+      git(this.settings.mainCheckout, ['merge-base', '--is-ancestor', source, head], this.settings.policy?.merge);
+    } catch {
+      throw new ProofUnavailableError(
+        `Proof pending/unavailable: registered snapshot ${source} is no longer an ancestor of ${head}; register current integration with retry ${task.id} --proof-start --expected-attempt ${task.currentAttempt} --brief <fresh-brief>`,
+      );
+    }
+  }
+  /** Require an authenticated capture and its original inputs before creating a proof attempt. */
   assertProofStart(task: Task): void {
     if (task.brief.kind !== 'verification') return;
     if (!task.brief.proof || task.proofAuthorization?.fingerprint !== proofFingerprint(task.brief))
       throw new ProofUnavailableError('Proof pending/unavailable: authenticated registration required');
-    const head = branchHead(this.settings, this.settings.integrationBranch, false);
-    if (head !== task.brief.proof.sourceCommit)
-      throw new ProofUnavailableError(
-        `Proof pending/unavailable: integration source advanced from ${task.brief.proof.sourceCommit} to ${head}; authenticated owner or operations must register the exact unchanged contract with sourceCommit ${head} through retry ${task.id} --proof-start --expected-attempt ${task.currentAttempt} --brief <fresh-brief> for a stopped/exited attempt before its new invocation; no separate logical release is required and every old binding/source remains evidence`,
-      );
+    this.assertProofCaptureReachable(task);
     if (
       spawnSync('git', ['cat-file', '-e', `${task.brief.proof.sourceCommit}:scripts/worker-check.ts`], {
         cwd: this.settings.mainCheckout,
@@ -1938,10 +1947,7 @@ export class WorkerTasks {
               'Proof dependency preparation did not provide node_modules/.bin/bun; no system Bun fallback is allowed',
             );
           // Ordinary shared/pinned preparation is outside SQLite, before any worker can invoke its command.
-          if (branchHead(this.settings, this.settings.integrationBranch, false) !== task.brief.proof!.sourceCommit)
-            throw new ProofUnavailableError(
-              'Proof pending/unavailable: integration source advanced; authenticated fresh registration required',
-            );
+          this.assertProofCaptureReachable(task);
           this.store.event(next, 'proof-command-ready', {
             sourceCommit: task.brief.proof!.sourceCommit,
             argv: task.brief.acceptance.command,

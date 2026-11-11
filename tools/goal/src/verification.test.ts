@@ -1351,7 +1351,14 @@ test('first-start cap waits and old captures keep one durable intent; authentica
     git(h.root, ['commit', '-m', 'Advance integration fixture']);
     const sourceCommit = git(h.root, ['rev-parse', 'HEAD']);
     git(h.root, ['update-ref', 'refs/heads/dev', sourceCommit]);
-    await expect(job.start(task.id, { expectedAttempt: 0 })).rejects.toThrow('integration source advanced');
+    expect(() => h.tasks.assertProofStart(h.store.task(task.id))).not.toThrow();
+    expect(() => h.tasks.queueProofStart(task.id, { expectedAttempt: 0 }, h.actor)).toThrow(
+      'proof source must be the captured integration head',
+    );
+    const unrelated = git(h.root, ['commit-tree', `${sourceCommit}^{tree}`, '-m', 'Replace integration history']);
+    git(h.root, ['update-ref', 'refs/heads/dev', unrelated]);
+    expect(() => h.tasks.assertProofStart(h.store.task(task.id))).toThrow('no longer an ancestor');
+    git(h.root, ['update-ref', 'refs/heads/dev', sourceCommit]);
     job.resumePendingRetries();
     await job.drain();
     expect(h.store.task(task.id).brief.proof?.sourceCommit).toBe(h.binding.sourceCommit);
@@ -2473,6 +2480,11 @@ test('authenticated stopped UNKNOWN proof retry captures fresh SAME-ID source wi
     ]);
     expect(h.store.record(h.current)).toEqual(oldRecord);
     expect(h.store.events(h.proof.id).filter((event) => event.kind === 'proof-registration-replaced')).toHaveLength(1);
+    writeFileSync(join(integrated, 'next-source'), 'Unrelated work lands while the proof waits');
+    git(integrated, ['add', 'next-source']);
+    git(integrated, ['commit', '-m', 'Advance integration while the proof is queued']);
+    const newerSource = git(integrated, ['rev-parse', 'HEAD']);
+    git(h.root, ['update-ref', 'refs/heads/dev', newerSource]);
     let launches = 0;
     const futureCheck = crypto.randomUUID();
     const tasks = new WorkerTasks(
@@ -2522,10 +2534,11 @@ test('authenticated stopped UNKNOWN proof retry captures fresh SAME-ID source wi
       h.store.events(h.proof.id).some((event) => ['proof-verified', 'historical-proof-terminal'].includes(event.kind)),
     ).toBe(false);
     // The new current wait consumes one logical slot; released UNKNOWN history consumes none.
+    const latest = submittedProof(h, { proof: { ...h.proofBrief.proof, sourceCommit: newerSource } });
     for (let index = 0; index < 2; index++) {
       const task = h.store.createTask(
-        fresh.brief,
-        { briefPath: fresh.path, worktree: integrated, branch: 'new-integration', base: sourceCommit },
+        latest.brief,
+        { briefPath: latest.path, worktree: integrated, branch: 'new-integration', base: newerSource },
         'implementation',
       );
       h.tasks.queueProofStart(task.id, { expectedAttempt: 0 }, h.actor);
