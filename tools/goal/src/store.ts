@@ -515,7 +515,9 @@ export class WorkerStore implements AttemptFence {
     return this.db
       .transaction(() => {
         const progress = this.db
-          .query('SELECT process_task_id, process_attempt, processes_complete FROM worker_maintenance_progress WHERE id=1')
+          .query(
+            'SELECT process_task_id, process_attempt, processes_complete FROM worker_maintenance_progress WHERE id=1',
+          )
           .get() as { process_task_id: string; process_attempt: number; processes_complete: number };
         if (progress.processes_complete) return { examined: 0, complete: true };
         const rows = this.db
@@ -631,7 +633,12 @@ export class WorkerStore implements AttemptFence {
           taskId: row.task_id,
           attempt: row.attempt,
           worktree: row.worktree,
-          process: { pid: row.pid, start: row.start, boot: row.boot, group: row.process_group } satisfies ProcessIdentity,
+          process: {
+            pid: row.pid,
+            start: row.start,
+            boot: row.boot,
+            group: row.process_group,
+          } satisfies ProcessIdentity,
         }));
       })
       .immediate();
@@ -641,9 +648,7 @@ export class WorkerStore implements AttemptFence {
     if (!candidates.length) return;
     const terms = candidates.map(() => '(ticket=? AND kind=? AND task_id=? AND attempt=?)').join(' OR ');
     const orderedBindings = candidates.flatMap(({ kind, taskId, attempt, ticket }) => [ticket, kind, taskId, attempt]);
-    this.db
-      .query(`DELETE FROM worker_maintenance_candidates WHERE ${terms}`)
-      .run(...orderedBindings);
+    this.db.query(`DELETE FROM worker_maintenance_candidates WHERE ${terms}`).run(...orderedBindings);
   }
   /** A cheap existence check; it does not decode old blocked-worktree bodies. */
   hasWorktreeCleanupDispositions(): boolean {
@@ -698,9 +703,7 @@ export class WorkerStore implements AttemptFence {
       .immediate();
   }
   worktreeScanComplete(): boolean {
-    return !this.db
-      .query('SELECT 1 FROM worker_maintenance_scan_directories WHERE complete=0 LIMIT 1')
-      .get();
+    return !this.db.query('SELECT 1 FROM worker_maintenance_scan_directories WHERE complete=0 LIMIT 1').get();
   }
   nextWorktreeScanDirectory(): WorktreeScanDirectory | undefined {
     const row = this.db
@@ -723,7 +726,9 @@ export class WorkerStore implements AttemptFence {
       .run(root, path);
   }
   removeWorktreeScanDirectory(root: string, path: string): void {
-    this.db.query('DELETE FROM worker_maintenance_scan_directories WHERE root=? AND path=? AND root<>path').run(root, path);
+    this.db
+      .query('DELETE FROM worker_maintenance_scan_directories WHERE root=? AND path=? AND root<>path')
+      .run(root, path);
   }
   updateWorktreeScanDirectory(
     root: string,
@@ -786,15 +791,15 @@ export class WorkerStore implements AttemptFence {
     if (!candidates.length) return;
     const terms = candidates.map(() => '(ticket=? AND path=?)').join(' OR ');
     const bindings = candidates.flatMap(({ path, ticket }) => [ticket, path]);
-    this.db
-      .query(`DELETE FROM worker_maintenance_strays WHERE ${terms}`)
-      .run(...bindings);
+    this.db.query(`DELETE FROM worker_maintenance_strays WHERE ${terms}`).run(...bindings);
   }
   maintenanceTasksBootstrapped(): boolean {
     return Boolean(
-      (this.db.query('SELECT tasks_complete FROM worker_maintenance_progress WHERE id=1').get() as {
-        tasks_complete: number;
-      }).tasks_complete,
+      (
+        this.db.query('SELECT tasks_complete FROM worker_maintenance_progress WHERE id=1').get() as {
+          tasks_complete: number;
+        }
+      ).tasks_complete,
     );
   }
   hasPendingWorktreeCandidates(): boolean {
@@ -1115,12 +1120,12 @@ export class WorkerStore implements AttemptFence {
         WHERE t.id=?
       `)
       .get(taskId) as {
-        current_attempt: number;
-        task_state: string | null;
-        attempt_state: string | null;
-        attempt_started_at: string | null;
-        priority_head_start: number;
-      } | null;
+      current_attempt: number;
+      task_state: string | null;
+      attempt_state: string | null;
+      attempt_started_at: string | null;
+      priority_head_start: number;
+    } | null;
     if (!row || typeof row.task_state !== 'string') return undefined;
     return {
       currentAttempt: row.current_attempt,
@@ -1431,8 +1436,7 @@ export class WorkerStore implements AttemptFence {
         if (
           owners.some(
             (owner) =>
-              !['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state) ||
-              this.hasLiveProofOwner(owner),
+              !['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state) || this.hasLiveProofOwner(owner),
           )
         ) {
           if (requireExitedOwners)
@@ -1974,10 +1978,7 @@ export class WorkerStore implements AttemptFence {
       (['running', 'landing'].includes(task.state) && attempt?.state === 'exited');
     if (!retryable) throw new StaleAttemptError(ref, task.currentAttempt);
     if (attempt) {
-      if (
-        !['stopped', 'exited'].includes(attempt.state) ||
-        this.hasLiveProofOwner(attempt)
-      )
+      if (!['stopped', 'exited'].includes(attempt.state) || this.hasLiveProofOwner(attempt))
         throw new StaleAttemptError(ref, task.currentAttempt);
     }
     this.assertProofContract(task, brief);

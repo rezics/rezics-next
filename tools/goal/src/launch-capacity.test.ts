@@ -22,10 +22,15 @@ import { temporaryDirectory } from './test-support.ts';
 
 function capacityStore(
   lifecycle: Map<string, CapacityLifecycle>,
-  options: { urgentRunning?: number; ordinaryRunning?: number; attempts?: Map<string, { attempt: number; state: 'pending' | 'running' | 'waiting' }[]> } = {},
+  options: {
+    urgentRunning?: number;
+    ordinaryRunning?: number;
+    attempts?: Map<string, { attempt: number; state: 'pending' | 'running' | 'waiting' }[]>;
+  } = {},
 ) {
   return {
-    capacityAttemptsCount: (urgent: boolean) => (urgent ? (options.urgentRunning ?? 0) : (options.ordinaryRunning ?? 0)),
+    capacityAttemptsCount: (urgent: boolean) =>
+      urgent ? (options.urgentRunning ?? 0) : (options.ordinaryRunning ?? 0),
     attempts: (taskId: string) => options.attempts?.get(taskId) ?? [],
     capacityLifecycle: (taskId: string) => lifecycle.get(taskId),
     taskGoal: () => 'library',
@@ -300,7 +305,10 @@ test('an obsolete first-start ticket cannot block an independent urgent repair a
   let release: (() => void) | undefined;
   const queue = join(directory.path, 'urgent-capacity-queue');
   try {
-    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 2, urgentSlots: 2, minAvailableMiB: 0 }));
+    writeFileSync(
+      join(directory.path, 'capacity.json'),
+      JSON.stringify({ maxWorkers: 2, urgentSlots: 2, minAvailableMiB: 0 }),
+    );
     mkdirSync(queue, { recursive: true });
     const obsolete = `000000000000001-${process.pid}-live-worker`;
     writeFileSync(join(queue, obsolete), liveTicketBody({ taskId: 'live-worker' }));

@@ -204,11 +204,7 @@ export function capacityAvailable(
   const scopes = workerScopes(store);
   const tickets = capacityTickets(stateDirectory, store);
   return (
-    hasCapacity(
-      running + admittedTicketCount(tickets),
-      availableMiB(),
-      capacity,
-    ) &&
+    hasCapacity(running + admittedTicketCount(tickets), availableMiB(), capacity) &&
     !pressureBrake(readPressureBrake(stateDirectory), readHostPressure(), Date.now()).paused &&
     workerHeadroomMiB(running, WORKER_SLICE_ROOT, scopes.parked, scopes.active) >=
       admittedMemoryMiBFromTickets(tickets, scopes.writers) + HEAVY_WORKER_MIB
@@ -404,11 +400,7 @@ export async function awaitHostCapacity(
       }
       if (reclaimDeficitMiB !== undefined) {
         const sample = (options.pressure ?? readHostPressure)();
-        const brake = pressureBrake(
-          readPressureBrake(stateDirectory),
-          sample,
-          options.now?.() ?? Date.now(),
-        );
+        const brake = pressureBrake(readPressureBrake(stateDirectory), sample, options.now?.() ?? Date.now());
         if (brake.paused) clearReclaimEpisode(stateDirectory);
         else (options.reclaim ?? ((deficit) => reclaimCleanFileCache(deficit)))(reclaimDeficitMiB);
         capacityChanged?.();
@@ -568,8 +560,7 @@ function ticketIsValid(ticket: CapacityTicket, lifecycle: CapacityLifecycle | un
       lifecycle.taskState === 'running' &&
       lifecycle.attemptState === 'waiting'
     );
-  if (ticket.attempt === lifecycle.currentAttempt + 1)
-    return STARTABLE_TASK_STATES.has(lifecycle.taskState);
+  if (ticket.attempt === lifecycle.currentAttempt + 1) return STARTABLE_TASK_STATES.has(lifecycle.taskState);
   return (
     ticket.attempt === lifecycle.currentAttempt &&
     lifecycle.attemptState === 'pending' &&
@@ -660,11 +651,7 @@ function ticketGoal(ticket: CapacityTicket, store: HostCapacityStore): string | 
 function ticketSequence(ticket: CapacityTicket, store: HostCapacityStore): number | undefined {
   return ticket.goalSequence ?? (ticket.taskId ? store.taskSequence?.(ticket.taskId) : undefined);
 }
-function admittedGoalTasks(
-  tickets: readonly CapacityTicket[],
-  goal: string,
-  store: HostCapacityStore,
-): Set<string> {
+function admittedGoalTasks(tickets: readonly CapacityTicket[], goal: string, store: HostCapacityStore): Set<string> {
   const tasks = new Set<string>();
   for (const ticket of tickets) {
     if (ticket.lane !== 'capacity-queue' || !ticket.admitted || ticketGoal(ticket, store) !== goal) continue;
@@ -815,7 +802,10 @@ function releaseWhenStarted(
       const attempts = store.attempts(taskId);
       const current =
         targetAttempt === undefined ? attempts.at(-1) : attempts.find((attempt) => attempt.attempt === targetAttempt);
-      if (current && (resume ? current.state !== 'pending' && current.state !== 'waiting' : current.state !== 'pending'))
+      if (
+        current &&
+        (resume ? current.state !== 'pending' && current.state !== 'waiting' : current.state !== 'pending')
+      )
         release();
     } catch {
       // Callers release explicitly when preparation fails; transient store errors must not admit another start early.
@@ -858,7 +848,8 @@ function queueTickets(queue: string): CapacityTicket[] {
     const metadata = ticketMetadata(queue, name);
     const taskId = ticketTaskId(queue, name, metadata);
     const attempt = metadata?.attempt;
-    const operation = metadata?.operation ?? (metadata?.resume === true ? 'resume' : attempt === undefined ? undefined : 'start');
+    const operation =
+      metadata?.operation ?? (metadata?.resume === true ? 'resume' : attempt === undefined ? undefined : 'start');
     const ticket: CapacityTicket = {
       lane: basename(queue) === 'urgent-capacity-queue' ? 'urgent-capacity-queue' : 'capacity-queue',
       queue,
