@@ -1893,6 +1893,9 @@ export class WorkerJob implements GateOutcomeSink {
         store.updateTask(ref, (current) => {
           current.state = 'stopped';
         });
+        store.updateAttempt(ref, (current) => {
+          current.driver = null;
+        });
         const event = {
           managerId: task.brief.manager,
           taskId: task.id,

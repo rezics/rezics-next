@@ -1392,9 +1392,7 @@ export class WorkerStore implements AttemptFence {
           owners.some(
             (owner) =>
               !['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state) ||
-              [owner.process, owner.driver, ...(owner.auxiliaryProcesses ?? [])].some(
-                (identity) => identity && sameProcess(identity),
-              ),
+              this.hasLiveProofOwner(owner),
           )
         ) {
           if (requireExitedOwners)
@@ -1938,13 +1936,23 @@ export class WorkerStore implements AttemptFence {
     if (attempt) {
       if (
         !['stopped', 'exited'].includes(attempt.state) ||
-        [attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some(
-          (identity) => identity && sameProcess(identity),
-        )
+        this.hasLiveProofOwner(attempt)
       )
         throw new StaleAttemptError(ref, task.currentAttempt);
     }
     this.assertProofContract(task, brief);
+  }
+  private hasLiveProofOwner(attempt: Attempt): boolean {
+    if ([attempt.process, ...(attempt.auxiliaryProcesses ?? [])].some((identity) => identity && sameProcess(identity)))
+      return true;
+    if (!attempt.driver || !sameProcess(attempt.driver)) return false;
+    // An adopting resident driver remains alive after its per-attempt proof settlement is routed.
+    return !(
+      attempt.state === 'exited' &&
+      this.db
+        .query("SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind='proof-failure-routed' LIMIT 1")
+        .get(attempt.taskId, attempt.attempt)
+    );
   }
   private assertProofContract(task: Task, brief: Brief): void {
     if (
