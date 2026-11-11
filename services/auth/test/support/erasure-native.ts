@@ -7,6 +7,11 @@ import { kernelTestDatabase, testDatabase } from '../../scripts/database.ts';
 import { configureTestReceiptKeys } from '../../../kernel/test/support/receipt-keys.ts';
 import { workerTestEnv } from '../../../kernel/test/support/worker-env.ts';
 import { createAuthHost } from '../../src/index.ts';
+import type {
+  AuthRestoredGeneration,
+  AuthRestoreInventory,
+  AuthRestoreNativeProgress,
+} from '../../src/restore-admission.ts';
 import { createNativeWorkflowProofPorts } from '../../src/native-workflow-proofs.ts';
 import { createProvisioningEvidenceVerifier } from '../../src/provisioning-evidence.ts';
 import { createBarrierProofVerifier } from '../../src/barrier-proofs.ts';
@@ -109,6 +114,7 @@ export async function nativeFixture(options: { openPool?: (url: string) => Promi
     modules = {
       ...(await import('../../../kernel/src/access/index.ts')),
       ...(await import('../../../kernel/src/access/native-account-bindings.ts')),
+      ...(await import('../../../kernel/src/access/auth-bindings.ts')),
       ...(await import('../../../kernel/src/access/workflow-approvals.ts')),
       ...(await import('../../../kernel/src/access/lifecycle.ts')),
       ...(await import('../../../kernel/src/access/bootstrap-governance.ts')),
@@ -224,6 +230,73 @@ export async function nativeFixture(options: { openPool?: (url: string) => Promi
       const token = await call('/token', {}, cookie);
       expect(token.status).toBe(200);
       return { ...person, cookie, bearer: ((await token.json()) as { access_token: string }).access_token };
+    },
+    /** Controlled old-image fixture with independently surviving native Auth
+     * progress and the actual Access producer. This implements no production
+     * backup verification or physical receiving installation. */
+    restoredGeneration(database: Pool, generation: string): AuthRestoredGeneration {
+      const inventory: AuthRestoreInventory = {
+        generation,
+        databaseIdentity: 'isolated-native-auth-fixture',
+        inventoryEntry: generation,
+        inventoryVersion: 'one',
+        sourceCluster: 'native-fixture-cluster',
+        sourceTimeline: 'native-fixture-timeline',
+        sourceLineage: 'independent-current-access',
+        capturePoint: 'before-confirmations',
+        committedNativeTail: 'surviving-native-auth-database',
+      };
+      const recovered = new Map<string, AuthRestoreNativeProgress>();
+      return {
+        kind: 'RESTORED',
+        generation,
+        obligations: modules.createAuthBindings({ pool: kernel }),
+        receiving: bindings.trustedAccess,
+        live: (receiver) => modules.createAuthBindings({ pool: kernel, authErasureLiveReceiver: receiver }),
+        databaseOwner: {
+          async verifyRestoredDatabase(input) {
+            expect(input.database).toBe(database);
+            expect(input.generation).toBe(generation);
+            expect(database.idleCount).toBe(database.totalCount);
+            return inventory;
+          },
+          async recoverCommittedNativeProgress({ accountId }) {
+            expect(database.idleCount).toBe(database.totalCount);
+            if (recovered.has(accountId)) return recovered.get(accountId)!;
+            const row = (await pool.query('SELECT * FROM auth_erasure WHERE account_id=$1', [accountId])).rows[0];
+            if (!row) return { pending: 'original-progress-unavailable' };
+            const progress: AuthRestoreNativeProgress = {
+              source: { accountId, route: modules.routeOf(accountId)!, version: row.kernel_version, at: row.kernel_at },
+              originalNativeId: row.id,
+              checkpoint: inventory.committedNativeTail,
+              floor: row.barrier,
+              acceptedAt: row.accepted_at.toISOString(),
+              applicable: row.applicable,
+              userDeletion: row.user_deleted_at
+                ? {
+                    state: 'established',
+                    deletedAt: row.user_deleted_at.toISOString(),
+                    consentDueAt: row.consent_due_at.toISOString(),
+                    consentCompletedAt: row.consent_completed_at?.toISOString() ?? null,
+                  }
+                : { state: 'never-established' },
+              consumer: row.source_accepted_at
+                ? {
+                    state: 'accepted',
+                    workflowId: row.source_workflow_id,
+                    continuationId: row.source_continuation_id,
+                    receiptId: row.source_receipt_id,
+                    acceptedAt: row.source_accepted_at.toISOString(),
+                    dischargedAt: row.source_discharged_at?.toISOString() ?? null,
+                    publishedAt: row.source_published_at?.toISOString() ?? null,
+                  }
+                : { state: 'pending' },
+            };
+            recovered.set(accountId, progress);
+            return progress;
+          },
+        },
+      };
     },
     routeOf: modules.routeOf,
     async person(name: string): Promise<Person> {

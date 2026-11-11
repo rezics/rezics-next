@@ -18,6 +18,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { createNativeLifecycleResults } from './native-lifecycle-results.ts';
 import {
+  type AuthErasureObligationPorts,
   AUTH_PAGE_OPERATION_CLIENT_ID,
   AUTH_PAGE_OPERATION_SCOPES,
   credentialEffectNotAppliedStatuses,
@@ -62,9 +63,28 @@ export function createAuthRestoreHost(options: {
   /** Original native Access controls, as on the ordinary host. No physical owner is installed by this port. */
   trustedAccess?: AuthServiceOptions['trustedAccess'];
 }) {
-  const restored = options.trustedAccess
-    ? { ...options.restoredGeneration, receiving: options.trustedAccess }
-    : options.restoredGeneration;
+  const access = options.trustedAccess;
+  // The ordinary native Access composition already exports the fixed feed.
+  // Bind its methods to the original capability owner; deployments need not
+  // duplicate them in restoredGeneration, and partial ports remain unavailable.
+  const obligations: AuthErasureObligationPorts | undefined =
+    options.restoredGeneration.obligations ??
+    (access?.readAuthErasureObligation &&
+    access.startAuthErasureObligationCut &&
+    access.pageAuthErasureObligations &&
+    access.verifyAuthErasureObligationCut
+      ? {
+          readAuthErasureObligation: access.readAuthErasureObligation.bind(access),
+          startAuthErasureObligationCut: access.startAuthErasureObligationCut.bind(access),
+          pageAuthErasureObligations: access.pageAuthErasureObligations.bind(access),
+          verifyAuthErasureObligationCut: access.verifyAuthErasureObligationCut.bind(access),
+        }
+      : undefined);
+  const restored: AuthRestoredGeneration = {
+    ...options.restoredGeneration,
+    ...(obligations ? { obligations } : {}),
+    ...(access ? { receiving: access } : {}),
+  };
   const kindConsentReceiver = restored.kindConsentReceiver;
   const kindConsent = createKindConsentParticipant({
     database: options.database,

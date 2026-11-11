@@ -3,13 +3,14 @@ import { Pool } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
 import { nativeErasurePage, startNativeErasure } from '../src/erasure-native.ts';
 import { failNativeQueries, nativeFixture } from './support/erasure-native.ts';
+import { createAuthRestoreHost } from '../src/host.ts';
+import { importRestoredAuthProgress, requireRestoredAuthAdmission } from '../src/restore-admission.ts';
 
-// These are future native acceptance cases, not a test-only restore service.
-// Row snapshots below establish exactly what a before-T copy would reintroduce.
-// The actual isolated restore/source-feed producer is absent and stays honest red.
-// Never transplant Access SQL, manufacture a source T or reset product fences.
+// Controlled old images exercise the delivered native Source and isolated host.
+// Physical deployment and backup expiry cases below remain external acceptance;
+// a successful Source read never supplies receiving or terminal evidence.
 
-test('actual Auth external diagnostics and backup restore custody cannot lose a committed deletion or assert none from absent configuration', async () => {
+test('native restore Source preserves the committed deletion while an isolated old image waits for actual receiving closure', async () => {
   const f = await nativeFixture();
   const restoredFixture = testDatabase();
   const restored = new Pool({ connectionString: restoredFixture.url });
@@ -44,16 +45,50 @@ test('actual Auth external diagnostics and backup restore custody cannot lose a 
     );
     const current = await f.bindings.trustedAccess.readErasureAccount?.(person.accountId);
     expect(current).toMatchObject({ accountId: person.accountId, state: 'deleted', fenced: true });
-    // Existing source port supplies only AccessAccount; this is deliberately
-    // the missing real source metadata assertion, not a fake restore receipt.
-    expect(current).toHaveProperty('erasure', {
+    const generation = f.restoredGeneration(restored, 'before-confirmation-copy');
+    const point = await generation.obligations!.readAuthErasureObligation({
+      accountId: person.accountId,
+      deadline: Date.now() + 5000,
+    });
+    expect(point.state).toBe('ready');
+    if (point.state !== 'ready') throw new Error('Missing native Source obligation');
+    expect(point.obligation).toMatchObject({
       route: source.route,
       accountId: source.account_id,
       version: source.version,
-      at: source.at.toISOString(),
+      at: (await f.bindings.trustedAccess.readAuthErasureBarrier!(person.accountId))!.at,
+      minimumAuthnEpoch: String(current!.authnEpoch),
     });
-    throw new Error(
-      'Missing adoption: Access sealed bounded Auth obligation feed and isolated restore bootstrap importing the original source tuple before handlers, issuers, DBOS recovery or personal reads open',
+    expect(new Date(point.obligation.at).getTime()).toBe(source.at.getTime());
+    // The database owner recovers the independently surviving Auth tail, rather
+    // than deriving an original floor, applicability or cutoff from the old image.
+    const inventory = await generation.databaseOwner!.verifyRestoredDatabase({
+      database: restored,
+      generation: generation.generation,
+    });
+    if ('pending' in inventory) throw new Error('Missing controlled fixture inventory');
+    const progress = await generation.databaseOwner!.recoverCommittedNativeProgress({
+      inventory,
+      accountId: person.accountId,
+    });
+    const original = (await f.pool.query('SELECT * FROM auth_erasure WHERE account_id=$1', [person.accountId]))
+      .rows[0]!;
+    expect(progress).toMatchObject({
+      source: { route: source.route, accountId: person.accountId, version: source.version, at: original.kernel_at },
+      floor: original.barrier,
+      applicable: original.applicable,
+      userDeletion: { consentDueAt: original.consent_due_at.toISOString() },
+    });
+    await expect(importRestoredAuthProgress(restored, generation, person.accountId)).rejects.toMatchObject({
+      code: 'receiving-closure-pending',
+    });
+    await expect(requireRestoredAuthAdmission(restored, generation)).rejects.toMatchObject({
+      name: 'AuthRestoreAdmissionError',
+    });
+    expect((await restored.query('SELECT 1 FROM auth_restore_replay')).rowCount).toBe(0);
+    expect((await restored.query('SELECT 1 FROM auth_signing_key')).rowCount).toBe(0);
+    expect((await restored.query('SELECT id FROM "user" ORDER BY id')).rows).toEqual(
+      snapshot.map(({ id }) => ({ id })),
     );
   } finally {
     await restored.end();
@@ -111,9 +146,9 @@ test('restore replay after a native crash retains the original floor, applicabil
     expect(
       (await pool.query('SELECT id,barrier,applicable,accepted_at FROM auth_erasure WHERE id=$1', [id])).rows[0],
     ).toEqual(original);
-    throw new Error(
-      'Missing restore admission: bind native replay checkpoints to the restored copy generation and original Access T; native same-database crash recovery alone cannot certify an older restored image',
-    );
+    // Same-database crash recovery proves the original native transaction only.
+    // It cannot admit an independently restored image or assert backup expiry.
+    expect((await pool.query('SELECT 1 FROM auth_restore_replay')).rowCount).toBe(0);
   } finally {
     restoreQueries();
     await pool.end();
@@ -148,9 +183,27 @@ test('restored stale sessions, issuers and late writers remain fenced without re
       await f.pool.query('SELECT barrier,consent_due_at FROM auth_erasure WHERE account_id=$1', [person.accountId])
     ).rows[0];
     expect(repeated).toEqual({ barrier: original.barrier, consent_due_at: original.consent_due_at });
-    throw new Error(
-      'Missing isolated restore admission: reintroduce the actual old session/signing/workflow copy only behind current source fencing, recover original consent due evidence and drain before serving; no restored completion may renew source authority',
-    );
+    const copy = testDatabase();
+    const database = new Pool({ connectionString: copy.url });
+    const restore = createAuthRestoreHost({
+      database,
+      restoredGeneration: f.restoredGeneration(database, 'stale-session-copy'),
+      trustedAccess: f.bindings.trustedAccess,
+    });
+    try {
+      expect('handler' in restore).toBe(false);
+      expect('service' in restore).toBe(false);
+      expect(await restore.reconcile()).toEqual({ pending: 'source-consumer-pending' });
+      expect((await database.query('SELECT 1 FROM auth_signing_key')).rowCount).toBe(0);
+      expect((await database.query('SELECT 1 FROM auth_restore_replay')).rowCount).toBe(0);
+      expect(
+        (await f.pool.query('SELECT barrier,consent_due_at FROM auth_erasure WHERE account_id=$1', [person.accountId]))
+          .rows[0],
+      ).toEqual(repeated);
+    } finally {
+      await restore.stop();
+      copy.close();
+    }
   } finally {
     await f.close();
   }

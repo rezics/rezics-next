@@ -71,6 +71,13 @@ not a required runtime physical-owner ABI or restore-generation witness protocol
 consumer or custody facts remain unverified; declaration, local emptiness and elapsed TTL never supply them.
 A fresh UUID alone does not prove replay or physical isolation. Ordinary dev landing proves no restore pass.
 
+Decision: source-side acceptance uses the native Access obligation/live producers and isolated Auth restore host;
+the host inherits the fixed obligation feed from trusted Access unless an explicit feed is supplied. The native
+fixture recovers original Auth progress from its surviving database. Receiving/physical deployment acceptance
+remains separate and pending; no fixture installs custody or a terminal acknowledgement. The Source cut and live
+subscription prove enrollment only. `restore-erasure-contract.test.ts` covers source identity, original progress,
+crash recovery and writer fences; `restore-live.test.ts` covers native live enrollment and host feed binding.
+
 ### Current receiving closure provenance
 
 The private `auth.receiving-closure/v1` factory accepts an exact obligation key and rereads its original accepted
