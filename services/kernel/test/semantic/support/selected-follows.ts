@@ -683,7 +683,7 @@ export async function runSelectedFollowsWitness(): Promise<SelectedFollowsObserv
       const deadline = Date.now() + 30_000;
       const actor = await access.authenticate(real.bearer('merger'), { pool: driver.fixtures.pool, deadline });
       if (actor.kind !== 'account') throw new Error('native merge authorization did not authenticate an account');
-      const authorization = accessCommandAuthorization(
+      const authorization = await accessCommandAuthorization(
         access,
         actor,
         'subject:merge',
