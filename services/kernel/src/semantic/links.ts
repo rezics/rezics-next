@@ -29,7 +29,7 @@ import { matchesTarget } from './targets.ts';
 import { withReadTransaction } from './read.ts';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { partitionReadClients, withConnection } from '../database/pool.ts';
 import { projectBatch, type Envelope } from '../events/log.ts';
 import type { Relay } from '../events/relays.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -872,7 +872,7 @@ export function linkProjection(pool: Pool): Relay {
   };
 }
 
-/** Current selected statements, batched by their source home, never copied from link projections. */
+/** Current selected statements, keyed across source homes and never copied from link projections. */
 async function currentRelationStatements(
   pool: Pool,
   entries: readonly { subject: string; property: string; statement: string }[],
@@ -880,15 +880,29 @@ async function currentRelationStatements(
   routeKey: Uint8Array,
   deadline: number,
 ): Promise<Map<string, Statement>> {
+  if (entries.length === 0) return new Map();
   const defaults = context === GLOBAL_CONTEXT ? {} : ((await contextSnapshot(pool, context))?.defaults ?? {});
-  const homes = new Map<number, (typeof entries)[number][]>();
-  for (const entry of entries) {
-    const home = partitionOf(routeOf(entry.subject)!);
-    const group = homes.get(home) ?? [];
-    group.push(entry);
-    homes.set(home, group);
-  }
-  const rows: {
+  const homes = new Set(entries.map((entry) => partitionOf(routeOf(entry.subject)!)));
+  const rows = (await withReadTransaction(
+    pool,
+    async (client) => {
+      // Bind every addressed source home on one snapshot before probing current native facts.
+      await partitionReadClients(client, [...homes]);
+      return currentRelations.run(client, {
+        context_id: context,
+        defaults,
+        entries: entries.map((entry) => ({
+          route: routeOf(entry.subject)!,
+          home: partitionOf(routeOf(entry.subject)!),
+          id: entry.subject,
+          property: entry.property,
+          candidate: entry.statement,
+        })),
+        ...(await statementAudience(client)),
+      });
+    },
+    deadline,
+  )) as {
     subject: string;
     property: string;
     candidate: string;
@@ -896,29 +910,7 @@ async function currentRelationStatements(
     release: string;
     revision: number;
     source: Source | null;
-  }[] = [];
-  for (const [home, group] of homes) {
-    requireAccessDeadline(deadline);
-    rows.push(
-      ...((await withReadTransaction(
-        pool,
-        async (client) =>
-          currentRelations.run(client, {
-            partition_no: home,
-            context_id: context,
-            defaults,
-            entries: group.map((entry) => ({
-              route: routeOf(entry.subject)!,
-              id: entry.subject,
-              property: entry.property,
-              candidate: entry.statement,
-            })),
-            ...(await statementAudience(client)),
-          }),
-        deadline,
-      )) as typeof rows),
-    );
-  }
+  }[];
   const tuples = new Map<string, ReturnType<typeof sourceTuple>>();
   for (const row of rows)
     if (row.source && 'field_group' in row.source) {

@@ -8,6 +8,7 @@ import { openApiDocument } from '../../src/http/openapi.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { createRealAccess } from './real-access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { subjectTarget } from '../../src/semantic/subject.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -217,6 +218,50 @@ test('a read returns the subject, its session token and the labels of its proper
   expect(
     realAccess.readChecks.filter(({ action }) => action === 'subject:read').map(({ resource }) => resource.id),
   ).not.toContain(secret);
+});
+
+test('anonymous inverse relation pages keep current summaries and continuation across source homes', async () => {
+  const person = (await create({ type: 'schema:Person', labels: { en: 'Cross-home author' } })).body.subject.id as string;
+  const homes = new Set<number>();
+  const books: string[] = [];
+  for (let index = 0; index < 3; index++) {
+    let key = '';
+    for (let attempt = 0; attempt < 10_000; attempt++) {
+      const value = randomUUID();
+      const home = partitionOf(subjectTarget(routeKey, accounts.writer, value).route);
+      if (homes.has(home)) continue;
+      homes.add(home);
+      key = `"${value}"`;
+      break;
+    }
+    if (!key) throw new Error('Unable to select distinct source homes for the inverse page fixture');
+    const created = await create(
+      {
+        labels: { en: `Cross-home book ${index}` },
+        statements: { 'schema:author': [author(person)] },
+      },
+      key,
+    );
+    const id = created.body.subject.id as string;
+    books.push(id);
+    await catchUpLinks(id);
+  }
+
+  const query = new URLSearchParams({ property: 'schema:author', language: 'en', limit: '2' });
+  const path = `/v1/subjects/${person}/links?${query}`;
+  const first = await call('GET', path);
+  expect(first.response.status).toBe(200);
+  expect(first.body.links).toHaveLength(2);
+  expect(first.body.next).toBeString();
+  const second = await call('GET', `${path}&${new URLSearchParams({ cursor: first.body.next })}`);
+  expect(second.response.status).toBe(200);
+  expect(second.body.links).toHaveLength(1);
+  expect(second.body.next).toBeNull();
+  const links = [...first.body.links, ...second.body.links];
+  expect(new Set(links.map((link) => link.subject))).toEqual(new Set(books));
+  expect(
+    links.every((link) => link.summary?.type === 'schema:Book' && link.label.startsWith('Cross-home book ')),
+  ).toBe(true);
 });
 
 test('a malformed, missing or unreadable subject is the same 404', async () => {
