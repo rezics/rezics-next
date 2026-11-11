@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { expect, screen, userEvent, within } from 'storybook/test';
 import { fallbackListPresentation, type CoverSubject, type CoverSummary } from './cover.tsx';
 import { CoverCard, CoverGrid } from './cover-card.tsx';
-import { MemberListRow } from './list-presentation.tsx';
+import { MemberListRow, MemberReadingItem } from './list-presentation.tsx';
 import { withSurface } from '../stories/support.tsx';
 
 const book: CoverSubject = { id: 'list-book', title: 'The Little Prince', types: ['schema:Book'] };
@@ -266,6 +266,92 @@ export const IntegratedMember: Story = {
       '/genres/fantasy',
     );
     await expect(within(canvasElement).getByRole('button', { name: 'More actions' })).toBeVisible();
+  },
+};
+
+export const CollectionReadingGrid: Story = {
+  render: () => (
+    <div className="max-w-lg space-y-4">
+      <CoverGrid ratio="5:7">
+        <MemberReadingItem
+          layout="grid"
+          href="/subjects/list-book"
+          title={book.title}
+          cover={{ subject: book, cover: summary(book, 'portrait'), src: imageSource }}
+          occurrenceId="covered-occurrence"
+          occurrenceLabel="The Little Prince, item 1"
+          position="Position 1 on this page"
+          metadata={<p className="text-sm">A supplied fact in the covered tile.</p>}
+          evidence={<p className="text-sm">Action evidence remains visible.</p>}
+          detailId="collection-reading-detail"
+          expanded={false}
+          inspectLabel="Inspect details"
+          onInspect={(opener) => (opener.dataset.inspected = 'true')}
+        />
+        <MemberReadingItem
+          layout="grid"
+          href="/subjects/list-movie"
+          title={movie.title}
+          cover={{ subject: movie, cover: null, src: imageSource }}
+          occurrenceId="placeholder-occurrence"
+          occurrenceLabel="The Red Turtle, item 2"
+          position="Position 2 on this page"
+          metadata={
+            <p className="text-sm">A placeholder title with a long supplied summary that wraps across its tile.</p>
+          }
+          detailId="collection-reading-detail"
+          expanded={false}
+          inspectLabel="Inspect details"
+          onInspect={(opener) => (opener.dataset.inspected = 'true')}
+        />
+        <MemberReadingItem
+          layout="grid"
+          title="An unavailable member with a deliberately long title"
+          occurrenceId="unavailable-occurrence"
+          occurrenceLabel="Unavailable member, item 3"
+          position="Position 3 on this page"
+          metadata={<p className="text-sm">No subject was supplied for this occurrence.</p>}
+          detailId="collection-reading-detail"
+          expanded={false}
+          inspectLabel="Inspect details"
+          onInspect={(opener) => (opener.dataset.inspected = 'true')}
+        />
+      </CoverGrid>
+      <nav aria-label="Collection pages">
+        <a href="/collections/next" className="inline-flex min-h-11 items-center rounded-lg border px-3">
+          More
+        </a>
+      </nav>
+    </div>
+  ),
+  async play({ canvasElement }) {
+    const items = [...canvasElement.querySelectorAll<HTMLElement>('[data-slot="collection-member-card"]')];
+    await expect(items).toHaveLength(3);
+    await expect(items[0]!.querySelector('[data-slot="cover-card"] [data-slot="cover"]')).not.toBeNull();
+    await expect(items[1]!.querySelector('[data-slot="cover-placeholder-title"]')).not.toBeNull();
+    await expect(items[2]!.querySelector('[data-slot="cover-card"]')).toBeNull();
+    const openers = items.map((item) => item.querySelector<HTMLButtonElement>('[data-collection-detail-opener]')!);
+    for (const [index, item] of items.entries()) {
+      const opener = openers[index]!;
+      opener.scrollIntoView({ block: 'center' });
+      const rect = opener.getBoundingClientRect();
+      const itemRect = item.getBoundingClientRect();
+      await expect(rect.width).toBeGreaterThanOrEqual(44);
+      await expect(rect.height).toBeGreaterThanOrEqual(44);
+      await expect(rect.top).toBeGreaterThanOrEqual(itemRect.top);
+      await expect(rect.bottom).toBeLessThanOrEqual(itemRect.bottom + 1);
+      const hit = canvasElement.ownerDocument.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      await expect(hit === opener || opener.contains(hit)).toBe(true);
+      await userEvent.pointer([
+        { keys: '[MouseLeft>]', target: opener },
+        { keys: '[/MouseLeft]', target: opener },
+      ]);
+      await expect(opener.dataset.inspected).toBe('true');
+    }
+    const more = within(canvasElement).getByRole('link', { name: 'More' });
+    more.scrollIntoView({ block: 'center' });
+    const moreTop = more.getBoundingClientRect().top;
+    await expect(moreTop).toBeGreaterThanOrEqual(Math.max(...items.map((item) => item.getBoundingClientRect().bottom)));
   },
 };
 

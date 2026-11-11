@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { MemberListRow } from '../src/components/list-presentation.tsx';
+import { MemberListRow, MemberReadingItem } from '../src/components/list-presentation.tsx';
 import type { CoverSummary } from '../src/components/cover.tsx';
 
 const cover: CoverSummary = {
@@ -99,4 +99,52 @@ test('MemberListRow keeps known Type defaults ahead of ratio and leaves unknown 
   expect(unknown).toContain('data-ratio="2:3"');
   expect(unknown).toContain('w-[72px] sm:w-24');
   expect(unknown).toContain('data-state="placeholder"');
+});
+
+test('MemberReadingItem keeps grid metadata, position, evidence and Inspect inside the complete item flow', () => {
+  const covered = renderToStaticMarkup(
+    createElement(MemberReadingItem, {
+      layout: 'grid',
+      href: '/subjects/member',
+      title: 'A translated member title that wraps',
+      cover: {
+        subject: { id: 'member', title: 'A translated member title that wraps', types: ['schema:Book'] },
+        cover,
+        src: () => '/member.webp',
+      },
+      occurrenceId: 'member-occurrence',
+      occurrenceLabel: 'A translated member title, item 2',
+      position: 'Position 2 on this page',
+      metadata: createElement('p', null, 'A supplied fact that wraps across the tile.'),
+      evidence: createElement('a', { href: '/actions' }, 'Available action'),
+      detailId: 'detail',
+      expanded: false,
+      inspectLabel: 'Inspect details',
+      onInspect() {},
+    }),
+  );
+  const card = /<article\b[^>]*data-slot="cover-card"[\s\S]*?<\/article>/u.exec(covered)?.[0];
+  expect(card).toContain('A supplied fact that wraps across the tile.');
+  expect(card).toContain('Position 2 on this page');
+  expect(card).toContain('Available action');
+  expect(card).toContain('data-collection-detail-opener');
+  expect(covered).toContain('data-collection-member-id="member-occurrence"');
+
+  const unavailable = renderToStaticMarkup(
+    createElement(MemberReadingItem, {
+      layout: 'grid',
+      title: 'Unavailable member',
+      occurrenceId: 'unavailable-occurrence',
+      occurrenceLabel: 'Unavailable member, item 4',
+      position: 'Position 4 on this page',
+      metadata: createElement('p', null, 'No supplied summary.'),
+      detailId: 'detail',
+      expanded: false,
+      inspectLabel: 'Inspect details',
+      onInspect() {},
+    }),
+  );
+  expect(unavailable).toContain('No supplied summary.');
+  expect(unavailable).toContain('Position 4 on this page');
+  expect(unavailable).toContain('data-collection-detail-opener');
 });

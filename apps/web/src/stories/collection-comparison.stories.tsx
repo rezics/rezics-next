@@ -165,30 +165,61 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 async function recoverExample(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
+  const layout = await canvas.findByRole('combobox', { name: m.library_layout() });
+  await userEvent.selectOptions(layout, 'list');
+  await expect(layout).toHaveValue('list');
+  await userEvent.selectOptions(layout, 'grid');
+  await expect(layout).toHaveValue('grid');
   await userEvent.click(await canvas.findByRole('button', { name: 'Recover same cursor' }));
-  const openers = [...canvasElement.querySelectorAll<HTMLButtonElement>('[data-collection-detail-opener]')];
-  await expect(openers).toHaveLength(4);
+  const items = [...canvasElement.querySelectorAll<HTMLElement>('[data-slot="collection-member-card"]')];
+  await expect(items).toHaveLength(4);
+  const openers = items.map((item) => item.querySelector<HTMLButtonElement>('[data-collection-detail-opener]')!);
+  const document = canvasElement.ownerDocument;
+  const window = document.defaultView!;
+  for (const [index, item] of items.entries()) {
+    const opener = openers[index]!;
+    opener.scrollIntoView({ block: 'center' });
+    const bounds = opener.getBoundingClientRect();
+    const itemBounds = item.getBoundingClientRect();
+    await expect(bounds.width).toBeGreaterThanOrEqual(44);
+    await expect(bounds.height).toBeGreaterThanOrEqual(44);
+    await expect(bounds.top).toBeGreaterThanOrEqual(itemBounds.top - 1);
+    await expect(bounds.bottom).toBeLessThanOrEqual(itemBounds.bottom + 1);
+    const hit = document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+    await expect(hit === opener || opener.contains(hit)).toBe(true);
+  }
   const references: string[] = [];
+  const referenceIds: string[] = [];
   for (const [index, note] of ['Read this occurrence first.', 'Revisit this occurrence later.'].entries()) {
-    await userEvent.click(openers[index]!);
+    const opener = openers[index]!;
+    opener.scrollIntoView({ block: 'center' });
+    await userEvent.pointer([
+      { keys: '[MouseLeft>]', target: opener },
+      { keys: '[/MouseLeft]', target: opener },
+    ]);
     const detail = canvasElement.querySelector<HTMLElement>('[data-slot="member-reading-detail"]')!;
     await expect(detail).toHaveFocus();
     await expect(await within(detail).findByText(note)).toBeVisible();
     const reference = detail.querySelector<HTMLAnchorElement>('[data-comparison-reference]')!;
     await expect(reference).toBeVisible();
     references.push(reference.href);
+    referenceIds.push(reference.dataset.comparisonReference!);
+    await expect(reference.dataset.comparisonReference).toBe(id(10 + index));
     await expect(
       detail.querySelector(`[data-copy-reference="${reference.dataset.comparisonReference}"]`),
     ).toBeVisible();
     await expect(
       canvasElement.querySelector('[data-slot="cover-card-actions-row"] [data-collection-member-id]'),
     ).toBeNull();
-    if (index === 0) {
-      await userEvent.click(within(detail).getByRole('button', { name: m.collection_reading_close() }));
-      await expect(openers[index]).toHaveFocus();
-    }
+    await userEvent.click(within(detail).getByRole('button', { name: m.collection_reading_close() }));
+    await expect(opener).toHaveFocus();
   }
   await expect(references[0]).not.toBe(references[1]);
+  await expect(referenceIds).toEqual([id(10), id(11)]);
+  const itemsBottom = Math.max(...items.map((item) => item.getBoundingClientRect().bottom + window.scrollY));
+  const more = canvasElement.querySelector<HTMLAnchorElement>('a[href*="cursor=later-page"]')!;
+  more.scrollIntoView({ block: 'center' });
+  await expect(more.getBoundingClientRect().top + window.scrollY).toBeGreaterThanOrEqual(itemsBottom);
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
 export const RecoveredComparison: Story = {
