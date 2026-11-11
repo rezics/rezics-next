@@ -36,6 +36,9 @@ Fixed-choice fields and toolbar selectors default to `Select` from `@rezics/ui/s
 and preserve the field name and submitted value. Native `<select>` and `NativeSelect` require an explicit, documented
 exception. Use links or buttons for a no-script navigation fallback. `Menu` is for actions and navigation, not values.
 
+Decision: Catalogue and search fixed-choice controls use shared shadcn `Select` with labelled `Field` composition;
+native select is reserved for a documented browser-native interaction.
+
 For ordinary sliders, associate a visible label with `aria-labelledby` and use the supported `locale` and `format`
 props for numeric value text. The rating components compose [Base UI slider parts](https://base-ui.com/react/components/slider)
 directly because the native range needs question-specific value text, including the unrated state. The actual
