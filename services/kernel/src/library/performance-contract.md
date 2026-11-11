@@ -914,6 +914,10 @@ Failed folded assertions report compact occurrences and source SQL for the reach
 producers. The fixture does not replay the complete page: its native plan notices exceeded the shared 32 MiB raw
 telemetry cap. It keeps the original bounds and assertions while identifying failed producers without that replay.
 Fewest tests: preserve bounded failure evidence in the existing `label-full-growth.test.ts` journey.
+Decision: Entry-tile growth accepts Sort only when its measured input is bounded by the distinct at-most-100 request
+IDs or by one exact Library row per point. Active-session growth keeps its one-key and 48-key assertions in one
+64/512/4096 series, with each statement checked separately and one settlement per scale. Existing point probes,
+zero-scan and nested-cost assertions remain unchanged.
 Fewest tests: one native maintenance journey covers last-complete, field-backfill preparing, and those original
 actions after publication; served HTTP uses own-account admission, open personal_library, and listEntries standing.
 The empty-owner drain/late-writer, source-change, purge and last-complete journeys are serial; source-change uses

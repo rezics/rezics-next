@@ -421,6 +421,21 @@ export async function createProfileEntryFixture(
       if (identityHomesReady && (home !== 0 || mappedHomes.has(0))) await catchUpIdentity(home);
       return { actor, bearer: await accountToken(claims) };
     }
+    async function refresh(person: { actor: AccountActor; bearer: string }) {
+      const claims = {
+        accountId: person.actor.accountId,
+        clientId: person.actor.clientId,
+        scopes: person.actor.scopes,
+        authnEpoch: person.actor.authnEpoch,
+        requestedBy: person.actor.requestedBy,
+      };
+      const bearer = await accountToken(claims);
+      const actor = await access.authenticate(bearer, { pool, deadline: Date.now() + 300_000 });
+      if (actor.accountId !== claims.accountId) throw new Error('Reauthentication changed the fixture account');
+      person.actor = actor;
+      person.bearer = bearer;
+      return person;
+    }
     // Grant-routes and outcome-driver admit platform.governance only on a token
     // that carries the complete mounted catalogue plus gate:any. A reduced sibling
     // list is denied even when the role row exists. media:complete stays off the
@@ -901,6 +916,7 @@ export async function createProfileEntryFixture(
         }
       });
     }
+    await Promise.all([refresh(steward), refresh(owner), refresh(other)]);
     expect((await commands.readEntry(owner.actor, baseline)).state).toBe('planned');
     expect((await send('owner', 'GET', `/v1/libraryEntries/${baseline}`)).status).toBe(200);
 
@@ -921,6 +937,7 @@ export async function createProfileEntryFixture(
       baselineSubject: baseline,
       growthSubjects,
       identity,
+      refresh,
       send,
       sendWithHeaders,
       createSubject,
