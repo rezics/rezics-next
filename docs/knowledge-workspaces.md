@@ -47,6 +47,45 @@ a storage hotspot, and a busy notebook can contend on structure mutations; later
 ownership migration that preserves routed resource identity. Realm-owned notebooks require their later-version
 routing and membership contract before creation is offered.
 
+### Native first-loop contract
+
+The first native slice creates an account-owned notebook around one existing public Subject. The notebook, its
+private attachment directory, stable document resources, immutable document revisions and primary placements use
+the owner's account home and route. Each first-slice document inherits the notebook's Subject association; changing
+that association is a separate admitted operation. Private reads and writes require the owning account's current
+native account admission and a full placement-ancestor check. Admit at most 64 ancestors per request; this bounds
+the path and Access work without borrowing the hosted-book occurrence or node-count limits. There is no notebook
+document-count limit. Sibling pages and mutations use indexed positions and a structure revision rather than
+loading or rewriting every sibling.
+
+Every saved document revision fixes its validated canonical document bytes, SHA-256 digest, title, language,
+references, authorship and licence. A publication is an immutable record selecting one exact document revision and
+the notebook Subject. The document's current-publication pointer is the only public availability authority. Saving
+a later private revision does not change it. Publication and withdrawal use native receipts and compare-and-swap
+against the expected document and publication revisions; withdrawal clears that pointer in the same transaction.
+Public resolution checks the pointer and exact bytes again when returning a response, so delayed or paused indexing
+cannot preserve access after withdrawal. Unknown or non-current revisions are concealed.
+
+Search owns candidate ordering and its indexed association observations; Content owns exact publication bytes and
+currentness. A Search-facing useful-page source accepts a bounded candidate observation, checks each candidate
+against its current publication and Subject authority, and retains preparation over that fixed observation when
+sparse stale candidates prevent a useful page or proved exhaustion. Candidate rows are never read authority, exact
+totals are not returned, and missing Search or Subject authority is unavailable rather than an empty result or a
+scan of account homes. Direct public resolution is available as soon as the Content publication commits and does
+not wait for Search acknowledgement. The native first-loop proof selects and reads one exact publication, then
+withdraws it while derived indexing is paused.
+
+At account-erasure time, private notebook structure, attachments, heads, unselected revisions and owner links are
+erased. An eligible current publication retains only its selected immutable revision and permitted public fields as
+a de-identified contribution, without its notebook ancestor chain or account identity. The existing publication
+record remains the source; no second publication store or writer is introduced. A publication already withdrawn at
+the erasure fence has no retained public selection. Moderation and later source withdrawal continue to govern the
+retained contribution.
+
+Decision: the first native loop uses an account-home notebook with a 64-ancestor admission bound, exact current
+publication pointers, Search-owned candidate observations, and de-identified retention of eligible current
+publications at account erasure.
+
 Primary placements form a forest under one notebook root. A document has one primary placement there. Later reference
 placements can show the same document elsewhere without moving or copying it; they do not recursively acquire its
 children. Their placement IDs remain different. First-release reuse uses ordinary document references. A deep copy
