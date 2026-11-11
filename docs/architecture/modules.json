@@ -1854,6 +1854,7 @@
       ],
       "publicEntries": [
         "apps/web/src/books/catalogue/shelf-link.tsx",
+        "apps/web/src/books/catalogue/route.tsx",
         "apps/web/src/session/community-application.tsx",
         "apps/web/src/content-editions/sale-review.tsx",
         "apps/web/src/content-editions/edition-create-route.tsx",
