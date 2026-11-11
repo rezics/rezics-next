@@ -145,7 +145,10 @@ export class ManagerSessionTransport {
       latest && (status === 'inProgress' || status === 'completed' || status === 'interrupted' || status === 'failed')
         ? { id: latest.id as string, status: status as ManagerTurnDisposition['status'] }
         : undefined;
-    return { activeTurnId: activeTurnId(resumed), latestTurn };
+    return {
+      activeTurnId: activeTurnId(resumed),
+      ...(latestTurn ? { latestTurn } : {}),
+    };
   }
   private async steer(client: AppServer, threadId: string, expectedTurnId: string, summary: string): Promise<void> {
     await client.request('turn/steer', {

@@ -1214,21 +1214,22 @@ export class ManagerSessions {
     for (const event of events) {
       state = this.get(id);
       assertManagedManager(state);
+      const current: ManagedManagerState = state;
       const summary = prefix ? [prefix, event.event.summary].filter(Boolean).join('\n\n') : event.event.summary;
       prefix = '';
       const delivered = await this.transport.deliverToSession(
         client,
-        state,
-        state.threadId!,
-        state.activeTurnId,
+        current,
+        current.threadId!,
+        current.activeTurnId,
         summary,
         (turnId) => {
-          this.adoptActiveTurn(state, turnId);
+          this.adoptActiveTurn(current, turnId);
         },
       );
       if (delivered.kind === 'started') {
-        this.turnStarted(state, delivered.turnId);
-        this.save(state);
+        this.turnStarted(current, delivered.turnId);
+        this.save(current);
       }
       this.inbox.notified(event.id);
     }

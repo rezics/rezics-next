@@ -2992,6 +2992,8 @@ cache, concrete Codex/Claude session requests, viewer argv and window prompt/res
 accounting, inbox delivery, renewal and budget stay with ManagerSessions. Extraction tests pin saved-thread ordering,
 retired-thread notifications, once-per-identity start, interrupt fallback, reconnect after a failed connect, and close
 flushing pending work.
+Decision: manager thread resume omits `latestTurn` when provider history has no recognized disposition; recognized
+`inProgress`, `completed`, `interrupted` and `failed` dispositions are preserved.
 Every Codex manager `turn/start` pins `gpt-6.1-sol` and the manager's configured effort, including the opening,
 idle inbox wakes, and renewed continuation threads. The app-server `turn/steer` request accepts input and an
 `expectedTurnId`, but no model or effort override, so steering keeps the active turn's pinned settings. Recovery and
