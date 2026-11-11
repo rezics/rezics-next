@@ -2437,6 +2437,8 @@ export type CrossMediaSeedExtras = {
   onConversionOutput?: ImporterOptions['onConversionOutput'];
   /** The ordinary CLI supplies its existing authenticated read port. */
   bangumiGenrePort?: ReviewedCataloguePort;
+  /** The selected showcase journal checkpoints complete Bangumi candidate listings. */
+  showcaseJournal?: ShowcaseJournal;
   /** Reviewed Game platform/engine Concepts; UUID/label values are lookup hints only. */
   bangumiGameEnvironment?: { readonly bindings: readonly BangumiGameEnvironmentBinding[] };
   /** Finite exact Game-template bindings used only by the explicit local showcase flow. */
@@ -3234,6 +3236,7 @@ export async function seedCrossMedia(
             bindings: importer.session.bindings,
             port: extras!.bangumiGenrePort!,
             lookupDiagnostics: genreAdapter.diagnostics(),
+            ...(extras?.showcaseJournal ? { journal: extras.showcaseJournal } : {}),
           })
         : undefined;
     const bangumiGameGenrePublication =
@@ -3838,6 +3841,7 @@ export async function runCrossMediaSeedCli(
       ...(gameGenreBindings ? { bangumiGameGenreBindings: gameGenreBindings } : {}),
       ...(gameEnvironmentBindings ? { bangumiGameEnvironment: { bindings: gameEnvironmentBindings } } : {}),
       bangumiGenrePort: importPort,
+      ...(journal ? { showcaseJournal: journal } : {}),
       ...(journal && publicClient
         ? {
             readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
