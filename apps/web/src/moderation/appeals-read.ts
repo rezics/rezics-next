@@ -185,11 +185,13 @@ class AppealReadFailure extends Error {
   }
 }
 function appealResult(result: {
+  status: number;
   data?: NativeAppealPage | null;
-  error?: { status: number; value: unknown } | null;
+  error?: { value: unknown } | null;
 }): AppealPage {
   if (result.error) {
-    const { status, value } = result.error;
+    const { status } = result;
+    const { value } = result.error;
     if (
       value &&
       typeof value === 'object' &&
