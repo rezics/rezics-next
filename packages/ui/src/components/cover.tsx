@@ -161,7 +161,11 @@ export function Cover({
 
   const frame = (
     <div
-      className={cn('relative max-w-full shrink-0', className)}
+      className={cn(
+        '@container relative max-w-full shrink-0',
+        (action || cover?.withheld) && 'min-h-11 min-w-11',
+        className,
+      )}
       data-slot="cover"
       data-state={state}
       data-ratio={frameRatio}
@@ -241,16 +245,19 @@ export function Cover({
             )}
           </>
         )}
-        {action && image && state !== 'withheld' && state !== 'placeholder' ? (
-          <button
-            className="absolute inset-0 z-[2] cursor-zoom-in rounded-[inherit] focus-visible:ring-4 focus-visible:ring-primary"
-            type="button"
-            aria-label={action.label}
-            onClick={action.onActivate}
-          />
-        ) : null}
-        {state === 'withheld' ? <RevealButton text={text} onReveal={() => reveal.setValue(true)} /> : null}
       </AspectRatio>
+      {action && image && state !== 'withheld' && state !== 'placeholder' ? (
+        <button
+          className={cn(
+            'absolute inset-0 z-[2] cursor-zoom-in focus-visible:ring-4 focus-visible:ring-primary',
+            coverRadius,
+          )}
+          type="button"
+          aria-label={action.label}
+          onClick={action.onActivate}
+        />
+      ) : null}
+      {state === 'withheld' ? <RevealButton text={text} onReveal={() => reveal.setValue(true)} /> : null}
     </div>
   );
 
@@ -361,7 +368,14 @@ function Withheld({ text }: { text: CoverLabels }) {
 function RevealButton({ text, onReveal }: { text: CoverLabels; onReveal: () => void }) {
   return (
     <div className="absolute inset-x-0 bottom-[16%] flex justify-center @max-[119px]:inset-0 @max-[119px]:bottom-0 @max-[119px]:items-center">
-      <Button type="button" variant="secondary" size="sm" onClick={onReveal} aria-label={text.reveal}>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="min-h-11 min-w-11 max-w-full whitespace-normal"
+        onClick={onReveal}
+        aria-label={text.reveal}
+      >
         <EyeIcon aria-hidden />
         <span className="@max-[119px]:hidden">{text.reveal}</span>
       </Button>

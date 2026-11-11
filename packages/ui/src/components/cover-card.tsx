@@ -11,6 +11,7 @@ import { Button } from '../shadcn/button.tsx';
 import { Menu, type MenuEntry } from './menu.tsx';
 import { Cover, coverRadius, listPresentationForCover, type CoverProps, type CoverRatio } from './cover.tsx';
 import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from './content-item.tsx';
+import { independentControlsClassName } from './content-interaction.ts';
 import { ListRowControl } from './list-row.tsx';
 import { ProgressRow } from './progress-row.tsx';
 
@@ -18,22 +19,6 @@ export type CoverDensity = 'small' | 'medium' | 'large';
 const DensityContext = createContext<CoverDensity | undefined>(undefined);
 
 const RatioContext = createContext<CoverRatio | undefined>(undefined);
-
-const independentControlsClassName = [
-  '[&_a]:relative [&_a]:z-20',
-  '[&_button]:relative [&_button]:z-20',
-  '[&_summary]:relative [&_summary]:z-20',
-  '[&_label]:relative [&_label]:z-20',
-  '[&_input]:relative [&_input]:z-20',
-  '[&_select]:relative [&_select]:z-20',
-  '[&_textarea]:relative [&_textarea]:z-20',
-  '[&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring',
-  '[&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring',
-  '[&_summary:focus-visible]:outline-2 [&_summary:focus-visible]:outline-offset-2 [&_summary:focus-visible]:outline-ring',
-  '[&_input:focus-visible]:outline-2 [&_input:focus-visible]:outline-offset-2 [&_input:focus-visible]:outline-ring',
-  '[&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring',
-  '[&_textarea:focus-visible]:outline-2 [&_textarea:focus-visible]:outline-offset-2 [&_textarea:focus-visible]:outline-ring',
-].join(' ');
 
 /** The frame shared by cards and tombstones in a cover collection. */
 export function useCoverRatio() {
@@ -120,10 +105,9 @@ export function CoverCard({
   const Link = link ?? 'a';
   const credit = essentialCredit != null;
   const secondaryContent = meta ?? secondary;
-  const compactSecondary = typeof secondaryContent === 'string' || typeof secondaryContent === 'number';
   const titleClass = credit
-    ? 'text-base leading-snug font-semibold wrap-anywhere'
-    : 'line-clamp-2 text-center text-xs leading-snug font-semibold wrap-anywhere';
+    ? 'block text-base leading-snug font-semibold wrap-anywhere'
+    : 'block text-center text-xs leading-snug font-semibold wrap-anywhere';
   const image = (
     <Cover
       {...cover}
@@ -132,7 +116,7 @@ export function CoverCard({
       {...(ratio ? { ratio } : {})}
       decorative
       frameClassName="bg-transparent ring-0"
-      className="w-full [&_button:not(.absolute)]:relative [&_button]:z-10"
+      className={`w-full ${independentControlsClassName}`}
     />
   );
   const actions =
@@ -207,7 +191,7 @@ export function CoverCard({
               aria-label={title}
               data-shelf-select
               onClick={onSelect}
-              className="absolute top-0 left-0 z-20 flex size-11 items-start justify-start rounded-sm opacity-100 [@media(hover:hover)_and_(pointer:fine)]:opacity-0 [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100 focus-visible:opacity-100"
+              className="absolute top-0 left-0 z-20 flex size-11 items-start justify-start rounded-sm opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <span aria-hidden className="mt-2 ml-2 size-5 rounded border bg-background" />
             </button>
@@ -242,7 +226,7 @@ export function CoverCard({
         {secondaryContent != null && (
           <div
             data-slot="cover-card-secondary"
-            className={`min-w-0 text-center text-[11px] leading-4 text-muted-foreground ${compactSecondary ? 'line-clamp-1' : ''} ${independentControlsClassName}`}
+            className={`min-w-0 text-center text-[11px] leading-4 text-muted-foreground whitespace-normal wrap-anywhere ${independentControlsClassName}`}
           >
             {secondaryContent}
           </div>
@@ -251,7 +235,7 @@ export function CoverCard({
           <ListRowControl className="z-20">
             <div
               data-slot="cover-card-essential-credit"
-              className="min-w-0 whitespace-normal text-sm leading-6 wrap-anywhere"
+              className={`min-w-0 whitespace-normal text-sm leading-6 wrap-anywhere ${independentControlsClassName}`}
             >
               {essentialCredit}
             </div>
@@ -265,7 +249,7 @@ export function CoverCard({
                   href={status.href}
                   aria-label={status.label}
                   data-slot="cover-card-status"
-                  className="relative z-10 block min-w-0 max-w-full truncate whitespace-nowrap rounded-sm bg-muted px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="relative z-20 inline-flex min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal rounded-sm bg-muted px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground wrap-anywhere outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {status.label}
                 </a>
@@ -273,7 +257,7 @@ export function CoverCard({
                 <span
                   aria-label={status.label}
                   data-slot="cover-card-status"
-                  className="block min-w-0 max-w-full truncate whitespace-nowrap rounded-sm bg-muted px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground"
+                  className="block min-w-0 max-w-full whitespace-normal rounded-sm bg-muted px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground wrap-anywhere"
                 >
                   {status.label}
                 </span>
@@ -285,10 +269,10 @@ export function CoverCard({
       {(progress != null || state != null || actions != null) && (
         <div
           data-slot="cover-card-actions-row"
-          className="mt-auto flex min-w-0 items-center justify-between gap-1 pt-0.5 pb-2 text-xs text-muted-foreground"
+          className="mt-auto flex min-w-0 flex-wrap items-center justify-between gap-1 pt-0.5 pb-2 text-xs text-muted-foreground"
         >
           {(progress != null || state != null) && (
-            <div data-slot="cover-card-state" className="min-w-0 flex-1 pt-0.5">
+            <div data-slot="cover-card-state" className="min-w-0 flex-1 basis-20 pt-0.5 wrap-anywhere">
               <div data-slot="cover-card-state-content" className={independentControlsClassName}>
                 {progress != null ? <ProgressRow value={progress.value} label={progress.label} /> : state}
               </div>
@@ -303,9 +287,9 @@ export function CoverCard({
 
 /** A responsive subject grid; shadcn does not provide this layout. */
 const densityClasses: Record<CoverDensity, string> = {
-  small: 'grid-cols-[repeat(auto-fill,minmax(8rem,1fr))]',
-  medium: 'grid-cols-[repeat(auto-fill,minmax(8.75rem,1fr))]',
-  large: 'grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))]',
+  small: 'grid-cols-[repeat(auto-fill,minmax(min(100%,8rem),1fr))]',
+  medium: 'grid-cols-[repeat(auto-fill,minmax(min(100%,8.75rem),1fr))]',
+  large: 'grid-cols-[repeat(auto-fill,minmax(min(100%,10.5rem),1fr))]',
 };
 const fixedDensityClasses: Record<CoverDensity, string> = {
   small: 'grid-cols-4 sm:grid-cols-[repeat(auto-fill,6rem)]',
@@ -327,10 +311,10 @@ export function CoverGrid({
   return (
     <RatioContext.Provider value={ratio}>
       <DensityContext.Provider value={density}>
-        <div className="@container">
+        <div className="@container min-w-0">
           <div
             data-slot="cover-grid"
-            className={`grid gap-2 ${(fixedDensity ? fixedDensityClasses : densityClasses)[density ?? 'medium']}`}
+            className={`grid min-w-0 gap-2 ${(fixedDensity ? fixedDensityClasses : densityClasses)[density ?? 'medium']}`}
           >
             {children}
           </div>
@@ -368,7 +352,7 @@ export function CoverRow({
           aria-label={label}
           tabIndex={0}
           data-slot="cover-row"
-          className={`flex snap-x snap-mandatory gap-2 overflow-x-auto ${coverRadius} focus-visible:outline-2 focus-visible:outline-ring ${coverRowDensityClasses[density]} [&>*]:shrink-0 [&>*]:snap-start`}
+          className={`flex min-w-0 snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain ${coverRadius} focus-visible:outline-2 focus-visible:outline-ring ${coverRowDensityClasses[density]} [&>*]:shrink-0 [&>*]:snap-start`}
         >
           {children}
         </div>

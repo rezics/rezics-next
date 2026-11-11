@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { EllipsisIcon, RotateCwIcon } from 'lucide-react';
 import { expect, screen, userEvent, within } from 'storybook/test';
 import { Button } from '../shadcn/button.tsx';
 import { settled, withSurface } from '../stories/support.tsx';
@@ -11,6 +12,14 @@ const bookTitle = 'A selected shelf entry with unknown progress';
 const meta = {
   title: 'Components/Content Item',
   component: ContentItem,
+  parameters: {
+    docs: {
+      description: {
+        component:
+          'Illustrative supplied summaries and local interactions; no native response or visual acceptance is claimed.',
+      },
+    },
+  },
   decorators: [withSurface],
 } satisfies Meta<typeof ContentItem>;
 export default meta;
@@ -30,6 +39,8 @@ export const Composed: Story = {
 
     await userEvent.tab();
     await expect(primaryLink).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(canvas.getByRole('status')).toHaveTextContent('Primary destination activated');
 
     const coverLink = canvas.getByRole('link', { name: 'Open cover artwork' });
     await userEvent.tab();
@@ -40,6 +51,7 @@ export const Composed: Story = {
     const coverButton = canvas.getByRole('button', { name: 'Rotate cover' });
     await userEvent.tab();
     await expect(coverButton).toHaveFocus();
+    await expect(coverButton).toHaveStyle({ position: 'absolute' });
     await userEvent.click(coverButton);
     await expect(canvas.getByRole('status')).toHaveTextContent('Cover action activated');
 
@@ -99,6 +111,14 @@ export const Composed: Story = {
     await userEvent.click(canvas.getByRole('checkbox', { name: 'Select book' }));
     await expect(canvas.getByRole('checkbox', { name: 'Select book' })).not.toBeChecked();
     await expect(canvas.getByText('Selection callbacks: 2')).toBeVisible();
+    const editionNote = canvas.getByText('Edition note');
+    await userEvent.click(editionNote);
+    await expect(canvas.getByRole('combobox', { name: 'Supplied edition language' })).toBeVisible();
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: 'Supplied edition language' }), 'ja');
+    await userEvent.click(canvas.getByText('Keep edition note private'));
+    await expect(canvas.getByRole('checkbox', { name: 'Keep edition note private' })).toBeChecked();
+    await expect(canvas.getByText('Selection callbacks: 2')).toBeVisible();
+    await expect(canvas.getByRole('checkbox', { name: 'Select book' })).not.toBeChecked();
     await userEvent.click(canvas.getByRole('button', { name: 'Reading' }));
     await expect(
       within(await settled(await screen.findByRole('menu'))).getByRole('menuitemradio', {
@@ -123,8 +143,14 @@ function Example() {
           href="/works/stars"
           title={title}
           titleLang="en"
+          onClick={(event) => {
+            if ((event.target as Element).closest('[data-slot="list-row-link"]')) {
+              event.preventDefault();
+              setMessage('Primary destination activated');
+            }
+          }}
           visual={
-            <div className="flex aspect-[5/7] w-[72px] flex-col items-start justify-between rounded bg-primary/10 p-2 text-xs text-primary sm:w-24">
+            <div className="relative flex aspect-[5/7] w-[72px] flex-col items-start justify-between rounded bg-primary/10 p-2 text-xs text-primary sm:w-24">
               <a
                 href="#cover"
                 aria-label="Open cover artwork"
@@ -140,9 +166,10 @@ function Example() {
                 variant="ghost"
                 size="icon-sm"
                 aria-label="Rotate cover"
+                className="absolute right-0 bottom-0"
                 onClick={() => setMessage('Cover action activated')}
               >
-                ↻
+                <RotateCwIcon aria-hidden />
               </Button>
             </div>
           }
@@ -219,7 +246,7 @@ function Example() {
           }
           trailing={
             <Button variant="ghost" size="icon-sm" aria-label="More actions">
-              <span aria-hidden>•••</span>
+              <EllipsisIcon aria-hidden />
             </Button>
           }
         />
@@ -227,7 +254,24 @@ function Example() {
           href="/works/book"
           cover={{ subject, cover: null, src: () => '' }}
           title={bookTitle}
-          meta="A supplied author and format"
+          meta={
+            <>
+              <span>A supplied author and format</span>
+              <details>
+                <summary>Edition note</summary>
+                <label>
+                  Supplied edition language
+                  <select defaultValue="en">
+                    <option value="en">English</option>
+                    <option value="ja">Japanese</option>
+                  </select>
+                </label>
+                <label>
+                  <input type="checkbox" /> Keep edition note private
+                </label>
+              </details>
+            </>
+          }
           status="Reading"
           statusMenuEntries={[
             {

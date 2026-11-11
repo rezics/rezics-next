@@ -15,13 +15,14 @@ const card = (subject = cover.subject) =>
     menu: createElement('span', null, 'Remove'),
   });
 
-test('card renders a title link and separate actions, with clamped text and a fill cover', () => {
+test('card renders a title link and separate actions, with wrapping text and a fill cover', () => {
   const html = renderToStaticMarkup(card());
   expect(html).toContain('href="/book"');
   expect(html).toContain('More actions for A book');
   expect(html).toContain('data-size="fill"');
-  expect(html).toContain('line-clamp-2');
-  expect(html).toContain('line-clamp-1');
+  expect(html).toContain('wrap-anywhere');
+  expect(html).toContain('whitespace-normal');
+  expect(html).not.toContain('line-clamp-');
   expect(html.match(/<a\b/g)?.length).toBe(1);
   expect(html.indexOf('</a>')).toBeLessThan(html.indexOf('<button'));
 });

@@ -41,9 +41,9 @@ test('list row renders its cover, one title link, state, actions and mobile layo
     'aria-checked="true"',
     'w-[72px]',
     'sm:w-24',
-    'style="aspect-ratio:5 / 7"',
-    'sm:line-clamp-1',
-    'line-clamp-2',
+    'data-ratio="5:7"',
+    'whitespace-normal',
+    'wrap-anywhere',
     'sm:hidden',
   ])
     expect(html).toContain(text);
@@ -145,7 +145,10 @@ test('table renders visible columns, sticky sortable header and caller supplied 
     'Reading',
     'Ep 3/6',
     'Rate',
-    'w-10',
+    'w-11',
+    'data-slot="shelf-sort-direction"',
+    'data-direction="asc"',
+    'min-h-11 min-w-11',
     'aria-checked="true"',
   ])
     expect(html).toContain(text);

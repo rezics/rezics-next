@@ -67,7 +67,7 @@ test('actual Search rows and cover-list cards use real member Types without a un
   expect(ratios(rows)).toEqual(cases.map(([, ratio]) => ratio));
   expect(rows.match(/data-slot="list-row"/gu)).toHaveLength(hits.length);
   expect(rows.match(/data-state="placeholder"/gu)).toHaveLength(hits.length);
-  expect(rows).toContain('line-clamp-2');
+  expect(rows).toContain('wrap-anywhere');
   expect(rows).toContain('w-32 sm:w-48');
   for (const member of hits) expect(rows).toContain(`/en/subjects/${member.id}/`);
 

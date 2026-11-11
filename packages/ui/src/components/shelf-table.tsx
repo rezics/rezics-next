@@ -7,9 +7,11 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
+import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import { Button } from '../shadcn/button.tsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../shadcn/table.tsx';
-import { Cover, coverRatio, type CoverProps } from './cover.tsx';
+import { Cover, type CoverProps } from './cover.tsx';
+import { independentControlsClassName, independentControlSelector } from './content-interaction.ts';
 import type { ShelfSelectionProps } from './shelf-list.tsx';
 import { Checkbox } from '../shadcn/checkbox.tsx';
 import { Field } from '../shadcn/field.tsx';
@@ -103,15 +105,21 @@ export function ShelfTable({
               }
             >
               {column.sortable ? (
-                <button
+                <Button
                   type="button"
-                  className="hover:underline focus-visible:outline-ring"
+                  variant="ghost"
+                  className="min-h-11 min-w-11 gap-1 px-2 font-medium"
                   onClick={() =>
                     onSort(column.id, sort?.field === column.id && sort.direction === 'asc' ? 'desc' : 'asc')
                   }
                 >
                   {column.label}
-                </button>
+                  {sort?.field === column.id && (
+                    <span data-slot="shelf-sort-direction" data-direction={sort.direction} aria-hidden="true">
+                      {sort.direction === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />}
+                    </span>
+                  )}
+                </Button>
               ) : (
                 column.label
               )}
@@ -132,12 +140,7 @@ export function ShelfTable({
               onClick={
                 row.selectable
                   ? (event) => {
-                      if (
-                        !(event.target as Element).closest(
-                          'a, button, input, select, textarea, [role="checkbox"], [role="menuitem"]',
-                        )
-                      )
-                        select(event);
+                      if (!(event.target as Element).closest(independentControlSelector)) select(event);
                     }
                   : undefined
               }
@@ -157,19 +160,19 @@ export function ShelfTable({
                 </TableCell>
               )}
               {visible.map(({ id }) => (
-                <TableCell key={id}>
+                <TableCell
+                  key={id}
+                  className={`max-w-sm whitespace-normal wrap-anywhere ${id === 'title' ? 'min-w-40' : ''} ${independentControlsClassName}`}
+                >
                   {id === 'cover' ? (
-                    <div
-                      className="w-10 overflow-hidden rounded"
-                      style={{ aspectRatio: coverRatio(row.cover.subject.types).replace(':', ' / ') }}
-                    >
-                      <Cover {...row.cover} size="fill" ratio={coverRatio(row.cover.subject.types)} decorative />
+                    <div className="w-11">
+                      <Cover {...row.cover} size="fill" decorative />
                     </div>
                   ) : id === 'title' ? (
                     <>
                       {row.href ? (
                         <a
-                          className="font-medium hover:underline"
+                          className="font-medium underline-offset-4 hover:underline"
                           href={row.href}
                           lang={row.titleLang}
                           onClick={
