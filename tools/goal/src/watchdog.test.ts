@@ -6,7 +6,7 @@ import { PassThrough } from 'node:stream';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { migrate, openDb } from './db.ts';
-import { checkHostsInOutage, sshProbe, violations, watch } from './watchdog.ts';
+import { checkHostsInOutage, retryWait, sshProbe, violations, watch } from './watchdog.ts';
 import { readControlPolicy } from './policy.ts';
 import { processIdentity } from './process.ts';
 import { workerMigrations, WorkerStore } from './store.ts';
@@ -721,6 +721,38 @@ test('watchdog overrides govern idle boundaries, alert repetition and host-outag
     expect(probes).toBe(2);
     expect(checkHostsInOutage(root, policy)).toEqual(['fixture']);
     expect(checkHostsInOutage(root)).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a retry waits for check hosts only when every performance-approved placement is in outage', () => {
+  const root = temporaryDirectory('goal-watchdog-eligible-hosts-');
+  const policy = readControlPolicy({ watchdog: { hostProbeFailures: 1 } });
+  const hosts = ['a', 'b', 'c'].map((name) => ({
+    name,
+    address: `check@${name}.test`,
+    identity: `/fixture/${name}`,
+    performance: true,
+  }));
+  hosts.push({ name: 'd', address: 'check@d.test', identity: '/fixture/d', performance: false });
+  const intent: RetryIntent = {
+    taskId: 'retry',
+    attempt: 1,
+    options: { awaitCheckHosts: true },
+    status: 'pending',
+  };
+  const task = { brief: { after: [] } } as Task;
+  try {
+    writeFileSync(join(root, 'remote-check-hosts.json'), JSON.stringify({ hosts }));
+    writeFileSync(join(root, 'watchdog.json'), JSON.stringify({ hostProbeFailures: { b: 1, d: 1 } }));
+    expect(checkHostsInOutage(root, policy)).toEqual(['b', 'd']);
+    expect(retryWait(intent, task, () => undefined, now, root, policy)).toBeNull();
+    writeFileSync(join(root, 'watchdog.json'), JSON.stringify({ hostProbeFailures: { a: 1, b: 1, c: 1, d: 1 } }));
+    expect(retryWait(intent, task, () => undefined, now, root, policy)).toEqual({
+      reason: 'check-hosts',
+      hosts: ['a', 'b', 'c'],
+    });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -435,7 +435,9 @@ test('a pending retry waits for its backoff time and for check hosts in a probed
       const state = h.settings.stateDirectory;
       writeFileSync(
         join(state, 'remote-check-hosts.json'),
-        JSON.stringify({ hosts: [{ name: 'b', address: 'check@b.example', identity: '/fixture/identity' }] }),
+        JSON.stringify({
+          hosts: [{ name: 'b', address: 'check@b.example', identity: '/fixture/identity', performance: true }],
+        }),
       );
       writeFileSync(join(state, 'watchdog.json'), JSON.stringify({ alerts: {}, hostProbeFailures: { b: 2 } }));
       h.store.updateRetryIntent(ref, (intent) => {

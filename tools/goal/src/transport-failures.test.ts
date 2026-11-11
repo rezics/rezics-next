@@ -102,6 +102,54 @@ test('transport classification uses stderr, not exit code', () => {
   expect([1, 2, 3, 6].map((count) => transportRetryBackoffMs(count))).toEqual([60_000, 120_000, 240_000, 240_000]);
 });
 
+test('check-host transport retries wait only while every eligible placement is in outage', async () => {
+  const h = settleHarness();
+  try {
+    const attempt = runningAttempt(h, '');
+    h.store.updateAttempt(attempt, (current) => {
+      current.state = 'exited';
+      current.endedAt = new Date().toISOString();
+    });
+    h.store.updateTask(attempt, (current) => {
+      current.state = 'ready';
+    });
+    h.store.saveRetryIntent(attempt, { awaitCheckHosts: true });
+    const hosts = ['a', 'b', 'c'].map((name) => ({
+      name,
+      address: `check@${name}.example`,
+      identity: `/fixture/${name}`,
+      performance: true,
+    }));
+    writeFileSync(join(h.settings.stateDirectory, 'remote-check-hosts.json'), JSON.stringify({ hosts }));
+    const policy = structuredClone(h.settings.policy!);
+    policy.watchdog.hostProbeFailures = 2;
+    h.settings.policy = policy;
+    const outages = (names: string[]) =>
+      writeFileSync(
+        join(h.settings.stateDirectory, 'watchdog.json'),
+        JSON.stringify({ hostProbeFailures: Object.fromEntries(names.map((name) => [name, 2])) }),
+      );
+    let starts = 0;
+    h.tasks.retry = async () => {
+      starts += 1;
+      return undefined;
+    };
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    outages(['a', 'b', 'c']);
+    job.resumePendingRetries();
+    await job.drain();
+    expect(starts).toBe(0);
+    expect(h.store.retryIntent(attempt)?.status).toBe('pending');
+
+    outages(['b']);
+    job.resumePendingRetries();
+    await job.drain();
+    expect(starts).toBe(1);
+  } finally {
+    h.dispose();
+  }
+});
+
 function settleHarness(script?: string) {
   const h = script === undefined ? harness() : harness(script);
   const policy = structuredClone(h.settings.policy ?? defaultPolicy);

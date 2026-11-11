@@ -1666,7 +1666,8 @@ The watchdog runs with reminder delivery and reports running tasks, or ready tas
 have had no worker for ten minutes after an attempt ended and its recorded driver identity is no longer live. A reused
 PID does not count as the same driver. A live driver may still be settling the attempt, including running affected tests
 or waiting for a check-host slot. A pending retry that waits by design is not reported: one whose `after` dependencies
-are not yet integrated, whose backoff time has not come, or that waits out a check-host outage. When a backoff expires,
+are not yet integrated, whose backoff time has not come, or that waits while every performance-approved check host is
+in outage. When a backoff expires,
 the missing-starter clock begins at that deadline if it is later than the attempt end. `goal status` shows
 such a retry's `pendingRetry` reason (`dependencies`, `backoff`, `check-hosts`, or `start` when it waits only for a
 starter or capacity). It also reports a `stabilize` branch that has stayed out of the integration branch for
@@ -1684,7 +1685,9 @@ When `<state>/remote-check-hosts.json` exists, each watchdog sweep probes every 
 five minutes with a twenty-second SSH timeout. Two consecutive failed probes report one host incident with the first
 line of SSH stderr. A successful probe clears that outage, so a later pair of failures can report a new incident. The
 watchdog does not probe when no hosts file is present and does not include the configured identity path in its alert.
-While a listed host is in outage, retries of check-host transport failures stay pending instead of relaunching.
+Decision: check wakes use their original pool after live occupancy and allowance admission; check-host retries wait
+only when every performance-approved host is in outage, while started remote runs stay on their recorded host and
+identity and new runs use existing probes to select a responding approved host.
 
 ## Integration, promotion, culprit isolation and attempt fencing
 
@@ -2082,10 +2085,10 @@ Every other tool failure, including a CLI that fails before a session, a silent 
 failure, resumes the same session after a backoff by its fingerprint: the failure's first line with worktree paths,
 numbers, hashes and identifiers removed. The first sighting of a fingerprint across all tasks in the last hour waits two minutes, the second
 ten and later ones thirty; each sighting is a `tool-blocker-retry` event. The delay is persisted as the retry intent's
-`notBefore`, so a restarted host honours it. A check-host transport failure also waits while the watchdog's probes
-show a listed check host in outage (two failed probes in a row, cleared by a success; see [Watchdog](#watchdog)), and
-every relaunch waits for [host capacity](#host-capacity-admission); the manager host's recovery sweep tries the pending
-retry again every minute. When three distinct tasks end on the same normalized line within 20 minutes, Goal opens one
+`notBefore`, so a restarted host honours it. A check-host transport failure also waits when the watchdog's probes show
+every performance-approved host in outage (two failed probes in a row, cleared by a success; see [Watchdog](#watchdog)),
+and every relaunch waits for [host capacity](#host-capacity-admission); the manager host's recovery sweep tries the
+pending retry again every minute. When three distinct tasks end on the same normalized line within 20 minutes, Goal opens one
 environment incident, holds retries for those tasks and new tasks that hit the line, and sends one `blocker` to the
 supermanager with the line, count, example tasks and the first tracked source match from `git grep`. Goal retries one
 affected task every 10 minutes. An affected launch recorded after the incident's trigger failure becomes its probe;
