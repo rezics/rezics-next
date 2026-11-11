@@ -59,6 +59,8 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   waitingForInbox?: boolean;
   /** One current-session turn only; interrupt intent is persisted before signaling this exact identity. */
   turnDisposition?: ManagerTurnDisposition;
+  /** Bounded replay fence for recently retired turns in this thread; discarded on renewal. */
+  retiredTurnIds?: string[];
   status: 'starting' | 'running' | 'paused' | 'complete' | 'renewal-failed';
   startedAt: number;
   turns: number;
@@ -95,10 +97,10 @@ export type ManagerState = ManagedManagerState | ResidentSupermanagerState;
 /** Observational projection shared by public status; native Goal state remains independent of lifecycle status. */
 export function readManagerOperationalStatus(db: Database) {
   if (!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()) return [];
-  const states = (db.query('SELECT state FROM manager_sessions').all() as { state: string }[]).flatMap((row) => {
+  const states = (db.query('SELECT id, state FROM manager_sessions').all() as { id: string; state: string }[]).flatMap((row) => {
     try {
       const state = JSON.parse(row.state) as ManagerState;
-      return state && typeof state.id === 'string' && typeof state.status === 'string' ? [state] : [];
+      return state && typeof state.status === 'string' ? [{ ...state, id: row.id }] : [];
     } catch {
       return [];
     }
@@ -107,13 +109,13 @@ export function readManagerOperationalStatus(db: Database) {
   return managerOwnership(states).map((owner) => {
     const state = byId.get(owner.id)!;
     if (state.kind === 'resident-supermanager') return owner;
-    const turn = state.turnDisposition;
-    const unexpected = turn?.intent === 'work' && (turn.status === 'interrupted' || turn.status === 'failed');
+    const turn = state.turnDisposition?.threadId === state.threadId ? state.turnDisposition : undefined;
+    const unexpected = unexpectedManagerTurn(state);
     return {
       ...owner,
       operation: state.status !== 'running' ? state.status
         : state.waitingForInbox ? 'waiting-for-inbox'
-        : unexpected ? `turn-${turn.status}`
+        : unexpected ? `turn-${turn?.status}`
         : state.activeTurnId ? 'active-turn' : 'idle',
       threadId: state.threadId,
       activeTurnId: state.activeTurnId,
@@ -151,6 +153,12 @@ function assertManagedManager(state: ManagerState): asserts state is ManagedMana
 
 function isManagedManager(state: ManagerState): state is ManagedManagerState {
   return !isResidentSupermanager(state);
+}
+
+function unexpectedManagerTurn(state: ManagedManagerState): boolean {
+  const turn = state.turnDisposition;
+  return turn?.threadId === state.threadId && turn?.intent === 'work' &&
+    (turn.status === 'interrupted' || turn.status === 'failed');
 }
 
 const managerDecisionMigration = {
@@ -724,6 +732,7 @@ export class ManagerSessions {
       activeTurnId: _activeTurnId,
       waitingForInbox: _waitingForInbox,
       turnDisposition: _turnDisposition,
+      retiredTurnIds: _retiredTurnIds,
       status: _status,
       startedAt: _startedAt,
       turns: _turns,
@@ -835,6 +844,8 @@ export class ManagerSessions {
   }
   private turnStarted(state: ManagedManagerState, turn: string): boolean {
     // A start reply and its notification share an identity. A delayed replay must not resurrect an ended turn.
+    if (!turn || state.retiredTurnIds?.includes(turn)) return false;
+    if (state.activeTurnId && state.activeTurnId !== turn) return false;
     if (state.turnDisposition?.threadId === state.threadId && state.turnDisposition.turnId === turn) return false;
     if (state.countedTurn === turn && state.activeTurnId !== turn) return false;
     const intent = state.status !== 'running' ? 'controller-stop' : state.waitingForInbox ? 'controller-park' : 'work';
@@ -868,6 +879,18 @@ export class ManagerSessions {
       .immediate();
     return true;
   }
+  private retireTurn(state: ManagedManagerState, turn: string): void {
+    // Keep identities only, not turn history or provider payloads. The current disposition owns diagnostics.
+    state.retiredTurnIds = [...(state.retiredTurnIds ?? []).filter((id) => id !== turn), turn].slice(-32);
+  }
+  /** A resume reply is authoritative about the active turn, unlike queued start notifications. */
+  private adoptActiveTurn(state: ManagedManagerState, turn: string | null): void {
+    if (state.activeTurnId && state.activeTurnId !== turn) this.retireTurn(state, state.activeTurnId);
+    // Preserve the authoritative identity even for older snapshots whose counted turn has no disposition yet.
+    state.activeTurnId = turn;
+    if (turn) this.turnStarted(state, turn);
+    this.save(state);
+  }
   private turnEnded(
     state: ManagedManagerState,
     turn: string,
@@ -878,6 +901,7 @@ export class ManagerSessions {
       .transaction(() => {
         if (state.activeTurnId !== turn) return;
         ended = true;
+        this.retireTurn(state, turn);
         const previous = state.turnDisposition;
         const intent = previous?.threadId === state.threadId && previous.turnId === turn ? previous.intent : 'work';
         if (state.threadId)
@@ -900,6 +924,27 @@ export class ManagerSessions {
       })
       .immediate();
     return ended;
+  }
+  private reportStrandedTurn(state: ManagedManagerState): void {
+    if (
+      state.status !== 'running' || state.waitingForInbox || state.activeTurnId ||
+      !unexpectedManagerTurn(state) || state.turnDisposition?.strandedReported ||
+      (state.goalState?.status !== 'active' && state.goalState?.status !== 'blocked') ||
+      (this.services.canStartTurn && !this.services.canStartTurn(state))
+    ) return;
+    const pending = this.inbox.notifications(state.id);
+    if (!pending.length) return;
+    const turn = state.turnDisposition!;
+    this.db.transaction(() => {
+      turn.strandedReported = true;
+      this.save(state);
+      this.inbox.deliver({
+        managerId: state.supermanager,
+        kind: 'environment',
+        goalId: state.goal,
+        summary: `Manager ${state.id} turn ${turn.turnId} on thread ${turn.threadId} ${turn.status} unexpectedly; ${pending.length} undelivered waking inbox event(s) remain. Use the existing manager wake/recovery path on this thread; native Goal is ${state.goalState!.status}.`,
+      });
+    }).immediate();
   }
   async noteCommand(id: string): Promise<void> {
     this.get(id);
@@ -1031,6 +1076,7 @@ export class ManagerSessions {
       state.status !== 'running' ||
       state.engine !== 'codex' ||
       !state.threadId ||
+      unexpectedManagerTurn(state) ||
       (state.activeTurnId !== null && !state.waitingForInbox)
     )
       return;
@@ -1065,9 +1111,24 @@ export class ManagerSessions {
     assertManagedManager(state);
     if (state.engine === 'codex' && state.threadId) {
       const client = await this.transport.client(state.pool);
+      const threadId = state.threadId;
+      const attributeInterrupt = (turnId: string) => {
+        if (state.threadId !== threadId) throw new Error('Manager thread changed before interrupt');
+        if (state.activeTurnId !== turnId) this.adoptActiveTurn(state, turnId);
+        state.activeTurnId = turnId;
+        state.turnDisposition = {
+          threadId, turnId, status: 'inProgress',
+          intent: state.status === 'running' && state.waitingForInbox ? 'controller-park' : 'controller-stop',
+          at: this.now(),
+        };
+        this.save(state);
+      };
+      // Pausing the Goal itself can end a turn, so attribution precedes both provider operations.
+      if (state.activeTurnId) attributeInterrupt(state.activeTurnId);
       state.goalState = await this.transport.setGoalStatus(client, state.threadId, 'paused');
       this.save(state);
-      if (state.activeTurnId) await this.transport.interruptTurn(client, state, state.threadId, state.activeTurnId);
+      if (state.activeTurnId)
+        await this.transport.interruptTurn(client, state, threadId, state.activeTurnId, attributeInterrupt);
     }
   }
   private async stopInternal(id: string): Promise<void> {
@@ -1128,6 +1189,8 @@ export class ManagerSessions {
       this.save(state);
       return;
     }
+    this.save(state);
+    this.reportStrandedTurn(state);
     let prefix = this.consumeGoalReadings(state);
     for (const event of events) {
       state = this.get(id);
@@ -1141,8 +1204,7 @@ export class ManagerSessions {
         state.activeTurnId,
         summary,
         (turnId) => {
-          state.activeTurnId = turnId;
-          this.save(state);
+          this.adoptActiveTurn(state, turnId);
         },
       );
       if (delivered.kind === 'started') {
@@ -1366,7 +1428,8 @@ export class ManagerSessions {
           if (current.engine === 'codex' && current.threadId) {
             const parkedIdle =
               current.status === 'running' &&
-              (current.waitingForInbox || (current.activeTurnId === null && current.turns > 0));
+              (current.waitingForInbox ||
+                (current.activeTurnId === null && current.turns > 0 && !unexpectedManagerTurn(current)));
             if (parkedIdle) {
               // Resolve the native Goal before resuming its thread. A completed idle turn must stay parked
               // across host recovery; resuming the thread could rearm provider autonomy.
@@ -1374,6 +1437,7 @@ export class ManagerSessions {
               current = this.get(current.id);
               assertManagedManager(current);
             } else if (
+              !unexpectedManagerTurn(current) &&
               current.goalState?.status !== 'paused' &&
               current.goalState?.status !== 'blocked' &&
               current.goalState?.status !== 'budgetLimited' &&
@@ -1383,9 +1447,15 @@ export class ManagerSessions {
               const client = await this.transport.client(current.pool);
               const resumed = await this.transport.resumeThread(client, current, current.threadId);
               reportProgress();
-              current.activeTurnId = resumed.activeTurnId;
+              // Reconcile only the recorded current identity; historical terminal turns cannot diagnose this session.
+              if (resumed.latestTurn?.id === current.activeTurnId && resumed.latestTurn.status !== 'inProgress')
+                this.turnEnded(current, resumed.latestTurn.id, resumed.latestTurn.status);
+              this.adoptActiveTurn(current, resumed.activeTurnId);
               current.goalState = await this.transport.getGoal(client, current.threadId);
-              if (current.status === 'running' && current.activeTurnId === null && current.turns > 0) {
+              if (
+                current.status === 'running' && current.activeTurnId === null && current.turns > 0 &&
+                !unexpectedManagerTurn(current)
+              ) {
                 await this.markWaitingForInbox(current.id);
                 current = this.get(current.id);
                 assertManagedManager(current);
@@ -1405,7 +1475,8 @@ export class ManagerSessions {
             current.threadId &&
             current.status === 'running' &&
             current.goalState?.status === 'active' &&
-            !current.waitingForInbox
+            !current.waitingForInbox &&
+            !unexpectedManagerTurn(current)
           ) {
             const client = await this.transport.client(current.pool);
             await this.services.windows.unregister(current.id);

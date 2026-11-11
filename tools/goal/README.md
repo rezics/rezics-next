@@ -3044,28 +3044,33 @@ retries every `policy.manager.renewalRetryMs` (ten minutes by default) until the
 `manager renew` accepts `renewal-failed` as well as `paused`. Window lookups pass `-u` to every tmux invocation and
 accept the underscore field separators tmux prints when the host has no locale.
 
-Manager events are committed to SQLite and signaled through filesystem notifications. Inbox waiting has no sleep loop.
-The control plane's manager wakeup path is event-driven: the opening tells a manager to end the turn when no decision
-is pending. When an event is delivered, the host steers it into the manager's active turn or starts a new turn on the
-persisted thread; if the app-server has not loaded that thread, the host resumes it once, then steers an already active
-turn or starts a new one. The opening also states the manager's outputs (ready briefs in its backlog and decisions),
-the stopped-task hour, the message limits, and that the brief and continuation are read once per session. The host
-counts `clock.sleep` items per manager and UTC hour;
-the eleventh in an hour sends the supermanager one `environment` alarm and the manager one correction. The
-turns-without-decision limit counts consecutive completed turns. A turn in which a ready brief in the Goal's backlog was
-written or moved back (by modification or status time), or a brief the backlog run dispatched was written, counts as a
-decision, as any control-plane command already does; a decision resets the count to zero.
-For Codex managers, the host persists idle intent and pauses the existing native Goal after each matched completed turn.
-The managed manager remains running on the same thread with its objective, token budget and usage. A real inbox event
-is held unread while the existing pool policy and retained allowance history refuse a new model turn; the current
-inbox tick retries that admission without querying the provider. Once admitted, the host reactivates the parked Goal
-and delivers through the existing start-or-steer path. If Goal activation starts the turn first, the host rejoins that
-turn and steers the event into it. Completion parks autonomy again; empty wakeups and host recovery do not resume an
-idle thread. Managed user pauses and Goal budget/guard states stay distinct and are never reactivated by an inbox
-event. Focused fake-app-server tests pin idle parking, preserved mail, same-thread delivery and the start/steer race;
-they do not exercise provider scheduling. See the
-[official OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex)
-for native continuation behavior.
+Manager events commit to SQLite; filesystem signals are wakeup hints. Managers end their turn when no decision is
+pending. Real mail steers the active turn or starts one on the same thread; an unloaded thread is resumed once before
+start or steer. The existing inbox cadence retries undelivered mail. Empty wakeups start no turn. The host counts
+`clock.sleep` items per UTC hour; the eleventh sends the supermanager an `environment` alarm and the manager a correction.
+Consecutive completed work turns count toward the turns-without-decision limit. Control-plane commands and ready
+briefs written or moved back since the turn began count as decisions and reset that limit.
+
+For Codex managers, matched work completion persists inbox-wait intent and pauses native Goal autonomy. The manager
+remains running on the same thread with its objective, budget and usage. Real mail waits unread during pool or allowance
+holds; admission reactivates only a controller-parked Goal and uses the existing start-or-steer path. Activation can
+start the turn first; the host rejoins and steers it. User pauses and native budget, usage, blocked and complete states
+retain their meaning. Blocked Goals accept admitted explicit inbox turns without reactivation. Empty wakeups and
+recovery leave idle threads parked. See the
+[OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex).
+
+Public `status` keeps manager lifecycle separate from `operation`: `waiting-for-inbox`, `active-turn`, `idle`,
+`turn-interrupted` or `turn-failed`, with native Goal status and the current turn disposition alongside it. Interrupt
+intent (`controller-park` or `controller-stop`) is persisted against the exact thread and turn before provider effects,
+including an interrupt retry's discovered turn. Late housekeeping continuations count as neither work nor failure.
+Retired threads, duplicate terminal events and recently retired turn starts are ignored; only one disposition and a
+bounded identity replay fence are retained per session.
+
+An unexpected current work interruption or failure remains visible instead of becoming an idle park. The existing
+inbox cadence reports it once to the supermanager when undelivered waking mail remains, the native Goal permits work
+and allowance admits a turn. Unread mail already delivered, quiet events and UI interruption toasts do not establish
+stranded work. Explicit stops and expected parks stay quiet. Recovery uses the existing same-thread inbox path;
+no mail means no synthetic prompt, automatic renewal or new turn.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is
 a proposal: `manager complete <goal>` records the request and returns immediately while the host checks that all scoped
 tasks are merged and the main gate passes in an isolated checkout. The gate checks the main commit captured when it
