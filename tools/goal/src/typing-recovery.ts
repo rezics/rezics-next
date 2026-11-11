@@ -232,12 +232,13 @@ export async function recoverWorkerTyping(
         },
       };
     }
-    if (withdrawnRetry) store.beginWithdrawnTypingRecoverySettlement(ref, attempt.result, webCompiler, {
-      actor: actor ?? { kind: 'controller' },
-      previousResult: attempt.result,
-      recoveryKind: 'withdrawn-budget-stop',
-      compilerCommand: webCompiler,
-    });
+    if (withdrawnRetry)
+      store.beginWithdrawnTypingRecoverySettlement(ref, attempt.result, webCompiler, {
+        actor: actor ?? { kind: 'controller' },
+        previousResult: attempt.result,
+        recoveryKind: 'withdrawn-budget-stop',
+        compilerCommand: webCompiler,
+      });
     else
       store.event(ref, 'typing-evidence-recovery', {
         actor: actor ?? { kind: 'controller' },
@@ -248,7 +249,9 @@ export async function recoverWorkerTyping(
       { attempt, exited: Promise.resolve({ code: attempt.exitCode ?? 0, signal: null }) },
       landing,
       afterSettle,
-      withdrawnRetry ? { withdrawnBudgetRecovery: { previousResult: attempt.result, command: webCompiler } } : undefined,
+      withdrawnRetry
+        ? { withdrawnBudgetRecovery: { previousResult: attempt.result, command: webCompiler } }
+        : undefined,
     );
     return { ...ref, status: store.task(task.id).state === 'landing' ? ('landing' as const) : ('pending' as const) };
   } finally {

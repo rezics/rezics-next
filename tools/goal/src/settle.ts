@@ -489,9 +489,11 @@ export async function settle(
           task.brief.goal !== 'web' ||
           task.brief.kind !== 'interface' ||
           (current.state !== 'stopped' &&
-            !(current.state === 'exited' &&
+            !(
+              current.state === 'exited' &&
               JSON.stringify(current.typingEvidencePending?.command) ===
-                JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']))) ||
+                JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck'])
+            )) ||
           current.result !== previousResult ||
           !workerCheckHostBudgetRefusalReport(current.result) ||
           JSON.stringify(command) !== JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) ||
@@ -511,7 +513,8 @@ export async function settle(
           throw new Error('Withdrawn retry source no longer has exact terminal Web compiler evidence');
         finalMeasurement.result = JSON.stringify({
           status: 'success',
-          summary: 'Retained source passed the installed owning Web typecheck; remaining acceptance stays with integration.',
+          summary:
+            'Retained source passed the installed owning Web typecheck; remaining acceptance stays with integration.',
           blocker: null,
           checks: [],
           approaches: [],

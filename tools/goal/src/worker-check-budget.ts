@@ -317,9 +317,11 @@ export function workerCheckHostWithdrawnRetryIsRecoverable(input: {
     workerCheckHostBudgetLimit(task, attempt.attempt) === 'off' ||
     !isKnownTypingCompiler(task.worktree, ['bun', 'run', '--cwd', 'apps/web', 'typecheck']) ||
     (attempt.state !== 'stopped' &&
-      !(attempt.state === 'exited' &&
+      !(
+        attempt.state === 'exited' &&
         JSON.stringify(attempt.typingEvidencePending?.command) ===
-          JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']))) ||
+          JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck'])
+      )) ||
     attempt.exitCode !== 0 ||
     attempt.failureKind !== 'tool' ||
     !workerCheckHostBudgetRefusalReport(attempt.result) ||
@@ -393,8 +395,7 @@ export function workerCheckHostAttemptChecksTerminal(
     if (record.ownership?.taskId !== taskId || record.ownership.attempt !== attempt) continue;
     if (typeof record.id !== 'string' || typeof record.physicalRunId !== 'string') return false;
     found.add(record.id);
-    const expectedCurrent =
-      currentCheck?.id === record.id && currentCheck.physicalRunId === record.physicalRunId;
+    const expectedCurrent = currentCheck?.id === record.id && currentCheck.physicalRunId === record.physicalRunId;
     if (
       record.cwd !== worktree ||
       file !== `${record.id}.json` ||
@@ -402,10 +403,7 @@ export function workerCheckHostAttemptChecksTerminal(
     )
       return false;
     if (expectedCurrent && record.status === 'running') continue;
-    if (
-      record.status !== 'finished' ||
-      !terminalPhysicalHistory(worktree, record.id, record.physicalRunId)
-    )
+    if (record.status !== 'finished' || !terminalPhysicalHistory(worktree, record.id, record.physicalRunId))
       return false;
   }
   return checkIds.every((id) => found.has(id));
@@ -502,11 +500,7 @@ export function grantWorkerTypingRecovery(
     for (const file of readdirSync(grants)) {
       if (!/^[0-9a-f-]{36}\.json$/.test(file)) continue;
       const prior = JSON.parse(readFileSync(join(grants, file), 'utf8')) as TypingRecoveryGrant;
-      if (
-        prior.version === 1 &&
-        prior.taskId === input.taskId &&
-        prior.attempt === input.attempt
-      )
+      if (prior.version === 1 && prior.taskId === input.taskId && prior.attempt === input.attempt)
         sameAttempt.push(prior);
       if (
         prior.version === 1 &&
@@ -617,7 +611,9 @@ function admitTypingRecovery(input: WorkerCheckHostAdmit, directory: string): Wo
         .query('SELECT body FROM worker_retry_intents WHERE task_id=? AND attempt=?')
         .get(grant.taskId, grant.attempt) as { body: string } | null;
       const progressRow = db
-        .query("SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='attempt-progress' ORDER BY sequence DESC LIMIT 1")
+        .query(
+          "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='attempt-progress' ORDER BY sequence DESC LIMIT 1",
+        )
         .get(grant.taskId, grant.attempt) as { body: string } | null;
       const task = taskRow && (JSON.parse(taskRow.body) as Task | null);
       const attempt = attemptRow && (JSON.parse(attemptRow.body) as Attempt | null);
@@ -632,8 +628,7 @@ function admitTypingRecovery(input: WorkerCheckHostAdmit, directory: string): Wo
         grant.recoveryKind === 'withdrawn-budget-stop' &&
         task !== null &&
         attempt !== null &&
-        JSON.stringify(grant.command) ===
-          JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) &&
+        JSON.stringify(grant.command) === JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) &&
         workerCheckHostWithdrawnRetryIsRecoverable({
           task,
           attempt,

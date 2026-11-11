@@ -2443,7 +2443,13 @@ export class WorkerStore implements AttemptFence {
         this.saveAttempt(attempt);
         this.db
           .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
-          .run(ref.taskId, ref.attempt, 'typing-recovery-authorized', new Date().toISOString(), JSON.stringify(eventBody));
+          .run(
+            ref.taskId,
+            ref.attempt,
+            'typing-recovery-authorized',
+            new Date().toISOString(),
+            JSON.stringify(eventBody),
+          );
       })
       .immediate();
     this.invalidateSnapshot();
@@ -2473,7 +2479,13 @@ export class WorkerStore implements AttemptFence {
         this.saveAttempt(attempt);
         this.db
           .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
-          .run(ref.taskId, ref.attempt, 'typing-evidence-recovery', new Date().toISOString(), JSON.stringify(eventBody));
+          .run(
+            ref.taskId,
+            ref.attempt,
+            'typing-evidence-recovery',
+            new Date().toISOString(),
+            JSON.stringify(eventBody),
+          );
       })
       .immediate();
     this.invalidateSnapshot();
@@ -2501,9 +2513,7 @@ export class WorkerStore implements AttemptFence {
     this.invalidateSnapshot();
   }
   private withdrawnTypingRecoveryRows(ref: AttemptRef, expectedResult: string): { attempt: Attempt } {
-    const task = decode<Task>(
-      this.db.query('SELECT body FROM worker_tasks WHERE id=?').get(ref.taskId),
-    );
+    const task = decode<Task>(this.db.query('SELECT body FROM worker_tasks WHERE id=?').get(ref.taskId));
     const attempt = decode<Attempt>(
       this.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt),
     );
