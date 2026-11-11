@@ -8,7 +8,7 @@ import type { AppServer, CodexPool, Notification } from './app-server.ts';
 import { migrate } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { isPendingContinuationHandshake } from './manager-continuation.ts';
-import { ownedGoals } from './manager-ownership.ts';
+import { managerOwnership, ownedGoals } from './manager-ownership.ts';
 import { ManagerSessionTransport } from './manager-session-transport.ts';
 import { readGoalDocuments, renderManagerOpening } from './prompts.ts';
 import { recordFlow } from './flow.ts';
@@ -42,6 +42,14 @@ export type GoalState = {
   timeUsedSeconds: number;
   tokenBudget: number | null;
 };
+export type ManagerTurnDisposition = {
+  threadId: string;
+  turnId: string;
+  status: 'inProgress' | 'completed' | 'interrupted' | 'failed';
+  intent: 'work' | 'controller-park' | 'controller-stop';
+  at: number;
+  strandedReported?: boolean;
+};
 export type ManagerSessionSnapshot = ManagerSpec & {
   /** Existing persisted sessions without a kind remain managed sessions. */
   kind?: 'managed';
@@ -49,6 +57,8 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   activeTurnId: string | null;
   /** This controller parked native Goal autonomy after a completed turn; only an admitted inbox wake resumes it. */
   waitingForInbox?: boolean;
+  /** One current-session turn only; interrupt intent is persisted before signaling this exact identity. */
+  turnDisposition?: ManagerTurnDisposition;
   status: 'starting' | 'running' | 'paused' | 'complete' | 'renewal-failed';
   startedAt: number;
   turns: number;
@@ -81,6 +91,38 @@ export type ResidentSupermanagerState = Pick<ManagerSessionSnapshot, 'id' | 'sta
   registeredAt: string;
 } & { [Key in ResidentManagedFields]?: never } & { history?: never };
 export type ManagerState = ManagedManagerState | ResidentSupermanagerState;
+
+/** Observational projection shared by public status; native Goal state remains independent of lifecycle status. */
+export function readManagerOperationalStatus(db: Database) {
+  if (!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()) return [];
+  const states = (db.query('SELECT state FROM manager_sessions').all() as { state: string }[]).flatMap((row) => {
+    try {
+      const state = JSON.parse(row.state) as ManagerState;
+      return state && typeof state.id === 'string' && typeof state.status === 'string' ? [state] : [];
+    } catch {
+      return [];
+    }
+  });
+  const byId = new Map(states.map((state) => [state.id, state]));
+  return managerOwnership(states).map((owner) => {
+    const state = byId.get(owner.id)!;
+    if (state.kind === 'resident-supermanager') return owner;
+    const turn = state.turnDisposition;
+    const unexpected = turn?.intent === 'work' && (turn.status === 'interrupted' || turn.status === 'failed');
+    return {
+      ...owner,
+      operation: state.status !== 'running' ? state.status
+        : state.waitingForInbox ? 'waiting-for-inbox'
+        : unexpected ? `turn-${turn.status}`
+        : state.activeTurnId ? 'active-turn' : 'idle',
+      threadId: state.threadId,
+      activeTurnId: state.activeTurnId,
+      waitingForInbox: state.waitingForInbox === true,
+      nativeGoalStatus: state.goalState?.status ?? null,
+      turnDisposition: turn ?? null,
+    };
+  });
+}
 export type CompletionEvidence = { passed: boolean; evidencePath: string; summary: string };
 export type ManagerServices = {
   policy?: ControlPolicy;
@@ -372,12 +414,24 @@ export class ManagerSessions {
     assertManagedManager(state);
     let completedCurrentTurn = false;
     // Notifications from a retired Codex thread can already be queued when renewal swaps sessions.
-    if (state.threadId && params?.threadId && state.threadId !== params.threadId) return;
+    if (!state.threadId || params?.threadId !== state.threadId) return;
     if (method === 'turn/started') {
-      this.turnStarted(state, params.turn.id);
+      if (!this.turnStarted(state, params.turn.id)) return;
       if (state.status !== 'running' || state.waitingForInbox) await this.pauseRemote(state);
     } else if (method === 'turn/completed') {
-      completedCurrentTurn = this.turnEnded(state, params.turn.id);
+      const terminal = params?.turn?.status;
+      if (terminal !== 'completed' && terminal !== 'interrupted' && terminal !== 'failed') return;
+      if (!this.turnEnded(state, params.turn.id, terminal)) return;
+      completedCurrentTurn = terminal === 'completed' && state.turnDisposition?.intent === 'work';
+      if (!completedCurrentTurn) {
+        if (state.status === 'running' && state.turnDisposition?.intent === 'work') {
+          const client = await this.transport.client(state.pool);
+          state.goalState = await this.transport.getGoal(client, state.threadId);
+          this.save(state);
+          this.reportStrandedTurn(state);
+        }
+        return;
+      }
     } else if (method === 'thread/goal/updated') {
       state.goalState = params.goal;
       if (
@@ -669,6 +723,7 @@ export class ManagerSessions {
       threadId: _threadId,
       activeTurnId: _activeTurnId,
       waitingForInbox: _waitingForInbox,
+      turnDisposition: _turnDisposition,
       status: _status,
       startedAt: _startedAt,
       turns: _turns,
@@ -778,7 +833,18 @@ export class ManagerSessions {
       await this.renewForContinuation(id, state.goalState?.tokensUsed ?? 0);
     });
   }
-  private turnStarted(state: ManagedManagerState, turn: string): void {
+  private turnStarted(state: ManagedManagerState, turn: string): boolean {
+    // A start reply and its notification share an identity. A delayed replay must not resurrect an ended turn.
+    if (state.turnDisposition?.threadId === state.threadId && state.turnDisposition.turnId === turn) return false;
+    if (state.countedTurn === turn && state.activeTurnId !== turn) return false;
+    const intent = state.status !== 'running' ? 'controller-stop' : state.waitingForInbox ? 'controller-park' : 'work';
+    if (state.threadId)
+      state.turnDisposition = { threadId: state.threadId, turnId: turn, status: 'inProgress', intent, at: this.now() };
+    if (intent !== 'work') {
+      state.activeTurnId = turn;
+      this.save(state);
+      return true;
+    }
     if (state.countedTurn !== turn) {
       state.turns++;
       state.decision = false;
@@ -800,13 +866,27 @@ export class ManagerSessions {
         this.save(state);
       })
       .immediate();
+    return true;
   }
-  private turnEnded(state: ManagedManagerState, turn: string): boolean {
+  private turnEnded(
+    state: ManagedManagerState,
+    turn: string,
+    status: 'completed' | 'interrupted' | 'failed' = 'completed',
+  ): boolean {
     let ended = false;
     this.db
       .transaction(() => {
         if (state.activeTurnId !== turn) return;
         ended = true;
+        const previous = state.turnDisposition;
+        const intent = previous?.threadId === state.threadId && previous.turnId === turn ? previous.intent : 'work';
+        if (state.threadId)
+          state.turnDisposition = { threadId: state.threadId, turnId: turn, status, intent, at: this.now() };
+        state.activeTurnId = null;
+        if (intent !== 'work' || status !== 'completed') {
+          this.save(state);
+          return;
+        }
         if (state.threadId && managerHasDecision(this.db, state.id, state.threadId, turn)) state.decision = true;
         // Ready briefs are a manager's main output; writing one is a decision even without a control-plane command.
         if (
@@ -816,7 +896,6 @@ export class ManagerSessions {
         )
           state.decision = true;
         state.turnsWithoutDecision = state.decision ? 0 : state.turnsWithoutDecision + 1;
-        state.activeTurnId = null;
         this.save(state);
       })
       .immediate();
