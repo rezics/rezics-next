@@ -80,6 +80,7 @@ class SourceClaimRaceError extends Error {
 function isSourceClaimRace(error: unknown): boolean {
   if (!record(error) || typeof error.code !== 'string') return false;
   return (
+    error.code === '40001' ||
     error.code === '55P03' ||
     error.code === '40P01' ||
     (error.code === '23505' && error.constraint === 'external_claim_pkey')
