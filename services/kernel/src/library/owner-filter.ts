@@ -243,7 +243,13 @@ export function leafProvider(accountId: string, filter: FilterDocument, deadline
           const size = await nativePoint(work, entrySize, key, 128, () => entrySize.run(client, key), 0, 1);
           if (size === null) return null;
           const row = await nativePoint(
-            work, entryPoint, key, pinProjectionBytes(size), () => entryPoint.run(client, key), 0, 1,
+            work,
+            entryPoint,
+            key,
+            pinProjectionBytes(size),
+            () => entryPoint.run(client, key),
+            0,
+            1,
           );
           if (!row) return null;
           const sequence = row.ownerWriteSeq === null ? null : BigInt(row.ownerWriteSeq);

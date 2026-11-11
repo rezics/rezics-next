@@ -256,9 +256,7 @@ export async function readOwnerOriginalTruth(client: Client, accountId: string, 
 export type OwnerOriginalTruth = Awaited<ReturnType<typeof readOwnerOriginalTruth>>;
 
 /** Clear is reduction evidence, independent of presence. Preserve every original live conflict. */
-export function currentOwnerState(
-  originals: readonly OwnerOriginalTruth[],
-):
+export function currentOwnerState(originals: readonly OwnerOriginalTruth[]):
   | { status: 'unready'; reason: 'unsequenced' | 'unpinned' }
   | {
       status: 'complete';

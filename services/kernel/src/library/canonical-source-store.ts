@@ -469,9 +469,7 @@ async function observe(pool: Pool, input: CanonicalCall, l: CollectionSourceLedg
         : null,
     // Clear-only originals supply reduction evidence, including in private saved-query Sources.
     // Older generations cannot establish that complete original population.
-    ...(metadata.authority === 'private_builtin'
-      ? { originalCoverage: 'owner-facts-v2' as const }
-      : {}),
+    ...(metadata.authority === 'private_builtin' ? { originalCoverage: 'owner-facts-v2' as const } : {}),
   };
   const basis: CanonicalBasis = { ...components, digest: hash(components) };
   return { metadata, basis };

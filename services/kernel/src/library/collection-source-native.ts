@@ -838,7 +838,8 @@ export async function readNativeCollectionStateGroup(
     input.originals.length > 100 ||
     new Set(input.originals).size !== input.originals.length ||
     input.originals.some((original) => routeOf(original) === null)
-  ) throw new TypeError('Invalid native state group');
+  )
+    throw new TypeError('Invalid native state group');
   return call(pool, input, async (work) =>
     readOnly(pool, input, work, async (client) => {
       const current = await currentSource(client, metadata, work);
@@ -874,7 +875,8 @@ export async function readNativeCollectionStateGroup(
         winner.pin?.provenance !== 'profile' ||
         winner.pin.releaseDigest !== current.releaseDigest ||
         winner.pin.profileId !== current.profileId
-      ) return { result: 'not_proven' as const };
+      )
+        return { result: 'not_proven' as const };
       return { result: winner.state === current.stateId };
     }),
   );

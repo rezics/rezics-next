@@ -397,10 +397,11 @@ function createCollectionSourceRuntime(
         for (const original of originals) {
           const resolved = await l.bounded(
             { nativeRows: 8192, nativePoints: 128, statements: 128, bytes: 1024 * 1024 },
-            () => resolveSubject(dependencies, input.actor, original, input.at, {
-              pool: dependencies.pool,
-              deadline: input.deadline,
-            }),
+            () =>
+              resolveSubject(dependencies, input.actor, original, input.at, {
+                pool: dependencies.pool,
+                deadline: input.deadline,
+              }),
           );
           if (resolved?.subjectId !== input.subjectId) return partial('native_evidence');
         }
@@ -408,12 +409,18 @@ function createCollectionSourceRuntime(
       await revalidate(input, l, current);
       return state.result
         ? {
-            result: true, subjectId: input.subjectId, positiveEvidence: { [nativeEvidence]: true },
-            observation: obs, work: l.receipt(),
+            result: true,
+            subjectId: input.subjectId,
+            positiveEvidence: { [nativeEvidence]: true },
+            observation: obs,
+            work: l.receipt(),
           }
         : {
-            result: false, subjectId: input.subjectId, negativeEvidence: { [nativeEvidence]: true },
-            observation: obs, work: l.receipt(),
+            result: false,
+            subjectId: input.subjectId,
+            negativeEvidence: { [nativeEvidence]: true },
+            observation: obs,
+            work: l.receipt(),
           };
     }
     for (const row of window.rows) {
