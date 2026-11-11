@@ -1,5 +1,7 @@
 # Semantic
 
+Decision: Semantic outcome fixtures use a separate schema-group presentation namespace for Music; Content's public subject-document adapter resolves immutable authored or imported field lineage in the same command and preserves unavailable when neither owner row exists; link assertions cover current assertion and related metadata and follow one redirect Location to verify the canonical subject.
+
 Decision: native outcome drivers install the shared production preload before Kernel mount; it binds Community's Content Realm image schema through `composeCommunityDomainPorts` and installs CopyWork after Search. Sourced fixtures use released property and qualifier metadata, create replies omit relation totals without current disclosure proof, and merge journeys read the bounded operation before independently following one redirect.
 
 Decision: `candidate-proposal.ts`, `candidate-decision.ts`, `candidate-adoption.ts` and `candidate-read.ts` own proposal writes, acceptance/rejection, adoption, and paged current readback. `candidate-contract.ts`, `candidate-command.ts`, `candidate-authored.ts` and `candidate-pagination.ts` own shared contracts and collaborators. HTTP and bulk bind directly to these owners; `candidates.ts` remains a re-export compatibility facade.

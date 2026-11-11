@@ -334,6 +334,16 @@ function contains(root: Json, expected: Json): boolean {
   return JSON.stringify(root).includes(JSON.stringify(expected));
 }
 async function music() {
+  const labels = {
+    de: 'Musikkomposition',
+    en: 'Musical composition',
+    es: 'Composición musical',
+    fr: 'Composition musicale',
+    ja: '楽曲',
+    ko: '음악 작품',
+    'zh-Hans': '音乐作品',
+    'zh-Hant': '音樂作品',
+  };
   return driver.compile(
     'fixture.yaml',
     {
@@ -344,10 +354,10 @@ prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
-imports: [linkml:types, rezics, music]
+imports: [linkml:types, rezics, music-fixture]
 `,
-      'music.yaml': String.raw`id: https://rezics.com/fixtures/music
-name: music
+      'music-fixture.yaml': String.raw`id: https://rezics.com/fixtures/music
+name: music-fixture
 version: 1.0.0
 prefixes:
   linkml: https://w3id.org/linkml/
@@ -363,11 +373,12 @@ classes:
     slots: [author]
 `,
     },
-    {
-      en: {
-        types: { 'schema:MusicComposition': 'musical composition' },
-      },
-    },
+    Object.fromEntries(
+      Object.entries(labels).map(([locale, label]) => [
+        `music-fixture/${locale}`,
+        { types: { 'schema:MusicComposition': label } },
+      ]),
+    ),
   );
 }
 
@@ -406,6 +417,12 @@ test('Anonymous reads the active pointer and the complete bundled catalogue with
 test('Steward publishes and activates a compiled music catalogue and editor uses its data alongside books', async () => {
   const before = await active();
   const compiled = await music();
+  const fixtureRelease = compiled.release as unknown as {
+    types: Record<string, { labels: Record<string, string> }>;
+  };
+  expect(Object.keys(fixtureRelease.types['schema:MusicComposition']!.labels).sort()).toEqual(
+    ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'].sort(),
+  );
   const publishKey = key();
   const published = await write(
     'steward',
@@ -1434,6 +1451,8 @@ interface Link {
   subject: string;
   property: string;
   statement: string;
+  assertion?: Statement;
+  related?: Record<string, unknown>;
   type: string;
   label: string;
   summary: {
@@ -1472,9 +1491,16 @@ async function eventuallyLink(work: string, expected: Link, persona: Persona) {
   do {
     // Poll actual HTTP without fixed sleeps or a simulated projection drain.
     const result = await links(work, persona);
-    if (result.links.some((link) => link.statement === expected.statement)) {
+    const current = result.links.find((link) => link.statement === expected.statement);
+    if (current) {
       expect(performance.now()).toBeLessThanOrEqual(deadline);
-      expect(result.links).toContainEqual(expected);
+      expect(current).toMatchObject(expected);
+      expect(current.assertion).toMatchObject({
+        id: expected.statement,
+        property: { id: expected.property },
+        value: { type: 'value', content: work },
+      });
+      expect(current.related).toMatchObject({ [work]: { id: work } });
       return result;
     }
   } while (performance.now() < deadline);
@@ -1496,7 +1522,15 @@ test('Incoming links honor the editor session and become visible anonymously wit
     summary: instanceSummary(edition.id, 'Kokoro, Penguin Classics'),
   };
   const own = await links(work.id, 'editor');
-  expect(own.links).toContainEqual(expected);
+  const current = own.links.find((link) => link.statement === expected.statement);
+  expect(current).toBeDefined();
+  expect(current).toMatchObject(expected);
+  expect(current!.assertion).toMatchObject({
+    id: expected.statement,
+    property: { id: 'schema:exampleOfWork' },
+    value: { type: 'value', content: work.id },
+  });
+  expect(current!.related).toMatchObject({ [work.id]: { id: work.id } });
   expect(own.freshness.caught_up).toBe(true);
   await eventuallyLink(work.id, expected, 'anonymous');
 });
@@ -1520,7 +1554,7 @@ test('Paused projection answers the editor within three seconds with stale links
     const started = performance.now();
     const stale = await links(work.id, 'editor');
     expect(performance.now() - started).toBeLessThan(3_000);
-    expect(stale.links).not.toContainEqual(expected);
+    expect(stale.links).not.toContainEqual(expect.objectContaining({ statement: expected.statement }));
     expect(stale.freshness.caught_up).toBe(false);
     await driver.projection('running');
     expect((await eventuallyLink(work.id, expected, 'editor')).freshness.caught_up).toBe(true);
@@ -1550,10 +1584,12 @@ test('Acceptor merges persons by smallest UUID with redirects related labels and
   expect(operation.body).toEqual({ operation: { id: operationId, done: false } });
   const redirect = await get(subjectPath(redirected!.id));
   expect(redirect.status).toBe(308);
-  expect(redirect.headers.get('location')).toBe(subjectPath(survivor!.id));
-  const terminal = await read(survivor!.id, undefined, 'anonymous');
-  expect(terminal.subject.id).toBe(survivor!.id);
-  expect(terminal.subject.labels).toEqual(survivor!.labels);
+  expect(redirect.body).toEqual({ redirect: { from: redirected!.id, to: survivor!.id } });
+  const terminalPath = redirect.headers.get('location');
+  expect(terminalPath).toBe(subjectPath(survivor!.id));
+  const terminal = await get(terminalPath!, 'anonymous');
+  expect(terminal.status).toBe(200);
+  expect(terminal.body.subject).toMatchObject({ id: survivor!.id, labels: survivor!.labels });
   const book = redirected!.id === first.id ? bookA : bookB;
   const result = await read(book.id);
   expect(result.related[redirected!.id]).toEqual({

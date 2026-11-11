@@ -22,10 +22,22 @@ function problem(response: HttpResponse, status: number, code: string) {
 async function gatedWrites(driver: SemanticOutcomeDriver): Promise<Write[]> {
   const active = await driver.request('anonymous', 'GET', '/v1/definitions/active');
   expect(active.status).toBe(200);
+  const left = await write(driver, 'editor', [
+    '/v1/subjects',
+    { type: 'schema:Person', labels: { en: 'Unprivileged merge operand A' } },
+  ]);
+  const right = await write(driver, 'editor', [
+    '/v1/subjects',
+    { type: 'schema:Person', labels: { en: 'Unprivileged merge operand B' } },
+  ]);
+  expect(left.status).toBe(201);
+  expect(right.status).toBe(201);
+  const leftId = (left.body.subject as { id: string }).id;
+  const rightId = (right.body.subject as { id: string }).id;
   return [
     ['/v1/definitions/releases', { release: constructionFixture() }],
     [`/v1/definitions/releases/${active.body.digest}:activate`, { expected_head: active.body.head }],
-    ['/v1/subjects:merge', { subjects: [Bun.randomUUIDv7(), Bun.randomUUIDv7()] }],
+    ['/v1/subjects:merge', { subjects: [leftId, rightId] }],
   ];
 }
 async function closedDiscovery(driver: SemanticOutcomeDriver) {
