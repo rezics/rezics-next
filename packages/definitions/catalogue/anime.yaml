@@ -442,7 +442,8 @@ slots:
       - wd:P361
     annotations:
       datatype: wikibase-item
+      qualifiers: position
       relation_group: membership
       inverse: schema:hasPart
-      relation_order: name
+      relation_order: position
       acyclic: true

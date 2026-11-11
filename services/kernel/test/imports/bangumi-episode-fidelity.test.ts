@@ -268,17 +268,32 @@ test('production operator imports authored Bangumi episodes through ordinary acc
       await acceptAdopt(fractionalId!, property);
     await acceptAdopt(specialEpisodeId!, 'schema:keywords');
     await acceptAdopt(specialEpisodeId!, 'schema:isPartOf');
+    await acceptAdopt(unknownId!, 'schema:isPartOf');
     const read = async (id: string) => {
       const response = await editor.http(`/v1/subjects/${id}?context=${globalContext}`);
       expect(response.status).toBe(200);
       return response.body as {
-        subject: { type: string; statements: Record<string, { value: { content: unknown } }[]> };
+        subject: {
+          type: string;
+          statements: Record<
+            string,
+            {
+              value: { content: unknown };
+              qualifiers?: { property: { id: string }; value: { content: unknown } }[];
+            }[]
+          >;
+        };
       };
     };
+    const position = (statements: Awaited<ReturnType<typeof read>>['subject']['statements'][string] | undefined) =>
+      statements
+        ?.flatMap((statement) => statement.qualifiers ?? [])
+        .find((qualifier) => qualifier.property.id === 'schema:position')?.value.content;
     const current = await read(fractionalId!);
     expect(current.subject.type).toBe('schema:Episode');
     expect(current.subject.statements['schema:episodeNumber']?.map((item) => item.value.content)).toEqual(['1.5']);
     expect(current.subject.statements['schema:isPartOf']?.map((item) => item.value.content)).toEqual([parentId]);
+    expect(position(current.subject.statements['schema:isPartOf'])).toBe('2');
     const published = current.subject.statements['schema:datePublished']?.[0]?.value.content as { precision: number };
     expect(published.precision).toBe(11);
     expect(current.subject.statements['schema:duration']?.[0]?.value.content).toEqual({
@@ -289,9 +304,29 @@ test('production operator imports authored Bangumi episodes through ordinary acc
     expect(documentText(parseDocument(abstract.document))).toBe('Authored CC-BY-SA episode description.');
     const specialView = await read(specialEpisodeId!);
     expect(specialView.subject.statements['schema:keywords']?.map((item) => item.value.content)).toEqual([specialId]);
+    expect(position(specialView.subject.statements['schema:isPartOf'])).toBe('1');
     const unknownView = await read(unknownId!);
     expect(unknownView.subject.statements['schema:keywords'] ?? []).toEqual([]);
     expect(unknownView.subject.statements['schema:duration'] ?? []).toEqual([]);
+    expect(position(unknownView.subject.statements['schema:isPartOf'])).toBe('3');
+    const firstInversePage = await editor.http(
+      `/v1/subjects/${parentId}/links?${new URLSearchParams({ property: 'schema:isPartOf', limit: '2' })}`,
+    );
+    expect(firstInversePage.status).toBe(200);
+    const firstInverse = firstInversePage.body as { links: { subject: string }[]; next: string | null };
+    expect(firstInverse.links.map((link) => link.subject)).toEqual([specialEpisodeId, fractionalId]);
+    expect(firstInverse.next).toBeTruthy();
+    const secondInversePage = await editor.http(
+      `/v1/subjects/${parentId}/links?${new URLSearchParams({
+        property: 'schema:isPartOf',
+        limit: '2',
+        cursor: firstInverse.next!,
+      })}`,
+    );
+    expect(secondInversePage.status).toBe(200);
+    const secondInverse = secondInversePage.body as { links: { subject: string }[]; next: string | null };
+    expect(secondInverse.links.map((link) => link.subject)).toEqual([unknownId]);
+    expect(secondInverse.next).toBeNull();
     const again = await importBangumiEpisodeFidelity({
       tables: tables(baseEpisodes),
       path,

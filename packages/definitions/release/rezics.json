@@ -2702,14 +2702,14 @@
       "mappings": ["wd:P361"],
       "datatype": "wikibase-item",
       "multivalued": false,
-      "qualifiers": [],
+      "qualifiers": ["schema:position"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
       },
       "relation": {
         "group": "membership",
-        "order": "name",
+        "order": "position",
         "inverse": "schema:hasPart",
         "acyclic": true,
         "inverseLabels": {
