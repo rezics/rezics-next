@@ -18,7 +18,7 @@ test('Subject threads retain native reaction totals, viewer isolation and final 
   try {
     effects = await world.startEffects();
     await effects.resume();
-    const created = await world.command<{ thread: { id: string } }>('POST', '/v1/threads', {
+    const created = await world.command<{ thread: { id: string; firstPost: { id: string } } }>('POST', '/v1/threads', {
       title: 'A Subject discussion',
       body: fromPlainText('Original opening'),
       licence: 'CC0-1.0',
@@ -29,6 +29,11 @@ test('Subject threads retain native reaction totals, viewer isolation and final 
     const threadId = created.thread.id;
     const path = `/v1/subjects/${world.conceptId}/threads?place=${world.mainTarget.realmId}&kind=discussion`;
     const reactionPath = `/v1/threads/${threadId}/reaction`;
+    // Reading cards require native coverage for both the thread and its opening.
+    const openingCapture = await effects.captureBeforeWrite(world.author.accountId);
+    await world.command('PUT', `/v1/posts/${created.thread.firstPost.id}/reaction`, { kind: 'like' });
+    const openingReaction = await openingCapture.read();
+    await effects.waitForEffect(openingReaction.envelope, openingReaction.eventSeq);
     const page = async (bearer?: string) => {
       const result = await world.call('GET', path, bearer === undefined ? {} : { bearer });
       expect(result.response.status, result.text).toBe(200);

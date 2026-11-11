@@ -2175,6 +2175,8 @@ each final phase reads again. This removes serial per-thread authority preparati
 retaining the production request deadline and the failed-dependency response. The HTTP regression exercises seven
 reviews through a six-row anonymous preview and its continuation with the production deadline; native reaction
 acceptance compares batch/point values and rejects the wrong Subject or place. No extra stories are needed.
+The native reaction fixture establishes coverage for both the thread and its opening post; missing native totals
+continue to make reading-card reactions unavailable rather than certifying an exact zero.
 
 Decision: Subject page identity uses Access `public-identity` `readPublicAccountByAgent`; live identity, unknown absence and evidence-backed deletion stay distinct, and contribution attribution is not command authority.
 
