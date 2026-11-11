@@ -3070,6 +3070,8 @@ def supervise():
     for sig in [signal.SIGHUP, signal.SIGINT, signal.SIGTERM]:
         signal.signal(sig, lambda number, frame: interrupted.append(number))
     tail = bytearray()
+    disconnected_tail = bytearray()
+    disconnected_streams = set()
     last_test = None
     packages = []
     observed = []
@@ -3108,8 +3110,19 @@ def supervise():
                     pending = output.with_name(output.name + '.pending')
                     pending.write_bytes(tail)
                     pending.replace(output)
-                event.data.write(block)
-                event.data.flush()
+                fd = event.data.fileno()
+                if fd not in disconnected_streams:
+                    try:
+                        event.data.write(block)
+                        event.data.flush()
+                    except BrokenPipeError:
+                        # SSH output custody does not own the check. Also make Python's final flush harmless.
+                        disconnected_streams.add(fd)
+                        with open(os.devnull, 'wb') as sink:
+                            os.dup2(sink.fileno(), fd)
+                if fd in disconnected_streams:
+                    disconnected_tail.extend(block)
+                    del disconnected_tail[:-65536]
             else:
                 selected.unregister(event.fileobj)
                 event.fileobj.close()
@@ -3134,6 +3147,11 @@ def supervise():
                     marker = root / '.bun-install-complete'
                     preparation_done = marker.exists() and marker.stat().st_mtime_ns <= wall_started_ns + int(limit_ms) * 1000000
                 break
+    if disconnected_tail:
+        try:
+            (root / '.temp/check-host/disconnected-output').write_bytes(disconnected_tail)
+        except OSError:
+            pass  # Output evidence must not change the original command result.
     if not preparation_done or failure:
         code = 128 + interrupted[0] if interrupted else 70
         receipt = {'status': 'infrastructure-failure', 'host': host, 'run': run, 'phase': 'command' if preparation_done else 'install/preparation',
@@ -4457,11 +4475,19 @@ function localRsyncSupportsZstd(): boolean {
   return result.exitCode === 0 && /zstd/i.test(result.stdout.toString());
 }
 
-/** Reads the command's recorded exit status when ssh itself reports 255. */
+const recoveredOutputHeader = 'remote-check: recovered output after disconnect\n';
+
+/** Reads the command's recorded exit status and optional retained output when ssh reports 255. */
 export function statusScript(directory: string): string {
+  const disconnectedOutput = quote(`${directory}/.temp/check-host/disconnected-output`);
   return `# REMOTE_CHECK_STATUS
 if [ -d ${quote(directory)} ]; then touch ${quote(`${directory}/.alive`)} || exit 75; fi
-if [ -e ${quote(`${directory}/exit-status`)} ]; then cat -- ${quote(`${directory}/exit-status`)}
+if [ -e ${quote(`${directory}/exit-status`)} ]; then
+  cat -- ${quote(`${directory}/exit-status`)} || exit 75
+  if [ -f ${disconnectedOutput} ]; then
+    printf '%s' ${quote(recoveredOutputHeader)} >&2
+    cat -- ${disconnectedOutput} >&2 || :
+  fi
 elif [ -e ${quote(`${directory}/.owned-cleanup-incomplete.json`)} ] || [ -e ${quote(`${directory}/.owned-resources-incomplete.json`)} ] || [ -e ${quote(`${directory}/run-lifetime-status.json`)} ] || [ -e ${quote(`${directory}/.command-result`)} ]; then printf 'CLEANING\\n'
 elif [ -e ${quote(`${directory}/command-started`)} ]; then printf 'STARTED\\n'
 else printf 'NOT_STARTED\\n'; fi`;
@@ -4506,7 +4532,7 @@ async function waitForRemoteCommandStatus(
   const pollMs = Math.max(1, Math.min(options.pollMs ?? 1_000, 1_000));
   const retryBaseMs = options.retryBackoffMs ?? 1_000;
   const probe = async (timeoutMs: number): Promise<RemoteCommandStatus | null> => {
-    let response: { code: number; output: string; stdout: string };
+    let response: { code: number; output: string; stdout: string; stderr: string };
     try {
       response = await boundedSsh(host, connectionId, statusScript(directory), 'remote command status', timeoutMs);
     } catch (error) {
@@ -4528,7 +4554,10 @@ async function waitForRemoteCommandStatus(
       reconnectPending = false;
     }
     consecutiveDrops = 0;
-    return parseRemoteCommandStatus(host, response);
+    const status = parseRemoteCommandStatus(host, response);
+    const recovered = response.stderr.indexOf(recoveredOutputHeader);
+    if (status.kind === 'completed' && recovered >= 0) process.stderr.write(response.stderr.slice(recovered));
+    return status;
   };
 
   while (Date.now() < deadlineAt) {
@@ -6042,7 +6071,7 @@ async function boundedSsh(
   script: string,
   step: string,
   timeoutMs: number,
-): Promise<{ code: number; output: string; stdout: string }> {
+): Promise<{ code: number; output: string; stdout: string; stderr: string }> {
   const child = Bun.spawn([sshExecutable(), ...sshOptions(host, connectionId), host.address, script], {
     stdin: 'ignore',
     stdout: 'pipe',
@@ -6051,7 +6080,7 @@ async function boundedSsh(
   const streams = Promise.all([
     new Response(child.stdout).text(),
     child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(''),
-  ]).then(([stdout, stderr]) => ({ output: stdout + stderr, stdout }));
+  ]).then(([stdout, stderr]) => ({ output: stdout + stderr, stdout, stderr }));
   const code = await within(timeoutMs, child.exited);
   if (code === null) {
     await stopAndReap(child);
