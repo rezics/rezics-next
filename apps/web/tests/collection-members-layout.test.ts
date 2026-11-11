@@ -6,6 +6,8 @@ import { renderToString } from 'react-dom/server';
 import type { EditableCollectionPage } from '../src/library/collection-load';
 import { collectionPageAddress } from '../src/library/collection-presentation';
 import { collectionComparisonReturnState } from '../src/library/collection-comparison/return';
+import { collectionMemberReturnAddress } from '../src/subject/collection-return';
+import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import {
   collectionPageIsFiltered,
   collectionPositionScope,
@@ -14,17 +16,6 @@ import {
 } from '../src/library/collection-public-reading/position';
 
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
-mock.module('../src/library/collection-edit', () => {
-  const unusedWrite = () => Promise.resolve({ ok: false, reason: 'conflict' });
-  return {
-    deleteCollection: unusedWrite,
-    moveCollectionMember: unusedWrite,
-    removeCollectionMember: unusedWrite,
-    setCollectionFollow: unusedWrite,
-    updateCollection: unusedWrite,
-    updateMemberNote: unusedWrite,
-  };
-});
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({}) }));
 mock.module('../src/library/collection-queries', () => ({
   personalCollectionPageQuery: (id: string, cursor?: string, search?: Record<string, string | string[]>) => ({
@@ -35,6 +26,7 @@ mock.module('../src/library/collection-queries', () => ({
   }),
 }));
 
+const { LibraryApplicationBoundary } = await import('../src/session/library-application');
 const { CollectionPage } = await import('../src/library/collection-page');
 
 const collectionId = 'reading-shelf';
@@ -105,7 +97,7 @@ async function render(
   return renderToString(
     createElement(QueryClientProvider, {
       client: new QueryClient(),
-      children: createElement(RouterProvider, { router }),
+      children: createElement(LibraryApplicationBoundary, null, createElement(RouterProvider, { router })),
     }),
   );
 }
@@ -131,6 +123,7 @@ test('collection members default to compact linked rows with a note indicator an
   expect(memberRows[1]).toContain('Kokoro');
   expect(memberRows[1]).not.toContain('A separate note for Kokoro.');
   expect(memberRows[1]).toContain('data-collection-note-available');
+  expect([...html.matchAll(/<section\b(?=[^>]*aria-label="Members")/g)]).toHaveLength(1);
 
   const layoutNav = /<nav\b(?=[^>]*data-slot="collection-layout")[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
   expect(layoutNav).toContain('aria-current="page"');
@@ -312,4 +305,34 @@ test('curator, member count and updated time share one metadata line', async () 
   expect(metadata).toContain('2 members');
   expect(metadata).toContain(`dateTime="${stamp}"`);
   expect((metadata.match(/aria-hidden="true">·<\/span>/g) ?? []).length).toBe(2);
+});
+
+test('comparison return admits one normalized same-locale Library directory intent', () => {
+  const collection = '8bb45f1b-9a84-47b0-805a-7f60bbbd0891';
+  const occurrence = 'f2cb92b9-951d-4ea0-9492-6cb86a55cb31';
+  const source = `/en/collections/${collection}?returnTo=%2Fen%2Flibrary`;
+  const returnAddress = collectionMemberReturnAddress(source, occurrence);
+  expect(returnAddress).toBe(
+    `/en/collections/${collection}?returnTo=%2Fen%2Flibrary%2Fcollections#collection-member-${occurrence}`,
+  );
+  expect(subjectVisitReturn(`${source}#collection-member-${occurrence}`, 'en')).toBe(returnAddress);
+  const directory = `/en/library/collections?cursor=${encodeURIComponent('directory+/=')}&layout=previews`;
+  const withDirectory = collectionMemberReturnAddress(
+    `/en/collections/${collection}?returnTo=${encodeURIComponent(directory)}`,
+    occurrence,
+  );
+  expect(new URL(withDirectory!, 'https://rezics.test').searchParams.get('returnTo')).toBe(directory);
+  expect(
+    collectionMemberReturnAddress(
+      `/en/collections/${collection}?returnTo=${encodeURIComponent('https://outside.test/en/library/collections?next=/')}`,
+      occurrence,
+    ),
+  ).toBe(`/en/collections/${collection}?returnTo=%2Fen%2Flibrary%2Fcollections#collection-member-${occurrence}`);
+  expect(
+    collectionMemberReturnAddress(
+      `/en/collections/${collection}?returnTo=${encodeURIComponent('/en/library/collections?cursor=page&next=/outside')}`,
+      occurrence,
+    ),
+  ).toBe(`/en/collections/${collection}?returnTo=%2Fen%2Flibrary%2Fcollections#collection-member-${occurrence}`);
+  expect(collectionMemberReturnAddress(`${source}&returnTo=%2Fen%2Flibrary%2Fcollections`, occurrence)).toBeUndefined();
 });

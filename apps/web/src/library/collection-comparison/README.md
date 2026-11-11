@@ -6,11 +6,15 @@ A single page-level release observation supplies property labels and presentatio
 ordinary member browsing available, without granting any authority or reading reference targets individually.
 Property labels describe ordinary facts; they never turn an item into a qualified creator role or a work into a release.
 
-Decision: comparison references use the existing localized Subject `via` return convention; only supplied curated
-occurrence IDs receive occurrence fragments, and projections without them return to their bounded filtered page.
-The filtered native projection supplies subjects and facts but no curated occurrence ID or note; no index or subject
-ID is promoted to an occurrence ID. If filtered occurrence return is required, the producer must supply the actual
-occurrence ID and note in that projection; the reader already accepts these fields on curated member rows.
+Decision: comparison references use the existing localized Subject `via` return convention. Their Collection return
+retains its admitted opaque cursor, supported filters, layout and exact supplied curated occurrence, plus one local
+`returnTo` normalized by the existing Library directory admission. That intent can address only the same locale's
+`/library/collections` page with its bounded cursor and `rows` or `previews` layout; invalid values resolve to that
+directory. Nested redirects and arbitrary query text are not carried. Projections without occurrence IDs return to
+their bounded filtered page. The filtered native projection supplies subjects and facts but no curated occurrence ID
+or note; no index or subject ID is promoted to an occurrence ID. If filtered occurrence return is required, the
+producer must supply the actual occurrence ID and note in that projection; the reader already accepts these fields
+on curated member rows.
 
 Admitted empty facts, absent observations and unavailable definitions have distinct presentation. A label without
 a supplied destination remains text. A concealed target is never reconstructed from its label. The installed fact

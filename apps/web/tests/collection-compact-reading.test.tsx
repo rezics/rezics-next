@@ -4,6 +4,7 @@ import { act, createElement } from 'react';
 import { m } from '../src/paraglide/messages.js';
 import type { CollectionReadMember } from '../src/library/collection-member-details';
 import type { CollectionMember } from '../src/library/reads';
+import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import * as start from '../.storybook/react-start';
 
 mock.module('@tanstack/react-start', () => start);
@@ -105,6 +106,7 @@ for (const layout of ['list', 'grid'] as const) {
       await render();
       expect(host.querySelector('[data-slot="collection-member-note"]')).toBeNull();
       expect(host.querySelector('[data-slot="cover-card-actions-row"]')).toBeNull();
+      expect(host.querySelectorAll('section[aria-label="Members"]')).toHaveLength(1);
       expect(openers()).toHaveLength(2);
       expect(host.querySelectorAll(layout === 'list' ? 'ul > li' : '[role="listitem"]')).toHaveLength(2);
       const first = await open(0);
@@ -119,7 +121,17 @@ for (const layout of ['list', 'grid'] as const) {
         expect(link.textContent).toBe('Same name');
         const url = new URL(link.href);
         expect(url.pathname).toContain(id(10 + index));
-        expect(url.searchParams.get('via')).toBe(`${address}#collection-member-${id(2)}`);
+        const viaAddress = url.searchParams.get('via')!;
+        const via = new URL(viaAddress, 'https://rezics.test');
+        expect(via.pathname).toBe(`/en/collections/${id(1)}`);
+        expect(via.searchParams.get('cursor')).toBe('next+/=');
+        expect(via.searchParams.get('type')).toBe('work');
+        expect(via.searchParams.getAll('f.genre')).toEqual(['fiction']);
+        expect(via.searchParams.getAll('l.genre')).toEqual(['Fiction']);
+        expect(via.searchParams.get('layout')).toBe(layout);
+        expect(via.searchParams.get('returnTo')).toBe('/en/library/collections');
+        expect(via.hash).toBe(`#collection-member-${id(2)}`);
+        expect(subjectVisitReturn(viaAddress, 'en')).toBe(viaAddress);
         const copy = detail()!.querySelector<HTMLButtonElement>(`[data-copy-reference="${id(10 + index)}"]`)!;
         await act(async () => copy.click());
         expect(copied.at(-1)).toBe(link.href);
@@ -171,8 +183,34 @@ for (const layout of ['list', 'grid'] as const) {
       expect(host.querySelector('[data-collection-member-id]')).toBeNull();
       await open(1);
       const projectionLink = detail()!.querySelector<HTMLAnchorElement>('[data-comparison-reference]')!;
-      expect(new URL(projectionLink.href).searchParams.get('via')).toBe(address);
+      const projectionVia = new URL(new URL(projectionLink.href).searchParams.get('via')!, 'https://rezics.test');
+      expect(projectionVia.searchParams.get('returnTo')).toBe('/en/library/collections');
+      expect(projectionVia.hash).toBe('');
       expect(detail()!.querySelector('[data-slot="collection-member-note"]')).toBeNull();
+
+      const returnHost = window.document.createElement('main');
+      window.document.body.append(returnHost);
+      const returnRoot = createRoot(returnHost);
+      const returnAddress = new URL(references[0]!.href).searchParams.get('via')!;
+      (window.document.activeElement as HTMLElement).blur();
+      await act(async () => root.render(null));
+      window.history.pushState({}, '', returnAddress);
+      await act(async () =>
+        returnRoot.render(
+          createElement(CollectionReadMembers, {
+            members,
+            layout,
+            currentHref: returnAddress,
+            returnSource: {},
+            listPresentations: presentations,
+            comparisonDefinitions: { creator: { labels: { en: 'Full supplied property label' } } },
+            onCopy() {},
+          }),
+        ),
+      );
+      expect(window.document.activeElement).toBe(returnHost.querySelector(`#collection-member-${id(2)}`));
+      await act(async () => returnRoot.unmount());
+
       await render([{ ...members[0]!, subject: null }]);
       await open(0);
       expect(detail()!.querySelector('a,[data-copy-reference]')).toBeNull();
