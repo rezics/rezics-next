@@ -582,9 +582,10 @@ when invoked from a linked worktree. Repository paths resolve against that main 
 usage files and executable paths containing a slash resolve against the local file's directory.
 `integrationBranch` defaults to `dev`; `integration.batchSize` defaults to `4` and limits how many queued dev landings
 share one candidate for the prelanding typecheck and optional boot check. Set it to `1` to keep one-at-a-time landing
-checks. A passing batch fast-forwards dev through its members in queue order, recording each member's own integrated
-commit. A failed candidate is attributed to its responsible member and unrelated members remain eligible for a later
-round. A member that cannot rebase onto earlier batch members stays queued for a later round while the rest continue.
+checks. A passing batch fast-forwards dev through its members in queue order and records the shared batch candidate on
+each member outcome. A failed candidate is attributed to its responsible member and unrelated members remain eligible
+for a later round. A member that cannot rebase onto earlier batch members stays queued for a later round while the rest
+continue.
 Legacy `integrationChecks` are selected for the independent verifier after dev integration; they do not run in the
 landing train. Main promotion retains its task acceptance gates.
 `promotionParallelism` defaults to `4` and caps concurrent promotion checks.

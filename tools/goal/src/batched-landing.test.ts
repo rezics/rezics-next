@@ -128,15 +128,15 @@ test('up to the batch size of queued landings rebase in order and fast-forward w
       [first.id, true],
       [second.id, true],
     ]);
-    expect(h.outcomes[0]?.mergedCommit).not.toBe(h.outcomes[1]?.mergedCommit);
+    expect(h.outcomes[0]?.mergedCommit).toBe(h.outcomes[1]?.mergedCommit);
     expect(git(h.root, 'merge-base', '--is-ancestor', h.outcomes[0]!.mergedCommit!, h.head('dev'))).toBe('');
-    expect(h.head('dev')).toBe(h.outcomes[1]!.mergedCommit!);
+    expect(h.head('dev')).toBe(h.outcomes[0]!.mergedCommit!);
   } finally {
     h.dispose();
   }
 });
 
-test('a failing batch falls back to single landings and refuses only its failing member', async () => {
+test('a failed batch check reports its responsible member and leaves the passing member queued', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -153,13 +153,11 @@ test('a failing batch falls back to single landings and refuses only its failing
         : { passed: true, output: '', timedOut: false },
     );
 
-    expect(h.outcomes.map(({ taskId, passed }) => [taskId, passed])).toEqual([
-      [passing.id, true],
-      [failing.id, false],
-    ]);
-    expect(h.outcomes[1]?.firstFailure?.assertion).toContain('AssertionError: broken member');
-    expect(h.head('dev')).not.toBe(base);
-    expect(git(h.root, 'show', 'dev:passing.ts')).toBe('passing.ts');
+    expect(h.outcomes.map(({ taskId, passed }) => [taskId, passed])).toEqual([[failing.id, false]]);
+    expect(h.outcomes[0]?.firstFailure?.assertion).toContain('AssertionError: broken member');
+    expect(h.head('dev')).toBe(base);
+    expect(h.queue.next()?.request.taskId).toBe(passing.id);
+    expect(() => git(h.root, 'show', 'dev:passing.ts')).toThrow();
     expect(() => git(h.root, 'show', 'dev:broken.ts')).toThrow();
   } finally {
     h.dispose();
@@ -262,7 +260,7 @@ test('a stale attempt discovered during the batch typecheck is skipped and never
     expect(typechecks).toBe(2);
     expect(h.outcomes.map(({ taskId, passed }) => [taskId, passed])).toEqual([[passing.id, true]]);
     expect(h.head('dev')).not.toBe(base);
-    expect(git(h.root, 'show', 'dev:passing.ts')).toBe('passing.ts');
+    expect(git(h.root, 'show', 'dev:passing.ts')).toBe('export const fixture = true;');
     expect(() => git(h.root, 'show', 'dev:stale.ts')).toThrow();
     expect(h.queue.next()).toBeUndefined();
     expect(h.store.task(stale.id).currentAttempt).toBe(2);
