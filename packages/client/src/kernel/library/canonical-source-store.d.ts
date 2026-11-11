@@ -68,7 +68,7 @@ export interface CanonicalBasis {
     /** Actual admitted meaning/profile/projection commitment, null for curated. */
     readonly meaning: string | null;
     /** State generations predating independent native support preparation cannot prove owner closure. */
-    readonly originalCoverage?: 'owner-facts-v1';
+    readonly originalCoverage?: 'owner-facts-v1' | 'owner-facts-v2';
 }
 export interface CanonicalSourceRef {
     readonly route: number;

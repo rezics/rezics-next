@@ -20,7 +20,7 @@ type NativeFactBase = {
 };
 export type OwnerFilterEntryFact = NativeFactBase & {
     kind: 'entry';
-    state: string;
+    state: string | null;
     ownerWriteSeq: bigint | null;
     pin: LibraryProfilePin | null;
 };
@@ -88,7 +88,7 @@ export declare function matchOwnerFilterSupport(leaf: Exclude<OwnerLeaf['owner']
     state: unknown;
 }>, fact: OwnerFilterNativeFact, releases: ReadonlyMap<string, Release>): RelationFacetMatch;
 /**
- * Fold already settled LIVE native entry points before testing any requested state. Bounded source work owns
+ * Fold settled live states and private clear registers before testing any requested state. Bounded source work owns
  * enumeration/completeness. Unsequenced entries cannot lose to a sequenced entry by an invented tie-breaker.
  */
 export declare function ownerFilterStateWinner(entries: Iterable<OwnerFilterEntryFact>): OwnerFilterEntryFact | null | 'not_proven';

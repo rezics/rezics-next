@@ -70,6 +70,9 @@ export declare function createNativeLibraryPresentation(ports: NativeLibraryPres
     };
     builtinOriginalInputs: (pool: Pool, accountId: string, after: string | null, limit: number) => Promise<{
         fact: {
+            clear?: {
+                sequence: bigint;
+            };
             original: string;
             presence: boolean | null;
             families: {

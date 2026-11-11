@@ -248,6 +248,15 @@ export declare function authorizeNativeCollectionMetadata(pool: Pool, metadata: 
 } & {
     work: WorkReceipt;
 }>;
+/** Reduce a COMPLETE bounded canonical group supplied by the admitted Source, never a caller alias hint.
+ * This native projection supplies no disclosure or completeness authority of its own.
+ */
+export declare function readNativeCollectionStateGroup(pool: Pool, metadata: NativeCollectionMetadata, input: Options & {
+    originals: readonly string[];
+}): Promise<{
+    result: boolean | 'not_proven';
+    work: WorkReceipt;
+}>;
 /** Internal raw data only: deletion episodes advance the same native ordinal frontier as live occurrences. */
 export declare function readNativeCollectionRawOrdinalPage(pool: Pool, metadata: NativeCollectionMetadata, input: Options & {
     after: NativeOrdinalKey | null;

@@ -7,6 +7,9 @@ export type ContinueActiveSession = ShelfSession;
 /** One original's actual state and bounded top active session. No entry is required for session support. */
 export declare function readContinueOriginalFacts(client: Client, accountId: string, original: string): Promise<{
     truth: {
+        clear?: {
+            sequence: bigint;
+        };
         original: string;
         presence: boolean | null;
         families: {
