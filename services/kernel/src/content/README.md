@@ -4602,6 +4602,8 @@ declaration, cast or generator.
 
 Decision: Content composition installs existing Semantic summary/observation readers, visible Rating questions, the standard vote ID and the required Semantic-backed Realm identity reader; Content's pure feed contract depends only on Library and Semantic contract entries, carries the exact Library card and viewer-action value types, and keeps Search's closed Collection summary as the runtime source. Client FeedPage/FeedItem aliases prefer concrete mounted fields and use Library fallbacks only for unknown fields across all Home ServerFns.
 
+Decision: the mounted Feed viewer-actions schema imports Library's public schema adapter directly, keeping the wire schema out of Library's runtime barrel cycle.
+
 [Current Home personal facts](../../../../docs/feeds.md#current-home-personal-facts) owns the
 response and full per-page cost. `feed-viewer.ts` calls the installed native personal-actions
 reader once per authenticated Home page and retains raw duplicate occurrence keys. Final

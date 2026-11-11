@@ -3,7 +3,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { CursorBinding } from '../tokens/cursor.ts';
 import { accessCheck } from './access-port.ts';
-import { decodeAuthorItemKey, encodeAuthorItemKey } from './author-item-reads.ts';
+import { decodeAuthorItemKey, encodeAuthorItemKey } from './author-item-cursor.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
 import { ContentNotFoundError, readPost, snapshot, type PostEntry, type RetainContentRead } from './reads.ts';
 import {

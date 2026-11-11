@@ -1,13 +1,13 @@
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '@rezics/operations/protocol';
+import { memoizedValue } from '../memoized.ts';
 import { AuthenticationError } from '../access/contract/authentication.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { problemSchema } from '../http/problem-schema.ts';
-import { defineRateLimit } from '../http/rate-limit.ts';
+import { customMethod, defineRateLimit } from '../http/route-metadata.ts';
 import { idempotencyKeyOf } from '../http/idempotency-key.ts';
-import { customMethod } from '../http/custom-method.ts';
 import { contentRequestId } from './adapters/bind.ts';
 import type { contentRoutes } from './routes.ts';
 import { strictContentSchema } from './schema-validation.ts';
@@ -52,34 +52,45 @@ import {
   HostedOwnerInventoryReadSchema,
 } from './hosted-chapters-schemas.ts';
 
-const params = t.Object({ id: HostedIdSchema }, { additionalProperties: false });
-const occurrenceParams = t.Object(
-  { id: HostedIdSchema, occurrenceId: HostedIdSchema },
-  { additionalProperties: false },
-);
-const ownerParams = t.Object({ accountId: HostedIdSchema }, { additionalProperties: false });
-const ownerReadParams = t.Object({ accountId: HostedIdSchema, id: HostedIdSchema }, { additionalProperties: false });
+function params() {
+  return memoizedValue(params, () => t.Object({ id: HostedIdSchema }, { additionalProperties: false }));
+}
+function occurrenceParams() {
+  return memoizedValue(occurrenceParams, () =>
+    t.Object({ id: HostedIdSchema, occurrenceId: HostedIdSchema }, { additionalProperties: false }),
+  );
+}
+function ownerParams() {
+  return memoizedValue(ownerParams, () => t.Object({ accountId: HostedIdSchema }, { additionalProperties: false }));
+}
+function ownerReadParams() {
+  return memoizedValue(ownerReadParams, () =>
+    t.Object({ accountId: HostedIdSchema, id: HostedIdSchema }, { additionalProperties: false }),
+  );
+}
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const responseHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
-const failures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden', 'platform_closed'),
-  404: problemSchema('not_found'),
-  412: problemSchema('precondition_failed'),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-  429: problemSchema('rate_limited'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-    'rate_limit_unavailable',
-  ),
-};
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden', 'platform_closed'),
+    404: problemSchema('not_found'),
+    412: problemSchema('precondition_failed'),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+    429: problemSchema('rate_limited'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
 const readSecurity: Record<string, string[]>[] = [{}, { bearerAuth: [] }];
 const readDetail = {
   'x-exposure': 'public',
@@ -88,13 +99,15 @@ const readDetail = {
   security: readSecurity,
 };
 const ownerDetail = { 'x-exposure': 'public', 'x-action': 'account:read', security: [{ bearerAuth: [] }] };
-const writeDetail = {
-  'x-exposure': 'public',
-  'x-resource-types': ['content.post'],
-  'x-action': 'post:revise',
-  'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
-  security: [{ bearerAuth: [] }],
-};
+function writeDetail() {
+  return memoizedValue(writeDetail, () => ({
+    'x-exposure': 'public',
+    'x-resource-types': ['content.post'],
+    'x-action': 'post:revise',
+    'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+    security: [{ bearerAuth: [] }],
+  }));
+}
 
 async function operation<T>(run: () => Promise<T>): Promise<T> {
   try {
@@ -133,9 +146,9 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
     .get(
       '/v1/accounts/:accountId/hostedCatalogues',
       {
-        params: ownerParams,
+        params: ownerParams(),
         query: strictContentSchema(HostedOwnerInventoryQuerySchema),
-        response: { 200: withHeaders(strictContentSchema(HostedOwnerInventorySchema), responseHeaders), ...failures },
+        response: { 200: withHeaders(strictContentSchema(HostedOwnerInventorySchema), responseHeaders), ...failures() },
         detail: { ...ownerDetail, operationId: 'own_hosted_catalogues.list' },
       },
       async ({ actor, params: { accountId }, query, admission, job, session, set }) => {
@@ -160,11 +173,11 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
     .get(
       '/v1/accounts/:accountId/hostedCatalogues/:id',
       {
-        params: ownerReadParams,
+        params: ownerReadParams(),
         query: strictContentSchema(t.Object({}, { additionalProperties: false })),
         response: {
           200: withHeaders(strictContentSchema(HostedOwnerInventoryReadSchema), responseHeaders),
-          ...failures,
+          ...failures(),
         },
         detail: { ...ownerDetail, operationId: 'own_hosted_catalogues.get' },
       },
@@ -186,8 +199,8 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
       {
         headers,
         body: strictContentSchema(HostedCreateSchema),
-        response: { 201: withHeaders(strictContentSchema(HostedCommandSchema), responseHeaders), ...failures },
-        detail: { ...writeDetail, operationId: 'hosted_catalogue.create' },
+        response: { 201: withHeaders(strictContentSchema(HostedCommandSchema), responseHeaders), ...failures() },
+        detail: { ...writeDetail(), operationId: 'hosted_catalogue.create' },
       },
       async ({ actor, body, request, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -205,11 +218,11 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
     .post(
       customMethod('/v1/hostedCatalogues/:id', 'revise'),
       {
-        params,
+        params: params(),
         headers,
         body: strictContentSchema(HostedReviseSchema),
-        response: { 200: withHeaders(strictContentSchema(HostedCommandSchema), responseHeaders), ...failures },
-        detail: { ...writeDetail, operationId: 'hosted_catalogue.revise' },
+        response: { 200: withHeaders(strictContentSchema(HostedCommandSchema), responseHeaders), ...failures() },
+        detail: { ...writeDetail(), operationId: 'hosted_catalogue.revise' },
       },
       async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -226,11 +239,11 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
     .post(
       customMethod('/v1/hostedCatalogues/:id', 'publish'),
       {
-        params,
+        params: params(),
         headers,
         body: strictContentSchema(HostedPublishSchema),
-        response: { 200: withHeaders(strictContentSchema(HostedCommandSchema), responseHeaders), ...failures },
-        detail: { ...writeDetail, operationId: 'hosted_catalogue.publish' },
+        response: { 200: withHeaders(strictContentSchema(HostedCommandSchema), responseHeaders), ...failures() },
+        detail: { ...writeDetail(), operationId: 'hosted_catalogue.publish' },
       },
       async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -247,9 +260,9 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
     .get(
       '/v1/hostedCatalogues/:id',
       {
-        params,
+        params: params(),
         query: strictContentSchema(HostedSelectionSchema),
-        response: { 200: withHeaders(strictContentSchema(HostedRevisionSchema), responseHeaders), ...failures },
+        response: { 200: withHeaders(strictContentSchema(HostedRevisionSchema), responseHeaders), ...failures() },
         detail: { ...readDetail, operationId: 'hosted_catalogue.get' },
       },
       async ({ actor, params: { id }, query, admission, job, session, set }) => {
@@ -265,9 +278,9 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
     .get(
       '/v1/hostedCatalogues/:id/children',
       {
-        params,
+        params: params(),
         query: strictContentSchema(HostedChildrenQuerySchema),
-        response: { 200: withHeaders(strictContentSchema(HostedPageSchema), responseHeaders), ...failures },
+        response: { 200: withHeaders(strictContentSchema(HostedPageSchema), responseHeaders), ...failures() },
         detail: { ...readDetail, operationId: 'hosted_catalogue.children' },
       },
       async ({ actor, params: { id }, query, admission, job, session, set }) => {
@@ -291,9 +304,9 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
     .get(
       '/v1/hostedCatalogues/:id/occurrences/:occurrenceId',
       {
-        params: occurrenceParams,
+        params: occurrenceParams(),
         query: strictContentSchema(HostedSelectionSchema),
-        response: { 200: withHeaders(strictContentSchema(HostedResolutionSchema), responseHeaders), ...failures },
+        response: { 200: withHeaders(strictContentSchema(HostedResolutionSchema), responseHeaders), ...failures() },
         detail: { ...readDetail, operationId: 'hosted_catalogue.resolve' },
       },
       async ({ actor, params: { id, occurrenceId }, query, admission, job, session, set }) => {
@@ -311,9 +324,9 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
     .get(
       '/v1/hostedCatalogues/:id/occurrences/:occurrenceId/navigation',
       {
-        params: occurrenceParams,
+        params: occurrenceParams(),
         query: strictContentSchema(HostedNavigationQuerySchema),
-        response: { 200: withHeaders(strictContentSchema(HostedPageSchema), responseHeaders), ...failures },
+        response: { 200: withHeaders(strictContentSchema(HostedPageSchema), responseHeaders), ...failures() },
         detail: { ...readDetail, operationId: 'hosted_catalogue.navigate' },
       },
       async ({ actor, params: { id, occurrenceId }, query, admission, job, session, set }) => {

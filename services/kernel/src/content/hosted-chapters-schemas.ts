@@ -1,6 +1,6 @@
 import { t } from 'elysia';
-import { MAX_DOCUMENT_BYTES } from './document.ts';
-import { HOSTED_PLACEMENT_LIMIT, HOSTED_PAGE_LIMIT } from './hosted-chapters-model.ts';
+import { MAX_DOCUMENT_BYTES } from './document-limits.ts';
+import { HOSTED_PLACEMENT_LIMIT, HOSTED_PAGE_LIMIT } from './hosted-chapters-limits.ts';
 
 const closed = { additionalProperties: false } as const;
 export const HostedIdSchema = t.String({

@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
 import { kernelContract } from '../../scripts/openapi.ts';
+import { FeedViewerPersonalActionsSchema } from '../../src/content/feed-viewer-schema.ts';
+
+test('Home reuses the Library viewer-actions wire schema instance', () => {
+  expect(FeedViewerPersonalActionsSchema()).toBe(FeedViewerPersonalActionsSchema());
+});
 
 test('the mounted Kernel publishes closed review and immediate-parent context without losing reaction fields', async () => {
   const { paths } = JSON.parse(await kernelContract());
