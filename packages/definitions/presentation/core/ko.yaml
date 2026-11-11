@@ -9,6 +9,7 @@ types:
   schema:AdministrativeArea: '행정 구역'
   schema:Event: '행사'
 properties:
+  rezics:stylisticallyComparableTo: '작풍 비교 대상'
   rezics:penNameOf: '필명 사용자'
   wdt:P186: 재료
   wdt:P1114: 수량
@@ -82,6 +83,7 @@ properties:
   schema:startDate: '시작일'
   schema:endDate: '종료일'
 inverseProperties:
+  rezics:stylisticallyComparableTo: '이 작품을 비교 대상으로 삼은 작품'
   rezics:penNameOf: '필명'
   wdt:P186: 사용되는 곳
   rezics:storyArc: '이 편이 속한 작품'
@@ -107,6 +109,7 @@ inverseProperties:
   rezics:releaseGroup: '이 릴리스 그룹의 파일'
   schema:containedInPlace: '포함하는 장소'
 propertyDescriptions:
+  rezics:stylisticallyComparableTo: '이 작품의 작풍, 구조, 게임 방식, 분위기 또는 경험을 설명할 때 비교 대상으로 삼는 책이나 비디오 게임 작품입니다. 비교에는 방향이 있으며 영향이나 파생 관계를 뜻하지 않습니다. 장르와 키워드 분류는 별개입니다.'
   rezics:penNameOf: '이 필명 또는 공동 명의를 사용하는 사람이나 조직.'
   wdt:P186: '재료나 구성 요소로 쓰이는 식품 또는 완성된 조리법입니다. 수량과 목록 순서를 한정자로 덧붙일 수 있습니다.'
   wdt:P1114: '진술 대상의 분량입니다. 단위와 함께, 출처가 제시한 하한과 상한이 있으면 기록합니다.'

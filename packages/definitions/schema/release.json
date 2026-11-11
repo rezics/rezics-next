@@ -553,7 +553,7 @@
         "facets": {
           "type": "array",
           "uniqueItems": true,
-          "maxItems": 16,
+          "maxItems": 17,
           "items": {
             "$ref": "#/$defs/curie"
           }

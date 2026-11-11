@@ -183,7 +183,7 @@ No external reference project or external research was required.
 - Bound: expected O(N + E + L + F + R + Q + O), plus actual canonical/hash key sorting comparisons and compared
   bytes, schema work and unchanged pattern analysis. N/E/L are visited input nodes/edges/string bytes, F filters,
   R returnable-type references, Q qualifier references, O emitted one-level facet entries. Direct base expansion
-  is bounded by the existing 16-facet cap; output enumeration is charged separately. Raw calls each pay their
+  is bounded by the current 17-facet cap; output enumeration is charged separately. Raw calls each pay their
   own construction; explicit sessions and deeply immutable releases reuse it. New shape caps are 4096/256/4096;
   historical verification retains existing JSON/schema/byte bounds and the same linear algorithms.
 - Growth check: managed Definitions/Filter construction tests at 64/512/4096 independently and crossed, full
@@ -232,8 +232,9 @@ that Map's cumulative memory or establish policy-version identity.
 
 The output is not just B bytes: it includes selected facet Sets, the untyped union, qualifier/unit Sets, pattern
 sources/proofs, saved-filter normalized nodes and diagnostics. Count actual insertions and emitted entries. If Eb
-is the submitted base-reference count, direct base expansion visits at most 16 Eb facets; each type's own list
-contributes at most 16 more. Historical bases and mappings remain bounded by B, without the new-publication
+is the submitted base-reference count, direct base expansion visits at most 17 Eb facets; each type's own list
+contributes at most 17 more. The frozen historical construction source retains its 16-facet validator and exact
+snapshot bytes. Historical bases and mappings remain bounded by B, without the new-publication
 shape caps. Unknown base IRIs do not recurse. Qualifier/unit indexing follows declaration entries; typed leaf
 admission probes selected type Sets and qualifier membership without rebuilding their unions. LinkML induction
 is a producer-time compiler operation, not part of HTTP publication. Effective Type list hints are already emitted

@@ -9,6 +9,7 @@ types:
   schema:AdministrativeArea: 'área administrativa'
   schema:Event: 'evento'
 properties:
+  rezics:stylisticallyComparableTo: 'Comparable en estilo con'
   rezics:penNameOf: 'seudónimo de'
   wdt:P186: hecho de
   wdt:P1114: cantidad
@@ -82,6 +83,7 @@ properties:
   schema:startDate: 'fecha de inicio'
   schema:endDate: 'fecha de finalización'
 inverseProperties:
+  rezics:stylisticallyComparableTo: 'Obras comparadas con esta obra'
   rezics:penNameOf: 'seudónimos'
   wdt:P186: Se usa en
   rezics:storyArc: 'Arco argumental de'
@@ -116,6 +118,7 @@ typeDescriptions:
   schema:AdministrativeArea: 'Una región administrativa con nombre representada como lugar, distinta de un recinto situado en ella.'
   schema:Event: 'Un acontecimiento delimitado con identidad propia, distinto de su lugar y sus participantes.'
 propertyDescriptions:
+  rezics:stylisticallyComparableTo: 'Una obra literaria o un videojuego que sirve de referencia para describir el estilo, la estructura, las mecánicas, el tono o la experiencia de esta obra. La comparación tiene una dirección y no afirma influencia ni derivación. El género y las palabras clave son independientes.'
   rezics:penNameOf: 'La persona u organización detrás de este seudónimo o nombre colectivo.'
   wdt:P186: 'Un alimento o receta preparada que se usa como ingrediente o componente; se pueden precisar cantidad y orden.'
   wdt:P1114: 'La cantidad del objeto de la declaración, con su unidad y los límites inferior y superior que se indiquen.'

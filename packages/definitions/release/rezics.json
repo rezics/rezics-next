@@ -2,7 +2,7 @@
   "format": "https://rezics.com/definitions/release/1",
   "catalogue": {
     "id": "https://rezics.com/catalogue/rezics",
-    "version": "1.0.10"
+    "version": "1.0.11"
   },
   "generator": {
     "name": "@neverblink/linkml",
@@ -708,6 +708,7 @@
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
         "rezics:storyArc",
+        "rezics:stylisticallyComparableTo",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:author",
@@ -737,7 +738,8 @@
         "schema:contributor",
         "schema:inLanguage",
         "schema:wordCount",
-        "wdt:P7937"
+        "wdt:P7937",
+        "rezics:stylisticallyComparableTo"
       ],
       "coverRatio": "5:7",
       "listPresentation": {
@@ -1285,6 +1287,7 @@
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
         "rezics:storyArc",
+        "rezics:stylisticallyComparableTo",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:alternateName",
@@ -1319,6 +1322,7 @@
         "wdt:P973"
       ],
       "facets": [
+        "rezics:stylisticallyComparableTo",
         "schema:gamePlatform",
         "schema:genre",
         "schema:keywords",
@@ -2037,6 +2041,7 @@
         "rezics:sideStoryOf",
         "rezics:spinOffOf",
         "rezics:storyArc",
+        "rezics:stylisticallyComparableTo",
         "rezics:summaryOf",
         "schema:abstract",
         "schema:alternateName",
@@ -2065,6 +2070,7 @@
         "wdt:P725"
       ],
       "facets": [
+        "rezics:stylisticallyComparableTo",
         "schema:genre",
         "schema:keywords",
         "schema:character",
@@ -7006,6 +7012,53 @@
         "ko": "이 작품의 이야기 구간입니다. 순서와 첫 에피소드 또는 장 번호, 마지막 번호를 한정자로 기록합니다.",
         "zh-Hans": "属于此作品的故事篇章，用限定词记录顺序及首尾集数或章节编号。",
         "zh-Hant": "此作品所包含的故事篇章，以限定詞記錄順序及起訖集數或章節編號。"
+      }
+    },
+    "rezics:stylisticallyComparableTo": {
+      "iri": "https://rezics.com/vocab/stylisticallyComparableTo",
+      "labels": {
+        "de": "Stilistisch vergleichbar mit",
+        "en": "Stylistically comparable to",
+        "es": "Comparable en estilo con",
+        "fr": "Comparable par le style à",
+        "ja": "作風の比較対象",
+        "ko": "작풍 비교 대상",
+        "zh-Hans": "风格参照作品",
+        "zh-Hant": "風格參照作品"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "association",
+        "order": "name",
+        "inverse": "rezics:comparedWork",
+        "inverseLabels": {
+          "de": "Mit diesem Werk verglichene Werke",
+          "en": "Works compared to this work",
+          "es": "Obras comparadas con esta obra",
+          "fr": "Œuvres comparées à cette œuvre",
+          "ja": "この作品を比較対象とする作品",
+          "ko": "이 작품을 비교 대상으로 삼은 작품",
+          "zh-Hans": "以此为参照的作品",
+          "zh-Hant": "以此為參照的作品"
+        }
+      },
+      "targets": ["schema:Book", "schema:VideoGame"],
+      "descriptions": {
+        "de": "Ein Buch- oder Videospielwerk, das als Vergleich für Stil, Struktur, Spielmechanik, Ton oder Erlebnis dieses Werks dient. Der Vergleich ist gerichtet und behauptet weder Einfluss noch Ableitung. Genre und Schlagwörter bleiben unabhängig.",
+        "en": "An exemplar Book or VideoGame Work used to describe this Work’s style, structure, mechanics, tone or experience. The comparison has a direction and does not assert influence or derivation. Genre and keyword classifications remain independent.",
+        "es": "Una obra literaria o un videojuego que sirve de referencia para describir el estilo, la estructura, las mecánicas, el tono o la experiencia de esta obra. La comparación tiene una dirección y no afirma influencia ni derivación. El género y las palabras clave son independientes.",
+        "fr": "Un livre ou un jeu vidéo servant de référence pour décrire le style, la structure, les mécaniques, le ton ou l’expérience de cette œuvre. La comparaison est orientée et n’affirme ni influence ni dérivation. Le genre et les mots-clés restent indépendants.",
+        "ja": "この作品の作風、構成、ゲームの仕組み、雰囲気や体験を説明するために比較対象とする書籍またはゲーム作品。比較には方向があり、影響や派生関係を意味しません。ジャンルやキーワードによる分類とは独立しています。",
+        "ko": "이 작품의 작풍, 구조, 게임 방식, 분위기 또는 경험을 설명할 때 비교 대상으로 삼는 책이나 비디오 게임 작품입니다. 비교에는 방향이 있으며 영향이나 파생 관계를 뜻하지 않습니다. 장르와 키워드 분류는 별개입니다.",
+        "zh-Hans": "用于描述本作品风格、结构、玩法、基调或体验的书籍或游戏作品。比较从本作品指向参照作品，不表示受到影响或存在衍生关系。类型与关键词分类独立于此比较。",
+        "zh-Hant": "用於描述本作品風格、結構、玩法、基調或體驗的書籍或遊戲作品。比較由本作品指向參照作品，不表示受到影響或存在衍生關係。類型與關鍵字分類獨立於此比較。"
       }
     },
     "rezics:summaryOf": {

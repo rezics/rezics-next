@@ -34,6 +34,34 @@ test('public resolver preserves missing, stale, ambiguous and inapplicable outco
     property: 'schema:exampleOfWork',
     targetTypes: ['schema:CreativeWork'],
   });
+  for (const type of ['schema:Book', 'schema:VideoGame']) {
+    expect(directions.resolve(type, 'rezics:stylisticallyComparableTo', 'forward')).toMatchObject({
+      state: 'admitted',
+      property: 'rezics:stylisticallyComparableTo',
+    });
+    expect(directions.resolve(type, 'rezics:stylisticallyComparableTo', 'inverse')).toMatchObject({
+      state: 'admitted',
+      property: 'rezics:stylisticallyComparableTo',
+    });
+  }
+  expect(directions.resolve('wd:Q689445', 'rezics:stylisticallyComparableTo', 'forward')).toMatchObject({
+    state: 'admitted',
+    property: 'rezics:stylisticallyComparableTo',
+  });
+  expect(directions.resolve('wd:Q689445', 'rezics:stylisticallyComparableTo', 'inverse')).toMatchObject({
+    state: 'admitted',
+    property: 'rezics:stylisticallyComparableTo',
+  });
+  for (const type of ['schema:CreativeWork', 'bf:Instance', 'skos:Concept']) {
+    expect(directions.resolve(type, 'rezics:stylisticallyComparableTo', 'forward')).toMatchObject({
+      state: 'unsupported',
+      reason: 'inapplicable-type',
+    });
+    expect(directions.resolve(type, 'rezics:stylisticallyComparableTo', 'inverse')).toMatchObject({
+      state: 'unsupported',
+      reason: 'inapplicable-type',
+    });
+  }
 
   const changedTarget = structuredClone(bundledRelease);
   changedTarget.properties['wdt:P725']!.targets = ['missing:type'];

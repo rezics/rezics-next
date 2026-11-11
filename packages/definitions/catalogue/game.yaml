@@ -25,9 +25,11 @@ classes:
       Shared video game work fields; source identifiers are declared on concrete profiles.
       Sources: https://schema.org/VideoGame and https://www.wikidata.org/wiki/Q7889.
     slots:
+      - stylisticallyComparableTo
       - alternateName
       - creativeWorkStatus
     annotations:
+      facets: stylisticallyComparableTo
       library:
         id: game.playing
         entryStateSet:

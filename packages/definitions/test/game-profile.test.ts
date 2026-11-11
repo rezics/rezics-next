@@ -82,7 +82,8 @@ test('a game, its releases by platform and language and its add-ons are catalogu
     expect(type?.bases).toContain('schema:CreativeWork');
   }
   expect(game?.facets).toEqual(expect.arrayContaining(workFacets));
-  expect(game?.facets?.length).toBeLessThanOrEqual(16);
+  expect(game?.facets).toEqual(expect.arrayContaining(['wdt:P179', 'rezics:stylisticallyComparableTo']));
+  expect(game?.facets).toHaveLength(17);
   expect(addOn?.properties).toContain('wdt:P8646');
   expect(addOn?.facets).toEqual(expect.arrayContaining([...workFacets, 'wdt:P8646']));
   expect(addOn?.facets?.length).toBeLessThanOrEqual(16);
