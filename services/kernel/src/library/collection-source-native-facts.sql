@@ -12,6 +12,11 @@ FROM input i CROSS JOIN LATERAL (
       WHERE i.driver = 'entry' AND e.route = i.route AND e.account_id = i.account_id
         AND (e.subject_id,e.subject_id) > (i.after_subject,i.after_fact)
       ORDER BY e.subject_id,e.subject_id LIMIT i.batch_limit)
+     UNION
+     (SELECT c.subject_id, c.subject_id AS fact_id FROM library.entry_clear c
+      WHERE i.driver = 'entry' AND c.route = i.route AND c.account_id = i.account_id
+        AND (c.subject_id,c.subject_id) > (i.after_subject,i.after_fact)
+      ORDER BY c.subject_id,c.subject_id LIMIT i.batch_limit)
      UNION ALL
      (SELECT p.subject_id, p.fact_id FROM library.entry_personal_fact p
       WHERE i.driver = 'entry' AND p.route = i.route AND p.account_id = i.account_id

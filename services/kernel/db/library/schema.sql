@@ -2588,7 +2588,12 @@ BEGIN
     DELETE FROM library.owner_index_pin WHERE route=r AND account_id=a AND pin=p AND NOT EXISTS (
       SELECT 1 FROM library.owner_member_support WHERE route=r AND account_id=a AND pin=p);
     DELETE FROM library.owner_member_index WHERE route=r AND account_id=a AND subject_id=s AND NOT EXISTS (
-      SELECT 1 FROM library.owner_member_support WHERE route=r AND account_id=a AND subject_id=s);
+      SELECT 1 FROM library.owner_member_support WHERE route=r AND account_id=a AND subject_id=s)
+      AND NOT EXISTS (SELECT 1 FROM library.entry_clear WHERE route=r AND account_id=a AND subject_id=s);
+  END IF;
+  -- Structural reduction coverage is independent of live family support and accepted pins.
+  IF EXISTS (SELECT 1 FROM library.entry_clear WHERE route=r AND account_id=a AND subject_id=s) THEN
+    INSERT INTO library.owner_member_index(route,account_id,subject_id) VALUES(r,a,s) ON CONFLICT DO NOTHING;
   END IF;
 END;
 $$;
@@ -4291,6 +4296,17 @@ CREATE TABLE library.entry (
 --
 -- Name: entry_annotation_review; Type: TABLE; Schema: library; Owner: -
 --
+
+CREATE TABLE library.entry_clear (
+    route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    owner_write_seq bigint NOT NULL CHECK (owner_write_seq > 0),
+    transaction_id uuid NOT NULL,
+    PRIMARY KEY (route, account_id, subject_id),
+    CHECK (route = get_byte(uuid_send(account_id), 10) * 256 + get_byte(uuid_send(account_id), 11))
+);
+COMMENT ON TABLE library.entry_clear IS 'Latest private original-keyed clear order. Reduction evidence only, never live entry or owner presence. Retained independently of Undo payload expiry until terminal account erasure.';
 
 CREATE TABLE library.entry_annotation_review (
     route integer NOT NULL,
@@ -11770,3 +11786,32 @@ ALTER TABLE ONLY library.vndb_label_adoption
 --
 
 
+
+-- Private canonical clear reduction metadata.
+CREATE FUNCTION library.maintain_entry_clear_scope() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='DELETE' THEN
+    DELETE FROM library.owner_member_index i
+    WHERE i.route=OLD.route AND i.account_id=OLD.account_id AND i.subject_id=OLD.subject_id
+      AND NOT EXISTS (SELECT 1 FROM library.owner_member_support s
+        WHERE s.route=i.route AND s.account_id=i.account_id AND s.subject_id=i.subject_id)
+      AND NOT EXISTS (SELECT 1 FROM library.entry_clear c
+        WHERE c.route=i.route AND c.account_id=i.account_id AND c.subject_id=i.subject_id);
+  ELSE
+    INSERT INTO library.owner_member_index(route,account_id,subject_id)
+      VALUES(NEW.route,NEW.account_id,NEW.subject_id) ON CONFLICT DO NOTHING;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER entry_clear_fact_source_rows AFTER INSERT OR DELETE ON library.entry_clear
+  FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+CREATE TRIGGER entry_clear_fact_source_update AFTER UPDATE ON library.entry_clear
+  FOR EACH ROW WHEN (OLD.* IS DISTINCT FROM NEW.*) EXECUTE FUNCTION library.advance_fact_source_head();
+CREATE TRIGGER entry_clear_native_writer AFTER INSERT OR DELETE OR UPDATE ON library.entry_clear
+  FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+CREATE TRIGGER zz_entry_clear_owner_scope AFTER INSERT OR DELETE OR UPDATE ON library.entry_clear
+  FOR EACH ROW EXECUTE FUNCTION library.maintain_entry_clear_scope();

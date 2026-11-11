@@ -7,6 +7,7 @@ import type { LibraryProfilePin } from './profile.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
 import nativeFacts from './collection-source-native-facts.sql';
 import labelOriginals from './owner-index-native-label-originals.sql';
+import { newestEntryState, type EntryStateCandidate } from './entry-clear-state.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 export type OwnerNativeFactDriver = 'entry' | 'label' | 'session' | 'copy';
@@ -140,6 +141,13 @@ export async function stepOwnerIndex(tx: OperationalTransaction, accountId: stri
              AND ($3::uuid IS NULL OR (e.subject_id,e.subject_id)>($3,$4::uuid))
            ORDER BY e.subject_id,e.subject_id LIMIT 100)
           UNION ALL
+          (SELECT c.subject_id AS subject,c.subject_id AS fact,'{}'::jsonb AS pin
+           FROM library.entry_clear c WHERE c.route=$1 AND c.account_id=$2
+             AND ($3::uuid IS NULL OR (c.subject_id,c.subject_id)>($3,$4::uuid))
+             AND NOT EXISTS (SELECT 1 FROM library.entry e
+               WHERE e.route=c.route AND e.account_id=c.account_id AND e.subject_id=c.subject_id)
+           ORDER BY c.subject_id,c.subject_id LIMIT 100)
+          UNION ALL
           (SELECT p.subject_id AS subject,p.fact_id AS fact,'{}'::jsonb AS pin
            FROM library.entry_personal_fact p WHERE p.route=$1 AND p.account_id=$2
              AND ($3::uuid IS NULL OR (p.subject_id,p.fact_id)>($3,$4::uuid))
@@ -201,6 +209,7 @@ export async function readOwnerOriginalTruth(client: Client, accountId: string, 
     copy: boolean;
     state: string | null;
     sequence: string | null;
+    clearSequence: string | null;
     pin: unknown;
   }>(
     `SELECT (EXISTS(SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3) OR
@@ -214,13 +223,19 @@ export async function readOwnerOriginalTruth(client: Client, accountId: string, 
       AND x.deleted_at IS NULL AND (x.slot_no IS NULL OR x.assignment_id IS NULL)) AS "labelUnready",
     EXISTS(SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND state <> 'retired') AS session,
     EXISTS(SELECT 1 FROM library.copy WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND deletion_id IS NULL) AS copy,
-    e.state, e.owner_write_seq::text AS sequence, e.library_profile_pin AS pin
-    FROM (VALUES(1)) anchor(n) LEFT JOIN library.entry e ON e.route=$1 AND e.account_id=$2 AND e.subject_id=$3`,
+    e.state, e.owner_write_seq::text AS sequence, e.library_profile_pin AS pin,
+    c.owner_write_seq::text AS "clearSequence"
+    FROM (VALUES(1)) anchor(n)
+    LEFT JOIN library.entry e ON e.route=$1 AND e.account_id=$2 AND e.subject_id=$3
+    LEFT JOIN library.entry_clear c ON c.route=$1 AND c.account_id=$2 AND c.subject_id=$3`,
     [...key(accountId), original],
   );
   const row = rows[0]!;
+  const clear: { clear?: { sequence: bigint } } =
+    row.clearSequence == null ? {} : { clear: { sequence: BigInt(row.clearSequence) } };
   return {
     original,
+    ...clear,
     presence: row.entry || row.label || row.session || row.copy || (row.labelUnready ? null : false),
     families: {
       entry: row.entry,
@@ -240,28 +255,34 @@ export async function readOwnerOriginalTruth(client: Client, accountId: string, 
 }
 export type OwnerOriginalTruth = Awaited<ReturnType<typeof readOwnerOriginalTruth>>;
 
-/** Chronology is independent of source, type, UUID, time and presentation digest. Preserve all live conflicts. */
+/** Clear is reduction evidence, independent of presence. Preserve every original live conflict. */
 export function currentOwnerState(
   originals: readonly OwnerOriginalTruth[],
 ):
   | { status: 'unready'; reason: 'unsequenced' | 'unpinned' }
-  | { status: 'complete'; state: { original: string; id: string; sequence: bigint; pin: LibraryProfilePin } | null } {
-  type Result = ReturnType<typeof currentOwnerState>;
-  return originals.reduce<Result>(
-    (result, original) => {
-      if (result.status === 'unready') return result;
+  | {
+      status: 'complete';
+      state: { original: string; id: string; sequence: bigint; pin: LibraryProfilePin } | null;
+      clear?: { original: string; sequence: bigint };
+    } {
+  const candidates: (EntryStateCandidate & { pin: LibraryProfilePin | null })[] = [];
+  for (const original of originals) {
+    if (original.state) {
       const state = original.state;
-      if (!state) return result;
       if (state.sequence === null) return { status: 'unready', reason: 'unsequenced' };
-      if (state.pin === null) return { status: 'unready', reason: 'unpinned' };
-      const winner = result.state;
-      if (winner && winner.sequence === state.sequence) throw new Error('Duplicate live owner state-write sequence');
-      if (winner && winner.sequence > state.sequence) return result;
-      return {
-        status: 'complete',
-        state: { original: original.original, id: state.id, sequence: state.sequence, pin: state.pin },
-      };
-    },
-    { status: 'complete', state: null },
-  );
+      candidates.push({ subjectId: original.original, state: state.id, ownerWriteSeq: state.sequence, pin: state.pin });
+    }
+    if (original.clear)
+      candidates.push({ subjectId: original.original, state: null, ownerWriteSeq: original.clear.sequence, pin: null });
+  }
+  const winner = newestEntryState(candidates);
+  if (winner === 'not_proven') return { status: 'unready', reason: 'unsequenced' };
+  if (winner === null) return { status: 'complete', state: null };
+  if (winner.state === null)
+    return { status: 'complete', state: null, clear: { original: winner.subjectId, sequence: winner.ownerWriteSeq! } };
+  if (winner.pin === null) return { status: 'unready', reason: 'unpinned' };
+  return {
+    status: 'complete',
+    state: { original: winner.subjectId, id: winner.state, sequence: winner.ownerWriteSeq!, pin: winner.pin! },
+  };
 }

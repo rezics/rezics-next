@@ -96,7 +96,7 @@ const maxGenerationRow = jsonBytes([
       sourceFence: 'f'.repeat(64),
       identity: { digest: 'f'.repeat(64) },
       meaning: 'f'.repeat(64),
-      originalCoverage: 'owner-facts-v1',
+      originalCoverage: 'owner-facts-v2',
     },
     driver: 'member',
     after_subject: maxUuid,
@@ -204,7 +204,7 @@ const maxBasisJson = JSON.stringify({
   sourceFence: 'f'.repeat(64),
   identity: { digest: 'f'.repeat(64) },
   meaning: 'f'.repeat(64),
-  originalCoverage: 'owner-facts-v1',
+  originalCoverage: 'owner-facts-v2',
 });
 const maxFrontierString = JSON.stringify({
   captureId: maxUuid,
@@ -497,7 +497,7 @@ export function canonicalSourceOwnerFactBound(limit: number): CanonicalSourceSql
   const resultBytes = maxOwnerFactRow * limit;
   return sqlBound({
     candidateKeys: limit,
-    nativeRows: 8 * limit + 8,
+    nativeRows: 16 * limit + 16,
     identityMetadataRows: 0,
     emptySeeks: 1,
     nativePoints: 1,
@@ -511,7 +511,7 @@ export function canonicalSourceRawWindowBound(limit: number): CanonicalSourceSql
   const owner = canonicalSourceOwnerFactBound(limit);
   const collection = sqlBound({
     candidateKeys: limit,
-    nativeRows: 8 * limit + 8,
+    nativeRows: 16 * limit + 16,
     identityMetadataRows: 0,
     emptySeeks: 1,
     nativePoints: 1,

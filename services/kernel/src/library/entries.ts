@@ -50,6 +50,7 @@ import { resolveSubject } from './subject-anchor.ts';
 import { assertPreProfileLibraryRead, readLibraryProfileSourceObservation } from './profile-source.ts';
 import { hasEntryState } from './profile.ts';
 import { allocateOwnerWriteSeq } from './owner-write-sequence.ts';
+import { retainEntryClear } from './entry-clear-store.ts';
 import stampOwnerSequence from './entry-owner-write-sequence.sql';
 import { admitEntryAttempt } from './entry-lifecycle.ts';
 import { prepareEntryRestoration } from './entry-restore-preparation.ts';
@@ -279,13 +280,20 @@ export async function deleteLibraryEntryInTransaction(
     });
     if (stamped?.incarnationId !== incarnation) throw new (LibraryEntryLifecycleConflictError())('stale');
   }
-  await allocateOwnerWriteSeq(tx, owner.accountId);
+  const sequence = await allocateOwnerWriteSeq(tx, owner.accountId);
   const removed = await retainEntryDeletion(
     tx,
     { route, accountId: owner.accountId, subjectId, revision: expected, incarnationId: incarnation },
     { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
   );
   if (!removed) throw new (LibraryEntryLifecycleConflictError())('stale');
+  await retainEntryClear(tx, {
+    route,
+    accountId: owner.accountId,
+    subjectId,
+    sequence,
+    transactionId: command.transactionId,
+  });
   if (gate.ready && !removed.typeId) throw new Error('Complete shelf deletion is missing its type');
   await createShelfCounters().transition(
     write,

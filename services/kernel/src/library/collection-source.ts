@@ -102,6 +102,7 @@ import {
   readNativeCollectionRawPage,
   readNativeCollectionRawOrdinalPage,
   probeNativeCollectionOriginal,
+  readNativeCollectionStateGroup,
   type NativeCollectionMetadata,
 } from './collection-source-native.ts';
 import { CollectionSourceLedger } from './collection-native-work.ts';
@@ -378,6 +379,43 @@ function createCollectionSourceRuntime(
             }),
           );
     if (!('rows' in window)) return partial('native_evidence');
+    if (saved.metadata.authority === 'private_builtin' && saved.metadata.builtinKind === 'state') {
+      // A positive alias cannot bypass a newer clear (or a different state) elsewhere in the fibre.
+      // Partial windows carry no winner; the existing bounded preparation owns larger groups.
+      if (after !== null || !window.exhausted) return partial('native_evidence');
+      const originals = [...new Set(window.rows.map((row) => row.key.storedSubjectId))];
+      const state = await l.run((allowance) =>
+        readNativeCollectionStateGroup(dependencies.pool, saved.metadata, {
+          originals,
+          ...(input.work ? { tx: input.work.tx } : {}),
+          deadline: input.deadline,
+          allowance,
+        }),
+      );
+      if (state.result === 'not_proven') return partial('native_evidence');
+      if (!input.work) {
+        for (const original of originals) {
+          const resolved = await l.bounded(
+            { nativeRows: 8192, nativePoints: 128, statements: 128, bytes: 1024 * 1024 },
+            () => resolveSubject(dependencies, input.actor, original, input.at, {
+              pool: dependencies.pool,
+              deadline: input.deadline,
+            }),
+          );
+          if (resolved?.subjectId !== input.subjectId) return partial('native_evidence');
+        }
+      }
+      await revalidate(input, l, current);
+      return state.result
+        ? {
+            result: true, subjectId: input.subjectId, positiveEvidence: { [nativeEvidence]: true },
+            observation: obs, work: l.receipt(),
+          }
+        : {
+            result: false, subjectId: input.subjectId, negativeEvidence: { [nativeEvidence]: true },
+            observation: obs, work: l.receipt(),
+          };
+    }
     for (const row of window.rows) {
       // Probe current original support, then consume the ordinary Semantic original AND terminal guards at T.
       const probe = await l.run((allowance) =>

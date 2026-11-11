@@ -8,6 +8,12 @@ WITH input AS NOT MATERIALIZED (
      AND (i.after_key IS NULL OR (e.subject_id,''::text)>(i.after_key,i.after_tie))
    ORDER BY e.subject_id,''::text LIMIT (SELECT batch_limit FROM input))
   UNION ALL
+  (SELECT c.subject_id AS key,'clear'::text AS tie,c.subject_id AS "subjectId",c.transaction_id AS "transactionId"
+   FROM library.entry_clear c CROSS JOIN input i
+   WHERE c.route=i.route AND c.account_id=i.account_id
+     AND (i.after_key IS NULL OR (c.subject_id,'clear'::text)>(i.after_key,i.after_tie))
+   ORDER BY c.subject_id,'clear'::text LIMIT (SELECT batch_limit FROM input))
+  UNION ALL
   (SELECT p.subject_id AS key,'personal'::text AS tie,p.subject_id AS "subjectId",p.transaction_id AS "transactionId"
    FROM library.entry_personal_fact p CROSS JOIN input i
    WHERE p.route=i.route AND p.account_id=i.account_id

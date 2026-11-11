@@ -290,7 +290,7 @@ export async function readCollectionPublicationNativeSource(
     sourceFence: nativeSourceFence(metadata),
     identity: { digest: identityDigest },
     meaning,
-    ...(metadata.builtinKind === 'state' ? { originalCoverage: 'owner-facts-v1' as const } : {}),
+    originalCoverage: 'owner-facts-v2' as const,
   };
   const expectedBasis: CanonicalBasis = { ...components, digest: hash(components) };
   if (!isDeepStrictEqual(row.canonicalBasis, expectedBasis)) return null;

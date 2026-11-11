@@ -560,8 +560,9 @@ resource grants and the account fence. Read authorization stays native; material
 Denied writes leave no storage. Opaque state references are discovery points, not permission or membership.
 
 Stored personal subject IDs and Collection occurrences are immutable and never rewritten by identity resolution;
-new writes address the terminal. Canonical views choose the live state with highest private `owner_write_seq` among
-merged originals, show conflicts and retain every original fact, stored subject reference and accepted pin. They
+new writes address the terminal. Canonical views reduce live states and private original-keyed clear registers by highest `owner_write_seq` among
+merged originals. A winning clear means absent entry state. Views show retained conflicts and preserve every
+original fact, stored subject reference and accepted pin. They
 union labels and keep copies/sessions separate. Browsing shows one card per canonical subject; the editor
 preserves every curated occurrence, note and order.
 
@@ -591,7 +592,8 @@ has been loaded. Intervening pages are never fetched.
 Latest state means a native per-account write sequence in the owner's partition. Each successful state set, state
 clear and Undo restore increments that owner's counter row in the same authorized fact transaction with
 `UPDATE ... SET seq=seq+1 RETURNING seq`. First-row initialization belongs to that write too, never GET. A live
-entry stores the returned value as private `owner_write_seq`. All of one owner's entries share the owner partition,
+entry stores the returned value as private `owner_write_seq`; clear stores its allocated value in the separate
+original-keyed private `entry_clear` register, atomically with physical deletion, retained snapshot and receipt. All of one owner's entries share the owner partition,
 so this totally orders that owner's state writes and confines counter contention to that person's writes. No
 cross-partition coordinator, clock/UUID sorting, maximum of unrelated per-slot revisions or executor hook supplies
 the order. This ordering rule supersedes those alternatives.
@@ -603,9 +605,18 @@ retained history partial, and entries already present at installation remain unk
 Undo is a new state write and obtains a fresh higher `owner_write_seq`, even when native state, subject IDs,
 accepted pin, source stamps and user dates are restored exactly. Existing native new-transaction and revision
 rules still apply. The archive retains the original state snapshot, including its original sequence; archived or
-deleted rows never compete as current live state. A clear advances the counter but keeps the exact retained-entry
-and physical-delete contract, including public status/body/headers; it creates no live state tombstone to hold a
-sequence. Physical payload purge and derived repair are not owner state writes.
+deleted rows never compete in current state reduction. A clear advances the counter and physically deletes the live
+entry, preserving the retained-entry contract and public status/body/headers. Its separate `entry_clear` register
+participates in reduction without becoming a live entry, positive membership witness or owner-presence fact.
+Notes, labels, copies and occurrences keep their independent support and reducers. A split leaves the clear at its
+addressed original, so another original's facts can reappear in its own fibre. Subsequent set and valid Undo use
+fresh order; neither copies an archive's old sequence into current truth. Physical payload purge and derived repair
+are not owner state writes.
+
+The register retains only the owner/original key, clear sequence and native transaction ID. Undo expiry and archive
+purge never remove it: an older aliased state may still need suppression, including after a later merge. Retain the
+latest clear per original until terminal account erasure. Indexed terminal cleanup drains it with retained entry
+deletions before owner counters and source heads. Clearing an entry never removes unrelated personal payload.
 
 Native receipt replay allocates no sequence. Failed, denied, stale, expired or occupied operations roll back any
 counter change with the fact; branded `noEffect` cannot hide a persisted counter write. A successful state-setting
@@ -622,8 +633,9 @@ explicit real owner reassertion. Independent complete presence/label/session/hol
 unknown state order. This is a required producer, not a permanent launch exception. The native
 [`allocateOwnerWriteSeq` and schema](../services/kernel/src/library/owner-write-sequence.md) are delivered: the live-execute,
 same-owner allocator returns bigint, with private nullable positive sequence columns on live/archive entries and
-an owner counter. Production set/clear/Undo binding, legacy NULL migration/cutover, epoch readiness and complete
-terminal erasure remain missing producers. The primitive establishes no canonical runtime readiness.
+an owner counter. Native set/clear/Undo commands bind that allocator, and clear retains its original-keyed register. Legacy NULL
+migration/cutover, epoch readiness and complete terminal/shared-custody erasure remain separate producers.
+The primitive establishes no canonical runtime readiness.
 
 The separate [`readOwnerFactVersion`](../services/kernel/src/library/owner-fact-version.md) reads one exact native owner
 head; full changed-row UPDATE hooks are integrated. Missing metadata is `null` (unbuilt), never zero or ready
@@ -933,7 +945,8 @@ Source/DBOS minimization and durable acknowledgement. Empty local stores, queued
 neither. Reuse Accounts' coordinator and actual store-owner minimizers with exact locators, fenced late inputs,
 child-before-parent crash/replay and no-resurrection evidence; no Library-local service or completion writer replaces
 those interfaces. Its fixture gaps are source findings, not observed native failures.
-The private owner counter and stored live/archive `owner_write_seq` belong to that inventory. T immediately fences
+The private owner counter, stored live/archive `owner_write_seq` and original-keyed `entry_clear` registers belong
+to that inventory. T immediately fences
 state writers; bounded participant cleanup erases ordering metadata after its dependent private facts. Late repair
 must never recreate it. This adds neither account restore nor a public activity counter.
 

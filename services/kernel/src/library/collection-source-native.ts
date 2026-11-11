@@ -154,6 +154,10 @@ function headerSQL() {
 }
 import membersQuery from './collection-source-native-members.sql';
 import factsQuery from './collection-source-native-facts.sql';
+import stateSize from './owner-filter-entry-size.sql';
+import stateRead from './canonical-source-state-read.sql';
+import { newestEntryState } from './entry-clear-state.ts';
+import { decodeLibraryProfilePin } from './profile-pin.ts';
 import probeQuery from './collection-source-native-probe.sql';
 import type { CollectionOutputPublication } from './collection-source-output.ts';
 import outputHead from './collection-source-output-head.sql';
@@ -285,6 +289,14 @@ function costs() {
         witnessKeys: 1,
         bytes: Number(v[3]),
       }));
+      register(stateSize.sql, fixed(16, 2, 128));
+      register(stateRead.sql, (values) => ({
+        nativeRows: 16,
+        nativePoints: 2,
+        candidateKeys: 1,
+        witnessKeys: 1,
+        bytes: Number(values[stateRead.params.indexOf('projection_bytes')]),
+      }));
       for (const sql of [probeSQL(), copySQL, sessionSQL])
         register(sql, () => ({
           nativeRows: 6,
@@ -297,7 +309,7 @@ function costs() {
         register(query.sql, (values) => {
           const limit = Number(values[query.params.indexOf('limit')]);
           return {
-            nativeRows: 8 * limit + 8,
+            nativeRows: query === factsQuery ? 16 * limit + 16 : 8 * limit + 8,
             nativePoints: 1,
             candidateKeys: limit,
             bytes: 256 * limit,
@@ -814,6 +826,60 @@ async function currentSource(client: QueryClient, metadata: NativeCollectionMeta
     throw new ProblemError('dependency_unavailable');
   return current;
 }
+/** Reduce a COMPLETE bounded canonical group supplied by the admitted Source, never a caller alias hint.
+ * This native projection supplies no disclosure or completeness authority of its own.
+ */
+export async function readNativeCollectionStateGroup(
+  pool: Pool,
+  metadata: NativeCollectionMetadata,
+  input: Options & { originals: readonly string[] },
+): Promise<{ result: boolean | 'not_proven'; work: WorkReceipt }> {
+  if (
+    input.originals.length > 100 ||
+    new Set(input.originals).size !== input.originals.length ||
+    input.originals.some((original) => routeOf(original) === null)
+  ) throw new TypeError('Invalid native state group');
+  return call(pool, input, async (work) =>
+    readOnly(pool, input, work, async (client) => {
+      const current = await currentSource(client, metadata, work);
+      if (current.authority !== 'private_builtin' || current.builtinKind !== 'state' || !current.curatorAccountId)
+        throw new ProblemError('dependency_unavailable');
+      const facts: {
+        subjectId: string;
+        state: string | null;
+        ownerWriteSeq: bigint | null;
+        pin: ReturnType<typeof decodeLibraryProfilePin>;
+      }[] = [];
+      for (const original of input.originals) {
+        const key = { route: current.route, account_id: current.curatorAccountId, subject_id: original };
+        const size = await stateSize.run(client, key);
+        if (!size) continue;
+        const storedBytes = Number(size.projectionBytes);
+        if (size.projectionBytes === null || !Number.isSafeInteger(storedBytes) || storedBytes < 0)
+          throw new Error('Invalid native state projection size');
+        const projectionBytes = 6 * (size.projectionCompressed ? 4 * 1024 * 1024 * 1024 : storedBytes) + 1024;
+        const row = await stateRead.run(client, { ...key, projection_bytes: projectionBytes });
+        if (!row) throw new ProblemError('stale_cursor');
+        facts.push({
+          subjectId: row.subjectId,
+          state: row.state,
+          ownerWriteSeq: row.ownerWriteSeq === null ? null : BigInt(row.ownerWriteSeq),
+          pin: decodeLibraryProfilePin(row.libraryProfilePin),
+        });
+      }
+      const winner = newestEntryState(facts);
+      if (winner === 'not_proven') return { result: 'not_proven' as const };
+      if (winner === null || winner.state === null) return { result: false };
+      if (
+        winner.pin?.provenance !== 'profile' ||
+        winner.pin.releaseDigest !== current.releaseDigest ||
+        winner.pin.profileId !== current.profileId
+      ) return { result: 'not_proven' as const };
+      return { result: winner.state === current.stateId };
+    }),
+  );
+}
+
 function keyInput(key: CanonicalRangeKey | null | undefined, driver?: CanonicalRangeKey['driver']) {
   if (
     key &&
