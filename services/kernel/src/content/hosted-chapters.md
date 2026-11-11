@@ -59,8 +59,10 @@ that a target is absent. Parts disclose their titles under catalogue authority.
 
 Resolution returns the selected occurrence and a nullable `document`. Available chapters deliver `encoding=base64`,
 the canonical UTF-8 Document bytes as `canonicalBytes`, lowercase `sha256`, original Post `authorId` and `licence`.
-Decoding the base64 string yields the bytes covered by that digest. The native 2 MiB body bound applies. Parts and
-unavailable chapters have a null document. Responses use private, no-store caching and record native session anchors.
+Decoding the base64 string yields the bytes covered by that digest. The document is the exact submitted canonical
+snapshot for the selected Post revision, including its stable block IDs. The native 2 MiB body bound applies. Parts
+and unavailable chapters have a null document. Responses use private, no-store caching and record native session
+anchors.
 
 Children default to the root; an explicit parent must be a part in the selected revision. Navigation uses preorder
 and returns only chapters, excluding the origin. `direction=next` returns ascending order; `previous` returns
