@@ -517,6 +517,9 @@ Current implementation evidence is narrower than the capability:
   remains a provisional typed unavailable adapter using its closed declarations.
 - `work-module.ts` registers Collection listing effects and ordinary entry, label and copy retention. `account-fact-purge.ts` exports
   `purgeAccountFactsPage` for entry/copy/follow, without a terminal whole-graph worker. It still omits most of that graph.
+- Decision: due-command and default-worker retention growth at 256/1024/4096 uses complete `cost-folded` captures,
+  preserving foreground/background occurrence ownership, failures, relation identity and row/block/cost attribution
+  within the existing budget; retain raw plans only when a test asserts plan documents.
 - Semantic's `identity-epoch-store.ts:identityEpochStore`, admission/receiving custody, native birth mappings and
   bootstrap are implemented. Mapping maintenance, fixed participants, final coordinator and whole-query Source2a
   remain missing runtime producers. Existing point Access/disclosure, `subjectSource` and projection checkpoints
