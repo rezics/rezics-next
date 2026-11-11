@@ -6,7 +6,7 @@ import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { ListRowLink } from '@rezics/ui/list-row';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { CandidateValue } from '../pages/data';
@@ -397,19 +397,27 @@ function WorkPartsPageLive({
               <>
                 <Field>
                   <FieldLabel htmlFor={streamId}>{m.work_parts_relation({}, o)}</FieldLabel>
-                  <NativeSelect
-                    id={streamId}
-                    className="min-w-0 max-w-full max-md:[&_select]:min-h-11 max-md:[&_select]:min-w-11 pointer-coarse:[&_select]:min-h-11 pointer-coarse:[&_select]:min-w-11"
-                    value={stream.key}
+                  <Select
+                    value={stream.key === '' ? null : stream.key}
                     disabled={busy}
-                    onChange={(event) => void load(event.target.value)}
+                    onValueChange={(nextSelectValue) => void load(nextSelectValue ?? '')}
                   >
-                    {read.streams.map((item) => (
-                      <NativeSelectOption key={item.key} value={item.key} lang={item.label.lang ?? undefined}>
-                        {item.label.text || m.subject_value_unlabelled({}, o)}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger
+                      id={streamId}
+                      className="min-w-0 max-w-full max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {read.streams.map((item) => (
+                          <SelectItem key={item.key} value={item.key} lang={item.label.lang ?? undefined}>
+                            {item.label.text || m.subject_value_unlabelled({}, o)}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
                 </Field>
                 <p ref={sliceStatus} role="status" tabIndex={-1}>
                   {m.work_parts_slice({}, o)}{' '}

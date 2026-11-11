@@ -9,7 +9,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { editorLabels } from '../../threads/composer';
@@ -372,26 +372,34 @@ export function MangaInitialField({
             <div className="flex min-w-0 flex-wrap items-end gap-3">
               <Field className="min-w-0 basis-full sm:basis-48 sm:flex-1">
                 <FieldLabel htmlFor={qualifierId}>{m.correction_add_qualifier({}, o)}</FieldLabel>
-                <NativeSelect
-                  id={qualifierId}
-                  className="w-full min-w-0"
-                  aria-label={m.correction_add_qualifier({}, o)}
-                  value={qualifierAllowed ? qualifier : ''}
-                  onChange={(event) => {
-                    if (editable()) setQualifier(event.target.value);
+                <Select
+                  value={(qualifierAllowed ? qualifier : '') === '' ? null : qualifierAllowed ? qualifier : ''}
+                  onValueChange={(nextSelectValue) => {
+                    if (editable()) setQualifier(nextSelectValue ?? '');
                   }}
                 >
-                  <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                  {qualifierOptions.map((id) => (
-                    <NativeSelectOption
-                      key={id}
-                      value={id}
-                      lang={pickText(read.release.properties[id]?.labels ?? {}, locale).lang ?? undefined}
-                    >
-                      {name(id)}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SelectTrigger
+                    id={qualifierId}
+                    className="w-full min-w-0"
+                    aria-label={m.correction_add_qualifier({}, o)}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+                      {qualifierOptions.map((id) => (
+                        <SelectItem
+                          key={id}
+                          value={id}
+                          lang={pickText(read.release.properties[id]?.labels ?? {}, locale).lang ?? undefined}
+                        >
+                          {name(id)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </Field>
               <Button
                 className="h-auto min-h-11 max-w-full whitespace-normal text-start"

@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
@@ -165,9 +166,9 @@ export const Denied: Story = {
   args: { scenario: 'denied' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.catalogue_create_language() }), 'en');
+    await chooseSelectValue(await canvas.findByRole('combobox', { name: m.catalogue_create_language() }), 'en');
     const field = within(canvas.getByRole('group', { name: m.catalogue_create_label() }));
-    await userEvent.selectOptions(field.getByRole('combobox'), 'set');
+    await chooseSelectValue(field.getByRole('combobox'), 'set');
     await userEvent.clear(field.getByRole('textbox'));
     await userEvent.type(field.getByRole('textbox'), 'A retained correction');
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_save() }));

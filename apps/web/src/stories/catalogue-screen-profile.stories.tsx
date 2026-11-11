@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import { useMemo } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
@@ -96,18 +97,15 @@ async function assertOwnedTarget(control: HTMLElement, region: HTMLElement, docu
 }
 async function fill(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  await userEvent.selectOptions(
-    await canvas.findByRole('combobox', { name: m.catalogue_create_type() }),
-    'schema:Episode',
-  );
+  await chooseSelectValue(await canvas.findByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Episode');
   await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'The observatory');
   for (const property of ['schema:duration', 'schema:episodeNumber', 'schema:isPartOf']) {
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), property);
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.character_add_fact() }), property);
     await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
     const section = within(canvas.getByRole('heading', { name: field(property) }).closest('section')!);
     if (property === 'schema:duration') {
       await userEvent.type(section.getByRole('textbox', { name: m.correction_amount() }), '+1440');
-      await userEvent.selectOptions(
+      await chooseSelectValue(
         section.getByRole('combobox', { name: m.correction_unit() }),
         'http://www.wikidata.org/entity/Q11574',
       );
@@ -137,16 +135,13 @@ export const Route: Story = {
     const document = canvasElement.ownerDocument;
     await expect(await canvas.findByRole('heading', { level: 1, name: m.screen_title() })).toBeVisible();
     await expect(canvasElement.querySelectorAll('main#main-content')).toHaveLength(1);
-    await userEvent.selectOptions(
-      await canvas.findByRole('combobox', { name: m.catalogue_create_type() }),
-      'schema:Episode',
-    );
+    await chooseSelectValue(await canvas.findByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Episode');
     const addField = canvas.getByRole('combobox', { name: m.character_add_fact() });
     const fields = addField.closest('fieldset')!;
     const add = canvas.getByRole('button', { name: m.correction_add() });
     await assertOwnedTarget(addField, fields, document);
     await assertOwnedTarget(add, fields, document);
-    await userEvent.selectOptions(addField, 'schema:director');
+    await chooseSelectValue(addField, 'schema:director');
     addField.focus();
     await userEvent.tab();
     await expect(add).toHaveFocus();
@@ -156,7 +151,7 @@ export const Route: Story = {
     const director = within(directorHeading.closest('section')!);
     const qualifier = director.getByRole('combobox', { name: m.correction_add_qualifier() });
     await assertOwnedTarget(qualifier, directorHeading.closest('section')!, document);
-    await userEvent.selectOptions(qualifier, 'schema:position');
+    await chooseSelectValue(qualifier, 'schema:position');
     const citation = director.getByRole('textbox', { name: m.relation_citation() });
     await assertOwnedTarget(citation, directorHeading.closest('section')!, document);
     await userEvent.type(citation, 'https://example.org/credits/observatory-director');
@@ -173,11 +168,11 @@ export const Route: Story = {
     await userEvent.keyboard('{Enter}');
     await expect(directorHeading).not.toBeInTheDocument();
 
-    await userEvent.selectOptions(addField, 'schema:duration');
+    await chooseSelectValue(addField, 'schema:duration');
     await userEvent.click(add);
     const duration = within(canvas.getByRole('heading', { name: field('schema:duration') }).closest('section')!);
     await userEvent.type(duration.getByRole('textbox', { name: m.correction_amount() }), '+1440');
-    await userEvent.selectOptions(
+    await chooseSelectValue(
       duration.getByRole('combobox', { name: m.correction_unit() }),
       'http://www.wikidata.org/entity/Q11574',
     );
@@ -287,7 +282,7 @@ async function proposeDate({ canvasElement }: { canvasElement: HTMLElement }, pa
     const languageRow = within(languageHeading.closest('section')!);
     const choices = languageRow.getByRole('combobox', { name: m.facts_choose_value() });
     const selected = within(choices).getAllByRole('option')[1]!.getAttribute('value')!;
-    await userEvent.selectOptions(choices, selected);
+    await chooseSelectValue(choices, selected);
     await userEvent.click(languageRow.getByRole('button', { name: m.facts_edit_field() }));
     const value = languageRow.getByRole('textbox', { name: m.correction_value() });
     await userEvent.clear(value);

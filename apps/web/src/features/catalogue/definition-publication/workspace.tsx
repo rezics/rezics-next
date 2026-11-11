@@ -1,6 +1,6 @@
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { cn } from '@rezics/ui/utils';
 import { useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { m } from '../../../paraglide/messages.js';
@@ -419,17 +419,23 @@ export function DefinitionPublicationWorkspace({
           {preview?.types.length ? (
             <Field>
               <FieldLabel htmlFor={`${fileId}-type`}>{m.definition_publication_create_type({}, o)}</FieldLabel>
-              <NativeSelect
-                id={`${fileId}-type`}
-                value={selectedType ?? ''}
-                onChange={(event) => setSelectedType(event.target.value)}
+              <Select
+                value={(selectedType ?? '') === '' ? null : (selectedType ?? '')}
+                onValueChange={(nextSelectValue) => setSelectedType(nextSelectValue ?? '')}
               >
-                {preview.types.map((type) => (
-                  <NativeSelectOption key={type.id} value={type.id}>
-                    {type.id}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SelectTrigger id={`${fileId}-type`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {preview.types.map((type) => (
+                      <SelectItem key={type.id} value={type.id}>
+                        {type.id}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
           ) : null}
           {selectedType && (

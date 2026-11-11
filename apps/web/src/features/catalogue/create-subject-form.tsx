@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
@@ -974,34 +974,44 @@ function CreateSubjectFormLive({
                 ) : (
                   <>
                     <FieldLabel htmlFor="create-type">{m.catalogue_create_type({}, options)}</FieldLabel>
-                    <NativeSelect
-                      id="create-type"
-                      value={type}
+                    <Select
+                      value={type === '' ? null : type}
                       disabled={draftDisabled || !!profile?.metadata?.pending}
-                      aria-invalid={invalid('create-type')}
-                      aria-describedby={`create-grain create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
-                      onChange={(event) => changeType(event.target.value)}
+                      onValueChange={(nextSelectValue) => changeType(nextSelectValue ?? '')}
                     >
-                      <NativeSelectOption value="">{m.catalogue_create_choose_type({}, options)}</NativeSelectOption>
-                      {type && !types.some((entry) => entry.id === type) && (
-                        <NativeSelectOption value={type} disabled>
-                          {m.catalogue_create_choose_type({}, options)}
-                        </NativeSelectOption>
-                      )}
-                      {types.map((entry) => (
-                        <NativeSelectOption
-                          key={entry.id}
-                          value={entry.id}
-                          lang={
-                            entry.label.trim() && entry.label !== entry.id ? profile?.labelLanguage?.(entry.id) : locale
-                          }
-                        >
-                          {entry.label.trim() && entry.label !== entry.id
-                            ? entry.label
-                            : m.catalogue_creation_type_unlabelled({}, options)}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                      <SelectTrigger
+                        id="create-type"
+                        aria-invalid={invalid('create-type')}
+                        aria-describedby={`create-grain create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value={null}>{m.catalogue_create_choose_type({}, options)}</SelectItem>
+                          {type && !types.some((entry) => entry.id === type) && (
+                            <SelectItem value={type} disabled>
+                              {m.catalogue_create_choose_type({}, options)}
+                            </SelectItem>
+                          )}
+                          {types.map((entry) => (
+                            <SelectItem
+                              key={entry.id}
+                              value={entry.id}
+                              lang={
+                                entry.label.trim() && entry.label !== entry.id
+                                  ? profile?.labelLanguage?.(entry.id)
+                                  : locale
+                              }
+                            >
+                              {entry.label.trim() && entry.label !== entry.id
+                                ? entry.label
+                                : m.catalogue_creation_type_unlabelled({}, options)}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
                     <FieldDescription id="create-grain">{m.catalogue_create_grain({}, options)}</FieldDescription>
                   </>
                 )}

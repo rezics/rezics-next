@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
@@ -91,7 +92,7 @@ type Story = StoryObj<typeof meta>;
 export const AdmittedLaterPage: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(
+    await chooseSelectValue(
       await canvas.findByRole('combobox', { name: m.release_fidelity_related() }),
       `forward:schema:isBasedOn`,
     );

@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { pickText } from '@rezics/composition';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
@@ -90,10 +91,7 @@ type Story = StoryObj<typeof meta>;
 
 async function fill(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  await userEvent.selectOptions(
-    await canvas.findByRole('combobox', { name: m.catalogue_create_type_search_mode() }),
-    'id',
-  );
+  await chooseSelectValue(await canvas.findByRole('combobox', { name: m.catalogue_create_type_search_mode() }), 'id');
   await userEvent.type(await canvas.findByRole('textbox', { name: m.catalogue_create_type_search() }), 'schema:Movie');
   await userEvent.click(await canvas.findByRole('button', { name: m.catalogue_create_type_search_action() }));
   await userEvent.click(await canvas.findByText(m.catalogue_create_type_select()));

@@ -1,3 +1,4 @@
+import { chooseCurrentSelectOption } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -11,7 +12,6 @@ import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
-import { selectSharedOption } from './shared-select-interaction';
 
 function EditorExample({ scenario }: { scenario: AuthoredScenario | 'loading' }) {
   const locale = getLocale();
@@ -206,7 +206,7 @@ export const Unavailable: Story = {
     docs: {
       description: {
         story:
-          'UNRUN: the existing default composition at 390px checks native control targets, wrapped labels, retained uncertain submission, exact-proposal retry, independent comparison and public readback after selection. Browser, native and visual verification remain deferred.',
+          'UNRUN: the existing default composition at 390px checks shared Select targets, wrapped labels, retained uncertain submission, exact-proposal retry, independent comparison and public readback after selection. Browser, native and visual verification remain deferred.',
       },
     },
   },
@@ -265,7 +265,7 @@ export const Unavailable: Story = {
           await expect(text.getClientRects().length).toBeGreaterThan(1);
         }
         await expect(property.textContent).not.toBe('');
-        await selectSharedOption(property, property.textContent!.trim());
+        await chooseCurrentSelectOption(property);
         await waitFor(() => expect(reload).toBeEnabled());
         await userEvent.click(reload);
         await waitFor(() => expect(reload).toBeEnabled());

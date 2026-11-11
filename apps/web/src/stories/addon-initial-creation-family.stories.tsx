@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
@@ -157,13 +158,13 @@ async function fill(scope: HTMLElement, long = false) {
 }
 async function add(scope: HTMLElement, property: string) {
   const group = scope.querySelector<HTMLElement>('[data-slot="addon-initial-facts"]')!;
-  await userEvent.selectOptions(within(group).getByRole('combobox', { name: m.character_add_fact() }), property);
+  await chooseSelectValue(within(group).getByRole('combobox', { name: m.character_add_fact() }), property);
   await userEvent.click(within(group).getAllByRole('button', { name: m.correction_add() })[0]!);
   return [...group.querySelectorAll<HTMLElement>(':scope > fieldset > section')].at(-1)!;
 }
 async function addPart(row: HTMLElement, label: string, property: string) {
   const select = within(row).getByRole('combobox', { name: label });
-  await userEvent.selectOptions(select, property);
+  await chooseSelectValue(select, property);
   await userEvent.click(
     within(select.closest('[data-slot="field"]')!.parentElement!).getByRole('button', { name: m.correction_add() }),
   );

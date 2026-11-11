@@ -2,7 +2,7 @@ import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { canonicalLanguageTag } from './language-refinement';
@@ -157,21 +157,25 @@ export function ConditionLanguages({
       <FieldLabel htmlFor={selectId}>{m.condition_languages_label({}, options)}</FieldLabel>
       <p className="text-sm text-muted-foreground">{m.condition_languages_help({}, options)}</p>
       <div className="flex flex-wrap items-end gap-2">
-        <NativeSelect
-          id={selectId}
-          value={selected}
+        <Select
+          value={selected === '' ? null : selected}
           disabled={disabled || atLimit || available.length === 0}
-          aria-invalid={invalid || undefined}
-          aria-describedby={errorId}
-          onChange={(event) => setSelected(event.currentTarget.value)}
+          onValueChange={(nextSelectValue) => setSelected(nextSelectValue ?? '')}
         >
-          <NativeSelectOption value="">{m.condition_languages_choose({}, options)}</NativeSelectOption>
-          {available.map((tag) => (
-            <NativeSelectOption key={tag} value={tag}>
-              {displayLanguage(tag, displayNames)} ({tag})
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger id={selectId} aria-invalid={invalid || undefined} aria-describedby={errorId}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value={null}>{m.condition_languages_choose({}, options)}</SelectItem>
+              {available.map((tag) => (
+                <SelectItem key={tag} value={tag}>
+                  {displayLanguage(tag, displayNames)} ({tag})
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         <Button
           type="button"
           variant="outline"

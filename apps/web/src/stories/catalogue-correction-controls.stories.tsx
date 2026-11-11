@@ -1,3 +1,4 @@
+import { chooseSelectOptionByName } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { pickText } from '@rezics/composition';
@@ -87,7 +88,7 @@ function correction(flow: 'facts' | 'identifiers'): Story {
       }
       await separated(edit, add);
       await contained(canvas.getByRole('button', { name: m.facts_submit() }), canvasElement);
-      await userEvent.selectOptions(select, field.getByRole('option', { name: m.facts_selected_value({ number: 1 }) }));
+      await chooseSelectOptionByName(select, m.facts_selected_value({ number: 1 }));
       select.focus();
       await userEvent.tab();
       await expect(edit).toHaveFocus();

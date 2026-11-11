@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 
 import type { FilterDocument, FilterStatement } from '@rezics/filter';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Field, FieldLabel, FieldSet } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
@@ -111,7 +111,7 @@ function ConceptPicker({
   const referenceRun = useRef(0);
   const focusIntent = useRef<FocusIntent | undefined>(undefined);
   const searchInput = useRef<HTMLInputElement>(null);
-  const schemeSelect = useRef<HTMLSelectElement>(null);
+  const schemeSelect = useRef<HTMLButtonElement>(null);
   const searchStatusElement = useRef<HTMLParagraphElement>(null);
   const referenceStatusElement = useRef<HTMLParagraphElement>(null);
   const resultsElement = useRef<HTMLUListElement>(null);
@@ -585,43 +585,54 @@ function ConceptPicker({
             <>
               <Field>
                 <FieldLabel htmlFor={schemeSelectId}>{m.condition_concept_scheme({}, options)}</FieldLabel>
-                <NativeSelect
-                  ref={schemeSelect}
-                  id={schemeSelectId}
-                  value={scheme}
-                  onChange={(event) => setSchemeState({ owner: selectionOwner, value: event.currentTarget.value })}
+                <Select
+                  value={scheme === '' ? null : scheme}
+                  onValueChange={(nextSelectValue) =>
+                    setSchemeState({ owner: selectionOwner, value: nextSelectValue ?? '' })
+                  }
                   disabled={disabled || !readyReference}
                 >
-                  <NativeSelectOption value="">{m.condition_concept_choose_scheme({}, options)}</NativeSelectOption>
-                  {scheme && !readyReference?.schemes.some((entry) => entry.id === scheme) && (
-                    <NativeSelectOption value={scheme}>{scheme}</NativeSelectOption>
-                  )}
-                  {readyReference?.schemes.map((entry) => (
-                    <NativeSelectOption key={entry.id} value={entry.id}>
-                      {entry.label || entry.id}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SelectTrigger ref={schemeSelect} id={schemeSelectId}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={null}>{m.condition_concept_choose_scheme({}, options)}</SelectItem>
+                      {scheme && !readyReference?.schemes.some((entry) => entry.id === scheme) && (
+                        <SelectItem value={scheme}>{scheme}</SelectItem>
+                      )}
+                      {readyReference?.schemes.map((entry) => (
+                        <SelectItem key={entry.id} value={entry.id}>
+                          {entry.label || entry.id}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </Field>
               <Field>
                 <FieldLabel htmlFor={modeSelectId}>{m.condition_concept_match({}, options)}</FieldLabel>
-                <NativeSelect
-                  id={modeSelectId}
-                  value={mode}
-                  onChange={(event) =>
+                <Select
+                  value={mode === '' ? null : mode}
+                  onValueChange={(nextSelectValue) =>
                     setModeState({
                       owner: selectionOwner,
-                      value: event.currentTarget.value as '' | 'exact' | 'descendants',
+                      value: (nextSelectValue ?? '') as '' | 'exact' | 'descendants',
                     })
                   }
                   disabled={disabled}
                 >
-                  <NativeSelectOption value="">{m.condition_concept_choose_match({}, options)}</NativeSelectOption>
-                  <NativeSelectOption value="exact">{m.condition_concept_exact({}, options)}</NativeSelectOption>
-                  <NativeSelectOption value="descendants">
-                    {m.condition_concept_descendants({}, options)}
-                  </NativeSelectOption>
-                </NativeSelect>
+                  <SelectTrigger id={modeSelectId}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={null}>{m.condition_concept_choose_match({}, options)}</SelectItem>
+                      <SelectItem value="exact">{m.condition_concept_exact({}, options)}</SelectItem>
+                      <SelectItem value="descendants">{m.condition_concept_descendants({}, options)}</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </Field>
               <div className="flex flex-wrap gap-2">
                 <Button

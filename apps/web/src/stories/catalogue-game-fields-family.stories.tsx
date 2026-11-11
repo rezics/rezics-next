@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
@@ -229,7 +230,7 @@ export const IndependentSelectors: Story = {
       await expect(label.htmlFor).toBe(selectors[index]!.id);
       await userEvent.click(label);
       await expect(selectors[index]!).toHaveFocus();
-      await userEvent.selectOptions(selectors[index]!, 'schema:url');
+      await chooseSelectValue(selectors[index]!, 'schema:url');
       await target(selectors[index]!);
       await userEvent.tab();
       await expect([first, second][index]!.getAllByRole('button', { name: m.correction_add() })[0]!).toHaveFocus();
@@ -242,12 +243,12 @@ export const IndependentSelectors: Story = {
       ).toBe(true);
       await expect(selectors[index]!).toHaveAccessibleName(m.character_add_fact());
     }
-    await userEvent.selectOptions(selectors[0]!, 'schema:url');
+    await chooseSelectValue(selectors[0]!, 'schema:url');
     const add = first.getAllByRole('button', { name: m.correction_add() })[0]!;
     await target(add);
     await userEvent.keyboard('{Tab}{Enter}');
-    await expect(selectors[0]!).toHaveValue('');
-    await expect(selectors[1]!).toHaveValue('schema:url');
+    await expectSelectValue(selectors[0]!, '');
+    await expectSelectValue(selectors[1]!, 'schema:url');
     await expect(mounts[0]!.querySelectorAll('[data-slot="game-initial-fact"]')).toHaveLength(2);
     await expect(mounts[1]!.querySelectorAll('[data-slot="game-initial-fact"]')).toHaveLength(1);
     await inspectFrames(canvasElement);
@@ -259,11 +260,11 @@ export const MultiplicityAndLimit: Story = {
     const canvas = within(canvasElement);
     const select = canvas.getByRole('combobox', { name: m.character_add_fact() });
     const add = canvas.getByRole('button', { name: m.correction_add() });
-    await userEvent.selectOptions(select, 'schema:inLanguage');
+    await chooseSelectValue(select, 'schema:inLanguage');
     await target(add);
     await userEvent.click(add);
     await expect(canvasElement.querySelectorAll('[data-slot="game-initial-fact"]')).toHaveLength(32);
-    await userEvent.selectOptions(select, 'schema:inLanguage');
+    await chooseSelectValue(select, 'schema:inLanguage');
     await expect(add).toBeDisabled();
     await userEvent.click(canvas.getAllByRole('button', { name: m.recipe_remove_field() })[0]!);
     await expect(add).toBeEnabled();
@@ -417,12 +418,12 @@ export const GameCreation: Story = {
   args: { mode: 'game-create' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(
+    await chooseSelectValue(
       await canvas.findByRole('combobox', { name: m.catalogue_create_type() }),
       'schema:VideoGame',
     );
     await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'The Lantern Game');
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:inLanguage');
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:inLanguage');
     await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
     const frame = canvasElement.querySelector<HTMLElement>('[data-slot="game-initial-fact"]')!;
     await userEvent.type(within(frame).getByRole('textbox', { name: m.correction_value() }), 'ja');

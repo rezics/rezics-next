@@ -17,7 +17,7 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import { pageText } from '../pages/data';
 import { subjectHref } from '../../subject/subject-href';
@@ -484,17 +484,12 @@ function FactField({
                 <FieldLabel className="min-w-0 flex-wrap [overflow-wrap:anywhere]" htmlFor={sourceId}>
                   {m.facts_choose_value({}, o)}
                 </FieldLabel>
-                <NativeSelect
-                  id={sourceId}
-                  className="w-full min-w-0 [&>select]:min-h-11"
-                  aria-label={m.facts_choose_value({}, o)}
-                  aria-describedby={sourceUnavailable ? recoveryId : undefined}
-                  aria-invalid={sourceUnavailable}
+                <Select
                   disabled={busy || !canStage || !selected.length}
-                  value={source}
-                  onChange={(event) => {
+                  value={source === '' ? null : source}
+                  onValueChange={(nextSelectValue) => {
                     if (!active()) return;
-                    const next = event.target.value;
+                    const next = nextSelectValue ?? '';
                     setChoice({
                       source: next,
                       selection,
@@ -502,13 +497,26 @@ function FactField({
                     });
                   }}
                 >
-                  <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                  {selected.map((statement, index) => (
-                    <NativeSelectOption key={statement.id} value={statement.id}>
-                      {m.facts_selected_value({ number: index + 1 }, o)}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SelectTrigger
+                    id={sourceId}
+                    className="w-full min-w-0 min-h-11"
+                    aria-label={m.facts_choose_value({}, o)}
+                    aria-describedby={sourceUnavailable ? recoveryId : undefined}
+                    aria-invalid={sourceUnavailable}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+                      {selected.map((statement, index) => (
+                        <SelectItem key={statement.id} value={statement.id}>
+                          {m.facts_selected_value({ number: index + 1 }, o)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </Field>
             )}
             <div className="flex min-w-0 flex-col flex-wrap gap-2 sm:flex-row sm:flex-wrap">

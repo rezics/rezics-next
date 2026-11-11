@@ -4,7 +4,7 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { pageText } from '../pages/data';
 import { m } from '../../paraglide/messages.js';
 import { coverSrc } from '../../media/cover-src';
@@ -860,22 +860,30 @@ function CharacterClassificationLive({
                   <FieldLabel htmlFor={selectedValueId} className="max-w-full flex-wrap whitespace-normal">
                     {m.facts_choose_value({}, o)}
                   </FieldLabel>
-                  <NativeSelect
-                    id={selectedValueId}
-                    className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring md:pointer-fine:[&_select]:min-h-8"
-                    aria-label={m.facts_choose_value({}, o)}
-                    value={sourceChoice}
-                    onChange={(event) => {
-                      if (usable()) setSource(event.target.value);
+                  <Select
+                    value={sourceChoice === '' ? null : sourceChoice}
+                    onValueChange={(nextSelectValue) => {
+                      if (usable()) setSource(nextSelectValue ?? '');
                     }}
                   >
-                    <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                    {selected.map((statement, index) => (
-                      <NativeSelectOption key={statement.id} value={statement.id}>
-                        {m.facts_selected_value({ number: index + 1 }, o)}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger
+                      id={selectedValueId}
+                      className="w-full min-w-0 max-w-full min-h-11 [&:focus-visible]:outline-2 [&:focus-visible]:outline-offset-2 [&:focus-visible]:outline-ring md:pointer-fine:min-h-8"
+                      aria-label={m.facts_choose_value({}, o)}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+                        {selected.map((statement, index) => (
+                          <SelectItem key={statement.id} value={statement.id}>
+                            {m.facts_selected_value({ number: index + 1 }, o)}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
                 </Field>
               </>
             )}
@@ -1040,7 +1048,7 @@ function CharacterClassificationLive({
                   </Button>
                 )}
                 {reviewing && reviewTransport && (
-                  <div className="min-w-0 [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:py-2 [&_button]:[overflow-wrap:anywhere] [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring [&_[data-slot=native-select-wrapper]]:w-full [&_select]:min-h-11 [&_label]:flex-wrap [&_label]:whitespace-normal">
+                  <div className="min-w-0 [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:py-2 [&_button]:[overflow-wrap:anywhere] [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring [&_[data-slot=select-trigger]]:w-full [&_[data-slot=select-trigger]]:min-h-11 [&_label]:flex-wrap [&_label]:whitespace-normal">
                     <CandidateReview
                       id={read.public.subject.id}
                       locale={locale}

@@ -27,6 +27,7 @@ import {
   type StoryArcPreparedIdentity,
 } from './story-arc-create-model';
 import { storyArcType } from './story-arc-profile';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 
 const action =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
@@ -181,20 +182,28 @@ export function StoryArcCreateFields({
       <div className="flex min-w-0 flex-wrap items-end gap-2">
         <label className="min-w-0 flex-1 space-y-1">
           <span>{m.story_arc_create_property({}, o)}</span>
-          <select
-            className="h-11 w-full rounded-md border border-input bg-background px-3 md:pointer-fine:h-8"
-            aria-label={m.story_arc_create_property({}, o)}
-            value={property}
+          <Select
+            value={property === '' ? null : property}
             disabled={disabled || !canEdit() || options.length === 0}
-            onChange={(event) => setProperty(event.target.value)}
+            onValueChange={(nextSelectValue) => setProperty(nextSelectValue ?? '')}
           >
-            <option value="">{m.story_arc_create_choose_property({}, o)}</option>
-            {options.map((id) => (
-              <option key={id} value={id}>
-                {definitionText(release.properties[id]?.labels, locale).text || id}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              className="h-11 w-full rounded-md border border-input bg-background px-3 md:pointer-fine:h-8"
+              aria-label={m.story_arc_create_property({}, o)}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value={null}>{m.story_arc_create_choose_property({}, o)}</SelectItem>
+                {options.map((id) => (
+                  <SelectItem key={id} value={id}>
+                    {definitionText(release.properties[id]?.labels, locale).text || id}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </label>
         <Button
           type="button"

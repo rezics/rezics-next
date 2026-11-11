@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { useMemo, useState } from 'react';
@@ -144,7 +145,7 @@ type Story = StoryObj<typeof meta>;
 const urlLabel = () => pickText(definitions.release.properties['schema:url'].labels, getLocale()).text;
 async function fill(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  await userEvent.selectOptions(
+  await chooseSelectValue(
     await canvas.findByRole('combobox', { name: m.catalogue_create_type() }),
     'schema:Organization',
   );
@@ -195,7 +196,7 @@ async function fillAndAssertOwnedControls(canvasElement: HTMLElement) {
   const focusStyle = view.getComputedStyle(relations);
   await expect(focusStyle.outlineWidth !== '0px' || focusStyle.boxShadow !== 'none').toBe(true);
 
-  await userEvent.selectOptions(
+  await chooseSelectValue(
     await canvas.findByRole('combobox', { name: m.catalogue_create_type() }),
     'schema:Organization',
   );

@@ -3,7 +3,7 @@ import type { PropertyDefinition } from '@rezics/definitions';
 import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { cn } from '@rezics/ui/utils';
 import {
   useEffect,
@@ -1214,25 +1214,33 @@ export function DefinitionGuideContent({
               <FieldLabel className="min-w-0 max-w-full flex-wrap" htmlFor={typeId}>
                 {m.catalogue_create_type({}, o)}
               </FieldLabel>
-              <NativeSelect
-                className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11 md:pointer-fine:[&_select]:min-h-8"
-                id={typeId}
-                aria-describedby={type ? `${typeId}-meaning` : undefined}
-                value={selected}
-                onChange={(event) =>
+              <Select
+                value={selected === '' ? null : selected}
+                onValueChange={(nextSelectValue) =>
                   setSelection({
                     addressKey,
-                    type: event.target.value,
+                    type: nextSelectValue ?? '',
                   })
                 }
               >
-                <NativeSelectOption value="">{m.catalogue_create_choose_type({}, o)}</NativeSelectOption>
-                {types.map((entry) => (
-                  <NativeSelectOption key={entry.id} value={entry.id}>
-                    {entry.label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SelectTrigger
+                  className="w-full min-w-0 max-w-full min-h-11 min-w-11 md:pointer-fine:min-h-8"
+                  id={typeId}
+                  aria-describedby={type ? `${typeId}-meaning` : undefined}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value={null}>{m.catalogue_create_choose_type({}, o)}</SelectItem>
+                    {types.map((entry) => (
+                      <SelectItem key={entry.id} value={entry.id}>
+                        {entry.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
           )}
           {type && (

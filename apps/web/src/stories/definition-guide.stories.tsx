@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
@@ -50,7 +51,7 @@ export const ActiveType: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const picker = await canvas.findByRole('combobox', { name: m.catalogue_create_type() });
-    await userEvent.selectOptions(picker, 'schema:Recipe');
+    await chooseSelectValue(picker, 'schema:Recipe');
     const name = definitionText(definitions.release.properties['schema:cookTime'].labels, getLocale()).text;
     const field = await canvas.findByRole('link', { name });
     expect(field.getAttribute('href')).toContain('property=schema%3AcookTime');
@@ -130,7 +131,7 @@ export const UnavailableRetry: Story = {
     await phoneGeometry();
     await userEvent.keyboard('{Enter}');
     await expect(releaseSummary.parentElement).not.toHaveAttribute('open');
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Recipe');
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Recipe');
     const name = definitionText(definitions.release.properties['schema:cookTime'].labels, getLocale()).text;
     const field = await canvas.findByRole('link', { name });
     await expect(field).toHaveAttribute(
@@ -166,7 +167,7 @@ export const IndependentGuides: Story = {
     docs: {
       description: {
         story:
-          'UNRUN: two actual same-address guides share the ordinary read query while retaining independent native selection and label associations. Uses the recorded active release through the existing fixture transport.',
+          'UNRUN: two actual same-address guides share the ordinary read query while retaining independent shared Select values and label associations. Uses the recorded active release through the existing fixture transport.',
       },
     },
   },
@@ -181,9 +182,9 @@ export const IndependentGuides: Story = {
       await userEvent.click(label);
       await expect(pickers[index]).toHaveFocus();
     }
-    await userEvent.selectOptions(pickers[1]!, 'schema:Recipe');
-    await expect(pickers[0]).toHaveValue('schema:Book');
-    await expect(pickers[1]).toHaveValue('schema:Recipe');
+    await chooseSelectValue(pickers[1]!, 'schema:Recipe');
+    await expectSelectValue(pickers[0]!, 'schema:Book');
+    await expectSelectValue(pickers[1]!, 'schema:Recipe');
     const guides = canvas.getAllByRole('article');
     const locale = getLocale();
     const book = definitionText(definitions.release.types['schema:Book'].labels, locale).text!;

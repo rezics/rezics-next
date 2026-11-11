@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectOptionAvailability } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { useMemo } from 'react';
@@ -163,7 +164,7 @@ const writes = (fixture: Fixture) => fixture.calls.filter((call) => call.method 
 
 async function add(element: HTMLElement, id: string) {
   const canvas = within(element);
-  await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), id);
+  await chooseSelectValue(canvas.getByRole('combobox', { name: m.character_add_fact() }), id);
   await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
   return within([...element.querySelectorAll<HTMLElement>('fieldset[id^="album-row-"]')].at(-1)!);
 }
@@ -190,7 +191,7 @@ async function fill(element: HTMLElement, complete = false) {
   await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_description() }), longDescription);
   await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_aliases() }), `${longAlias}\n港の別名`);
   const date = await add(element, 'schema:datePublished');
-  await userEvent.selectOptions(date.getByRole('combobox', { name: m.correction_precision() }), '9');
+  await chooseSelectValue(date.getByRole('combobox', { name: m.correction_precision() }), '9');
   await userEvent.type(date.getByRole('textbox', { name: m.correction_year() }), '2024');
   await userEvent.type(date.getByRole('textbox', { name: m.relation_citation() }), citation);
   if (complete) {
@@ -202,10 +203,10 @@ async function fill(element: HTMLElement, complete = false) {
     await userEvent.click(
       await within(element.ownerDocument.body).findByRole('option', { name: /The Harbour Ensemble/ }),
     );
-    await userEvent.selectOptions(credit.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P1932');
+    await chooseSelectValue(credit.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P1932');
     await userEvent.click(credit.getByRole('button', { name: m.relation_add_qualifier() }));
     await userEvent.type(credit.getByRole('textbox', { name: name(fixture, 'wdt:P1932') }), longAlias);
-    await userEvent.selectOptions(credit.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P3831');
+    await chooseSelectValue(credit.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P3831');
     await userEvent.click(credit.getByRole('button', { name: m.relation_add_qualifier() }));
     await userEvent.type(credit.getByRole('combobox', { name: name(fixture, 'wdt:P3831') }), 'Performer');
     const popup = within(element.ownerDocument.body);
@@ -276,8 +277,8 @@ export const TermsCreditsAndFacts: Story = {
     await expect(canvas.getByRole('heading', { level: 2, name: m.catalogue_create_terms() })).toBeVisible();
     await expect(canvas.getByRole('heading', { level: 3, name: name(fixture, 'schema:contributor') })).toBeVisible();
     const field = canvas.getByRole('combobox', { name: m.character_add_fact() });
-    await expect(within(field).queryByRole('option', { name: name(fixture, 'schema:datePublished') })).toBeNull();
-    await expect(within(field).getByRole('option', { name: name(fixture, 'schema:contributor') })).toBeInTheDocument();
+    await expectSelectOptionAvailability(field, 'schema:datePublished', false);
+    await expectSelectOptionAvailability(field, 'schema:contributor', true);
     await geometry(canvasElement);
     await expect(writes(fixture)).toHaveLength(0);
   },

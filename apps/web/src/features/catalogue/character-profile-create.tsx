@@ -9,7 +9,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
@@ -678,27 +678,35 @@ function CharacterProfileCreateLive({
           <FieldLabel className={labelClassName} htmlFor={`${termsId}-initial-field`}>
             {m.character_initial_fact({}, o)}
           </FieldLabel>
-          <NativeSelect
-            id={`${termsId}-initial-field`}
-            className="w-full [&>select]:min-h-11"
-            value={selectedField}
-            aria-describedby={fieldWithdrawn ? `${termsId}-field-withdrawn` : undefined}
-            onChange={(event) => {
-              setField(event.target.value);
+          <Select
+            value={selectedField === '' ? null : selectedField}
+            onValueChange={(nextSelectValue) => {
+              setField(nextSelectValue ?? '');
               setFieldWithdrawn(false);
             }}
           >
-            <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-            {available.map((id) => (
-              <NativeSelectOption
-                key={id}
-                value={id}
-                lang={pickText(release.properties[id]!.labels, locale).lang ?? undefined}
-              >
-                {pickText(release.properties[id]!.labels, locale).text || m.candidate_value_unavailable({}, o)}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger
+              id={`${termsId}-initial-field`}
+              className="w-full min-h-11"
+              aria-describedby={fieldWithdrawn ? `${termsId}-field-withdrawn` : undefined}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+                {available.map((id) => (
+                  <SelectItem
+                    key={id}
+                    value={id}
+                    lang={pickText(release.properties[id]!.labels, locale).lang ?? undefined}
+                  >
+                    {pickText(release.properties[id]!.labels, locale).text || m.candidate_value_unavailable({}, o)}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
           {fieldWithdrawn && (
             <p id={`${termsId}-field-withdrawn`} role="status" className="text-sm text-muted-foreground">
               {m.character_initial_fact_withdrawn({}, o)}
@@ -755,12 +763,9 @@ function CharacterProfileCreateLive({
                       <FieldLabel className={labelClassName} htmlFor={`${address}-rank`}>
                         {m.candidate_rank({}, o)}
                       </FieldLabel>
-                      <NativeSelect
-                        id={`${address}-rank`}
-                        className="w-full [&>select]:min-h-11"
+                      <Select
                         value={fact.rank === 'preferred' ? 'preferred' : 'normal'}
-                        {...feedback(`${address}-rank`)}
-                        onChange={(event) => {
+                        onValueChange={(nextSelectValue) => {
                           const admitted = () =>
                             isCurrent() &&
                             !locked &&
@@ -771,7 +776,7 @@ function CharacterProfileCreateLive({
                             !pending.current;
                           if (!admitted()) return;
                           const rank: 'normal' | 'preferred' =
-                            event.target.value === 'preferred' ? 'preferred' : 'normal';
+                            (nextSelectValue ?? '') === 'preferred' ? 'preferred' : 'normal';
                           setFacts((previous) => {
                             if (!admitted() || !previous.includes(fact)) return previous;
                             return previous.map((row) => {
@@ -783,9 +788,20 @@ function CharacterProfileCreateLive({
                           });
                         }}
                       >
-                        <NativeSelectOption value="normal">{m.candidate_rank_normal({}, o)}</NativeSelectOption>
-                        <NativeSelectOption value="preferred">{m.candidate_rank_preferred({}, o)}</NativeSelectOption>
-                      </NativeSelect>
+                        <SelectTrigger
+                          id={`${address}-rank`}
+                          className="w-full min-h-11"
+                          {...feedback(`${address}-rank`)}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="normal">{m.candidate_rank_normal({}, o)}</SelectItem>
+                            <SelectItem value="preferred">{m.candidate_rank_preferred({}, o)}</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
                     </Field>
                     <StatementFields
                       creation

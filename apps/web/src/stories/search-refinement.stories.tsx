@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import releaseRecording from '../kernel/recorded/definitions-release.json';
@@ -101,8 +102,8 @@ export const Range: Story = {
   render: () => <Example />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.refinement_property() }), 'schema:wordCount');
-    await expect(canvas.getByRole('combobox', { name: m.refinement_unit() })).toHaveValue('1');
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.refinement_property() }), 'schema:wordCount');
+    await expectSelectValue(canvas.getByRole('combobox', { name: m.refinement_unit() }), '1');
     const minimum = canvas.getAllByRole('spinbutton', { name: m.refinement_lower() })[0]!;
     await userEvent.type(minimum, '1000001');
     await expect(minimum).toHaveValue(1000001);

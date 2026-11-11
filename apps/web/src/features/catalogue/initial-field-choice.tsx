@@ -2,7 +2,15 @@ import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@rezics/ui/shadcn/select';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 
@@ -85,9 +93,9 @@ export function InitialFieldChoice({
     properties.map((id) => {
       const label = pickText(release.properties[id]!.labels, locale);
       return (
-        <NativeSelectOption key={id} value={id} lang={label.lang ?? undefined}>
+        <SelectItem key={id} value={id} lang={label.lang ?? undefined}>
           {label.text}
-        </NativeSelectOption>
+        </SelectItem>
       );
     });
   return (
@@ -96,30 +104,35 @@ export function InitialFieldChoice({
         <FieldLabel className={labelClassName} htmlFor={selectId}>
           {addLabel ?? m.character_add_fact({}, o)}
         </FieldLabel>
-        <NativeSelect
-          id={selectId}
-          className={selectClassName}
+        <Select
           disabled={disabled}
-          aria-describedby={explanation ? `${selectId}-withdrawn` : undefined}
-          value={property}
-          onChange={(event) => {
+          value={property === '' ? null : property}
+          onValueChange={(nextSelectValue) => {
             handoff.current?.cancel();
-            setChoice({ property: event.target.value, withdrawn: false });
+            setChoice({ property: nextSelectValue ?? '', withdrawn: false });
           }}
         >
-          <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-          {offeredGroups.map(
-            (group, index) =>
-              group.properties.length > 0 &&
-              (group.label ? (
-                <optgroup key={index} label={group.label}>
+          <SelectTrigger
+            id={selectId}
+            className={selectClassName}
+            aria-describedby={explanation ? `${selectId}-withdrawn` : undefined}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+            </SelectGroup>
+            {offeredGroups.map((group, index) =>
+              group.properties.length > 0 ? (
+                <SelectGroup key={index}>
+                  {group.label ? <SelectLabel>{group.label}</SelectLabel> : null}
                   {options(group.properties)}
-                </optgroup>
-              ) : (
-                options(group.properties)
-              )),
-          )}
-        </NativeSelect>
+                </SelectGroup>
+              ) : null,
+            )}
+          </SelectContent>
+        </Select>
         {explanation && (
           <p id={`${selectId}-withdrawn`} role="status" className="text-sm text-muted-foreground">
             {m.initial_field_choice_withdrawn({}, o)}
