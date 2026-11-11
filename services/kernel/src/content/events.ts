@@ -67,6 +67,16 @@ export function CONTENT_EVENTS() {
         'com.rezics.content.edition.created.v1': editionEvent,
         'com.rezics.content.edition.published.v1': editionEvent,
         'com.rezics.content.edition.unpublished.v1': editionEvent,
+        'com.rezics.content.knowledge.publication.changed.v1': Type.Object(
+          {
+            action: Type.Union([Type.Literal('selected'), Type.Literal('withdrawn')]),
+            documentId: UUID,
+            publicationId: UUID,
+            revisionId: UUID,
+            subjectId: UUID,
+          },
+          { additionalProperties: false },
+        ),
         'com.rezics.content.thread.created.v1': Type.Object(
           { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID, ...threadIndexFields },
           { additionalProperties: false },

@@ -53,8 +53,8 @@ The first native slice creates an account-owned notebook around one existing pub
 private attachment directory, stable document resources, immutable document revisions and primary placements use
 the owner's account home and route. Each first-slice document inherits the notebook's Subject association; changing
 that association is a separate admitted operation. Private reads and writes require the owning account's current
-native account admission and a full placement-ancestor check. Admit at most 64 ancestors per request; this bounds
-the path and Access work without borrowing the hosted-book occurrence or node-count limits. There is no notebook
+native account admission and a full placement-ancestor check. Admit at most 31 parent ancestors (32 placements on
+one path); this bounds the path and Access work without borrowing the hosted-book occurrence or node-count limits. There is no notebook
 document-count limit. Sibling pages and mutations use indexed positions and a structure revision rather than
 loading or rewriting every sibling.
 
@@ -75,6 +75,11 @@ scan of account homes. Direct public resolution is available as soon as the Cont
 not wait for Search acknowledgement. The native first-loop proof selects and reads one exact publication, then
 withdraws it while derived indexing is paused.
 
+The current Search Content source port exposes review discovery but has no Knowledge candidate-page contract. The
+first native loop therefore proves direct exact reads against current Content source authority; it does not claim
+subject useful-page discovery. Search must add its own bounded Knowledge candidate observation and preparation API
+before subject contribution pages are exposed.
+
 At account-erasure time, private notebook structure, attachments, heads, unselected revisions and owner links are
 erased. An eligible current publication retains only its selected immutable revision and permitted public fields as
 a de-identified contribution, without its notebook ancestor chain or account identity. The existing publication
@@ -82,7 +87,7 @@ record remains the source; no second publication store or writer is introduced. 
 the erasure fence has no retained public selection. Moderation and later source withdrawal continue to govern the
 retained contribution.
 
-Decision: the first native loop uses an account-home notebook with a 64-ancestor admission bound, exact current
+Decision: the first native loop uses an account-home notebook with a 32-placement-depth bound, exact current
 publication pointers, Search-owned candidate observations, and de-identified retention of eligible current
 publications at account erasure.
 
