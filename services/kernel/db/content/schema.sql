@@ -297,6 +297,19 @@ $$;
 
 
 --
+-- Name: guard_knowledge_snapshot(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_knowledge_snapshot() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Knowledge revisions and publications are immutable' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
 -- Name: guard_media_erasure(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -1490,6 +1503,130 @@ CREATE TABLE content.imported_field (
     CONSTRAINT imported_field_source_check2 CHECK (((source ? 'references'::text) AND (jsonb_typeof((source -> 'references'::text)) = 'array'::text) AND (jsonb_array_length((source -> 'references'::text)) <= 128)))
 );
 ALTER TABLE ONLY content.imported_field ALTER COLUMN body SET COMPRESSION lz4;
+
+
+--
+-- Name: knowledge_document; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.knowledge_document (
+    route integer NOT NULL,
+    document_id uuid NOT NULL,
+    notebook_id uuid NOT NULL,
+    head_revision_id uuid NOT NULL,
+    current_publication_id uuid,
+    created_transaction_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT knowledge_document_check CHECK ((route = ((get_byte(uuid_send(document_id), 10) * 256) + get_byte(uuid_send(document_id), 11)))),
+    CONSTRAINT knowledge_document_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT knowledge_document_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: knowledge_notebook; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.knowledge_notebook (
+    route integer NOT NULL,
+    notebook_id uuid NOT NULL,
+    owner_account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    title text NOT NULL,
+    structure_revision_id uuid NOT NULL,
+    created_transaction_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT knowledge_notebook_check CHECK ((route = ((get_byte(uuid_send(notebook_id), 10) * 256) + get_byte(uuid_send(notebook_id), 11)))),
+    CONSTRAINT knowledge_notebook_check1 CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11)))),
+    CONSTRAINT knowledge_notebook_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT knowledge_notebook_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT knowledge_notebook_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 256)))
+);
+
+
+--
+-- Name: knowledge_placement; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.knowledge_placement (
+    route integer NOT NULL,
+    notebook_id uuid NOT NULL,
+    placement_id uuid NOT NULL,
+    document_id uuid NOT NULL,
+    parent_id uuid,
+    "position" bigint NOT NULL,
+    CONSTRAINT knowledge_placement_check CHECK ((route = ((get_byte(uuid_send(placement_id), 10) * 256) + get_byte(uuid_send(placement_id), 11)))),
+    CONSTRAINT knowledge_placement_position_check CHECK (("position" >= 0)),
+    CONSTRAINT knowledge_placement_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: knowledge_publication; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.knowledge_publication (
+    route integer NOT NULL,
+    document_id uuid NOT NULL,
+    publication_id uuid NOT NULL,
+    revision_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    body_sha256 bytea NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    published_at timestamp with time zone NOT NULL,
+    CONSTRAINT knowledge_publication_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
+    CONSTRAINT knowledge_publication_check CHECK ((route = ((get_byte(uuid_send(document_id), 10) * 256) + get_byte(uuid_send(document_id), 11)))),
+    CONSTRAINT knowledge_publication_check1 CHECK ((route = ((get_byte(uuid_send(publication_id), 10) * 256) + get_byte(uuid_send(publication_id), 11)))),
+    CONSTRAINT knowledge_publication_published_at_check CHECK (isfinite(published_at)),
+    CONSTRAINT knowledge_publication_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: knowledge_revision; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.knowledge_revision (
+    route integer NOT NULL,
+    document_id uuid NOT NULL,
+    revision_id uuid NOT NULL,
+    title text NOT NULL,
+    language text,
+    canonical_bytes bytea NOT NULL,
+    body_sha256 bytea NOT NULL,
+    licence text NOT NULL,
+    subject_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    author_account_id uuid,
+    recorded_transaction_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT knowledge_revision_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
+    CONSTRAINT knowledge_revision_canonical_bytes_check CHECK ((octet_length(canonical_bytes) <= 2097152)),
+    CONSTRAINT knowledge_revision_check CHECK ((route = ((get_byte(uuid_send(document_id), 10) * 256) + get_byte(uuid_send(document_id), 11)))),
+    CONSTRAINT knowledge_revision_check1 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
+    CONSTRAINT knowledge_revision_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT knowledge_revision_language_check CHECK (((language IS NULL) OR ((char_length(language) >= 1) AND (char_length(language) <= 64)))),
+    CONSTRAINT knowledge_revision_licence_check CHECK (((char_length(licence) >= 1) AND (char_length(licence) <= 128))),
+    CONSTRAINT knowledge_revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT knowledge_revision_subject_ids_check CHECK ((cardinality(subject_ids) <= 64)),
+    CONSTRAINT knowledge_revision_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 512)))
+);
+
+
+--
+-- Name: knowledge_structure_revision; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.knowledge_structure_revision (
+    route integer NOT NULL,
+    notebook_id uuid NOT NULL,
+    revision_id uuid NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT knowledge_structure_revision_check CHECK ((route = ((get_byte(uuid_send(notebook_id), 10) * 256) + get_byte(uuid_send(notebook_id), 11)))),
+    CONSTRAINT knowledge_structure_revision_check1 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
+    CONSTRAINT knowledge_structure_revision_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT knowledge_structure_revision_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
 
 
 --
@@ -3017,6 +3154,78 @@ ALTER TABLE ONLY content.imported_field
 
 
 --
+-- Name: knowledge_document knowledge_document_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_document
+    ADD CONSTRAINT knowledge_document_pkey PRIMARY KEY (route, document_id);
+
+
+--
+-- Name: knowledge_document knowledge_document_route_notebook_id_document_id_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_document
+    ADD CONSTRAINT knowledge_document_route_notebook_id_document_id_key UNIQUE (route, notebook_id, document_id);
+
+
+--
+-- Name: knowledge_notebook knowledge_notebook_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_notebook
+    ADD CONSTRAINT knowledge_notebook_pkey PRIMARY KEY (route, notebook_id);
+
+
+--
+-- Name: knowledge_placement knowledge_placement_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_placement
+    ADD CONSTRAINT knowledge_placement_pkey PRIMARY KEY (route, notebook_id, placement_id);
+
+
+--
+-- Name: knowledge_placement knowledge_placement_route_notebook_id_document_id_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_placement
+    ADD CONSTRAINT knowledge_placement_route_notebook_id_document_id_key UNIQUE (route, notebook_id, document_id);
+
+
+--
+-- Name: knowledge_placement knowledge_placement_route_notebook_id_parent_id_position_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_placement
+    ADD CONSTRAINT knowledge_placement_route_notebook_id_parent_id_position_key UNIQUE NULLS NOT DISTINCT (route, notebook_id, parent_id, "position");
+
+
+--
+-- Name: knowledge_publication knowledge_publication_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_publication
+    ADD CONSTRAINT knowledge_publication_pkey PRIMARY KEY (route, document_id, publication_id);
+
+
+--
+-- Name: knowledge_revision knowledge_revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_revision
+    ADD CONSTRAINT knowledge_revision_pkey PRIMARY KEY (route, document_id, revision_id);
+
+
+--
+-- Name: knowledge_structure_revision knowledge_structure_revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_revision
+    ADD CONSTRAINT knowledge_structure_revision_pkey PRIMARY KEY (route, notebook_id, revision_id);
+
+
+--
 -- Name: media media_image_display_metadata_check; Type: CHECK CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -3812,6 +4021,27 @@ CREATE INDEX hosted_placement_navigation_idx ON content.hosted_placement USING b
 
 
 --
+-- Name: knowledge_notebook_owner_page; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX knowledge_notebook_owner_page ON content.knowledge_notebook USING btree (route, owner_account_id, created_at DESC, notebook_id);
+
+
+--
+-- Name: knowledge_placement_children; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX knowledge_placement_children ON content.knowledge_placement USING btree (route, notebook_id, parent_id, "position", placement_id);
+
+
+--
+-- Name: knowledge_publication_subject_page; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX knowledge_publication_subject_page ON content.knowledge_publication USING btree (route, subject_id, published_at DESC, document_id, publication_id);
+
+
+--
 -- Name: media_collection_eligible_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -4184,6 +4414,27 @@ CREATE TRIGGER imported_field_immutable BEFORE DELETE OR UPDATE ON content.impor
 
 
 --
+-- Name: knowledge_publication knowledge_publication_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_publication_immutable BEFORE DELETE OR UPDATE ON content.knowledge_publication FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_snapshot();
+
+
+--
+-- Name: knowledge_revision knowledge_revision_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_revision_immutable BEFORE DELETE OR UPDATE ON content.knowledge_revision FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_snapshot();
+
+
+--
+-- Name: knowledge_structure_revision knowledge_structure_revision_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_structure_revision_immutable BEFORE DELETE OR UPDATE ON content.knowledge_structure_revision FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_snapshot();
+
+
+--
 -- Name: media media_erasure_guard; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -4471,6 +4722,94 @@ ALTER TABLE ONLY content.hosted_structure_revision
 
 ALTER TABLE ONLY content.hosted_structure_revision
     ADD CONSTRAINT hosted_structure_revision_route_catalogue_id_source_revisi_fkey FOREIGN KEY (route, catalogue_id, source_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: knowledge_document knowledge_document_current_publication_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_document
+    ADD CONSTRAINT knowledge_document_current_publication_fk FOREIGN KEY (route, document_id, current_publication_id) REFERENCES content.knowledge_publication(route, document_id, publication_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: knowledge_document knowledge_document_head_revision_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_document
+    ADD CONSTRAINT knowledge_document_head_revision_fk FOREIGN KEY (route, document_id, head_revision_id) REFERENCES content.knowledge_revision(route, document_id, revision_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: knowledge_document knowledge_document_notebook_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_document
+    ADD CONSTRAINT knowledge_document_notebook_fk FOREIGN KEY (route, notebook_id) REFERENCES content.knowledge_notebook(route, notebook_id);
+
+
+--
+-- Name: knowledge_notebook knowledge_notebook_structure_revision_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_notebook
+    ADD CONSTRAINT knowledge_notebook_structure_revision_fk FOREIGN KEY (route, notebook_id, structure_revision_id) REFERENCES content.knowledge_structure_revision(route, notebook_id, revision_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: knowledge_placement knowledge_placement_document_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_placement
+    ADD CONSTRAINT knowledge_placement_document_fk FOREIGN KEY (route, notebook_id, document_id) REFERENCES content.knowledge_document(route, notebook_id, document_id);
+
+
+--
+-- Name: knowledge_placement knowledge_placement_notebook_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_placement
+    ADD CONSTRAINT knowledge_placement_notebook_fk FOREIGN KEY (route, notebook_id) REFERENCES content.knowledge_notebook(route, notebook_id);
+
+
+--
+-- Name: knowledge_placement knowledge_placement_parent_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_placement
+    ADD CONSTRAINT knowledge_placement_parent_fk FOREIGN KEY (route, notebook_id, parent_id) REFERENCES content.knowledge_placement(route, notebook_id, placement_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: knowledge_publication knowledge_publication_document_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_publication
+    ADD CONSTRAINT knowledge_publication_document_fk FOREIGN KEY (route, document_id) REFERENCES content.knowledge_document(route, document_id);
+
+
+--
+-- Name: knowledge_publication knowledge_publication_revision_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_publication
+    ADD CONSTRAINT knowledge_publication_revision_fk FOREIGN KEY (route, document_id, revision_id) REFERENCES content.knowledge_revision(route, document_id, revision_id);
+
+
+--
+-- Name: knowledge_revision knowledge_revision_route_document_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_revision
+    ADD CONSTRAINT knowledge_revision_route_document_id_fkey FOREIGN KEY (route, document_id) REFERENCES content.knowledge_document(route, document_id);
+
+
+--
+-- Name: knowledge_structure_revision knowledge_structure_revision_notebook_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_revision
+    ADD CONSTRAINT knowledge_structure_revision_notebook_fk FOREIGN KEY (route, notebook_id) REFERENCES content.knowledge_notebook(route, notebook_id) DEFERRABLE INITIALLY DEFERRED;
 
 
 --
