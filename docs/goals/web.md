@@ -13,17 +13,18 @@ capabilities and disclosure rules on every page and device.
   boards, threads, posting/replies and the scoped community, Zone, moderation and notification surfaces.
 - Collections, the personal library, independent labels, holdings, progress and explicit publication are usable
   through their real APIs. Filters remain available wherever the common Collection abstraction appears.
-- Book discovery/catalogue, personal Library, hosted-novel authoring and complete public reading are launch
+- Book discovery/catalogue, personal Library, complete books and hosted-novel authoring and reading are launch
   requirements through their owners' real APIs. One shared Studio serves books and columns with common drafts,
   editing, revision history/comparison, preview and explicit publication; books add an ordered nested TOC, chapter
   add/reorder/move and navigation, while columns retain article/series presentation. Mounted author and reader
-  journeys are a separate acceptance gate from Content's native API acceptance. Authors manage and compare chapter
-  revisions, preview and explicitly publish a frozen TOC selection with exact body revisions; unselected drafts stay
-  private under ordinary authorization. Public readers get frozen chapters, stable exact chapter links, progress and
-  continue reading. The launch gate meets or exceeds the read-only `../rezics` behavior baseline at `95167ceab` and
-  demonstrates an improvement, such as links surviving chapter moves with atomic published-revision selection. A
-  flat native first slice is not release acceptance. Requiring Book Studio does not expand unrelated article rollout
-  or open paid publishing, Notion, Concept or general Search expansion.
+  journeys are a separate acceptance gate from [Content's native API acceptance](content.md#acceptance). Authors
+  manage drafts, edit and compare chapter revisions, preview and explicitly publish a frozen TOC selection with
+  exact body revisions; later draft edits leave public reading unchanged, and unselected drafts stay private under
+  ordinary authorization. Public readers get frozen chapters, stable exact chapter links, progress and
+  continue reading. Record a legacy parity comparison meeting or exceeding the read-only `../rezics` behavior baseline
+  at `95167ceab` and at least one demonstrable improvement, such as stable exact links across chapter moves plus
+  atomic published-revision selection. A flat native first slice is not release acceptance. Requiring Book Studio
+  does not expand unrelated article rollout or open paid publishing, Notion, Concept or general Search expansion.
 
 Decision: Independent progress visits expose explicit refresh, adopt newer saved values in untouched units, and
 retain local amount or clear choices by measure unit.
@@ -1075,6 +1076,13 @@ Preparation failure preserves the independent shelves. All launch locales carry 
 Decision: cap the serialized and retained selected publication review at 128 KiB UTF-8, project original and terminal Semantic summaries in one observation, and independently report an optional label or complete cover as unavailable when its full meaning cannot fit; never truncate attribution or legal text. The generated Client method owns the wire contract, the reader checks the same byte limit before retaining the response, and the current native Realm decision remains usable when optional presentation is unavailable. Native physical growth, frozen full acceptance and visual review remain with their existing owners. Full Realm/Space page composition and its Board and membership consumers keep their existing owner.
 
 ## Acceptance
+
+Mounted book acceptance separately proves discovery/catalogue and personal Library through their owners' real APIs,
+then an author managing drafts in the shared Studio, adding/reordering/moving nested parts and chapters, editing and
+comparing revisions, previewing and explicitly publishing. A public reader opens the frozen TOC and exact chapters,
+follows stable exact links after moves, saves progress and continues reading; later private draft edits remain private
+and do not change that published selection. Record the legacy parity comparison and improvement required above.
+Neither [Content's native API gate](content.md#acceptance) nor a flat first slice substitutes for these mounted journeys.
 
 Run focused interface and integration suites through the owning app/package check runners. Connect native
 [page outcomes](../../specs/pages-outcomes.test.ts), [search outcomes](../../specs/search-outcomes.test.ts),

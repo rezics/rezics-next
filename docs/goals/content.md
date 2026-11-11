@@ -14,13 +14,15 @@ boards, threads, posts, media, Spaces and Realms.
   [document package](../../packages/document/README.md). Persistent board pins never grant visibility; active, hot
   and newest continuations skip pinned threads without losing sparse-page progress under current container-chain
   disclosure.
-- Content owns the hosted-book structure and Post revision contracts for the first-public book library: ordered,
-  nested parts and chapters have stable occurrence identities and support add, reorder and move; chapter revisions
-  support history and comparison; explicit publication freezes a public TOC selection with its exact Post revisions.
-  Unselected drafts stay private under ordinary author and reader authorization. Native API acceptance is a separate
-  gate from Web's mounted author and reader acceptance. Both must meet or exceed the read-only `../rezics` behavior
-  baseline at `95167ceab` and demonstrate an improvement, such as exact chapter links surviving moves with atomic
-  published-revision selection. A flat native first slice alone does not satisfy the launch gate.
+- Content owns the hosted-book structure and Post revision contracts for the first-public book library: authors
+  manage drafts, add, reorder and move ordered nested parts and chapters with stable occurrence identities, and
+  edit chapters with revision history and comparison. Explicit publication atomically freezes a public TOC selection
+  with its exact Post revisions; later draft edits leave that selection unchanged. Ordinary author and reader
+  authorization still applies, and unselected drafts stay private. [Native API acceptance](#acceptance) and
+  [Web's mounted author and reader acceptance](web.md#acceptance) are separate launch gates for complete books and
+  hosted novels. Record a legacy parity comparison against the read-only `../rezics` behavior baseline at `95167ceab`,
+  meeting or exceeding it and demonstrating at least one improvement, such as stable exact chapter links across
+  moves plus atomic published-revision selection. A flat native first slice alone does not satisfy the launch gate.
 - Reports retain exact anchors. Takedown targets the resource partition and security revision. Erased revision bodies
   become `NULL` while exact references disclose erased availability. Author thread erasure makes bounded durable
   progress with current per-post authority; point erasure and takedown keep their synchronous contract.
@@ -142,6 +144,12 @@ events and durable work; Web uploader transport and authenticated pages; and Sea
 Content owns only its composed outcomes and native adapters.
 
 ## Acceptance
+
+Native book API acceptance covers author draft management, nested part/chapter add/reorder/move, chapter editing,
+history/comparison and explicit atomic publication of exact TOC/body revisions. Read back the frozen public selection
+after further draft edits and moves; exact chapter links retain their selection, and unauthorized readers cannot read
+private drafts. Record the legacy parity comparison and demonstrable improvement required above. This gate does
+not replace [Web's mounted discovery, Library, Studio and reader journeys](web.md#acceptance).
 
 Use [capability acceptance](content.capabilities.md) for frozen scenarios and stage distinctions,
 [thread outcomes](../../specs/content-thread-outcomes.test.ts),
