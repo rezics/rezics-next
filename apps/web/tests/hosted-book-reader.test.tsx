@@ -202,6 +202,38 @@ test('sparse continuation, failure and retry retain the opaque cursor and the se
   expect(source.read.mock.calls[4]![0].address).toEqual({ ...address, cursor: illustrativeBookCursor });
 });
 
+test('host-supplied canonical links remain native links with independent occurrence addresses', async () => {
+  const book = createIllustrativeHostedBook();
+  const source = observed(book.source);
+  const hrefForAddress = (address: BookAddress) =>
+    address.kind === 'chapter' ? `/illustrative-exact/${address.selection.occurrenceId}` : null;
+  await mount(source, book.contents(ids.nested), { hrefForAddress });
+  const first = host.querySelector<HTMLAnchorElement>(`a[href="/illustrative-exact/${ids.first}"]`)!;
+  const reused = host.querySelector<HTMLAnchorElement>(`a[href="/illustrative-exact/${ids.reused}"]`)!;
+  expect(first).not.toBeNull();
+  expect(reused).not.toBeNull();
+  expect(first.closest('button')).toBeNull();
+  let prevented: boolean | undefined;
+  const capture = (event: Event) => {
+    prevented = event.defaultPrevented;
+    event.preventDefault();
+  };
+  document.addEventListener('click', capture);
+  try {
+    await act(async () =>
+      first.dispatchEvent(new window.MouseEvent('click', { ctrlKey: true, bubbles: true, cancelable: true })),
+    );
+    expect(prevented).toBe(false);
+    expect(source.read).toHaveBeenCalledTimes(1);
+    await click(reused);
+    expect(prevented).toBe(true);
+    expect(source.read).toHaveBeenCalledTimes(2);
+    expect(source.read.mock.calls[1]![0].address).toEqual(await book.chapter(true));
+  } finally {
+    document.removeEventListener('click', capture);
+  }
+});
+
 test('a moved occurrence keeps its frozen body while current ancestors change; neighbours distinguish end and unavailable', async () => {
   const book = createIllustrativeHostedBook('moved');
   const address = await book.chapter();

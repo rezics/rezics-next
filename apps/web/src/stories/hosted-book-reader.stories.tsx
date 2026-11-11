@@ -79,7 +79,7 @@ async function nestedJourney({ canvasElement }: { canvasElement: HTMLElement }) 
   await userEvent.click(first);
   await canvas.findByRole('heading', { level: 1, name: 'Dawn / 黎明' });
   await expect(canvas.getByRole('article')).toHaveTextContent('The keeper opened the eastern shutters.');
-  await userEvent.click(canvas.getAllByRole('button', { name: m.book_reader_contents(), exact: true })[0]!);
+  await userEvent.click(canvas.getAllByRole('button', { name: m.book_reader_contents() })[0]!);
   await expect(
     await canvas.findByRole('button', { name: `${m.book_reader_open_chapter()} · Dawn / 黎明` }),
   ).toHaveAttribute('aria-current', 'location');

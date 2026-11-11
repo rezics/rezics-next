@@ -1,5 +1,5 @@
 import { QueryClientContext } from '@tanstack/react-query';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import {
   Component,
   useCallback,
@@ -178,28 +178,27 @@ function BookReaderView({ reader, locale, restart, hrefForAddress, renderProgres
       else rows.current.delete(extra.row);
     };
     return href ? (
-      <Button asChild variant="outline" className={control}>
-        <a
-          href={href}
-          ref={ref}
-          aria-current={extra?.selected ? 'location' : undefined}
-          onClick={(event) => {
-            if (
-              event.defaultPrevented ||
-              event.button !== 0 ||
-              event.metaKey ||
-              event.ctrlKey ||
-              event.altKey ||
-              event.shiftKey
-            )
-              return;
-            event.preventDefault();
-            navigate(address);
-          }}
-        >
-          {title}
-        </a>
-      </Button>
+      <a
+        href={href}
+        ref={ref}
+        className={buttonVariants({ variant: 'outline', className: control })}
+        aria-current={extra?.selected ? 'location' : undefined}
+        onClick={(event) => {
+          if (
+            event.defaultPrevented ||
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.altKey ||
+            event.shiftKey
+          )
+            return;
+          event.preventDefault();
+          navigate(address);
+        }}
+      >
+        {title}
+      </a>
     ) : (
       <Button
         ref={ref}
