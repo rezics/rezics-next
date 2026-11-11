@@ -2659,14 +2659,14 @@ export function CollectionReadMembers<Member extends CollectionReadMember>({
             comparisonDefinitions={comparisonDefinitions}
           />
         }
-        evidence={
+        evidence={layout === 'grid' ? (
           <CollectionMemberActionEvidence
             member={member}
             viewerProjection={viewerProjection}
             actionHref={viewerActionHref?.(member)}
             collection={collection}
           />
-        }
+        ) : null}
         detailId={detailId}
         expanded={Boolean(selected && selection?.key === key)}
         inspectLabel={m.collection_reading_inspect()}
@@ -2736,6 +2736,14 @@ export function CollectionReadMembers<Member extends CollectionReadMember>({
           opener={selection.opener}
           onClose={() => setSelection(undefined)}
         >
+          {layout === 'list' && (
+            <CollectionMemberActionEvidence
+              member={selected}
+              viewerProjection={viewerProjection}
+              actionHref={viewerActionHref?.(selected)}
+              collection={collection}
+            />
+          )}
           <CollectionMemberOccurrenceDetails
             member={selected}
             currentHref={currentHref}
