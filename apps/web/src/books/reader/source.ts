@@ -6,7 +6,13 @@ export const BOOK_CONTENTS_LIMIT = 40;
 export const BOOK_ANCESTOR_LIMIT = 24;
 export const BOOK_CURSOR_LIMIT = 8192;
 
-export type BookPublication = Readonly<{ id: string; structureRevisionId: string }>;
+export type BookPublication = Readonly<{
+  /** Native catalogue ID. */
+  id: string;
+  structureRevisionId: string;
+  /** Native publication revision, distinct from its source structure. Required by the native adapter. */
+  releaseRevisionId?: string;
+}>;
 export type BookBodySelection = Readonly<{ postId: string; revisionId: string; sha256: string }>;
 export type BookSelection = Readonly<{ occurrenceId: string; body: BookBodySelection }>;
 export type BookChapterAddress = Readonly<{
@@ -46,6 +52,8 @@ type PageBase = Readonly<{
   publicationTitle: string;
   /** Current context is separately observed; it cannot rewrite the frozen publication selection. */
   currentStructureRevisionId: string;
+  /** Current publication release observed by the native binding, independently of the frozen address. */
+  currentReleaseRevisionId?: string;
   /** Root to immediate parent, in native order; never reconstructed from title strings. */
   ancestors: readonly BookAncestor[];
 }>;
@@ -113,7 +121,8 @@ export const uninstalledHostedBookSource: HostedBookSource = {
 };
 
 export function samePublication(a: BookPublication, b: BookPublication) {
-  return a.id === b.id && a.structureRevisionId === b.structureRevisionId;
+  return a.id === b.id && a.structureRevisionId === b.structureRevisionId &&
+    a.releaseRevisionId === b.releaseRevisionId;
 }
 export function sameSelection(a: BookSelection | null, b: BookSelection | null) {
   return a === null || b === null
@@ -134,6 +143,7 @@ export function sameBookAddress(a: BookAddress, b: BookAddress): boolean {
 export function bookAddressWithinBounds(address: BookAddress): boolean {
   const identity = (value: string) => value.length > 0 && value.length <= 1024;
   if (!identity(address.publication.id) || !identity(address.publication.structureRevisionId)) return false;
+  if (address.publication.releaseRevisionId !== undefined && !identity(address.publication.releaseRevisionId)) return false;
   const selection = address.selection;
   if (selection && (!identity(selection.occurrenceId) || !identity(selection.body.postId) ||
     !identity(selection.body.revisionId) || !/^[a-f0-9]{64}$/i.test(selection.body.sha256))) return false;
