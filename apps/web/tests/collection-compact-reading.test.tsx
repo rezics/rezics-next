@@ -5,6 +5,7 @@ import { m } from '../src/paraglide/messages.js';
 import type { CollectionReadMember } from '../src/library/collection-member-details';
 import type { CollectionMember } from '../src/library/reads';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
+import { collectionPageAddress } from '../src/library/collection-presentation';
 import * as start from '../.storybook/react-start';
 
 mock.module('@tanstack/react-start', () => start);
@@ -12,7 +13,9 @@ mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
 const { CollectionReadMembers } = await import('../src/library/collection-page');
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-const address = `/en/collections/${id(1)}?cursor=next%2B%2F%3D&type=work&f.genre=fiction&l.genre=Fiction&returnTo=%2Fen%2Flibrary`;
+const search = { type: 'work', 'f.genre': 'fiction', 'l.genre': 'Fiction' };
+const address = (layout: 'list' | 'grid', cursor = 'next+/=') =>
+  collectionPageAddress('en', id(1), cursor, search, layout);
 const note = `  Supplied note\n\n\t${'界'.repeat(600)}\n `;
 const members: CollectionMember[] = [2, 3].map((n) => ({
   id: id(n),
@@ -33,7 +36,9 @@ for (const layout of ['list', 'grid'] as const) {
     const { Window } = await import(
       Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
     );
-    const window = new Window({ url: `https://rezics.test${address}&layout=${layout}`, width: 390 });
+    const currentHref = address(layout);
+    const alternateLayout = layout === 'list' ? 'grid' : 'list';
+    const window = new Window({ url: `https://rezics.test${currentHref}`, width: 390 });
     const globals = {
       window,
       document: window.document,
@@ -72,7 +77,7 @@ for (const layout of ['list', 'grid'] as const) {
     const source = {};
     const render = (
       rows: readonly CollectionReadMember[] = members,
-      href = address,
+      href = currentHref,
       returnSource = source,
       view: 'list' | 'grid' = layout,
     ) =>
@@ -157,10 +162,10 @@ for (const layout of ['list', 'grid'] as const) {
 
       // Address, native observation and layout replacement retire detail without restoring stale opener focus.
       for (const replace of [
-        () => render(members, address.replace('cursor=next', 'cursor=other')),
-        () => render(members, address, {}),
+        () => render(members, address(layout, 'other-cursor')),
+        () => render(members, currentHref, {}),
         () => render(members.map((member) => ({ ...member }))),
-        () => render(members, address, source, layout === 'list' ? 'grid' : 'list'),
+        () => render(members, address(alternateLayout), source, alternateLayout),
       ]) {
         await render();
         const opener = await open(0);
@@ -174,7 +179,7 @@ for (const layout of ['list', 'grid'] as const) {
       delayCopy = true;
       await act(async () => detail()!.querySelector<HTMLButtonElement>('[data-copy-reference]')!.click());
       expect(detail()!.textContent).toContain(m.collection_reading_copy_pending());
-      await render(members, address, {});
+      await render(members, currentHref, {});
       await act(async () => finishCopy!());
       expect(detail()).toBeNull();
       expect(host.textContent).not.toContain(m.collection_reading_copy_done());
