@@ -11609,5 +11609,15 @@
   "collection_reading_copy_reference": "Copier le lien de référence",
   "collection_reading_copy_pending": "Copie du lien…",
   "collection_reading_copy_done": "Lien copié.",
-  "collection_reading_copy_unavailable": "Le lien n’a pas pu être copié. Ouvrez la référence ou réessayez."
+  "collection_reading_copy_unavailable": "Le lien n’a pas pu être copié. Ouvrez la référence ou réessayez.",
+  "books_catalogue_title": "Bibliothèque de livres",
+  "books_catalogue_intro": "Découvrez des livres, des séries de livres et des éditions. Ouvrez une fiche pour consulter ses informations littéraires et sa bibliographie.",
+  "books_catalogue_return": "Le catalogue et les étagères personnelles s’ouvrent dans un nouvel onglet. Revenez à l’onglet initial pour retrouver votre position.",
+  "books_catalogue_new_tab": "S’ouvre dans un nouvel onglet",
+  "books_catalogue_shelf": "Mon étagère pour ce type",
+  "books_catalogue_kind": "Type",
+  "books_catalogue_browse": "Parcourir le catalogue",
+  "books_catalogue_missing": "Ce type n’est pas publié actuellement.",
+  "books_catalogue_unavailable": "Ce type est indisponible pour le moment.",
+  "books_catalogue_retry": "Recharger les choix du catalogue"
 }

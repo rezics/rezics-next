@@ -689,12 +689,12 @@ async function startDriver(
       async compile(root, schemas, presentation) {
         const bundled = bundledSources();
         const mergedPresentation = { ...bundled.presentation };
-        for (const [language, additions] of Object.entries(presentation)) {
-          const base = Bun.YAML.parse(mergedPresentation[language] ?? '{}') as {
+        for (const [groupLocale, additions] of Object.entries(presentation)) {
+          const base = Bun.YAML.parse(mergedPresentation[groupLocale] ?? '{}') as {
             types?: Record<string, string>;
             properties?: Record<string, string>;
           };
-          mergedPresentation[language] = Bun.YAML.stringify({
+          mergedPresentation[groupLocale] = Bun.YAML.stringify({
             types: { ...(base.types ?? {}), ...(additions.types ?? {}) },
             properties: { ...(base.properties ?? {}), ...(additions.properties ?? {}) },
           });

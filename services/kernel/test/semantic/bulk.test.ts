@@ -3,10 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import { fromPlainText } from '@rezics/document';
-import pg from 'pg';
+import pg, { type PoolClient, type QueryConfig } from 'pg';
+import { encodeReceiptKey } from '../../src/command/receipt-key.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { anchorRoute, routeOf, newId } from '../../src/route/route.ts';
+import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createRealAccess } from './real-access.ts';
@@ -232,6 +233,102 @@ test('concurrent batch creates on separate pools resolve one source claim under 
     expect(claims.rows).toEqual([{ subject_id: results[0]!.value.id }]);
   } finally {
     await competingPool.end();
+  }
+});
+
+test('a serializable source-claim insert conflict resolves the committed identity under the same intent', async () => {
+  const externalId = `OL${randomUUID()}W`;
+  const source = record(externalId);
+  const winner: BatchCommand = {
+    op: 'create',
+    key: randomUUID(),
+    source,
+    subject: work('Claim winner'),
+  };
+  const first = await batch([winner]);
+  expect(first.response.status).toBe(200);
+  const winningResult = first.body.results[0];
+  if (!winningResult || !('value' in winningResult) || !('id' in winningResult.value))
+    throw new Error('The first source claim must create a subject');
+  const winnerId = winningResult.value.id;
+  const duplicate: BatchCommand = { ...winner, key: randomUUID() };
+  const route = anchorRoute(routeKey, `openlibrary\n${externalId}`);
+  const partition = partitionOf(route);
+  const headBefore = await admin.query<{ position: string }>(
+    'SELECT position::text AS position FROM core.partition WHERE partition_no=$1',
+    [partition],
+  );
+  const eventsBefore = await admin.query<{ count: string }>(
+    'SELECT count(*)::text AS count FROM core.outbox WHERE partition_no=$1 AND subject=$2',
+    [partition, winnerId],
+  );
+  let staleClaimRead = false;
+  let serializationConflict = false;
+  const originals = new Map<PoolClient, PoolClient['query']>();
+  const intercept = (client: PoolClient) => {
+    if (originals.has(client)) return;
+    const query = client.query;
+    originals.set(client, query);
+    client.query = ((statement: QueryConfig | string, ...args: unknown[]) => {
+      const text = typeof statement === 'string' ? statement : statement.text;
+      if (!staleClaimRead && /^\s*SELECT\b/i.test(text) && /FROM\s+semantic\.external_claim/i.test(text)) {
+        staleClaimRead = true;
+        return Promise.resolve(Reflect.apply(query, client, [statement, ...args])).then((result) => ({
+          ...result,
+          // Model a serializable snapshot taken before the committed winner.
+          rows: [],
+        }));
+      }
+      if (staleClaimRead && !serializationConflict && /INSERT\s+INTO\s+semantic\.external_claim/i.test(text)) {
+        serializationConflict = true;
+        throw Object.assign(new Error('Serializable imported claim conflict'), { code: '40001' });
+      }
+      return Reflect.apply(query, client, [statement, ...args]);
+    }) as PoolClient['query'];
+  };
+  pool.on('acquire', intercept);
+  try {
+    const recovered = await batch([duplicate]);
+    expect(recovered.response.status).toBe(200);
+    expect(recovered.body.results).toEqual([{ key: duplicate.key, status: 200, value: { id: winnerId, revision: 1 } }]);
+    expect(staleClaimRead).toBe(true);
+    expect(serializationConflict).toBe(true);
+    expect(
+      (
+        await admin.query(
+          'SELECT subject_id::text AS subject_id FROM semantic.external_claim WHERE route=$1 AND source=$2 AND external_id=$3',
+          [route, source.source, externalId],
+        )
+      ).rows,
+    ).toEqual([{ subject_id: winnerId }]);
+    const receiptKey = encodeReceiptKey(
+      testReceiptKeys(),
+      'subject.batch_create',
+      { kind: 'account', id: accounts.importer },
+      duplicate.key,
+    );
+    expect(
+      (
+        await admin.query(
+          `SELECT response FROM core.receipt WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+           AND command_kind='subject.batch_create' AND idempotency_key=$3`,
+          [partition, accounts.importer, receiptKey],
+        )
+      ).rows,
+    ).toEqual([{ response: { status: 200, value: { id: winnerId, revision: 1 } } }]);
+    const headAfter = await admin.query<{ position: string }>(
+      'SELECT position::text AS position FROM core.partition WHERE partition_no=$1',
+      [partition],
+    );
+    expect(headAfter.rows).toEqual(headBefore.rows);
+    const eventsAfter = await admin.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM core.outbox WHERE partition_no=$1 AND subject=$2',
+      [partition, winnerId],
+    );
+    expect(eventsAfter.rows).toEqual(eventsBefore.rows);
+  } finally {
+    pool.off('acquire', intercept);
+    for (const [client, query] of originals) client.query = query;
   }
 });
 

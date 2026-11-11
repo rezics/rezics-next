@@ -11609,5 +11609,15 @@
   "collection_reading_copy_reference": "Copy reference link",
   "collection_reading_copy_pending": "Copying link…",
   "collection_reading_copy_done": "Link copied.",
-  "collection_reading_copy_unavailable": "The link could not be copied. Open the reference or try again."
+  "collection_reading_copy_unavailable": "The link could not be copied. Open the reference or try again.",
+  "books_catalogue_title": "Book Library",
+  "books_catalogue_intro": "Discover books, book series and editions. Open a subject to read its literary details and bibliography.",
+  "books_catalogue_return": "Discovery and personal shelves open in a new tab. Return to the original tab to keep your place.",
+  "books_catalogue_new_tab": "Opens in a new tab",
+  "books_catalogue_shelf": "My shelf for this type",
+  "books_catalogue_kind": "Type",
+  "books_catalogue_browse": "Browse catalogue",
+  "books_catalogue_missing": "This type is not currently released.",
+  "books_catalogue_unavailable": "This type is unavailable right now.",
+  "books_catalogue_retry": "Reload catalogue choices"
 }

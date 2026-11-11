@@ -2,7 +2,7 @@ import { jsonParameter } from '../database/json.ts';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
-import { readAuthoredFieldHistorySource } from '../content/authored-fields-history.ts';
+import { readContentDocumentHistorySource } from '../content/adapters/subject-document.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -425,7 +425,7 @@ export async function collectSemanticRecordFacts(
       )
         continue;
       if (!building(tx, set).documents.has(content.document)) {
-        const original = await readAuthoredFieldHistorySource(tx, content.document);
+        const original = await readContentDocumentHistorySource(tx, content.document);
         // Missing native metadata is unknown prior coverage, never evidence of source absence.
         if (!original)
           throw Object.assign(new AccessUnavailableError('contention'), {

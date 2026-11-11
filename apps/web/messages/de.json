@@ -11609,5 +11609,15 @@
   "collection_reading_copy_reference": "Referenzlink kopieren",
   "collection_reading_copy_pending": "Link wird kopiert…",
   "collection_reading_copy_done": "Link kopiert.",
-  "collection_reading_copy_unavailable": "Der Link konnte nicht kopiert werden. Öffne die Referenz oder versuche es erneut."
+  "collection_reading_copy_unavailable": "Der Link konnte nicht kopiert werden. Öffne die Referenz oder versuche es erneut.",
+  "books_catalogue_title": "Buchbibliothek",
+  "books_catalogue_intro": "Entdecke Bücher, Buchreihen und Ausgaben. Öffne einen Eintrag, um literarische Angaben und die Bibliografie zu lesen.",
+  "books_catalogue_return": "Katalog und persönliche Regale öffnen sich in einem neuen Tab. Kehre zum ursprünglichen Tab zurück, um an derselben Stelle weiterzumachen.",
+  "books_catalogue_new_tab": "Öffnet in einem neuen Tab",
+  "books_catalogue_shelf": "Mein Regal für diesen Typ",
+  "books_catalogue_kind": "Typ",
+  "books_catalogue_browse": "Katalog durchsuchen",
+  "books_catalogue_missing": "Dieser Typ ist derzeit nicht veröffentlicht.",
+  "books_catalogue_unavailable": "Dieser Typ ist derzeit nicht verfügbar.",
+  "books_catalogue_retry": "Katalogauswahl neu laden"
 }

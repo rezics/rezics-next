@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import type { LiteraryWorkIdentity } from './model';
+import { BookShelfLink } from '../../../books/catalogue/shelf-link';
 
 const linkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -11,6 +12,7 @@ export function LiteraryReader({
   editionHref,
   factsHref,
   sourcesHref,
+  shelfType,
   retired: sourceRetired = false,
   grainLabel,
   scopeText,
@@ -22,6 +24,7 @@ export function LiteraryReader({
   editionHref?: string | undefined;
   factsHref?: string | undefined;
   sourcesHref?: string | undefined;
+  shelfType?: string | undefined;
   retired?: boolean;
   grainLabel?: ReactNode;
   scopeText?: string;
@@ -138,6 +141,7 @@ export function LiteraryReader({
             )}
             <p className="max-w-prose text-sm text-muted-foreground">{m.literary_reader_return({}, options)}</p>
             <nav aria-label={m.literary_reader_title({}, options)} className="flex flex-wrap gap-x-5 gap-y-1">
+              {shelfType && <BookShelfLink locale={locale} type={shelfType} />}
               {editionHref ? (
                 <a className={linkClass} href={editionHref}>
                   {m.literary_reader_editions({}, options)}

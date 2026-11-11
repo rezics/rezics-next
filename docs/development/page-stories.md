@@ -1,5 +1,12 @@
 # Page story coverage map
 
+## Book Library visit
+
+`apps/web/src/stories/book-library-catalogue.stories.tsx` mounts the public `/books` entry and its installed destination
+compositions. `AnonymousBrowse`, `MemberShelfHandoff`, `Sparse` and `UnavailableRecovery` cover the named visit states.
+The public envelopes are illustrative; the member shelf uses the recorded Library transport. All eight locale,
+phone390/desktop1280 and light/dark globals apply. Execution, visual review and native acceptance are deferred.
+
 See [Storybook for web and UI](storybook.md) for review catalogue rules and the meaning of ledger statuses.
 
 Every route has page stories on recorded or fake API responses for every state a user can meet: populated, empty, long content, preparing or unavailable, error; for each viewer that applies: anonymous, member, owner or curator, suspended; on desktop and phone. Complex surfaces cover every control state. Every interface brief lists the stories it adds. Primitive component stories (shadcn wrappers) are not required.

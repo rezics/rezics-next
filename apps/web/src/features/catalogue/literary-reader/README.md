@@ -6,6 +6,12 @@ windows. A member remains its supplied Type and statement; no count, title or nu
 editions, integer positions or progress. The owning contract is [Subject pages](../../../../../docs/subject-pages.md#read-a-literary-work).
 
 The native descriptor's existing literary admission supplies Type ancestry, property labels and direction results.
+
+A current released literary reader offers the [Book Library shelf handoff](../../../books/catalogue/README.md#personal-library-handoff)
+for its actual Subject type. The separate-tab destination preserves the reader's current bibliography window and
+uses the native Library's sign-in, preferences and private action lifetimes. Retired or unreleased readings offer
+no shelf handoff; no work mapping replaces the selected Edition or Series identity.
+
 Every supplied membership and Edition window stays discoverable in native order. A selected node, released property
 and direction stay paired with its view, Realm and opaque cursor; changing streams starts that node without another
 stream's cursor. An unavailable or unsupported descriptor remains explicit. Canonical work mapping is a current
