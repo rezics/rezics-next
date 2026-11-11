@@ -156,10 +156,12 @@ export function parseWorkerCommandArguments(command: string, argv: string[]): Pa
           if (!value || !Number.isFinite(Date.parse(value))) throw new Error(`${flag} requires a valid time`);
           const normalized = new Date(Date.parse(value)).toISOString();
           if (flag === '--since') {
-            if (since !== undefined) throw new Error('usage: report [--flow] [--since <time>] [--until <time>] [--json]');
+            if (since !== undefined)
+              throw new Error('usage: report [--flow] [--since <time>] [--until <time>] [--json]');
             since = normalized;
           } else {
-            if (until !== undefined) throw new Error('usage: report [--flow] [--since <time>] [--until <time>] [--json]');
+            if (until !== undefined)
+              throw new Error('usage: report [--flow] [--since <time>] [--until <time>] [--json]');
             until = normalized;
           }
         }

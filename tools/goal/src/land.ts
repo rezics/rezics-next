@@ -437,9 +437,7 @@ export class SqliteLandingQueue implements LandingQueue {
     const body = JSON.stringify(outcome);
     this.db
       .transaction(() => {
-        const row = this.db
-          .query('SELECT task,attempt,outcome,operation_id FROM landing_queue WHERE id=?')
-          .get(id) as {
+        const row = this.db.query('SELECT task,attempt,outcome,operation_id FROM landing_queue WHERE id=?').get(id) as {
           task: string;
           attempt: number;
           outcome: string | null;
@@ -456,8 +454,7 @@ export class SqliteLandingQueue implements LandingQueue {
           .query('UPDATE landing_queue SET outcome=?,resolving=0 WHERE id=? AND outcome IS NULL')
           .run(body, id);
         if (update.changes !== 1) return false;
-        if (row.operation_id)
-          recordLandingOperationTerminal(this.db, row.operation_id, at, 'finished', body);
+        if (row.operation_id) recordLandingOperationTerminal(this.db, row.operation_id, at, 'finished', body);
         else
           recordFlow(this.db, {
             taskId: row.task,
@@ -532,7 +529,9 @@ export class SqliteLandingQueue implements LandingQueue {
           if (this.resolving.has(row.id)) continue;
           const identity = killedResolverIdentity(this.db, row.task, row.attempt);
           if (!identity || identityLive(identity)) continue;
-          const result = this.db.query('UPDATE landing_queue SET resolving = 0 WHERE id = ? AND resolving = 1').run(row.id);
+          const result = this.db
+            .query('UPDATE landing_queue SET resolving = 0 WHERE id = ? AND resolving = 1')
+            .run(row.id);
           if (result.changes !== 1) continue;
           released++;
           recordFlow(this.db, {
@@ -574,7 +573,10 @@ export class SqliteLandingQueue implements LandingQueue {
         )
           return false;
         const at = new Date().toISOString();
-        const detail = JSON.stringify({ commit: request.devResolution?.commit, attempts: request.devResolution?.attempts });
+        const detail = JSON.stringify({
+          commit: request.devResolution?.commit,
+          attempts: request.devResolution?.attempts,
+        });
         if (row.operation_id)
           recordLandingOperationTerminal(this.db, row.operation_id, at, 'resolver-requeued', detail, detail);
         else

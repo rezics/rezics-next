@@ -387,11 +387,9 @@ describe('sequential integration', () => {
       s.queue.finish(retry.id, outcome);
 
       const events = readFlow(s.db).filter((event) => event.taskId === request.taskId && event.operationId);
-      expect(events.filter((event) => event.operationId === original.operationId).map((event) => event.action)).toEqual([
-        'enqueued',
-        'started',
-        'resolver-requeued',
-      ]);
+      expect(events.filter((event) => event.operationId === original.operationId).map((event) => event.action)).toEqual(
+        ['enqueued', 'started', 'resolver-requeued'],
+      );
       expect(events.filter((event) => event.operationId === retry.operationId).map((event) => event.action)).toEqual([
         'enqueued',
         'started',
@@ -399,7 +397,12 @@ describe('sequential integration', () => {
       ]);
       expect(
         summarizeLandingOperations(readLandingOperations(s.db, '2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')),
-      ).toMatchObject({ terminalCount: 2, measuredCount: 2, unknownDurationCount: 0, outcomes: { 'resolver-requeued': 1, finished: 1 } });
+      ).toMatchObject({
+        terminalCount: 2,
+        measuredCount: 2,
+        unknownDurationCount: 0,
+        outcomes: { 'resolver-requeued': 1, finished: 1 },
+      });
     } finally {
       s.close();
     }

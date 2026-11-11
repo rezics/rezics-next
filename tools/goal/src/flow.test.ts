@@ -268,14 +268,22 @@ test('bounded flow reports use half-open UTC windows and pair terminal operation
   const end = '2026-10-31T01:00:00.000Z';
   let queueId = 0;
   const save = (operationId: string, startedAt: string | null, terminalAt: string) =>
-    db.query(
-      `INSERT INTO landing_operations(operation_id,queue_id,task_id,attempt,enqueued_at,started_at,terminal_at,terminal_action,terminal_outcome)
+    db
+      .query(
+        `INSERT INTO landing_operations(operation_id,queue_id,task_id,attempt,enqueued_at,started_at,terminal_at,terminal_action,terminal_outcome)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'finished', '{}')`,
-    ).run(operationId, ++queueId, operationId, 1, start, startedAt, terminalAt);
+      )
+      .run(operationId, ++queueId, operationId, 1, start, startedAt, terminalAt);
   save('cross-midnight', '2026-10-30T23:40:00.000Z', '2026-10-31T00:10:00.000Z');
   save('missing-start', null, '2026-10-31T00:30:00.000Z');
   save('at-excluded-end', '2026-10-31T00:59:00.000Z', end);
-  recordFlow(db, { taskId: 'legacy', attempt: 1, stage: 'landing', action: 'finished', at: '2026-10-31T00:40:00.000Z' });
+  recordFlow(db, {
+    taskId: 'legacy',
+    attempt: 1,
+    stage: 'landing',
+    action: 'finished',
+    at: '2026-10-31T00:40:00.000Z',
+  });
   recordFlow(db, { taskId: 'window-task', attempt: 1, stage: 'landing', action: 'enqueued', at: start });
   recordFlow(db, { taskId: 'future-task', attempt: 1, stage: 'integration', action: 'integrated', at: end });
 

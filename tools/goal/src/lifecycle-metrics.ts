@@ -831,9 +831,7 @@ function lifecycleMetricsWithWidth(
     width,
     trailingHour: { startsAt: start.toISOString(), endsAt: now.toISOString(), durationMs: HOUR_MS },
     attemptsPerTaskPerTrailingHour: launchCounts(db, start.toISOString(), now.toISOString()),
-    landingOperations: summarizeLandingOperations(
-      readLandingOperations(db, start.toISOString(), now.toISOString()),
-    ),
+    landingOperations: summarizeLandingOperations(readLandingOperations(db, start.toISOString(), now.toISOString())),
     waiting: {
       count: entries.length,
       oldestAgeMs: unknownAgeCount ? null : Math.max(0, ...knownAges),

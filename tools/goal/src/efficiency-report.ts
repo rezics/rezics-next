@@ -9,12 +9,7 @@ import {
   type HourlyObservationData,
   type ObservationAttribution,
 } from './efficiency-report-delivery.ts';
-import {
-  ensureFlow,
-  readLandingOperations,
-  summarizeLandingOperations,
-  type LandingOperationSummary,
-} from './flow.ts';
+import { ensureFlow, readLandingOperations, summarizeLandingOperations, type LandingOperationSummary } from './flow.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import { formatLifecycleMetrics } from './report.ts';
 import { listOpenToolIncidents } from './tool-incidents.ts';
@@ -175,7 +170,13 @@ export function measureProductLineObservation(
   if (!/^[a-f\d]{40}(?:[a-f\d]{24})?$/i.test(revision)) return unknownMeasurement();
   const startMs = Date.parse(bucket.start);
   const endMs = Date.parse(bucket.end);
-  const lines = productLineCount(repository, revision, bucket.start, undefined, (time) => time >= startMs && time < endMs);
+  const lines = productLineCount(
+    repository,
+    revision,
+    bucket.start,
+    undefined,
+    (time) => time >= startMs && time < endMs,
+  );
   if (lines === null) return unknownMeasurement(revision);
   const validPreviousRevision =
     previousSourceRevision && /^[a-f\d]{40}(?:[a-f\d]{24})?$/i.test(previousSourceRevision)
@@ -838,7 +839,9 @@ export function captureHourlyEfficiencyObservation(db: Database, options: Report
       const observation = observationData(db, bucket, measurement, options.privateDuty, capturedAt);
       if (
         observation.attribution === 'measured' &&
-        (!Number.isSafeInteger(observation.productLines) || observation.productLines! < 0 || !observation.sourceRevision)
+        (!Number.isSafeInteger(observation.productLines) ||
+          observation.productLines! < 0 ||
+          !observation.sourceRevision)
       )
         throw new Error('measured hourly observation requires product lines and a source revision');
       return observation;

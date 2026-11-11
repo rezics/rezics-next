@@ -704,17 +704,13 @@ test('flow report JSON and text include lifecycle measures', async () => {
     recordFlow(h.store.db, { taskId: 'future', attempt: 1, stage: 'integration', action: 'integrated', at: end });
     recordFlow(h.store.db, { taskId: 'future', attempt: 1, stage: 'chain', action: 'offered', at: end });
     const boundedJson: string[] = [];
-    await runWorkerCommand(
-      'report',
-      ['--flow', '--since', start, '--until', end, '--json'],
-      {
-        settings: h.settings,
-        store: h.store,
-        tasks: h.tasks,
-        print: (value) => boundedJson.push(value),
-        env: {},
-      },
-    );
+    await runWorkerCommand('report', ['--flow', '--since', start, '--until', end, '--json'], {
+      settings: h.settings,
+      store: h.store,
+      tasks: h.tasks,
+      print: (value) => boundedJson.push(value),
+      env: {},
+    });
     const bounded = JSON.parse(boundedJson[0]!);
     expect(bounded.window).toMatchObject({ since: start, until: end, startInclusive: true, endExclusive: true });
     expect(bounded.chain.offered).toBe(0);
