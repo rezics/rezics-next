@@ -50,15 +50,9 @@ test('the dev lane batches eligible dev entries without worker-side affected res
     }
     const controlPlaneLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === controlPlane.id)!.logPath, 'utf8');
     const stabilizeLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === stabilize.id)!.logPath, 'utf8');
-    const affectedLog = readFileSync(h.outcomes.find(({ taskId }) => taskId === affected.id)!.logPath, 'utf8');
-    const devLogs = h.outcomes
-      .filter(({ taskId }) => [first.id, second.id].includes(taskId))
-      .map(({ logPath }) => readFileSync(logPath, 'utf8'));
     expect(controlPlaneLog).toContain('Control-plane checks on');
     expect(controlPlaneLog).not.toContain('Batch integration check on');
     expect(stabilizeLog).not.toContain('Batch integration check on');
-    expect(affectedLog).toContain('Batch integration check on');
-    expect(devLogs.some((log) => log.includes('Batch integration check on'))).toBe(true);
   } finally {
     h.dispose();
   }
@@ -101,45 +95,35 @@ test('the dev batch fills in eligible queue order when prioritized entries lead 
       true,
     ]);
     expect(h.outcomes.find(({ taskId }) => taskId === affected.id)?.passed).toBe(true);
-    const logs = dev.map(({ id }) => readFileSync(h.outcomes.find(({ taskId }) => taskId === id)!.logPath, 'utf8'));
-    expect(logs.slice(0, 3).every((log) => log.includes('Batch integration check on'))).toBe(true);
-    expect(logs[3]).toContain('Batch integration check on');
-    for (const entry of [controlPlane, stabilize]) {
-      const log = readFileSync(h.outcomes.find(({ taskId }) => taskId === entry.id)!.logPath, 'utf8');
-      expect(log).toContain(entry.id === controlPlane.id ? 'Control-plane checks on' : 'Integration check on');
-      expect(log).not.toContain('Batch integration check on');
-    }
+    expect(h.outcomes.filter(({ taskId }) => dev.some(({ id }) => id === taskId)).map(({ passed }) => passed)).toEqual([
+      true,
+      true,
+      true,
+      true,
+    ]);
   } finally {
     h.dispose();
   }
 }, 60_000);
 
-test('up to the batch size of queued landings rebase in order, check once, and fast-forward with one outcome each', async () => {
+test('up to the batch size of queued landings rebase in order and fast-forward with one outcome each', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
-    const changed = join(h.settings.stateDirectory, 'batch-typecheck-files.txt');
-    const runs = join(h.settings.stateDirectory, 'batch-typecheck-runs.txt');
-    setChecks(h, [
-      {
-        paths: ['**'],
-        command: [
-          'sh',
-          '-c',
-          `printf '%s\\n' "$TYPECHECK_CHANGED" >> '${changed}'; printf 'run\\n' >> '${runs}' # scripts/typecheck.ts`,
-        ],
-      },
-    ]);
+    h.settings.integration.devPrelandingTypecheck = true;
+    let typechecks = 0;
     const first = h.dispatch('first.ts');
     const second = h.dispatch('second.ts');
     await h.start(first);
     await h.start(second);
 
-    await h.train();
+    await h.train(async () => {
+      typechecks++;
+      return { passed: true, output: '', timedOut: false };
+    });
 
     expect(h.settings.integration.batchSize).toBe(4);
-    expect(readFileSync(runs, 'utf8').trim().split('\n')).toHaveLength(1);
-    expect(readFileSync(changed, 'utf8').split('\n')).toEqual(expect.arrayContaining(['first.ts', 'second.ts']));
+    expect(typechecks).toBe(1);
     expect(h.outcomes.map(({ taskId, passed }) => [taskId, passed])).toEqual([
       [first.id, true],
       [second.id, true],
@@ -156,26 +140,19 @@ test('a failing batch falls back to single landings and refuses only its failing
   const h = integrationHarness();
   try {
     h.ensureDev();
-    const runs = join(h.settings.stateDirectory, 'batch-failure-runs.txt');
-    setChecks(h, [
-      {
-        paths: ['**'],
-        command: [
-          'sh',
-          '-c',
-          `printf 'run\\n' >> '${runs}'; test ! -e broken.ts || { echo 'AssertionError: broken member'; exit 1; }`,
-        ],
-      },
-    ]);
+    h.settings.integration.devPrelandingTypecheck = true;
     const passing = h.dispatch('passing.ts');
     const failing = h.dispatch('broken.ts');
     await h.start(passing);
     await h.start(failing);
     const base = h.head('dev');
 
-    await h.train();
+    await h.train(async (_command, cwd) =>
+      existsSync(join(cwd, 'broken.ts'))
+        ? { passed: false, output: 'broken.ts:1:1: error TS2304: AssertionError: broken member', timedOut: false }
+        : { passed: true, output: '', timedOut: false },
+    );
 
-    expect(readFileSync(runs, 'utf8').trim().split('\n').length).toBeGreaterThan(1);
     expect(h.outcomes.map(({ taskId, passed }) => [taskId, passed])).toEqual([
       [passing.id, true],
       [failing.id, false],
@@ -193,8 +170,6 @@ test('a member that conflicts with an earlier batch member is deferred past it, 
   const h = integrationHarness();
   try {
     h.ensureDev();
-    const runs = join(h.settings.stateDirectory, 'batch-rebase-runs.txt');
-    setChecks(h, [{ paths: ['**'], command: ['sh', '-c', `printf 'run\\n' >> '${runs}'`] }]);
     const first = h.dispatch('shared.txt');
     const conflict = h.dispatch('shared.txt');
     writeFileSync(
@@ -214,7 +189,6 @@ test('a member that conflicts with an earlier batch member is deferred past it, 
       [later.id, true, undefined],
       [conflict.id, false, 'rebase'],
     ]);
-    expect(readFileSync(runs, 'utf8').trim().split('\n')).toHaveLength(1);
     expect(git(h.root, 'show', 'dev:shared.txt')).toBe('shared.txt');
     expect(git(h.root, 'show', 'dev:later.txt')).toBe('later.txt');
     // The rebase outcome starts the worker's conflict-resolution attempt, which lands again.
@@ -254,34 +228,16 @@ test('a landing that conflicts with dev itself, first in its batch, gets a rebas
   }
 });
 
-test('a stale attempt discovered during the batch check is skipped and never lands', async () => {
+test('a stale attempt discovered during the batch typecheck is skipped and never lands', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
-    const runs = join(h.settings.stateDirectory, 'batch-stale-runs.txt');
+    h.settings.integration.devPrelandingTypecheck = true;
     const stale = h.dispatch('stale.ts');
     const passing = h.dispatch('passing.ts');
     await h.start(stale);
     await h.start(passing);
-    const source = `import { Database } from 'bun:sqlite';
-import { appendFileSync } from 'node:fs';
-const db = new Database(${JSON.stringify(join(h.settings.stateDirectory, 'goal.sqlite'))});
-const taskId = ${JSON.stringify(stale.id)};
-const row = db.query('SELECT body FROM worker_tasks WHERE id=?').get(taskId);
-const task = JSON.parse(row.body);
-if (task.currentAttempt === 1) {
-  task.currentAttempt = 2;
-  db.query('UPDATE worker_tasks SET current_attempt=?, body=? WHERE id=?').run(task.currentAttempt, JSON.stringify(task), taskId);
-}
-db.close();
-appendFileSync(${JSON.stringify(runs)}, 'run\\n');
-`;
-    setChecks(h, [
-      {
-        paths: ['**'],
-        command: ['bun', '-e', source],
-      },
-    ]);
+    let typechecks = 0;
     const base = h.head('dev');
 
     await new MergeTrain({
@@ -289,9 +245,21 @@ appendFileSync(${JSON.stringify(runs)}, 'run\\n');
       queue: h.queue,
       fence: h.store,
       sink: { onGateOutcome: (outcome) => h.outcomes.push(outcome) },
+      runGate: async () => {
+        typechecks++;
+        if (typechecks === 1) {
+          const row = h.store.db.query('SELECT body FROM worker_tasks WHERE id=?').get(stale.id) as { body: string };
+          const task = JSON.parse(row.body) as { currentAttempt: number };
+          task.currentAttempt = 2;
+          h.store.db
+            .query('UPDATE worker_tasks SET current_attempt=?, body=? WHERE id=?')
+            .run(task.currentAttempt, JSON.stringify(task), stale.id);
+        }
+        return { passed: true, output: '', timedOut: false };
+      },
     }).run();
 
-    expect(readFileSync(runs, 'utf8').trim().split('\n').length).toBeGreaterThanOrEqual(1);
+    expect(typechecks).toBe(2);
     expect(h.outcomes.map(({ taskId, passed }) => [taskId, passed])).toEqual([[passing.id, true]]);
     expect(h.head('dev')).not.toBe(base);
     expect(git(h.root, 'show', 'dev:passing.ts')).toBe('passing.ts');
@@ -367,20 +335,15 @@ test('a resolver handoff runs after the dev lane lease is released', async () =>
   }
 });
 
-test('batch checks compare against dev and accept errors already present there', async () => {
+test('legacy dev integration checks do not gate landing outcomes', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
     h.advanceDev('existing-error.ts');
-    const runs = join(h.settings.stateDirectory, 'batch-baseline-runs.txt');
     setChecks(h, [
       {
         paths: ['**'],
-        command: [
-          'sh',
-          '-c',
-          `printf 'run\\n' >> '${runs}'; test ! -e existing-error.ts || { echo 'AssertionError: existing dev error'; exit 1; }`,
-        ],
+        command: ['sh', '-c', "echo 'AssertionError: legacy dev check ran'; exit 1"],
       },
     ]);
     const first = h.dispatch('first.ts');
@@ -390,32 +353,32 @@ test('batch checks compare against dev and accept errors already present there',
 
     await h.train();
 
-    expect(readFileSync(runs, 'utf8').trim().split('\n')).toHaveLength(2);
     expect(h.outcomes.map((outcome) => outcome.passed)).toEqual([true, true]);
-    expect(h.outcomes[0]?.logPath && readFileSync(h.outcomes[0].logPath, 'utf8')).toContain(
-      'dev already fails the integration check',
-    );
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).not.toContain('legacy dev check ran');
     expect(h.head('dev')).toBe(h.outcomes[1]!.mergedCommit!);
   } finally {
     h.dispose();
   }
 });
 
-test('batch size one keeps one-at-a-time integration checks', async () => {
+test('batch size one keeps prelanding checks one at a time', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
     h.settings.integration.batchSize = 1;
-    const runs = join(h.settings.stateDirectory, 'batch-size-one-runs.txt');
-    setChecks(h, [{ paths: ['**'], command: ['sh', '-c', `printf 'run\\n' >> '${runs}'`] }]);
+    h.settings.integration.devPrelandingTypecheck = true;
+    let typechecks = 0;
     const first = h.dispatch('first.ts');
     const second = h.dispatch('second.ts');
     await h.start(first);
     await h.start(second);
 
-    await h.train();
+    await h.train(async () => {
+      typechecks++;
+      return { passed: true, output: '', timedOut: false };
+    });
 
-    expect(readFileSync(runs, 'utf8').trim().split('\n')).toHaveLength(2);
+    expect(typechecks).toBe(2);
     expect(h.outcomes.map((outcome) => outcome.passed)).toEqual([true, true]);
   } finally {
     h.dispose();

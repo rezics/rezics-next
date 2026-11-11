@@ -581,14 +581,15 @@ error event per changed version to the supermanager inbox.
 when invoked from a linked worktree. Repository paths resolve against that main checkout. Pool configuration paths,
 usage files and executable paths containing a slash resolve against the local file's directory.
 `integrationBranch` defaults to `dev`; `integration.batchSize` defaults to `4` and limits how many queued dev landings
-share one integration check. Set it to `1` to keep one-at-a-time integration. A passing batch checks the combined tree
-once and fast-forwards dev through its members in queue order, recording each member's own integrated commit. If the
-combined check fails, the train retries the members individually so a passing member can still land. A member that
-cannot rebase onto earlier batch members stays queued for a later round while the rest continue.
-Each member's acceptance command runs concurrently against the final batch candidate in its own detached worktree.
-`integration.batchAcceptanceConcurrency` defaults to `8` and caps these acceptance commands. If any command fails,
-times out, or changes its worktree, the train retries the members individually so the failure is attributed to its task.
+share one candidate for the prelanding typecheck and optional boot check. Set it to `1` to keep one-at-a-time landing
+checks. A passing batch fast-forwards dev through its members in queue order, recording each member's own integrated
+commit. A failed candidate is attributed to its responsible member and unrelated members remain eligible for a later
+round. A member that cannot rebase onto earlier batch members stays queued for a later round while the rest continue.
+Legacy `integrationChecks` are selected for the independent verifier after dev integration; they do not run in the
+landing train. Main promotion retains its task acceptance gates.
 `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
+Decision: dev batch checks cover the prelanding typecheck and optional boot boundary; legacy acceptance remains with
+the independent postintegration verifier and does not gate landing.
 
 Decision: settings resolution and decoding live in `settings.ts`; `config.ts` remains the supported public settings entry and owns runtime composition.
 

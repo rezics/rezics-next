@@ -13,16 +13,11 @@ export type StoppedActionHint = 'actionable' | 'preserved' | 'inspect-proof';
 export function stoppedActionHint(
   taskId: 'c.task_id' | 't.id',
   attempt: 'c.current_attempt' | 't.current_attempt',
+  hasWorkerEvents = true,
 ): string {
-  return `(SELECT CASE
-    WHEN json_extract(a.body, '$.terminationIntent.operation')='stop'
-      AND coalesce(json_extract(a.body, '$.terminationIntent.requestedAt'), '')!='' THEN 'preserved'
-    WHEN json_extract(a.body, '$.terminationIntent.operation')='cancel' AND (
-      coalesce(json_extract(a.body, '$.terminationIntent.state'), '')!='complete' OR
-      coalesce(json_extract(a.body, '$.terminationIntent.settledAt'), '')=''
-    ) THEN 'preserved'
-    WHEN coalesce(json_extract(s.body, '$.brief.kind'), '')!='verification' THEN 'actionable'
-    WHEN EXISTS (
+  // Without the event source, do not infer that a verification stop has preserved proof.
+  const verificationDecision = hasWorkerEvents
+    ? `WHEN EXISTS (
       SELECT 1 FROM worker_records r WHERE r.task_id=s.id AND r.attempt=s.current_attempt
         AND json_extract(r.body, '$.proof.status')='terminal'
     ) AND EXISTS (
@@ -32,7 +27,17 @@ export function stoppedActionHint(
     WHEN EXISTS (
       SELECT 1 FROM worker_events e WHERE e.task_id=s.id AND e.attempt=s.current_attempt
         AND e.kind='owner-contract-decision-accepted'
-    ) THEN 'inspect-proof'
+    ) THEN 'inspect-proof'`
+    : `WHEN coalesce(json_extract(s.body, '$.brief.kind'), '')='verification' THEN 'actionable'`;
+  return `(SELECT CASE
+    WHEN json_extract(a.body, '$.terminationIntent.operation')='stop'
+      AND coalesce(json_extract(a.body, '$.terminationIntent.requestedAt'), '')!='' THEN 'preserved'
+    WHEN json_extract(a.body, '$.terminationIntent.operation')='cancel' AND (
+      coalesce(json_extract(a.body, '$.terminationIntent.state'), '')!='complete' OR
+      coalesce(json_extract(a.body, '$.terminationIntent.settledAt'), '')=''
+    ) THEN 'preserved'
+    WHEN coalesce(json_extract(s.body, '$.brief.kind'), '')!='verification' THEN 'actionable'
+    ${verificationDecision}
     ELSE 'actionable' END
     FROM worker_tasks s LEFT JOIN worker_attempts a ON a.task_id=s.id AND a.attempt=s.current_attempt
     WHERE s.id=${taskId} AND s.current_attempt=${attempt})`;

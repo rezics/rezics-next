@@ -128,7 +128,13 @@ function tableExists(db: Database, name: string): boolean {
   return Boolean(db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
 }
 
-function pageQuery(db: Database, afterSequence: number, limit: number, hasRetryIntents: boolean): WidthRow[] {
+function pageQuery(
+  db: Database,
+  afterSequence: number,
+  limit: number,
+  hasRetryIntents: boolean,
+  hasWorkerEvents: boolean,
+): WidthRow[] {
   const pendingStart = hasRetryIntents
     ? `EXISTS (
         SELECT 1 FROM worker_retry_intents AS i
@@ -139,7 +145,11 @@ function pageQuery(db: Database, afterSequence: number, limit: number, hasRetryI
   return db
     .query(
       `SELECT c.sequence, c.task_id, c.current_attempt,
-        CASE WHEN c.task_state='stopped' THEN ${stoppedActionHint('c.task_id', 'c.current_attempt')} END AS stopped_action,
+        CASE WHEN c.task_state='stopped' THEN ${stoppedActionHint(
+          'c.task_id',
+          'c.current_attempt',
+          hasWorkerEvents,
+        )} END AS stopped_action,
         c.task_state,
         c.goal,
         c.manager,
@@ -243,6 +253,7 @@ function readSnapshotSync(
   at: Date | number,
   options: SyncWidthSnapshotOptions,
   hasRetryIntents: boolean,
+  hasWorkerEvents: boolean,
 ): WidthSnapshot {
   const system = emptyCounts();
   const goals = new Map<string, MutableGoal>();
@@ -252,7 +263,7 @@ function readSnapshotSync(
   // The cursor precedes every persisted sequence; it is not a page-size policy.
   let cursor = -1;
   for (;;) {
-    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents);
+    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents, hasWorkerEvents);
     for (const row of rows) addRow(row, system, goals, processIsLive, db, policy);
     if (rows.length < pageSize) break;
     cursor = rows[rows.length - 1]!.sequence;
@@ -266,6 +277,7 @@ async function readSnapshotAsync(
   at: Date | number,
   options: AsyncWidthSnapshotOptions,
   hasRetryIntents: boolean,
+  hasWorkerEvents: boolean,
 ): Promise<WidthSnapshot> {
   const system = emptyCounts();
   const goals = new Map<string, MutableGoal>();
@@ -275,7 +287,7 @@ async function readSnapshotAsync(
   // The cursor precedes every persisted sequence; it is not a page-size policy.
   let cursor = -1;
   for (;;) {
-    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents);
+    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents, hasWorkerEvents);
     for (const row of rows) addRow(row, system, goals, processIsLive, db, policy);
     if (rows.length < pageSize) break;
     cursor = rows[rows.length - 1]!.sequence;
@@ -298,9 +310,10 @@ export function readWidthSnapshot(
   options: WidthSnapshotOptions = {},
 ): WidthSnapshot | Promise<WidthSnapshot> {
   const hasRetryIntents = tableExists(db, 'worker_retry_intents');
+  const hasWorkerEvents = tableExists(db, 'worker_events');
   return options.yieldBetweenPages
-    ? readSnapshotAsync(db, at, options as AsyncWidthSnapshotOptions, hasRetryIntents)
-    : readSnapshotSync(db, at, options as SyncWidthSnapshotOptions, hasRetryIntents);
+    ? readSnapshotAsync(db, at, options as AsyncWidthSnapshotOptions, hasRetryIntents, hasWorkerEvents)
+    : readSnapshotSync(db, at, options as SyncWidthSnapshotOptions, hasRetryIntents, hasWorkerEvents);
 }
 
 function noLongerActiveManager(db: Database, managerId: string): boolean {
