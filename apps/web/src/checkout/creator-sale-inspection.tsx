@@ -1,3 +1,5 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
@@ -205,30 +207,43 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent, prepareD
             <span className="font-mono">{sale.targetSubjectId}</span>
           </Fact>
         </dl>
-        <div className="min-w-0 space-y-2">
-          <label htmlFor="creator-sale-reference-kind" className="block text-sm font-medium">
+        <Field className="min-w-0 space-y-2">
+          <FieldLabel htmlFor="creator-sale-reference-kind" className="block text-sm font-medium">
             {m.creator_review_reference_kind()}
-          </label>
-          <select
-            id="creator-sale-reference-kind"
+          </FieldLabel>
+          <Select
+            items={[
+              { value: 'sale', label: m.creator_sales_reference() },
+              { value: 'offer', label: m.creator_sale_offer_reference() },
+              { value: 'work', label: m.creator_sale_work_reference() },
+              { value: 'terms', label: m.creator_sale_terms() },
+            ]}
             value={referenceKind}
             disabled={copy === 'pending'}
-            onChange={(event) => {
+            onValueChange={(value) => {
               if (!isCurrent()) return;
-              const value = event.currentTarget.value;
               if (value !== 'sale' && value !== 'offer' && value !== 'work' && value !== 'terms') return;
               live.current.attempt++;
               setReferenceKind(value);
               setCopy('idle');
             }}
-            className="min-h-11 w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm"
           >
-            <option value="sale">{m.creator_sales_reference()}</option>
-            <option value="offer">{m.creator_sale_offer_reference()}</option>
-            <option value="work">{m.creator_sale_work_reference()}</option>
-            <option value="terms">{m.creator_sale_terms()}</option>
-          </select>
-        </div>
+            <SelectTrigger
+              id="creator-sale-reference-kind"
+              className="min-h-11 w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="sale">{m.creator_sales_reference()}</SelectItem>
+                <SelectItem value="offer">{m.creator_sale_offer_reference()}</SelectItem>
+                <SelectItem value="work">{m.creator_sale_work_reference()}</SelectItem>
+                <SelectItem value="terms">{m.creator_sale_terms()}</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
         <details className="min-w-0 rounded-lg border p-3">
           <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium">
             {m.creator_review_reference_preview()}

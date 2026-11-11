@@ -39,8 +39,10 @@ export const MountedDraft = { render: () => <Shell /> };
 export const PendingSelection = {
   render: () => <Shell />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const select = canvasElement.querySelector('select')!;
-    select.value = select.value === 'ja' ? 'de' : 'ja';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
+    const trigger = canvasElement.querySelector<HTMLButtonElement>('[role=combobox]')!;
+    const value = trigger.lang === 'ja' ? 'de' : 'ja';
+    trigger.click();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    document.querySelector<HTMLElement>(`[role=option][lang="${value}"]`)!.click();
   },
 };

@@ -1,4 +1,5 @@
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Languages } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { AuthButton } from './button';
@@ -11,7 +12,7 @@ export function LocaleChoice() {
   const locale = useInterfaceLocale();
   const [draft, setDraft] = useState<Locale | undefined>();
   const [feedback, setFeedback] = useState<'saved' | 'temporary' | 'unsupported'>();
-  const select = useRef<HTMLSelectElement>(null);
+  const select = useRef<HTMLButtonElement>(null);
   const id = useId();
   const pending = draft !== undefined && draft !== locale;
 
@@ -36,19 +37,15 @@ export function LocaleChoice() {
   }
 
   return (
-    <div className="auth-locale-choice">
-      <label htmlFor={id} className="auth-locale-label">
+    <Field className="auth-locale-choice">
+      <FieldLabel htmlFor={id} className="auth-locale-label">
         <Languages aria-hidden="true" size={18} />
         <span>{m.auth_locale_label()}</span>
-      </label>
-      <NativeSelect
-        id={id}
-        ref={select}
+      </FieldLabel>
+      <Select
+        items={locales.map((value) => ({ value, label: localeNames[value] }))}
         value={draft ?? locale}
-        lang={draft ?? locale}
-        aria-describedby={`${id}-status`}
-        onChange={(event) => {
-          const value = event.target.value;
+        onValueChange={(value) => {
           if (!isLocale(value)) {
             setFeedback('unsupported');
             return;
@@ -57,12 +54,25 @@ export function LocaleChoice() {
           setFeedback(undefined);
         }}
       >
-        {locales.map((value) => (
-          <NativeSelectOption key={value} value={value} lang={value}>
-            {localeNames[value]}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
+        <SelectTrigger
+          id={id}
+          ref={select}
+          lang={draft ?? locale}
+          aria-describedby={`${id}-status`}
+          className="w-full min-w-0"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {locales.map((value) => (
+              <SelectItem key={value} value={value} lang={value}>
+                {localeNames[value]}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
       {pending ? (
         <div className="auth-locale-actions">
           <AuthButton
@@ -90,6 +100,6 @@ export function LocaleChoice() {
                 ? m.auth_locale_unsupported()
                 : null}
       </p>
-    </div>
+    </Field>
   );
 }

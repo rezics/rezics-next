@@ -198,3 +198,8 @@ export const automatedOperatorPage = (accountId: string, operator: object) =>
     },
     action: 'confirm',
   });
+
+export async function chooseLocale(host: HTMLElement, value: string) {
+  await flush(() => host.querySelector<HTMLButtonElement>('.auth-locale-choice [role=combobox]')!.click());
+  await flush(() => document.querySelector<HTMLElement>(`[role=option][lang="${value}"]`)!.click());
+}

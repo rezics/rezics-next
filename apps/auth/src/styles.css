@@ -60,12 +60,17 @@ body {
 }
 
 .auth-locale-choice {
+  flex-direction: row;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem;
   min-width: 0;
   max-width: 100%;
+}
+
+.auth-locale-choice > * {
+  width: auto;
 }
 
 .auth-locale-label,
@@ -76,10 +81,9 @@ body {
   font-size: 0.875rem;
 }
 
-.auth-locale-choice [data-slot='native-select'] {
+.auth-locale-choice [data-slot='select-trigger'] {
   min-height: 2.75rem;
   max-width: 13rem;
-  border-color: var(--border);
 }
 
 .auth-locale-status {

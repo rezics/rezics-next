@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
 import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
-import { creationFixture, button, dom, fill, flush, open, send } from './creation-page-fixture';
+import { creationFixture, button, dom, fill, flush, open, send, chooseLocale } from './creation-page-fixture';
 import { AuthShell } from '../src/frame';
 import { initializeDocumentLocale, observeLocaleComponent } from '../src/locale-observation';
 import { Route } from '../src/routes/signup';
@@ -84,11 +84,7 @@ async function setup() {
   const input = (name: string) => p.host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
   const choose = (label: string) => flush(() => button(document.body, label)!.click());
   const locale = async (value: string) => {
-    await flush(() => {
-      const control = p.host.querySelector('select')!;
-      control.value = value;
-      control.dispatchEvent(new dom.Event('change', { bubbles: true }) as unknown as Event);
-    });
+    await chooseLocale(p.host, value);
     await flush(() => p.host.querySelector<HTMLButtonElement>('.auth-locale-actions button')!.click());
   };
   const unload = () => {

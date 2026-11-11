@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { AccessDeparture, useAccessDraft } from './departure';
 import { PendingAccessIntent } from './pending-intent';
 import { AccessDraftStore, accessAuthority, grantReference } from './draft';
@@ -11,7 +12,6 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -333,15 +333,26 @@ function GrantForm({
             <>
               <Field>
                 <FieldLabel htmlFor="access-recipient">{m.access_recipient()}</FieldLabel>
-                <NativeSelect
-                  id="access-recipient"
+                <Select
+                  items={[
+                    { value: 'account', label: m.access_account() },
+                    { value: 'organization', label: m.access_organization_group() },
+                    { value: 'active_accounts', label: m.access_active_accounts() },
+                  ]}
                   value={recipient}
-                  onChange={(event) => changeRecipient(event.target.value)}
+                  onValueChange={(value) => changeRecipient(value!)}
                 >
-                  <NativeSelectOption value="account">{m.access_account()}</NativeSelectOption>
-                  <NativeSelectOption value="organization">{m.access_organization_group()}</NativeSelectOption>
-                  <NativeSelectOption value="active_accounts">{m.access_active_accounts()}</NativeSelectOption>
-                </NativeSelect>
+                  <SelectTrigger id="access-recipient" className="w-full min-w-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="account">{m.access_account()}</SelectItem>
+                      <SelectItem value="organization">{m.access_organization_group()}</SelectItem>
+                      <SelectItem value="active_accounts">{m.access_active_accounts()}</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </Field>
               {recipient !== 'active_accounts' ? (
                 <>
@@ -372,14 +383,24 @@ function GrantForm({
                   {recipient === 'organization' ? (
                     <Field>
                       <FieldLabel htmlFor="access-group-role">{m.access_group_membership()}</FieldLabel>
-                      <NativeSelect
-                        id="access-group-role"
+                      <Select
+                        items={[
+                          { value: 'member', label: m.access_org_members() },
+                          { value: 'owner', label: m.access_org_owners() },
+                        ]}
                         value={groupRole}
-                        onChange={(event) => setGroupRole(event.target.value as 'owner' | 'member')}
+                        onValueChange={(value) => setGroupRole(value! as 'owner' | 'member')}
                       >
-                        <NativeSelectOption value="member">{m.access_org_members()}</NativeSelectOption>
-                        <NativeSelectOption value="owner">{m.access_org_owners()}</NativeSelectOption>
-                      </NativeSelect>
+                        <SelectTrigger id="access-group-role" className="w-full min-w-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="member">{m.access_org_members()}</SelectItem>
+                            <SelectItem value="owner">{m.access_org_owners()}</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
                     </Field>
                   ) : null}
                 </>
@@ -391,18 +412,28 @@ function GrantForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="access-kind">{m.access_grant_kind()}</FieldLabel>
-              <NativeSelect
-                id="access-kind"
+              <Select
+                items={[
+                  { value: 'role', label: m.access_named_role() },
+                  { value: 'direct', label: m.access_direct_action() },
+                ]}
                 value={kind}
                 disabled={grant !== null}
-                onChange={(event) => {
-                  setKind(event.target.value as 'role' | 'direct');
+                onValueChange={(value) => {
+                  setKind(value! as 'role' | 'direct');
                   setPermissionFilter('');
                 }}
               >
-                <NativeSelectOption value="role">{m.access_named_role()}</NativeSelectOption>
-                <NativeSelectOption value="direct">{m.access_direct_action()}</NativeSelectOption>
-              </NativeSelect>
+                <SelectTrigger id="access-kind" className="w-full min-w-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="role">{m.access_named_role()}</SelectItem>
+                    <SelectItem value="direct">{m.access_direct_action()}</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
             <Field>
               <FieldLabel htmlFor="access-role">{kind === 'role' ? m.access_role() : m.access_action()}</FieldLabel>
@@ -415,33 +446,54 @@ function GrantForm({
                 placeholder={m.access_search_permissions()}
               />
               <FieldDescription>{m.access_filter_help()}</FieldDescription>
-              <NativeSelect
-                id="access-role"
+              <Select
+                items={[
+                  { value: '', label: m.access_choose() },
+                  ...(kind === 'role'
+                    ? page.roles.map((item) => {
+                        const presented = rolePresentation(item.id);
+                        return {
+                          value: item.id,
+                          label: `${presented.label} · ${presented.identifier}${item.delegable ? '' : ` — ${m.access_selection_unavailable()}`}`,
+                        };
+                      })
+                    : page.actions.map((value) => {
+                        const presented = permissionPresentation(value);
+                        return { value, label: `${presented.label} · ${presented.identifier}` };
+                      })),
+                ]}
                 value={kind === 'role' ? role : action}
-                onChange={(event) => (kind === 'role' ? setRole(event.target.value) : setAction(event.target.value))}
+                onValueChange={(value) => (kind === 'role' ? setRole(value!) : setAction(value!))}
                 required
               >
-                <NativeSelectOption value="" disabled>
-                  {m.access_choose()}
-                </NativeSelectOption>
-                {kind === 'role'
-                  ? roles.map((item) => {
-                      const presented = rolePresentation(item.id);
-                      return (
-                        <NativeSelectOption key={item.id} value={item.id} disabled={!item.delegable}>
-                          {`${presented.label} · ${presented.identifier}${item.delegable ? '' : ` — ${m.access_selection_unavailable()}`}`}
-                        </NativeSelectOption>
-                      );
-                    })
-                  : actions.map((item) => {
-                      const presented = permissionPresentation(item);
-                      return (
-                        <NativeSelectOption key={item} value={item}>
-                          {`${presented.label} · ${presented.identifier}`}
-                        </NativeSelectOption>
-                      );
-                    })}
-              </NativeSelect>
+                <SelectTrigger id="access-role" className="w-full min-w-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="" disabled>
+                      {m.access_choose()}
+                    </SelectItem>
+                    {kind === 'role'
+                      ? roles.map((item) => {
+                          const presented = rolePresentation(item.id);
+                          return (
+                            <SelectItem key={item.id} value={item.id} disabled={!item.delegable}>
+                              {`${presented.label} · ${presented.identifier}${item.delegable ? '' : ` — ${m.access_selection_unavailable()}`}`}
+                            </SelectItem>
+                          );
+                        })
+                      : actions.map((item) => {
+                          const presented = permissionPresentation(item);
+                          return (
+                            <SelectItem key={item} value={item}>
+                              {`${presented.label} · ${presented.identifier}`}
+                            </SelectItem>
+                          );
+                        })}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
               {(kind === 'role' ? roles.length : actions.length) === 0 ? (
                 <p role="status" className="text-sm text-muted-foreground">
                   {m.access_no_permission_matches()}

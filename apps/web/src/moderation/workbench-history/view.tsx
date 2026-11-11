@@ -1,9 +1,10 @@
-import type { MouseEvent } from 'react';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
+import { useId, type MouseEvent } from 'react';
 import type { WorkbenchWindowMove, WorkbenchWindowView } from '../workbench-queue/window-history';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeHref } from '../../paraglide/runtime.js';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { threadLocation } from '../../threads/thread-href';
 import { workbenchSearch, type WorkbenchSearch } from '../workbench-queue/scope';
 import type { HistoryRead } from './read';
@@ -117,6 +118,7 @@ export function WorkbenchHistory({
   onReturn: () => void;
   onRetry?: () => void;
 }) {
+  const filterId = useId();
   function move(kind: WorkbenchWindowMove | 'retry', event: MouseEvent<HTMLButtonElement>) {
     onMove?.(kind, event.currentTarget, event.detail === 0);
   }
@@ -193,28 +195,40 @@ export function WorkbenchHistory({
         <p role={page.state === 'denied' ? 'status' : 'alert'}>{status}</p>
       ) : (
         <>
-          <label className="grid max-w-sm gap-1">
-            {m.moderation_workbench_triage_target_kind()}
-            <NativeSelect
+          <Field className="grid max-w-sm gap-1">
+            <FieldLabel htmlFor={`${filterId}-kind`}>{m.moderation_workbench_triage_target_kind()}</FieldLabel>
+            <Select
+              items={[
+                { value: 'all', label: m.moderation_filter_all_kinds() },
+                { value: 'board', label: m.moderation_history_board() },
+                { value: 'thread', label: m.moderation_history_thread() },
+                { value: 'post', label: m.moderation_history_post() },
+              ]}
               value={search.historyTargetKind ?? 'all'}
-              className="min-h-11"
-              onChange={(event) =>
+              onValueChange={(value) =>
                 onSearch(
                   workbenchSearch({
                     ...search,
-                    historyTargetKind: event.target.value,
+                    historyTargetKind: value!,
                     historyCursor: undefined,
                     historyDecision: undefined,
                   }),
                 )
               }
             >
-              <NativeSelectOption value="all">{m.moderation_filter_all_kinds()}</NativeSelectOption>
-              <NativeSelectOption value="board">{m.moderation_history_board()}</NativeSelectOption>
-              <NativeSelectOption value="thread">{m.moderation_history_thread()}</NativeSelectOption>
-              <NativeSelectOption value="post">{m.moderation_history_post()}</NativeSelectOption>
-            </NativeSelect>
-          </label>
+              <SelectTrigger id={`${filterId}-kind`} className="min-h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">{m.moderation_filter_all_kinds()}</SelectItem>
+                  <SelectItem value="board">{m.moderation_history_board()}</SelectItem>
+                  <SelectItem value="thread">{m.moderation_history_thread()}</SelectItem>
+                  <SelectItem value="post">{m.moderation_history_post()}</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
           {page.entries.length === 0 ? (
             <p role="status">{page.next ? m.moderation_workbench_empty_next() : m.moderation_history_empty()}</p>
           ) : (

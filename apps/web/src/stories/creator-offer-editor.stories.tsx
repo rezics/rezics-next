@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, within, screen } from 'storybook/test';
 import { CreatorPriceFields, type CreatorPriceIntent } from '../checkout/creator-offer-editor';
 import { configuredPriceExample } from '../kernel/fake/creator-offers';
 import { formatMinorAmount } from '../checkout/money';
@@ -47,14 +47,17 @@ function PriceExample() {
 async function priceIntent({ canvasElement }: { canvasElement: HTMLElement }) {
   const view = within(canvasElement);
   const currency = await view.findByRole('combobox', { name: m.creator_currency() });
-  await userEvent.selectOptions(currency, 'usd');
+  await userEvent.click(currency);
+  await userEvent.click(await screen.findByRole('option', { name: 'USD' }));
   const amount = view.getByRole('textbox', { name: m.creator_amount() });
   await userEvent.type(amount, '12.99');
   const rule = configuredPriceExample.configuredSaleCurrencies[0]!;
   await expect(
     view.getByText(`${formatMinorAmount(getLocale(), 'usd', 1299, rule.unit)} · USD · ${m.commerce_before_tax()}`),
   ).toBeVisible();
-  await userEvent.selectOptions(currency, 'eur');
+  currency.focus();
+  await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+  await expect(currency).toHaveTextContent('EUR');
   await expect(amount).toHaveValue('');
   await userEvent.type(amount, '12,99');
   await expect(amount).toHaveAttribute('aria-invalid', 'true');

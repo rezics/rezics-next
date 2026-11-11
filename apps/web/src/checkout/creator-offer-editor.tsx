@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import {
   createContext,
   useContext,
@@ -13,7 +14,6 @@ import { QueryClientContext } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import {
@@ -228,23 +228,31 @@ export function CreatorPriceFields({
     <>
       <Field>
         <FieldLabel htmlFor={id}>{m.creator_currency()}</FieldLabel>
-        <NativeSelect
-          id={id}
+        <Select
+          items={[
+            { value: '', label: m.creator_select_currency() },
+            ...rules.map((row) => ({ value: row.currency, label: row.currency.toUpperCase() })),
+          ]}
           name="currency"
           required
           value={intent.currency}
           disabled={disabled}
-          onChange={(event) => onChange({ currency: event.target.value, text: '' })}
-          aria-describedby={`${id}-help`}
-          className="w-full [&_select]:min-h-11"
+          onValueChange={(value) => onChange({ currency: value!, text: '' })}
         >
-          <NativeSelectOption value="">{m.creator_select_currency()}</NativeSelectOption>
-          {rules.map((row) => (
-            <NativeSelectOption key={row.currency} value={row.currency}>
-              {row.currency.toUpperCase()}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger id={id} aria-describedby={`${id}-help`} className="w-full min-h-11">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="">{m.creator_select_currency()}</SelectItem>
+              {rules.map((row) => (
+                <SelectItem key={row.currency} value={row.currency}>
+                  {row.currency.toUpperCase()}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         <p id={`${id}-help`} className="text-sm text-muted-foreground">
           {m.creator_currency_change()}
         </p>

@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import {
   useCallback,
   useContext,
@@ -17,7 +18,6 @@ import {
   ContentSectionTitle,
 } from '@rezics/ui/content-section';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -356,21 +356,30 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor={actionId}>{m.lifecycle_action()}</FieldLabel>
-                <NativeSelect
-                  id={actionId}
-                  className="w-full"
+                <Select
+                  disabled={!canChoose || confirmation !== null}
+                  items={
+                    offered.length
+                      ? offered.map((value) => ({ value, label: actionLabel(value) }))
+                      : [{ value: '', label: m.lifecycle_capability_unavailable() }]
+                  }
                   value={selected ?? ''}
-                  onChange={(event) => setAction(event.target.value as Action)}
+                  onValueChange={(value) => setAction(value! as Action)}
                 >
-                  {offered.length === 0 && (
-                    <NativeSelectOption value="">{m.lifecycle_capability_unavailable()}</NativeSelectOption>
-                  )}
-                  {offered.map((item) => (
-                    <NativeSelectOption key={item} value={item}>
-                      {actionLabel(item)}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SelectTrigger id={actionId} className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {offered.length === 0 && <SelectItem value="">{m.lifecycle_capability_unavailable()}</SelectItem>}
+                      {offered.map((item) => (
+                        <SelectItem key={item} value={item}>
+                          {actionLabel(item)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </Field>
               <Field>
                 <FieldLabel htmlFor={reasonId}>{m.lifecycle_reason()}</FieldLabel>

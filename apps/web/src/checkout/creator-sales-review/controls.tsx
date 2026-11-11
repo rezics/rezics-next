@@ -1,3 +1,5 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { creatorSaleSettlementLabel } from '../creator-sale-inspection';
@@ -20,7 +22,7 @@ type Props = {
   current: boolean;
 };
 
-/** Native form controls keep phone and keyboard reading within the existing page. */
+/** Received-page filters keep phone and keyboard reading within the existing page. */
 export function CreatorSalesReviewControls({ review, criteria, visible, change, reset, current }: Props) {
   const filtered = reviewIsFiltered(criteria);
   return (
@@ -54,69 +56,104 @@ export function CreatorSalesReviewControls({ review, criteria, visible, change, 
           </p>
         </div>
         <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-          <div className="min-w-0 space-y-2">
-            <label htmlFor="creator-sales-review-work" className="block text-sm font-medium">
+          <Field className="min-w-0 space-y-2">
+            <FieldLabel htmlFor="creator-sales-review-work" className="block text-sm font-medium">
               {m.creator_sale_work_reference()}
-            </label>
-            <select
-              id="creator-sales-review-work"
+            </FieldLabel>
+            <Select
+              disabled={!current}
+              items={[
+                { value: '', label: m.creator_review_all_works() },
+                ...review.works.map((work) => ({ value: work.id, label: `${work.id} (${work.count})` })),
+              ]}
               value={criteria.work}
-              onChange={(event) => change({ ...criteria, work: event.currentTarget.value })}
-              className={fieldClass}
+              onValueChange={(value) => change({ ...criteria, work: value! })}
             >
-              <option value="">{m.creator_review_all_works()}</option>
-              {review.works.map((work) => (
-                <option key={work.id} value={work.id}>
-                  {work.id} ({work.count})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="min-w-0 space-y-2">
-            <label htmlFor="creator-sales-review-offer" className="block text-sm font-medium">
+              <SelectTrigger id="creator-sales-review-work" className={fieldClass}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="">{m.creator_review_all_works()}</SelectItem>
+                  {review.works.map((work) => (
+                    <SelectItem key={work.id} value={work.id}>
+                      {work.id} ({work.count})
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field className="min-w-0 space-y-2">
+            <FieldLabel htmlFor="creator-sales-review-offer" className="block text-sm font-medium">
               {m.creator_sale_offer_reference()}
-            </label>
-            <select
-              id="creator-sales-review-offer"
+            </FieldLabel>
+            <Select
+              disabled={!current}
+              items={[
+                { value: '', label: m.creator_review_all_offers() },
+                ...review.offers.map((offer) => ({ value: offer.id, label: `${offer.id} (${offer.count})` })),
+              ]}
               value={criteria.offer}
-              onChange={(event) => change({ ...criteria, offer: event.currentTarget.value })}
-              className={fieldClass}
-              aria-describedby="creator-sales-review-offer-hint"
+              onValueChange={(value) => change({ ...criteria, offer: value! })}
             >
-              <option value="">{m.creator_review_all_offers()}</option>
-              {review.offers.map((offer) => (
-                <option key={offer.id} value={offer.id}>
-                  {offer.id} ({offer.count})
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                id="creator-sales-review-offer"
+                className={fieldClass}
+                aria-describedby="creator-sales-review-offer-hint"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="">{m.creator_review_all_offers()}</SelectItem>
+                  {review.offers.map((offer) => (
+                    <SelectItem key={offer.id} value={offer.id}>
+                      {offer.id} ({offer.count})
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             <p id="creator-sales-review-offer-hint" className="text-sm text-muted-foreground">
               {m.creator_review_offer_hint()}
             </p>
-          </div>
+          </Field>
         </div>
-        <div className="space-y-2">
-          <label htmlFor="creator-sales-review-settlement" className="block text-sm font-medium">
+        <Field className="space-y-2">
+          <FieldLabel htmlFor="creator-sales-review-settlement" className="block text-sm font-medium">
             {m.creator_sale_settlement()}
-          </label>
-          <select
-            id="creator-sales-review-settlement"
+          </FieldLabel>
+          <Select
+            disabled={!current}
+            items={[
+              { value: 'all', label: m.creator_review_all_settlements() },
+              ...settlementStates.map((value) => ({
+                value,
+                label: `${creatorSaleSettlementLabel(value)} (${review.settlements[value]})`,
+              })),
+            ]}
             value={criteria.settlement}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
+            onValueChange={(value) => {
               const settlement = value === 'all' ? 'all' : settlementStates.find((state) => state === value);
               if (settlement) change({ ...criteria, settlement });
             }}
-            className={fieldClass}
           >
-            <option value="all">{m.creator_review_all_settlements()}</option>
-            {settlementStates.map((state) => (
-              <option key={state} value={state}>
-                {creatorSaleSettlementLabel(state)} ({review.settlements[state]})
-              </option>
-            ))}
-          </select>
-        </div>
+            <SelectTrigger id="creator-sales-review-settlement" className={fieldClass}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">{m.creator_review_all_settlements()}</SelectItem>
+                {settlementStates.map((state) => (
+                  <SelectItem key={state} value={state}>
+                    {creatorSaleSettlementLabel(state)} ({review.settlements[state]})
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
       </fieldset>
       <div className="flex flex-wrap items-center gap-3">
         <Button

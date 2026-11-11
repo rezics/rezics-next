@@ -1,3 +1,4 @@
+import { chooseSelect } from './select-interaction';
 import { afterAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
@@ -276,11 +277,7 @@ async function mounted() {
     await act(async () => button(label).click());
   };
   const chooseCurrency = async () => {
-    await act(async () => {
-      const select = host.querySelector('select')!;
-      select.value = 'usd';
-      select.dispatchEvent(new window.Event('change', { bubbles: true }));
-    });
+    await chooseSelect(host.querySelector<HTMLElement>('[role=combobox]')!, 'USD');
   };
   const settle = async <T,>(work: ReturnType<typeof deferred<T>>, value: T | Error) => {
     await act(async () => {
