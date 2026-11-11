@@ -29,7 +29,7 @@ an accompanying kind must match. Private structure revisions additionally requir
 the ordinary catalogue Post disclosure. Chapter rows and bytes additionally retain the exact target Post read,
 including Board, Realm, ancestry, erasure and revision disclosure. Unavailable chapter slots expose occurrence,
 parent, order and kind only; their title, target, digest and attribution are withheld. Available resolution delivers
- canonical Document bytes, SHA-256, original Post author and licence. No bodies are copied into hosted storage.
+canonical Document bytes, SHA-256, original Post author and licence. No bodies are copied into hosted storage.
 
 Decision: books and columns share ordinary Post ownership and publication boundaries; the book profile adds immutable
 placements and release snapshots, and a release never publishes a target Post or grants draft access.

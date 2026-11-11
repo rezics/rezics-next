@@ -26,11 +26,30 @@ export { developmentMediaHandler } from './media-local-http.ts';
 
 export { createHostedCatalogue, reviseHostedCatalogue, publishHostedCatalogue } from './hosted-chapters-commands.ts';
 export type { HostedCommandDependencies } from './hosted-chapters-commands.ts';
-export { readHostedCatalogue, listHostedChildren, navigateHostedChapters, resolveHostedOccurrence } from './hosted-chapters-reads.ts';
+export {
+  readHostedCatalogue,
+  listHostedChildren,
+  navigateHostedChapters,
+  resolveHostedOccurrence,
+} from './hosted-chapters-reads.ts';
 export { listOwnHostedCatalogues, readOwnHostedCatalogue } from './hosted-chapters-owner.ts';
 export type {
-  HostedCreateInput, HostedReviseInput, HostedPublishInput, HostedPlacement, HostedChapterTarget,
-  HostedReadSelection, HostedChildrenInput, HostedNavigationInput, HostedCommandContext,
-  HostedCommandValue, HostedRevisionView, HostedOccurrenceView, HostedPageView, HostedResolutionView,
-  HostedOwnerInventoryScope, HostedOwnerInventoryInput, HostedOwnerInventoryEntry, HostedOwnerInventoryView,
+  HostedCreateInput,
+  HostedReviseInput,
+  HostedPublishInput,
+  HostedPlacement,
+  HostedChapterTarget,
+  HostedReadSelection,
+  HostedChildrenInput,
+  HostedNavigationInput,
+  HostedCommandContext,
+  HostedCommandValue,
+  HostedRevisionView,
+  HostedOccurrenceView,
+  HostedPageView,
+  HostedResolutionView,
+  HostedOwnerInventoryScope,
+  HostedOwnerInventoryInput,
+  HostedOwnerInventoryEntry,
+  HostedOwnerInventoryView,
 } from './hosted-chapters-model.ts';

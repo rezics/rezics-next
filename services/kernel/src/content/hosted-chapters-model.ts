@@ -17,10 +17,8 @@ type PlacementBase = Readonly<{
   position: number;
   title: string;
 }>;
-export type HostedPlacement = PlacementBase & (
-  | Readonly<{ kind: 'part'; target?: never }>
-  | Readonly<{ kind: 'chapter'; target: HostedChapterTarget }>
-);
+export type HostedPlacement = PlacementBase &
+  (Readonly<{ kind: 'part'; target?: never }> | Readonly<{ kind: 'chapter'; target: HostedChapterTarget }>);
 export type OrderedHostedPlacement = HostedPlacement & Readonly<{ ordinal: number }>;
 export type HostedStructureInput = Readonly<{ placements: readonly HostedPlacement[] }>;
 export type HostedCreateInput = HostedStructureInput & Readonly<{ postId: string; threadId: string }>;
@@ -44,11 +42,12 @@ export type HostedOccurrenceView = Readonly<{
   occurrenceId: string;
   parentId: string | null;
   position: number;
-}> & (
-  | Readonly<{ availability: 'unavailable'; kind: 'part' | 'chapter' }>
-  | Readonly<{ availability: 'available'; kind: 'part'; title: string; target: null }>
-  | Readonly<{ availability: 'available'; kind: 'chapter'; title: string; target: HostedChapterTarget }>
-);
+}> &
+  (
+    | Readonly<{ availability: 'unavailable'; kind: 'part' | 'chapter' }>
+    | Readonly<{ availability: 'available'; kind: 'part'; title: string; target: null }>
+    | Readonly<{ availability: 'available'; kind: 'chapter'; title: string; target: HostedChapterTarget }>
+  );
 export type HostedReadSelection = Readonly<{ revisionId?: string; kind?: 'structure' | 'publication' }>;
 /** Inventory covers only the acting account's route. A complete cross-home
  * catalogue locator is not installed; an empty home page proves nothing abroad. */
@@ -83,31 +82,35 @@ export class HostedOwnerInventoryUnavailableError extends Error {
     this.name = 'HostedOwnerInventoryUnavailableError';
   }
 }
-export type HostedChildrenInput = HostedReadSelection & Readonly<{
-  parentId?: string;
-  limit?: number;
-  cursor?: string;
-}>;
-export type HostedNavigationInput = HostedReadSelection & Readonly<{
-  occurrenceId: string;
-  direction: 'previous' | 'next';
-  limit?: number;
-  cursor?: string;
-}>;
-export type HostedPageView = HostedRevisionView & Readonly<{
-  items: readonly HostedOccurrenceView[];
-  nextCursor: string | null;
-}>;
-export type HostedResolutionView = HostedRevisionView & Readonly<{
-  occurrence: HostedOccurrenceView;
-  document: Readonly<{
-    encoding: 'base64';
-    canonicalBytes: string;
-    sha256: string;
-    authorId: string;
-    licence: string;
-  }> | null;
-}>;
+export type HostedChildrenInput = HostedReadSelection &
+  Readonly<{
+    parentId?: string;
+    limit?: number;
+    cursor?: string;
+  }>;
+export type HostedNavigationInput = HostedReadSelection &
+  Readonly<{
+    occurrenceId: string;
+    direction: 'previous' | 'next';
+    limit?: number;
+    cursor?: string;
+  }>;
+export type HostedPageView = HostedRevisionView &
+  Readonly<{
+    items: readonly HostedOccurrenceView[];
+    nextCursor: string | null;
+  }>;
+export type HostedResolutionView = HostedRevisionView &
+  Readonly<{
+    occurrence: HostedOccurrenceView;
+    document: Readonly<{
+      encoding: 'base64';
+      canonicalBytes: string;
+      sha256: string;
+      authorId: string;
+      licence: string;
+    }> | null;
+  }>;
 export class InvalidHostedCursorError extends Error {
   constructor() {
     super('Invalid hosted catalogue cursor');

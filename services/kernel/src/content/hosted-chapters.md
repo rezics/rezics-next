@@ -6,10 +6,10 @@ grants, Subjects or bodies. Columns and individual articles continue to use ordi
 
 ## Authoring and release
 
-| Operation ID | Method and path | Input |
-| --- | --- | --- |
-| `hosted_catalogue.create` | `POST /v1/hostedCatalogues` | `postId`, `threadId`, `placements` |
-| `hosted_catalogue.revise` | `POST /v1/hostedCatalogues/{id}:revise` | `expectedRevisionId`, `placements` |
+| Operation ID               | Method and path                          | Input                                                                   |
+| -------------------------- | ---------------------------------------- | ----------------------------------------------------------------------- |
+| `hosted_catalogue.create`  | `POST /v1/hostedCatalogues`              | `postId`, `threadId`, `placements`                                      |
+| `hosted_catalogue.revise`  | `POST /v1/hostedCatalogues/{id}:revise`  | `expectedRevisionId`, `placements`                                      |
 | `hosted_catalogue.publish` | `POST /v1/hostedCatalogues/{id}:publish` | `expectedRevisionId`, nullable `expectedPublicationId`, `occurrenceIds` |
 
 Every command requires an Idempotency-Key and returns `catalogueId` and the newly selected `revisionId`. Create
@@ -38,12 +38,12 @@ events contain only catalogue/revision identities; no private target selections 
 
 ## Reading
 
-| Operation ID | Method and path | Query |
-| --- | --- | --- |
-| `hosted_catalogue.get` | `GET /v1/hostedCatalogues/{id}` | selection |
-| `hosted_catalogue.children` | `GET /v1/hostedCatalogues/{id}/children` | selection, optional `parentId`, `limit`, `cursor` |
-| `hosted_catalogue.resolve` | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}` | selection |
-| `hosted_catalogue.navigate` | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}/navigation` | selection, `direction`, `limit`, `cursor` |
+| Operation ID                | Method and path                                                       | Query                                             |
+| --------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- |
+| `hosted_catalogue.get`      | `GET /v1/hostedCatalogues/{id}`                                       | selection                                         |
+| `hosted_catalogue.children` | `GET /v1/hostedCatalogues/{id}/children`                              | selection, optional `parentId`, `limit`, `cursor` |
+| `hosted_catalogue.resolve`  | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}`            | selection                                         |
+| `hosted_catalogue.navigate` | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}/navigation` | selection, `direction`, `limit`, `cursor`         |
 
 Selection accepts optional `revisionId` and `kind` (`structure` or `publication`). Without either, it chooses the
 current release. `kind=structure` chooses the current draft head, including a catalogue that has never released.

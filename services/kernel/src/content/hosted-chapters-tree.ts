@@ -12,26 +12,34 @@ export function orderHostedPlacements(
   route: number,
   placements: readonly HostedPlacement[],
 ): readonly OrderedHostedPlacement[] {
-  if (!Array.isArray(placements) || placements.length > HOSTED_PLACEMENT_LIMIT)
-    throw new InvalidHostedStructureError();
+  if (!Array.isArray(placements) || placements.length > HOSTED_PLACEMENT_LIMIT) throw new InvalidHostedStructureError();
   const byId = new Map<string, HostedPlacement>();
   const children = new Map<string | null, HostedPlacement[]>();
   for (const placement of placements) {
     if (
-      !placement || routeOf(placement.occurrenceId) !== route || byId.has(placement.occurrenceId) ||
+      !placement ||
+      routeOf(placement.occurrenceId) !== route ||
+      byId.has(placement.occurrenceId) ||
       (placement.parentId !== null && routeOf(placement.parentId) !== route) ||
-      !Number.isSafeInteger(placement.position) || placement.position < 0 ||
-      typeof placement.title !== 'string' || placement.title.trim().length === 0 ||
+      !Number.isSafeInteger(placement.position) ||
+      placement.position < 0 ||
+      typeof placement.title !== 'string' ||
+      placement.title.trim().length === 0 ||
       placement.title.length > 512 ||
       [...placement.title].length > 256 ||
       (placement.kind !== 'part' && placement.kind !== 'chapter')
-    ) throw new InvalidHostedStructureError();
+    )
+      throw new InvalidHostedStructureError();
     if (placement.kind === 'chapter') {
       const target = placement.target;
-      if (!target || routeOf(target.postId) === null ||
+      if (
+        !target ||
+        routeOf(target.postId) === null ||
         routeOf(target.threadId) !== routeOf(target.postId) ||
         routeOf(target.revisionId) !== routeOf(target.postId) ||
-        !/^[0-9a-f]{64}$/.test(target.sha256)) throw new InvalidHostedStructureError();
+        !/^[0-9a-f]{64}$/.test(target.sha256)
+      )
+        throw new InvalidHostedStructureError();
     } else if (placement.target !== undefined) throw new InvalidHostedStructureError();
     byId.set(placement.occurrenceId, placement);
     const siblings = children.get(placement.parentId) ?? [];
@@ -50,9 +58,11 @@ export function orderHostedPlacements(
     const siblings = children.get(parentId) ?? [];
     if (siblings.length && depth > HOSTED_DEPTH_LIMIT) throw new InvalidHostedStructureError('Tree is too deep');
     for (const placement of siblings) {
-      result.push(placement.kind === 'chapter'
-        ? { ...placement, target: { ...placement.target }, ordinal: result.length }
-        : { ...placement, ordinal: result.length });
+      result.push(
+        placement.kind === 'chapter'
+          ? { ...placement, target: { ...placement.target }, ordinal: result.length }
+          : { ...placement, ordinal: result.length },
+      );
       visit(placement.occurrenceId, depth + 1);
     }
   }

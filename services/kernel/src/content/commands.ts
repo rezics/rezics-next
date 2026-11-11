@@ -534,13 +534,16 @@ export function hostedPostAuthorization(
 ): CommandAuthorization {
   account(actor);
   const container = containerAuthorization(dependencies, actor, threadId, postId, context, true, receipt);
-  const base = container.wrap(resourceAuthorization({
-    access: dependencies.access,
-    actor,
-    action: 'post:revise',
-    anchor: { resource: container.resource, validate: container.validate },
-    context: { pool: dependencies.pool, deadline: context.deadline, partition: partitionOf(route(postId)) },
-  }), false);
+  const base = container.wrap(
+    resourceAuthorization({
+      access: dependencies.access,
+      actor,
+      action: 'post:revise',
+      anchor: { resource: container.resource, validate: container.validate },
+      context: { pool: dependencies.pool, deadline: context.deadline, partition: partitionOf(route(postId)) },
+    }),
+    false,
+  );
   return {
     ...base,
     async authorize(tx, attempt, evidence) {
