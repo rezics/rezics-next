@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Seeded first-public Commerce and Library walk. Run under `dev-stack.ts walk`.
- * Native commands and served pages are recorded per finishing-register row.
+ * Evidence records native commands and served pages for each journey.
  * Evidence stays under `.temp/commerce-walk/`.
  *
  * Kernel /v1/definitions/active must return a digest, identity-epoch topology
@@ -28,7 +28,6 @@ import {
 } from '../../../../services/importer/src/credentials.ts';
 import { createImportTransport, ImportTransportError } from '../../../../services/importer/src/import-client.ts';
 import {
-  applyWalkResults,
   createWalkKernel,
   FIRST_PUBLIC_JOURNEYS,
   publicFields,
@@ -657,15 +656,6 @@ async function main() {
       mode: 0o600,
     },
   );
-  const capabilitiesPath = join(root, 'docs/goals/commerce.capabilities.md');
-  try {
-    const capabilities = await readFile(capabilitiesPath, 'utf8');
-    if (!capabilities.includes('## First-public journeys on dev'))
-      throw new Error('finishing register heading missing');
-    await writeFile(capabilitiesPath, applyWalkResults(capabilities, rows));
-  } catch (error) {
-    if ((error as { code?: string }).code !== 'ENOENT') throw error;
-  }
   const slowest = report.slowestFailing;
   console.log(
     `first-public walk ${report.passing}/${report.total}` +

@@ -81,10 +81,10 @@ Owner documents state current rules and contracts only. They hold no dated headi
 sections, no receipts of past attempts, no task IDs and no `.temp/` paths. A brief cites owner documents as authority.
 It may link research only as background.
 
-At closeout or incident review, the owner turns each reusable lesson that changes future work into documentation.
-State the decision, when it applies, the evidence behind it, and how to tell it works. Update the existing owner
-document and replace superseded advice; create a document only when no owner covers the topic. Link retained
-evidence separately. Raw notes, transcripts and unverified observations are not rules.
+During closeout or incident review, keep a lesson only if it changes what someone should do in a future case.
+Write the rule, when it applies, and how to recognize success in the existing owner document. Replace obsolete
+guidance. The rule must make sense without the incident's date, participants or transcript; retain any useful
+evidence separately. Do not turn a pending task or a past result into policy.
 
 Source-mapping and value-fidelity contracts belong in the conversion module
 README. When a mapping also needs selected-record acquisition, native proposals,
@@ -111,9 +111,11 @@ them.
 
 ### Task notes and state
 
-Continuations, manager working files, decision drafts and daily audits are state. They stay under `.temp/`, which is
-never tracked, or on an archive branch. Workers are never told to read main-checkout `.temp/goal/` files. A decision a
-worker needs is in an owner document, or quoted in the brief within its budget.
+Continuations, working notes, screenshots and raw run results are local state. Keep `.temp/` untracked, including
+continuations. Preserve historical evidence separately; curate decisions into owner documents instead of moving
+the notes. Workers read the owning document or the necessary text in their brief, not main-checkout private state.
+
+Untracking local state changes the Git index only; preserve existing working files.
 
 ### Budgets
 

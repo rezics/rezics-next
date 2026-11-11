@@ -144,9 +144,10 @@ cancellation, finite undo and terminal erasure/expiry cleanup. Complete-caller s
 effects at native64/512/4096 remain deferred to integration. Native setup failure stays failed/unmeasured.
 
 The landing entry point `test/library/label-consolidation.test.ts` reuses the installed native outcome scenarios.
-Current Subject admission is repeated before effects; retained evidence does not yet include an immutable Subject
-security-revision stamp. Binding still-readable authority/exposure changes, typed-client generation and complete
-growth coverage remain in `.temp/continuation/label-consolidation-client-growth.md`.
+Current Subject admission is repeated before effects. Closure must also bind authority and exposure changes
+that leave the Subject readable; retained evidence still lacks the immutable Subject security revision.
+Use the [generated Kernel client](../services/kernel/README.md#client-declaration-output-placement) for the mounted
+journey and measure the full caller at the native scales above.
 
 Sources read: `docs/library-labels.md`, native metadata/assignment commands and storage, reservation/parent/tuple SQL
 and migrations, native Subject and family admission, shared cursor codec and existing native label fixtures. No

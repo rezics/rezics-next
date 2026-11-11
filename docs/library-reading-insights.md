@@ -153,23 +153,5 @@ idempotent, source deletion removes the final owner projection, and owner genera
 and physical cost measurements remain controller-owned; the added statements and row work remain within the original
 writer or admitted maintenance transaction and do not introduce a new scheduler, receipt or funding protocol.
 
-`bun run --cwd services/kernel derived schema` succeeded and regenerated only the Library canonical schema.
-`bun run --cwd services/kernel typecheck` failed with 301 diagnostics, identical to a clean clone of the bound
-base after normalizing shifted line numbers; this increment adds zero diagnostics. Its first error is
-`../../packages/client/src/index.ts(268,8): error TS2307: Cannot find module './kernel/rating/own-votes-counted' or its corresponding type declarations.`
-The base comparison used `bun run --cwd .temp/reading-insights-base/services/kernel typecheck` with the existing
-approved check-host configuration; no compiler inputs or checks were suppressed.
-
-`bun run --cwd services/kernel check test/library/reading-insights-profiles.test.ts` reached the test runner after
-formatting was corrected, then failed during the unchanged Kernel/Search module import, before any fixture or test
-case executed: `TypeError: undefined is not an object (evaluating 'viewerFactsResponseSchema.properties.rows')`,
-at `src/search/discovery-http.ts:200:40`. Result: 0 pass, 1 fail, 1 import error. The new native assertions therefore
-remain unexecuted; this is not a passing native check. Search source is identical to the bound base and the base
-compiler diagnostics also include its schema-property failures. No unrelated Search file was changed.
-
-References reviewed: `legacy-final:apps/web/features/library/reading-stats.tsx`,
-`/home/edge/projects/rezics/rezics/apps/web/features/progress/components/unit-progress-statistics.tsx`, the named
-reference INDEX, and current consumption-statistics/reported-year/progress-measure owner documents and producers.
-This is new projection code, not a legacy source port. There are no product files outside the declared paths.
-Remaining journey and validation are in `.temp/continuation/reading-insights.md`. Full/frozen acceptance, broad native
-growth, root checks, installed client publication and browser/rendered review were not run and remain deferred.
+[Generated client publication](#mounted-assessment-panel-contract), the mounted Web journey, and frozen native
+and growth acceptance remain required.

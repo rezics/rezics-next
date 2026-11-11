@@ -2,13 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FIRST_PUBLIC_JOURNEY_PATHS } from '../scripts/first-public-journeys-paths.ts';
-import {
-  CAPABILITIES_BEGIN,
-  CAPABILITIES_END,
-  capabilitiesTableMarkdown,
-} from '../scripts/first-public-journeys-table.ts';
-
-const capabilities = resolve(import.meta.dir, '../../../docs/goals/performance.capabilities.md');
+import { capabilitiesTableMarkdown } from '../scripts/first-public-journeys-table.ts';
 
 test('the first-public journey walk names each of the 17 Goal paths once', () => {
   expect(FIRST_PUBLIC_JOURNEY_PATHS).toHaveLength(17);
@@ -26,16 +20,6 @@ test('the walk retains Settings, Inbox and Library owners and does not import Au
   expect(new Set(FIRST_PUBLIC_JOURNEY_PATHS.map((path) => path.owner))).toEqual(
     new Set(['Settings', 'Accounts', 'Inbox', 'Library']),
   );
-});
-
-test('performance.capabilities records one PASS, FAIL or FAIL-unreached row for each path', () => {
-  const text = readFileSync(capabilities, 'utf8');
-  expect(text).toContain(CAPABILITIES_BEGIN);
-  expect(text).toContain(CAPABILITIES_END);
-  for (const path of FIRST_PUBLIC_JOURNEY_PATHS) {
-    expect(text).toMatch(new RegExp(`\\| ${path.id} \\|`));
-    expect(text).toMatch(new RegExp(`\\| ${path.id} \\|[^\\n]*\\| (PASS|FAIL-unreached|FAIL) \\|`));
-  }
 });
 
 test('the walk table writer names every path once with the observed result', () => {

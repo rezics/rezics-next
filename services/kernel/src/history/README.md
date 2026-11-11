@@ -83,7 +83,7 @@ walk does not close the consumer. The observation carries the exact Zone source 
 event type/position/sequence, consumer name and released-hold state. No new acknowledgement row is written.
 
 The receiving input remains the existing `HistoryReceivingContext`. Ordinary account erasure uses its default
-`{ kind: 'account-erasure' }` discriminant. A future Semantic terminal-Account caller supplies
+`{ kind: 'account-erasure' }` discriminant. Terminal account cleanup of a Zone requires
 `{ kind: 'zone-cleanup', binding }`, where the binding carries the committed account barrier and the exact Zone
 original home/epoch, captured owner/transaction, resource/lifecycle revisions, deletion generation and protection
 revision. The output is either a pending native gap or an in-transaction `ZoneHistoryConsumerObservation`; it is not
@@ -96,14 +96,12 @@ Decision: register the ten Zone receipt kinds and eleven ID/revision events and 
 family open until its native producer and closure owner land. The single cleanup policy is
 [Zones](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup).
 
-Semantic's sole Zone lifecycle owner operation is still undelivered. The next owner seam must lock and bind the
-committed account barrier, original Zone owner/transaction custody, current lifecycle/protection state and durable
-source/copy progress before it passes the existing receiving context. See `.temp/continuation/zone-history-semantic.md`.
-History closes the delivered Zone receipt/outbox consumers only when their exact Semantic delivery and receiving holds
-are closed. The complete branch-aware minimizer must still bind the same generation/version and await source
-inventory/pages, copies, released holds and late effects. No new receipt or ACK is adopted. See the
-[Zones cleanup contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup); History
-support does not complete Zone cleanup.
+Before calling History receiving, the [Zone lifecycle owner](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup)
+must bind the committed barrier, original owner/transaction custody, lifecycle and protection revisions, and durable
+source/copy progress under the Zone parent lock. Keep original
+command source custody through native consumer release, then run the selected physical minimizers. History
+receipt/outbox closure and Access grant exhaustion are separate from full Zone cleanup, which still requires closed
+source inventory, minimized copies, released holds, and settled late effects.
 
 ## Recovered Account identity serializers
 

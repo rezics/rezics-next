@@ -100,7 +100,7 @@ test('the table-shape check does not boot Storybook, and follow writes the publi
   expect(source).toMatch(/credential-effects\/stage[\s\S]{0,240}30_000/);
   const rows = parseJourneyTable(readFileSync(capabilities, 'utf8'));
   const census = renderWalkCensus(rows, rows[0]!.revision, rows[0]!.observedAt, '2026-11-07T03:42:43Z', true);
-  expect(census).toMatch(/^Round .+ Causal repairs: `\.temp\/continuation\/accounts-walk-admission.md`/);
+  expect(census).toMatch(/^Round .+ Next hourly due 2026-11-07T03:42:43Z\.$/);
   expect(replaceWalkCensus(readFileSync(capabilities, 'utf8'), census)).toContain(census);
   const withProse = `## First-public journeys\n\nCensus refresh locates the dated census line. Round 2026-11-07T00:00:00Z on \`abc\`. The table-shape check does not start Storybook.\n`;
   expect(replaceWalkCensus(withProse, 'Round 2026-11-07T01:00:00Z on `def`.')).toContain('dated census line');

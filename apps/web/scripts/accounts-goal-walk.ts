@@ -206,8 +206,6 @@ export function renderJourneyTable(rows: JourneyRow[]): string {
   return [...header, ...body].join('\n');
 }
 
-const CENSUS_REPAIRS =
-  '`.temp/continuation/accounts-walk-admission.md`, `auth-website-kernel-bearer.md`, `auth-recovery-and-credentials.md`, `accounts-operations-e18.md`, `accounts-follow.md`, `accounts-walk-browser.md`, `accounts-realm.md`';
 const CENSUS_MARKER = ' The table-shape check does not start Storybook.';
 
 export function renderWalkCensus(
@@ -223,7 +221,7 @@ export function renderWalkCensus(
   const passList = passing.map((row) => row.id).join(', ') || 'none';
   const slowestText = slowest ? `${slowest.id} ${slowest.elapsed} ${cell(slowest.cause).slice(0, 120)}` : 'none';
   const observed = observedAt.replace(/\.\d+Z$/, 'Z');
-  return `Round ${observed} on \`${sourceRevision}\` with \`REZICS_WALK_DEFER_FRONTENDS=${deferFrontends ? '1' : '0'}\`: ${passing.length}/19 PASS (${passList}). Slowest FAIL ${slowestText}. Next hourly due ${nextHourly}. Causal repairs: ${CENSUS_REPAIRS}.`;
+  return `Round ${observed} on \`${sourceRevision}\` with \`REZICS_WALK_DEFER_FRONTENDS=${deferFrontends ? '1' : '0'}\`: ${passing.length}/19 PASS (${passList}). Slowest FAIL ${slowestText}. Next hourly due ${nextHourly}.`;
 }
 
 export function replaceWalkCensus(markdown: string, sentence: string): string {

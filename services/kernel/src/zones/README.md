@@ -105,14 +105,16 @@ removed originals in restricted custody; configuration reads with a live decisio
 Platform `:hold`/`:releaseHold`/`:purge` commit hold and cleanup intent on Global Context (`zone:purge`);
 `purgeZonePage` is the bounded worker. Account-erasure Zone payload and ordinary retention's final purged marker
 use `lockZoneHead`/`compareAndSetZone`; a live hold defers the locator and does not clear withholding.
-Terminal grant drain reads the committed `access.erasure` version/T, pages both Access grant stores, and
-CAS-persists the returned cursor on the Zone until both stores complete; empty `resource_grant` progress no
-longer stalls owner-role cleanup. Proposed
-prepareZoneCleanup and lockZoneCleanup are not callable exports; the current ordinary record authority remains
-unchanged. Zone cleanup follows the [adopted branch contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup).
+After the parent lock, Semantic issues cleanup admission through `admitZoneCleanup` and runs Access grant pages
+through `advanceZoneCleanupGrants`. Terminal grant drain binds the original committed `access.erasure` version and
+time and captured primary-owner evidence. The Zone CAS saves its separate grant cursor in the same transaction
+until both stores complete, independently of
+[History receiving](../history/README.md#zone-receipts-outbox-events-and-current-closure-boundary). The ordinary
+record authority remains unchanged. Zone cleanup follows the
+[adopted branch contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup).
 Native, growth and browser acceptance for six-surface walks, source publication, privacy repair, withholding,
 purge, account cleanup and default-world outcomes remain unproved; helper setup and type evidence do not establish
-them. Access grant minimization, Content order-scope and History durable-work remain open.
+them. Full Content order-scope and History durable-work composition remain open.
 
 ## Authored names
 

@@ -34,8 +34,8 @@ No new authorization behavior is introduced by the census. Native/default-worker
 Character local-selection and with-dev-server receiving remain required. A complete path passes only when every
 required step has an asserted observation; successful earlier requests never fill an unreached step. Focused
 reporting tests pin that distinction, actual first-failure retention and failing-journey timing. They are not native
-or mounted acceptance. Each round uses a distinct `.temp/search-walk/<UTC-start>/` directory and writes evidence after
-each journey, before later journeys can fail. Setup time remains separate from product time. Independent executable
+or mounted acceptance. Keep rounds separate and record each journey as it completes so later failures cannot erase
+its evidence. Setup time remains separate from product time. Independent executable
 paths continue after persona, seed or sign-in failure. Receive the creator/provisioning repair before ordinary
 admission; do not change permissions or create a separate queue from Search.
 
@@ -104,10 +104,8 @@ and browser receiving remains on integrated dev. The last measured census remain
 
 Landing retry decision: complete the controller-started rebase onto `d83d857aa1cb986eed483ae7dd9aaf180214fd96`,
 preserving current message preparation, process custody, Vite and Library setup behavior together with the original
-curated-occurrence assertions and safe HTTP failure diagnostics. The ignored-artifact staging failure reproduced
-with `git add -- .temp/search-walk`; narrow `.gitignore` exceptions now retain only the five reviewed evidence files.
-This is the additional outside-path change. The controller-started rebase is complete. The active integration
-contract now requires only changed-workspace typing; the former three behavior selections are superseded as
+curated-occurrence assertions and safe HTTP failure diagnostics. The active integration contract requires only
+changed-workspace typing; the former three behavior selections are superseded as
 prelanding gates. Refresh Kernel and Web typing against the rebased owner contracts, retaining the unchanged
 Auth and Importer results above. One identical app-entry test is deduplicated without removing an assertion.
 Original native, mounted browser and six-path acceptance remain on integrated dev; the census is unchanged.
@@ -149,9 +147,7 @@ bun scripts/worker-check.ts -- sh -c 'bun run --cwd services/kernel typecheck &&
 The retained seventeen-file Kernel command at `cea61c8e7dbf418048ea308a87b37031cb7d08ad` returned exit 1 on host b
 in 1722.930 seconds. Compilation passed in 21.101 seconds and eight files passed, including native boot, original
 receiving-store custody, bulk no-effect and Members composition. Nine files failed. These are native receiving
-measurements, not six-path journey durations. Exact command and file results are retained in
-`.temp/search-walk/native-receiving-2026-11-07T15-44-09Z.json`; full owned evidence is
-`.temp/goal/checks/worker-check-e3b27aa8-09bc-463d-92fe-0f4209c4b106-2026-11-07T15-44-09.792Z-121e98b4.log`.
+measurements, not six-path journey durations.
 
 | Existing cause owner         | Reached native failure retained for integrated receiving                                                                                                                                                                                                                               |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -366,13 +362,7 @@ Seed 503 and frontend memory termination are separable setup failures, not measu
 The existing startup owner receives the memory diagnostic; the existing seed/source-fence owner receives the 503
 with unavailable endpoint/correlation explicitly marked. No heap, deadline, pool or permission change is made here.
 
-Secret-free retained evidence:
-`.temp/search-walk/2026-11-07T12-26-23-118Z/census.json`, `persona.log`, `seed.log` and `stack.redacted.log`.
-The census was reconstructed only from returned artifacts, not a completed walk report. Persona passwords are redacted.
-The full owned check log is
-`.temp/goal/checks/worker-check-ef268857-9864-46fb-ab95-2656f01f54d9-2026-11-07T12-13-33.053Z-f3dcd568.log`.
-The remote runner reported artifact staging cleanup. No walk-specific container/lease cleanup receipt was retained,
-so this ledger does not independently assert that cleanup completed.
+The census was reconstructed from returned setup observations. No completed walk report was produced.
 
 ### Scope of this census and handoff
 
@@ -672,6 +662,10 @@ owner account through own-account Collection commands and JWT scopes, and mount 
 Administering collection:* onto the owner-account resource through access.grant is denied because collection:create is
 typed to library.collection.
 
+The [native identity receiving](../../services/kernel/test/search/identity-receiving-native.test.ts) and
+[receiving-store](../../services/kernel/test/search/identity-receiving-native-store.test.ts) cases require genuine
+publication, original custody, OLD/NEW traversal, applied and release behavior, and replay.
+
 | Stage                                   | Evidence                                                                                         |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | specification validated red             | Existing assertions present; measured red not recorded; complete4096-original matrix not frozen. |
@@ -800,6 +794,12 @@ exact chunk snapshots through later transport failure and replay”; [bulk visib
 “the real rebuild command uses the configured route key for current imported-source fences”; [auto-create](../../services/kernel/test/search/subject-auto-create.test.ts)
 “actual native late bulk cannot implicitly recreate a retired subject generation while explicit creation works”.
 These native seams are retained, without claiming complete runtime closure.
+
+The [default public runtime](../../services/kernel/test/search/default-public-runtime.test.ts) and
+[Search outcomes](../../services/kernel/test/search/outcomes.test.ts) require a positive native response using the
+[Semantic projection and reduction proof](../../services/kernel/src/semantic/public-filter-source-contract.md).
+While that proof is unavailable, exercise the
+[retained preparation behavior](../../services/kernel/src/search/README.md#default-public-runtime-composition).
 
 **Native wrapper/command:** original Search/relation wrappers use
 [outcome-driver](../../services/kernel/test/search/outcome-driver.ts)→[driver client](../../services/kernel/test/search/support/driver-client.ts)

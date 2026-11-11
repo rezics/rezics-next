@@ -91,12 +91,12 @@ to pass. Reuse unchanged valid passing evidence rather than rerunning it to comp
 Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
 workspace-wide change; the train and promotion own whole-workspace checks.
 
-Run the acceptance command once after the last relevant edit, plus the root typecheck (`bun scripts/typecheck.ts`).
-Write missing acceptance tests named by the contract. Preserve existing frozen acceptance. Add focused checks for
-concrete risks, naming at most twelve nearby test files per discretionary check. Run a whole-workspace or full web
-check only when the contract requires it; do not repeat a passing acceptance to obtain a success summary. Broaden checks when shared
-contracts or unresolved failures require it. Use the full kernel check for a change to a runtime contract that every module's tests rely on.
-Use the control plane's own gate for executable control-plane changes. Documentation alone does not require either. Judge commands by their exit status.
+Run acceptance once after the last relevant edit, plus the root typecheck (`bun scripts/typecheck.ts`).
+Write missing contract tests and preserve frozen acceptance. A discretionary check must target a reachable failure
+whose result changes the next action; name at most twelve nearby test files and reuse valid receipts. Broaden only
+for shared contracts or unresolved failures. Run the full Kernel check for a runtime contract every module relies on,
+and the control-plane gate for executable changes there. Documentation alone requires neither. A successful exit
+is evidence only when the intended check actually ran.
 
 For every operation, document one Cost entry with Operation, Touches, Bound and Growth check. Use one operation
 subsection with the bullets `Touches:`, `Bound:` and `Growth check:`; its heading supplies Operation. Existing Cost

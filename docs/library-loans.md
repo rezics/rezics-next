@@ -81,8 +81,10 @@ Decision: each copy context's `facts` is the closed union the generated client d
 `code`), so a loan page serializes through the Web server function without casts. Loans read and refresh under the
 `copy.list` gate, the personal-library operation Copies already uses; the exposure table has no loan-specific operation.
 
-Decision: loan commands receive the transaction-bound History evidence through the request access seam, which binds the
-prepared history accounts on the live command transaction. They do not import the evidence leaf themselves.
+The request access seam binds prepared History accounts to the live loan command transaction. The
+[mounted work contract](../services/kernel/src/library/performance-contract.md#private-physical-copy-loans)
+covers the manifest owner's original funding, current authorization before receipt replay, and one request deadline
+through retries and response handling.
 
 Returned history is private to the owner for the owner's lifetime and survives copy deletion or disposal. Terminal
 owner erasure removes loan rows and the generation row through the existing owned-graph receiver, in batches of at
@@ -149,22 +151,9 @@ concealed-person threats, lost-acknowledgement refresh, stale-cursor recovery or
 for every pool. Complete measured costs for admission/currentness, SQL, locks, dispatch, receipts, hydration,
 serialization, retention and cleanup remain unverified.
 
-## Verification
+## Acceptance
 
-Product-first landing decision: finish the production outcome and changed workspace typechecks, then land with the exact one-shot journey results recorded; non-money test failures may accompany landing, and landing alone is not end-to-end acceptance.
-
-`bun run --cwd services/kernel check test/library/loan-http.test.ts` executed the mounted native journey: 1 test
-passed with 29 assertions. It covers exact create receipt replay, conflicting open create, due-day inclusivity,
-next-day overdue state, extension and stale revision, refusal to dispose or delete an open-loan copy, return replay,
-repeated-return conflict, and returned history after copy deletion. The command wrapper exited 1 after the test phase
-because artifact return failed with:
-`error: remote-check: returned empty directory differs from its manifest: services/kernel/.temp/schema-diagnostics/schema-3aQitT`.
-
-`bun run --cwd services/kernel typecheck` exited 2. Its first diagnostic is the unchanged missing client module
-`../../packages/client/src/index.ts(268,8): error TS2307: Cannot find module './kernel/rating/own-votes-counted' or its corresponding type declarations.`
-The output also reports unchanged Community, Content and Search errors; it reported no diagnostics in the loan source or
-loan HTTP test. The focused landing command
-`bun run --cwd services/kernel check test/library/loan-date.test.ts test/library/loan-model.test.ts` previously
-executed both pure-model suites: 9 tests passed with 139 assertions, but its wrapper also hit the artifact-return
-failure above. Frozen acceptance, full native privacy/concurrency and growth cases, generated web delivery, and
-browser review were not run.
+The [mounted native journey](../services/kernel/test/library/loan-http.test.ts) covers exact create and return
+receipt replay, one open loan per copy, inclusive due dates, overdue state, extension and stale revision,
+disposal and deletion refusal while a loan is open, repeated return conflict, and returned history after copy
+deletion. The date and model suites cover the calendar and lifecycle rules independently.
