@@ -31,6 +31,25 @@ filters and canonical layout, then retain a valid same-locale Collection-directo
 references assert the `collectionMemberReturnAddress` owner preserves its normalized destination. Header acceptance
 checks linked curator identity separately from the readable member count and native update time.
 
+Decision: interaction acceptance stays in the three canonical comparison story plays, using the mounted
+`CollectionPage` and its shared detail owner. An address change can replace `PatternStory`'s routed subtree;
+acquire controls from the current canvas for each interaction and await the mounted presentation afterwards.
+A native select's value alone is insufficient: establish four actual List rows and four Grid cards, with their
+supplied occurrence identities, before inspection. Inspector references and openers belong only to that mounted
+visit; reacquire them after navigation or replacement. Recovery closes inspection, so a reference departure must
+explicitly open a current occurrence. Follow its supplied `via` address on return, retaining the exact cursor,
+layout, directory return and occurrence fragment; let route replacement retire detail and action presentation.
+
+The existing three states cover same-cursor recovery, all four independent occurrences, identical-label references
+with distinct supplied identities, notes, unavailable definitions and replacement during a reference visit. Keep
+these assertions in their plays instead of adding another fixture-only reader test or story state. Play assertions
+also retain 44px contained openers, close focus, continuation separation and bounded width. Their illustrative
+native-format records establish neither live native responses nor main acceptance. The four supplied regression
+pass records, executed story results, browser accessibility/geometry review, clean six-smoke publication with served
+commit/index verification, and main/native acceptance remain separate evidence. The dev verifier executes the
+changed plays after landing; the manager owns the toolbar/theme, clipboard, keyboard and pointer review and the
+single superseding publication. Committed source and owning Web typing are the worker's acceptance.
+
 Source evidence: `docs/research/page-needs-api-render-audit.md` (A06 and Collection), `web-component-parity.md`,
 `api-first-platform-coverage.md`, and `seeded-core-page-review.md`; read-only `legacy-final` work-page/credits.tsx
 and library/library-list.tsx; earlier checkout collection-detail-page.tsx, collection-items-page.tsx,
