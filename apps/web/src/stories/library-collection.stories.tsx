@@ -365,8 +365,10 @@ export const DestinationOverflow: Story = {
     await waitFor(() => expect(trigger).toHaveFocus());
     const toolbar = within(context.canvasElement.querySelector<HTMLElement>('[data-slot="collection-toolbar"]')!);
     const layout = toolbar.getByRole('combobox', { name: m.library_layout() });
-    await expect(layout).toHaveValue('list');
-    await userEvent.selectOptions(layout, 'grid');
+    await expect(layout).toHaveTextContent(m.library_layout_list());
+    await userEvent.click(layout);
+    const popup = await document.findByRole('listbox');
+    await userEvent.click(within(popup).getByRole('option', { name: m.library_layout_grid(), exact: true }));
     await waitFor(() =>
       expect(context.canvasElement.querySelector('[data-collection-members]')).toHaveAttribute(
         'data-collection-layout',

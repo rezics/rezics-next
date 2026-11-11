@@ -214,14 +214,21 @@ async function mountedPresentation(canvasElement: HTMLElement, layout: 'list' | 
     );
     const currentControl = within(canvasElement).getByRole('combobox', { name: m.library_layout() });
     expect(currentControl.isConnected).toBe(true);
-    expect(currentControl).toHaveValue(layout);
+    expect(currentControl).toHaveTextContent(layout === 'list' ? m.library_layout_list() : m.library_layout_grid());
   });
 }
 
 async function selectPresentation(canvasElement: HTMLElement, layout: 'list' | 'grid') {
   // PatternStory replaces its routed subtree when the address changes. Never retain this control for the next choice.
   const currentControl = await within(canvasElement).findByRole('combobox', { name: m.library_layout() });
-  await userEvent.selectOptions(currentControl, layout);
+  await userEvent.click(currentControl);
+  const popup = await within(canvasElement.ownerDocument.body).findByRole('listbox');
+  await userEvent.click(
+    within(popup).getByRole('option', {
+      name: layout === 'list' ? m.library_layout_list() : m.library_layout_grid(),
+      exact: true,
+    }),
+  );
   await mountedPresentation(canvasElement, layout);
   await expect(mountedAddress(canvasElement)).toBe(comparisonAddress(layout));
 }
