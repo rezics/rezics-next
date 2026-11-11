@@ -2424,6 +2424,116 @@ export class WorkerStore implements AttemptFence {
       return attempt;
     });
   }
+  /** Record the exact operator-authorized check while preserving a stopped attempt's stop tombstone. */
+  recordWithdrawnTypingRecoveryAuthorization(
+    ref: AttemptRef,
+    expectedResult: string,
+    pending: NonNullable<Attempt['typingEvidencePending']>,
+    eventBody: unknown,
+  ): void {
+    this.db
+      .transaction(() => {
+        const { attempt } = this.withdrawnTypingRecoveryRows(ref, expectedResult);
+        if (
+          attempt.state !== 'stopped' ||
+          JSON.stringify(pending.command) !== JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck'])
+        )
+          throw new Error('stopped attempt no longer accepts its exact Web typing recovery grant');
+        attempt.typingEvidencePending = pending;
+        this.saveAttempt(attempt);
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(ref.taskId, ref.attempt, 'typing-recovery-authorized', new Date().toISOString(), JSON.stringify(eventBody));
+      })
+      .immediate();
+    this.invalidateSnapshot();
+  }
+  /** Move a stopped attempt into ordinary settlement only after exact current Web compiler evidence exists. */
+  beginWithdrawnTypingRecoverySettlement(
+    ref: AttemptRef,
+    expectedResult: string,
+    command: readonly string[],
+    eventBody: unknown,
+  ): void {
+    this.db
+      .transaction(() => {
+        const { attempt } = this.withdrawnTypingRecoveryRows(ref, expectedResult);
+        if (
+          JSON.stringify(command) !== JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) ||
+          (attempt.state !== 'stopped' && attempt.state !== 'exited') ||
+          (attempt.typingEvidencePending?.command !== undefined &&
+            JSON.stringify(attempt.typingEvidencePending.command) !== JSON.stringify(command))
+        )
+          throw new Error('stopped attempt no longer accepts its exact Web typing receipt');
+        attempt.state = 'exited';
+        attempt.typingEvidencePending ??= {
+          result: 'Compiler evidence for the retained Web source is being reconciled.',
+          command: [...command],
+        };
+        this.saveAttempt(attempt);
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(ref.taskId, ref.attempt, 'typing-evidence-recovery', new Date().toISOString(), JSON.stringify(eventBody));
+      })
+      .immediate();
+    this.invalidateSnapshot();
+  }
+  /** Preserve compiler diagnostics on a stopped source attempt without starting a source-writing retry. */
+  recordWithdrawnTypingRecoveryFailure(
+    ref: AttemptRef,
+    expectedResult: string,
+    result: string,
+    eventBody: unknown,
+  ): void {
+    this.db
+      .transaction(() => {
+        const { attempt } = this.withdrawnTypingRecoveryRows(ref, expectedResult);
+        if (attempt.state !== 'stopped') throw new Error('stopped attempt no longer accepts compiler failure evidence');
+        attempt.failureKind = 'tool';
+        attempt.result = result;
+        delete attempt.typingEvidencePending;
+        this.saveAttempt(attempt);
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(ref.taskId, ref.attempt, 'typing-evidence-failed', new Date().toISOString(), JSON.stringify(eventBody));
+      })
+      .immediate();
+    this.invalidateSnapshot();
+  }
+  private withdrawnTypingRecoveryRows(ref: AttemptRef, expectedResult: string): { attempt: Attempt } {
+    const task = decode<Task>(
+      this.db.query('SELECT body FROM worker_tasks WHERE id=?').get(ref.taskId),
+    );
+    const attempt = decode<Attempt>(
+      this.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt),
+    );
+    const retry = decode<RetryIntent>(
+      this.db.query('SELECT body FROM worker_retry_intents WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt),
+    );
+    const stop = attempt?.terminationIntent;
+    if (
+      !task ||
+      task.currentAttempt !== ref.attempt ||
+      task.state !== 'stopped' ||
+      task.brief.goal !== 'web' ||
+      task.brief.kind !== 'interface' ||
+      !attempt ||
+      attempt.result !== expectedResult ||
+      attempt.exitCode !== 0 ||
+      attempt.failureKind !== 'tool' ||
+      !stop ||
+      stop.operation !== 'stop' ||
+      stop.state !== 'complete' ||
+      stop.processIdentity !== 'known' ||
+      !stop.settledAt ||
+      retry?.status !== 'abandoned' ||
+      retry.abandonedBy !== 'stop' ||
+      retry.nextAttempt !== undefined ||
+      retry.options.escalation !== 'environment'
+    )
+      throw new Error('stopped source or withdrawn retry changed before typing recovery persistence');
+    return { attempt };
+  }
   /** Do not publish a replacement while an accepted operator stop still owns this generation. */
   assertRetryAllowed(ref: AttemptRef, explicit = false): void {
     const task = this.task(ref.taskId);

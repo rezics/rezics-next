@@ -14,7 +14,10 @@ import {
   isTypingEvidenceUnavailableResult,
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
+  workerCheckHostHasTypecheckRun,
   workerCheckHostTypingSettlement,
+  workerCheckHostTypingReceiptMatches,
+  workerCheckHostWithdrawnRetryIsRecoverable,
 } from './worker-check-budget.ts';
 
 /** Reconcile completed source under its original attempt; this boundary never invokes a model. */
@@ -28,8 +31,45 @@ export async function recoverWorkerTyping(
   const { store, settings } = tasks;
   const lease = acquireDirectoryLease(join(settings.stateDirectory, 'leases', ref.taskId), settings.policy?.leases);
   try {
-    store.assertCurrent(ref);
     const task = store.task(ref.taskId);
+    if (task.currentAttempt !== ref.attempt) store.assertCurrent(ref);
+    if (task.state === 'landing') {
+      store.assertCurrent(ref);
+      return { ...ref, status: 'landing' as const };
+    }
+    const attempt = store.attempt(ref);
+    const retry = store.retryIntent(ref);
+    const progressEvent = store.events(ref.taskId, ref.attempt).findLast((event) => event.kind === 'attempt-progress');
+    let progress: { endHead?: unknown; uncommitted?: unknown } | undefined;
+    try {
+      progress = progressEvent ? (JSON.parse(progressEvent.body) as typeof progress) : undefined;
+    } catch {
+      progress = undefined;
+    }
+    const withdrawnRetry = workerCheckHostWithdrawnRetryIsRecoverable({
+      task,
+      attempt,
+      ...(retry ? { retry } : {}),
+      ...(progress ? { progress } : {}),
+    });
+    const ordinaryPending =
+      ['ready', 'running', 'stopped'].includes(task.state) &&
+      attempt.state === 'exited' &&
+      !(attempt.process && sameProcess(attempt.process)) &&
+      !attempt.terminationIntent &&
+      (attempt.typingEvidencePending !== undefined || isTypingEvidenceUnavailableResult(attempt.result));
+    if (task.brief.kind === 'verification' || (!ordinaryPending && !withdrawnRetry)) {
+      if (
+        !withdrawnRetry &&
+        attempt.state === 'stopped' &&
+        task.state === 'stopped' &&
+        (attempt.typingEvidencePending !== undefined || isTypingEvidenceUnavailableResult(attempt.result))
+      )
+        throw new Error('typing recovery requires completed ordinary source with pending compiler evidence');
+      store.assertCurrent(ref);
+      throw new Error('typing recovery requires completed ordinary source with pending compiler evidence');
+    }
+    if (!withdrawnRetry) store.assertCurrent(ref);
     let authority: AuthenticatedManager | undefined;
     if (actor !== undefined) {
       const live = actor && backlogManagerActor(store.db, actor.id);
@@ -41,17 +81,8 @@ export async function recoverWorkerTyping(
         throw new Error('typing recovery requires the authenticated owning or operations manager');
       authority = live;
     }
-    if (task.state === 'landing') return { ...ref, status: 'landing' as const };
-    const attempt = store.attempt(ref);
-    if (
-      task.brief.kind === 'verification' ||
-      !['ready', 'running', 'stopped'].includes(task.state) ||
-      attempt.state !== 'exited' ||
-      (attempt.process && sameProcess(attempt.process)) ||
-      attempt.terminationIntent ||
-      (!attempt.typingEvidencePending && !isTypingEvidenceUnavailableResult(attempt.result))
-    )
-      throw new Error('typing recovery requires completed ordinary source with pending compiler evidence');
+    if (withdrawnRetry && !authority)
+      throw new Error('withdrawn retry compiler recovery requires authenticated owner or operations authority');
     const directory = workerCheckBudgetDirectory(settings.stateDirectory, task.id, ref.attempt);
     const typing = workerCheckHostTypingSettlement({
       directory,
@@ -63,6 +94,13 @@ export async function recoverWorkerTyping(
         intent.status = 'abandoned';
       });
     if (!typing.ok && typing.kind === 'typing-failure') {
+      if (withdrawnRetry) {
+        store.recordWithdrawnTypingRecoveryFailure(ref, attempt.result, typing.result, {
+          actor: authority,
+          recoveryKind: 'withdrawn-budget-stop',
+        });
+        return { ...ref, status: 'typing-failure' as const, result: typing.result };
+      }
       store.updateAttempt(ref, (current) => {
         delete current.typingEvidencePending;
         current.failureKind = 'tool';
@@ -79,14 +117,46 @@ export async function recoverWorkerTyping(
       store.event(ref, 'typing-evidence-failed', { result: typing.result });
       return { ...ref, status: 'typing-failure' as const, result: typing.result };
     }
-    if (!typing.ok) {
+    const webCompiler = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+    const hasWebReceipt =
+      typing.ok &&
+      workerCheckHostHasTypecheckRun(directory) &&
+      workerCheckHostTypingReceiptMatches(directory, webCompiler);
+    if (withdrawnRetry && hasWebReceipt) {
+      store.beginWithdrawnTypingRecoverySettlement(ref, attempt.result, webCompiler, {
+        actor: authority,
+        previousResult: attempt.result,
+        recoveryKind: 'withdrawn-budget-stop',
+        compilerCommand: webCompiler,
+      });
+      await settle(
+        tasks,
+        { attempt, exited: Promise.resolve({ code: attempt.exitCode ?? 0, signal: null }) },
+        landing,
+        afterSettle,
+        { withdrawnBudgetRecovery: { previousResult: attempt.result, command: webCompiler } },
+      );
+      return {
+        ...ref,
+        status: store.task(task.id).state === 'landing' ? ('landing' as const) : ('pending' as const),
+      };
+    }
+    if (!typing.ok || (withdrawnRetry && !hasWebReceipt)) {
+      const pendingResult = typing.ok
+        ? 'Compiler evidence for the retained Web source is missing; only the installed Web typecheck is authorized.'
+        : typing.result;
       const original = typing.command ?? attempt.typingEvidencePending?.command ?? [];
       const expanded = expandCheckCommands(original);
-      const commands = expanded
-        .map((command) => resolveTypingCompilerCommand(task.worktree, command) ?? command)
-        .filter(
-          (command) => isTypecheckCommand(command) && (!authority || isKnownTypingCompiler(task.worktree, command)),
-        );
+      const resolvedWebCompiler = resolveTypingCompilerCommand(task.worktree, webCompiler);
+      if (withdrawnRetry && !resolvedWebCompiler)
+        throw new Error('Withdrawn retry recovery requires the installed owning Web typecheck');
+      const commands = withdrawnRetry
+        ? [resolvedWebCompiler!]
+        : expanded
+            .map((command) => resolveTypingCompilerCommand(task.worktree, command) ?? command)
+            .filter(
+              (command) => isTypecheckCommand(command) && (!authority || isKnownTypingCompiler(task.worktree, command)),
+            );
       const workspaceScoped = expanded.some(
         (command) =>
           (command[0] === 'bun' || command[0]?.endsWith('/bun')) &&
@@ -105,24 +175,43 @@ export async function recoverWorkerTyping(
               worktree: task.worktree,
               command,
               actor: authority!,
+              ...(withdrawnRetry ? { recoveryKind: 'withdrawn-budget-stop' as const } : {}),
             }),
           )
         : [];
-      for (const grant of grants)
-        store.event(ref, 'typing-recovery-authorized', {
-          actor: grant.actor,
-          token: grant.token,
-          identity: grant.identity,
-          command: grant.command,
-          checkId: grant.checkId,
+      if (withdrawnRetry && grants.length === 1) {
+        const grant = grants[0]!;
+        store.recordWithdrawnTypingRecoveryAuthorization(
+          ref,
+          attempt.result,
+          { result: pendingResult, command: grant.command },
+          {
+            actor: grant.actor,
+            token: grant.token,
+            identity: grant.identity,
+            command: grant.command,
+            checkId: grant.checkId,
+            recoveryKind: 'withdrawn-budget-stop',
+          },
+        );
+      } else {
+        for (const grant of grants)
+          store.event(ref, 'typing-recovery-authorized', {
+            actor: grant.actor,
+            token: grant.token,
+            identity: grant.identity,
+            command: grant.command,
+            checkId: grant.checkId,
+            ...(grant.recoveryKind ? { recoveryKind: grant.recoveryKind } : {}),
+          });
+        store.updateTask(ref, (current) => {
+          current.state = 'stopped';
         });
-      store.updateTask(ref, (current) => {
-        current.state = 'stopped';
-      });
+      }
       return {
         ...ref,
         status: 'pending' as const,
-        result: typing.result,
+        result: pendingResult,
         proof: {
           cwd: task.worktree,
           env: {
@@ -143,15 +232,23 @@ export async function recoverWorkerTyping(
         },
       };
     }
-    store.event(ref, 'typing-evidence-recovery', {
+    if (withdrawnRetry) store.beginWithdrawnTypingRecoverySettlement(ref, attempt.result, webCompiler, {
       actor: actor ?? { kind: 'controller' },
       previousResult: attempt.result,
+      recoveryKind: 'withdrawn-budget-stop',
+      compilerCommand: webCompiler,
     });
+    else
+      store.event(ref, 'typing-evidence-recovery', {
+        actor: actor ?? { kind: 'controller' },
+        previousResult: attempt.result,
+      });
     await settle(
       tasks,
       { attempt, exited: Promise.resolve({ code: attempt.exitCode ?? 0, signal: null }) },
       landing,
       afterSettle,
+      withdrawnRetry ? { withdrawnBudgetRecovery: { previousResult: attempt.result, command: webCompiler } } : undefined,
     );
     return { ...ref, status: store.task(task.id).state === 'landing' ? ('landing' as const) : ('pending' as const) };
   } finally {

@@ -2858,9 +2858,22 @@ Decision: recover recognized workspace compiler intent with `bun run --cwd <work
 recovery grant only after the previous exact check proves terminal SIGTERM before command start, preserving its stamp
 and physical custody.
 
-After this recovery path is live, settle numeric task `8f0c490d` with
-`bun tools/goal/src/cli.ts typing-recover 8f0c490d --expected-attempt 1`, run the returned wrapper command, then repeat
-`typing-recover` after its actual result.
+Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
+environment retry was withdrawn by stop, but only with authenticated authority, unchanged final source, a completed
+known stop, terminal custody for every same-attempt check and one exact installed Web compiler grant. Permit one
+replacement grant only when the original recovery check has proven terminal before compiler entry; preserve both
+grant tombstones and physical custody. Keep the withdrawn retry and stop tombstones intact; only a terminal Web
+receipt for the current inputs may land that same attempt.
+
+For this stopped Web-source case, use the same `typing-recover <task> --expected-attempt <n>` command. It returns only
+`bun run --cwd apps/web typecheck` through the authorized wrapper when a matching successful receipt is absent. Run the
+returned wrapper once and repeat `typing-recover` after its physical result is terminal. An exact current-source Web
+receipt lands without another run. Unknown process or check custody, source drift, explicit cancellation, a live check,
+or a compiler diagnostic keeps the attempt fenced; recovery never restores the withdrawn source retry.
+
+After this recovery path is live, settle a retained numeric task with
+`bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <attempt>`, run only the returned exact wrapper
+command, then repeat `typing-recover` after its actual result. For the current retained numeric task, use attempt 1.
 
 Landing and promotion checks record only clean, successful runs. Each result is keyed by the normalized command, the
 allowlisted environment (`CI`, `DATABASE_URL`, `NODE_ENV`, `PATH`, `PLAYWRIGHT_BROWSERS_PATH`, and `TZ`), the Git tree

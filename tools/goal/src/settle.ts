@@ -37,7 +37,10 @@ import { defaultPolicy } from './policy.ts';
 import {
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
+  workerCheckHostBudgetRefusalReport,
+  workerCheckHostTypingReceiptMatches,
   workerCheckHostTypingSettlement,
+  workerCheckHostWithdrawnRetryIsRecoverable,
 } from './worker-check-budget.ts';
 
 function readAttemptStderr(logPath: string): string {
@@ -101,6 +104,7 @@ export async function settle(
   worker: Pick<RunningWorker, 'attempt' | 'exited' | 'logStartOffset' | 'resuming'>,
   landing: LandingQueue,
   startTrain: () => Promise<void> = async () => {},
+  recovery?: { withdrawnBudgetRecovery: { previousResult: string; command: string[] } },
 ): Promise<void> {
   const ref = worker.attempt;
   const policy = tasks.settings.policy ?? defaultPolicy;
@@ -469,6 +473,53 @@ export async function settle(
         maxLogBytes: policy.worker.logTailBytes,
         ...(logStartOffset !== undefined ? { logStartOffset } : {}),
       });
+      if (recovery?.withdrawnBudgetRecovery) {
+        const { previousResult, command } = recovery.withdrawnBudgetRecovery;
+        const directory = workerCheckBudgetDirectory(tasks.settings.stateDirectory, ref.taskId, ref.attempt);
+        const progressEvent = store
+          .events(ref.taskId, ref.attempt)
+          .findLast((event) => event.kind === 'attempt-progress');
+        let progress: { endHead?: unknown; uncommitted?: unknown } | undefined;
+        try {
+          progress = progressEvent ? (JSON.parse(progressEvent.body) as typeof progress) : undefined;
+        } catch {
+          progress = undefined;
+        }
+        if (
+          task.brief.goal !== 'web' ||
+          task.brief.kind !== 'interface' ||
+          (current.state !== 'stopped' &&
+            !(current.state === 'exited' &&
+              JSON.stringify(current.typingEvidencePending?.command) ===
+                JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']))) ||
+          current.result !== previousResult ||
+          !workerCheckHostBudgetRefusalReport(current.result) ||
+          JSON.stringify(command) !== JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) ||
+          !workerCheckHostTypingReceiptMatches(directory, command) ||
+          !workerCheckHostTypingSettlement({
+            directory,
+            worktree: task.worktree,
+            limit: workerCheckHostBudgetLimit(task, ref.attempt),
+          }).ok ||
+          !workerCheckHostWithdrawnRetryIsRecoverable({
+            task,
+            attempt: current,
+            retry: store.retryIntent(ref),
+            ...(progress ? { progress } : {}),
+          })
+        )
+          throw new Error('Withdrawn retry source no longer has exact terminal Web compiler evidence');
+        finalMeasurement.result = JSON.stringify({
+          status: 'success',
+          summary: 'Retained source passed the installed owning Web typecheck; remaining acceptance stays with integration.',
+          blocker: null,
+          checks: [],
+          approaches: [],
+        });
+        finalMeasurement.blocker = null;
+        finalMeasurement.failureKind = null;
+        finalMeasurement.waitingChecks = null;
+      }
       if (pool)
         try {
           agentAdapter(pool.cli).afterExit(pool, readLogTail(attempt.logPath, policy.worker.logTailBytes));

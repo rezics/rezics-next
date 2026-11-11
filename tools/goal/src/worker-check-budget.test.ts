@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { startWorkerCheck, workerCheckNeedsStack } from '../../../scripts/worker-check.ts';
 import { openDb } from './db.ts';
@@ -15,7 +15,6 @@ import {
   captureTypingInputs,
   typingInputCommand,
 } from './worker-check-typing-inputs.ts';
-import { readFileSync } from 'node:fs';
 import { WorkerStore } from './store.ts';
 import { brief, harness, temporaryDirectory } from './test-support.ts';
 import type { Attempt, Settings } from './types.ts';
@@ -1230,3 +1229,244 @@ test('misordered compiler recovery uses its owner and replaces only a proven pre
     await h.disposeAsync();
   }
 });
+
+test('a withdrawn Web interface retry gets one exact terminal compiler receipt and lands the same stopped attempt', async () => {
+  const h = harness();
+  try {
+    const retained = await settleSuccessWithHostCheck(h, testsOnlyLog);
+    const task = h.store.task(retained.task.id);
+    const attempt = h.store.attempt(retained.ref);
+    h.store.db
+      .query("DELETE FROM worker_events WHERE task_id=? AND attempt=? AND kind='landing-requested'")
+      .run(retained.ref.taskId, retained.ref.attempt);
+    h.store.updateTask(retained.ref, (current) => {
+      current.state = 'stopped';
+      current.brief.goal = 'web';
+      current.brief.kind = 'interface';
+    });
+
+    const worktree = task.worktree;
+    const compiler = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+    mkdirSync(join(worktree, 'apps/web/scripts'), { recursive: true });
+    mkdirSync(join(worktree, 'apps/web/src'), { recursive: true });
+    writeFileSync(
+      join(worktree, 'apps/web/package.json'),
+      JSON.stringify({ scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
+    );
+    writeFileSync(join(worktree, 'apps/web/tsconfig.json'), '{"include":["src/**/*.ts"]}');
+    writeFileSync(join(worktree, 'apps/web/scripts/typecheck.ts'), 'export {};\n');
+    writeFileSync(join(worktree, 'apps/web/src/baseline.ts'), 'export const baseline = true;\n');
+    git(worktree, ['add', 'apps/web']);
+    git(worktree, ['commit', '-m', 'Prepare Web compiler fixture']);
+
+    const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, task.id, 1);
+    const second = admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree });
+    expect(second).toMatchObject({ ok: true, used: 2, stamp: '2' });
+    const priorEnv: NodeJS.ProcessEnv = {
+      GOAL_WORKER_CHECK_BUDGET: '2',
+      GOAL_WORKER_CHECK_BUDGET_DIR: budget,
+      GOAL_WORKER_CHECK_BUDGET_STAMP: '2',
+    };
+    const priorLog = join(h.settings.stateDirectory, 'prior-web-typecheck.log');
+    writeFileSync(priorLog, '');
+    settleWorkerCheckHostBudget(priorEnv, 0, true, { argv: compiler, log: priorLog, worktree });
+    const priorStamps = ['1', '2'].map((stamp) => readFileSync(join(budget, stamp), 'utf8'));
+
+    writeFileSync(join(worktree, 'apps/web/src/reader.ts'), 'export const mountedReader = true;\n');
+    git(worktree, ['add', 'apps/web/src/reader.ts']);
+    git(worktree, ['commit', '-m', 'Complete mounted reader']);
+    const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: worktree, encoding: 'utf8' }).stdout.trim();
+    const stoppedProcess = { pid: 2_000_000_001, start: '1', boot: 'fixture-boot', group: 2_000_000_001 };
+    const endedAt = new Date(Math.max(Date.now(), Date.parse(attempt.startedAt)) + 1_000).toISOString();
+    const requestedAt = new Date(Date.parse(endedAt) + 1_000).toISOString();
+    const settledAt = new Date(Date.parse(requestedAt) + 5).toISOString();
+    const refusal = JSON.stringify({
+      status: 'blocked',
+      summary: 'Completed Web source; the final compiler could not start.',
+      blocker: {
+        kind: 'tool',
+        detail: `${WORKER_CHECK_HOST_BUDGET_REFUSAL}\nRepeated on two retries; the final Web typecheck could not start.`,
+      },
+      checks: [],
+      approaches: [],
+    });
+    const previousCheckId = 'a7a7a7a7-7777-4777-8777-777777777777';
+    const previousPhysicalId = 'b8b8b8b8-8888-4888-8888-888888888888';
+    const checkRoot = join(worktree, '.temp/goal/checks');
+    const results = join(checkRoot, 'results');
+    const history = join(checkRoot, 'custody/history');
+    mkdirSync(results, { recursive: true });
+    mkdirSync(history, { recursive: true });
+    writeFileSync(
+      join(results, `${previousCheckId}.json`),
+      JSON.stringify({
+        id: previousCheckId,
+        cwd: worktree,
+        argv: compiler,
+        ownership: { taskId: task.id, attempt: 1 },
+        status: 'finished',
+        exitCode: 0,
+        physicalRunId: previousPhysicalId,
+      }),
+    );
+    writeFileSync(
+      join(history, `${previousCheckId}.${previousPhysicalId}.json`),
+      JSON.stringify({
+        version: 1,
+        id: previousCheckId,
+        cwd: worktree,
+        physicalRunId: previousPhysicalId,
+        status: 'finished',
+        remoteExpected: false,
+        exitCode: 0,
+        terminalProof: { local: true, remote: null, resultKnown: true, observedAt: new Date().toISOString() },
+      }),
+    );
+    writeFileSync(
+      attempt.logPath,
+      [
+        { type: 'thread.started', thread_id: 'typing-session' },
+        { type: 'item.completed', item: { type: 'agent_message', text: refusal } },
+        { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } },
+      ]
+        .map((event) => JSON.stringify(event))
+        .join('\n') + '\n',
+    );
+    h.store.saveRetryIntent(retained.ref, { escalation: 'environment' });
+    h.store.updateRetryIntent(retained.ref, (retry) => {
+      retry.status = 'abandoned';
+      retry.abandonedBy = 'stop';
+    });
+    h.store.event(retained.ref, 'attempt-progress', {
+      startHead: head,
+      endHead: head,
+      uncommitted: false,
+      progress: false,
+    });
+    h.store.event(retained.ref, 'termination-requested', { operation: 'stop', processIdentity: 'known' });
+    h.store.event(retained.ref, 'stopped', {});
+    h.settings.integration.operationsManager = 'operations';
+    h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY,state TEXT NOT NULL)');
+    h.store.db.query('INSERT INTO manager_sessions VALUES (?,?)').run(
+      'operations',
+      JSON.stringify({
+        id: 'operations',
+        kind: 'resident-supermanager',
+        provider: 'claude',
+        status: 'running',
+        threadId: 'operations-session',
+      }),
+    );
+    const actor = { id: 'operations', sessionId: 'operations-session' };
+    const landings: unknown[] = [];
+    const landing = { enqueue: (value: unknown) => landings.push(value) };
+    const recover = () => recoverWorkerTyping(h.tasks, landing, retained.ref, actor);
+    h.store.updateTask(retained.ref, (current) => {
+      current.state = 'cancelled';
+    });
+    await expect(recover()).rejects.toThrow();
+    h.store.updateTask(retained.ref, (current) => {
+      current.state = 'stopped';
+    });
+    h.store.updateAttempt(retained.ref, (current) => {
+      current.state = 'stopped';
+      current.endedAt = endedAt;
+      current.exitCode = 0;
+      current.failureKind = 'tool';
+      current.result = refusal;
+      current.checks = [previousCheckId];
+      current.process = stoppedProcess;
+      current.terminationIntent = {
+        operation: 'stop',
+        requestedAt,
+        state: 'complete',
+        processIdentity: 'known',
+        process: stoppedProcess,
+        auxiliaryProcesses: [],
+        settledAt,
+      };
+    });
+
+    const beforeStop = JSON.stringify(h.store.attempt(retained.ref).terminationIntent);
+    const beforeRetry = JSON.stringify(h.store.retryIntent(retained.ref));
+
+    const issued = await recover();
+    expect(issued.status).toBe('pending');
+    expect(issued.proof.commands).toHaveLength(1);
+    expect(issued.proof.commands[0]?.slice(-compiler.length)).toEqual(compiler);
+    expect(issued.proof.env[TYPING_RECOVERY_ENV]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(h.store.attempt(retained.ref).typingEvidencePending?.command).toEqual(compiler);
+    expect(JSON.stringify(h.store.attempt(retained.ref).terminationIntent)).toBe(beforeStop);
+    expect(JSON.stringify(h.store.retryIntent(retained.ref))).toBe(beforeRetry);
+
+    const savedEnvironment = { ...process.env };
+    let physicalRunId = '';
+    let checkId = '';
+    let launchEnvironment: NodeJS.ProcessEnv | undefined;
+    try {
+      Object.assign(process.env, issued.proof.env);
+      checkId = startWorkerCheck(compiler, worktree, (record, childEnv) => {
+        physicalRunId = record.physicalRunId!;
+        launchEnvironment = { ...childEnv };
+      });
+    } finally {
+      for (const key of Object.keys(process.env)) if (!(key in savedEnvironment)) delete process.env[key];
+      Object.assign(process.env, savedEnvironment);
+    }
+    const currentResult = join(results, `${checkId}.json`);
+    expect(JSON.parse(readFileSync(currentResult, 'utf8'))).toMatchObject({ status: 'running', physicalRunId });
+    await expect(recover()).rejects.toThrow('completed ordinary source with pending compiler evidence');
+
+    if (!launchEnvironment) throw new Error('recovery check did not receive its admitted environment');
+    const receiptEnv = {
+      ...launchEnvironment,
+      REZICS_TYPING_INPUTS_PHYSICAL: physicalRunId,
+      REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(compiler)).toString('base64'),
+    };
+    recordWorkerCheckTypingInputs(launchEnvironment, worktree, physicalRunId, compiler);
+    const completeReceipt = beginTypingInputReceipt(worktree, receiptEnv, compiler);
+    if (!completeReceipt) throw new Error('recovery compiler did not begin a physical input receipt');
+    completeReceipt(0);
+    const compilerLog = join(h.settings.stateDirectory, 'reader-web-typecheck.log');
+    writeFileSync(compilerLog, '');
+    settleWorkerCheckHostBudget(launchEnvironment, 0, true, {
+      argv: compiler,
+      log: compilerLog,
+      worktree,
+      physicalRunId,
+    });
+    const completed = JSON.parse(readFileSync(currentResult, 'utf8')) as Record<string, unknown>;
+    writeFileSync(currentResult, JSON.stringify({ ...completed, status: 'finished', exitCode: 0 }));
+    writeFileSync(
+      join(history, `${checkId}.${physicalRunId}.json`),
+      JSON.stringify({
+        version: 1,
+        id: checkId,
+        cwd: worktree,
+        physicalRunId,
+        status: 'finished',
+        remoteExpected: false,
+        exitCode: 0,
+        terminalProof: { local: true, remote: null, resultKnown: true, observedAt: new Date().toISOString() },
+      }),
+    );
+
+    const landed = await recover();
+    expect(landed.status).toBe('landing');
+    expect(landings).toHaveLength(1);
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+    expect(h.store.attempt(retained.ref).typingEvidencePending).toBeUndefined();
+    expect(h.store.attempt(retained.ref).result).toContain('installed owning Web typecheck');
+    expect(h.store.attempt(retained.ref).terminationIntent).toEqual(JSON.parse(beforeStop));
+    expect(h.store.retryIntent(retained.ref)).toEqual(JSON.parse(beforeRetry));
+    expect(readWorkerCheckHostStamp(budget, '3')).toMatchObject({
+      exitCode: 0,
+      typingRecovery: { checkId, physicalRunId },
+      typingInputs: { exitCode: 0 },
+    });
+    expect(['1', '2'].map((stamp) => readFileSync(join(budget, stamp), 'utf8'))).toEqual(priorStamps);
+    expect(readdirSync(join(budget, 'typing-recovery')).filter((file) => file.endsWith('.json'))).toHaveLength(1);
+  } finally {
+    await h.disposeAsync();
+  }
+}, 20_000);

@@ -14,9 +14,10 @@ import { dirname, join, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { Database } from 'bun:sqlite';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
+import { identityLive, sameProcess } from './process.ts';
 import { writeAtomicJson } from '../../../scripts/check-custody.ts';
 import type { AuthenticatedManager } from './priority-authority.ts';
-import type { Task, Attempt } from './types.ts';
+import type { Task, Attempt, RetryIntent } from './types.ts';
 import {
   captureTypingInputs,
   isKnownTypingCompiler,
@@ -202,6 +203,7 @@ type TypingRecoveryGrant = {
   physicalRunId: string;
   stamp?: string;
   replacementOf?: string;
+  recoveryKind?: 'withdrawn-budget-stop';
 };
 const recoveryPath = (directory: string, token: string) => {
   if (!/^[0-9a-f-]{36}$/.test(token)) throw new Error('Invalid typing recovery token');
@@ -265,6 +267,160 @@ function terminalPhysicalHistory(worktree: string, checkId: string, physicalRunI
     (history.remoteExpected === true
       ? history.terminalProof?.remote === true
       : history.remoteExpected === false && history.terminalProof?.remote === null),
+  );
+}
+
+/** Exact structured worker outcome needed to recover completed source after its retry was withdrawn. */
+export function workerCheckHostBudgetRefusalReport(result: string | null | undefined): boolean {
+  if (!result) return false;
+  let value: unknown;
+  try {
+    value = JSON.parse(result);
+  } catch {
+    return false;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const report = value as {
+    status?: unknown;
+    checks?: unknown;
+    blocker?: { kind?: unknown; detail?: unknown } | null;
+  };
+  return (
+    report.status === 'blocked' &&
+    report.blocker?.kind === 'tool' &&
+    typeof report.blocker.detail === 'string' &&
+    report.blocker.detail.startsWith(WORKER_CHECK_HOST_BUDGET_REFUSAL) &&
+    Array.isArray(report.checks) &&
+    report.checks.length === 0
+  );
+}
+
+/**
+ * A completed, clean Web source attempt whose environment retry was withdrawn by an explicit post-exit stop.
+ * Every recorded check must be physically terminal; the optional current check is only accepted as an idempotent
+ * replay of the exact already-authorized recovery check.
+ */
+export function workerCheckHostWithdrawnRetryIsRecoverable(input: {
+  task: Task;
+  attempt: Attempt;
+  retry?: RetryIntent;
+  progress?: { endHead?: unknown; uncommitted?: unknown };
+  currentCheck?: { id: string; physicalRunId: string };
+}): boolean {
+  const { task, attempt, retry, progress } = input;
+  const stop = attempt.terminationIntent;
+  if (
+    task.state !== 'stopped' ||
+    task.currentAttempt !== attempt.attempt ||
+    task.brief.goal !== 'web' ||
+    task.brief.kind !== 'interface' ||
+    workerCheckHostBudgetLimit(task, attempt.attempt) === 'off' ||
+    !isKnownTypingCompiler(task.worktree, ['bun', 'run', '--cwd', 'apps/web', 'typecheck']) ||
+    (attempt.state !== 'stopped' &&
+      !(attempt.state === 'exited' &&
+        JSON.stringify(attempt.typingEvidencePending?.command) ===
+          JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']))) ||
+    attempt.exitCode !== 0 ||
+    attempt.failureKind !== 'tool' ||
+    !workerCheckHostBudgetRefusalReport(attempt.result) ||
+    retry?.status !== 'abandoned' ||
+    retry.taskId !== task.id ||
+    retry.attempt !== attempt.attempt ||
+    retry.abandonedBy !== 'stop' ||
+    retry.nextAttempt !== undefined ||
+    retry.options.escalation !== 'environment' ||
+    !stop ||
+    stop.operation !== 'stop' ||
+    stop.state !== 'complete' ||
+    stop.processIdentity !== 'known' ||
+    !stop.settledAt ||
+    !attempt.endedAt ||
+    Date.parse(stop.requestedAt) <= Date.parse(attempt.endedAt) ||
+    Date.parse(stop.settledAt) < Date.parse(stop.requestedAt) ||
+    !stop.process ||
+    !attempt.process ||
+    JSON.stringify(stop.process) !== JSON.stringify(attempt.process) ||
+    JSON.stringify(stop.auxiliaryProcesses) !== JSON.stringify(attempt.auxiliaryProcesses ?? [])
+  )
+    return false;
+
+  const ended = Date.parse(attempt.endedAt);
+  const requested = Date.parse(stop.requestedAt);
+  const settled = Date.parse(stop.settledAt);
+  if (![ended, requested, settled].every(Number.isFinite) || requested <= ended || settled < requested) return false;
+  if (identityLive(stop.process)) return false;
+  if (attempt.driver && identityLive(attempt.driver)) return false;
+  for (const process of [...(attempt.auxiliaryProcesses ?? []), ...stop.auxiliaryProcesses])
+    if (identityLive(process)) return false;
+
+  if (progress?.uncommitted !== false || typeof progress.endHead !== 'string') return false;
+  try {
+    if (git(task.worktree, ['rev-parse', 'HEAD']).trim() !== progress.endHead) return false;
+    if (git(task.worktree, ['status', '--porcelain', '--untracked-files=all']).trim() !== '') return false;
+  } catch {
+    return false;
+  }
+  return workerCheckHostAttemptChecksTerminal(
+    task.worktree,
+    task.id,
+    attempt.attempt,
+    attempt.checks ?? [],
+    input.currentCheck,
+  );
+}
+
+/** No competing check is inferred from a missing, unreadable or non-terminal owned result. */
+export function workerCheckHostAttemptChecksTerminal(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  checkIds: readonly string[],
+  currentCheck?: { id: string; physicalRunId: string },
+): boolean {
+  const root = join(worktree, '.temp', 'goal', 'checks');
+  const recordDirectory = join(root, 'results');
+  let files: string[];
+  try {
+    files = readdirSync(recordDirectory).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return checkIds.length === 0;
+    throw error;
+  }
+  const found = new Set<string>();
+  for (const file of files) {
+    const record = readCheckEvidence(join(recordDirectory, file));
+    if (!record) return false;
+    if (record.ownership?.taskId !== taskId || record.ownership.attempt !== attempt) continue;
+    if (typeof record.id !== 'string' || typeof record.physicalRunId !== 'string') return false;
+    found.add(record.id);
+    const expectedCurrent =
+      currentCheck?.id === record.id && currentCheck.physicalRunId === record.physicalRunId;
+    if (
+      record.cwd !== worktree ||
+      file !== `${record.id}.json` ||
+      existsSync(join(root, 'cancellations', `${record.id}.json`))
+    )
+      return false;
+    if (expectedCurrent && record.status === 'running') continue;
+    if (
+      record.status !== 'finished' ||
+      !terminalPhysicalHistory(worktree, record.id, record.physicalRunId)
+    )
+      return false;
+  }
+  return checkIds.every((id) => found.has(id));
+}
+
+export function workerCheckHostTypingReceiptMatches(directory: string, command: readonly string[]): boolean {
+  const source = stampNames(directory)
+    .map((name) => readWorkerCheckHostStamp(directory, name))
+    .findLast((stamp) => stamp.includedTypecheck || stamp.typingRequest);
+  return Boolean(
+    source?.typingRequest &&
+    JSON.stringify(source.typingRequest.command) === JSON.stringify(command) &&
+    source.typingInputs?.exitCode === 0 &&
+    source.exitCode === 0 &&
+    source.includedTypecheck === true,
   );
 }
 
@@ -342,9 +498,16 @@ export function grantWorkerTypingRecovery(
     const grants = join(directory, 'typing-recovery');
     mkdirSync(grants, { recursive: true });
     const matching: TypingRecoveryGrant[] = [];
+    const sameAttempt: TypingRecoveryGrant[] = [];
     for (const file of readdirSync(grants)) {
       if (!/^[0-9a-f-]{36}\.json$/.test(file)) continue;
       const prior = JSON.parse(readFileSync(join(grants, file), 'utf8')) as TypingRecoveryGrant;
+      if (
+        prior.version === 1 &&
+        prior.taskId === input.taskId &&
+        prior.attempt === input.attempt
+      )
+        sameAttempt.push(prior);
       if (
         prior.version === 1 &&
         prior.taskId === input.taskId &&
@@ -354,6 +517,47 @@ export function grantWorkerTypingRecovery(
         JSON.stringify(prior.command) === JSON.stringify(input.command)
       )
         matching.push(prior);
+    }
+    if (input.recoveryKind === 'withdrawn-budget-stop') {
+      if (
+        sameAttempt.some(
+          (prior) =>
+            prior.recoveryKind !== 'withdrawn-budget-stop' ||
+            prior.identity !== identity ||
+            JSON.stringify(prior.command) !== JSON.stringify(input.command),
+        )
+      )
+        throw new Error('Withdrawn retry recovery already has a different compiler authority for this attempt');
+      const withdrawn = sameAttempt;
+      if (withdrawn.length > 0) {
+        const original = withdrawn.find((prior) => !prior.replacementOf);
+        if (!original || withdrawn.some((prior) => prior.replacementOf && prior.replacementOf !== original.token))
+          throw new Error('Withdrawn retry recovery has conflicting compiler grant history');
+        const replacement = withdrawn.find((prior) => prior.replacementOf === original.token);
+        if (replacement) return replacement;
+        if (withdrawn.length !== 1 || !provenPreCompilerRecoveryCancellation(original, directory)) return original;
+        const grant: TypingRecoveryGrant = {
+          ...input,
+          version: 1,
+          token: randomUUID(),
+          identity,
+          checkId: randomUUID(),
+          physicalRunId: randomUUID(),
+          replacementOf: original.token,
+        };
+        writeAtomicJson(recoveryPath(directory, grant.token), grant);
+        return grant;
+      }
+      const grant: TypingRecoveryGrant = {
+        ...input,
+        version: 1,
+        token: randomUUID(),
+        identity,
+        checkId: randomUUID(),
+        physicalRunId: randomUUID(),
+      };
+      writeAtomicJson(recoveryPath(directory, grant.token), grant);
+      return grant;
     }
     const original = matching.find((prior) => !prior.replacementOf);
     if (matching.length > 0 && !original) return matching[0]!;
@@ -409,8 +613,37 @@ function admitTypingRecovery(input: WorkerCheckHostAdmit, directory: string): Wo
       const attemptRow = db
         .query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?')
         .get(grant.taskId, grant.attempt) as { body: string } | null;
+      const retryRow = db
+        .query('SELECT body FROM worker_retry_intents WHERE task_id=? AND attempt=?')
+        .get(grant.taskId, grant.attempt) as { body: string } | null;
+      const progressRow = db
+        .query("SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='attempt-progress' ORDER BY sequence DESC LIMIT 1")
+        .get(grant.taskId, grant.attempt) as { body: string } | null;
       const task = taskRow && (JSON.parse(taskRow.body) as Task | null);
       const attempt = attemptRow && (JSON.parse(attemptRow.body) as Attempt | null);
+      const retry = retryRow && (JSON.parse(retryRow.body) as RetryIntent | null);
+      let progress: { endHead?: unknown; uncommitted?: unknown } | undefined;
+      try {
+        progress = progressRow ? (JSON.parse(progressRow.body) as typeof progress) : undefined;
+      } catch {
+        progress = undefined;
+      }
+      const withdrawnRetry =
+        grant.recoveryKind === 'withdrawn-budget-stop' &&
+        task !== null &&
+        attempt !== null &&
+        JSON.stringify(grant.command) ===
+          JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) &&
+        workerCheckHostWithdrawnRetryIsRecoverable({
+          task,
+          attempt,
+          ...(retry ? { retry } : {}),
+          ...(progress ? { progress } : {}),
+          currentCheck: { id: grant.checkId, physicalRunId: grant.physicalRunId },
+        });
+      const ordinaryPending =
+        attempt?.state === 'exited' &&
+        (Boolean(attempt.typingEvidencePending) || isTypingEvidenceUnavailableResult(attempt.result));
       if (
         !task ||
         task.currentAttempt !== grant.attempt ||
@@ -418,8 +651,7 @@ function admitTypingRecovery(input: WorkerCheckHostAdmit, directory: string): Wo
         task.state !== 'stopped' ||
         task.brief.kind === 'verification' ||
         !attempt ||
-        attempt.state !== 'exited' ||
-        (!attempt.typingEvidencePending && !isTypingEvidenceUnavailableResult(attempt.result))
+        (!ordinaryPending && !withdrawnRetry)
       )
         throw new Error('Typing recovery authority is stale or source is no longer pending compiler evidence');
     } finally {
@@ -663,6 +895,20 @@ export type WorkerCheckHostTypingSettlement =
 const TYPING_SETTLEMENT_FAILED = 'Last check-host run failed its typecheck.';
 const TYPING_SETTLEMENT_CHANGED = 'Worktree content changed after the last check-host typecheck.';
 const TYPING_SETTLEMENT_UNAVAILABLE = 'Compiler input closure is unavailable for the last check-host typecheck.';
+
+export function workerCheckHostHasTypecheckRun(directory: string): boolean {
+  let names: string[];
+  try {
+    names = stampNames(directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+  return names.some((name) => {
+    const stamp = readWorkerCheckHostStamp(directory, name);
+    return stamp.includedTypecheck === true || stamp.typingRequest !== undefined;
+  });
+}
 
 /** Controller typing settlements do not establish a shared tool incident. */
 export function isTypingSettlementResult(result: string | null | undefined): boolean {
