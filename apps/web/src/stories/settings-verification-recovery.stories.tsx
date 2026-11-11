@@ -127,7 +127,6 @@ async function readAgain(view: ReturnType<typeof within>) {
 
 export const CurrentStatusEmpty: Story = {
   args: { scenario: 'empty' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await view.findByText(m.settings_verification_read_empty());
@@ -140,14 +139,8 @@ export const CurrentStatusEmpty: Story = {
   },
 };
 
-export const CurrentStatusEmptyPhone: Story = {
-  ...CurrentStatusEmpty,
-  globals: {},
-};
-
 export const CurrentStatusFailure: Story = {
   args: { scenario: 'failure' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     const failure = await view.findByRole('alert');
@@ -161,14 +154,8 @@ export const CurrentStatusFailure: Story = {
   },
 };
 
-export const CurrentStatusFailurePhone: Story = {
-  ...CurrentStatusFailure,
-  globals: {},
-};
-
 export const CurrentStatusRecovered: Story = {
   args: { scenario: 'recovery' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await view.findByRole('alert');
@@ -176,11 +163,6 @@ export const CurrentStatusRecovered: Story = {
     await expectEmpty(view);
     await expect(view.queryByRole('alert')).toBeNull();
   },
-};
-
-export const CurrentStatusRecoveredPhone: Story = {
-  ...CurrentStatusRecovered,
-  globals: {},
 };
 
 const readRecoveryFixtures = new WeakMap<Element, ReturnType<typeof readRecoveryTransport>>();

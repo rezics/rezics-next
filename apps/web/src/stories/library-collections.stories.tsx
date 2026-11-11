@@ -12,7 +12,11 @@ import { readLibraryPinsPage } from '../library/pins-read';
 import collectionRecording from '../kernel/recorded/library-collection.json';
 import collectionsRecording from '../kernel/recorded/library-collections.json';
 
-const meta = { title: 'Library/Collections', id: 'pages-library-collections', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Library/Collections',
+  id: 'pages-library-collections',
+  parameters: { layout: 'fullscreen' },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -468,7 +472,7 @@ export const PinAtCapacity: Story = {
   },
 };
 
-export const PhoneSelectorOpen: Story = {
+export const SelectorOpen: Story = {
   render: () =>
     render('many', pagePaths['library-entries'], { pinCount: 1, builtins: 'everything-liked', collectionCount: 2 }),
   play: async (context) => {

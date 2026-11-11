@@ -131,7 +131,6 @@ export const Directory: Story = {
 };
 export const MultilingualDirectory: Story = {
   args: { scenario: 'directory-multilingual' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const list = within(canvasElement).getByRole('list', { name: m.ctxw_title() });
     const heading = within(list).getByRole('heading', { name: longContextTitle, level: 2 });
@@ -314,42 +313,38 @@ async function readTechnicalDetails({ canvasElement }: { canvasElement: HTMLElem
   await userEvent.keyboard('{Enter}');
   await expect(within(rule.closest('details')!).getByText(m.ctx_reader_property_key())).toBeVisible();
 }
-function readerStory(locale: string, viewport: 'phone390' | 'desktop1280', theme: 'light' | 'dark'): Story {
+function readerStory(locale: string): Story {
   return {
     render: () => <ReaderExample />,
     globals: { locale },
     play: readTechnicalDetails,
   };
 }
-export const ReaderEnglishPhone = readerStory('en', 'phone390', 'light');
-export const ReaderEnglishDesktop = readerStory('en', 'desktop1280', 'dark');
-export const ReaderTraditionalChinesePhone = readerStory('zh-Hant', 'phone390', 'dark');
-export const ReaderTraditionalChineseDesktop = readerStory('zh-Hant', 'desktop1280', 'light');
-export const ReaderSimplifiedChinesePhone = readerStory('zh-Hans', 'phone390', 'light');
-export const ReaderSimplifiedChineseDesktop = readerStory('zh-Hans', 'desktop1280', 'dark');
-export const ReaderJapanesePhone = readerStory('ja', 'phone390', 'dark');
-export const ReaderJapaneseDesktop = readerStory('ja', 'desktop1280', 'light');
-export const ReaderKoreanPhone = readerStory('ko', 'phone390', 'light');
-export const ReaderKoreanDesktop = readerStory('ko', 'desktop1280', 'dark');
-export const ReaderGermanPhone = readerStory('de', 'phone390', 'dark');
-export const ReaderGermanDesktop = readerStory('de', 'desktop1280', 'light');
-export const ReaderFrenchPhone = readerStory('fr', 'phone390', 'light');
-export const ReaderFrenchDesktop = readerStory('fr', 'desktop1280', 'dark');
-export const ReaderSpanishPhone = readerStory('es', 'phone390', 'dark');
-export const ReaderSpanishDesktop = readerStory('es', 'desktop1280', 'light');
-export const ReaderRtlPhone: Story = {
-  ...readerStory('en', 'phone390', 'dark'),
+export const ReaderEnglish = readerStory('en');
+
+export const ReaderTraditionalChinese = readerStory('zh-Hant');
+
+export const ReaderSimplifiedChinese = readerStory('zh-Hans');
+
+export const ReaderJapanese = readerStory('ja');
+
+export const ReaderKorean = readerStory('ko');
+
+export const ReaderGerman = readerStory('de');
+
+export const ReaderFrench = readerStory('fr');
+
+export const ReaderSpanish = readerStory('es');
+
+export const ReaderRtl: Story = {
+  ...readerStory('en'),
   render: () => <ReaderExample rtl />,
 };
-export const ReaderRtlDesktop: Story = {
-  ...readerStory('en', 'desktop1280', 'light'),
-  render: () => <ReaderExample rtl />,
-};
+
 export const ReaderNoSettings: Story = { render: () => <ReaderExample empty="settings" /> };
 export const ReaderNoDefaults: Story = { render: () => <ReaderExample empty="defaults" /> };
 export const IndependentReaders: Story = {
   render: () => <ReaderExample pair />,
-  globals: {},
   play: async (context) => {
     await readTechnicalDetails(context);
     const panels = context.canvasElement.querySelectorAll('article');

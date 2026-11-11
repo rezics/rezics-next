@@ -262,7 +262,6 @@ function ReadingLeaveExample() {
 }
 
 export const SingleDiscardDecision: Story = {
-  globals: {},
   render: () => <ReadingLeaveExample />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -312,9 +311,4 @@ export const SingleDiscardDecision: Story = {
     await userEvent.click(view.getByRole('link', { name: m.nav_home() }));
     await page.findByRole('alertdialog');
   },
-};
-
-export const SingleDiscardDecisionPhone: Story = {
-  ...SingleDiscardDecision,
-  globals: {},
 };

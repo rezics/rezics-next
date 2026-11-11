@@ -21,7 +21,7 @@ import type { VndbJourneySnapshot } from '../library/personal-list-import/contro
 import type { ImportLibrarySnapshot } from '../library/showcase-import-return/browser';
 
 const noop = () => {};
-const phone = {};
+
 const desktop = {};
 
 const preview = await vndbLifecyclePreviewSnapshot();
@@ -84,21 +84,7 @@ const meta = {
 export default meta;
 type Story = StoryObj;
 
-export const OwnerPreviewDesktop: Story = {
-  name: 'Owner preview',
-  globals: desktop,
-  render: () => <ReviewStage snap={preview} />,
-  play: async ({ canvasElement }) => {
-    const view = within(canvasElement);
-    await view.findByText('v123');
-    await expect(view.getByText('Private source note', { exact: false })).toBeInTheDocument();
-    await expect(canvasElement.querySelector('[data-vndb-source-xml]')).not.toBeNull();
-  },
-};
-export const OwnerPreviewPhone: Story = { ...OwnerPreviewDesktop, globals: phone };
-
-export const ScoreReviewDesktop: Story = {
-  name: 'Explicit score review',
+export const ScoreReview: Story = {
   globals: desktop,
   render: () => <ReviewStage snap={scoreReview} />,
   play: async ({ canvasElement }) => {
@@ -109,22 +95,8 @@ export const ScoreReviewDesktop: Story = {
     await expect(view.getByText('0', { exact: false })).toBeInTheDocument();
   },
 };
-export const ScoreReviewPhone: Story = { ...ScoreReviewDesktop, globals: phone };
 
-export const PartialResultDesktop: Story = {
-  name: 'Partial result',
-  globals: desktop,
-  render: () => <ResultStage snap={partial} snapshot={library} />,
-  play: async ({ canvasElement }) => {
-    await expect(canvasElement.querySelector('[data-vndb-result="applied"]')).not.toBeNull();
-    await expect(canvasElement.querySelector('[data-vndb-result="unavailable"]')).not.toBeNull();
-    await expect(canvasElement.querySelector('[data-vndb-library-return]')).not.toBeNull();
-  },
-};
-export const PartialResultPhone: Story = { ...PartialResultDesktop, globals: phone };
-
-export const UnchangedReopenDesktop: Story = {
-  name: 'Unchanged reopen',
+export const UnchangedReopen: Story = {
   globals: desktop,
   render: () => <ReviewStage snap={reopen} />,
   play: async ({ canvasElement }) => {
@@ -133,10 +105,8 @@ export const UnchangedReopenDesktop: Story = {
     await expect(canvasElement.querySelector('[data-vndb-stage="review"]')).not.toBeNull();
   },
 };
-export const UnchangedReopenPhone: Story = { ...UnchangedReopenDesktop, globals: phone };
 
-export const ChangedReimportDesktop: Story = {
-  name: 'Changed reimport',
+export const ChangedReimport: Story = {
   globals: desktop,
   render: () => <ReviewStage snap={changed} />,
   play: async ({ canvasElement }) => {
@@ -145,10 +115,8 @@ export const ChangedReimportDesktop: Story = {
     await expect(view.queryByText('Private source note')).toBeNull();
   },
 };
-export const ChangedReimportPhone: Story = { ...ChangedReimportDesktop, globals: phone };
 
-export const LibraryReturnDesktop: Story = {
-  name: 'Current Library return',
+export const LibraryReturn: Story = {
   globals: desktop,
   render: () => (
     <ImportShell>
@@ -163,10 +131,8 @@ export const LibraryReturnDesktop: Story = {
     await expect(canvasElement.textContent).not.toContain('Private source note');
   },
 };
-export const LibraryReturnPhone: Story = { ...LibraryReturnDesktop, globals: phone };
 
-export const OtherViewerDesktop: Story = {
-  name: 'Other viewer privacy',
+export const OtherViewer: Story = {
   globals: desktop,
   render: () => (
     <ImportShell visitor="Signed Out">
@@ -182,10 +148,8 @@ export const OtherViewerDesktop: Story = {
     await expect(canvasElement.querySelector('[data-vndb-native-vote="present"]')).toBeNull();
   },
 };
-export const OtherViewerPhone: Story = { ...OtherViewerDesktop, globals: phone };
 
-export const UploadDesktop: Story = {
-  name: 'Private upload',
+export const Upload: Story = {
   globals: desktop,
   render: () => (
     <ImportShell>
@@ -193,8 +157,26 @@ export const UploadDesktop: Story = {
     </ImportShell>
   ),
 };
-export const UploadPhone: Story = { ...UploadDesktop, globals: phone };
 
-/** Kept for existing catalogue references; the named owner preview is OwnerPreviewDesktop. */
-export const Review: Story = OwnerPreviewDesktop;
-export const Results: Story = PartialResultDesktop;
+/** Kept for existing catalogue references; the named owner preview is Review. */
+export const Review: Story = {
+  name: 'Owner preview',
+  globals: desktop,
+  render: () => <ReviewStage snap={preview} />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByText('v123');
+    await expect(view.getByText('Private source note', { exact: false })).toBeInTheDocument();
+    await expect(canvasElement.querySelector('[data-vndb-source-xml]')).not.toBeNull();
+  },
+};
+export const Results: Story = {
+  name: 'Partial result',
+  globals: desktop,
+  render: () => <ResultStage snap={partial} snapshot={library} />,
+  play: async ({ canvasElement }) => {
+    await expect(canvasElement.querySelector('[data-vndb-result="applied"]')).not.toBeNull();
+    await expect(canvasElement.querySelector('[data-vndb-result="unavailable"]')).not.toBeNull();
+    await expect(canvasElement.querySelector('[data-vndb-library-return]')).not.toBeNull();
+  },
+};

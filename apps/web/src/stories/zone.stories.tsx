@@ -23,12 +23,6 @@ const meta = {
   id: 'pages-community-zone',
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
 } satisfies Meta;
 export default meta;
@@ -190,7 +184,6 @@ export const PreparedToUseful: Story = {
   parameters: { __id: 'pages-zones-prepared-to-useful-completion' },
   name: 'Prepared page reaches a useful route',
   play: preparedToUsefulReady,
-  globals: {},
   render: () => <PageStory visitor="Signed Out" path={`/zones/${withinBudgetZone}`} />,
 };
 
@@ -198,21 +191,12 @@ export const SubjectReturn: Story = {
   parameters: { __id: 'pages-zones-subject-return-to-route' },
   name: 'Direct subject returns to the Zone route',
   play: subjectReturnReady,
-  globals: {},
-  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}/subjects/${subject}`} />,
-};
-
-export const SubjectReturnPhone: Story = {
-  name: 'Direct subject return on a narrow layout',
-  play: subjectReturnReady,
-  globals: {},
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}/subjects/${subject}`} />,
 };
 
 export const KeyboardNavigation: Story = {
   name: 'Keyboard Zone navigation',
   play: keyboardNavigationReady,
-  globals: {},
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 
@@ -233,22 +217,7 @@ export const TypeListFull: Story = {
   parameters: { __id: 'pages-zones-type-list-full-page-on-route' },
   name: 'TypeList full page stays on the Zone route',
   play: typeListFullReady,
-  globals: {},
   render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}?list=books`} />,
-};
-
-export const TypeListFullPhone: Story = {
-  name: 'TypeList full page on a narrow layout',
-  play: typeListFullReady,
-  globals: {},
-  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}?list=books`} />,
-};
-
-export const HomePhone: Story = {
-  name: 'Static home on a narrow layout',
-  play: staticHomeReady,
-  globals: {},
-  render: () => <PageStory visitor="Signed Out" path={`/zones/${zone}`} />,
 };
 
 export const HomeLocales: Story = {

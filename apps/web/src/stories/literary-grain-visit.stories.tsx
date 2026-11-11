@@ -52,10 +52,6 @@ type Story = StoryObj<typeof meta>;
 
 export const SeriesAndVolume: Story = {};
 export const VolumeAndEdition: Story = { args: grainExample('schema:Book') };
-export const PhoneLight: Story = { name: 'Default', ...SeriesAndVolume, globals: {} };
-export const PhoneDark: Story = { tags: ['!dev'], ...SeriesAndVolume, globals: {} };
-export const DesktopLight: Story = { tags: ['!dev'], ...SeriesAndVolume, globals: {} };
-export const DesktopDark: Story = { tags: ['!dev'], ...SeriesAndVolume, globals: {} };
 
 const concealed = grainExample();
 const concealedWindow = concealed.windows[0]!;

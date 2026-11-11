@@ -162,8 +162,7 @@ export const UnavailableRetry: Story = {
     await waitFor(() => expect(canvasElement.ownerDocument.activeElement).toBe(heading));
   },
 };
-export const UnavailableRetryPhone: Story = { name: 'Unavailable Retry', ...UnavailableRetry, globals: {} };
-export const UnavailableRetryDesktop: Story = { tags: ['!dev'], ...UnavailableRetry, globals: {} };
+
 async function retryAbaStory(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   const retry = await canvas.findByRole('button', { name: m.sources_retry() });
@@ -179,16 +178,8 @@ async function retryAbaStory(canvasElement: HTMLElement) {
     expect(canvasElement.ownerDocument.activeElement).not.toBe(heading);
   });
 }
-export const UnavailableRetryABAPhone: Story = {
-  name: 'Unavailable Retry ABA',
+export const UnavailableRetryABA: Story = {
   args: { scenario: 'unavailable', exact: 'matched', retryAba: true },
-  globals: {},
-  play: async ({ canvasElement }) => retryAbaStory(canvasElement),
-};
-export const UnavailableRetryABADesktop: Story = {
-  tags: ['!dev'],
-  args: { scenario: 'unavailable', exact: 'matched', retryAba: true },
-  globals: {},
   play: async ({ canvasElement }) => retryAbaStory(canvasElement),
 };
 

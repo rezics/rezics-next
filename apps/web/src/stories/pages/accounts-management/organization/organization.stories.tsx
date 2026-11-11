@@ -109,7 +109,7 @@ async function holdersGeometry({ canvasElement }: { canvasElement: HTMLElement }
   await expect(query.get('operatorsCursor')).toBe('kept-operator');
   await expect(query.get('membersCursor')).toBe('members +/=?& continuation');
 }
-export const LongHoldersPhoneRtl: Story = {
+export const LongHoldersRtl: Story = {
   render: () => suppliedHolders(),
   globals: { locale: 'de' },
   play: async (context) => {
@@ -121,12 +121,9 @@ export const LongHoldersPhoneRtl: Story = {
     await expect(within(missing).getByText(m.managed_member())).toBeVisible();
   },
 };
-export const LongHoldersDesktopRtl: Story = {
-  ...LongHoldersPhoneRtl,
-  globals: { locale: 'de' },
-};
+
 export const EmptyCurrentHolderPage: Story = {
-  ...LongHoldersPhoneRtl,
+  ...LongHoldersRtl,
   render: () => suppliedHolders(true),
   play: async (context) => {
     await holdersGeometry(context);

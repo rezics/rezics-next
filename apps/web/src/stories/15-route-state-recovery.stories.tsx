@@ -8,7 +8,7 @@ import { m } from '../paraglide/messages.js';
 import { shellErrorReads } from '../kernel/fake/shell-errors';
 import offer from '../kernel/recorded/offer.json';
 import { PatternStory } from './page';
-import { ErrorStory, errorReady, StillUnavailable, Closed, NotFound } from './shell-errors.stories';
+import { ErrorStory, errorReady, StillUnavailable, Closed as ClosedOutcome, NotFound } from './shell-errors.stories';
 
 const meta = {
   title: 'Site Shell/Route recovery',
@@ -17,8 +17,6 @@ const meta = {
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
-const phone = {};
-const desktop = {};
 
 async function keyboardRecovery(context: { canvasElement: HTMLElement }) {
   const main = await errorReady(context);
@@ -31,18 +29,16 @@ async function keyboardRecovery(context: { canvasElement: HTMLElement }) {
   await expect(within(context.canvasElement).getAllByRole('main')).toHaveLength(1);
 }
 
-export const RetryPhone: Story = {
-  globals: phone,
+export const Retry: Story = {
   render: () => <ErrorStory outcome="unavailable" />,
   play: keyboardRecovery,
 };
-export const RetryDesktop: Story = { ...RetryPhone, globals: desktop };
-export const FailedRetryPhone: Story = { ...StillUnavailable, globals: { ...phone } };
-export const FailedRetryDesktop: Story = { ...StillUnavailable, globals: { ...desktop } };
-export const ClosedPhone: Story = { name: 'Closed', ...Closed, globals: phone };
-export const ClosedDesktop: Story = { tags: ['!dev'], ...Closed, globals: desktop };
-export const MissingPhone: Story = { ...NotFound, globals: { ...phone } };
-export const MissingDesktop: Story = { ...NotFound, globals: { ...desktop } };
+
+export const FailedRetry: Story = { ...StillUnavailable };
+
+export const Closed: Story = { ...ClosedOutcome };
+
+export const Missing: Story = { ...NotFound };
 
 /** Prepared shell states, without pretending that a recording is a native pending request. */
 function PreparedLoading({ layout }: { layout: PendingLayout }) {
@@ -77,22 +73,19 @@ async function pendingReady({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(canvas.getByRole('main')).toBe(main);
   await expect(main.querySelector('[aria-busy="true"]')).toBeNull();
 }
-export const FeedPhone: Story = { globals: phone, render: () => <PreparedLoading layout="feed" />, play: pendingReady };
-export const FeedDesktop: Story = { ...FeedPhone, globals: desktop };
-export const DetailPhone: Story = {
-  globals: { ...phone },
+export const Feed: Story = { render: () => <PreparedLoading layout="feed" />, play: pendingReady };
+
+export const Detail: Story = {
   render: () => <PreparedLoading layout="detail" />,
   play: pendingReady,
 };
-export const DetailDesktop: Story = { ...DetailPhone, globals: { ...desktop } };
-export const FormPhone: Story = { globals: phone, render: () => <PreparedLoading layout="form" />, play: pendingReady };
-export const FormDesktop: Story = { ...FormPhone, globals: desktop };
-export const GenericPhone: Story = {
-  globals: { ...phone },
+
+export const Form: Story = { render: () => <PreparedLoading layout="form" />, play: pendingReady };
+
+export const Generic: Story = {
   render: () => <PreparedLoading layout="page" />,
   play: pendingReady,
 };
-export const GenericDesktop: Story = { ...GenericPhone, globals: { ...desktop } };
 
 function LongRecovery() {
   return (
@@ -107,8 +100,8 @@ function LongRecovery() {
     </PatternStory>
   );
 }
-export const LongStringsPhone: Story = {
-  globals: { ...phone, locale: 'de' },
+export const LongStrings: Story = {
+  globals: { locale: 'de' },
   render: () => <LongRecovery />,
   play: async ({ canvasElement }) => {
     const main = await within(canvasElement).findByRole('main');
@@ -120,4 +113,3 @@ export const LongStringsPhone: Story = {
     await expect(main.scrollWidth).toBeLessThanOrEqual(main.clientWidth);
   },
 };
-export const LongStringsDesktop: Story = { ...LongStringsPhone, globals: { ...desktop, locale: 'de' } };

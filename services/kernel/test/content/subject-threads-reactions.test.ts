@@ -1,20 +1,24 @@
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
-import { readSubjectThread } from '../../src/content/reads.ts';
+import { composeContentFeed } from '../../src/composition/content.ts';
+import { readSubjectThread, readSubjectThreads } from '../../src/content/reads.ts';
 import { projectSubjectThreadReactions } from '../../src/content/subject-threads-reactions.ts';
 import viewerReactions from '../../src/content/reaction-viewer.sql';
 import reactionCounts from '../../src/content/reaction-count-page.sql';
 import { routeOf } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createReactionRelayBase } from './reaction-relay-convergence-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
 
 test('Subject threads retain native reaction totals, viewer isolation and final source authority', async () => {
   const world = await createReactionRelayBase();
+  composeContentFeed();
   let effects: Awaited<ReturnType<typeof world.startEffects>> | undefined;
   let trace: ReturnType<typeof observeSql> | undefined;
   try {
     effects = await world.startEffects();
-    const created = await world.command<{ thread: { id: string } }>('POST', '/v1/threads', {
+    await effects.resume();
+    const created = await world.command<{ thread: { id: string; firstPost: { id: string } } }>('POST', '/v1/threads', {
       title: 'A Subject discussion',
       body: fromPlainText('Original opening'),
       licence: 'CC0-1.0',
@@ -25,6 +29,11 @@ test('Subject threads retain native reaction totals, viewer isolation and final 
     const threadId = created.thread.id;
     const path = `/v1/subjects/${world.conceptId}/threads?place=${world.mainTarget.realmId}&kind=discussion`;
     const reactionPath = `/v1/threads/${threadId}/reaction`;
+    // Reading cards require native coverage for both the thread and its opening.
+    const openingCapture = await effects.captureBeforeWrite(world.author.accountId);
+    await world.command('PUT', `/v1/posts/${created.thread.firstPost.id}/reaction`, { kind: 'like' });
+    const openingReaction = await openingCapture.read();
+    await effects.waitForEffect(openingReaction.envelope, openingReaction.eventSeq);
     const page = async (bearer?: string) => {
       const result = await world.call('GET', path, bearer === undefined ? {} : { bearer });
       expect(result.response.status, result.text).toBe(200);
@@ -55,6 +64,15 @@ test('Subject threads retain native reaction totals, viewer isolation and final 
     const context = { actor: { kind: 'anonymous' as const }, deadline: Date.now() + 60_000 };
     const selected = await readSubjectThread(deps, threadId, world.conceptId, world.mainTarget.realmId, context);
     expect(selected.value).not.toBeNull();
+    const batched = await readSubjectThreads(deps, [threadId], world.conceptId, world.mainTarget.realmId, context);
+    expect(batched.map((item) => item.value)).toEqual([selected.value]);
+    for (const [subjectId, placeId] of [
+      [world.conceptId, GLOBAL_CONTEXT],
+      [world.schemeId, world.mainTarget.realmId],
+    ] as const) {
+      const wrongScope = await readSubjectThreads(deps, [threadId], subjectId, placeId, context);
+      expect(wrongScope.map((item) => item.value)).toEqual([null]);
+    }
     await pool.query('UPDATE content.thread SET title=$3 WHERE route=$1 AND thread_id=$2', [
       routeOf(threadId),
       threadId,
@@ -94,4 +112,4 @@ test('Subject threads retain native reaction totals, viewer isolation and final 
     await effects?.stop();
     await world.system.close();
   }
-});
+}, 180_000);

@@ -150,12 +150,11 @@ export const IndependentStreamRetryAndPrevious: Story = {
     await expect(canvasElement.querySelectorAll('[data-slot="music-release-row"]').length).toBe(2);
   },
 };
-export const PhoneLight: Story = { name: 'Default', globals: {} };
-export const DesktopDark: Story = { tags: ['!dev'], globals: {} };
+
 export const OrdinarySignedIn: Story = { args: { visitor: 'Signed In' } };
-export const TraditionalChinesePhoneDark: Story = {
+export const TraditionalChinese: Story = {
   globals: { locale: 'zh-Hant' },
 };
-export const JapanesePhoneLight: Story = {
+export const Japanese: Story = {
   globals: { locale: 'ja' },
 };

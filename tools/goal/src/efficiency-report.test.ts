@@ -88,7 +88,9 @@ function runCaptureChild(databasePath: string, productLines: number, sourceRevis
     child.stdout?.setEncoding('utf8').on('data', (chunk) => (stdout += chunk));
     child.stderr?.setEncoding('utf8').on('data', (chunk) => (stderr += chunk));
     child.once('error', reject);
-    child.once('close', (code) => (code === 0 ? resolve(stdout.trim()) : reject(new Error(stderr || `child exited ${code}`))));
+    child.once('close', (code) =>
+      code === 0 ? resolve(stdout.trim()) : reject(new Error(stderr || `child exited ${code}`)),
+    );
   });
 }
 
@@ -111,6 +113,29 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
         JSON.stringify({ taskId: 'queued', attempt: 1, declaredPaths: ['services/sample/src/index.ts'] }),
       );
     const at = (minute: number) => new Date(Date.parse(bucket) + minute * 60_000).toISOString();
+    h.db
+      .query(
+        `INSERT INTO landing_operations(operation_id,queue_id,task_id,attempt,enqueued_at,started_at,terminal_at,terminal_action,terminal_outcome)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        'hourly-cross-boundary',
+        1,
+        'landed',
+        2,
+        '2026-10-31T00:45:00.000Z',
+        '2026-10-31T00:50:00.000Z',
+        at(20),
+        'finished',
+        '{}',
+      );
+    h.db
+      .query(
+        `INSERT INTO landing_operations(operation_id,queue_id,task_id,attempt,enqueued_at,started_at,terminal_at,terminal_action,terminal_outcome)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run('at-hour-end', 2, 'landed', 2, bucket, at(55), '2026-10-31T02:00:00.000Z', 'finished', '{}');
+    recordFlow(h.db, { taskId: 'legacy-finish', attempt: 1, stage: 'landing', action: 'finished', at: at(30) });
     task(h.db, 'guarded', 'integrated', 'fixture');
     recordFlow(h.db, {
       taskId: 'landed',
@@ -140,6 +165,9 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
 
     const report = await renderHourlyEfficiencyReport(h.db, { bucket, now });
     expect(report).toContain('Landings in UTC hour: dev 1; stabilize 0; main 0; unknown 0 (each task counted once).');
+    expect(report).toContain(
+      'Landing operations in UTC hour: 2 terminal; 1 timed; 1 unknown duration; p50 1800000 ms; p90 1800000 ms.',
+    );
     expect(report).toContain('Backlog returns in bucket: 0.');
     expect(report).toContain('Landing identities: landed#2 at 2026-10-31T01:10:00.000Z (dev).');
     expect(report).toContain('Last useful landing: landed#2 at 2026-10-31T01:10:00.000Z.');
@@ -493,7 +521,10 @@ test('late commits and integrations remain backfill after the first measured buc
     git(repository, ['config', 'user.name', 'Goal report test']);
     git(repository, ['config', 'user.email', 'goal-report@example.invalid']);
     mkdirSync(join(repository, 'services/demo/src'), { recursive: true });
-    writeFileSync(join(repository, 'services/demo/src/index.ts'), 'export const first = 1;\nexport const second = 2;\n');
+    writeFileSync(
+      join(repository, 'services/demo/src/index.ts'),
+      'export const first = 1;\nexport const second = 2;\n',
+    );
     git(repository, ['add', '.']);
     git(repository, ['commit', '-q', '-m', 'initial product source'], {
       GIT_AUTHOR_DATE: '2026-10-31T01:10:00Z',
@@ -508,7 +539,9 @@ test('late commits and integrations remain backfill after the first measured buc
       now: capturedAt,
       productLineMeasurement: firstMeasurement,
     });
-    expect(first.snapshot.report).toContain(`Product lines added in UTC bucket: 2 (attribution measured; dev@${firstMeasurement.sourceRevision}`);
+    expect(first.snapshot.report).toContain(
+      `Product lines added in UTC bucket: 2 (attribution measured; dev@${firstMeasurement.sourceRevision}`,
+    );
 
     writeFileSync(join(repository, 'services/demo/src/late.ts'), 'export const late = true;\n');
     git(repository, ['add', '.']);
@@ -561,8 +594,12 @@ test('late commits and integrations remain backfill after the first measured buc
       now: new Date('2026-10-31T03:15:00.000Z'),
       productLineMeasurement: nextMeasurement,
     });
-    expect(backfill.snapshot.report).toContain('Landing identities: late-integration#1 at 2026-10-31T02:10:00.000Z (dev).');
-    expect(backfill.snapshot.report).toContain('Late integration backfill in this bucket: 1 additions newly visible since');
+    expect(backfill.snapshot.report).toContain(
+      'Landing identities: late-integration#1 at 2026-10-31T02:10:00.000Z (dev).',
+    );
+    expect(backfill.snapshot.report).toContain(
+      'Late integration backfill in this bucket: 1 additions newly visible since',
+    );
     expect(backfill.snapshot.report).toContain('Late integrations remain visible in their integration bucket');
     expect(backfill.snapshot.observation.backfillProductLines).toBe(1);
     expect(backfill.snapshot.rolling).toEqual({ productLines: 2, attribution: 'measured' });
@@ -586,10 +623,14 @@ test('two-hour product totals sum independent frozen observations', () => {
     });
     expect(first.snapshot.rolling).toEqual({ productLines: null, attribution: 'unknown' });
     expect(second.snapshot.rolling).toEqual({ productLines: 7245, attribution: 'measured' });
-    expect(second.snapshot.report).toContain('Product lines across this and the previous completed UTC hour: 7245 across two frozen observations.');
+    expect(second.snapshot.report).toContain(
+      'Product lines across this and the previous completed UTC hour: 7245 across two frozen observations.',
+    );
     expect(second.snapshot.report).not.toContain('10232');
     const stored = h.db
-      .query('SELECT hour_bucket, product_lines, source_revision, source_window_start, source_window_end, filter_version, report_ref FROM efficiency_report_deliveries ORDER BY hour_bucket')
+      .query(
+        'SELECT hour_bucket, product_lines, source_revision, source_window_start, source_window_end, filter_version, report_ref FROM efficiency_report_deliveries ORDER BY hour_bucket',
+      )
       .all() as {
       hour_bucket: string;
       product_lines: number;
@@ -625,7 +666,9 @@ test('missing historical product evidence remains unknown after a measured retry
     });
     expect(unknown.snapshot.observation).toMatchObject({ productLines: null, attribution: 'unknown' });
     expect(unknown.snapshot.rolling).toMatchObject({ productLines: null, attribution: 'unknown' });
-    expect(unknown.snapshot.report).toContain('Product lines added in UTC bucket: unknown (attribution unknown; source revision unavailable');
+    expect(unknown.snapshot.report).toContain(
+      'Product lines added in UTC bucket: unknown (attribution unknown; source revision unavailable',
+    );
 
     const retry = captureHourlyEfficiencyObservation(h.db, {
       bucket,

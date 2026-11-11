@@ -164,12 +164,12 @@ async function previewJourney({ canvasElement }: { canvasElement: HTMLElement })
 
 export const Preview: Story = { play: previewJourney };
 
-export const PhoneEnlargedText: Story = {
+export const EnlargedText: Story = {
   args: { phone: true, enlarged: true },
   play: previewJourney,
 };
 
-export const PhoneRightToLeft: Story = {
+export const RightToLeft: Story = {
   args: { phone: true, enlarged: true, rtl: true },
   play: previewJourney,
 };

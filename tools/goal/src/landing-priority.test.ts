@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { join } from 'node:path';
-import type { AttemptFence, LandingRequest } from './contracts.ts';
+import type { AttemptFence, GateOutcome, LandingRequest } from './contracts.ts';
 import { openDb } from './db.ts';
 import { readFlow } from './flow.ts';
 import { SqliteLandingQueue } from './land.ts';
@@ -97,6 +97,57 @@ test('replaying the same landing enqueue records only its first insertion', () =
     queue.enqueue({ ...request, attempt: 2 });
     const enqueues = readFlow(db).filter((event) => event.stage === 'landing' && event.action === 'enqueued');
     expect(enqueues.map(({ attempt }) => attempt)).toEqual([1, 2]);
+    expect(enqueues.every(({ operationId }) => typeof operationId === 'string')).toBe(true);
+    expect(new Set(enqueues.map(({ operationId }) => operationId)).size).toBe(2);
+  } finally {
+    db.close();
+    t.close();
+  }
+});
+
+test('a restarted queue resumes the same landing operation without duplicating its start or terminal event', () => {
+  const t = temporaryDirectory();
+  const path = join(t.path, 'state.sqlite');
+  const fence = { assertCurrent() {} } as unknown as AttemptFence;
+  const request = {
+    taskId: 'restart-task',
+    attempt: 1,
+    branch: 'restart-task',
+    worktree: 'restart-task',
+    declaredPaths: [],
+  } as unknown as LandingRequest;
+  const outcome: GateOutcome = {
+    taskId: request.taskId,
+    attempt: request.attempt,
+    passed: true,
+    stage: 'merge',
+    logPath: 'landing.log',
+    hostMs: 0,
+    changedFiles: [],
+    diffLines: 0,
+  };
+  let db = openDb(path);
+  try {
+    let queue = new SqliteLandingQueue(db, fence);
+    queue.enqueue(request);
+    const first = queue.next()!;
+    const operationId = first.operationId;
+    expect(operationId).toBeTruthy();
+    db.close();
+
+    db = openDb(path);
+    queue = new SqliteLandingQueue(db, fence);
+    queue.enqueue(request);
+    const resumed = queue.next()!;
+    expect(resumed.operationId).toBe(operationId);
+    queue.finish(resumed.id, outcome);
+    queue.finish(resumed.id, outcome);
+
+    expect(
+      readFlow(db)
+        .filter((event) => event.operationId === operationId)
+        .map((event) => event.action),
+    ).toEqual(['enqueued', 'started', 'finished']);
   } finally {
     db.close();
     t.close();

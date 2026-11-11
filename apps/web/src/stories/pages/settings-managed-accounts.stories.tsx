@@ -175,7 +175,7 @@ const connectedLongRecoveryPlay: NonNullable<Story['play']> = async ({ canvasEle
   await canvas.findByRole('heading', { level: 4, name: longName });
 };
 
-export const LongLocaleBoundedRecoveryPhone: Story = {
+export const LongLocaleBoundedRecovery: Story = {
   globals: { locale: 'de' },
   render: () => (
     <PatternStory visitor="Signed In" path="/settings?panel=compact#account">
@@ -184,12 +184,12 @@ export const LongLocaleBoundedRecoveryPhone: Story = {
   ),
   play: connectedLongRecoveryPlay,
 };
-export const LongLocaleBoundedRecoveryDesktop: Story = {
-  ...LongLocaleBoundedRecoveryPhone,
+export const LongLocaleBoundedRecoveryFrench: Story = {
+  ...LongLocaleBoundedRecovery,
   globals: { locale: 'fr' },
 };
 export const LongLocaleBoundedRecoveryRTL: Story = {
-  ...LongLocaleBoundedRecoveryPhone,
+  ...LongLocaleBoundedRecovery,
   render: () => (
     <PatternStory visitor="Signed In" path="/settings?panel=compact#account">
       <div dir="rtl">

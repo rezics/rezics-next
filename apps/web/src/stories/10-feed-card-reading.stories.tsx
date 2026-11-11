@@ -70,12 +70,6 @@ const meta = {
   component: Reading,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
 } satisfies Meta<typeof Reading>;
 export default meta;
@@ -119,9 +113,6 @@ const journey: Story['play'] = async ({ canvasElement }) => {
   await expect(canvas.getAllByRole('listitem')).toHaveLength(8);
 };
 
-export const PhoneLight: Story = { name: 'Default', globals: {}, play: journey };
-export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: journey };
-export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: journey };
-export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: journey };
-export const LongKeyboardPhone: Story = { name: 'Long Keyboard', args: { long: true }, globals: {}, play: journey };
-export const LongKeyboardDesktop: Story = { tags: ['!dev'], args: { long: true }, globals: {}, play: journey };
+export const ReadingJourney: Story = { play: journey };
+
+export const LongKeyboard: Story = { args: { long: true }, play: journey };

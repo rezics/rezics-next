@@ -26,11 +26,9 @@ const ready: Extract<MembershipPage, { kind: 'ready' }> = {
 function ReturnStory({
   initialHistory,
   current = 'unavailable',
-  dark = false,
 }: {
   initialHistory: MembershipHistory;
   current?: 'ready' | 'empty' | 'unavailable' | 'denied';
-  dark?: boolean;
 }) {
   const [history, setHistory] = useState(initialHistory);
   const [pending, setPending] = useState(false);
@@ -68,7 +66,7 @@ function ReturnStory({
       : ready;
   return (
     <AuthStory>
-      <div className={dark ? 'dark bg-background text-foreground' : undefined}>
+      <div className="bg-background text-foreground">
         <AuthPage heading={m.auth_members_heading()}>
           <a href="/security" className="inline-flex min-h-11 items-center underline">
             {m.auth_members_back()}
@@ -99,29 +97,28 @@ function ReturnStory({
     </AuthStory>
   );
 }
-const phone = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
-const desktop = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
-export const UnsentPhoneLight = {
-  parameters: phone,
+
+export const Unsent = {
+  parameters: reviewParameters,
   render: () => <ReturnStory initialHistory={['unsent']} current="empty" />,
 };
-export const UnknownPhoneDark = {
-  parameters: phone,
-  render: () => <ReturnStory initialHistory={['unresolved']} dark />,
+export const Unknown = {
+  parameters: reviewParameters,
+  render: () => <ReturnStory initialHistory={['unresolved']} />,
 };
-export const AcknowledgedDesktopLight = {
-  parameters: desktop,
+export const Acknowledged = {
+  parameters: reviewParameters,
   render: () => <ReturnStory initialHistory={['acknowledged']} current="ready" />,
 };
-export const UnknownThenAcknowledgedDesktopDark = {
-  parameters: desktop,
-  render: () => <ReturnStory initialHistory={['unresolved', 'acknowledged']} current="ready" dark />,
+export const UnknownThenAcknowledged = {
+  parameters: reviewParameters,
+  render: () => <ReturnStory initialHistory={['unresolved', 'acknowledged']} current="ready" />,
 };
-export const RefusedPhoneLight = {
-  parameters: phone,
+export const Refused = {
+  parameters: reviewParameters,
   render: () => <ReturnStory initialHistory={['refused']} current="denied" />,
 };
-export const UnknownThenUnsentDesktopDark = {
-  parameters: desktop,
-  render: () => <ReturnStory initialHistory={['unresolved', 'unsent']} current="empty" dark />,
+export const UnknownThenUnsent = {
+  parameters: reviewParameters,
+  render: () => <ReturnStory initialHistory={['unresolved', 'unsent']} current="empty" />,
 };

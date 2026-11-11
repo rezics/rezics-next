@@ -7,7 +7,6 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'r
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
-import { subjectHref } from '../subject/subject-href';
 import { displayLibraryTitle } from './title';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
 import type { DynamicMembersResult } from './collection-load';
@@ -17,6 +16,7 @@ import { LibraryNavigation } from './library-nav';
 import { useCurrentLibraryNavigation } from './pins-current';
 import { FollowTargetControl } from './follow-target-control';
 import { CollectionReadActions, CollectionReadMembers } from './collection-page';
+import { collectionComparisonHref } from './collection-comparison/model';
 import { collectionViewerProjection } from './collection-viewer/model';
 import { CollectionPresentationSummary } from './showcase-collection/presentation';
 import { AccountRef } from './account-ref';
@@ -462,7 +462,10 @@ function DynamicCollectionPageLifetime({
             onCopy={({ subject }) => {
               if (!subject) return;
               const title = displayLibraryTitle(subject.label, locale).text;
-              copyLink(subjectHref({ id: subject.id, label: title }, locale).href);
+              return navigator.clipboard.writeText(
+                new URL(collectionComparisonHref(subject.id, title, locale, resultsHref, undefined), location.origin)
+                  .href,
+              );
             }}
           />
         ) : null}

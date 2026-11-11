@@ -1,0 +1,190 @@
+import { afterAll, expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act, createElement } from 'react';
+import { m } from '../src/paraglide/messages.js';
+import type { CollectionReadMember } from '../src/library/collection-member-details';
+import type { CollectionMember } from '../src/library/reads';
+import * as start from '../.storybook/react-start';
+
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
+const { CollectionReadMembers } = await import('../src/library/collection-page');
+const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const address = `/en/collections/${id(1)}?cursor=next%2B%2F%3D&type=work&f.genre=fiction&l.genre=Fiction&returnTo=%2Fen%2Flibrary`;
+const note = `  Supplied note\n\n\t${'界'.repeat(600)}\n `;
+const members: CollectionMember[] = [2, 3].map((n) => ({
+  id: id(n),
+  addedAt: '2026-11-01T00:00:00Z',
+  note: n === 2 ? note : 'Second occurrence note',
+  subject: { id: id(4), type: 'work', types: ['work'], label: 'Identical title', typeLabel: 'Book', cover: null },
+  facts: {
+    creator: [10, 11, 12].map((n) => ({ kind: 'item', id: id(n), labels: { en: 'Same name' } })),
+    date: [1943, 1944, 1945].map((year) => ({ kind: 'time', year })),
+    code: ['FIRST', 'SECOND', 'THIRD'].map((value) => ({ kind: 'code', value })),
+    quantity: [90, 91, 92].map((amount) => ({ kind: 'quantity', amount, unit: 'min' })),
+  },
+}));
+const presentations = { work: { imageAspect: 'portrait' as const, keyFacts: ['creator', 'date', 'code', 'quantity'] } };
+
+for (const layout of ['list', 'grid'] as const) {
+  test(`${layout}: one exact occurrence detail retains all evidence, independent reference targets and local copy outcomes`, async () => {
+    const { Window } = await import(
+      Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+    );
+    const window = new Window({ url: `https://rezics.test${address}&layout=${layout}`, width: 390 });
+    const globals = {
+      window,
+      document: window.document,
+      navigator: window.navigator,
+      HTMLElement: window.HTMLElement,
+      Element: window.Element,
+      Node: window.Node,
+      IS_REACT_ACT_ENVIRONMENT: true,
+    };
+    const previous = new Map(
+      Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+    );
+    for (const [key, value] of Object.entries(globals))
+      Object.defineProperty(globalThis, key, { configurable: true, value });
+    const copied: string[] = [];
+    let failCopy = false;
+    let finishCopy: (() => void) | undefined;
+    let delayCopy = false;
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        async writeText(value: string) {
+          copied.push(value);
+          if (failCopy) throw new Error('Clipboard permission denied');
+          if (delayCopy)
+            await new Promise<void>((resolve) => {
+              finishCopy = resolve;
+            });
+        },
+      },
+    });
+    const { createRoot } = await import('react-dom/client');
+    const host = window.document.createElement('main');
+    window.document.body.append(host);
+    const root = createRoot(host);
+    const source = {};
+    const render = (
+      rows: readonly CollectionReadMember[] = members,
+      href = address,
+      returnSource = source,
+      view: 'list' | 'grid' = layout,
+    ) =>
+      act(async () =>
+        root.render(
+          createElement(CollectionReadMembers, {
+            members: rows,
+            layout: view,
+            currentHref: href,
+            returnSource,
+            listPresentations: presentations,
+            comparisonDefinitions: { creator: { labels: { en: 'Full supplied property label' } } },
+            onCopy: async (member) => {
+              copied.push(member.subject!.id);
+            },
+          }),
+        ),
+      );
+    const openers = () => [...host.querySelectorAll<HTMLButtonElement>('[data-collection-detail-opener]')];
+    const detail = () => host.querySelector<HTMLElement>('[data-slot="member-reading-detail"]');
+    const open = async (index: number) => {
+      const opener = openers()[index]!;
+      opener.focus();
+      await act(async () => opener.click());
+      expect(opener.getAttribute('aria-expanded')).toBe('true');
+      expect(window.document.activeElement).toBe(detail());
+      return opener;
+    };
+    const close = async () => act(async () => detail()!.querySelector<HTMLButtonElement>('button')!.click());
+    try {
+      await render();
+      expect(host.querySelector('[data-slot="collection-member-note"]')).toBeNull();
+      expect(host.querySelector('[data-slot="cover-card-actions-row"]')).toBeNull();
+      expect(openers()).toHaveLength(2);
+      expect(host.querySelectorAll(layout === 'list' ? 'ul > li' : '[role="listitem"]')).toHaveLength(2);
+      const first = await open(0);
+      expect(detail()!.querySelector('[data-slot="collection-member-note"]')!.textContent).toBe(note);
+      expect(detail()!.querySelectorAll('dl > div')).toHaveLength(12);
+      for (const value of ['1945', 'THIRD', '92 min', 'Full supplied property label'])
+        expect(detail()!.textContent).toContain(value);
+      const references = [...detail()!.querySelectorAll<HTMLAnchorElement>('[data-comparison-reference]')];
+      expect(references).toHaveLength(3);
+      expect(new Set(references.map((link) => link.href)).size).toBe(3);
+      for (const [index, link] of references.entries()) {
+        expect(link.textContent).toBe('Same name');
+        const url = new URL(link.href);
+        expect(url.pathname).toContain(id(10 + index));
+        expect(url.searchParams.get('via')).toBe(`${address}#collection-member-${id(2)}`);
+        const copy = detail()!.querySelector<HTMLButtonElement>(`[data-copy-reference="${id(10 + index)}"]`)!;
+        await act(async () => copy.click());
+        expect(copied.at(-1)).toBe(link.href);
+        expect(copy.parentElement!.textContent).toContain(m.collection_reading_copy_done());
+      }
+      failCopy = true;
+      const denied = detail()!.querySelector<HTMLButtonElement>(`[data-copy-reference="${id(10)}"]`)!;
+      await act(async () => denied.click());
+      expect(denied.parentElement!.textContent).toContain(m.collection_reading_copy_unavailable());
+      failCopy = false;
+      expect(host.querySelectorAll('a a, a button')).toHaveLength(0);
+      await close();
+      expect(detail()).toBeNull();
+      expect(window.document.activeElement).toBe(first);
+      const second = await open(1);
+      expect(host.querySelectorAll('[data-slot="member-reading-detail"]')).toHaveLength(1);
+      expect(detail()!.textContent).toContain('Second occurrence note');
+      expect(detail()!.textContent).not.toContain(note);
+      await act(async () =>
+        detail()!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+      );
+      expect(window.document.activeElement).toBe(second);
+
+      // Address, native observation and layout replacement retire detail without restoring stale opener focus.
+      for (const replace of [
+        () => render(members, address.replace('cursor=next', 'cursor=other')),
+        () => render(members, address, {}),
+        () => render(members.map((member) => ({ ...member }))),
+        () => render(members, address, source, layout === 'list' ? 'grid' : 'list'),
+      ]) {
+        await render();
+        const opener = await open(0);
+        await replace();
+        expect(detail()).toBeNull();
+        expect(window.document.activeElement).not.toBe(opener);
+      }
+      // A clipboard completion belongs to the retired detail only.
+      await render();
+      await open(0);
+      delayCopy = true;
+      await act(async () => detail()!.querySelector<HTMLButtonElement>('[data-copy-reference]')!.click());
+      expect(detail()!.textContent).toContain(m.collection_reading_copy_pending());
+      await render(members, address, {});
+      await act(async () => finishCopy!());
+      expect(detail()).toBeNull();
+      expect(host.textContent).not.toContain(m.collection_reading_copy_done());
+      const projections = members.map(({ subject, facts }) => ({ subject, facts }));
+      await render(projections);
+      expect(host.querySelector('[data-collection-member-id]')).toBeNull();
+      await open(1);
+      const projectionLink = detail()!.querySelector<HTMLAnchorElement>('[data-comparison-reference]')!;
+      expect(new URL(projectionLink.href).searchParams.get('via')).toBe(address);
+      expect(detail()!.querySelector('[data-slot="collection-member-note"]')).toBeNull();
+      await render([{ ...members[0]!, subject: null }]);
+      await open(0);
+      expect(detail()!.querySelector('a,[data-copy-reference]')).toBeNull();
+      expect(detail()!.textContent).toContain(note);
+    } finally {
+      await act(async () => root.unmount());
+      await window.happyDOM.close();
+      for (const [key, descriptor] of previous) {
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+        else Reflect.deleteProperty(globalThis, key);
+      }
+    }
+  });
+}
+afterAll(() => mock.restore());

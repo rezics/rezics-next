@@ -61,9 +61,7 @@ export const Unavailable: Story = {
   render: () => <InboxStory fixture="unavailable" />,
   play: rowsReady,
 };
-export const SparseUnreadPhone: Story = {
-  name: 'Sparse unread page',
-  globals: {},
+export const SparseUnread: Story = {
   render: () => <InboxStory fixture="sparse-unread" />,
   play: async ({ canvasElement }) => {
     const main = within(await inboxMain(canvasElement));
@@ -81,7 +79,6 @@ export const SparseUnreadPhone: Story = {
 };
 export const Preparing: Story = {
   name: 'Service unavailable (503)',
-  globals: {},
   render: () => <InboxStory fixture="preparing" />,
   play: async ({ canvasElement }) => {
     const status = await within(canvasElement).findByRole('status');
@@ -104,7 +101,6 @@ function WaitingInboxStory() {
 
 export const RetryAfterRecovery: Story = {
   name: 'Unavailable, wait, then retry',
-  globals: {},
   render: () => <WaitingInboxStory />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -280,7 +276,6 @@ async function rejectedContinuation({ canvasElement }: { canvasElement: HTMLElem
 export const RejectedContinuation: Story = {
   name: 'Rejected continuation with separate first-page choice',
   parameters: restartParameters,
-  globals: {},
   render: () => <RejectedContinuationExample />,
   play: async (context) => {
     await rejectedContinuation(context);
@@ -298,7 +293,6 @@ export const RejectedContinuation: Story = {
 export const RestartAfterRejectedContinuation: Story = {
   name: 'Explicit first-page restart after rejection',
   parameters: restartParameters,
-  globals: {},
   render: () => <RejectedContinuationExample />,
   play: async (context) => {
     await rejectedContinuation(context);
@@ -318,7 +312,6 @@ export const RestartAfterRejectedContinuation: Story = {
 export const FirstPageRestartUnavailable: Story = {
   name: 'First-page restart unavailable, then deliberate retry',
   parameters: restartParameters,
-  globals: {},
   render: () => <RejectedContinuationExample failedReset />,
   play: async (context) => {
     await rejectedContinuation(context);
@@ -357,7 +350,6 @@ function SeenInboxStory({ fixture, transition = false }: { fixture: string; tran
 
 export const SeenRetryAfterRecovery: Story = {
   name: 'Mark seen waits, then retries the original notice after pagination',
-  globals: {},
   render: () => <SeenInboxStory fixture="seen-wait" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -388,7 +380,6 @@ export const SeenRetryAfterRecovery: Story = {
 
 export const SeenUnavailable: Story = {
   name: 'Mark seen unavailable without a native wait',
-  globals: {},
   render: () => <SeenInboxStory fixture="seen-unavailable" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -406,7 +397,6 @@ export const SeenUnavailable: Story = {
 
 export const SeenClosed: Story = {
   name: 'Mark seen closed after a readable Inbox',
-  globals: {},
   render: () => <SeenInboxStory fixture="seen-closed" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -420,7 +410,6 @@ export const SeenClosed: Story = {
 
 export const SeenDenied: Story = {
   name: 'Mark seen denied after a readable Inbox',
-  globals: {},
   render: () => <SeenInboxStory fixture="seen-denied" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -435,7 +424,6 @@ export const SeenDenied: Story = {
 
 export const SeenViewerBecomesUnknown: Story = {
   name: 'Viewer changes while mark seen is waiting',
-  globals: {},
   render: () => <SeenInboxStory fixture="seen-wait" transition />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -455,7 +443,6 @@ export const SeenViewerBecomesUnknown: Story = {
 export const SeenDeniedAccessRecovery: Story = {
   name: 'Default Inbox denied mark-seen recovery checks current access without replaying the mutation and preserves the exact unresolved marker for deliberate retry',
   tags: ['!dev'],
-  globals: {},
   parameters: {
     docs: {
       description: {

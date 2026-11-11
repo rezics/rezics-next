@@ -73,12 +73,7 @@ const meta = {
   component: CatalogueFileReaderRecoveryStory,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component: 'Unavailable current definitions with deliberate page retry and visible rejected-recovery feedback.',
@@ -108,19 +103,19 @@ const showRejectedRecovery: NonNullable<Story['play']> = async ({ canvasElement 
   await expect(canvas.getByRole('alert')).toBeVisible();
 };
 
-export const KoreanPhoneDark: Story = {
+export const Korean: Story = {
   globals: { locale: 'ko' },
   play: retryCurrentPage,
 };
-export const GermanPhoneLight: Story = {
+export const German: Story = {
   globals: { locale: 'de' },
 };
-export const FrenchDesktopDark: Story = {
+export const French: Story = {
   globals: { locale: 'fr' },
   args: { reject: true },
   play: showRejectedRecovery,
 };
-export const SpanishDesktopLight: Story = {
+export const Spanish: Story = {
   globals: { locale: 'es' },
 };
 

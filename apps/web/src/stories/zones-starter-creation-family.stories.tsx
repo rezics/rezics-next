@@ -114,12 +114,7 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -151,7 +146,6 @@ async function save(canvasElement: HTMLElement) {
   return canvas;
 }
 export const Starter: Story = {
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const select = await canvas.findByLabelText(m.zones_create_starter());
@@ -164,7 +158,7 @@ export const Starter: Story = {
     await expect(canvas.getByRole('button', { name: m.zones_create_submit() })).toHaveFocus();
   },
 };
-export const StarterPhone: Story = { ...Starter, globals: {} };
+
 export const IndependentVisits: Story = {
   args: { independent: true },
   play: async ({ canvasElement }) => {

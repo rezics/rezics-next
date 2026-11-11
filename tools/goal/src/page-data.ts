@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess, type SpawnSyncReturns } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -11,6 +11,7 @@ import { defaultPolicy } from './policy.ts';
 import type { Settings, Task } from './types.ts';
 import { ensureFlow, recordFlow } from './flow.ts';
 import type { ManagerInbox } from './contracts.ts';
+import { CHECK_SLICE, WORKER_SCOPE_MEMORY_MAX, workerScopeArguments } from './worker-slice.ts';
 
 export const PAGE_DATA_CLASSES = ['DATA', 'EMPTY', 'UNAUTHORIZED', 'UNAVAILABLE', 'API', 'WEB', 'SEED'] as const;
 export type PageDataClass = (typeof PAGE_DATA_CLASSES)[number];
@@ -162,6 +163,17 @@ export function pageDataRepairTarget(section: PageDataSection): PageDataRepairTa
   return section;
 }
 
+type PageDataStackResult = {
+  output: string;
+  exitCode: number;
+  registry?: ReadonlyMap<string, SectionConfig>;
+  stackOutput?: string;
+  diagnostics?: string;
+  seed?: PageDataSeedStatus;
+  scopeLimitExceeded?: boolean;
+  scopeKilled?: boolean;
+};
+
 export type PageDataOptions = {
   settings: Settings;
   db: Database;
@@ -169,17 +181,7 @@ export type PageDataOptions = {
   inbox: Pick<ManagerInbox, 'deliver'>;
   routeDefect: (repair: PageDataRepair) => Promise<PageDataRepairRoute>;
   now?: () => Date;
-  runStack?: (
-    head: string,
-    invocation: string,
-  ) => Promise<{
-    output: string;
-    exitCode: number;
-    registry?: ReadonlyMap<string, SectionConfig>;
-    stackOutput?: string;
-    diagnostics?: string;
-    seed?: PageDataSeedStatus;
-  }>;
+  runStack?: (head: string, invocation: string) => Promise<PageDataStackResult>;
 };
 
 export type SectionConfig = Pick<
@@ -557,7 +559,11 @@ function parseNativeProblem(encoded: string): PageDataNativeProblem {
   return { ...(typeof code === 'string' ? { code } : {}), ...(typeof pointer === 'string' ? { pointer } : {}) };
 }
 
-export function parsePageDataOutput(output: string, registry: ReadonlyMap<string, SectionConfig>): PageDataSection[] {
+export function parsePageDataOutput(
+  output: string,
+  registry: ReadonlyMap<string, SectionConfig>,
+  allowPartial = false,
+): PageDataSection[] {
   const results: PageDataSection[] = [];
   const seen = new Set<string>();
   for (const line of output.split(/\r?\n/).filter(Boolean)) {
@@ -595,7 +601,7 @@ export function parsePageDataOutput(output: string, registry: ReadonlyMap<string
       ...(PAGE_DATA_DEFECTS.has(classValue) ? { firstErrorLine: safeLine(line) } : {}),
     });
   }
-  if (seen.size !== registry.size)
+  if (!allowPartial && seen.size !== registry.size)
     throw new Error(`page-data output covered ${seen.size} of ${registry.size} sections`);
   return results;
 }
@@ -606,6 +612,7 @@ export function parsePageDataCompletion(
   registry: ReadonlyMap<string, SectionConfig>,
   invocation: string,
   exitCode: number,
+  scopeLimitExceeded = false,
 ): { sections: PageDataSection[]; incomplete: boolean } {
   const prefix = 'Page-data completed ';
   const lines = output.split(/\r?\n/u).filter(Boolean);
@@ -628,9 +635,27 @@ export function parsePageDataCompletion(
     throw new Error('page-data completed-output marker did not match this invocation');
   const sections = parsePageDataOutput(lines.slice(0, -1).join('\n'), registry);
   const defects = sections.filter((section) => PAGE_DATA_DEFECTS.has(section.class)).length;
-  if (marker.defects !== defects || exitCode !== (defects > 0 ? 1 : marker.incomplete ? 2 : 0))
+  const expectedExitCode = defects > 0 ? 1 : marker.incomplete ? 2 : 0;
+  if (marker.defects !== defects || (!scopeLimitExceeded && exitCode !== expectedExitCode))
     throw new Error('page-data completed-output marker did not match the section results or exit code');
-  return { sections, incomplete: marker.incomplete };
+  return { sections, incomplete: marker.incomplete || scopeLimitExceeded };
+}
+
+function parseScopeLimitedPageDataOutput(
+  output: string,
+  registry: ReadonlyMap<string, SectionConfig>,
+  invocation: string,
+  exitCode: number,
+): { sections: PageDataSection[]; incomplete: true } {
+  if (output.split(/\r?\n/u).some((line) => line.startsWith('Page-data completed ')))
+    return { ...parsePageDataCompletion(output, registry, invocation, exitCode, true), incomplete: true };
+  try {
+    return { sections: parsePageDataOutput(output, registry, true), incomplete: true };
+  } catch (error) {
+    if (!output || /(?:\r?\n)$/u.test(output)) throw error;
+    const lines = output.split(/\r?\n/u);
+    return { sections: parsePageDataOutput(lines.slice(0, -1).join('\n'), registry, true), incomplete: true };
+  }
 }
 
 function readLastCycle(db: Database): { at: string } | undefined {
@@ -972,6 +997,8 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
     let diagnostics = '';
     const invocation = randomUUID();
     let exitCode = -1;
+    let scopeLimitExceeded = false;
+    let scopeKilled = false;
     let seed: PageDataSeedStatus | undefined;
     let registryForRun: ReadonlyMap<string, SectionConfig> | undefined;
     try {
@@ -983,8 +1010,10 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
       stackOutput = result.stackOutput ?? '';
       diagnostics = result.diagnostics ?? '';
       exitCode = result.exitCode;
+      scopeLimitExceeded = result.scopeLimitExceeded ?? false;
+      scopeKilled = result.scopeKilled ?? false;
       seed = result.seed;
-      if (![0, 1, 2].includes(result.exitCode)) {
+      if (![0, 1, 2].includes(result.exitCode) && !scopeLimitExceeded && !scopeKilled) {
         const command = commandOutput(output, diagnostics);
         const line = command.trim() ? terminalErrorLine(command) : `page-data-check exited ${result.exitCode}`;
         throw new PageDataStackError('check', line, line, combineFailureOutput(stackOutput, command));
@@ -1005,7 +1034,10 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
     let sections: PageDataSection[];
     let incomplete: boolean;
     try {
-      ({ sections, incomplete } = parsePageDataCompletion(output, registry, invocation, exitCode));
+      ({ sections, incomplete } =
+        scopeLimitExceeded || scopeKilled
+          ? parseScopeLimitedPageDataOutput(output, registry, invocation, exitCode)
+          : parsePageDataCompletion(output, registry, invocation, exitCode));
     } catch (error) {
       const transcript = combineFailureOutput(stackOutput, commandOutput(output, diagnostics));
       const logPath = writePageDataFailureLog(options.settings.stateDirectory, runId, 'check', transcript);
@@ -1289,7 +1321,14 @@ function boundedAppend(current: string, chunk: string, maximum: number): string 
   return bytes.byteLength > maximum ? bytes.subarray(bytes.byteLength - maximum).toString('utf8') : next;
 }
 
-type ProcessResult = { exitCode: number; stdout: string; stderr: string; output: string };
+type ProcessResult = {
+  exitCode: number;
+  signal?: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+  output: string;
+};
+type ScopedPageDataResult = ProcessResult & { scopeLimitExceeded: boolean; scopeKilled: boolean };
 export type PageDataCapture = {
   value: string;
   context?: Record<string, unknown>;
@@ -1383,6 +1422,58 @@ function commandOutput(stdout: string, stderr: string): string {
   return `${stdout}\n=== stderr ===\n${stderr}`;
 }
 
+export function pageDataCheckScopeUnit(invocation: string): string {
+  return `rezics-page-data-${invocation}.scope`;
+}
+
+const PAGE_DATA_SCOPE_RUNNER = [
+  '"$@"',
+  'status=$?',
+  'cgroup=',
+  'while IFS=: read -r hierarchy controllers path; do',
+  '  if [ "$hierarchy" = 0 ] && [ -z "$controllers" ]; then cgroup=$path; break; fi',
+  'done < /proc/self/cgroup',
+  'oom_kills=unavailable',
+  'if [ -n "$cgroup" ] && [ -r "/sys/fs/cgroup$cgroup/memory.events" ]; then',
+  '  oom_kills=0',
+  '  while read -r key value rest; do',
+  '    if [ "$key" = oom_kill ]; then oom_kills=$value; break; fi',
+  '  done < "/sys/fs/cgroup$cgroup/memory.events"',
+  'fi',
+  'printf "REZICS_PAGE_DATA_SCOPE_OOM_KILLS=%s\\n" "$oom_kills" >&2',
+  'exit "$status"',
+].join('\n');
+
+export function pageDataCheckScopeArguments(invocation: string, command: string, args: readonly string[]): string[] {
+  return workerScopeArguments(
+    pageDataCheckScopeUnit(invocation),
+    '/bin/sh',
+    ['-c', PAGE_DATA_SCOPE_RUNNER, 'page-data-check-scope', command, ...args],
+    {
+      pipe: true,
+      slice: CHECK_SLICE,
+      properties: ['OOMPolicy=continue'],
+    },
+  );
+}
+
+function takePageDataScopeOomStatus(stderr: string): { stderr: string; reported: boolean; oomKills?: number } {
+  const lines = stderr.split(/\r?\n/u);
+  const markers = lines.filter((line) => line.startsWith('REZICS_PAGE_DATA_SCOPE_OOM_KILLS='));
+  if (markers.length === 0) return { stderr, reported: false };
+  if (markers.length !== 1) throw new Error('page-data scope emitted multiple OOM counters');
+  const match = /^REZICS_PAGE_DATA_SCOPE_OOM_KILLS=(unavailable|0|[1-9]\d*)$/u.exec(markers[0]!);
+  if (!match) throw new Error('page-data scope emitted an invalid OOM counter');
+  const count = match[1] === 'unavailable' ? undefined : Number(match[1]);
+  if (count !== undefined && !Number.isSafeInteger(count))
+    throw new Error('page-data scope emitted an invalid OOM counter');
+  return {
+    stderr: lines.filter((line) => line !== markers[0]).join('\n'),
+    reported: true,
+    ...(count !== undefined ? { oomKills: count } : {}),
+  };
+}
+
 function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
   if (!child.pid) return;
   try {
@@ -1450,7 +1541,119 @@ async function runCommand(
       diagnostic,
       output,
     );
-  return { exitCode: code ?? -1, stdout, stderr, output: stdout };
+  return { exitCode: code ?? -1, signal: child.signalCode, stdout, stderr, output: stdout };
+}
+
+function systemctlUser(
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+): SpawnSyncReturns<string> {
+  return spawnSync('systemctl', ['--user', ...args], { cwd, env, encoding: 'utf8', timeout: timeoutMs });
+}
+
+function systemctlFailure(result: SpawnSyncReturns<string>, command: string): string | undefined {
+  if (result.error) return `${command} failed: ${externalErrorLine(result.error.message)}`;
+  if (result.status !== 0) {
+    const detail = externalErrorLine(result.stderr || result.stdout || '');
+    return `${command} exited with status ${result.status ?? result.signal ?? 'unknown'}${detail ? `: ${detail}` : ''}`;
+  }
+  return undefined;
+}
+
+function cleanupPageDataScope(
+  unit: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+): string | undefined {
+  const stopped = systemctlUser(['stop', unit], cwd, env, timeoutMs);
+  const stopFailure = systemctlFailure(stopped, `systemctl stop ${unit}`);
+  if (stopFailure) {
+    const state = systemctlUser(['show', unit, '--property=LoadState', '--value'], cwd, env, timeoutMs);
+    if (!systemctlFailure(state, `systemctl show ${unit}`) && state.stdout.trim() === 'not-found') return undefined;
+    return stopFailure;
+  }
+  const reset = systemctlUser(['reset-failed', unit], cwd, env, timeoutMs);
+  const resetFailure = systemctlFailure(reset, `systemctl reset-failed ${unit}`);
+  if (resetFailure) {
+    const state = systemctlUser(['show', unit, '--property=LoadState', '--value'], cwd, env, timeoutMs);
+    if (!systemctlFailure(state, `systemctl show ${unit}`) && state.stdout.trim() === 'not-found') return undefined;
+    return resetFailure;
+  }
+  return undefined;
+}
+
+async function runPageDataScopedCheck(
+  invocation: string,
+  command: string,
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+  outputLimit: number,
+  killAfterMs: number,
+): Promise<ScopedPageDataResult> {
+  const unit = pageDataCheckScopeUnit(invocation);
+  let result: ProcessResult | undefined;
+  let scopeLimitExceeded = false;
+  let scopeKilled = false;
+  let failure: unknown;
+  try {
+    result = await runCommand(
+      'systemd-run',
+      pageDataCheckScopeArguments(invocation, command, args),
+      cwd,
+      env,
+      timeoutMs,
+      outputLimit,
+      'check',
+      [0, 1, 2, 137, -1],
+      killAfterMs,
+    );
+    const oomStatus = takePageDataScopeOomStatus(result.stderr);
+    result = { ...result, stderr: oomStatus.stderr };
+    scopeLimitExceeded = (oomStatus.oomKills ?? 0) > 0;
+    scopeKilled = result.exitCode === 137;
+    if (!oomStatus.reported && !scopeKilled)
+      throw new PageDataStackError(
+        'check',
+        `Page-data systemd scope ${unit} did not report completion; launch or memory outcome is unknown`,
+        `Page-data systemd scope ${unit} did not report completion; launch or memory outcome is unknown`,
+        commandOutput(result.stdout, result.stderr),
+      );
+    if (!scopeLimitExceeded && !scopeKilled && ![0, 1, 2].includes(result.exitCode)) {
+      const detail = result.stderr || result.stdout;
+      const signal = result.signal ? ` (signal ${result.signal})` : '';
+      const line = detail.trim() ? terminalErrorLine(detail) : `page-data-check exited ${result.exitCode}${signal}`;
+      throw new PageDataStackError('check', line, line, commandOutput(result.stdout, result.stderr));
+    }
+  } catch (error) {
+    failure = error;
+  }
+
+  const cleanupFailure = cleanupPageDataScope(unit, cwd, env, killAfterMs);
+  if (cleanupFailure) {
+    const detail = `Page-data systemd scope cleanup failed: ${cleanupFailure}`;
+    if (failure instanceof PageDataStackError)
+      throw new PageDataStackError(
+        failure.phase,
+        `${failure.message}; ${detail}`,
+        failure.firstErrorLine,
+        combineFailureOutput(failure.output, detail),
+      );
+    if (failure)
+      throw new PageDataStackError(
+        'check',
+        `${errorMessage(failure)}; ${detail}`,
+        safeLine(errorMessage(failure)),
+        detail,
+      );
+    throw new PageDataStackError('check', detail, detail, commandOutput(result?.stdout ?? '', result?.stderr ?? ''));
+  }
+  if (failure) throw failure;
+  return { ...result!, scopeLimitExceeded, scopeKilled };
 }
 
 /** Existing readiness seam; injectable time/probes let causal tests use an inert owned child. */
@@ -1655,14 +1858,7 @@ async function runDedicatedPageDataStack(
   settings: Settings,
   head: string,
   invocation: string,
-): Promise<{
-  output: string;
-  exitCode: number;
-  registry: ReadonlyMap<string, SectionConfig>;
-  stackOutput: string;
-  diagnostics: string;
-  seed?: PageDataSeedStatus;
-}> {
+): Promise<PageDataStackResult> {
   const { policy, worktree, config, names, env: preparedEnv } = await prepareDedicatedPageDataStack(settings, head);
   const bun = process.execPath;
   let env = preparedEnv;
@@ -1672,7 +1868,7 @@ async function runDedicatedPageDataStack(
     context: launchContext(worktree, head, [bun, 'services/auth/scripts/dev-stack.ts', 'start'], env),
   };
   let child: ChildProcess | undefined;
-  let checked: ProcessResult | undefined;
+  let checked: ScopedPageDataResult | undefined;
   let registry: ReadonlyMap<string, SectionConfig> | undefined;
   let seedStatus: PageDataSeedStatus | undefined;
   let failed = false;
@@ -1786,7 +1982,8 @@ async function runDedicatedPageDataStack(
       }
     }
 
-    checked = await runCommand(
+    checked = await runPageDataScopedCheck(
+      invocation,
       bun,
       [
         'scripts/page-data-check.ts',
@@ -1803,8 +2000,6 @@ async function runDedicatedPageDataStack(
       env,
       policy.checkTimeoutMs,
       policy.outputBytes,
-      'check',
-      [0, 1, 2],
       policy.stopTimeoutMs,
     );
     registry = sectionRegistry(worktree);
@@ -1839,13 +2034,26 @@ async function runDedicatedPageDataStack(
     );
   }
   const result = checked!;
+  const diagnostics = [
+    result.stderr,
+    ...(result.scopeLimitExceeded
+      ? [`Page-data systemd scope exhausted MemoryMax=${WORKER_SCOPE_MEMORY_MAX}; coverage is incomplete`]
+      : []),
+    ...(result.scopeKilled && !result.scopeLimitExceeded
+      ? ['Page-data check scope was killed; coverage is incomplete']
+      : []),
+  ]
+    .filter(Boolean)
+    .join('\n');
   return {
     output: result.stdout,
-    diagnostics: result.stderr,
+    diagnostics,
     exitCode: result.exitCode,
     registry: registry!,
     stackOutput: pageDataCaptureOutput(stackCapture, policy.outputBytes),
     ...(seedStatus ? { seed: seedStatus } : {}),
+    ...(result.scopeLimitExceeded ? { scopeLimitExceeded: true } : {}),
+    ...(result.scopeKilled ? { scopeKilled: true } : {}),
   };
 }
 

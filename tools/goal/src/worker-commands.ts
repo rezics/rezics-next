@@ -9,7 +9,7 @@ import { BriefContractUnchangedError, WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
 import { importAttempt, importRunDirectory } from './import-attempt.ts';
 import { formatLifecycleMetrics, formatUsageReport, report } from './report.ts';
-import { flowReport, formatPageDataFlowRuns, readFlow, readFlowTasks } from './flow.ts';
+import { flowReport, formatPageDataFlowRuns, readFlow, readFlowTasks, readLandingOperations } from './flow.ts';
 import { formatGuardLedger, guardLedger } from './guards.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import type { LandingQueue, ManagerInbox } from './contracts.ts';
@@ -383,10 +383,11 @@ export async function runWorkerCommand(
         );
       }
     } else if (parsedArguments.command === 'report') {
-      const { flow, since, json } = parsedArguments;
+      const { flow, since, until, json } = parsedArguments;
       if (flow) {
         const now = new Date();
-        const metrics = lifecycleMetrics(store.db, now, settings.policy);
+        const historical = until !== undefined;
+        const metrics = historical ? undefined : lifecycleMetrics(store.db, now, settings.policy);
         const records = store.records();
         // Landed lines come from the latest passing attempt of each task, the one that integrated it.
         const landed = new Map<string, { attempt: number; lines: number }>();
@@ -400,11 +401,22 @@ export async function runWorkerCommand(
           ...task,
           diffLines: landed.get(task.id)?.lines ?? null,
         }));
+        const windowStart = since ?? '0000-01-01T00:00:00.000Z';
+        const operationEnd = until ?? '9999-12-31T23:59:59.999Z';
+        const landingOperations = readLandingOperations(store.db, windowStart, operationEnd);
+        const guards = historical ? undefined : guardLedger(records, store.attempts(), now.getTime());
         const result = {
-          ...flowReport(readFlow(store.db, since), tasks, now.getTime()),
-          guards: guardLedger(records, store.attempts(), now.getTime()),
-          lifecycle: metrics,
+          ...flowReport(readFlow(store.db, since, until), tasks, now.getTime(), {
+            historical,
+            landingOperations,
+            ...(historical ? { window: { since: windowStart, until } } : {}),
+          }),
+          ...(guards && metrics ? { guards, lifecycle: metrics } : {}),
         };
+        const operationSummary = result.landingOperations;
+        const landingOperationLine = operationSummary
+          ? `Landing operations ${historical ? 'in UTC window' : 'in recorded history'}: ${operationSummary.terminalCount} terminal; ${operationSummary.measuredCount} timed; ${operationSummary.unknownDurationCount} unknown duration; p50 ${operationSummary.p50DurationMs === null ? 'unknown' : `${operationSummary.p50DurationMs} ms`}; p90 ${operationSummary.p90DurationMs === null ? 'unknown' : `${operationSummary.p90DurationMs} ms`}.`
+          : undefined;
         if (json) print(JSON.stringify(result, null, 2));
         else
           print(
@@ -413,6 +425,7 @@ export async function runWorkerCommand(
               `Bottleneck: ${result.bottleneck ?? 'unknown'}`,
               `Over-budget launches by layer: ${JSON.stringify(result.overBudgetLaunchesByLayer)}`,
               `Attempts per integrated task: ${result.attemptsPerIntegrated ?? 'unknown'}`,
+              ...(landingOperationLine ? [landingOperationLine] : []),
               `Chained: ${result.chain.chained.tasks} tasks, ${result.chain.chained.integrated} integrated, ${result.chain.chained.linesPerWorkerHour === null ? 'unknown' : result.chain.chained.linesPerWorkerHour.toFixed(1)} lines per worker-hour; unchained: ${result.chain.unchained.tasks} tasks, ${result.chain.unchained.integrated} integrated, ${result.chain.unchained.linesPerWorkerHour === null ? 'unknown' : result.chain.unchained.linesPerWorkerHour.toFixed(1)} lines per worker-hour; offers ${result.chain.offered}, declined ${JSON.stringify(result.chain.declined)}`,
               `Dev landing transpile: ${result.devTranspile.successfulChecks} passed, ${result.devTranspile.repairHandbacks} repair handbacks, ${result.devTranspile.unavailable} unavailable; ${result.devTranspile.measuredChecks} measured checks, ${result.devTranspile.totalMs === null ? 'cost unavailable' : `${result.devTranspile.totalMs}ms total`}.`,
               `Dev landing architecture: ${result.devArchitecture.successfulChecks} passed, ${result.devArchitecture.repairHandbacks} repair handbacks, ${result.devArchitecture.unavailable} unavailable; ${result.devArchitecture.measuredChecks} measured checks, ${result.devArchitecture.totalMs === null ? 'cost unavailable' : `${result.devArchitecture.totalMs}ms total`}.`,
@@ -423,8 +436,8 @@ export async function runWorkerCommand(
               ...result.queues.map(
                 (q) => `Queue ${q.stage}: ${q.length}, oldest ${Math.round(q.oldestAgeMs / 60000)}m`,
               ),
-              ...formatGuardLedger(result.guards),
-              ...formatLifecycleMetrics(metrics),
+              ...(guards ? formatGuardLedger(guards) : []),
+              ...(metrics ? formatLifecycleMetrics(metrics) : []),
             ].join('\n'),
           );
         return 0;

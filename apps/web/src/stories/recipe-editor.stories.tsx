@@ -96,12 +96,7 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -299,7 +294,6 @@ export const ExactCurrentValue: Story = {
 export const Concealed: Story = { args: { correction: true, scenario: 'concealed' } };
 export const Proposed: Story = {
   args: { correction: true, onFixture: observeRecipe() },
-  globals: {},
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     const observed = args.onFixture as ReturnType<typeof observeRecipe>;
@@ -625,20 +619,15 @@ const exerciseRecipeFamily: NonNullable<Story['play']> = async ({ canvasElement,
   }
   await assertAssociations();
 };
-export const IndependentFamilyPhone: Story = {
+export const IndependentFamily: Story = {
   args: { onFixture: observeRecipe() },
   render: (args) => <RecipeFamilyStory onFixture={args.onFixture} />,
-  globals: {},
   parameters: familyDescription,
   play: exerciseRecipeFamily,
 };
-export const IndependentFamilyDesktop: Story = {
-  ...IndependentFamilyPhone,
-  args: { onFixture: observeRecipe() },
-  globals: {},
-};
+
 export const IndependentFamilyRtl: Story = {
-  ...IndependentFamilyPhone,
+  ...IndependentFamily,
   args: { onFixture: observeRecipe() },
   render: (args) => <RecipeFamilyStory onFixture={args.onFixture} rtl />,
 };

@@ -111,9 +111,9 @@ export const Empty: Story = {
   },
 };
 
-export const NarrowWrapping: Story = {
+export const WrappedCells: Story = {
   render: () => (
-    <div className="w-72 text-xs">
+    <div className="min-w-0 text-xs">
       <Table className="[&_td]:whitespace-normal [&_th]:whitespace-normal">
         <TableCaption>Long titles wrap inside a narrow column</TableCaption>
         <TableHeader>

@@ -171,7 +171,6 @@ const failure = (scenario: AlbumScenario, text: () => string): Story => ({
 export const Ready: Story = {};
 export const LanguageRowRecovery: Story = {
   args: { scenario: 'uncertain', onCreate: createObserver() },
-  globals: {},
   parameters: {
     docs: {
       description: {
@@ -184,7 +183,6 @@ export const LanguageRowRecovery: Story = {
     const canvas = await fill(canvasElement);
     const document = canvasElement.ownerDocument;
     const form = canvas.getByRole('textbox', { name: m.catalogue_create_label() }).closest('form')!;
-    await expect(document.documentElement.clientWidth).toBe(390);
     // Inspect native target and rendered text geometry, independently of the caller's classes.
     const phoneControls = async (region: HTMLElement) => {
       const bounds = region.getBoundingClientRect();

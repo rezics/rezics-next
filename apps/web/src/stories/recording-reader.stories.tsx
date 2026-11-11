@@ -82,12 +82,7 @@ const meta = {
   component: RecordingReaderStory,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1440: { name: 'Desktop 1440', styles: { width: '1440px', height: '1000px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -119,25 +114,6 @@ async function inspectQualifiedFact({ canvasElement }: { canvasElement: HTMLElem
 
 export const AdmittedExample: Story = {
   args: { admitted: true },
-  globals: {},
   play: inspectQualifiedFact,
 };
 export const CurrentReleaseUnsupported: Story = { args: { admitted: false } };
-export const QualifiedFactPhoneDark: Story = {
-  name: 'Qualified Fact',
-  args: { admitted: true },
-  globals: {},
-  play: inspectQualifiedFact,
-};
-export const QualifiedFactDesktopLight: Story = {
-  tags: ['!dev'],
-  args: { admitted: true },
-  globals: {},
-  play: inspectQualifiedFact,
-};
-export const QualifiedFactDesktopDark: Story = {
-  tags: ['!dev'],
-  args: { admitted: true },
-  globals: {},
-  play: inspectQualifiedFact,
-};

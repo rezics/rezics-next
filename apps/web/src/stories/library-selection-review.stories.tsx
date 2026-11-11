@@ -45,39 +45,18 @@ async function selectedReview(context: { canvasElement: HTMLElement }, unavailab
   await expect(within(tray).getByRole('button', { name: m.library_selection_review() })).toHaveFocus();
 }
 
-export const PhoneLight: Story = {
-  name: 'Default',
-  globals: { locale: 'en' },
-  render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
-  play: (context) => selectedReview(context),
-};
-export const PhoneDark: Story = {
-  name: 'Default',
-  globals: { locale: 'zh-Hant' },
-  render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
-  play: (context) => selectedReview(context),
-};
-export const DesktopLight: Story = {
-  name: 'Default',
-  globals: { locale: 'ja' },
-  render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
-  play: (context) => selectedReview(context),
-};
-export const DesktopDark: Story = {
-  tags: ['!dev'],
+export const SelectedReview: Story = {
   globals: { locale: 'en' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
 };
 
 export const TraditionalChineseSelectionReview: Story = {
-  tags: ['!dev'],
   globals: { locale: 'zh-Hant' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
 };
 export const JapaneseSelectionReview: Story = {
-  tags: ['!dev'],
   globals: { locale: 'ja' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
@@ -89,7 +68,4 @@ const unavailableVisit = {
   play: (context: Parameters<typeof selectedReview>[0]) => selectedReview(context, true),
 };
 
-export const StatusUnavailablePhoneLight: Story = { name: 'Status Unavailable', ...unavailableVisit, globals: {} };
-export const StatusUnavailablePhoneDark: Story = { tags: ['!dev'], ...unavailableVisit, globals: {} };
-export const StatusUnavailableDesktopLight: Story = { tags: ['!dev'], ...unavailableVisit, globals: {} };
-export const StatusUnavailableDesktopDark: Story = { tags: ['!dev'], ...unavailableVisit, globals: {} };
+export const StatusUnavailable: Story = { ...unavailableVisit };

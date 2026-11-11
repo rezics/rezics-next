@@ -1011,6 +1011,7 @@ export async function discloseBoardPageThreads(
   context: ReadContext,
   decisions: ReadDecisions,
   query = '',
+  subjectScope?: { subjectId: string; placeId: string },
 ): Promise<
   Readonly<{
     items: readonly Anchored<ThreadView | null>[];
@@ -1020,10 +1021,13 @@ export async function discloseBoardPageThreads(
 > {
   const ids = [boardId, ...threadIds];
   if (baseline.realmId) ids.push(baseline.realmId);
+  if (subjectScope) for (const threadId of threadIds) await dependencies.disclosureBarrier?.({ threadId });
   const result = await batchSnapshot(dependencies, ids, context, async (client, anchors) => {
     const currentBoards = await batchRows(client, 'board', [batchKey(boardId)]);
     const currentBoard = currentBoards[0];
     if (!currentBoard || signature(currentBoard) !== signature(boardRowFromView(baseline)))
+      return { items: new Map<string, ThreadView | null>(), parentAllowed: false };
+    if (subjectScope && (currentBoard.realm_id ?? GLOBAL_CONTEXT) !== subjectScope.placeId)
       return { items: new Map<string, ThreadView | null>(), parentAllowed: false };
     const realms = currentBoard.realm_id ? await batchRealms(client, [currentBoard.realm_id]) : [];
     const parentChecks = await decideBoardAndRealms(client, decisions, context.actor, [currentBoard], realms);
@@ -1105,6 +1109,7 @@ export async function discloseBoardPageThreads(
         !post ||
         !revision ||
         thread.board_id !== boardId ||
+        (subjectScope && !revision.subject_ids.includes(subjectScope.subjectId)) ||
         !decisionAllowed(thread, threadAccess[id], context.actor, threadTombstone.get(id) ?? false) ||
         !decisionAllowed(post, postAccess[post.id], context.actor, postTombstone.get(post.id) ?? false) ||
         (erased && postAccess[post.id]?.explicit !== true && thread.visibility === 'taken_down')
@@ -1191,7 +1196,10 @@ export async function discloseBoardPageThreads(
     if (thread) {
       const current = await readableCitation(dependencies, context, thread);
       const witness = contentSourceWitness(thread);
-      if (witness) contentSourceWitnesses.set(current, witness);
+      if (witness) {
+        contentSourceWitnesses.set(current, witness);
+        contentSourceWitnesses.set(current.firstPost, witness);
+      }
       result.value.items.set(id, current);
     }
   }
@@ -1885,6 +1893,18 @@ export async function readSubjectThread(
     placeId,
   })) as Anchored<ThreadView | null>;
 }
+
+/** The same current Subject/place constraints as a point read, with native Board,
+ * opening-post and Access evaluation batched across the selected thread keys. */
+export function readSubjectThreads(
+  dependencies: ContentReadDependencies,
+  threadIds: readonly ThreadId[],
+  subjectId: string,
+  placeId: string,
+  context: ReadContext,
+): Promise<readonly Anchored<ThreadView | null>[]> {
+  return discloseThreadBatch(dependencies, threadIds, context, { subjectId, placeId });
+}
 /** Internal exact-opening evidence. This shares the ordinary native resources,
  * board observation, ancestry, account fences and Access evaluator. It loads no
  * document bytes and cannot enumerate candidates or establish census coverage.
@@ -2267,8 +2287,17 @@ export async function discloseThreads(
   threadIds: readonly ThreadId[],
   context: ReadContext,
 ): Promise<readonly Anchored<ThreadView | null>[]> {
+  return discloseThreadBatch(dependencies, threadIds, context);
+}
+
+async function discloseThreadBatch(
+  dependencies: ContentReadDependencies,
+  threadIds: readonly ThreadId[],
+  context: ReadContext,
+  subjectScope?: { subjectId: string; placeId: string },
+): Promise<readonly Anchored<ThreadView | null>[]> {
   if (threadIds.length > 200) throw new RangeError('At most 200 disclosure candidates');
-  const hint = boardDisclosureHint.getStore();
+  const hint = subjectScope ? undefined : boardDisclosureHint.getStore();
   if (threadIds.length === 0 && !hint) return [];
   const decisions = hint?.decisions ?? (await prepareBoardPageDecisions(dependencies, context));
   if (hint) {
@@ -2328,6 +2357,8 @@ export async function discloseThreads(
       new Map(),
       context,
       decisions,
+      '',
+      subjectScope,
     );
     ids.forEach((id, index) => results.set(id, disclosed.items[index]!));
   }

@@ -369,10 +369,9 @@ export const IndependentEditors: Story = {
   },
 };
 
-export const LongKeysPhoneFocus: Story = {
+export const LongKeysFocus: Story = {
   args: { initial: longInitial, locale: 'en', transport: controlsTransport() },
   render,
-  globals: {},
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.selectOptions(

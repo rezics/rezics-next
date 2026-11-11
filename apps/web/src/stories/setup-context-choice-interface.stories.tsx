@@ -81,12 +81,7 @@ const meta = {
   ),
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -143,15 +138,10 @@ const longObservation: NonNullable<Story['play']> = async ({ canvasElement }) =>
   await userEvent.tab();
   await focusVisible(canvas.getByRole('button', { name: m.space_setup_resolve() }));
 };
-export const LongCurrentAndSelectedPhone: Story = { name: 'Long Current And Selected', play: longObservation };
-export const LongCurrentAndSelectedDesktop: Story = { tags: ['!dev'], globals: {}, play: longObservation };
+export const LongCurrentAndSelected: Story = { play: longObservation };
+
 export const LongCurrentAndSelectedRTL: Story = { parameters: { direction: 'rtl' }, play: longObservation };
-export const LongCurrentAndSelectedDesktopRTL: Story = {
-  tags: ['!dev'],
-  parameters: { direction: 'rtl' },
-  globals: {},
-  play: longObservation,
-};
+
 export const LoadingIsNotEmpty: Story = {
   loaders: [load('loading')],
   play: async ({ canvasElement }) => {

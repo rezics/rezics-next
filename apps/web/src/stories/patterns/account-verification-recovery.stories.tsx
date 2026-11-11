@@ -267,7 +267,6 @@ export const ReadUnavailable: Story = {
 };
 
 export const AstralBoundary: Story = {
-  globals: {},
   args: { scenario: 'astral', onRequest: fn() },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
@@ -312,7 +311,6 @@ export const AstralBoundary: Story = {
 };
 
 export const InvalidDraftBeforeCommand: Story = {
-  globals: {},
   args: { scenario: 'invalid', onRequest: fn() },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
@@ -357,7 +355,6 @@ export const InvalidDraftBeforeCommand: Story = {
 };
 
 export const FiveLinkKeyboardEditing: Story = {
-  globals: {},
   args: { scenario: 'links', onRequest: fn() },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
@@ -416,11 +413,6 @@ export const FiveLinkKeyboardEditing: Story = {
     await expect(args.onRequest).toHaveBeenCalledTimes(1);
     await expect(args.onRequest).toHaveBeenCalledWith(expect.objectContaining({ links: expectedLinks }));
   },
-};
-
-export const FiveLinkKeyboardEditingPhone: Story = {
-  ...FiveLinkKeyboardEditing,
-  globals: {},
 };
 
 async function showRetryAfter(canvasElement: HTMLElement, withdraw = false) {

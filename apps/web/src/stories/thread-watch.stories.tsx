@@ -121,12 +121,6 @@ const meta = {
   id: 'pages-community-thread-watch',
   component: ThreadWatchPageStory,
   parameters: {
-    viewport: {
-      viewports: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
     docs: {
       description: {
         component:
@@ -233,19 +227,19 @@ export const SimplifiedChinese: Story = {
   args: { example: 'not-watching' },
   globals: { locale: 'zh-Hans' },
 };
-export const GermanPhone: Story = {
+export const German: Story = {
   args: { example: 'watching' },
   globals: { locale: 'de' },
 };
-export const SpanishDesktop: Story = {
+export const Spanish: Story = {
   args: { example: 'not-watching' },
   globals: { locale: 'es' },
 };
-export const JapanesePhone: Story = {
+export const Japanese: Story = {
   args: { example: 'watching' },
   globals: { locale: 'ja' },
 };
-export const TraditionalChineseDesktop: Story = {
+export const TraditionalChinese: Story = {
   args: { example: 'not-watching' },
   globals: { locale: 'zh-Hant' },
 };

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   collectionComparisonFacts,
   collectionComparisonHref,
@@ -34,12 +35,14 @@ export function CollectionMemberDetails({
   comparisonDefinitions,
   currentHref,
   onReferenceNavigate,
+  referenceActions,
 }: {
   member: Pick<CollectionMember, 'subject' | 'facts'> & { id?: string };
   listPresentations?: CollectionListPresentations | undefined;
   comparisonDefinitions?: CollectionComparisonDefinitions | undefined;
   currentHref?: string | undefined;
   onReferenceNavigate?: ((anchor: HTMLAnchorElement) => void) | undefined;
+  referenceActions?: ((reference: { id: string; label: string; href: string }) => ReactNode) | undefined;
 }) {
   if (!member.subject) return null;
   const locale = getLocale();
@@ -60,11 +63,11 @@ export function CollectionMemberDetails({
           <dl className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 [overflow-wrap:anywhere]">
             {facts.map((fact, index) => (
               <div key={`${fact.property}:${index}`} data-property={fact.property} className="min-w-0 max-w-full">
-                <dt lang={fact.label.lang} className="text-xs">
+                <dt lang={fact.label.lang ?? undefined} className="text-xs">
                   {fact.label.text || m.search_constraint_identity_property_unavailable()}
                 </dt>
                 <dd lang={fact.lang}>
-                  {fact.targetId && currentHref ? (
+                  {fact.targetId && (currentHref || referenceActions) ? (
                     <a
                       href={collectionComparisonHref(fact.targetId, fact.text, locale, currentHref, member.id)}
                       data-comparison-reference={fact.targetId}
@@ -76,6 +79,13 @@ export function CollectionMemberDetails({
                   ) : (
                     fact.text
                   )}
+                  {fact.targetId
+                    ? referenceActions?.({
+                        id: fact.targetId,
+                        label: fact.text,
+                        href: collectionComparisonHref(fact.targetId, fact.text, locale, currentHref, member.id),
+                      })
+                    : null}
                 </dd>
               </div>
             ))}

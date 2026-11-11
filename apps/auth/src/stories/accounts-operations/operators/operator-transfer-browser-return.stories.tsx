@@ -35,11 +35,9 @@ const saved: TransferAttempt = {
 function ReturnStory({
   phase = 'readback',
   unavailable = false,
-  dark = false,
 }: {
   phase?: TransferAttempt['phase'];
   unavailable?: boolean;
-  dark?: boolean;
 }) {
   const [ready, setReady] = useState(false);
   useLayoutEffect(() => {
@@ -81,7 +79,7 @@ function ReturnStory({
     };
   }, [phase, unavailable]);
   return (
-    <div className={dark ? 'dark bg-background text-foreground' : undefined}>
+    <div className="bg-background text-foreground">
       {ready ? (
         <AuthShell>
           <OperatorTransferPage initial={owner} />
@@ -94,28 +92,27 @@ async function review({ canvasElement }: { canvasElement: HTMLElement }) {
   const action = await waitFor(() => button(canvasElement, m.auth_transfer_recovery_review()));
   action.click();
 }
-const phone = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
-const desktop = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
-export const AcknowledgedPhoneLight = { parameters: phone, render: () => <ReturnStory />, play: review };
-export const AcknowledgedReadUnavailableDesktopDark = {
-  parameters: desktop,
-  render: () => <ReturnStory unavailable dark />,
+
+export const Acknowledged = { parameters: reviewParameters, render: () => <ReturnStory />, play: review };
+export const AcknowledgedReadUnavailable = {
+  parameters: reviewParameters,
+  render: () => <ReturnStory unavailable />,
   play: review,
 };
-export const UnknownMatchingDesktopLight = {
-  parameters: desktop,
+export const UnknownMatching = {
+  parameters: reviewParameters,
   render: () => <ReturnStory phase="execute" />,
   play: review,
 };
-export const DestinationAcceptancePhoneDark = {
-  parameters: phone,
-  render: () => <ReturnStory phase="accepted" dark />,
+export const DestinationAcceptance = {
+  parameters: reviewParameters,
+  render: () => <ReturnStory phase="accepted" />,
   play: review,
 };
-export const SavedReviewPhoneLight = { parameters: phone, render: () => <ReturnStory phase="approve" /> };
-export const CachedReturnPhoneDark = {
-  parameters: phone,
-  render: () => <ReturnStory dark />,
+export const SavedReview = { parameters: reviewParameters, render: () => <ReturnStory phase="approve" /> };
+export const CachedReturn = {
+  parameters: reviewParameters,
+  render: () => <ReturnStory />,
   play: async (context: { canvasElement: HTMLElement }) => {
     await review(context);
     await waitFor(() => context.canvasElement.querySelector('#transfer-acknowledgment'));

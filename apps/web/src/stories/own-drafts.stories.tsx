@@ -1,6 +1,6 @@
 import { fromPlainText } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useMemo, type ComponentType } from 'react';
+import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
@@ -272,47 +272,9 @@ export const SelectedJapaneseSubjectKeyboard: Story = {
   args: { locale: 'ja' },
   play: inspectSubjectByKeyboard,
 };
-const desktop = [
-  (Story: ComponentType) => (
-    <div className="w-[1280px] bg-background text-foreground">
-      <Story />
-    </div>
-  ),
-];
-const phoneLight = [
-  (Story: ComponentType) => (
-    <div className="w-[390px] max-w-full bg-background text-foreground">
-      <Story />
-    </div>
-  ),
-];
-const phoneDark = [
-  (Story: ComponentType) => (
-    <div className="dark w-[390px] max-w-full bg-background text-foreground">
-      <Story />
-    </div>
-  ),
-];
-export const ReadyPhoneLight: Story = { decorators: phoneLight };
-export const ReadyDesktopLight: Story = { decorators: desktop };
-export const SelectedDesktopLight: Story = { play: selectDraft, decorators: desktop };
-export const PreparingDesktopDark: Story = {
-  args: { scenario: 'preparing' },
-  decorators: [
-    (Story) => (
-      <div className="dark w-[1280px] bg-background text-foreground">
-        <Story />
-      </div>
-    ),
-  ],
-};
-export const SelectedPhoneDark: Story = { play: selectDraft, decorators: phoneDark };
-export const PreparingPhoneDark: Story = { decorators: phoneDark, args: { scenario: 'preparing' } };
-export const DeniedPhoneDark: Story = { decorators: phoneDark, args: { scenario: 'denied' } };
-export const LongGermanPhoneDark: Story = { args: { locale: 'de', scenario: 'long' }, decorators: phoneDark };
-export const ConflictDesktopLight: Story = {
+
+export const Conflict: Story = {
   args: { scenario: 'conflict' },
-  decorators: desktop,
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
     await userEvent.click(
@@ -326,9 +288,8 @@ export const ConflictDesktopLight: Story = {
     await expect(view.getByRole('alertdialog')).toHaveTextContent('Current native head after another edit');
   },
 };
-export const UncertainCommandPhoneLight: Story = {
+export const UncertainCommand: Story = {
   args: { scenario: 'uncertain' },
-  decorators: phoneLight,
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
     await userEvent.click(
@@ -341,9 +302,8 @@ export const UncertainCommandPhoneLight: Story = {
     await expect(view.findByRole('button', { name: m.own_drafts_retry_save() })).resolves.toBeVisible();
   },
 };
-export const EraseReviewPhoneDark: Story = {
+export const EraseReview: Story = {
   args: { scenario: 'erase-review' },
-  decorators: phoneDark,
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
     await userEvent.click(
@@ -356,21 +316,6 @@ export const EraseReviewPhoneDark: Story = {
   },
 };
 
-const desktopDark = [
-  (Story: ComponentType) => (
-    <div className="dark w-[1280px] bg-background text-foreground">
-      <Story />
-    </div>
-  ),
-];
-export const ReadyDesktopDark: Story = { decorators: desktopDark };
-export const SelectedDesktopDark: Story = { play: selectDraft, decorators: desktopDark };
-export const DeniedDesktopLight: Story = { args: { scenario: 'denied' }, decorators: desktop };
-export const LongTraditionalChineseDesktopDark: Story = {
-  args: { locale: 'zh-Hant', scenario: 'long' },
-  decorators: desktopDark,
-};
-
 const returnFromUnknownErase: NonNullable<Story['play']> = async ({ canvasElement, args }) => {
   const view = within(canvasElement);
   const locale = args.locale;
@@ -381,7 +326,4 @@ const returnFromUnknownErase: NonNullable<Story['play']> = async ({ canvasElemen
   await userEvent.click(await view.findByRole('button', { name: m.own_drafts_return({}, { locale }) }));
   await expect(view.getByRole('button', { name: m.own_drafts_retry_erase({}, { locale }) })).toBeVisible();
 };
-export const EraseRecoveryPhoneLight: Story = { play: returnFromUnknownErase, decorators: phoneLight };
-export const EraseRecoveryPhoneDark: Story = { play: returnFromUnknownErase, decorators: phoneDark };
-export const EraseRecoveryDesktopLight: Story = { play: returnFromUnknownErase, decorators: desktop };
-export const EraseRecoveryDesktopDark: Story = { play: returnFromUnknownErase, decorators: desktopDark };
+export const EraseRecovery: Story = { play: returnFromUnknownErase };

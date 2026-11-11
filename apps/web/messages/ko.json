@@ -11600,5 +11600,14 @@
   "zones_owner_unlisted": "목록에 숨김",
   "zones_owner_unnamed": "이름 없는 Zone",
   "zones_owner_views": "Zone 목록",
-  "zones_owner_working": "저장 중…"
+  "zones_owner_working": "저장 중…",
+  "collection_reading_inspect": "상세 정보 보기",
+  "collection_reading_close": "상세 정보 닫기",
+  "collection_reading_note_available": "메모 있음",
+  "collection_reading_metadata": "제공된 메타데이터",
+  "collection_reading_note": "컬렉션 작성자의 메모",
+  "collection_reading_copy_reference": "참조 링크 복사",
+  "collection_reading_copy_pending": "링크 복사 중…",
+  "collection_reading_copy_done": "링크를 복사했습니다.",
+  "collection_reading_copy_unavailable": "링크를 복사하지 못했습니다. 참조 대상을 열거나 다시 시도하세요."
 }

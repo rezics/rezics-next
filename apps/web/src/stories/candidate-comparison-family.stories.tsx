@@ -55,12 +55,7 @@ const licenceUrl = 'https://creativecommons.org/publicdomain/zero/1.0/';
 const exactRecord = `Q25338/${'exact-record-'.repeat(8)}`;
 const exactRevision = `revision/${'a'.repeat(64)}`;
 const exactConverter = `wikidata/${'b'.repeat(64)}`;
-const viewports = {
-  options: {
-    phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-    desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-  },
-};
+
 function LongReview({ rtl = false }: { rtl?: boolean }) {
   const locale = getLocale();
   const fixture = useMemo(() => {
@@ -138,16 +133,13 @@ async function inspectLong(canvasElement: HTMLElement) {
       await expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   }
 }
-export const LongLocalizedPhone: Story = {
+export const LongLocalized: Story = {
   render: () => <LongReview />,
-  parameters: { viewport: viewports },
-  globals: {},
   play: async ({ canvasElement }) => inspectLong(canvasElement),
 };
-export const LongLocalizedDesktopRtl: Story = {
-  ...LongLocalizedPhone,
+export const LongLocalizedRtl: Story = {
+  ...LongLocalized,
   render: () => <LongReview rtl />,
-  globals: {},
 };
 
 export const IndependentReviewsAndActions: Story = {

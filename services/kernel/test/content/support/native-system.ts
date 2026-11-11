@@ -21,7 +21,7 @@ import { createNativeAccountBindings } from '../../../src/access/native-account-
 import { LIFECYCLE_ACTIONS } from '../../../src/access/lifecycle.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createRealmMembership } from '../../../src/community/membership.ts';
-import { createKernel } from '../../../src/http/kernel.ts';
+import { createKernel, createKernelAccessResolver } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { accessCheck, type AccessRealmRoleReader } from '../../../src/request/access.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
@@ -223,22 +223,30 @@ async function createNativeContentSystemWithOptions(
           },
         },
       });
-      fresh = createAccess({
-        actions,
+      // The production resolver mounts Commerce's native current buyer-fact
+      // reader. A prebuilt Access passed to Kernel must already contain it.
+      fresh = createKernelAccessResolver({
+        pool,
+        tokens: tokenKeys,
         clock,
+        deadlineNow: () => Date.now(),
         realmRoleReader,
-        auth: {
-          issuer,
-          audience,
-          jwksUrl: `${issuer}/.well-known/jwks.json`,
-          fetch: async (input, init) => {
-            const request = new Request(input, init);
-            const response = await nativeAuth.handler(request);
-            await observeJwks?.(request, response.clone());
-            return response;
-          },
-        },
-      });
+        access: (config) =>
+          createAccess({
+            ...config,
+            auth: {
+              issuer,
+              audience,
+              jwksUrl: `${issuer}/.well-known/jwks.json`,
+              fetch: async (input, init) => {
+                const request = new Request(input, init);
+                const response = await nativeAuth.handler(request);
+                await observeJwks?.(request, response.clone());
+                return response;
+              },
+            },
+          }),
+      }).resolveAccess({ actions });
       return fresh;
     };
     // Kernel resolves Access on a live request, after all routes are mounted.

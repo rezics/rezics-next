@@ -3,7 +3,7 @@ import * as Stories from './phone-shell.stories';
 
 <Meta of={Stories} />
 
-# Phone Shell
+# Shell Navigation
 
 The actual AppShell mounts one query owner. At phone390 its header contains Menu and one wide search pill;
 Home, Library, Create, Inbox and You stay above the safe area. At desktop1280 the existing rail, search and
@@ -15,10 +15,10 @@ opens SearchPage's registered native controls. Create offers the currently expos
 Shared entries retain the same session, operation and native route checks as desktop navigation.
 You includes Settings and the reusable display region.
 
-Exact IDs: `patterns-phone-shell--rest`, `--unread`, `--unread-unavailable`, `--search-empty`, `--search-recent`,
+Exact IDs: `patterns-shell-navigation--rest`, `--unread`, `--unread-unavailable`, `--search-empty`, `--search-recent`,
 `--search-trending`, `--search-loading`, `--search-unavailable`, `--search-closed`, `--search-typing`,
 `--search-filters-open`, `--creation-sheet`, `--you-settings`.
-The prefix `patterns-phone-shell` applies to every suffix. Review phone390/desktop1280 using locale/theme globals.
+The prefix `patterns-shell-navigation` applies to every suffix. Review phone390/desktop1280 using locale/theme globals.
 
 Web owns the RecentPanel/header placement and visible-page lifecycle. Content alone owns
 `community/realm-discovery/index.ts` (`RealmDiscoverySection`, `loadRealmDiscovery` and their types).

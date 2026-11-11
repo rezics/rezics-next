@@ -168,7 +168,6 @@ export const IndependentCursors: Story = {
 };
 export const PartialPreparing: Story = {
   args: { scenario: 'preparing' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.managed_preparing_text());
@@ -179,7 +178,6 @@ export const PartialPreparing: Story = {
 };
 export const ReconcilingAndUnavailableIdentity: Story = {
   args: { scenario: 'reconciling' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.settings_managed_identity_unavailable());
@@ -202,7 +200,6 @@ export const ReconcilingAndUnavailableIdentity: Story = {
 
 export const InitialRetryDelay: Story = {
   args: { scenario: 'initial-delay' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const alert = await canvas.findByRole('alert');
@@ -221,7 +218,6 @@ export const InitialRetryDelay: Story = {
 
 export const InitialUnavailable: Story = {
   args: { scenario: 'initial-unavailable' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const alert = within(await canvas.findByRole('alert'));
@@ -236,7 +232,6 @@ export const InitialUnavailable: Story = {
 
 export const IndependentRetryDelays: Story = {
   args: { scenario: 'feed-delays' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
@@ -272,7 +267,6 @@ export const IndependentRetryDelays: Story = {
 
 export const DenialClearsInventory: Story = {
   args: { scenario: 'denied' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
@@ -287,7 +281,6 @@ export const DenialClearsInventory: Story = {
 
 export const InvalidCursorFirstPageRecovery: Story = {
   args: { scenario: 'invalid-cursor' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
@@ -316,7 +309,6 @@ export const InvalidCursorFirstPageRecovery: Story = {
 
 export const StaleCursorIndependentRecovery: Story = {
   args: { scenario: 'stale-cursor' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
@@ -341,7 +333,6 @@ export const StaleCursorIndependentRecovery: Story = {
 
 export const FailedFirstPageRecovery: Story = {
   args: { scenario: 'restart-unavailable' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
@@ -366,7 +357,6 @@ export const FailedFirstPageRecovery: Story = {
 
 export const DeniedFirstPageClearsInventory: Story = {
   args: { scenario: 'restart-denied' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
@@ -493,17 +483,17 @@ const longRecoveryPlay: NonNullable<Story['play']> = async ({ canvasElement }) =
   await assertInventoryGeometry(canvasElement);
 };
 
-export const LongLocaleBoundedRecoveryPhone: Story = {
+export const LongLocaleBoundedRecovery: Story = {
   globals: { locale: 'de' },
   render: () => <LongInventoryExample />,
   play: longRecoveryPlay,
 };
-export const LongLocaleBoundedRecoveryDesktop: Story = {
-  ...LongLocaleBoundedRecoveryPhone,
+export const LongLocaleBoundedRecoveryFrench: Story = {
+  ...LongLocaleBoundedRecovery,
   globals: { locale: 'fr' },
 };
 export const LongLocaleBoundedRecoveryRTL: Story = {
-  ...LongLocaleBoundedRecoveryPhone,
+  ...LongLocaleBoundedRecovery,
   render: () => <LongInventoryExample rtl />,
 };
 export const LongLocalePreparing: Story = {

@@ -115,7 +115,7 @@ function expectPhoneTarget(target: HTMLElement) {
   const rect = target.getBoundingClientRect();
   expect(rect.height).toBeGreaterThanOrEqual(44);
   expect(rect.left).toBeGreaterThanOrEqual(0);
-  expect(rect.right).toBeLessThanOrEqual(390);
+  expect(rect.right).toBeLessThanOrEqual(target.ownerDocument.documentElement.clientWidth);
   expect(getComputedStyle(target).whiteSpace).toBe('normal');
   expect(getComputedStyle(target).maxWidth).not.toBe('none');
   return rect;
@@ -123,7 +123,6 @@ function expectPhoneTarget(target: HTMLElement) {
 
 export const SignedOutAndSessionRecovery: Story = {
   name: 'Signed out and session recovery',
-  globals: {},
   render: () => <InboxEntryPhoneStory />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -184,6 +183,8 @@ export const SignedOutAndSessionRecovery: Story = {
     await expect(main.queryByText(m.inbox_session_unavailable())).toBeNull();
     await expect(journey.sessionReads).toBe(3);
     await waitFor(() => expect(journey.privateInboxQueries()).toBeGreaterThan(0));
-    await expect(canvasElement.ownerDocument.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+    await expect(canvasElement.ownerDocument.documentElement.scrollWidth).toBeLessThanOrEqual(
+      canvasElement.ownerDocument.documentElement.clientWidth,
+    );
   },
 };

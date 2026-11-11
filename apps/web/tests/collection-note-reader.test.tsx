@@ -13,10 +13,9 @@ import { subjectHref } from '../src/subject/subject-href';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.example' } }));
-const { CollectionReadMembers } = await import('../src/library/collection-page');
 
 // UNRUN: focused composed outcomes; browser geometry is covered by the dedicated, also unrun stories.
-for (const presentation of ['occurrence list', 'member list', 'grid'] as const) {
+for (const presentation of ['occurrence list'] as const) {
   test(`${presentation}: bounded exact notes have independent occurrence and keyboard disclosure`, async () => {
     const { Window } = await import(
       Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -117,25 +116,16 @@ for (const presentation of ['occurrence list', 'member list', 'grid'] as const) 
         event.preventDefault();
       }
     });
-    const render = (items: CollectionMember[]) =>
-      presentation === 'occurrence list' ? (
-        <CollectionMemberList
-          members={items}
-          editing={false}
-          firstPage
-          onCopy={(id) => {
-            copies.push(id);
-          }}
-        />
-      ) : (
-        <CollectionReadMembers
-          members={items}
-          layout={presentation === 'grid' ? 'grid' : 'list'}
-          onCopy={(item) => {
-            copies.push(item);
-          }}
-        />
-      );
+    const render = (items: CollectionMember[]) => (
+      <CollectionMemberList
+        members={items}
+        editing={false}
+        firstPage
+        onCopy={(id) => {
+          copies.push(id);
+        }}
+      />
+    );
     const notes = () => [...host.querySelectorAll<HTMLParagraphElement>('[data-slot="collection-member-note"]')];
     const controlFor = (text: HTMLParagraphElement) => text.parentElement!.querySelector<HTMLButtonElement>('button')!;
 
@@ -144,7 +134,7 @@ for (const presentation of ['occurrence list', 'member list', 'grid'] as const) 
       await show(render(members));
       const texts = notes();
       expect(texts.map((text) => text.textContent)).toEqual([firstNote, secondNote, 'Short note', unbroken, ' \t\n ']);
-      const clamp = presentation === 'grid' ? 'line-clamp-4' : 'line-clamp-2';
+      const clamp = 'line-clamp-2';
       expect(texts.every((text) => text.classList.contains(clamp))).toBe(true);
       for (const text of texts) {
         expect(text.className).toContain('whitespace-pre-wrap');
@@ -231,21 +221,6 @@ for (const presentation of ['occurrence list', 'member list', 'grid'] as const) 
       narrow = true;
       await act(async () => resizeCallbacks.forEach((resize) => resize()));
       expect(controlFor(notes()[0]!)).not.toBeNull();
-      if (presentation !== 'occurrence list') {
-        // Id-less supplied read rows must not carry expansion by their old array position.
-        const idless = (note: string) => (
-          <CollectionReadMembers
-            members={[{ subject, note }]}
-            layout={presentation === 'grid' ? 'grid' : 'list'}
-            onCopy={() => undefined}
-          />
-        );
-        await show(idless(firstNote));
-        await act(async () => user.click(controlFor(notes()[0]!)));
-        await show(idless(secondNote));
-        expect(notes()[0]!.textContent).toBe(secondNote);
-        expect(controlFor(notes()[0]!).getAttribute('aria-expanded')).toBe('false');
-      }
     } finally {
       await act(async () => root.unmount());
       expect(resizeCallbacks.size).toBe(0);

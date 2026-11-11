@@ -36,12 +36,7 @@ const meta = {
   component: Example,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -69,10 +64,9 @@ async function separated(first: HTMLElement, second: HTMLElement) {
   await expect(gap).toBeGreaterThanOrEqual(8 - 1);
 }
 
-function correction(flow: 'facts' | 'identifiers', viewport: 'phone390' | 'desktop1280'): Story {
+function correction(flow: 'facts' | 'identifiers'): Story {
   return {
     args: { flow },
-    globals: {},
     play: async ({ canvasElement }) => {
       const canvas = within(canvasElement);
       const property = flow === 'facts' ? 'schema:inLanguage' : 'schema:sameAs';
@@ -105,10 +99,9 @@ function correction(flow: 'facts' | 'identifiers', viewport: 'phone390' | 'deskt
   };
 }
 
-function recipeCorrection(viewport: 'phone390' | 'desktop1280'): Story {
+function recipeCorrection(): Story {
   return {
     args: { flow: 'recipe-correction' },
-    globals: {},
     play: async ({ canvasElement }) => {
       const canvas = within(canvasElement);
       for (const property of ['schema:recipeIngredient', 'schema:recipeYield'] as const) {
@@ -134,10 +127,9 @@ function recipeCorrection(viewport: 'phone390' | 'desktop1280'): Story {
   };
 }
 
-function languageRecovery(flow: 'album' | 'character' | 'recipe', viewport: 'phone390' | 'desktop1280'): Story {
+function languageRecovery(flow: 'album' | 'character' | 'recipe'): Story {
   return {
     args: { flow, onCreate: createObserver() },
-    globals: {},
     play: async ({ canvasElement, args }) => {
       const canvas = within(canvasElement);
       const observed = args.onCreate as ReturnType<typeof createObserver>;
@@ -225,15 +217,14 @@ function languageRecovery(flow: 'album' | 'character' | 'recipe', viewport: 'pho
   };
 }
 
-export const FactsPhone: Story = { ...correction('facts', 'phone390') };
-export const FactsDesktop: Story = { ...correction('facts', 'desktop1280') };
-export const IdentifiersPhone: Story = { ...correction('identifiers', 'phone390') };
-export const IdentifiersDesktop: Story = { ...correction('identifiers', 'desktop1280') };
-export const RecipeCorrectionPhone: Story = { ...recipeCorrection('phone390') };
-export const RecipeCorrectionDesktop: Story = { ...recipeCorrection('desktop1280') };
-export const AlbumLanguagePhone: Story = { ...languageRecovery('album', 'phone390') };
-export const AlbumLanguageDesktop: Story = { ...languageRecovery('album', 'desktop1280') };
-export const CharacterLanguagePhone: Story = { ...languageRecovery('character', 'phone390') };
-export const CharacterLanguageDesktop: Story = { ...languageRecovery('character', 'desktop1280') };
-export const RecipeLanguagePhone: Story = { ...languageRecovery('recipe', 'phone390') };
-export const RecipeLanguageDesktop: Story = { ...languageRecovery('recipe', 'desktop1280') };
+export const Facts: Story = { ...correction('facts') };
+
+export const Identifiers: Story = { ...correction('identifiers') };
+
+export const RecipeCorrection: Story = { ...recipeCorrection() };
+
+export const AlbumLanguage: Story = { ...languageRecovery('album') };
+
+export const CharacterLanguage: Story = { ...languageRecovery('character') };
+
+export const RecipeLanguage: Story = { ...languageRecovery('recipe') };

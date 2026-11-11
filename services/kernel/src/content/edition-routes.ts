@@ -297,6 +297,7 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
         },
       },
       async ({ actor, params: { id }, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const result = await operation(() =>
           admission.run('normal', job, () => readContentEditionRevision(deps, id, { actor, deadline: job.deadline })),
         );

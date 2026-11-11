@@ -38,20 +38,14 @@ const identitySource: AccountIdentitySource = async () => ({
   email: 'reader@example.test',
 });
 
-function canvas(theme: 'light' | 'dark', children: ReactNode) {
-  return (
-    <div className={`${theme === 'dark' ? 'dark' : ''} min-h-screen bg-background text-foreground`}>{children}</div>
-  );
+function canvas(children: ReactNode) {
+  return <div className="min-h-screen bg-background text-foreground">{children}</div>;
 }
 
-export const PhoneCurrentReview = {
-  parameters: { viewport: {} },
+export const CurrentReview = {
   render: () => (
     <AuthStory>
-      {canvas(
-        'light',
-        <SecurityPage initial={initial} identitySource={identitySource} inventorySource={populatedInventory} />,
-      )}
+      {canvas(<SecurityPage initial={initial} identitySource={identitySource} inventorySource={populatedInventory} />)}
     </AuthStory>
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -63,14 +57,10 @@ export const PhoneCurrentReview = {
   },
 };
 
-export const DesktopUnknownReturn = {
-  parameters: { viewport: {} },
+export const UnknownReturn = {
   render: () => (
     <AuthStory mode="unknown">
-      {canvas(
-        'dark',
-        <SecurityPage initial={initial} identitySource={identitySource} inventorySource={populatedInventory} />,
-      )}
+      {canvas(<SecurityPage initial={initial} identitySource={identitySource} inventorySource={populatedInventory} />)}
     </AuthStory>
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {

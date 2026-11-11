@@ -413,7 +413,6 @@ export const CleanNavigation: Story = {
 };
 
 export const LinkRows: Story = {
-  globals: {},
   play: async ({ canvasElement }) => {
     const view = await profileView(canvasElement);
     const name = await view.findByRole('textbox', { name: m.settings_profile_display_name() });
@@ -482,11 +481,6 @@ export const LinkRows: Story = {
   },
 };
 
-export const LinkRowsPhone: Story = {
-  ...LinkRows,
-  globals: {},
-};
-
 export const LinkRemovalEdges: Story = {
   play: async ({ canvasElement }) => {
     const view = await profileView(canvasElement);
@@ -525,7 +519,6 @@ export const LinkRemovalEdges: Story = {
 
 export const RetryDelay: Story = {
   args: { recovery: 'delay', onSave: fn() },
-  globals: {},
   play: async ({ canvasElement, args }) => {
     const view = await editName(canvasElement);
     await view.findByText(m.settings_retry_wait());
@@ -542,7 +535,6 @@ export const RetryDelay: Story = {
 
 export const PublicActivityRetryDate: Story = {
   args: { recovery: 'date', onSave: fn() },
-  globals: {},
   play: async ({ canvasElement, args }) => {
     const activity = within(within(canvasElement).getByRole('region', { name: m.settings_public_activity_heading() }));
     await userEvent.click(await activity.findByRole('switch', { name: m.settings_public_reviews() }));
@@ -562,7 +554,6 @@ export const PublicActivityRetryDate: Story = {
 
 export const RetryOriginalAfterDelay: Story = {
   args: { recovery: 'short', onSave: fn() },
-  globals: {},
   play: async ({ canvasElement, args }) => {
     const view = await editName(canvasElement);
     await view.findByText(m.settings_retry_wait());
@@ -589,7 +580,6 @@ export const RetryOriginalAfterDelay: Story = {
 
 export const MalformedRetryAfter: Story = {
   args: { recovery: 'malformed' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const view = await editName(canvasElement);
     await view.findByText(m.settings_profile_save_unknown());
@@ -602,7 +592,6 @@ export const MalformedRetryAfter: Story = {
 
 export const ReadRetryDelay: Story = {
   args: { recovery: 'read' },
-  globals: {},
   play: async ({ canvasElement }) => {
     for (const name of [m.settings_profile_heading(), m.settings_public_activity_heading()]) {
       const view = within(await within(canvasElement).findByRole('region', { name }));

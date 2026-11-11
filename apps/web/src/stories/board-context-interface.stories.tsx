@@ -76,12 +76,6 @@ const meta = {
           'Actual BoardContext with public TanStack Link/router/history and recorded Realm/Board identities. All observations are authored UNRUN: none, each context alone, both, prominent initials, null-title fallback, exact localized hrefs and native order, keyboard focus/activation, 44px targets, complete long/unbroken supplied titles at 390/1280px and RTL. Review all locale and light/dark globals. No native reads, membership inference, hidden context, Source disclosure or automatic navigation; native/browser/physical/full acceptance remains owed.',
       },
     },
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
   args: { realm, board, prominent: false, direction: 'ltr' },
   play: async ({ canvasElement, args }) => {
@@ -177,19 +171,11 @@ export const ProminentRealmOnly: Story = { args: { board: undefined, prominent: 
 export const ProminentBoardOnly: Story = { args: { realm: undefined, prominent: true } };
 export const UntitledBoard: Story = { args: { realm: undefined, board: { ...board, title: null }, prominent: true } };
 export const ShortLabels: Story = { args: { realm: { ...realm, title: 'R' }, board: { ...board, title: 'B' } } };
-export const LongSuppliedTitlesPhone: Story = {
+export const LongSuppliedTitles: Story = {
   args: { realm: longRealm, board: longBoard, prominent: true },
-  globals: {},
 };
-export const LongSuppliedTitlesDesktop: Story = {
-  ...LongSuppliedTitlesPhone,
-  globals: {},
-};
-export const LongSuppliedTitlesRtlPhone: Story = {
-  ...LongSuppliedTitlesPhone,
-  args: { ...LongSuppliedTitlesPhone.args, direction: 'rtl' },
-};
-export const LongSuppliedTitlesRtlDesktop: Story = {
-  ...LongSuppliedTitlesRtlPhone,
-  globals: {},
+
+export const LongSuppliedTitlesRtl: Story = {
+  ...LongSuppliedTitles,
+  args: { ...LongSuppliedTitles.args, direction: 'rtl' },
 };

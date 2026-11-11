@@ -221,51 +221,48 @@ const unavailable: NonNullable<Story['play']> = async (context) => {
   ).toBeDisabled();
 };
 
-export const PhoneLight: Story = {
+export const EnglishInspection: Story = {
   globals: { locale: 'en' },
   play: inspect,
 };
-export const DesktopDark: Story = {
+export const GermanInspection: Story = {
   globals: { locale: 'de' },
   play: inspect,
 };
-export const TraditionalChinesePhoneDark: Story = {
+export const TraditionalChinese: Story = {
   globals: { locale: 'zh-Hant' },
   play: inspect,
 };
-export const SimplifiedChineseDesktopLight: Story = {
+export const SimplifiedChinese: Story = {
   globals: { locale: 'zh-Hans' },
   play: inspect,
 };
-export const JapanesePhoneLight: Story = {
+export const Japanese: Story = {
   globals: { locale: 'ja' },
   play: inspect,
 };
-export const KoreanDesktopDark: Story = {
+export const Korean: Story = {
   globals: { locale: 'ko' },
   play: inspect,
 };
-export const FrenchPhoneDark: Story = {
+export const French: Story = {
   globals: { locale: 'fr' },
   play: inspect,
 };
-export const SpanishDesktopLight: Story = {
+export const Spanish: Story = {
   globals: { locale: 'es' },
   play: inspect,
 };
 export const HundredSections: Story = {
   args: { blocks: 100 },
-  globals: {},
   play: inspect,
 };
 export const CurrentBodyMissing: Story = {
   args: { scenario: 'missing' },
-  globals: {},
   play: unavailable,
 };
 export const CurrentErased: Story = {
   args: { scenario: 'erased' },
-  globals: {},
   play: unavailable,
 };
 export const KeepWriting: Story = {
@@ -314,12 +311,10 @@ const changeDuringReview =
   };
 export const DraftChangedDuringInspection: Story = {
   render: () => <ChangedInspectionExample />,
-  globals: {},
   play: changeDuringReview(() => m.thread_inspect_draft_changed()),
 };
 export const CurrentReadingChanged: Story = {
   render: () => <ChangedInspectionExample currentChanged />,
-  globals: {},
   play: changeDuringReview(() => m.thread_inspect_current_changed()),
 };
 export const RetiredReading: Story = {

@@ -39,7 +39,7 @@ const holders: Holder[] = [
   { accountId: id(5), account: null, role: 'member', actions: { changeRole: 'allowed', remove: 'allowed' } },
 ];
 type Mode = 'first' | 'middle' | 'backwards' | 'empty' | 'failed' | 'unavailable' | 'pending';
-function RosterStory({ mode, dark = false }: { mode: Mode; dark?: boolean }) {
+function RosterStory({ mode }: { mode: Mode }) {
   const navigation = useRef<MembershipRosterNavigation | null>(null);
   if (!navigation.current) {
     const local = new MembershipRosterNavigation();
@@ -82,7 +82,7 @@ function RosterStory({ mode, dark = false }: { mode: Mode; dark?: boolean }) {
   };
   return (
     <AuthStory>
-      <div className={dark ? 'dark bg-background text-foreground' : undefined}>
+      <div className="bg-background text-foreground">
         <AuthPage heading={m.auth_members_heading()}>
           {pending ? (
             <p role="status">
@@ -112,20 +112,19 @@ function RosterStory({ mode, dark = false }: { mode: Mode; dark?: boolean }) {
     </AuthStory>
   );
 }
-const phone = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
-const desktop = { ...reviewParameters, viewport: { ...reviewParameters.viewport } };
-export const FirstPhoneLight = { parameters: phone, render: () => <RosterStory mode="first" /> };
-export const MiddleDesktopDark = { parameters: desktop, render: () => <RosterStory mode="middle" dark /> };
-export const BackwardsPhoneDark = { parameters: phone, render: () => <RosterStory mode="backwards" dark /> };
-export const EmptyWithNextDesktopLight = { parameters: desktop, render: () => <RosterStory mode="empty" /> };
-export const InaccessiblePreviousPhoneLight = { parameters: phone, render: () => <RosterStory mode="failed" /> };
-export const MembersUnavailableDesktopDark = {
-  parameters: desktop,
-  render: () => <RosterStory mode="unavailable" dark />,
+
+export const First = { parameters: reviewParameters, render: () => <RosterStory mode="first" /> };
+export const Middle = { parameters: reviewParameters, render: () => <RosterStory mode="middle" /> };
+export const Backwards = { parameters: reviewParameters, render: () => <RosterStory mode="backwards" /> };
+export const EmptyWithNext = { parameters: reviewParameters, render: () => <RosterStory mode="empty" /> };
+export const InaccessiblePrevious = { parameters: reviewParameters, render: () => <RosterStory mode="failed" /> };
+export const MembersUnavailable = {
+  parameters: reviewParameters,
+  render: () => <RosterStory mode="unavailable" />,
 };
-export const PendingPreviousPhoneDark = { parameters: phone, render: () => <RosterStory mode="pending" dark /> };
-export const LongGermanLabelsDesktopLight = {
-  parameters: desktop,
+export const PendingPrevious = { parameters: reviewParameters, render: () => <RosterStory mode="pending" /> };
+export const LongGermanLabels = {
+  parameters: reviewParameters,
   globals: { locale: 'de' },
   render: () => <RosterStory mode="middle" />,
 };

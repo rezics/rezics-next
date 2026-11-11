@@ -16,11 +16,6 @@ import { getLocale } from '../paraglide/runtime.js';
 import type { Release } from '../subject/definitions';
 import { PatternStory, pagePaths } from './page';
 
-const viewports = {
-  phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
-  desktop: { name: 'Desktop', styles: { width: '1280px', height: '900px' } },
-};
-
 const meta = {
   decorators: [
     (Story) => (
@@ -31,7 +26,7 @@ const meta = {
   ],
   title: 'Library/Entry layouts',
   id: 'patterns-library-entry-layouts',
-  parameters: { layout: 'fullscreen', viewport: { options: viewports } },
+  parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -114,9 +109,7 @@ export const StateFilter: Story = activeStateId
   ? story('State filter', 'grid', 'm', activeStateId)
   : story('State filter', 'grid');
 
-export const PhoneTileMenuOpen: Story = {
-  name: 'Phone tile actions open',
-  globals: {},
+export const TileMenuOpen: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { name: m.library_heading() });

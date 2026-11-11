@@ -57,9 +57,7 @@ async function ready(context: { canvasElement: HTMLElement }) {
   await expect(within(context.canvasElement).getByRole('button', { name: 'Open filter review' })).toBeVisible();
 }
 
-export const PhoneDraft: Story = { name: 'Draft', globals: {}, render: () => <FilterReview />, play: ready };
-
-export const DesktopDraft: Story = { tags: ['!dev'], globals: {}, render: () => <FilterReview />, play: ready };
+export const Draft: Story = { render: () => <FilterReview />, play: ready };
 
 function LongCopyEditor() {
   const [open, setOpen] = useState(false);
@@ -148,7 +146,6 @@ function LongCopyEditor() {
 }
 
 export const LongCopyForm: Story = {
-  globals: {},
   parameters: {
     docs: {
       description: {

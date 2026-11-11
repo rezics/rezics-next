@@ -34,12 +34,7 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -73,13 +68,11 @@ async function importReview(canvasElement: HTMLElement) {
 }
 
 export const Review: Story = {
-  globals: {},
   play: async ({ canvasElement }) => importReview(canvasElement),
 };
-export const ReviewPhone: Story = { ...Review, globals: {} };
+
 export const BuildContinuation: Story = {
   args: { scenario: 'build' },
-  globals: {},
   play: async ({ canvasElement }) => {
     await importReview(canvasElement);
     const canvas = within(canvasElement);
@@ -89,13 +82,9 @@ export const BuildContinuation: Story = {
     expect(cont).toHaveFocus();
   },
 };
-export const BuildContinuationPhone: Story = {
-  ...BuildContinuation,
-  globals: {},
-};
+
 export const Reconciliation: Story = {
   args: { scenario: 'reconciliation' },
-  globals: {},
   play: async ({ canvasElement }) => {
     await importReview(canvasElement);
     const canvas = within(canvasElement);
@@ -106,13 +95,9 @@ export const Reconciliation: Story = {
     expect(reload).toHaveFocus();
   },
 };
-export const ReconciliationPhone: Story = {
-  ...Reconciliation,
-  globals: {},
-};
+
 export const Completed: Story = {
   args: { scenario: 'completed' },
-  globals: {},
   play: async ({ canvasElement }) => {
     await importReview(canvasElement);
     const canvas = within(canvasElement);
@@ -124,6 +109,6 @@ export const Completed: Story = {
     expect(create).toHaveFocus();
   },
 };
-export const CompletedPhone: Story = { ...Completed, globals: {} };
+
 export const Closed: Story = { args: { scenario: 'closed' } };
 export const Denied: Story = { args: { scenario: 'denied' } };

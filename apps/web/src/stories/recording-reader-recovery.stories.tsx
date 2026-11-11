@@ -81,12 +81,7 @@ const meta = {
   component: RecordingReaderRecovery,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-        desktop1440: { name: 'Desktop 1440', styles: { width: '1440px', height: '1000px' }, type: 'desktop' },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -122,27 +117,12 @@ async function restartRetiredSelection({ canvasElement }: { canvasElement: HTMLE
   await expect(canvas.getByRole('link', { name: m.subject_relations() })).toBeVisible();
 }
 
-export const FailedReleaseRecoveredPhone: Story = {
-  name: 'Failed Release Recovered',
+export const FailedReleaseRecovered: Story = {
   args: { scenario: 'failed' },
-  globals: {},
   play: recoverRelease,
 };
-export const FailedReleaseRecoveredDesktop: Story = {
-  tags: ['!dev'],
-  args: { scenario: 'failed' },
-  globals: {},
-  play: recoverRelease,
-};
-export const RetiredExactSelectionPhone: Story = {
-  name: 'Retired Exact Selection',
+
+export const RetiredExactSelection: Story = {
   args: { scenario: 'retired' },
-  globals: {},
-  play: restartRetiredSelection,
-};
-export const RetiredExactSelectionDesktop: Story = {
-  tags: ['!dev'],
-  args: { scenario: 'retired' },
-  globals: {},
   play: restartRetiredSelection,
 };

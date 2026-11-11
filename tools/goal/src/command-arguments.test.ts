@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { run } from './cli.ts';
+import { parseWorkerCommandArguments } from './command-arguments.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 
 test('Reject invalid worker commands before recovery', async () => {
@@ -57,5 +58,36 @@ test('Reject invalid worker commands before recovery', async () => {
 test('direct worker callers retain usage rejections before loading services', async () => {
   await expect(runWorkerCommand('priority', ['grant', 'task-1', 'extra'])).rejects.toThrow(
     'usage: priority grant <task>',
+  );
+});
+
+test('flow report bounds normalize to UTC and require a non-reversed exclusive end', () => {
+  expect(
+    parseWorkerCommandArguments('report', [
+      '--flow',
+      '--since',
+      '2026-11-10T08:00:00+08:00',
+      '--until',
+      '2026-11-11T00:00:00Z',
+      '--json',
+    ]),
+  ).toEqual({
+    command: 'report',
+    flow: true,
+    json: true,
+    since: '2026-11-10T00:00:00.000Z',
+    until: '2026-11-11T00:00:00.000Z',
+  });
+  expect(() =>
+    parseWorkerCommandArguments('report', [
+      '--flow',
+      '--since',
+      '2026-11-11T00:00:00Z',
+      '--until',
+      '2026-11-10T00:00:00Z',
+    ]),
+  ).toThrow('--since must be at or before --until');
+  expect(() => parseWorkerCommandArguments('report', ['--until', '2026-11-11T00:00:00Z'])).toThrow(
+    'usage: report [--flow] [--since <time>] [--until <time>] [--json]',
   );
 });

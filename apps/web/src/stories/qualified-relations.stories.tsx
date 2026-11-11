@@ -63,15 +63,7 @@ const completeCredit: Story['play'] = async ({ canvasElement }) => {
   ).toHaveAttribute('href', expect.stringContaining('node=cast&cursor=cast-next'));
 };
 
-export const CompleteCreditPhone: Story = {
-  name: 'Complete Credit',
-  globals: {},
-  render: () => <QualifiedRelationsReader long />,
-  play: completeCredit,
-};
-export const CompleteCreditDesktop: Story = {
-  tags: ['!dev'],
-  globals: {},
+export const CompleteCredit: Story = {
   render: () => <QualifiedRelationsReader long />,
   play: completeCredit,
 };

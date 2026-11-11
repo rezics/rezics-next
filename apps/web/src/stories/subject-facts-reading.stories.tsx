@@ -221,9 +221,6 @@ const meta = {
           'UNRUN under MINIMAL. Real configured About, Statements and MoreStatements sections with supplied native DTO variants. Keyboard, 320px, 200% text, RTL, target geometry and visual acceptance await browser execution; these variants establish no native outcome.',
       },
     },
-    viewport: {
-      options: { phone320: { name: 'Phone 320', styles: { width: '320px', height: '900px' }, type: 'mobile' } },
-    },
   },
 } satisfies Meta<typeof FactsReading>;
 export default meta;
@@ -328,11 +325,9 @@ async function readingJourney({ canvasElement }: { canvasElement: HTMLElement })
 
 export const Overview: Story = { args: { view: 'overview' }, play: readingJourney };
 export const Details: Story = { args: { view: 'details', signedIn: true }, play: readingJourney };
-export const NarrowOverview: Story = { ...Overview, globals: {} };
-export const NarrowDetails: Story = { ...Details, globals: {} };
-export const EnlargedOverview: Story = { ...NarrowOverview, args: { view: 'overview', enlarged: true } };
+export const EnlargedOverview: Story = { ...Overview, args: { view: 'overview', enlarged: true } };
 export const EnlargedRtlDetails: Story = {
-  ...NarrowDetails,
+  ...Details,
   args: { view: 'details', enlarged: true, dir: 'rtl', signedIn: true },
-  globals: { ...NarrowDetails.globals, locale: 'fr' },
+  globals: { ...Details.globals, locale: 'fr' },
 };

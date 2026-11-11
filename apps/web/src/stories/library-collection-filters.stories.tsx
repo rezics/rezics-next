@@ -153,12 +153,7 @@ export const ActualCombined: Story = {
   render: () => <PageStory visitor="Signed Out" path={collectionFilterRoutePath(states.combined)} />,
 };
 
-export const ActualCombinedPhoneLight: Story = {
-  name: 'Actual Combined',
-  ...ActualCombined,
-  globals: { locale: 'en' },
-};
-export const ActualCombinedPhoneDarkTraditionalChinese: Story = {
+export const ActualCombinedTraditionalChinese: Story = {
   ...ActualCombined,
   globals: { locale: 'zh-Hant' },
 };

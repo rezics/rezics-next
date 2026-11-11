@@ -20,14 +20,7 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
     admitted,
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
-      },
-    },
   },
-  globals: {},
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -141,8 +134,7 @@ export const Normal: Story = {
   },
 };
 
-export const NarrowLongText: Story = {
-  globals: {},
+export const LongTitlesAndStatus: Story = {
   render: () => <TablePattern longText columns="title,status" />,
   play: async ({ canvasElement }) => {
     const table = await tableReady(canvasElement, 2);

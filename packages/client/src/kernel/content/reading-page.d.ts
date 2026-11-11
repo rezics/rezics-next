@@ -1,8 +1,8 @@
 import { readAccountDiscoverySummaries } from './access-port.ts';
 import type { ViewerActionBindings } from '../access/content-adapter.ts';
 import type { Access, Actor } from '../request/access.ts';
-import type { ContentReadDependencies, PostEntry } from './reads.ts';
-import type { AnchoredPosition } from './model.ts';
+import type { ContentReadDependencies, PostEntry, ThreadView } from './reads.ts';
+import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import type { ViewerActionResources } from '../access/viewer-actions.ts';
 export declare const READING_PAGE_REPLY_LIMIT = 20;
 export declare const READING_PAGE_REQUEST_BYTES: number;
@@ -394,7 +394,10 @@ export declare function readingPageReactionCoverageState(targetIds: readonly str
  * Select up to twenty exact thread/post cards, hydrate their shared personal state once, then let
  * the owner append its parent/Subject context before calling the returned final currentness seam.
  */
-export declare function createContentReadingCardBatch(dependencies: ReadingPageDependencies, selected: readonly SelectedReadingCardReference[], actor: Actor, deadline: number): Promise<ContentReadingCardBatch>;
+export declare function createContentReadingCardBatch(dependencies: ReadingPageDependencies, selected: readonly SelectedReadingCardReference[], actor: Actor, deadline: number, options?: Readonly<{
+    /** Native caller-owned disclosure; preparation and finish each get a fresh observation. */
+    observeThreads?: (ids: readonly string[], context: ReadContext) => Promise<ReadonlyMap<string, Anchored<ThreadView | null>>>;
+}>): Promise<ContentReadingCardBatch>;
 /** Opening consumes one list slot only on the first page; continuations are already past it. */
 export declare function readingPageRawLimit(cursor?: string): number;
 /** One disclosed opening plus the next raw native reply interval, with bounded personal state. */

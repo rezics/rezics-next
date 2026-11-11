@@ -83,12 +83,7 @@ test('mixed range filters reopen without a Book profile and name every returned 
   const html = renderToStaticMarkup(
     createElement(CollectionMemberOccurrenceDetails, {
       member,
-      position: 2,
-      scope: 'filtered-first',
-      pageKey: 'mixed',
-      noteStateKey: 'anime',
-      noteExpanded: false,
-      onNoteExpandedChange() {},
+      onCopy() {},
     }),
   );
   expect(html).toContain(types[1]!);

@@ -52,9 +52,7 @@ export const SignedIn: Story = {
   render: () => FollowingStory(),
 };
 
-export const UnfollowMenuPhone: Story = {
-  name: 'Unfollow Menu',
-  globals: {},
+export const UnfollowMenu: Story = {
   render: () => FollowingStory(),
   play: async (context) => {
     await pageReady(context);
@@ -194,16 +192,6 @@ export const RemoveUnavailableTarget: Story = {
   },
 };
 
-export const UnfollowMenuDesktop: Story = {
-  tags: ['!dev'],
-  globals: {},
-  render: () => FollowingStory(),
-  play: async (context) => {
-    await pageReady(context);
-    await followMenu(context.canvasElement, 'Kokoro');
-  },
-};
-
 async function inspectCommunity(canvasElement: HTMLElement) {
   await libraryHeadingReady({ canvasElement }, m.library_following_heading);
   const row = canvasElement.querySelector<HTMLElement>('[data-follow-target-type="space"]')!;
@@ -262,7 +250,6 @@ export const NoDestination: Story = {
   },
 };
 export const LongLocalizedInspection: Story = {
-  globals: {},
   render: () => FollowingStory('reading-long'),
   play: async ({ canvasElement }) => {
     await inspectCommunity(canvasElement);

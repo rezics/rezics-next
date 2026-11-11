@@ -41,10 +41,20 @@ states are UNAVAILABLE. HTTP requests, page navigation, reader readiness and SQL
 missing SQL evidence is reported, does not produce WEB or SEED, and makes an otherwise clean run exit 2; defects exit
 1 and a complete non-defect run exits 0. Credentials and tokens never appear in output.
 
-Decision: browser navigation waits only for the committed document response; real section selectors then share one
-reader deadline per page. A navigation timeout records whether a main document response was observed; without a
-response browser probes stay unrun, while an observed response still permits section evidence. No timeout is
-attributed to assets without evidence.
+Decision: a committed redirect response is not a settled reader document. After navigation returns, one shared
+reader deadline bounds redirect settlement, transient execution-context recovery and every section on that page.
+Each observation is tied to the current committed main document's query-free URL and `performance.timeOrigin`.
+Unsettled navigation, a missing section, a busy reader, context replacement and target loss retain their exact
+reason in diagnostics; only that browser probe is unavailable, while its native and SQL probes still complete.
+Readiness remains scoped to the requested reader, so unrelated preparation text and delayed resources do not block a
+ready section. A settled empty reader records `browserProbe=run` and `reader=empty`; an unrun reader records
+`browserProbe=unrun` and `reader=missing`.
+
+The bounded Chromium fixture suite is `bun test scripts/page-data-check.test.ts`. It covers redirect recovery,
+delayed unrelated resources, context replacement, independently unready sections, redirect deadline expiry, target
+loss and the distinction between genuine empty content and an unrun reader. The fixture uses local Web and Kernel
+HTTP endpoints and read-only SQL-count stubs; original native integration acceptance remains a separate controller
+cycle.
 
 Decision: member browser sign-in uses that same committed-document navigation, then the visible email, password and
 Sign in controls under a form reader deadline. Submission waits explicitly for the Web callback redirect and requires

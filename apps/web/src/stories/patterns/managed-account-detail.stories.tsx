@@ -119,7 +119,6 @@ type Story = StoryObj<typeof meta>;
 
 export const MemberRestricted: Story = {
   args: { member: true },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.managed_holders_denied());
@@ -131,7 +130,6 @@ export const MemberRestricted: Story = {
 };
 
 export const ManagerObservations: Story = {
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.managed_current());
@@ -154,7 +152,6 @@ export const ManagerObservations: Story = {
 
 export const IndependentPaging: Story = {
   args: { paging: true },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(
@@ -173,7 +170,6 @@ export const IndependentPaging: Story = {
 
 export const MembersFirstPageRecovery: Story = {
   args: { failed: 'members' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('alert');
@@ -198,7 +194,6 @@ export const MembersFirstPageRecovery: Story = {
 
 export const ResponsibilitiesContinuationFailure: Story = {
   args: { failed: 'responsibilities' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('alert');
@@ -223,7 +218,6 @@ export const ResponsibilitiesContinuationFailure: Story = {
 
 export const ContinuationRetryAfter: Story = {
   args: { failed: 'responsibilities', waiting: true },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('alert');
@@ -239,7 +233,7 @@ export const ContinuationRetryAfter: Story = {
   },
 };
 
-export const LongLocaleRecoveryPhone: Story = {
+export const LongLocaleRecovery: Story = {
   args: { failed: 'members', long: true },
   globals: { locale: 'de' },
   play: async ({ canvasElement }) => {

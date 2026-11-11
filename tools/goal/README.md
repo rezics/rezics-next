@@ -581,14 +581,16 @@ error event per changed version to the supermanager inbox.
 when invoked from a linked worktree. Repository paths resolve against that main checkout. Pool configuration paths,
 usage files and executable paths containing a slash resolve against the local file's directory.
 `integrationBranch` defaults to `dev`; `integration.batchSize` defaults to `4` and limits how many queued dev landings
-share one integration check. Set it to `1` to keep one-at-a-time integration. A passing batch checks the combined tree
-once and fast-forwards dev through its members in queue order, recording each member's own integrated commit. If the
-combined check fails, the train retries the members individually so a passing member can still land. A member that
-cannot rebase onto earlier batch members stays queued for a later round while the rest continue.
-Each member's acceptance command runs concurrently against the final batch candidate in its own detached worktree.
-`integration.batchAcceptanceConcurrency` defaults to `8` and caps these acceptance commands. If any command fails,
-times out, or changes its worktree, the train retries the members individually so the failure is attributed to its task.
+share one candidate for the prelanding typecheck and optional boot check. Set it to `1` to keep one-at-a-time landing
+checks. A passing batch fast-forwards dev through its members in queue order and records the shared batch candidate on
+each member outcome. A failed candidate is attributed to its responsible member and unrelated members remain eligible
+for a later round. A member that cannot rebase onto earlier batch members stays queued for a later round while the rest
+continue.
+Legacy `integrationChecks` are selected for the independent verifier after dev integration; they do not run in the
+landing train. Main promotion retains its task acceptance gates.
 `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
+Decision: dev batch checks cover the prelanding typecheck and optional boot boundary; legacy acceptance remains with
+the independent postintegration verifier and does not gate landing.
 
 Decision: settings resolution and decoding live in `settings.ts`; `config.ts` remains the supported public settings entry and owns runtime composition.
 
@@ -1106,7 +1108,11 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 
 ### Delivery flow telemetry
 
-`report --flow [--since <time>] [--json]` reads durable flow events. Its `chain` section counts offers, chained and unchained
+`report --flow [--since <time>] [--until <time>] [--json]` reads durable flow events. `--since` is inclusive and
+`--until` is exclusive; together they select a fixed UTC window. A bounded report counts terminal landing operations
+inside that window, pairs each to its own start even when the start precedes midnight, and excludes later events and
+current task-state evidence. Legacy operations without their own identity and complete boundaries remain untimed.
+Its `chain` section counts offers, chained and unchained
 tasks (integrated, landed lines, worker-hours and lines per worker-hour) and declined offers by reason; see
 [Chained briefs](#chained-briefs). Decision: after one stable sort, `flowReport`
 builds one in-memory next-boundary and integration index; no per-request history rescan or second event store. It
@@ -1173,13 +1179,21 @@ start/terminal coverage for the terminal cohort. Compare throughput at comparabl
 counts do not establish time or allowance saved.
 
 The November 10 daily audit at `907b6f2929` recorded 52 enqueue events for 26 attempt identities and complete
-same-day landing intervals for two of 26 integrations. An enqueue now records its event only when it inserts the queue
-row. Start and terminal timing by operation remain the next part of the existing delivery contract.
+same-day landing intervals for two of 26 integrations. The enqueue insertion guard already records events only for
+new queue rows; the operation ledger below adds durable start and terminal boundaries with a distinct identity per
+genuine requeue.
+
+Decision: assign each landing operation a durable UUID and persist its enqueue, first actual queue start, and terminal
+outcome boundaries with their flow events in one SQLite transaction. A resolver requeue closes the current operation
+and creates a new operation identity in that transaction. Bounded reports use `[start, end)`, pair each terminal
+operation with its own start, and keep legacy or incomplete timing unknown; a historical report ignores current task
+state.
 
 ### Hourly delivery report
 
 `bun tools/goal/scripts/efficiency-report.ts [--bucket <UTC-hour-start>]` prints the most recently completed UTC hour
-by default. It joins timestamped integrations to task and attempt identities, names the last useful landing, and reads
+by default. Its landing-operation count and duration summary use the same `[start, end)` observations as the bounded
+flow report. It joins timestamped integrations to task and attempt identities, names the last useful landing, and reads
 current waits, orphaned landings, promotion state, quarantines and shared tool incidents from their existing durable
 records. Missing source history is `unknown`; an empty counter is not inferred from missing evidence. Landing counts
 are task outcomes, not changed-line volume. Worker diff churn is labeled separately and is not presented as delivered
@@ -1784,9 +1798,24 @@ fields and preserves the remaining evidence for a valid completed invocation.
 The checker ends stdout with one `Page-data completed` JSON marker (at most 512 characters) containing `version: 1`,
 the caller's fresh `--invocation`, section and defect counts, and `incomplete`. The caller accepts only this final
 marker, the exact manifest coverage and the corresponding exit (defects: 1; otherwise incomplete: 2; otherwise: 0).
-A timeout, stale, duplicate, missing or malformed marker remains a check failure. A usable partial result stores
-`coverage=incomplete` separately from seed publication status, preserves its redacted diagnostic log and check-failure
-notice, and never manufactures a successful dependent probe.
+A timeout, stale, duplicate or malformed marker remains a check failure. A missing marker remains a check failure
+except when the owned page-data scope reports an OOM kill or the scoped checker exits via SIGKILL; then strict valid
+emitted rows are saved as `coverage=incomplete`, and only an unterminated malformed final fragment is discarded. A
+usable partial result stores `coverage=incomplete` separately from seed publication status, preserves its redacted
+diagnostic log and check-failure notice, and never manufactures a successful dependent probe.
+
+Incident: a live canonical page-data check held about 25.9 GB in the verifier service, including one exact owned
+Chromium process at roughly 19 GB RSS; host memory full PSI approached 29%. Stopping only that browser process brought
+memory full avg10 below 1%.
+
+Decision: run `bun scripts/page-data-check.ts` and its Chromium child inside a uniquely named owned user-manager scope
+under `rezics-check.slice`, separate from `rezics-workers.slice`, reusing the existing 12 GiB `MemoryMax` and setting
+`OOMPolicy=continue` so a killed browser can leave the checker to report independent evidence. The in-scope wrapper
+reads `memory.events` after the checker exits because a continuing scope does not reliably finish with `Result=oom-kill`.
+Keep the existing one-hour check timeout. A scope launch failure stops the check without an unbounded retry. An OOM
+records valid emitted sections as `coverage=incomplete`, writes the existing diagnostic log and notice, and cannot
+count as full coverage. Stop and reset only that exact scope after each outcome; retain the page-data lease and stack
+process cleanup.
 
 Decision: persist each bounded page-data boot/check transcript in a run-scoped state-directory log, name that path in the supermanager notice, retain the pre-teardown cause alongside cleanup and the final origin-specific readiness probe, and redact recognized credentials.
 

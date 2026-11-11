@@ -157,11 +157,10 @@ function Preview({
   );
 }
 
-function journey(view: View, viewport: 'phone390' | 'desktop1280', theme: 'light' | 'dark'): Story {
+function journey(view: View): Story {
   const attempts: InboxNoticeSeenAttempt[] = [];
   const cursors: (string | null)[] = [];
   return {
-    globals: {},
     render: () => <Preview view={view} attempts={attempts} cursors={cursors} />,
     play: async ({ canvasElement }) => {
       const canvas = within(canvasElement);
@@ -211,23 +210,13 @@ function journey(view: View, viewport: 'phone390' | 'desktop1280', theme: 'light
   };
 }
 
-export const MixedPhoneLight = journey('mixed-previous', 'phone390', 'light');
-export const MixedPhoneDark = journey('mixed', 'phone390', 'dark');
-export const MixedDesktopLight = journey('mixed', 'desktop1280', 'light');
-export const MixedDesktopDark = journey('mixed', 'desktop1280', 'dark');
-export const SparsePhoneLight = journey('sparse', 'phone390', 'light');
-export const SparsePhoneDark = journey('sparse', 'phone390', 'dark');
-export const SparseDesktopLight = journey('sparse', 'desktop1280', 'light');
-export const SparseDesktopDark = journey('sparse', 'desktop1280', 'dark');
-export const ReportWithheldPhoneLight = journey('report', 'phone390', 'light');
-export const ReportWithheldPhoneDark = journey('report', 'phone390', 'dark');
-export const ReportWithheldDesktopLight = journey('report', 'desktop1280', 'light');
-export const ReportWithheldDesktopDark = journey('report', 'desktop1280', 'dark');
-export const UnavailablePhoneLight = journey('unavailable', 'phone390', 'light');
-export const UnavailablePhoneDark = journey('unavailable', 'phone390', 'dark');
-export const UnavailableDesktopLight = journey('unavailable', 'desktop1280', 'light');
-export const UnavailableDesktopDark = journey('unavailable', 'desktop1280', 'dark');
-export const UncertainPhoneLight = journey('uncertain', 'phone390', 'light');
-export const UncertainPhoneDark = journey('uncertain', 'phone390', 'dark');
-export const UncertainDesktopLight = journey('uncertain', 'desktop1280', 'light');
-export const UncertainDesktopDark = journey('uncertain', 'desktop1280', 'dark');
+export const MixedWithPrevious = journey('mixed-previous');
+export const Mixed = journey('mixed');
+
+export const Sparse = journey('sparse');
+
+export const ReportWithheld = journey('report');
+
+export const Unavailable = journey('unavailable');
+
+export const Uncertain = journey('uncertain');

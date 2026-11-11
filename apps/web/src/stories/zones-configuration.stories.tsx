@@ -15,12 +15,6 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
     docs: { description: { component: 'Contract-shaped fake API outcomes. Native and visual review remain pending.' } },
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
 } satisfies Meta;
 export default meta;
@@ -129,10 +123,9 @@ function EditorStory({ mode = 'ready' }: { mode?: Mode }) {
   );
 }
 
-export const Desktop: Story = { name: 'Default', globals: {}, render: () => <EditorStory /> };
-export const Phone: Story = { tags: ['!dev'], globals: {}, render: () => <EditorStory /> };
+export const Configuration: Story = { render: () => <EditorStory /> };
+
 export const Dirty: Story = {
-  globals: {},
   render: () => <EditorStory mode="dirty" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -141,7 +134,6 @@ export const Dirty: Story = {
   },
 };
 export const Conflict: Story = {
-  globals: {},
   render: () => <EditorStory mode="conflict" />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -176,33 +168,17 @@ export const Loading: Story = {
 };
 
 // UNRUN: actual editor states at both supported review widths; contract-shaped API outcomes only.
-export const ValidationPhone: Story = {
-  name: 'Validation',
+export const ValidationGerman: Story = {
   globals: { locale: 'de' },
   render: () => <EditorStory mode="validation-long" />,
 };
-export const ValidationDesktop: Story = {
-  tags: ['!dev'],
-  globals: { locale: 'de' },
-  render: () => <EditorStory mode="validation-long" />,
-};
-export const DeniedPhone: Story = { tags: ['!dev'], globals: {}, render: () => <EditorStory mode="denied" /> };
-export const DeniedDesktop: Story = { tags: ['!dev'], globals: {}, render: () => <EditorStory mode="denied" /> };
-export const ConflictPhone: Story = { name: 'Conflict', globals: {}, render: () => <EditorStory mode="conflict" /> };
-export const ConflictDesktop: Story = { tags: ['!dev'], globals: {}, render: () => <EditorStory mode="conflict" /> };
-export const UnknownCodePhone: Story = {
-  name: 'Unknown Code',
-  globals: {},
+
+export const ConflictReview: Story = { render: () => <EditorStory mode="conflict" /> };
+
+export const UnknownCode: Story = {
   render: () => <EditorStory mode="unknown" />,
 };
-export const UnknownCodeDesktop: Story = { tags: ['!dev'], globals: {}, render: () => <EditorStory mode="unknown" /> };
-export const StaleTargetPhone: Story = {
-  name: 'Stale Target',
-  globals: {},
-  render: () => <EditorStory mode="stale-target" />,
-};
-export const StaleTargetDesktop: Story = {
-  tags: ['!dev'],
-  globals: {},
+
+export const StaleTarget: Story = {
   render: () => <EditorStory mode="stale-target" />,
 };

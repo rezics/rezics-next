@@ -21,6 +21,8 @@ import {
   parsePageDataOutput,
   parsePageDataCompletion,
   pageDataSeedStatus,
+  pageDataCheckScopeArguments,
+  pageDataCheckScopeUnit,
   PageDataStackError,
   firstSubstantiveErrorLine,
   terminalErrorLine,
@@ -37,6 +39,7 @@ import {
 import type { Settings, Task } from './types.ts';
 import { harness } from './test-support.ts';
 import { readControlPolicy } from './policy.ts';
+import { CHECK_SLICE, WORKER_SCOPE_MEMORY_MAX } from './worker-slice.ts';
 
 const roots: string[] = [];
 afterEach(() => {
@@ -610,6 +613,66 @@ test('only a matching completed check retains partial evidence and records cover
     expect(await runPageDataCycle(options)).toBe('failed');
     expect(readLatestPageDataRun(h.db)).toEqual(retained);
     expect(notices.at(-1)?.summary).toContain('error: child crashed');
+  } finally {
+    h.db.close();
+  }
+});
+
+test('an owned page-data scope preserves emitted sections when MemoryMax is exhausted', async () => {
+  const h = fixture();
+  try {
+    const invocation = 'scope-test-123';
+    const second = { ...h.source, section: 'details', name: 'Details' };
+    const scopeRegistry = new Map(h.registry).set(`${second.page}\t${second.persona}\t${second.section}`, second);
+    expect(pageDataCheckScopeUnit(invocation)).toBe(`rezics-page-data-${invocation}.scope`);
+    const scopeArgs = pageDataCheckScopeArguments(invocation, 'bun', ['scripts/page-data-check.ts']);
+    expect(scopeArgs.slice(0, 9)).toEqual([
+      '--user',
+      '--scope',
+      '--collect',
+      '--pipe',
+      '--quiet',
+      `--slice=${CHECK_SLICE}`,
+      `--property=MemoryMax=${WORKER_SCOPE_MEMORY_MAX}`,
+      '--property=OOMPolicy=continue',
+      `--unit=rezics-page-data-${invocation}.scope`,
+    ]);
+    expect(scopeArgs.slice(9, 11)).toEqual(['/bin/sh', '-c']);
+    expect(scopeArgs[11]).toContain('/sys/fs/cgroup$cgroup/memory.events');
+    expect(scopeArgs[11]).toContain('REZICS_PAGE_DATA_SCOPE_OOM_KILLS=');
+    expect(scopeArgs.slice(12)).toEqual(['page-data-check-scope', 'bun', 'scripts/page-data-check.ts']);
+
+    const notices: { summary: string }[] = [];
+    const output = 'home anonymous feed DATA\nhome anonymous details';
+    const limit = `Page-data systemd scope exhausted MemoryMax=${WORKER_SCOPE_MEMORY_MAX}; coverage is incomplete`;
+    expect(
+      await runPageDataCycle({
+        settings: h.settings,
+        db: h.db,
+        tasks: { tasks: () => [] },
+        inbox: { deliver: (notice: { summary: string }) => notices.push(notice) },
+        now: () => new Date('2026-01-01T00:00:00.000Z'),
+        runStack: async () => ({
+          output,
+          exitCode: -1,
+          registry: scopeRegistry,
+          diagnostics: limit,
+          scopeLimitExceeded: true,
+        }),
+        routeDefect: async () => 'dispatched',
+      }),
+    ).toBe('ran');
+
+    expect(readLatestPageDataRun(h.db)).toMatchObject({
+      coverage: { status: 'incomplete' },
+      sections: [{ page: 'home', persona: 'anonymous', section: 'feed', class: 'DATA' }],
+    });
+    expect(notices[0]?.summary).toContain('Incomplete page-data coverage');
+    expect(notices[0]?.summary).toContain('MemoryMax=12G');
+    const logPath = notices[0]?.summary.match(/output log: (.+)$/)?.[1];
+    const log = readFileSync(logPath!, 'utf8');
+    expect(log).toContain(output);
+    expect(log).toContain(limit);
   } finally {
     h.db.close();
   }

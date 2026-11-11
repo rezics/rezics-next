@@ -14,7 +14,7 @@ import {
   type SelectedReadingCardBatchResult,
   type SelectedReadingCardReference,
 } from './reading-page.ts';
-import { readSubjectThread } from './reads.ts';
+import { readSubjectThreads } from './reads.ts';
 import type { ReactionCountFreshness, ThreadView } from './reads.ts';
 import type { SubjectThreadWithReactions } from './subject-threads-reactions.ts';
 import {
@@ -270,7 +270,14 @@ export async function projectSubjectThreadCards(
   }
 
   const references = selected.map((thread) => cardReference(thread, subjectId));
-  const cards = await createContentReadingCardBatch(dependencies, references, context.actor, context.deadline);
+  const observeThreads = (ids: readonly string[], current: ReadContext) =>
+    readSubjectThreads(dependencies, ids, subjectId, placeId, current);
+  const cards = await createContentReadingCardBatch(dependencies, references, context.actor, context.deadline, {
+    observeThreads: async (ids, current) => {
+      const rows = await observeThreads(ids, current);
+      return new Map(ids.map((id, index) => [id, rows[index]!]));
+    },
+  });
   const initialActivity = activitySnapshot.selected;
   const content = await prepareFeedContentContext(
     dependencies,
@@ -279,12 +286,7 @@ export async function projectSubjectThreadCards(
     context,
     [],
     {
-      observeThreads: (threadIds, current) =>
-        Promise.all(
-          threadIds.map(
-            async (threadId) => await readSubjectThread(dependencies, threadId, subjectId, placeId, current),
-          ),
-        ),
+      observeThreads,
     },
   );
 

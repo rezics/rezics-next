@@ -10,9 +10,37 @@ export const WORKER_SLICE = 'rezics-workers.slice';
 export const WORKER_SLICE_PREPARATION_TIMEOUT_MS = defaultPolicy.workerResources.preparationTimeoutMs;
 // Binary unit conversion, independent of admission policy.
 const GIB = 1024 ** 3;
-const CHECK_SLICE = 'rezics-check.slice';
+export const CHECK_SLICE = 'rezics-check.slice';
 /** One attempt's scope: a runaway test (22 GB on 2026-11-06) is killed inside its own scope instead of filling the host. */
 export const WORKER_SCOPE_MEMORY_MAX = '12G';
+
+export type WorkerScopeOptions = {
+  pipe?: boolean;
+  slice?: string;
+  properties?: readonly string[];
+};
+
+/** Build an owned user-manager scope command; callers keep its unit identity for exact cleanup and reporting. */
+export function workerScopeArguments(
+  unit: string,
+  command: string,
+  args: readonly string[],
+  options: WorkerScopeOptions = {},
+): string[] {
+  return [
+    '--user',
+    '--scope',
+    '--collect',
+    ...(options.pipe ? ['--pipe'] : []),
+    '--quiet',
+    `--slice=${options.slice ?? WORKER_SLICE}`,
+    `--property=MemoryMax=${WORKER_SCOPE_MEMORY_MAX}`,
+    ...(options.properties ?? []).map((property) => `--property=${property}`),
+    `--unit=${unit}`,
+    command,
+    ...args,
+  ];
+}
 
 /** Existing operator limits outrank adaptive tuning; an explicit launch override may only tighten them. */
 export function workerMemoryHigh(desiredGiB: number, limits: string, explicit = false): string {
@@ -82,21 +110,7 @@ export class WorkerSlice {
       );
     }
 
-    const scoped = this.run(
-      'systemd-run',
-      [
-        '--user',
-        '--scope',
-        '--collect',
-        '--quiet',
-        `--slice=${WORKER_SLICE}`,
-        `--property=MemoryMax=${WORKER_SCOPE_MEMORY_MAX}`,
-        `--unit=${workerUnit(taskId, attempt)}`,
-        command,
-        ...args,
-      ],
-      options,
-    );
+    const scoped = this.run('systemd-run', workerScopeArguments(workerUnit(taskId, attempt), command, args), options);
     const scopedError = failure(scoped);
     if (!scopedError) return scoped;
     if (hasStarted()) {

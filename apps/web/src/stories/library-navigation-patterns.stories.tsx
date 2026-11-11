@@ -49,13 +49,7 @@ const pins = {
   ],
 };
 
-export const PhoneSelectorOpen: Story = {
-  name: 'Phone selector open',
-  parameters: {
-    viewport: {
-      viewports: { phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } } },
-    },
-  },
+export const SelectorOpen: Story = {
   render: () => (
     <PatternStory>
       <LibraryNavigation current="tracked" pins={pins} collections={destinations} />
@@ -86,7 +80,7 @@ export const PhoneSelectorOpen: Story = {
 
 export const SelectedCollectionSelector: Story = {
   name: 'Selected Collection title and keyboard focus',
-  parameters: { ...PhoneSelectorOpen.parameters },
+  parameters: { ...SelectorOpen.parameters },
   render: () => (
     <PatternStory>
       <LibraryNavigation

@@ -116,12 +116,7 @@ const meta = {
   component: ControlsExample,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -133,7 +128,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const ActiveDesktop: Story = {
+export const Active: Story = {
   globals: desktopGlobals,
   play: async ({ canvasElement }) => {
     const list = await within(canvasElement).findByRole('list', { name: m.zones_owner_active() });
@@ -150,9 +145,9 @@ export const ActiveDesktop: Story = {
     expect(row.getByRole('button', { name: m.zones_owner_trash_action() })).toHaveFocus();
   },
 };
-export const ActivePhone: Story = { ...ActiveDesktop, globals: phoneGlobals };
-export const RtlPhone: Story = { ...ActivePhone, args: { rtl: true } };
-export const TrashDesktop: Story = {
+
+export const Rtl: Story = { ...Active, args: { rtl: true } };
+export const Trash: Story = {
   args: { example: 'long-trash' },
   globals: desktopGlobals,
   play: async ({ canvasElement }) => {
@@ -165,7 +160,7 @@ export const TrashDesktop: Story = {
     expect(within(rows[1]!).getByRole('status')).toHaveTextContent(m.zones_owner_expired());
   },
 };
-export const TrashPhone: Story = { ...TrashDesktop, globals: phoneGlobals };
+
 export const EmptyActive: Story = { args: { example: 'empty' } };
 export const EmptyTrash: Story = { args: { example: 'empty-trash' } };
 export const Denied: Story = { args: { example: 'denied' } };
@@ -197,7 +192,7 @@ export const IndependentInstances: Story = {
   ...KeyboardCancelAndConfirm,
   args: { example: 'list', independent: true },
 };
-export const LongConfirmationPhone: Story = {
+export const LongConfirmation: Story = {
   globals: phoneGlobals,
   play: async ({ canvasElement }) => {
     const { trigger, dialog } = await openConfirmation(canvasElement);

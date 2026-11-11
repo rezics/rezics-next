@@ -170,7 +170,10 @@ type SelectionRound = Readonly<{
     anchors: readonly AnchoredPosition[];
 }>;
 export declare function selectBoardThreadCandidates(dependencies: ContentReadDependencies, boardId: BoardId, threadIds: readonly string[], context: ReadContext, decisions: ReadDecisions, query?: string): Promise<SelectionRound>;
-export declare function discloseBoardPageThreads(dependencies: ContentReadDependencies, boardId: BoardId, baseline: BoardView, threadIds: readonly string[], expectedRevisions: ReadonlyMap<string, string>, context: ReadContext, decisions: ReadDecisions, query?: string): Promise<Readonly<{
+export declare function discloseBoardPageThreads(dependencies: ContentReadDependencies, boardId: BoardId, baseline: BoardView, threadIds: readonly string[], expectedRevisions: ReadonlyMap<string, string>, context: ReadContext, decisions: ReadDecisions, query?: string, subjectScope?: {
+    subjectId: string;
+    placeId: string;
+}): Promise<Readonly<{
     items: readonly Anchored<ThreadView | null>[];
     boardAnchor: AnchoredPosition;
     parentAllowed: boolean;
@@ -244,6 +247,9 @@ export declare function readThread(dependencies: ContentReadDependencies, thread
 /** Subject listings use the same final thread, post, board and Access checks as exact thread reads, then
  * confirm the current subject reference and board's current Global/Realm placement in that snapshot. */
 export declare function readSubjectThread(dependencies: ContentReadDependencies, threadId: ThreadId, subjectId: string, placeId: string, context: ReadContext): Promise<Anchored<ThreadView | null>>;
+/** The same current Subject/place constraints as a point read, with native Board,
+ * opening-post and Access evaluation batched across the selected thread keys. */
+export declare function readSubjectThreads(dependencies: ContentReadDependencies, threadIds: readonly ThreadId[], subjectId: string, placeId: string, context: ReadContext): Promise<readonly Anchored<ThreadView | null>[]>;
 /** Internal exact-opening evidence. This shares the ordinary native resources,
  * board observation, ancestry, account fences and Access evaluator. It loads no
  * document bytes and cannot enumerate candidates or establish census coverage.

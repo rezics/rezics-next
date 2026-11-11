@@ -109,17 +109,14 @@ async function accountControls({ canvasElement }: { canvasElement: HTMLElement }
   await expect(canvas.getByText(m.managed_options_guidance())).toBeVisible();
   await expect(canvas.getByText(m.managed_operation_status())).toBeVisible();
 }
-export const LongSelfPhoneRtl: Story = {
+export const LongSelfRtl: Story = {
   render: () => suppliedAccount(),
   globals: { locale: 'de' },
   play: accountControls,
 };
-export const LongSelfDesktopRtl: Story = {
-  ...LongSelfPhoneRtl,
-  globals: { locale: 'de' },
-};
+
 export const OperatorIdentityUnavailable: Story = {
-  ...LongSelfPhoneRtl,
+  ...LongSelfRtl,
   render: () => suppliedAccount(true),
   play: async (context) => {
     await accountControls(context);

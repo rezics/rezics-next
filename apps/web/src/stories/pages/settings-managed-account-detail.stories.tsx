@@ -34,7 +34,6 @@ function Example({
 
 export const Manager: Story = {
   render: () => <Example />,
-  globals: {},
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
@@ -54,7 +53,6 @@ export const Manager: Story = {
 
 export const MemberRestricted: Story = {
   render: () => <Example member />,
-  globals: {},
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
@@ -119,7 +117,7 @@ export const SessionRecovery: Story = {
 };
 
 // Connected settings examples retain the actual read boundary and independently owned action catalogue.
-export const LongIdentityPhone: Story = {
+export const LongIdentity: Story = {
   render: () => <Example mode="long" />,
   globals: { locale: 'de' },
   play: async (context) => {
@@ -151,7 +149,6 @@ function canvasElementCard(canvasElement: HTMLElement) {
 
 export const UnnamedAccount: Story = {
   render: () => <Example mode="handleless" />,
-  globals: {},
   play: async (context) => {
     await pageReady(context);
     const target = within(await within(context.canvasElement).findByRole('region', { name: m.managed_target_title() }));

@@ -78,12 +78,6 @@ const meta = {
           'The subject fact editor uses the generated native client and the existing candidate-review fake. Proposals leave the public statement unchanged. The returned candidate alone opens comparison; acceptance and adoption remain separate confirmations. Use locale, theme and viewport globals for review.',
       },
     },
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
 } satisfies Meta<typeof Example>;
 export default meta;
@@ -141,7 +135,6 @@ export const Conflict: Story = {
 };
 export const Unavailable: Story = {
   args: { scenario: 'lost-response', onRequests: fn() },
-  globals: {},
   parameters: {
     docs: {
       description: {
@@ -155,7 +148,6 @@ export const Unavailable: Story = {
     const form = await canvas.findByRole('form', { name: m.correction_title() });
     const article = form.closest('article')!;
     const document = canvasElement.ownerDocument;
-    await expect(document.documentElement.clientWidth).toBe(390);
     const calls = mocked(args.onRequests!).mock.calls.at(-1)![0];
     const proposals = () => calls.filter((call) => call.method === 'POST' && call.path.endsWith('/candidates'));
 
@@ -385,14 +377,13 @@ function FamilyExample({ rtl = false }: { rtl?: boolean }) {
   );
 }
 
-async function familyJourney(canvasElement: HTMLElement, width: number) {
+async function familyJourney(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await canvas.findByRole('form', { name: m.correction_title() });
   const family = canvasElement.querySelector<HTMLElement>('[data-statement-family]')!;
   const first = family.querySelector<HTMLElement>('[data-family-editor="A"]')!;
   const second = family.querySelector<HTMLElement>('[data-family-editor="B"]')!;
   const document = canvasElement.ownerDocument;
-  await expect(document.documentElement.clientWidth).toBe(width);
   for (const editor of [first, second]) {
     await expect(within(editor).getAllByRole('heading', { level: 4 })).toHaveLength(3);
     await expect(editor.querySelectorAll('fieldset > legend')).toHaveLength(2);
@@ -445,10 +436,11 @@ async function familyJourney(canvasElement: HTMLElement, width: number) {
   // Actual browser rectangles and full text runs, authored only. DOM construction is not this proof.
   for (const panel of [family, first, second])
     await expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+  const minimumTargetHeight = family.ownerDocument.defaultView!.matchMedia('(max-width: 767px)').matches ? 44 : 32;
   for (const target of family.querySelectorAll<HTMLElement>('input, select, button[data-slot="button"]')) {
     const rect = target.getBoundingClientRect();
     const panel = target.closest('[data-family-editor], article')!.getBoundingClientRect();
-    await expect(rect.height).toBeGreaterThanOrEqual(width === 390 ? 44 : 32);
+    await expect(rect.height).toBeGreaterThanOrEqual(minimumTargetHeight);
     await expect(rect.width).toBeGreaterThanOrEqual(44);
     await expect(rect.left).toBeGreaterThanOrEqual(panel.left - 1);
     await expect(rect.right).toBeLessThanOrEqual(panel.right + 1);
@@ -486,24 +478,23 @@ const familyEvidence = {
     },
   },
 };
-export const FamilyPhone: Story = {
+export const IndependentFamilyGerman: Story = {
   render: () => <FamilyExample />,
   globals: { locale: 'de' },
   parameters: familyEvidence,
-  play: ({ canvasElement }) => familyJourney(canvasElement, 390),
+  play: ({ canvasElement }) => familyJourney(canvasElement),
 };
-export const FamilyDesktop: Story = {
+export const IndependentFamily: Story = {
   render: () => <FamilyExample />,
-  globals: {},
   parameters: familyEvidence,
-  play: ({ canvasElement }) => familyJourney(canvasElement, 1280),
+  play: ({ canvasElement }) => familyJourney(canvasElement),
 };
 export const FamilyRtl: Story = {
   render: () => <FamilyExample rtl />,
   globals: { locale: 'fr' },
   parameters: familyEvidence,
   play: async ({ canvasElement }) => {
-    await familyJourney(canvasElement, 390);
+    await familyJourney(canvasElement);
     await expect(canvasElement.querySelector('[data-statement-family]')).toHaveAttribute('dir', 'rtl');
   },
 };

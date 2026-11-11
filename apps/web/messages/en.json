@@ -11600,5 +11600,14 @@
   "zones_owner_unlisted": "Unlisted",
   "zones_owner_unnamed": "Unnamed Zone",
   "zones_owner_views": "Zone lists",
-  "zones_owner_working": "Saving…"
+  "zones_owner_working": "Saving…",
+  "collection_reading_inspect": "Inspect details",
+  "collection_reading_close": "Close details",
+  "collection_reading_note_available": "Note supplied",
+  "collection_reading_metadata": "Supplied metadata",
+  "collection_reading_note": "Curator note",
+  "collection_reading_copy_reference": "Copy reference link",
+  "collection_reading_copy_pending": "Copying link…",
+  "collection_reading_copy_done": "Link copied.",
+  "collection_reading_copy_unavailable": "The link could not be copied. Open the reference or try again."
 }

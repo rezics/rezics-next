@@ -145,12 +145,7 @@ const meta = {
   component: AlbumCreateFamily,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -274,7 +269,6 @@ async function geometry(canvasElement: HTMLElement) {
 
 export const TermsCreditsAndFacts: Story = {
   args: { longMetadata: true },
-  globals: {},
   play: async ({ canvasElement }) => {
     await fill(canvasElement, true);
     const fixture = fixtureFor(canvasElement);
@@ -288,18 +282,12 @@ export const TermsCreditsAndFacts: Story = {
     await expect(writes(fixture)).toHaveLength(0);
   },
 };
-export const TermsCreditsAndFactsDesktop: Story = {
-  ...TermsCreditsAndFacts,
-  globals: {},
-};
+
 export const TermsCreditsAndFactsRTL: Story = {
-  ...TermsCreditsAndFactsDesktop,
-  args: { longMetadata: true, rtl: true },
-};
-export const TermsCreditsAndFactsPhoneRTL: Story = {
   ...TermsCreditsAndFacts,
   args: { longMetadata: true, rtl: true },
 };
+
 export const IndependentLanguageRows: Story = {
   args: { pair: true },
   play: async ({ canvasElement }) => {
@@ -372,7 +360,6 @@ export const MetadataFailure: Story = {
 };
 export const UncertainExactReplay: Story = {
   args: { scenario: 'uncertain' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement, true);
     const fixture = fixtureFor(canvasElement);
@@ -413,7 +400,6 @@ export const CreatedReaderRecovery: Story = {
 };
 export const EligibilityPending: Story = {
   args: { deferredAdmission: true },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
     const fixture = fixtureFor(canvasElement);
@@ -427,7 +413,6 @@ export const EligibilityPending: Story = {
 };
 export const StaleReviewRecovery: Story = {
   args: { deferredAdmission: true },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
     const fixture = fixtureFor(canvasElement);
@@ -461,17 +446,8 @@ export const SignedOut: Story = { args: { signedOut: true } };
 export const CreatedExactReferenceRTL: Story = {
   ...UncertainExactReplay,
   args: { scenario: 'uncertain', rtl: true },
-  globals: {},
 };
-export const CreatedExactReferenceDesktop: Story = {
-  ...UncertainExactReplay,
-  globals: {},
-};
-export const CreatedExactReferencePhoneRTL: Story = {
-  tags: ['!dev'],
-  ...UncertainExactReplay,
-  args: { scenario: 'uncertain', rtl: true },
-};
+
 export const InitialFieldRemovalAndMultiplicity: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);

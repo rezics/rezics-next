@@ -128,7 +128,7 @@ function UnknownUnitStory() {
   );
 }
 
-export const UnknownUnitNarrow: Story = {
+export const UnknownUnitLongTitles: Story = {
   name: 'Unknown unit with long titles',
   parameters: {
     docs: {
@@ -153,10 +153,10 @@ export const UnknownUnitNarrow: Story = {
 };
 
 export const UnknownUnitDetailsOpen: Story = {
-  ...UnknownUnitNarrow,
+  ...UnknownUnitLongTitles,
   name: 'Optional native progress details opened by keyboard',
   play: async (context) => {
-    await UnknownUnitNarrow.play?.(context);
+    await UnknownUnitLongTitles.play?.(context);
     const details = context.canvasElement.querySelector('details')!;
     details.querySelector('summary')!.focus();
     await userEvent.keyboard('{Enter}');

@@ -16,14 +16,7 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
     admitted: labelOperations,
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
-      },
-    },
   },
-  globals: {},
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -83,7 +76,6 @@ export const Empty: Story = {
   },
 };
 export const NextPage: Story = {
-  globals: {},
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="next" />,
   play: async (context) => {
     await labelsReady(context);
@@ -250,7 +242,6 @@ export const EmptyPrefix: Story = {
 
 export const LaterPagePrefix: Story = {
   name: 'Empty later page, keep the filter',
-  globals: {},
   render: () => (
     <PageStory
       visitor="Signed In"
@@ -307,7 +298,6 @@ function RecoveryState({ uncertain = false }: { uncertain?: boolean }) {
 
 export const StalePage: Story = {
   name: 'Stale page, restart with the same filter',
-  globals: {},
   render: () => <RecoveryState />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -322,7 +312,6 @@ export const StalePage: Story = {
 
 export const UnconfirmedChange: Story = {
   name: 'Unconfirmed create, retained long draft',
-  globals: {},
   render: () => <RecoveryState uncertain />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -457,7 +446,7 @@ export const PickerPages: Story = {
   },
 };
 
-async function openPhoneLabelForm(context: { canvasElement: HTMLElement }) {
+async function openLabelForm(context: { canvasElement: HTMLElement }) {
   await pageReady(context);
   const view = within(context.canvasElement);
   const trigger = await view.findByRole('button', { name: m.library_subject_label_add() });
@@ -485,11 +474,10 @@ async function openPhoneLabelForm(context: { canvasElement: HTMLElement }) {
   return { view, trigger, input, form, create };
 }
 
-export const PhoneBeforeCapacity: Story = {
-  globals: {},
+export const PickerCancelAndReopen: Story = {
   render: () => <SubjectLabelStory count={31} />,
   play: async (context) => {
-    const { trigger, form } = await openPhoneLabelForm(context);
+    const { trigger, form } = await openLabelForm(context);
     await expect(context.canvasElement.querySelectorAll('[data-subject-label-chip]')).toHaveLength(31);
     await userEvent.click(within(form).getByRole('button', { name: m.library_collection_cancel() }));
     await waitFor(() =>
@@ -505,11 +493,10 @@ export const PhoneBeforeCapacity: Story = {
   },
 };
 
-export const PhoneCapacity: Story = {
-  globals: {},
+export const CapacityRetainsDraft: Story = {
   render: () => <SubjectLabelStory count={32} />,
   play: async (context) => {
-    const { view, input, create } = await openPhoneLabelForm(context);
+    const { view, input, create } = await openLabelForm(context);
     await userEvent.click(create);
     await view.findByText(m.library_subject_label_capacity());
     await expect(context.canvasElement.querySelectorAll('[data-subject-label-chip]')).toHaveLength(32);

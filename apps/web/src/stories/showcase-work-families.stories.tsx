@@ -264,12 +264,7 @@ const meta = {
   component: FamiliesJourney,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -283,7 +278,6 @@ type Story = StoryObj<typeof meta>;
 
 export const WorkFamiliesReading: Story = {
   name: 'Default',
-  globals: {},
   play: async ({ canvasElement }) => {
     await expectFamilies(canvasElement);
   },

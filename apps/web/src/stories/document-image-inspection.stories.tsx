@@ -59,12 +59,6 @@ const meta = {
   component: InspectionReader,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      viewports: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
   render: (args) => <InspectionReader {...args} />,
 } satisfies Meta<typeof InspectionReader>;
@@ -99,26 +93,9 @@ async function unavailableImage({ canvasElement }: { canvasElement: HTMLElement 
   await expect(canvas.queryByText(image.credit!.rightsHolder)).toBeNull();
 }
 
-export const PhoneLight: Story = { name: 'Default', globals: {}, play: inspectAndReturn };
-export const PhoneDark: Story = { tags: ['!dev'], globals: {}, play: inspectAndReturn };
-export const DesktopLight: Story = { tags: ['!dev'], globals: {}, play: inspectAndReturn };
-export const DesktopDark: Story = { tags: ['!dev'], globals: {}, play: inspectAndReturn };
-export const PhoneFailureLight: Story = {
-  name: 'Failure',
+export const Inspection: Story = { play: inspectAndReturn };
+
+export const Failure: Story = {
   args: { failure: true },
-  globals: {},
-  play: unavailableImage,
-};
-export const PhoneFailureDark: Story = { tags: ['!dev'], args: { failure: true }, globals: {}, play: unavailableImage };
-export const DesktopFailureLight: Story = {
-  tags: ['!dev'],
-  args: { failure: true },
-  globals: {},
-  play: unavailableImage,
-};
-export const DesktopFailureDark: Story = {
-  tags: ['!dev'],
-  args: { failure: true },
-  globals: {},
   play: unavailableImage,
 };

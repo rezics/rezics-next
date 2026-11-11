@@ -140,9 +140,8 @@ export const Overview: Story = {
     await expect(within(canvasElement).getByRole('heading', { name: 'Library' })).toBeVisible();
   },
 };
-export const MenuOpenPhone: Story = {
+export const MenuOpen: Story = {
   render: () => <Page />,
-  globals: {},
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Sort' }));
     await expect(await screen.findByRole('dialog', { name: 'Sort' })).toBeVisible();

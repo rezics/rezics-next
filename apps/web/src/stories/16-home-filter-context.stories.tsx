@@ -177,13 +177,10 @@ async function journey({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(within(canvas.getByRole('dialog')).queryByRole('list', { name: m.refinement_selected() })).toBeNull();
   await userEvent.keyboard('{Escape}');
 }
-export const DesktopJourney: Story = { name: 'Journey', globals: {}, play: journey };
-export const PhoneJourney: Story = { tags: ['!dev'], globals: {}, play: journey };
-export const DarkPhone: Story = { name: 'Default', globals: {}, play: journey };
-export const DarkDesktop: Story = { tags: ['!dev'], globals: {}, play: journey };
+export const Journey: Story = { play: journey };
+
 export const LongStrings: Story = {
   args: { long: true },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
@@ -231,7 +228,6 @@ export const UnavailableRetainedChoice: Story = {
   },
 };
 export const OpenSheetAccountReplacement: Story = {
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));

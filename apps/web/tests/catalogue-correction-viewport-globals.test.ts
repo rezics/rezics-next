@@ -19,9 +19,7 @@ test('Character LongWorkReference and Game Proposed leave phone390 and desktop12
   expect(proposed).toContain('m.correction_proposed()');
   expect(proposed).toContain('largeTouchTargets');
   expect(proposed).not.toMatch(/globals:\s*\{\s*viewport/);
-  expect(story(character, 'UncertainRetry')).toContain(
-    "globals: { viewport: { value: 'phone390', isRotated: false } }",
-  );
+  expect(story(character, 'UncertainRetry')).not.toMatch(/globals:\s*\{\s*viewport/);
   expect(story(character, 'Created')).toContain('play:');
   expect(story(game, 'Created')).toContain('play:');
   for (const source of [character, game, preview]) {

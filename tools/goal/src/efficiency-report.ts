@@ -9,7 +9,7 @@ import {
   type HourlyObservationData,
   type ObservationAttribution,
 } from './efficiency-report-delivery.ts';
-import { ensureFlow } from './flow.ts';
+import { ensureFlow, readLandingOperations, summarizeLandingOperations, type LandingOperationSummary } from './flow.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import { formatLifecycleMetrics } from './report.ts';
 import { listOpenToolIncidents } from './tool-incidents.ts';
@@ -170,7 +170,13 @@ export function measureProductLineObservation(
   if (!/^[a-f\d]{40}(?:[a-f\d]{24})?$/i.test(revision)) return unknownMeasurement();
   const startMs = Date.parse(bucket.start);
   const endMs = Date.parse(bucket.end);
-  const lines = productLineCount(repository, revision, bucket.start, undefined, (time) => time >= startMs && time < endMs);
+  const lines = productLineCount(
+    repository,
+    revision,
+    bucket.start,
+    undefined,
+    (time) => time >= startMs && time < endMs,
+  );
   if (lines === null) return unknownMeasurement(revision);
   const validPreviousRevision =
     previousSourceRevision && /^[a-f\d]{40}(?:[a-f\d]{24})?$/i.test(previousSourceRevision)
@@ -327,6 +333,8 @@ function landingLines(
   hasLanding: boolean,
   urgentIdentities: string[],
   policy: ReportPolicy,
+  operationSummary: LandingOperationSummary,
+  tasksAvailable: boolean,
 ): string[] {
   const totals: Record<LandingTarget, number> = { dev: 0, stabilize: 0, main: 0, unknown: 0 };
   const goals = new Map<string, number>();
@@ -349,11 +357,24 @@ function landingLines(
     .join(', ');
   const omittedGoals = Math.max(0, goals.size - policy.goalRows);
   const omittedLandings = Math.max(0, landingCount - identities.length);
+  const landingDuration =
+    operationSummary.terminalCount === null
+      ? 'Landing operation timing in UTC hour: unknown (landing operation history unavailable).'
+      : operationSummary.terminalCount === 0
+        ? 'Landing operations in UTC hour: 0 terminal; no duration sample recorded.'
+        : `Landing operations in UTC hour: ${operationSummary.terminalCount} terminal; ${operationSummary.measuredCount} timed; ${operationSummary.unknownDurationCount} unknown duration; p50 ${operationSummary.p50DurationMs === null ? 'unknown' : `${operationSummary.p50DurationMs} ms`}; p90 ${operationSummary.p90DurationMs === null ? 'unknown' : `${operationSummary.p90DurationMs} ms`}.`;
   return [
-    `Landings in UTC hour: dev ${totals.dev}; stabilize ${totals.stabilize}; main ${totals.main}; unknown ${totals.unknown} (each task counted once).`,
-    `Landings by Goal: ${perGoal || (hasLanding ? 'unknown' : 'none recorded')}${omittedGoals ? `; ${omittedGoals} more Goals omitted` : ''}.`,
-    `Landing identities: ${identities.join('; ') || 'none recorded'}${omittedLandings ? `; ${omittedLandings} more omitted` : ''}.`,
+    tasksAvailable
+      ? `Landings in UTC hour: dev ${totals.dev}; stabilize ${totals.stabilize}; main ${totals.main}; unknown ${totals.unknown} (each task counted once).`
+      : 'Landings: unknown (current task attribution unavailable).',
+    tasksAvailable
+      ? `Landings by Goal: ${perGoal || (hasLanding ? 'unknown' : 'none recorded')}${omittedGoals ? `; ${omittedGoals} more Goals omitted` : ''}.`
+      : 'Landings by Goal: unknown (current task attribution unavailable).',
+    tasksAvailable
+      ? `Landing identities: ${identities.join('; ') || 'none recorded'}${omittedLandings ? `; ${omittedLandings} more omitted` : ''}.`
+      : 'Landing identities: unknown (current task attribution unavailable).',
     `Urgent landings (excluded from throughput): ${urgentIdentities.join('; ') || 'none recorded'}.`,
+    landingDuration,
   ];
 }
 
@@ -374,9 +395,12 @@ function aggregateBucket(
     landingLines: [
       'Landings: unknown (timestamped integration history unavailable).',
       'Landing identities: unknown (timestamped integration history unavailable).',
+      'Landing operation timing in UTC hour: unknown (flow history unavailable).',
     ],
   };
   if (!available) return summary;
+
+  const operationSummary = summarizeLandingOperations(readLandingOperations(db, bucket.start, bucket.end));
 
   const taskJoin = tasksAvailable
     ? 'LEFT JOIN worker_tasks AS t ON t.id=e.task_id'
@@ -441,7 +465,7 @@ function aggregateBucket(
   checkWaits.sort((a, b) => a - b);
   summary.checkWaitCount = checkWaits.length;
   summary.checkWaitP90 = checkWaits.length ? checkWaits[Math.ceil(0.9 * checkWaits.length) - 1]! : null;
-  if (tasksAvailable) summary.landingLines = landingLines(landings, hasLanding, urgentLandings, policy);
+  summary.landingLines = landingLines(landings, hasLanding, urgentLandings, policy, operationSummary, tasksAvailable);
   return summary;
 }
 
@@ -815,7 +839,9 @@ export function captureHourlyEfficiencyObservation(db: Database, options: Report
       const observation = observationData(db, bucket, measurement, options.privateDuty, capturedAt);
       if (
         observation.attribution === 'measured' &&
-        (!Number.isSafeInteger(observation.productLines) || observation.productLines! < 0 || !observation.sourceRevision)
+        (!Number.isSafeInteger(observation.productLines) ||
+          observation.productLines! < 0 ||
+          !observation.sourceRevision)
       )
         throw new Error('measured hourly observation requires product lines and a source revision');
       return observation;

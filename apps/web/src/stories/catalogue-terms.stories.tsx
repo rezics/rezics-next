@@ -36,12 +36,7 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -123,7 +118,6 @@ export const Invalid: Story = {
 };
 export const StaleDraft: Story = {
   args: { scenario: 'stale' },
-  globals: {},
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
     await phoneControls(canvasElement);
@@ -356,9 +350,8 @@ export const IndependentForms: Story = {
   },
 };
 
-export const LongTextPhone: Story = {
+export const LongText: Story = {
   render: () => <IndependentTermsStory />,
-  globals: {},
   play: async ({ canvasElement }) => {
     const languages = await within(canvasElement).findAllByRole('combobox', { name: m.catalogue_create_language() });
     const [left] = independentArticles(canvasElement);

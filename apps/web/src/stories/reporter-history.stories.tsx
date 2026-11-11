@@ -136,13 +136,7 @@ function KeyboardSelection() {
   );
 }
 
-export const KeyboardAndPhone: Story = {
-  name: 'Keyboard selection on a phone',
-  parameters: {
-    viewport: {
-      viewports: { phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } } },
-    },
-  },
+export const KeyboardHistory: Story = {
   render: () => (
     <Frame>
       <KeyboardSelection />

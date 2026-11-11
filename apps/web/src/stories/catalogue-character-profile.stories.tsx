@@ -198,7 +198,6 @@ export const Created: Story = {
 };
 export const UncertainRetry: Story = {
   args: { scenario: 'uncertain', onCreate: createObserver() },
-  globals: {},
   parameters: {
     docs: {
       description: {
@@ -212,11 +211,10 @@ export const UncertainRetry: Story = {
     const label = await canvas.findByRole('textbox', { name: m.catalogue_create_label() });
     const form = label.closest('form')!;
     const document = canvasElement.ownerDocument;
-    await expect(document.documentElement.clientWidth).toBe(390);
     const phoneControls = async () => {
       const bounds = form.getBoundingClientRect();
       await expect(bounds.left).toBeGreaterThanOrEqual(0);
-      await expect(bounds.right).toBeLessThanOrEqual(390);
+      await expect(bounds.right).toBeLessThanOrEqual(canvasElement.ownerDocument.documentElement.clientWidth);
       await expect(form.scrollWidth).toBeLessThanOrEqual(form.clientWidth + 1);
       for (const target of form.querySelectorAll<HTMLElement>('input, textarea, select, button, a')) {
         const rect = target.getBoundingClientRect();

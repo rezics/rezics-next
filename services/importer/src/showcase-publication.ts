@@ -3,7 +3,7 @@ import { showcaseFranchiseFence } from './showcase-franchise.ts';
 import { showcaseTagParentSourceFence } from './showcase-cross-provider-tags.ts';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import { ImportTransportError, type ReviewedSubjectRead } from './import-client.ts';
+import { ImportTransportError, importCommandPages, type ReviewedSubjectRead } from './import-client.ts';
 import type { CrossMediaSeedResult, VndbWorkRelationOutcome } from './cross-media-seed.ts';
 import {
   showcaseDigest,
@@ -47,7 +47,7 @@ import type {
   VndbTagRatingObservation,
   VndbTagRatingSnapshot,
 } from './showcase-vndb-tag-ratings.ts';
-import type { ShowcaseJournal } from './showcase-journal.ts';
+import { captureShowcaseCommands, type ShowcaseJournal } from './showcase-journal.ts';
 import type { ShowcaseAdoptBody as AdoptBody, ShowcasePublicationResult } from './showcase-publication-contract.ts';
 import {
   actionIdempotencyKey,
@@ -660,6 +660,60 @@ async function candidatePage(
   return page;
 }
 
+/** Resume exact selected source proposals whose native receipt was not durably observed.
+ * Prepared commands always replay their sealed body. Acknowledged commands replay only
+ * after a complete current listing proves their sealed candidate is absent.
+ */
+export async function replayMissingSelectedProposalCommands(input: {
+  plan: CrossMediaPlan;
+  aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
+  journal: ShowcaseJournal;
+  review: Pick<ShowcaseReviewPort, 'reviewedCandidates'>;
+  transport: CrossMediaPort;
+}): Promise<BatchCommand[]> {
+  const selectedSources = new Set<string>();
+  for (const [provider, rows] of [
+    ['bangumi', [...input.plan.records.bangumi, ...input.plan.entities.bangumi]],
+    ['vndb', [...input.plan.records.vndb, ...input.plan.entities.vndb]],
+  ] as const)
+    for (const row of rows) selectedSources.add(`${input.aliases[provider]}\0${row.key}`);
+
+  const prepared = input.journal.preparedCommands();
+  const preparedKeys = new Set(prepared.map((entry) => entry.command.key));
+  const acknowledged = input.journal.acknowledgedCommands();
+  const pageCache = new Map<string, CandidatePage>();
+  const replay = new Map<string, BatchCommand>();
+  for (const entry of [...prepared, ...acknowledged]) {
+    const command = entry.command;
+    if (
+      command.op !== 'propose' ||
+      entry.commandDigest !== showcaseDigest(command) ||
+      !selectedSources.has(`${command.source.source}\0${command.source.external_id}`)
+    )
+      continue;
+    if (preparedKeys.has(command.key) || !entry.candidateId) {
+      replay.set(command.key, command);
+      continue;
+    }
+    const page = await candidatePage(
+      {
+        review: input.review,
+        id: command.subject,
+        property: command.statement.property.id,
+        journal: input.journal,
+      },
+      pageCache,
+    );
+    if (page.complete && !page.candidates.some((candidate) => candidate.id === entry.candidateId))
+      replay.set(command.key, command);
+  }
+
+  const commands = [...replay.values()];
+  const captured = captureShowcaseCommands(input.transport, input.journal);
+  for (const page of importCommandPages(commands, (command) => command)) await captured.batch({ commands: page });
+  return commands;
+}
+
 /** Conflicting request receipts do not decide which citation the native candidate actually owns. */
 export async function preferCurrentCandidateAcknowledgements(
   acknowledgements: readonly ShowcaseAcknowledgement[],
@@ -884,6 +938,8 @@ type ShowcasePublicationInput = {
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
   journal: ShowcaseJournal;
   review: ShowcaseReviewPort & ServedVariantReview;
+  /** Raw source transport used only to resume this selection's sealed proposal commands. */
+  transport?: CrossMediaPort;
   publicClient: PublicBulkClient;
   vocabularyRequirements?: readonly ShowcaseVocabularyRequirement[];
   tagWeightObservations?: ShowcaseManifest['tagWeightObservations'];
@@ -953,7 +1009,7 @@ async function publishShowcasePhases(
   progress.enter('cover-current-reads');
   const mediaOutcomes = await currentCoverOutcomes(input.result, input.review);
   progress.enter('target-current-reads');
-  const acknowledgements = input.journal.acknowledgedCommands(
+  let acknowledgements = input.journal.acknowledgedCommands(
     vocabularyOnly ? (input.vocabularyRequirements ?? []).map((requirement) => requirement.source) : undefined,
   );
   const readings = vocabularyOnly
@@ -965,15 +1021,27 @@ async function publishShowcasePhases(
   const result = { ...input.result, readings, mediaOutcomes };
   const pageCache = new Map<string, CandidatePage>();
   progress.enter('candidate-recovery');
-  const recovered = vocabularyOnly
-    ? { acknowledgements, omissions: [] }
-    : await resolveLegacyCandidates({
+  let recovered: Awaited<ReturnType<typeof resolveLegacyCandidates>>;
+  if (vocabularyOnly) recovered = { acknowledgements, omissions: [] };
+  else {
+    if (input.transport) {
+      await replayMissingSelectedProposalCommands({
         plan: input.plan,
-        result,
         aliases: input.aliases,
+        journal: input.journal,
         review: input.review,
-        existing: acknowledgements,
+        transport: input.transport,
       });
+      acknowledgements = input.journal.acknowledgedCommands();
+    }
+    recovered = await resolveLegacyCandidates({
+      plan: input.plan,
+      result,
+      aliases: input.aliases,
+      review: input.review,
+      existing: acknowledgements,
+    });
+  }
   const genre = input.result.bangumiGenrePublication;
   const gameGenre = input.result.bangumiGameGenrePublication;
   const tagParentCommandKeys = new Set((input.tagParentAcknowledgements ?? []).map((entry) => entry.command.key));

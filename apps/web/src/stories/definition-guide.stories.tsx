@@ -34,12 +34,7 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -79,7 +74,6 @@ export const Denied: Story = { args: { scenario: 'denied' } };
 export const InvalidRelease: Story = { args: { scenario: 'invalid' } };
 export const UnavailableRetry: Story = {
   args: { scenario: 'unavailable' },
-  globals: {},
   parameters: {
     docs: {
       description: {
@@ -93,14 +87,15 @@ export const UnavailableRetry: Story = {
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.guide_unavailable());
     const document = canvasElement.ownerDocument;
     const guide = canvas.getByRole('article');
-    await expect(document.documentElement.clientWidth).toBe(390);
     const phoneGeometry = async () => {
       const bounds = guide.getBoundingClientRect();
       await expect(bounds.width).toBeGreaterThan(0);
       await expect(bounds.left).toBeGreaterThanOrEqual(0);
-      await expect(bounds.right).toBeLessThanOrEqual(390);
+      await expect(bounds.right).toBeLessThanOrEqual(canvasElement.ownerDocument.documentElement.clientWidth);
       await expect(guide.scrollWidth).toBeLessThanOrEqual(guide.clientWidth + 1);
-      await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+      await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+        canvasElement.ownerDocument.documentElement.clientWidth,
+      );
       for (const target of guide.querySelectorAll<HTMLElement>('button, a, select, summary')) {
         const rect = target.getBoundingClientRect();
         await expect(rect.height).toBeGreaterThanOrEqual(44);
@@ -244,9 +239,8 @@ function LongGuideStory() {
   );
 }
 
-export const LongNamesAndPhoneKeyboard: Story = {
+export const LongNamesAndKeyboard: Story = {
   render: () => <LongGuideStory />,
-  globals: {},
   parameters: {
     docs: {
       description: {
@@ -259,12 +253,11 @@ export const LongNamesAndPhoneKeyboard: Story = {
     const canvas = within(canvasElement);
     const document = canvasElement.ownerDocument;
     const guides = canvas.getAllByRole('article');
-    await expect(document.documentElement.clientWidth).toBe(390);
     const geometry = async () => {
       for (const guide of guides) {
         const bounds = guide.getBoundingClientRect();
         await expect(bounds.left).toBeGreaterThanOrEqual(0);
-        await expect(bounds.right).toBeLessThanOrEqual(390);
+        await expect(bounds.right).toBeLessThanOrEqual(canvasElement.ownerDocument.documentElement.clientWidth);
         await expect(guide.scrollWidth).toBeLessThanOrEqual(guide.clientWidth + 1);
         // Closed native details have no visible target or text geometry until expanded.
         for (const target of guide.querySelectorAll<HTMLElement>('a, select, summary')) {
@@ -290,7 +283,9 @@ export const LongNamesAndPhoneKeyboard: Story = {
           }
         }
       }
-      await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+      await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+        canvasElement.ownerDocument.documentElement.clientWidth,
+      );
     };
     await geometry();
     const fieldGuide = within(guides[1]!);

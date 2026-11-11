@@ -9,7 +9,9 @@ import {
   ensureFlow,
   flowReport,
   readFlow,
+  readLandingOperations,
   recordFlow,
+  summarizeLandingOperations,
   type FlowTask,
 } from './flow.ts';
 import type { Task } from './types.ts';
@@ -257,6 +259,64 @@ test('every task records durable timestamps for dispatch, start, each check-slot
   expect(events[3]?.at).toBe(date(3));
   db.close();
   rmSync(dir, { recursive: true, force: true });
+});
+
+test('bounded flow reports use half-open UTC windows and pair terminal operations to their own earlier starts', () => {
+  const db = openDb(':memory:');
+  ensureFlow(db);
+  const start = '2026-10-31T00:00:00.000Z';
+  const end = '2026-10-31T01:00:00.000Z';
+  let queueId = 0;
+  const save = (operationId: string, startedAt: string | null, terminalAt: string) =>
+    db
+      .query(
+        `INSERT INTO landing_operations(operation_id,queue_id,task_id,attempt,enqueued_at,started_at,terminal_at,terminal_action,terminal_outcome)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'finished', '{}')`,
+      )
+      .run(operationId, ++queueId, operationId, 1, start, startedAt, terminalAt);
+  save('cross-midnight', '2026-10-30T23:40:00.000Z', '2026-10-31T00:10:00.000Z');
+  save('missing-start', null, '2026-10-31T00:30:00.000Z');
+  save('at-excluded-end', '2026-10-31T00:59:00.000Z', end);
+  recordFlow(db, {
+    taskId: 'legacy',
+    attempt: 1,
+    stage: 'landing',
+    action: 'finished',
+    at: '2026-10-31T00:40:00.000Z',
+  });
+  recordFlow(db, { taskId: 'window-task', attempt: 1, stage: 'landing', action: 'enqueued', at: start });
+  recordFlow(db, { taskId: 'future-task', attempt: 1, stage: 'integration', action: 'integrated', at: end });
+
+  const operations = readLandingOperations(db, start, end);
+  const summary = summarizeLandingOperations(operations);
+  expect(operations.map((operation) => operation.operationId)).toEqual(['cross-midnight', 'missing-start', null]);
+  expect(summary).toMatchObject({
+    terminalCount: 3,
+    measuredCount: 1,
+    unknownDurationCount: 2,
+    totalDurationMs: 1_800_000,
+    p50DurationMs: 1_800_000,
+    p90DurationMs: 1_800_000,
+  });
+  const events = readFlow(db, start, end);
+  expect(events.map((event) => event.taskId)).toEqual(['window-task', 'legacy']);
+  const historical = flowReport(
+    events,
+    [{ ...task('window-task'), currentAttempt: 2, terminalState: 'integrated' } as FlowTask],
+    Date.parse('2026-11-01T00:00:00.000Z'),
+    { historical: true, landingOperations: operations, window: { since: start, until: end } },
+  );
+  expect(historical.window).toEqual({ since: start, until: end, startInclusive: true, endExclusive: true });
+  expect(historical.landingOperations).toEqual(summary);
+  expect(historical.stages.find((stage) => stage.stage === 'landing')).toMatchObject({
+    count: 1,
+    totalMs: 1_800_000,
+    p90Ms: 1_800_000,
+  });
+  expect(historical.queues).toEqual([]);
+  expect(historical.bottleneck).toBeNull();
+  expect(historical.urgent.integrated).toBe(0);
+  db.close();
 });
 
 test('goal report --flow gives per stage and per Goal totals and percentiles, efficiency, queues, bottleneck and attempts', () => {

@@ -19,12 +19,7 @@ const meta = {
   id: 'pages-commerce-creator-statement',
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -121,8 +116,7 @@ const longTransaction =
 const longPaymentReference =
   'External bank reference for the September royalty statement / retained-reference-202609-USD-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
-export const NarrowLongText: Story = {
-  globals: {},
+export const LongText: Story = {
   render: () => (
     <PatternStory visitor="Signed In" path={`/creator/statements/${paidCreatorStatementFixture.id}`}>
       <AppShell>
@@ -200,10 +194,7 @@ export const UnknownHistoricalMoney: Story = {
     await expect(view.getByText(historicalCreatorStatementFixture.paidReference!)).toBeVisible();
   },
 };
-export const UnknownHistoricalMoneyPhone: Story = {
-  ...UnknownHistoricalMoney,
-  globals: {},
-};
+
 function stateReady(label: () => string) {
   return async (context: { canvasElement: HTMLElement }) => {
     await pageReady(context);

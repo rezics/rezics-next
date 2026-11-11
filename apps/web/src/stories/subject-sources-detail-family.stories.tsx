@@ -164,19 +164,17 @@ function Reader({
 
 function DetailJourney({
   scenario = 'selected-facts',
-  width = 1280,
   allRecords = false,
   coverUnknown = false,
 }: {
   scenario?: Scenario;
-  width?: 390 | 1280;
   allRecords?: boolean;
   coverUnknown?: boolean;
 }) {
   return (
     <PatternStory path={allRecords ? '/?sourceRecords=all' : '/'} visitor="Signed Out">
       <AppShell>
-        <div style={{ width, maxWidth: '100%' }} className="min-w-0 space-y-12">
+        <div className="min-w-0 space-y-12">
           <div dir="rtl" data-reader="first">
             <Reader
               key={`${getLocale()}:${scenario}:${allRecords}:${coverUnknown}:first`}
@@ -264,7 +262,7 @@ export const NoCitations: Story = { args: { scenario: 'no-citations' } };
 export const PartialMetadata: Story = { args: { scenario: 'partial-metadata' } };
 export const UnknownCoverRights: Story = { args: { scenario: 'partial-metadata', coverUnknown: true } };
 export const AllRecordedAttribution: Story = {
-  args: { allRecords: true, width: 390 },
+  args: { allRecords: true },
   play: async ({ canvasElement }) => {
     const reader = within(canvasElement.querySelector<HTMLElement>('[data-reader="second"]')!);
     const sources = within(reader.getByRole('region', { name: m.sources_metadata() }));

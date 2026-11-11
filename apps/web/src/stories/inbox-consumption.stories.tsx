@@ -56,24 +56,13 @@ async function installedWatch({ canvasElement }: { canvasElement: HTMLElement })
   await expect(recordedWatch.items[0]?.actor).toMatchObject({ state: 'available', avatar: null, avatarUrl: null });
 }
 
-export const InstalledWatchPhone: Story = {
-  name: 'Installed Watch',
-  globals: {},
-  render: () => <InboxStory fixture="thread-watch" />,
-  play: installedWatch,
-};
-
-export const InstalledWatchDesktop: Story = {
-  tags: ['!dev'],
-  name: 'Recorded thread_watch on desktop',
-  globals: {},
+export const InstalledWatch: Story = {
   render: () => <InboxStory fixture="thread-watch" />,
   play: installedWatch,
 };
 
 export const GenuineEmpty: Story = {
   name: 'Genuine empty Inbox',
-  globals: {},
   render: () => <InboxStory fixture="empty" />,
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByText(m.inbox_empty());
@@ -83,7 +72,6 @@ export const GenuineEmpty: Story = {
 
 export const SparseContinuing: Story = {
   name: 'Sparse continuing unread page',
-  globals: {},
   render: () => <InboxStory fixture="sparse-unread" />,
   play: async ({ canvasElement }) => {
     const main = within(canvasElement);
@@ -181,17 +169,7 @@ async function keyboardReturnPlay({ canvasElement }: { canvasElement: HTMLElemen
   await userEvent.keyboard('{Enter}');
 }
 
-export const KeyboardReturnPhone: Story = {
-  name: 'Keyboard Return',
-  globals: {},
-  render: () => <ReturnPreview />,
-  play: keyboardReturnPlay,
-};
-
-export const KeyboardReturnDesktop: Story = {
-  tags: ['!dev'],
-  name: 'Keyboard return on desktop',
-  globals: {},
+export const KeyboardReturn: Story = {
   render: () => <ReturnPreview />,
   play: keyboardReturnPlay,
 };
@@ -224,7 +202,6 @@ function RecoveryPreview() {
 
 export const UnknownCommandRecovery: Story = {
   name: 'Unknown command then exact original recovery',
-  globals: {},
   render: () => <RecoveryPreview />,
   play: async ({ canvasElement }) => {
     const list = within(await within(canvasElement).findByRole('list', { name: m.inbox_heading() }));
@@ -245,7 +222,6 @@ function ObservationStory() {
 
 export const ObservationRecovery: Story = {
   name: 'Validated receipt then failed page observation',
-  globals: {},
   render: () => <ObservationStory />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
@@ -267,7 +243,6 @@ function OneItemAckStory() {
 
 export const OneItemAcknowledgement: Story = {
   name: 'One-item acknowledgement of recorded thread_watch',
-  globals: {},
   render: () => <OneItemAckStory />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);

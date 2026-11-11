@@ -4507,6 +4507,7 @@ export async function runCrossMediaSeedCli(
         aliases: crossMediaAliases,
         journal,
         review: importPort,
+        transport: importPort,
         publicClient,
         ...(vocabularyRequirements.length ? { vocabularyRequirements } : {}),
         tagWeightObservations: publicTags.tagWeightObservations,

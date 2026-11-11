@@ -244,6 +244,8 @@ so no additional repair brief is opened. Original `stack.host`, `auth-stack.host
   `specs/dynamic-collections-outcomes.test.ts`, `specs/library-profiles-outcomes.test.ts`,
   `specs/library-labels-outcomes.test.ts`, `specs/library-listing-freshness-outcomes.test.ts`.
   Accounts/commerce own follow edges and owner-only follower counts; web follow/count binding pending.
+- **Test decision**: Collection page rendering uses the production `LibraryApplicationBoundary`; sparse rows assert
+  unknown facts, and anonymous provenance enables the existing export-order assertion.
 - **Acceptance command**: `bun test specs/web-personal-outcomes.test.ts` with `WEB_PERSONAL_DRIVER` configured
   to its native binding; pending parallel suite delivery. Publication privacy cells use the publication verifier above.
 

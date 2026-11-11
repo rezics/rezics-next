@@ -151,6 +151,9 @@ Decision: Boundary repairs reuse existing public entries and extract shared Cand
 Semantic Source receives its identity store through the existing composition port. Native Character bindings keep concrete
 page adapters at composition, while transaction, actor, deadline, work and dependency allowances stay unchanged.
 
+Decision: Collection comparison owns its labels-only definition projection and keeps its structurally compatible type
+local, rather than importing Search's private fact metadata helper; no runtime behavior changes.
+
 Decision: configured Presentation pages and scoped Search consume Library runtime, Source and public-output contracts
 through declared entries; composition binds the existing producers, while Platform session and Kernel HTTP hosts are
 public entries. Existing authorization and nested page/source budgets stay unchanged.

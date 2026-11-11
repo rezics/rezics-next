@@ -692,7 +692,15 @@ export const LongNotesSparseContinuation: Story = {
   play: async (context) => {
     const view = await detailReady(context);
     await expect(view.getAllByRole('link', { name: collectionLongNotesSparse.identity })).toHaveLength(2);
-    for (const note of collectionLongNotesSparse.notes) await view.findByText(note);
+    const openers = [...context.canvasElement.querySelectorAll<HTMLButtonElement>('[data-collection-detail-opener]')];
+    for (const [index, note] of collectionLongNotesSparse.notes.entries()) {
+      await userEvent.click(openers[index]!);
+      const detail = context.canvasElement.querySelector<HTMLElement>('[data-slot="member-reading-detail"]')!;
+      await expect(detail).toHaveFocus();
+      await within(detail).findByText(note);
+      await userEvent.click(within(detail).getByRole('button', { name: m.collection_reading_close() }));
+      await expect(openers[index]).toHaveFocus();
+    }
     await view.findByRole('link', { name: m.library_collection_more() });
     await expect(view.getByText(m.library_subject_unavailable())).toBeVisible();
     await expect(view.queryByRole('link', { name: (accessibleName) => accessibleName === 'Snow Country' })).toBeNull();

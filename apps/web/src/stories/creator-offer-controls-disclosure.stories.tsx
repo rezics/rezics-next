@@ -23,14 +23,14 @@ const meta = {
     docs: {
       description: {
         component:
-          'The actual offer-list component with illustrative recorded price facts and configured price rules. Normal and Draft cover independent controls; Narrow long text constrains the same row to phone width. Unavailable rules retains honest unknown facts and delist access. Authority retired removes private controls. Pending, uncertain original requests and late completion are authored in creator-offer-controls-disclosure.test.tsx. Stories and tests are UNRUN; native, browser, accessibility and visual verification remain deferred.',
+          'The actual offer-list component with illustrative recorded price facts and configured price rules. Normal and Draft cover independent controls; Long title management retains the supplied long title at every toolbar size. Unavailable rules retains honest unknown facts and delist access. Authority retired removes private controls. Pending, uncertain original requests and late completion are authored in creator-offer-controls-disclosure.test.tsx. Stories and tests are UNRUN; native, browser, accessibility and visual verification remain deferred.',
       },
     },
   },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
-type Variant = 'normal' | 'narrow' | 'rules-unavailable' | 'unavailable' | 'retired';
+type Variant = 'normal' | 'long-title' | 'rules-unavailable' | 'unavailable' | 'retired';
 const longTitle = 'A captured title / '.repeat(20) + '無空白の長い題名'.repeat(24);
 
 function Example({ variant = 'normal' }: { variant?: Variant }) {
@@ -42,7 +42,7 @@ function Example({ variant = 'normal' }: { variant?: Variant }) {
   }));
   const offer = {
     ...creatorOfferFixture,
-    ...(variant === 'narrow' ? { title: longTitle } : {}),
+    ...(variant === 'long-title' ? { title: longTitle } : {}),
     ...(variant === 'rules-unavailable' ? { moneyUnit: null, taxBehavior: null, contentEdition: null } : {}),
   };
   const data: CreatorOffersPageData = {
@@ -60,7 +60,7 @@ function Example({ variant = 'normal' }: { variant?: Variant }) {
   return (
     <PatternStory visitor="Signed In" path="/creator/offers">
       <AppShell>
-        <div className={variant === 'narrow' ? 'w-full max-w-[22rem] space-y-4' : 'min-w-0 space-y-4'}>
+        <div className="min-w-0 space-y-4">
           {variant !== 'unavailable' && !retired && (
             <Button
               type="button"
@@ -127,8 +127,8 @@ export const DraftRemainsVisible: Story = {
     await expect(view.getByText(m.creator_offer_controls_retained())).toBeVisible();
   },
 };
-export const NarrowLongText: Story = {
-  render: () => <Example variant="narrow" />,
+export const LongTitleManagement: Story = {
+  render: () => <Example variant="long-title" />,
   play: async ({ canvasElement }) => {
     const { view } = await openManagement(canvasElement, longTitle);
     const heading = view.getByRole('heading', { name: longTitle });

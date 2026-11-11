@@ -11600,5 +11600,14 @@
   "zones_owner_unlisted": "不公開列出",
   "zones_owner_unnamed": "未命名的 Zone",
   "zones_owner_views": "Zone 清單",
-  "zones_owner_working": "儲存中…"
+  "zones_owner_working": "儲存中…",
+  "collection_reading_inspect": "查看詳情",
+  "collection_reading_close": "關閉詳情",
+  "collection_reading_note_available": "有附註",
+  "collection_reading_metadata": "提供的中繼資料",
+  "collection_reading_note": "策展人附註",
+  "collection_reading_copy_reference": "複製引用連結",
+  "collection_reading_copy_pending": "正在複製連結…",
+  "collection_reading_copy_done": "已複製連結。",
+  "collection_reading_copy_unavailable": "無法複製連結。請開啟引用或重試。"
 }

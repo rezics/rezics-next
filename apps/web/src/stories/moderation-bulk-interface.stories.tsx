@@ -19,7 +19,7 @@ const meta = {
   component: BoardReportQueue,
   parameters: {
     layout: 'padded',
-    viewport: { options: queueViewports },
+
     docs: {
       description: {
         component:
@@ -87,7 +87,6 @@ async function confirm(canvasElement: HTMLElement) {
 }
 
 export const SelectingReviewCancel: Story = {
-  globals: {},
   play: async ({ canvasElement, args }) => {
     const view = within(bulk(canvasElement));
     const select = view.getByRole('button', { name: m.moderation_bulk_select_loaded() });
@@ -208,7 +207,6 @@ export const RefreshingReceipts: Story = {
     ...PartialResults.args,
     onRefresh: fn(() => new Promise<void>(() => {})),
   },
-  globals: {},
   play: async ({ canvasElement, args }) => {
     const view = await review(canvasElement);
     await userEvent.click(view.getByRole('button', { name: m.moderation_bulk_confirm({ count: 3 }) }));
@@ -300,10 +298,7 @@ export const LongLocalizedReview: Story = {
   ...ReviewConfirmation,
   globals: { locale: 'fr' },
 };
-export const LongLocalizedReviewDesktop: Story = {
-  ...LongLocalizedReview,
-  globals: { locale: 'fr' },
-};
+
 export const LongLocalizedReviewRtl: Story = {
   ...LongLocalizedReview,
   decorators: [
@@ -314,16 +309,7 @@ export const LongLocalizedReviewRtl: Story = {
     ),
   ],
 };
-export const LongLocalizedReviewRtlDesktop: Story = {
-  ...LongLocalizedReviewDesktop,
-  decorators: [
-    (Story) => (
-      <div dir="rtl">
-        <Story />
-      </div>
-    ),
-  ],
-};
+
 export const LongLocalizedUncertain: Story = {
   args: {
     onAction: fn<ReportQueueAction>(async (command) => {
@@ -339,11 +325,8 @@ export const LongLocalizedUncertain: Story = {
     await observeSurface(bulk(canvasElement));
   },
 };
-export const LongLocalizedDesktop: Story = {
-  ...LongLocalizedUncertain,
-  globals: { locale: 'fr' },
-};
-export const LongLocalizedRtlPhone: Story = {
+
+export const LongLocalizedRtl: Story = {
   ...LongLocalizedUncertain,
   decorators: [
     (Story) => (
@@ -353,16 +336,7 @@ export const LongLocalizedRtlPhone: Story = {
     ),
   ],
 };
-export const LongLocalizedRtlDesktop: Story = {
-  ...LongLocalizedDesktop,
-  decorators: [
-    (Story) => (
-      <div dir="rtl">
-        <Story />
-      </div>
-    ),
-  ],
-};
+
 export const FailedRefreshRtl: Story = {
   ...FailedRefreshReceipts,
   globals: { locale: 'fr' },
@@ -374,17 +348,7 @@ export const FailedRefreshRtl: Story = {
     ),
   ],
 };
-export const FailedRefreshDesktop: Story = {
+export const FailedRefresh: Story = {
   ...FailedRefreshReceipts,
   globals: { locale: 'fr' },
-};
-export const FailedRefreshRtlDesktop: Story = {
-  ...FailedRefreshDesktop,
-  decorators: [
-    (Story) => (
-      <div dir="rtl">
-        <Story />
-      </div>
-    ),
-  ],
 };

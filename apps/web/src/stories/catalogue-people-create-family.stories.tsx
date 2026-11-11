@@ -137,12 +137,7 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+
     docs: {
       description: {
         component:
@@ -322,16 +317,14 @@ export const PersonInitialFamily: Story = {
 export const OrganizationInitialFamily: Story = {
   play: async ({ canvasElement }) => family(first(canvasElement), 'schema:Organization'),
 };
-export const PersonFamily: Story = { name: 'Person', ...PersonInitialFamily, globals: {} };
-export const OrganizationFamily: Story = { name: 'Organization', ...OrganizationInitialFamily, globals: {} };
+export const PersonFamily: Story = { name: 'Person', ...PersonInitialFamily };
+export const OrganizationFamily: Story = { name: 'Organization', ...OrganizationInitialFamily };
 export const LongPersonRtl: Story = {
   args: { variant: 'long', rtl: true },
-  globals: {},
   play: async ({ canvasElement }) => family(first(canvasElement), 'schema:Person', true),
 };
 export const LongOrganizationRtl: Story = {
   args: { variant: 'long', rtl: true },
-  globals: {},
   play: async ({ canvasElement }) => family(first(canvasElement), 'schema:Organization', true),
 };
 export const IndependentSuppliedInstances: Story = {

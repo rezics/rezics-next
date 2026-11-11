@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { openDb } from './db.ts';
+import { readFlow, readLandingOperations, summarizeLandingOperations } from './flow.ts';
 import type { AttemptFence, GateOutcome } from './contracts.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { SqliteLandingQueue } from './land.ts';
@@ -125,6 +126,12 @@ describe('sequential integration', () => {
         ['alpha', true],
         ['beta', true],
       ]);
+      const landingEvents = readFlow(s.db).filter((event) => event.operationId);
+      for (const taskId of ['alpha', 'beta']) {
+        const events = landingEvents.filter((event) => event.taskId === taskId);
+        expect(events.map((event) => event.action)).toEqual(['enqueued', 'started', 'finished']);
+        expect(new Set(events.map((event) => event.operationId)).size).toBe(1);
+      }
       expect(git(second.worktree, 'rev-parse', 'HEAD')).toBe(original);
       expect(git(s.main, 'symbolic-ref', 'HEAD')).toBe('refs/heads/main');
       expect(git(s.main, 'worktree', 'list', '--porcelain')).not.toContain(`worktree ${s.options.worktreeRoot}/`);
@@ -340,6 +347,62 @@ describe('sequential integration', () => {
       await new MergeTrain(s.options).run();
       expect(s.outcomes).toHaveLength(1);
       expect(s.queue.next()).toBeUndefined();
+    } finally {
+      s.close();
+    }
+  });
+
+  test('resolver continuation closes one operation and starts a distinct requeued operation', () => {
+    const s = setup();
+    try {
+      const request = s.branch('resolver', 'resolved-file');
+      s.queue.enqueue(request);
+      const original = s.queue.next()!;
+      const continued = {
+        ...request,
+        devResolution: {
+          attempts: 1,
+          commit: 'resolved-commit',
+          targetHead: 'dev-head',
+          method: 'resolver' as const,
+          tokens: { input: 0, output: 0, cached: 0, total: 0 },
+          paths: ['resolved-file'],
+        },
+      };
+      s.queue.requeueResolved(original.id, continued);
+      s.queue.requeueResolved(original.id, continued);
+
+      const retry = s.queue.next()!;
+      expect(retry.operationId).not.toBe(original.operationId);
+      const outcome: GateOutcome = {
+        taskId: request.taskId,
+        attempt: request.attempt,
+        passed: true,
+        stage: 'merge',
+        logPath: 'landing.log',
+        hostMs: 0,
+        changedFiles: [],
+        diffLines: 0,
+      };
+      s.queue.finish(retry.id, outcome);
+
+      const events = readFlow(s.db).filter((event) => event.taskId === request.taskId && event.operationId);
+      expect(events.filter((event) => event.operationId === original.operationId).map((event) => event.action)).toEqual(
+        ['enqueued', 'started', 'resolver-requeued'],
+      );
+      expect(events.filter((event) => event.operationId === retry.operationId).map((event) => event.action)).toEqual([
+        'enqueued',
+        'started',
+        'finished',
+      ]);
+      expect(
+        summarizeLandingOperations(readLandingOperations(s.db, '2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')),
+      ).toMatchObject({
+        terminalCount: 2,
+        measuredCount: 2,
+        unknownDurationCount: 0,
+        outcomes: { 'resolver-requeued': 1, finished: 1 },
+      });
     } finally {
       s.close();
     }

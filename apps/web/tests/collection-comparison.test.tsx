@@ -8,6 +8,7 @@ import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigati
 
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
 const { CollectionReadMembers } = await import('../src/library/collection-page');
+const { CollectionMemberOccurrenceDetails } = await import('../src/library/collection-member-details');
 const { CollectionMemberList } = await import('../src/library/collection-editor');
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const source = `/en/collections/${id(1)}?cursor=two&layout=grid&type=work&f.genre=fiction&l.genre=Fiction`;
@@ -32,7 +33,7 @@ const comparisonDefinitions = {
   date: { labels: { en: 'Recorded date' } },
 };
 
-test('actual grid, list and editor compositions retain property meanings, supplied targets and independent occurrences', () => {
+test('compact layouts defer complete evidence to the same occurrence detail and retain independent identities', () => {
   for (const layout of ['grid', 'list'] as const) {
     const html = renderToStaticMarkup(
       createElement(CollectionReadMembers, {
@@ -44,14 +45,29 @@ test('actual grid, list and editor compositions retain property meanings, suppli
         onCopy() {},
       }),
     );
-    for (const text of ['Creator', 'Recorded date', 'February 2024', '95 min', 'A-17', 'Occurrence 2', 'Occurrence 3'])
-      expect(html).toContain(text);
-    expect(html).not.toContain('Unselected');
+    expect(html).toContain('Same name');
+    expect(html).toContain('February 2024');
+    expect(html).not.toContain('Occurrence 2');
+    expect(html).not.toContain('data-comparison-reference');
     expect(html).not.toContain('Your private Library');
+    expect(html.match(/data-collection-detail-opener/g)).toHaveLength(2);
     for (const member of members) {
+      expect(html).toContain(`id="collection-member-${member.id}"`);
+      const detail = renderToStaticMarkup(
+        createElement(CollectionMemberOccurrenceDetails, {
+          member,
+          listPresentations,
+          comparisonDefinitions,
+          currentHref: source,
+          onCopy() {},
+        }),
+      );
+      for (const text of ['Creator', 'Recorded date', 'February 2024', '95 min', 'A-17', member.note!])
+        expect(detail).toContain(text);
+      expect(detail).not.toContain('Unselected');
       const target = member.facts!.creator![0]!;
       if (target.kind !== 'item') throw new Error('Expected item fixture');
-      expect(html).toContain(`data-comparison-reference="${target.id}"`);
+      expect(detail).toContain(`data-comparison-reference="${target.id}"`);
       const destination = new URL(
         collectionComparisonHref(target.id, 'Same name', 'en', source, member.id),
         'https://rezics.test',
@@ -107,7 +123,11 @@ test('missing, empty, unavailable and concealed context stays truthful without i
   const hidden = render({ ...base, subject: null });
   expect(hidden).not.toContain('Same name');
   expect(hidden).toContain(`id="collection-member-${base.id}"`);
-  expect(render(base)).toContain('Property name unavailable');
+  expect(
+    renderToStaticMarkup(
+      createElement(CollectionMemberOccurrenceDetails, { member: base, currentHref: source, onCopy() {} }),
+    ),
+  ).toContain('Property name unavailable');
   expect(
     collectionComparisonFacts({ ...base, facts: { date: [{ kind: 'time', year: 1943 }] } }, undefined, {}, 'en')[0]
       ?.text,
@@ -173,7 +193,7 @@ test('mounted reference returns repeat on the retained page and retire on replac
     await render([]);
     await render(members);
     expect(window.document.activeElement?.id).toBe(`collection-member-${id(3)}`);
-    const links = [...container.querySelectorAll<HTMLAnchorElement>('[data-comparison-reference]')];
+    const links = [...container.querySelectorAll<HTMLAnchorElement>('a[href*="/subjects/"]')];
     expect(links).toHaveLength(2);
     expect(links.every((link) => !link.parentElement?.closest('a'))).toBe(true);
     expect(new URL(links[1]!.href).searchParams.get('via')).toBe(`${source}#collection-member-${id(3)}`);

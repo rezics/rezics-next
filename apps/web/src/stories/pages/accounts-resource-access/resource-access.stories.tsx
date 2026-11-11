@@ -160,12 +160,6 @@ const meta = {
   component: Example,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
   },
 } satisfies Meta<typeof Example>;
 export default meta;
@@ -381,18 +375,11 @@ async function longIdentities({ canvasElement }: { canvasElement: HTMLElement })
   }
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
-export const LongIdentitiesPhone: Story = {
-  name: 'Long Identities',
+export const LongIdentities: Story = {
   args: { scenario: 'long' },
-  globals: {},
   play: longIdentities,
 };
-export const LongIdentitiesDesktop: Story = {
-  tags: ['!dev'],
-  args: { scenario: 'long' },
-  globals: {},
-  play: longIdentities,
-};
+
 export const GenericResource: Story = {
   args: { scenario: 'generic' },
   play: async ({ canvasElement }) => {

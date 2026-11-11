@@ -138,7 +138,7 @@ const meta = {
   component: HistoryStory,
   parameters: {
     layout: 'fullscreen',
-    viewport: { options: queueViewports },
+
     docs: {
       description: {
         component:
@@ -169,7 +169,6 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Populated: Story = {
-  globals: {},
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
     const inspect = view.getByRole('button', { name: m.moderation_history_open_receipt() });
@@ -180,7 +179,7 @@ export const Populated: Story = {
     );
   },
 };
-export const Narrow: Story = { globals: {} };
+export const InitialPage: Story = {};
 export const Withheld: Story = {
   args: {
     page: {

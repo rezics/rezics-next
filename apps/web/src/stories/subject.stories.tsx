@@ -160,15 +160,12 @@ export const SpoilerLongSummary: Story = {
   render: () => <ReadingPassageStory rich />,
 };
 
-export const LibrarySlotMenuPhone: Story = {
-  tags: ['!dev'],
-  name: 'Collection menu open, drawer',
-  globals: {},
+export const CollectionMenuOpen: Story = {
   play: async (context) => {
     await subjectReady(context);
     const canvas = within(context.canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.library_subject_add_collection() }));
-    const sheet = document.querySelector('[data-slot="drawer-content"]');
+    const sheet = await within(document.body).findByRole('dialog', { name: m.library_subject_add_collection() });
     await expect(sheet).toBeVisible();
     await expect(
       within(sheet as HTMLElement).getByRole('button', { name: m.library_subject_load_collections() }),
@@ -177,31 +174,13 @@ export const LibrarySlotMenuPhone: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
 };
 
-export const LibrarySlotMenuDesktop: Story = {
-  tags: ['!dev'],
-  name: 'Collection menu open, popover',
-  globals: {},
-  play: async (context) => {
-    await subjectReady(context);
-    const canvas = within(context.canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.library_subject_add_collection() }));
-    const menu = await within(document.body).findByRole('menu');
-    await expect(within(menu).getByRole('button', { name: m.library_subject_load_collections() })).toBeVisible();
-  },
-  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
-};
-
-export const OverviewReactionsEnglishPhone: Story = {
-  tags: ['!dev'],
-  name: 'Overview / Full Reactions / English / Phone 390',
+export const OverviewReactionsEnglish: Story = {
   globals: { locale: 'en' },
   play: pageReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
 };
 
-export const OverviewReactionsChinesePhone: Story = {
-  tags: ['!dev'],
-  name: 'Overview / Full Reactions / Chinese / Phone 390',
+export const OverviewReactionsChinese: Story = {
   globals: { locale: 'zh-Hans' },
   play: pageReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,

@@ -294,8 +294,7 @@ export const LongTitlesAndMissingData: Story = {
   },
 };
 
-export const PhoneWidth: Story = {
-  globals: {},
+export const MultipleLongTitles: Story = {
   args: { multiple: true },
   async play({ canvasElement }) {
     await userEvent.type(within(canvasElement).getByRole('combobox', { name: 'Subject' }), 'three');

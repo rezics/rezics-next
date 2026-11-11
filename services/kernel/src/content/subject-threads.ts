@@ -8,7 +8,7 @@ import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
-import { ContentNotFoundError, readSubjectThread, type ThreadView } from './reads.ts';
+import { ContentNotFoundError, readSubjectThreads, type ThreadView } from './reads.ts';
 import page from './page-subject-threads.sql';
 import { prepareSubjectThreadContext, type SubjectThreadContext } from './subject-threads-context.ts';
 import { projectSubjectThreadReactions, type SubjectThreadWithReactions } from './subject-threads-reactions.ts';
@@ -195,12 +195,22 @@ export async function listSubjectThreads(
   let scanned = 0;
   let lastScanned: Candidate | null = null;
   while (scanned < candidates.candidates.length && entries.length < limit) {
-    const candidate = candidates.candidates[scanned]!;
-    scanned++;
-    lastScanned = candidate;
-    const result = await readSubjectThread(dependencies, candidate.threadId, subjectId, input.place, context);
-    anchors.push(result.anchor);
-    if (result.value) entries.push(result.value);
+    // Never observe beyond the possible output frontier. Concealed keys make
+    // room for another batch inside the original raw scan window.
+    const batch = candidates.candidates.slice(scanned, scanned + limit - entries.length);
+    const results = await readSubjectThreads(
+      dependencies,
+      batch.map((candidate) => candidate.threadId),
+      subjectId,
+      input.place,
+      context,
+    );
+    for (const [index, result] of results.entries()) {
+      scanned++;
+      lastScanned = batch[index]!;
+      anchors.push(result.anchor);
+      if (result.value) entries.push(result.value);
+    }
   }
 
   const hasMore = scanned < candidates.candidates.length || candidates.candidates.length === limit * SCAN_FACTOR;

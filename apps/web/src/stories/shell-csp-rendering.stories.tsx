@@ -7,15 +7,8 @@ import { PatternStory, pagePaths, pageReady } from './page';
 const meta = {
   title: 'Site Shell/CSP Rendering',
   id: 'patterns-app-shell-csp-rendering',
-  globals: {},
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
-        desktop: { name: 'Desktop', styles: { width: '1440px', height: '960px' } },
-      },
-    },
   },
 } satisfies Meta;
 export default meta;
@@ -32,7 +25,7 @@ function CspShellPreview() {
   );
 }
 
-export const PhoneShell: Story = {
+export const Navigation: Story = {
   play: async (context) => {
     await pageReady(context);
     const view = within(context.canvasElement);
