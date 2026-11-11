@@ -26,6 +26,8 @@ Decision: fewest tests pin user-visible publication behaviour and named-state st
 
 Decision: preserve historical releases and recordings; advance catalogue source to 1.0.11 for comparative Work references. Releases share the immutable Release1 compiler and exact digest; Library capabilities remain explicit per-Type references.
 
+Decision: the historical materializer resolves both static imports and `import.meta.resolve` operands from each verified snapshot, routing the old checker through the installed, version-checked `recheck-historical` alias. Its cold-process seam compiles the current catalogue first, then validates the pinned release while checking that current Definitions imports retain their live identities.
+
 Release vocabulary, digest, catalogue formats and publication helpers are the contract
 (`@rezics/definitions/contract`, browser root). Compilation, release validation and
 catalogue artifact admission are one compiler application (`src/compiler/application.ts`)

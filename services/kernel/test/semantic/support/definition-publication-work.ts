@@ -182,13 +182,18 @@ export async function effectsSnapshot(pool: Pool) {
   }
 }
 
-/** Prove that installing the historical publisher cannot take ownership of a
- * current Definitions import. Run it in a fresh Bun process because plugins
+/** Prove that current catalogue compilation and pinned historical validation
+ * keep separate module graphs. Run it in a fresh Bun process because plugins
  * and module caches are process-wide.
  */
 export async function historicalCatalogueImportWitness(root: string) {
   const helper = `${root}/packages/definitions/test/support/historical-construction.ts`;
   const catalogue = `${root}/packages/definitions/src/catalogue-files.ts`;
+  const definitions = `${root}/packages/definitions/src/index.ts`;
+  const compiler = `${root}/packages/definitions/src/compile.ts`;
+  const bundled = `${root}/packages/definitions/src/bundled.ts`;
+  const portable = `${root}/packages/definitions/src/portable.ts`;
+  const historicalRelease = `${root}/packages/definitions/test/fixtures/bundled-historical-construction.json`;
   const child = Bun.spawn(
     [
       process.execPath,
@@ -197,10 +202,33 @@ export async function historicalCatalogueImportWitness(root: string) {
 const { mountHistoricalConstruction } = await import(${JSON.stringify(helper)});
 const historical = mountHistoricalConstruction();
 try {
-  await import(${JSON.stringify(catalogue)});
+  const currentCatalogue = await import(${JSON.stringify(catalogue)});
+  const [{ compileCatalogue }, { bundledDigest, bundledSources }, { releaseDigest }] = await Promise.all([
+    import(${JSON.stringify(compiler)}),
+    import(${JSON.stringify(bundled)}),
+    import(${JSON.stringify(portable)}),
+  ]);
+  const compiled = await compileCatalogue(bundledSources());
+  if (releaseDigest(compiled) !== bundledDigest)
+    throw new Error('Current catalogue compilation changed its bundled digest');
   if (historical.loaded.length !== 0)
-    throw new Error('Current catalogue import loaded pinned historical modules: ' + historical.loaded.join(', '));
-  console.log('current catalogue import succeeded');
+    throw new Error(
+      'Current catalogue compilation loaded pinned historical modules: ' + historical.loaded.join(', '),
+    );
+  const currentDefinitions = await import(${JSON.stringify(definitions)});
+  const pinnedDefinitions = await import(historical.originalDefinitionsPath);
+  const release = JSON.parse(await Bun.file(${JSON.stringify(historicalRelease)}).text());
+  const errors = pinnedDefinitions.validateRelease(release);
+  if (errors.length !== 0) throw new Error('Pinned historical release validation failed: ' + JSON.stringify(errors));
+  const currentDefinitionsAgain = await import(${JSON.stringify(definitions)});
+  const currentCatalogueAgain = await import(${JSON.stringify(catalogue)});
+  if (
+    currentDefinitionsAgain.validateRelease !== currentDefinitions.validateRelease ||
+    currentCatalogueAgain.catalogueFileStore !== currentCatalogue.catalogueFileStore
+  )
+    throw new Error('Current Definitions imports lost their live module identities');
+  console.log('current catalogue compilation succeeded');
+  console.log('pinned historical validation succeeded');
 } finally {
   historical.close();
 }

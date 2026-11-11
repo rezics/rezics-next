@@ -120,8 +120,9 @@ async function cold(options: {
 test('historical setup leaves current Definitions catalogue imports on current modules', async () => {
   const witness = await historicalCatalogueImportWitness(root);
   expect(witness.exit, witness.stderr + witness.stdout).toBe(0);
-  expect(witness.stdout).toContain('current catalogue import succeeded');
-});
+  expect(witness.stdout).toContain('current catalogue compilation succeeded');
+  expect(witness.stdout).toContain('pinned historical validation succeeded');
+}, 180_000);
 
 // Parent integration obligation: there is still no production callable HTTP work
 // producer for the exact same-pattern reached-defect 400 before excess 422 tie.
