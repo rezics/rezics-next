@@ -181,3 +181,37 @@ export async function effectsSnapshot(pool: Pool) {
     client.release();
   }
 }
+
+/** Prove that installing the historical publisher cannot take ownership of a
+ * current Definitions import. Run it in a fresh Bun process because plugins
+ * and module caches are process-wide.
+ */
+export async function historicalCatalogueImportWitness(root: string) {
+  const helper = `${root}/packages/definitions/test/support/historical-construction.ts`;
+  const catalogue = `${root}/packages/definitions/src/catalogue-files.ts`;
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      '-e',
+      `
+const { mountHistoricalConstruction } = await import(${JSON.stringify(helper)});
+const historical = mountHistoricalConstruction();
+try {
+  await import(${JSON.stringify(catalogue)});
+  if (historical.loaded.length !== 0)
+    throw new Error('Current catalogue import loaded pinned historical modules: ' + historical.loaded.join(', '));
+  console.log('current catalogue import succeeded');
+} finally {
+  historical.close();
+}
+`,
+    ],
+    { cwd: root, stdout: 'pipe', stderr: 'pipe' },
+  );
+  const [stdout, stderr, exit] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  return { exit, stdout, stderr };
+}
