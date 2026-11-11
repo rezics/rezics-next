@@ -6,8 +6,8 @@ import { cn } from '../utils.ts';
 export type ChoiceSelectOption = Readonly<{
   value: string | null;
   label: ReactNode;
-  disabled?: boolean;
-  lang?: string;
+  disabled?: boolean | undefined;
+  lang?: string | undefined;
 }>;
 
 type ChoiceSelectName =
@@ -17,10 +17,10 @@ type ChoiceSelectName =
 
 type ChoiceSelectBaseProps = {
   id?: string;
-  name?: string;
+  name?: string | undefined;
   form?: string;
   required?: boolean;
-  disabled?: boolean;
+  disabled?: boolean | undefined;
   options: readonly ChoiceSelectOption[];
   placeholder?: ReactNode;
   ariaDescribedBy?: string;
@@ -29,14 +29,14 @@ type ChoiceSelectBaseProps = {
   labelClassName?: string;
   triggerClassName?: string;
   triggerDataAttributes?: Record<`data-${string}`, string | number | boolean | undefined>;
-  triggerLang?: string;
+  triggerLang?: string | undefined;
   triggerRef?: Ref<HTMLButtonElement>;
 };
 
 export type ChoiceSelectProps = ChoiceSelectBaseProps &
   ChoiceSelectName & {
-    value?: string | null;
-    defaultValue?: string | null;
+    value?: string | null | undefined;
+    defaultValue?: string | null | undefined;
     onValueChange?: (value: string | null) => void;
   };
 

@@ -128,6 +128,7 @@ export function AniListLabelAdoption({
       <ul className="space-y-3">
         {evidence.values.map((value) => {
           const selection = selections.find((item) => item.key === value.key);
+          const targetLabelId = selection && 'labelId' in selection.target ? selection.target.labelId : null;
           const selectable = evidence.selectable.some((item) => item.key === value.key);
           return (
             <li key={value.key} className="space-y-2 rounded border p-3" data-anilist-label-key={value.key}>
@@ -158,9 +159,8 @@ export function AniListLabelAdoption({
                         }}
                         options={[
                           { value: 'new', label: m.library_anilist_labels_new() },
-                          ...('labelId' in selection.target &&
-                          !targets?.labels.some((item) => item.id === selection.target.labelId)
-                            ? [{ value: selection.target.labelId, label: selection.target.labelId }]
+                          ...(targetLabelId && !targets?.labels.some((item) => item.id === targetLabelId)
+                            ? [{ value: targetLabelId, label: targetLabelId }]
                             : []),
                           ...(targets?.labels ?? []).map((label) => ({
                             value: label.id,
