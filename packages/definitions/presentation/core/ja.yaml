@@ -9,6 +9,7 @@ types:
   schema:AdministrativeArea: '行政区域'
   schema:Event: 'イベント'
 properties:
+  rezics:stylisticallyComparableTo: '作風の比較対象'
   rezics:penNameOf: '筆名の使用者'
   wdt:P186: 材料
   wdt:P1114: 数量
@@ -82,6 +83,7 @@ properties:
   schema:startDate: '開始日'
   schema:endDate: '終了日'
 inverseProperties:
+  rezics:stylisticallyComparableTo: 'この作品を比較対象とする作品'
   rezics:penNameOf: '筆名'
   wdt:P186: 使用先
   rezics:storyArc: 'この編を含む作品'
@@ -107,6 +109,7 @@ inverseProperties:
   rezics:releaseGroup: 'このリリースグループのファイル'
   schema:containedInPlace: '含まれる場所'
 propertyDescriptions:
+  rezics:stylisticallyComparableTo: 'この作品の作風、構成、ゲームの仕組み、雰囲気や体験を説明するために比較対象とする書籍またはゲーム作品。比較には方向があり、影響や派生関係を意味しません。ジャンルやキーワードによる分類とは独立しています。'
   rezics:penNameOf: 'この筆名または共同名義を使用する人物または組織。'
   wdt:P186: '材料や構成要素として使う食品または調理済みのレシピ。数量やリスト内の順序を修飾できます。'
   wdt:P1114: '文の対象となるものの分量。単位を付け、出典に範囲があれば下限と上限も記録します。'

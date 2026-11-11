@@ -9,6 +9,7 @@ types:
   schema:AdministrativeArea: '行政區'
   schema:Event: '活動'
 properties:
+  rezics:stylisticallyComparableTo: '風格參照作品'
   rezics:penNameOf: '筆名使用者'
   wdt:P186: 材料
   wdt:P1114: 數量
@@ -82,6 +83,7 @@ properties:
   schema:startDate: '開始日期'
   schema:endDate: '結束日期'
 inverseProperties:
+  rezics:stylisticallyComparableTo: '以此為參照的作品'
   rezics:penNameOf: '筆名'
   wdt:P186: 用於
   rezics:storyArc: '所屬作品'
@@ -107,6 +109,7 @@ inverseProperties:
   rezics:releaseGroup: '此發佈組的檔案'
   schema:containedInPlace: '包含地點'
 propertyDescriptions:
+  rezics:stylisticallyComparableTo: '用於描述本作品風格、結構、玩法、基調或體驗的書籍或遊戲作品。比較由本作品指向參照作品，不表示受到影響或存在衍生關係。類型與關鍵字分類獨立於此比較。'
   rezics:penNameOf: '使用此筆名或共同名義的個人或組織。'
   wdt:P186: '作為材料或組成部分的食物或已完成的食譜，可用限定詞補充用量和清單順序。'
   wdt:P1114: '陳述對象的用量，附有單位；來源若提供範圍，也保留下限與上限。'

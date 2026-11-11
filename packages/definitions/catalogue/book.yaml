@@ -21,6 +21,7 @@ classes:
     exact_mappings:
       - wd:Q47461344
     slots:
+      - stylisticallyComparableTo
       - representativeEdition
       - author
       - abstract
@@ -63,7 +64,7 @@ classes:
             - id: digital
               statuses: [{ id: owned }]
         importSources: []
-      facets: author genre keywords partOfSeries datePublished contributor inLanguage wordCount workFormat
+      facets: author genre keywords partOfSeries datePublished contributor inLanguage wordCount workFormat stylisticallyComparableTo
       schema_org_type: https://schema.org/Book
   Edition:
     is_a: CreativeWork

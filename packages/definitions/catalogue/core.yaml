@@ -387,6 +387,22 @@ slots:
       symmetric: true
       relation_group: world
       relation_order: name
+  stylisticallyComparableTo:
+    slot_uri: rezics:stylisticallyComparableTo
+    description: >-
+      An exemplar Book or VideoGame Work to which the described Work is compared in style,
+      structure, mechanics, tone or experience. The comparison is directed and does not assert
+      influence, derivation, shared genre or shared keywords. References retain the source's
+      comparison; an inverse read lists the Works that compare themselves to this exemplar.
+    any_of:
+      - range: Work
+      - range: VideoGame
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      inverse: rezics:comparedWork
+      relation_group: association
+      relation_order: name
   bangumiRelatedTo:
     slot_uri: rezics:bangumiRelatedTo
     description: >-

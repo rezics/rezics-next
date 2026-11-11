@@ -24,7 +24,7 @@ Decision: fewest tests pin user-visible publication behaviour and named-state st
 
 ## Compiler layers
 
-Decision: preserve release 1.0.10 and its recordings; follow reviewed type, facet and qualifier contracts; pin historical sources and dependencies in a Gitless archive. Launch and contributor fixture verticals share the immutable Release1 compiler and exact digest; Library capabilities remain explicit per-Type references, and reader/editor meanings come from that release.
+Decision: preserve historical releases and recordings; advance catalogue source to 1.0.11 for comparative Work references. Releases share the immutable Release1 compiler and exact digest; Library capabilities remain explicit per-Type references.
 
 Release vocabulary, digest, catalogue formats and publication helpers are the contract
 (`@rezics/definitions/contract`, browser root). Compilation, release validation and
@@ -71,7 +71,7 @@ The published inventory in `catalogue/` gives every Type a portrait 5:7 cover fr
 including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, quotation, person and
 character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
 any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
-is immutable: 1.0.10 is current, while release 1.0.0 through 1.0.9 bytes and their digests remain loadable for existing pins. Book
+is immutable: source targets 1.0.11; the bundled artifact remains 1.0.10 until regeneration. Historical bytes and digests remain loadable for existing pins. Book
 selects author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
 cookTime/suitableForDiet; MusicAlbum selects datePublished/genre; MusicRelease selects datePublished/distribution format;
 MusicRecording selects duration/datePublished. These ordered factual hints, media dimensions,
@@ -134,21 +134,25 @@ and form. Every bundled item property declares a relation, including item
 qualifiers. Qualifier-only role properties use `inverse: none`; they do not
 create standalone inbound relations.
 
-Bundled facts are stored on the later work (`wdt:P155`), derived work
-(`wdt:P144`, `rezics:spinOffOf`, `wdt:P8646`), edition
-(`schema:exampleOfWork`), member (`wdt:P179`), contained work
-(`wdt:P361`, `schema:isPartOf`, `wdt:P1433`), or credited work
-(credits and `schema:character`). Their reverse terms and inverse labels are metadata, never additional properties or admitted property aliases. `wdt:P1889` is symmetric. Credits admit credited-as,
-position and detailed role, sort by position, and filter by `[wdt:P3831, wdt:P518]`;
-appearances filter by either that role or a story arc and sort by name. `schema:character` admits
-the appearance-age qualifier `wdt:P3629` (years, `wd:Q577`) on that exact work statement; a source-wide
-character age is not this qualifier. Character-to-character identity is `rezics:relatedCharacterIdentity`
-(VNDB `chars.main`), distinct from the appearance role concept `main`. Spouse, sibling, father, mother,
-partner and rival are association relations targeting Character; unknown Bangumi relation codes stay
-omitted. Series members sort by
-position; follows and edition-of reads sort by date. Other bundled relations
-sort by name without inventing a source ordinal. Episode, edition and release
-profiles admit the credit properties with the same qualifiers as works.
+Facts belong to the later (`wdt:P155`), derived (`wdt:P144`, `rezics:spinOffOf`, `wdt:P8646`),
+edition (`schema:exampleOfWork`), member (`wdt:P179`), contained (`wdt:P361`, `schema:isPartOf`,
+`wdt:P1433`) or credited work. Inverses are metadata, never properties or aliases; `wdt:P1889`
+is symmetric. Credits sort by position, admit credited-as, position and detailed role, and filter
+by `[wdt:P3831, wdt:P518]`; appearances sort by name and filter by role or arc. Their `wdt:P3629`
+age qualifier is work-specific, in years (`wd:Q577`). `rezics:relatedCharacterIdentity` (VNDB
+`chars.main`) differs from the `main` appearance role. Family, partner and rival associations
+target Character; unknown Bangumi codes stay omitted. Series members sort by position;
+follows and edition-of by date; others by name. Episode, edition and release credits retain
+the Work qualifiers.
+
+`rezics:stylisticallyComparableTo` points from a described Book or VideoGame Work to an exemplar
+for style, structure, mechanics, tone or experience, without asserting influence or derivation.
+It is multivalued, directed, name-ordered `association`, neither symmetric nor acyclic;
+`rezics:comparedWork` is its inverse metadata. Slots and facets inherit only through Book/Game
+Work bases; targets use that same union, including actual subtypes. Editions, releases and
+Concepts retain their grains. Genre and keywords may disagree with comparisons. Core owns
+all eight forward/inverse labels. Existing references, citation policy, Context acceptance
+and adoption apply; no mandatory citation, Concept creation, focus bridge or qualifier is added.
 
 Source inventory mappings may declare `inverse: true`: `term` names the
 canonical bundled property, and the related subject holds the statement whose
@@ -226,13 +230,9 @@ are superseded by useful explanations where they were too broad or misleading;
 they are not an additional source of native meaning. Catalogue class and slot
 declarations retain authority over semantics, attribution and disclosure.
 
-Regenerate the bundled release and both normal definitions recordings with the
-commands above. The focused default-composition regression is
-`services/kernel/test/semantic/definition-guide-meanings.test.ts`: it reads the
-mounted active/release routes from ordinary bundled setup, checks the guide-shaped
-localized read and source/recording parity, and retains an actual historical pin
-through authorized publication, activation and subsequent bootstrap. It does not
-supply substitute meanings from a fixture or change a deployed active release.
+Regenerate the release and both recordings with the commands above.
+`services/kernel/test/semantic/definition-guide-meanings.test.ts` covers mounted guide reads,
+localization, recording parity and historical pins across publication, activation and bootstrap.
 
 #### Read Type and field guidance cost
 

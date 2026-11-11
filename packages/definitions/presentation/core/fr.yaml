@@ -9,6 +9,7 @@ types:
   schema:AdministrativeArea: 'zone administrative'
   schema:Event: 'événement'
 properties:
+  rezics:stylisticallyComparableTo: 'Comparable par le style à'
   rezics:penNameOf: 'pseudonyme de'
   wdt:P186: fabriqué à partir de
   wdt:P1114: quantité
@@ -82,6 +83,7 @@ properties:
   schema:startDate: 'date de début'
   schema:endDate: 'date de fin'
 inverseProperties:
+  rezics:stylisticallyComparableTo: 'Œuvres comparées à cette œuvre'
   rezics:penNameOf: 'pseudonymes'
   wdt:P186: Utilisé dans
   rezics:storyArc: 'Arc narratif de'
@@ -116,6 +118,7 @@ typeDescriptions:
   schema:AdministrativeArea: 'Une région administrative nommée représentée comme un lieu, distincte d’un établissement qui s’y trouve.'
   schema:Event: 'Un événement délimité doté de sa propre identité, distinct de son lieu et de ses participants.'
 propertyDescriptions:
+  rezics:stylisticallyComparableTo: 'Un livre ou un jeu vidéo servant de référence pour décrire le style, la structure, les mécaniques, le ton ou l’expérience de cette œuvre. La comparaison est orientée et n’affirme ni influence ni dérivation. Le genre et les mots-clés restent indépendants.'
   rezics:penNameOf: 'La personne ou organisation derrière ce pseudonyme ou nom collectif.'
   wdt:P186: 'Un aliment ou une recette préparée utilisé comme ingrédient ou composant ; sa quantité et son ordre peuvent être précisés.'
   wdt:P1114: 'La quantité de l’objet de l’énoncé, avec son unité et les éventuelles bornes inférieure et supérieure indiquées.'

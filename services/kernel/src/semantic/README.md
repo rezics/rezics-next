@@ -699,7 +699,16 @@ Decision: a Person's released `wdt:P106` occupation targeting exactly `skos:Conc
 
 The per-subject cap of 512 applies to descriptive facts, including labels, descriptions, aliases, classifications and every other non-relation statement. A statement is a relation when its property in the release used to write it declares a group of `order`, `derivation`, `world`, `membership`, `association`, `credit` or `appearance`, or is the declared Person occupation exception above. Relation statements do not count toward that cap. The per-command limit remains 512 facts, so large casts are written across commands.
 
-Relations remain statements and keep the same candidates, slots, Contexts, adoption, revisions, moderation and history as other statements. Each relation slot is keyed by `(subject, property, target)`. A property's optional `relation.slotKey` adds the value of an admitted item qualifier to that identity, for example `wdt:P725` uses `wdt:P453` to give each actor–character pair its own slot. A relation with a resolved target and no slot-key qualifier uses the target slot with an empty key. A `somevalue` with a `schema:sameAs` IRI has its own external-IRI slot; `somevalue` without that qualifier and `novalue` use the property-level slot. A later resolved statement is proposed in its target slot and does not automatically move the unresolved candidate.
+Relations retain ordinary candidates, Context acceptance/adoption, revisions, disputes, references and history.
+Slots use `(subject, property, target)` plus an optional `relation.slotKey` item qualifier
+(`wdt:P725` uses `wdt:P453` for actor–character pairs); absent keys are empty. Unresolved `somevalue`
+uses its `schema:sameAs` IRI slot, otherwise the property slot, as does `novalue`. Resolution
+proposes a new target-slot candidate without moving the unresolved one.
+
+Book/Game `rezics:stylisticallyComparableTo` uses these same rules and citation policy, with
+`rezics:comparedWork` inverse metadata. Comparisons and Concept classifications are independent.
+Shared typed filters preserve unknown evidence under NOT/OR and disclosure reduction; neither
+inverse previews nor names establish equality or complete coverage. Identity merges retain provenance.
 
 Relation slots are projected into `semantic.outbound_link` in the holder's partition, with a mirror in `semantic.inbound_link` in the target's partition. Unresolved relation slots have outbound rows, count toward property totals and have no inbound row. The subject read returns the first 12 selected slots per relation property and its exact count. Both projections carry `context_id`. Global is the base layer; a community Context stores only added or replacing relations and active suppression rows for overridden Global keys. The relay projects Context decisions in both directions. Forward and inverse pages accept `context`, and subject previews use the same ordered merge. Global reads select only Global rows. Global counters retain their existing keys and fixed Global `context_id`; the separate `outbound_link_context_count` and `inbound_link_context_count` tables hold signed deltas keyed by Context. Counts add the Global counter and the selected Context's delta. Subject previews select each projected statement once, even when a slot selects several values. Their resolution diagnostics retain a separate bounded 12-row Global preview for omitted slots.
 

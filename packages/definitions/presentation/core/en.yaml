@@ -9,6 +9,7 @@ types:
   schema:AdministrativeArea: 'administrative area'
   schema:Event: 'event'
 properties:
+  rezics:stylisticallyComparableTo: 'Stylistically comparable to'
   rezics:penNameOf: 'pen name of'
   wdt:P186: made from material
   wdt:P1114: quantity
@@ -82,6 +83,7 @@ properties:
   schema:startDate: 'start date'
   schema:endDate: 'end date'
 inverseProperties:
+  rezics:stylisticallyComparableTo: 'Works compared to this work'
   rezics:penNameOf: 'pen names'
   wdt:P186: Used in
   rezics:storyArc: 'Story arc of'
@@ -107,6 +109,7 @@ inverseProperties:
   rezics:releaseGroup: 'files from this release group'
   schema:containedInPlace: 'Contains places'
 propertyDescriptions:
+  rezics:stylisticallyComparableTo: 'An exemplar Book or VideoGame Work used to describe this Work’s style, structure, mechanics, tone or experience. The comparison has a direction and does not assert influence or derivation. Genre and keyword classifications remain independent.'
   rezics:penNameOf: 'The person or organization behind this pen name or collective name.'
   wdt:P186: 'A food or prepared recipe used as a material or component; qualify its quantity and list order where known.'
   wdt:P1114: "The amount of the statement's object, with its unit and any stated lower and upper bounds."
