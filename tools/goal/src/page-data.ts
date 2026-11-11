@@ -1450,7 +1450,6 @@ export function pageDataCheckScopeArguments(invocation: string, command: string,
     '/bin/sh',
     ['-c', PAGE_DATA_SCOPE_RUNNER, 'page-data-check-scope', command, ...args],
     {
-      pipe: true,
       slice: CHECK_SLICE,
       properties: ['OOMPolicy=continue'],
     },
@@ -1616,13 +1615,16 @@ async function runPageDataScopedCheck(
     result = { ...result, stderr: oomStatus.stderr };
     scopeLimitExceeded = (oomStatus.oomKills ?? 0) > 0;
     scopeKilled = result.exitCode === 137;
-    if (!oomStatus.reported && !scopeKilled)
+    if (!oomStatus.reported && !scopeKilled) {
+      const missing = `Page-data systemd scope ${unit} did not report completion; launch or memory outcome is unknown`;
+      const diagnostic = result.stderr.trim() ? externalErrorLine(result.stderr) : undefined;
       throw new PageDataStackError(
         'check',
-        `Page-data systemd scope ${unit} did not report completion; launch or memory outcome is unknown`,
-        `Page-data systemd scope ${unit} did not report completion; launch or memory outcome is unknown`,
+        diagnostic ? `${missing}: ${diagnostic}` : missing,
+        diagnostic ?? missing,
         commandOutput(result.stdout, result.stderr),
       );
+    }
     if (!scopeLimitExceeded && !scopeKilled && ![0, 1, 2].includes(result.exitCode)) {
       const detail = result.stderr || result.stdout;
       const signal = result.signal ? ` (signal ${result.signal})` : '';

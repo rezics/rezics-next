@@ -15,12 +15,11 @@ export const CHECK_SLICE = 'rezics-check.slice';
 export const WORKER_SCOPE_MEMORY_MAX = '12G';
 
 export type WorkerScopeOptions = {
-  pipe?: boolean;
   slice?: string;
   properties?: readonly string[];
 };
 
-/** Build an owned user-manager scope command; callers keep its unit identity for exact cleanup and reporting. */
+/** Build an owned user-manager scope command. The child inherits stdio; --pipe is for service units. */
 export function workerScopeArguments(
   unit: string,
   command: string,
@@ -31,7 +30,6 @@ export function workerScopeArguments(
     '--user',
     '--scope',
     '--collect',
-    ...(options.pipe ? ['--pipe'] : []),
     '--quiet',
     `--slice=${options.slice ?? WORKER_SLICE}`,
     `--property=MemoryMax=${WORKER_SCOPE_MEMORY_MAX}`,
