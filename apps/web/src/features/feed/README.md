@@ -6,6 +6,9 @@ anonymous before the separate member read. Install Worker bindings before import
 Decision: Home omits conversation activity when the optional native summary field is absent; only an explicit
 withheld result shows unavailable activity and its native retry destination. A current exact zero remains visible.
 
+Decision: Home's mounted feed window bounds every browser feed read to 2,000 ms. Expiry aborts that generation and
+settles through the existing retryable deadline state; a late response cannot replace that terminal result.
+
 `FeedResults<T>` is the shared ordered list, availability, empty-state and recovery region. It renders one named
 `section` and an `ol` or `ul` of `ContentItem` rows. It does not add a page landmark. The caller keeps its page
 heading and selects `emptyHeadingLevel` (default 2) for the explained recovery frame.

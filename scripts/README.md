@@ -50,11 +50,17 @@ Readiness remains scoped to the requested reader, so unrelated preparation text 
 ready section. A settled empty reader records `browserProbe=run` and `reader=empty`; an unrun reader records
 `browserProbe=unrun` and `reader=missing`.
 
+Decision: A reader timeout reports native response settlement separately from the selected browser reader's
+presence, data state and busy state. `native=unsettled` means the independent native request produced no HTTP
+response; a present, busy reader means the mounted selected region is still loading; a missing reader identifies a
+selector mismatch.
+The manifest selectors and shared readiness deadline stay unchanged.
+
 The bounded Chromium fixture suite is `bun test scripts/page-data-check.test.ts`. It covers redirect recovery,
 delayed unrelated resources, context replacement, independently unready sections, redirect deadline expiry, target
 loss and the distinction between genuine empty content and an unrun reader. The fixture uses local Web and Kernel
 HTTP endpoints and read-only SQL-count stubs; original native integration acceptance remains a separate controller
-cycle.
+cycle. The timeout regression pins a settled native 200 alongside both a present busy reader and a missing selector.
 
 Decision: member browser sign-in uses that same committed-document navigation, then the visible email, password and
 Sign in controls under a form reader deadline. Submission waits explicitly for the Web callback redirect and requires

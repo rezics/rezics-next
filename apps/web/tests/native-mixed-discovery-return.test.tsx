@@ -211,8 +211,8 @@ test('selection replacement retires the old page and ignores its late response',
   const book = controller.load({ stream: 'home', kind: 'schema:Book' });
   const movie = controller.load({ stream: 'home', kind: 'schema:Movie' });
   expect(requests.get('schema:Book')!.signal.aborted).toBe(true);
-  requests.get('schema:Book')!.resolve(page('stale-book'));
   await book;
+  requests.get('schema:Book')!.resolve(page('stale-book'));
   expect(controller.snapshot()).toMatchObject({
     busy: true,
     result: { state: 'loading' },
@@ -221,6 +221,28 @@ test('selection replacement retires the old page and ignores its late response',
   requests.get('schema:Movie')!.resolve(page('current-movie'));
   await movie;
   expect(controller.snapshot().result).toEqual(page('current-movie'));
+});
+
+test('a home read deadline aborts the request and ignores a late native response', async () => {
+  let resolveRead!: (result: HomeFeedResult) => void;
+  let signal!: AbortSignal;
+  const controller = createHomeFeedWindow(
+    { state: 'loading', code: 'loading' },
+    (_input, current) => {
+      signal = current;
+      return new Promise<HomeFeedResult>((resolve) => (resolveRead = resolve));
+    },
+    10,
+  );
+  await controller.load({ stream: 'home' });
+  expect(signal.aborted).toBe(true);
+  expect(controller.snapshot()).toMatchObject({
+    busy: false,
+    result: { state: 'deadline', code: 'deadline_exceeded' },
+  });
+  resolveRead(page('late'));
+  await Promise.resolve();
+  expect(controller.snapshot().result).toEqual({ state: 'deadline', code: 'deadline_exceeded' });
 });
 
 test('return revalidates Space access and shows restart for an expired native frontier', async () => {

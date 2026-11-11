@@ -902,6 +902,8 @@ test('bounded native-page observation recovers redirects and context replacement
         section('ready', '[data-case="ready"]'),
         section('pending-a', '[data-case="pending"]'),
         section('pending-b', '[data-case="pending"]'),
+        section('selector-missing', '[data-case="selector-missing"]'),
+        section('native-unsettled', '[data-case="pending"]', '/v1/offline'),
       ]),
       anonymousPage('genuine-empty', '/en/empty', [
         section('empty', '[data-case="empty"]', '/v1/empty', 'SELECT 0 AS n'),
@@ -927,6 +929,10 @@ test('bounded native-page observation recovers redirects and context replacement
       pageTimeoutMs,
       readerTimeoutMs,
       requestTimeoutMs: 500,
+      fetch: (async (request: Request) =>
+        new URL(request.url).pathname === '/v1/offline'
+          ? Promise.reject(new Error('fixture native transport failure'))
+          : fetch(request)) as typeof fetch,
       queryCount: async (text) => {
         sqlCalls.push(text);
         return text === 'SELECT 0 AS n' ? 0 : 5;
@@ -1005,7 +1011,13 @@ test('bounded native-page observation recovers redirects and context replacement
     });
     expect(result.diagnostics.some((line) => line.includes('reason=redirect-not-settled'))).toBe(true);
     expect(result.diagnostics.some((line) => line.includes('reason=target-lost'))).toBe(true);
-    expect(result.diagnostics.some((line) => line.includes('reason=reader-remained-loading'))).toBe(true);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        'Reader readiness timed out for independent-readers anonymous pending-a: reason=reader-remained-loading; native=settled:200 reader=present state=loading busy=true',
+        'Reader readiness timed out for independent-readers anonymous selector-missing: reason=reader-selector-not-found; native=settled:200 reader=missing state=none busy=true',
+        'Reader readiness timed out for independent-readers anonymous native-unsettled: reason=reader-remained-loading; native=unsettled reader=present state=loading busy=true',
+      ]),
+    );
     expect(sqlCalls).toHaveLength(5);
     expect([irrelevantResourceStarted, irrelevantResourceFinished, closeLostTarget]).toEqual([true, false, true]);
     expect(lateTargetStarted).toBe(true);

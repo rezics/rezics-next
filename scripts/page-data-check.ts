@@ -1741,13 +1741,14 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
               }
             }
             if (native?.error) report(`${manifestPage.id} ${persona} ${section.id}: ${native.error}`);
+            const observed = read.observation;
             if (read.timedOut) {
               incomplete = true;
+              const nativeResponse = !native ? 'unrun' : native.status === 0 ? 'unsettled' : `settled:${native.status}`;
               report(
-                `Reader readiness timed out for ${manifestPage.id} ${persona} ${section.id}: reason=${read.readinessReason ?? 'reader-not-ready-before-shared-deadline'}`,
+                `Reader readiness timed out for ${manifestPage.id} ${persona} ${section.id}: reason=${read.readinessReason ?? 'reader-not-ready-before-shared-deadline'}; native=${nativeResponse} reader=${observed.present ? 'present' : 'missing'} state=${observed.dataState ?? 'none'} busy=${observed.busy}`,
               );
             }
-            const observed = read.observation;
             const classified = native
               ? classifySection(
                   native,
