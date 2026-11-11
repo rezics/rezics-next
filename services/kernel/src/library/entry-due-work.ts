@@ -1,4 +1,5 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { CommandUnavailableError } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { PARTITIONS } from '../route/route.ts';
@@ -33,21 +34,33 @@ export async function registerLibraryEntryRetentionWork({ pool, client, clock }:
         if (Date.now() >= deadline - 100) break;
         const partition = result.cursor.partition;
         const read = await withConnection(pool, async (connection) => {
+          const remainingMillis = () => {
+            const remaining = Math.floor(deadline - Date.now());
+            if (remaining <= 0) throw new CommandUnavailableError('deadline', partition);
+            return remaining;
+          };
+          // Checkout consumes the page budget too. Do not start expired discovery work.
+          remainingMillis();
           await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
           try {
-            await connection.query(`SET LOCAL statement_timeout = '${Math.max(1, deadline - Date.now())}ms'`);
+            await connection.query(`SET LOCAL statement_timeout = '${remainingMillis()}ms'`);
             if (loaded !== partition) {
               if (result.probes === PAGE_BOUND) {
+                remainingMillis();
                 await connection.query('COMMIT');
                 return { kind: 'bound' } as const;
               }
               result.probes++;
               const metadata = await readPartition(connection, partition);
               if (!metadata || metadata.writeState !== 'active') {
+                remainingMillis();
                 await connection.query('COMMIT');
                 return { kind: 'pending' } as const;
               }
               loaded = partition;
+              // PostgreSQL restarts statement_timeout for each statement. The key seek must only
+              // receive what remains after the metadata probe, not another copy of its allowance.
+              await connection.query(`SET LOCAL statement_timeout = '${remainingMillis()}ms'`);
             }
             seeks++;
             const keys = await pageDueEntryDeletions(connection, {
@@ -56,6 +69,7 @@ export async function registerLibraryEntryRetentionWork({ pool, client, clock }:
               ...('after' in result.cursor ? { after: result.cursor.after } : {}),
               limit: 1,
             });
+            remainingMillis();
             await connection.query('COMMIT');
             return { kind: 'key', key: keys[0] } as const;
           } catch (error) {

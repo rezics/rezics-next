@@ -2736,6 +2736,20 @@ sends no SQL; uncertain native I/O discards its client, and cleanup shares the o
   sequence commit/replay/rollback. `entry-undo-http.test.ts` proves the real caller and published contract. Automatic
   due delivery and complete library deletion-driver coverage remain separate.
 
+### Automatic retained entry collection
+
+`entry-due-work.ts` registers the default Library worker's UTC ten-minute retention schedule. Each sweep
+captures one cutoff and walks the native due index with the original timestamp/route/account/deletion cursor.
+A page admits at most 100 seeks and 100 partition probes; a segment checkpoints at most 100 pages before
+enqueueing its deterministic continuation. Fenced or moved partitions remain for a fresh sweep.
+
+Discovery checkout, metadata, key seeks and exact purge commands share one finite page deadline. Discovery
+checks expiry after checkout and before committing a read frontier, and reduces the key seek's SQL timeout
+by time spent probing partition metadata. A failed page retains its prior durable frontier; already committed
+purges remain safe to rediscover. `entry-due-command.ts` rechecks the exact original deadline and archive under
+the command fence before receipt replay, and removes only the addressed deletion episode. This mechanical
+maintenance does not require an active owner or grant access to a live replacement entry.
+
 ### Rich personal entry
 
 - Owner-only DTO: `GET /v1/libraryEntries/{subjectId}/personal`; note/priority CAS: `PUT /v1/libraryEntries/{subjectId}/annotations`; reviewed source admission/correction: `POST`/`PATCH /v1/libraryEntries/{subjectId}/sourceObservations`. All private reads and write responses are `no-store`.
