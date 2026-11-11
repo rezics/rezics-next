@@ -29,6 +29,7 @@
     "pg": "8.23.1"
   },
   "devDependencies": {
+    "@rezics/definitions": "workspace:*",
     "@rezics/operations": "workspace:*",
     "@types/pg": "8.23.1",
     "dbmate": "2.37.0",
