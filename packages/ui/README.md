@@ -31,10 +31,10 @@ The package uses shadcn's Rhea style on the Base UI primitives (`components.json
 
 ## Form fields
 
-Fields that choose one value from a fixed list use `NativeSelect` from `@rezics/ui/shadcn/native-select`, with
-`NativeSelectOption`s, inside a shadcn `Field` with a `FieldLabel` from `@rezics/ui/shadcn/field`. This keeps form
-choices native, consistent with other fields, and available before hydration. `Menu` is for actions and navigation,
-not form values.
+Fixed-choice fields and toolbar selectors default to `Select` from `@rezics/ui/shadcn/select`. Use a labelled
+`SelectTrigger`, `SelectValue`, and `SelectItem`s inside a `SelectGroup`. For a form, use `Field` and `FieldLabel`
+and preserve the field name and submitted value. Native `<select>` and `NativeSelect` require an explicit, documented
+exception. Use links or buttons for a no-script navigation fallback. `Menu` is for actions and navigation, not values.
 
 For ordinary sliders, associate a visible label with `aria-labelledby` and use the supported `locale` and `format`
 props for numeric value text. The rating components compose [Base UI slider parts](https://base-ui.com/react/components/slider)
