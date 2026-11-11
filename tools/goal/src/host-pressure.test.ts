@@ -36,3 +36,44 @@ test('working-set presets and measured peaks reserve future growth without treat
     directory.close();
   }
 });
+
+test('five worker scopes retain actual usage and active reserves while proven parked checks release only their reserve', () => {
+  const directory = temporaryDirectory();
+  const gib = (value: number) => String(Math.round(value * 1024 ** 3));
+  const scope = (name: string, current: number, peak = current) => {
+    mkdirSync(join(directory.path, name));
+    writeFileSync(join(directory.path, name, 'memory.current'), gib(current));
+    writeFileSync(join(directory.path, name, 'memory.peak'), gib(peak));
+  };
+  try {
+    writeFileSync(join(directory.path, 'memory.max'), gib(28));
+    writeFileSync(join(directory.path, 'memory.current'), gib(9.16));
+    scope('rezics-worker-check-a.scope', 0.04);
+    scope('rezics-worker-check-b.scope', 0.04);
+    scope('rezics-worker-check-c.scope', 0.35);
+    scope('rezics-worker-active.scope', 2.25, 7.71);
+    scope('rezics-worker-unknown.scope', 2.25, 4);
+
+    const baseline = workerHeadroomMiB(1, directory.path, new Set(), new Set(['rezics-worker-active.scope']));
+    const parked = workerHeadroomMiB(
+      1,
+      directory.path,
+      new Set(['rezics-worker-check-a.scope', 'rezics-worker-check-b.scope', 'rezics-worker-check-c.scope']),
+      new Set(['rezics-worker-active.scope']),
+    );
+    const contradictory = workerHeadroomMiB(
+      1,
+      directory.path,
+      new Set(['rezics-worker-check-a.scope', 'rezics-worker-check-b.scope', 'rezics-worker-check-c.scope']),
+      new Set(['rezics-worker-active.scope', 'rezics-worker-check-a.scope']),
+    );
+
+    expect(baseline).toBeCloseTo(0.06 * 1024, 1);
+    expect(baseline).toBeLessThan(workerReservationMiB('imports'));
+    expect(parked).toBeCloseTo(11.63 * 1024, 1);
+    expect(parked).toBeGreaterThan(workerReservationMiB('imports'));
+    expect(contradictory).toBeCloseTo(parked - 3.96 * 1024, 1);
+  } finally {
+    directory.close();
+  }
+});

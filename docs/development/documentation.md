@@ -81,6 +81,11 @@ Owner documents state current rules and contracts only. They hold no dated headi
 sections, no receipts of past attempts, no task IDs and no `.temp/` paths. A brief cites owner documents as authority.
 It may link research only as background.
 
+At closeout or incident review, the owner turns each reusable lesson that changes future work into documentation.
+State the decision, when it applies, the evidence behind it, and how to tell it works. Update the existing owner
+document and replace superseded advice; create a document only when no owner covers the topic. Link retained
+evidence separately. Raw notes, transcripts and unverified observations are not rules.
+
 Source-mapping and value-fidelity contracts belong in the conversion module
 README. When a mapping also needs selected-record acquisition, native proposals,
 current vocabulary publication or independent native reads, the importer README

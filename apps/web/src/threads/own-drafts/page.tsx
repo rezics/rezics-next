@@ -1182,6 +1182,14 @@ function BoundOwnDraftsPage({
                   >
                     {m.own_drafts_inspect({}, { locale })}
                   </Button>
+                  {entry.documentKind === 'opening' ? (
+                    <a
+                      className={`${control} mt-3 inline-flex items-center rounded-md border border-border px-3 py-2 underline underline-offset-2`}
+                      href={localizeHref(`/studio?postId=${encodeURIComponent(entry.id)}`, { locale })}
+                    >
+                      {m.own_drafts_open_studio({}, { locale })}
+                    </a>
+                  ) : null}
                 </li>
               ))}
             </ol>

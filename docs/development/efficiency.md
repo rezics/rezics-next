@@ -18,23 +18,14 @@ Each coding worker targets at least 1,000 landed product lines per worker-hour. 
 separate source delivery, check waits, and unknown attribution. When a worker is below target, repair the brief,
 admission, or verification cause and keep independent code moving. Do not add code merely to meet the count.
 
-Throughput target: product code landed on the integrated branch, held steadily at 20,000 lines an hour and aiming
-for 40,000. Lines measure throughput; they are not the goal. The target is a lot of good code: quality comes first,
-never write code to raise the count, and never lower throughput to gain quality. Count added product lines only.
-Product lines are added lines under `apps/`, `services/` and `packages/`, excluding tests, stories, fixtures,
-recordings, JSON, snapshots and generated files, including emitted declarations such as `packages/client/src/**/*.d.ts`
-(on 2026-11-06 those were 70% of the lines counted).
-Deleted lines are ignored and never offset output, so deleting bad code (duplicates, dead code, wrong abstractions)
-is encouraged.
+Target 20,000 landed product lines per hour, aiming for 40,000, alongside accepted journeys and quality. Count
+additions under `apps/`, `services/` and `packages/` excluding tests, stories, fixtures, recordings, JSON, snapshots
+and generated files, including emitted declarations. Never pad output or subtract deletions.
 
-Size each brief as one complete user journey of about 2,000–3,000 lines, backend and interface together, which a
-worker finishes in under an hour. The controller returns a product brief estimating under 1,200 lines or with a body
-over 4,000 characters (`brief.minimumEstimateLines` / `brief.maximumBodyCharacters`) instead of dispatching it. With 32 workers, that gives 30,000–40,000 lines an hour. Split a journey only
-where a real dependency forces it. A worker writes a continuation only for what remains after it has built most of
-the brief. Small slices, measurement-only tasks and proof-only tasks spend more attempts, setup and landings than
-they deliver.
-Padding, duplication, speculative abstraction and test or fixture bulk counted as product all work against the Goal,
-and the efficiency review reports quality signals (reverts, review findings, repeated failures) beside the count.
+Size a complete journey, including backend and interface, to finish in about an hour (usually 2,000–3,000 lines).
+The controller returns product briefs under 1,200 estimated lines or over 4,000 body characters. Split only at a
+real dependency; complete independent parts now and hold only the receiving seam. Continue the remainder after
+most of the brief is built. Report reverts, review findings and repeated failures beside throughput.
 
 Measure flow with `goal report --flow`. The manager host must alarm hourly against these absolute targets:
 
@@ -87,8 +78,9 @@ record the effect, including when it is not yet observable.
 ## Planning
 
 - Plan a few complete journeys at a time, each with one integrating owner and a native demo receipt.
-- Write consumer-first briefs: name the caller, the export or route it needs and one failing native outcome.
-  Implement a missing port together with its binding in the same task; do not create a contract-only tier.
+- Name the caller, its required export or route, and one failing native outcome. Implement a missing port with
+  its binding when the producer exists; where it does not, finish the independent behavior and name the exact
+  unbound seam. A mock binding does not finish a journey.
 - Make a task one complete outcome of about 1,500 to 3,000 product lines, landed with one check: a whole capability
   row, a whole system or one migration step across a module. Chain similar work in one worker, not in slivers. State
   the expected line count in the brief. Keep at most six tasks in flight per Goal.
@@ -135,20 +127,21 @@ Decision: enforce the six-task per-Goal limit at worker start admission; waiting
 Token efficiency is a primary measure, beside output: allowance spent per landed product line and per landed
 outcome, tracked per Goal, task class and model profile. It improves in three ways:
 
-- **Clear prompts.** The dispatching manager owns brief quality. Preflight against current source, name the concrete
-  evidence and owning code, and separate the worker's permitted checks from later acceptance. Replace a brief that
-  sent a worker into the same failure twice; preserve the completed source and remove superseded tasks and instructions.
-  Follow [instructions and documentation](documentation.md).
+- **Clear prompts.** The manager names current evidence, one outcome, its write scope, and the permitted checks
+  separately from later acceptance. In a shared checkout, claim files or a directory before editing and tell
+  peers about overlaps. Replace a repeated bad premise; keep completed source and remove stale briefs.
 - **The simplest model that does the work.** A well-specified implementation journey runs on GPT-6 Luna at max
   effort. Stronger models are kept for the work that needs them: review-prone or citation-heavy work, hard
   debugging, and design. Change a routing default only after comparing profiles on representative accepted work.
 - **No rework.** Attempts that end without landing are the largest token cost. Remove their causes, as set out under
   "Output and flow".
 
-Each attempt carries a fixed cost: reading context, orienting and running checks. A brief therefore carries a
-complete outcome, and its estimate is the lines its worker is expected to land, not a label. Fold repairs into the
-journey or broken path they serve, with every fix it needs. Do not dispatch small finish, recover or refuse slivers.
-A brief whose outcome is a new refusal, bound or guard needs its price line ([agent conduct](agent-conduct.md#briefs)).
+Fold repairs into the journey they serve. An estimate predicts landed source; it is not a task label. Price each
+new refusal, bound or guard as required by [agent conduct](agent-conduct.md#briefs).
+
+For an explicitly authorized code-only window, use isolated worktrees outside controller-owned task custody.
+Checkpoint coherent source and record the exact deferred acceptance. Count saved source, integrated code and
+accepted journeys separately. Compare the whole delivery cost before changing routine models or worker width.
 
 The brief writer picks the model by the task's difficulty. A simple, well-specified brief pins `model: gpt-6-luna` and
 `effort: max` in its front matter. Examples: exact edits the brief names, fixture, data or translation work, and wiring
