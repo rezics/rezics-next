@@ -8,7 +8,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { UnreadBadge, UnreadBadgeView, type UnreadCount } from '../inbox';
 import { LanguageControl, ThemeControl } from './appearance-controls';
-import { PhoneCreationLinks, useShellCreationActions } from './phone-navigation';
+import { PhoneCreationLinks, shellSignInHref, useShellCreationActions } from './phone-navigation';
 import { navigationPathMatches, type NavigationSession } from './navigation';
 
 export function TopBar({
@@ -86,7 +86,7 @@ export function ShellTopActions({
   notifications?: ReactNode;
 }) {
   const actions = useShellCreationActions(session);
-  const signIn = `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`;
+  const signIn = shellSignInHref(pathname, returnTo);
   return (
     <>
       <Menu
@@ -98,16 +98,7 @@ export function ShellTopActions({
             <span className="hidden lg:inline">{m.shell_create()}</span>
           </Button>
         }
-        content={
-          session === 'signed-out' ? (
-            <a className="flex min-h-11 items-center gap-2 px-3 text-primary" href={signIn}>
-              <LogIn aria-hidden="true" className="size-4" />
-              {m.account_sign_in()}
-            </a>
-          ) : (
-            <PhoneCreationLinks actions={actions} pathname={pathname} session={session} />
-          )
-        }
+        content={<PhoneCreationLinks actions={actions} pathname={pathname} session={session} returnTo={returnTo} />}
       />
       {session === 'signed-in' ? (
         <>

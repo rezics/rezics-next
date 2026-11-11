@@ -1,5 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { AccountMenu } from '../shell/shell';
+import { PhoneNavigationView } from '../shell/phone-navigation';
+import type { NavigationSession } from '../shell/navigation';
+import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/app-shell';
 import { SideNav } from '../shell/side-nav';
 import { NotificationsLink, ShellTopActions, TopBar } from '../shell/top-bar';
@@ -136,4 +140,38 @@ function HeaderState({ session }: { session: 'unknown' | 'unavailable' }) {
 export const RestoringHeader: Story = { render: () => <HeaderState session="unknown" /> };
 export const UnavailableHeader: Story = {
   render: () => <HeaderState session="unavailable" />,
+};
+
+function PhoneSessionState({ session }: { session: NavigationSession }) {
+  const returnTo = `/${getLocale()}/books?q=Prince&cursor=next%2Fpage`;
+  return (
+    <PatternStory visitor="Signed Out" path="/books?q=Prince&cursor=next%2Fpage">
+      <PhoneNavigationView
+        pathname="/books"
+        session={session}
+        returnTo={returnTo}
+        library={false}
+        actions={[]}
+        account={<AccountMenu session={session} csrfToken={null} phone />}
+      />
+    </PatternStory>
+  );
+}
+async function openPhoneCreate(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const phone = within(context.canvasElement).getByRole('navigation', { name: m.shell_phone_tabs() });
+  await userEvent.click(within(phone).getByRole('button', { name: m.shell_create() }));
+  await expect(await within(document.body).findByRole('dialog', { name: m.shell_create() })).toBeVisible();
+}
+export const PreparingPhoneCreate: Story = {
+  render: () => <PhoneSessionState session="unknown" />,
+  play: openPhoneCreate,
+};
+export const SignedOutPhoneCreate: Story = {
+  render: () => <PhoneSessionState session="signed-out" />,
+  play: openPhoneCreate,
+};
+export const UnavailablePhoneCreate: Story = {
+  render: () => <PhoneSessionState session="unavailable" />,
+  play: openPhoneCreate,
 };
