@@ -382,6 +382,7 @@ describe('sequential integration', () => {
         logPath: 'landing.log',
         hostMs: 0,
         changedFiles: [],
+        diffLines: 0,
       };
       s.queue.finish(retry.id, outcome);
 

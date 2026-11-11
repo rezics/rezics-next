@@ -124,6 +124,7 @@ test('a restarted queue resumes the same landing operation without duplicating i
     logPath: 'landing.log',
     hostMs: 0,
     changedFiles: [],
+    diffLines: 0,
   };
   let db = openDb(path);
   try {
