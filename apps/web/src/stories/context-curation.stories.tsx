@@ -10,6 +10,7 @@ import { ContextCurationStory } from '../features/catalogue/context-curation-sto
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
 import { pagePaths, PatternStory } from './page';
+import { selectSharedOption } from './shared-select-interaction';
 
 const meta = {
   title: 'Catalogue/Context review',
@@ -35,7 +36,7 @@ async function open(canvasElement: HTMLElement) {
 }
 async function replace(canvasElement: HTMLElement) {
   const canvas = await open(canvasElement);
-  await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.context_mode() }), 'replace');
+  await selectSharedOption(await canvas.findByRole('combobox', { name: m.context_mode() }), m.context_replace());
   for (const choice of canvas.getAllByRole('checkbox'))
     if (choice.getAttribute('aria-checked') === 'true') await userEvent.click(choice);
   await userEvent.click(canvas.getAllByRole('checkbox').at(-1)!);

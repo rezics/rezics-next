@@ -1,8 +1,8 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/load-subject';
 import { catalogueEntries } from '../../catalogue/catalogue-entry';
@@ -428,7 +428,7 @@ export function GraphBrowserPage({
   const depthId = useId();
   const failureRef = useRef<HTMLParagraphElement>(null);
   const statusRef = useRef<HTMLParagraphElement>(null);
-  const relationRef = useRef<HTMLSelectElement>(null);
+  const relationRef = useRef<HTMLButtonElement>(null);
   const detailHeadingRef = useRef<HTMLHeadingElement>(null);
   const pageRef = useRef<HTMLElement>(null);
   const focusIntentRef = useRef<{ kind: 'selection'; key: string } | { kind: 'relation' } | null>(null);
@@ -725,34 +725,76 @@ export function GraphBrowserPage({
           >
             <Field className="min-w-40 flex-1">
               <FieldLabel htmlFor={relationId}>{m.graph_explore_relation({}, o)}</FieldLabel>
-              <NativeSelect
-                ref={relationRef}
-                id={relationId}
+              <SharedSelect.Select
                 name="property"
-                defaultValue={read.query.property[0] ?? ''}
+                defaultValue={read.query.property[0] ?? read.relations[0]?.id ?? null}
+                items={read.relations.map((relation) => ({
+                  value: relation.id,
+                  label: `${relation.label.text}${relation.inverse?.text ? ` / ${relation.inverse.text}` : ''}`,
+                }))}
               >
-                {read.relations.map((relation) => (
-                  <NativeSelectOption key={relation.id} value={relation.id}>
-                    {relation.label.text}
-                    {relation.inverse?.text ? ` / ${relation.inverse.text}` : ''}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SharedSelect.SelectTrigger
+                  id={relationId}
+                  ref={relationRef}
+                  className="max-md:min-h-11 pointer-coarse:min-h-11"
+                >
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    {read.relations.map((relation) => (
+                      <SharedSelect.SelectItem key={relation.id} value={relation.id}>
+                        {relation.label.text}
+                        {relation.inverse?.text ? ` / ${relation.inverse.text}` : ''}
+                      </SharedSelect.SelectItem>
+                    ))}
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
             </Field>
             <Field className="min-w-32">
               <FieldLabel htmlFor={directionId}>{m.graph_explore_direction({}, o)}</FieldLabel>
-              <NativeSelect id={directionId} name="direction" defaultValue={read.query.direction}>
-                <NativeSelectOption value="both">{m.graph_explore_both({}, o)}</NativeSelectOption>
-                <NativeSelectOption value="out">{m.graph_explore_out({}, o)}</NativeSelectOption>
-                <NativeSelectOption value="in">{m.graph_explore_in({}, o)}</NativeSelectOption>
-              </NativeSelect>
+              <SharedSelect.Select
+                name="direction"
+                defaultValue={read.query.direction}
+                items={[
+                  { value: 'both', label: m.graph_explore_both({}, o) },
+                  { value: 'out', label: m.graph_explore_out({}, o) },
+                  { value: 'in', label: m.graph_explore_in({}, o) },
+                ]}
+              >
+                <SharedSelect.SelectTrigger id={directionId} className="max-md:min-h-11 pointer-coarse:min-h-11">
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    <SharedSelect.SelectItem value="both">{m.graph_explore_both({}, o)}</SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem value="out">{m.graph_explore_out({}, o)}</SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem value="in">{m.graph_explore_in({}, o)}</SharedSelect.SelectItem>
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
             </Field>
             <Field className="min-w-32">
               <FieldLabel htmlFor={depthId}>{m.graph_explore_depth({}, o)}</FieldLabel>
-              <NativeSelect id={depthId} name="depth" defaultValue={String(read.query.depth)}>
-                <NativeSelectOption value="1">{m.graph_explore_depth1({}, o)}</NativeSelectOption>
-                <NativeSelectOption value="2">{m.graph_explore_depth2({}, o)}</NativeSelectOption>
-              </NativeSelect>
+              <SharedSelect.Select
+                name="depth"
+                defaultValue={String(read.query.depth)}
+                items={[
+                  { value: '1', label: m.graph_explore_depth1({}, o) },
+                  { value: '2', label: m.graph_explore_depth2({}, o) },
+                ]}
+              >
+                <SharedSelect.SelectTrigger id={depthId} className="max-md:min-h-11 pointer-coarse:min-h-11">
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    <SharedSelect.SelectItem value="1">{m.graph_explore_depth1({}, o)}</SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem value="2">{m.graph_explore_depth2({}, o)}</SharedSelect.SelectItem>
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
             </Field>
             <Button type="submit" className={actionClass}>
               {m.graph_explore_apply({}, o)}

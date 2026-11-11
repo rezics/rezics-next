@@ -1,3 +1,4 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import {
   useContext,
   useEffect,
@@ -16,7 +17,6 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { ListRowControl } from '@rezics/ui/list-row';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { NativeSelect } from '@rezics/ui/shadcn/native-select';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
 import { m } from '../../../paraglide/messages.js';
 import {
@@ -130,28 +130,39 @@ function SelectField({
   label,
   value,
   onChange,
-  children,
+  options,
   disabled = false,
 }: {
   label: string;
   value: string;
   onChange(value: string): void;
-  children: ReactNode;
+  options: readonly { value: string; label: string }[];
   disabled?: boolean;
 }) {
   const id = useId();
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <NativeSelect
+      <SharedSelect.Select
         id={id}
         value={value}
         disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full"
+        items={options}
+        onValueChange={(value) => onChange(value ?? '')}
       >
-        {children}
-      </NativeSelect>
+        <SharedSelect.SelectTrigger id={id} className="w-full min-w-0">
+          <SharedSelect.SelectValue />
+        </SharedSelect.SelectTrigger>
+        <SharedSelect.SelectContent>
+          <SharedSelect.SelectGroup>
+            {options.map((option) => (
+              <SharedSelect.SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SharedSelect.SelectItem>
+            ))}
+          </SharedSelect.SelectGroup>
+        </SharedSelect.SelectContent>
+      </SharedSelect.Select>
     </Field>
   );
 }
@@ -720,7 +731,7 @@ function SpaceSetupFormVisit({
     );
   return (
     <div
-      className="min-w-0 space-y-6 [overflow-wrap:anywhere] [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:h-auto [&_button]:whitespace-normal [&_button]:text-start [&_input]:min-w-0 [&_select]:min-w-0 [&_p]:text-start [&_summary]:min-h-11 [&_summary]:content-center"
+      className="min-w-0 space-y-6 [overflow-wrap:anywhere] [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:h-auto [&_button]:whitespace-normal [&_button]:text-start [&_input]:min-w-0 [&_p]:text-start [&_summary]:min-h-11 [&_summary]:content-center"
       aria-busy={busy}
       onKeyDownCapture={noteKeyboardActivation}
     >
@@ -914,13 +925,14 @@ function SpaceSetupFormVisit({
                       label={m.space_setup_visibility()}
                       value={visibility}
                       disabled={!commandReady}
+                      options={[
+                        { value: 'public', label: m.space_setup_public() },
+                        { value: 'protected', label: m.space_setup_protected() },
+                      ]}
                       onChange={(value) => {
                         if (value === 'public' || value === 'protected') setVisibility(value);
                       }}
-                    >
-                      <option value="public">{m.space_setup_public()}</option>
-                      <option value="protected">{m.space_setup_protected()}</option>
-                    </SelectField>
+                    />
                     <p className="text-sm text-muted-foreground">
                       {visibility === 'public' ? m.space_setup_public_hint() : m.space_setup_protected_hint()}
                     </p>
@@ -967,26 +979,28 @@ function SpaceSetupFormVisit({
                       label={m.space_setup_visibility()}
                       value={boardVisibility}
                       disabled={!commandReady}
+                      options={[
+                        { value: 'published', label: m.space_setup_public() },
+                        { value: 'protected', label: m.space_setup_protected() },
+                        { value: 'draft', label: m.space_setup_draft() },
+                      ]}
                       onChange={(value) => {
                         if (value === 'published' || value === 'protected' || value === 'draft')
                           setBoardVisibility(value);
                       }}
-                    >
-                      <option value="published">{m.space_setup_public()}</option>
-                      <option value="protected">{m.space_setup_protected()}</option>
-                      <option value="draft">{m.space_setup_draft()}</option>
-                    </SelectField>
+                    />
                     <SelectField
                       label={m.space_setup_purpose()}
                       value={purpose}
                       disabled={!commandReady}
+                      options={[
+                        { value: 'discussion', label: m.realm_board_purpose_discussion() },
+                        { value: 'reviews', label: m.realm_board_purpose_reviews() },
+                      ]}
                       onChange={(value) => {
                         if (value === 'discussion' || value === 'reviews') setPurpose(value);
                       }}
-                    >
-                      <option value="discussion">{m.realm_board_purpose_discussion()}</option>
-                      <option value="reviews">{m.realm_board_purpose_reviews()}</option>
-                    </SelectField>
+                    />
                   </>
                 )}
               </fieldset>

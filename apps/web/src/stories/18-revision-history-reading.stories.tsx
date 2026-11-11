@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { selectSharedOption } from './shared-select-interaction';
 import { useMemo, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { RevisionHistoryNavigation } from '../threads/revision-history-navigation';
@@ -127,7 +128,7 @@ async function readingVisit({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(canvasElement.querySelector('[data-history-inspector]')).toBeNull();
   await expect(canvas.getByText(m.revision_history_loaded_help())).toBeVisible();
   const choose = canvas.getByLabelText(m.revision_history_choose());
-  await userEvent.selectOptions(choose, '7');
+  await selectSharedOption(choose, m.thread_history_version({ number: '8' }));
   await userEvent.click(canvas.getByRole('button', { name: m.revision_history_go() }));
   const trigger = canvas.getByRole('button', { name: m.revision_history_collapse({ number: '8' }) });
   await expect(trigger).toHaveFocus();
@@ -192,7 +193,10 @@ export const SuppliedHundred: Story = {
   args: { count: 100 },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(canvas.getByLabelText(m.revision_history_choose()), '99');
+    await selectSharedOption(
+      canvas.getByLabelText(m.revision_history_choose()),
+      m.thread_history_version({ number: '100' }),
+    );
     await userEvent.click(canvas.getByRole('button', { name: m.revision_history_go() }));
     await expect(canvasElement.querySelectorAll('[data-history-inspector]')).toHaveLength(1);
     await expect(canvas.getByRole('button', { name: m.revision_history_next() })).toBeDisabled();

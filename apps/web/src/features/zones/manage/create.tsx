@@ -1,10 +1,10 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useId, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { pickText, UI_LOCALES, type ZoneConfiguration, type ZoneLanguage } from '@rezics/composition';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
 import { ZoneNameFields } from '../editor/name-fields';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { PageHeading } from '../../../shell/page-heading';
 import { m } from '../../../paraglide/messages.js';
 import type { NavigationSession } from '../../../shell/navigation';
@@ -54,7 +54,7 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
   const leftVisit = useRef(false);
   const clearBlockedDeparture = useRef<(() => void) | null>(null);
   const alert = useRef<HTMLDivElement>(null);
-  const choose = useRef<HTMLSelectElement>(null);
+  const choose = useRef<HTMLButtonElement>(null);
   const capture = owner?.capture();
   const isCurrent = (admission: OwnerCapture | null | undefined) =>
     sessionRef.current === 'signed-in' && (!owner || owner.isCurrent(admission));
@@ -205,34 +205,49 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
               <FieldLabel className="whitespace-normal" htmlFor={`${starterId}-zone-starter`}>
                 {m.zones_create_starter({}, options)}
               </FieldLabel>
-              <NativeSelect
-                id={`${starterId}-zone-starter`}
-                className="w-full max-w-full [&_select]:h-auto [&_select]:min-h-8 [&_select]:max-w-full [&_select]:whitespace-normal [&_select]:break-words [@media(pointer:coarse)]:[&_select]:min-h-11"
-                ref={choose}
-                value={starter}
+              <SharedSelect.Select
+                value={starter || null}
                 disabled={frozen}
-                aria-invalid={invalid && !starter}
-                aria-describedby={`${starterId}-zone-starter-help`}
-                onChange={(event) => {
+                items={[
+                  { value: null, label: m.zones_create_choose({}, options) },
+                  ...starterChoices.map((choice) => ({
+                    value: choice.id,
+                    label: pickText(choice.labels, locale).text,
+                  })),
+                ]}
+                onValueChange={(value) => {
                   if (!isCurrent(capture)) return;
-                  const id = event.target.value;
+                  const id = value ?? '';
                   setStarter(id);
                   setLabels((current) => current ?? (copyStarter(id) ? {} : null));
                   setResult(null);
                 }}
               >
-                <NativeSelectOption value="">{m.zones_create_choose({}, options)}</NativeSelectOption>
-                {starterChoices.map((choice) => (
-                  <NativeSelectOption
-                    key={choice.id}
-                    value={choice.id}
-                    lang={pickText(choice.labels, locale).lang ?? undefined}
-                    dir="auto"
-                  >
-                    {pickText(choice.labels, locale).text}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SharedSelect.SelectTrigger
+                  id={`${starterId}-zone-starter`}
+                  ref={choose}
+                  aria-invalid={invalid && !starter}
+                  aria-describedby={`${starterId}-zone-starter-help`}
+                  className="w-full max-w-full h-auto min-h-8 max-w-full whitespace-normal break-words [@media(pointer:coarse)]:min-h-11"
+                >
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    <SharedSelect.SelectItem value={null}>{m.zones_create_choose({}, options)}</SharedSelect.SelectItem>
+                    {starterChoices.map((choice) => (
+                      <SharedSelect.SelectItem
+                        key={choice.id}
+                        value={choice.id}
+                        lang={pickText(choice.labels, locale).lang ?? undefined}
+                        dir="auto"
+                      >
+                        {pickText(choice.labels, locale).text}
+                      </SharedSelect.SelectItem>
+                    ))}
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
               <FieldDescription id={`${starterId}-zone-starter-help`}>
                 {m.zones_create_starter_help({}, options)}
               </FieldDescription>

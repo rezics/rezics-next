@@ -10,8 +10,11 @@ import { contextFixture } from '../kernel/fake/context-curation';
 import { ContextCurationStory } from '../features/catalogue/context-curation-story';
 import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
+import definitions from '../kernel/recorded/definitions-release.json';
+import { pickText } from '@rezics/composition';
 import { pagePaths, PatternStory } from './page';
 import * as original from './subject-candidate-review.stories';
+import { selectSharedOption } from './shared-select-interaction';
 
 // Authored UNRUN. These are actual reviewers on the existing native-shaped fixture seam.
 // Width/RTL intent and DOM assertions are not measured browser, native or growth proof.
@@ -30,6 +33,11 @@ const meta = {
 } satisfies Meta<typeof CandidateStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+type CandidateProperty = keyof typeof definitions.release.properties;
+
+function candidateFieldLabel(property: CandidateProperty) {
+  return pickText(definitions.release.properties[property].labels, getLocale()).text;
+}
 
 // Keep the connected canonical journeys and their original plays verbatim.
 export const BrowseCompareConfirmCancel: Story = { ...original.Confirmation };
@@ -89,9 +97,9 @@ function LongReview({ rtl = false }: { rtl?: boolean }) {
 async function inspectLong(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
-  await userEvent.selectOptions(
+  await selectSharedOption(
     await canvas.findByRole('combobox', { name: m.candidate_field() }),
-    'schema:alternateName',
+    candidateFieldLabel('schema:alternateName'),
   );
   await userEvent.click(await canvas.findByRole('button', { name: m.candidate_review() }));
   await expect(canvas.getByRole('heading', { level: 4, name: m.candidate_proposed() })).toBeVisible();
@@ -159,9 +167,9 @@ export const IndependentReviewsAndActions: Story = {
     const [first, second] = scopes.map((scope) => within(scope));
     for (const canvas of [first!, second!]) {
       await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
-      await userEvent.selectOptions(
+      await selectSharedOption(
         await canvas.findByRole('combobox', { name: m.candidate_field() }),
-        'schema:inLanguage',
+        candidateFieldLabel('schema:inLanguage'),
       );
       await canvas.findAllByRole('checkbox');
     }
@@ -230,7 +238,7 @@ export const ContextInherit: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
     await canvas.findByText(m.context_inherited());
-    await expect(canvas.getByRole('combobox', { name: m.context_mode() })).toHaveValue('inherit');
+    await expect(canvas.getByRole('combobox', { name: m.context_mode() })).toHaveTextContent(m.context_inherit());
   },
 };
 export const ContextReplaceAndReload: Story = {
@@ -238,7 +246,7 @@ export const ContextReplaceAndReload: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
-    await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.context_mode() }), 'replace');
+    await selectSharedOption(await canvas.findByRole('combobox', { name: m.context_mode() }), m.context_replace());
     for (const choice of canvas.getAllByRole('checkbox'))
       if (choice.getAttribute('aria-checked') === 'true') await userEvent.click(choice);
     await userEvent.click(canvas.getAllByRole('checkbox').at(-1)!);
@@ -258,7 +266,7 @@ export const ContextSuppress: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
     await canvas.findByText(m.context_suppressed());
-    await expect(canvas.getByRole('combobox', { name: m.context_mode() })).toHaveValue('suppress');
+    await expect(canvas.getByRole('combobox', { name: m.context_mode() })).toHaveTextContent(m.context_suppress());
   },
 };
 export const ContextUnresolved: Story = {
@@ -291,7 +299,7 @@ export const ImmutableUncertainContextReplay: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
-    await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.context_mode() }), 'suppress');
+    await selectSharedOption(await canvas.findByRole('combobox', { name: m.context_mode() }), m.context_suppress());
     await userEvent.click(canvas.getByRole('button', { name: m.context_adopt() }));
     const title = m.candidate_confirm_title({ action: m.context_adopt() });
     await userEvent.click(
@@ -366,9 +374,9 @@ export const SuppliedSelectionGrowth: Story = {
       const canvas = within(region);
       const size = Number(region.dataset.suppliedSize);
       await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
-      await userEvent.selectOptions(
+      await selectSharedOption(
         await canvas.findByRole('combobox', { name: m.candidate_field() }),
-        'schema:inLanguage',
+        candidateFieldLabel('schema:inLanguage'),
       );
       await canvas.findAllByRole('checkbox');
       await expect(region.querySelectorAll('[data-candidate-item]')).toHaveLength(2);
@@ -403,9 +411,9 @@ export const RetainedUnresolvedChoice: Story = {
     const canvas = within(canvasElement);
     const open = async () => {
       await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
-      await userEvent.selectOptions(
+      await selectSharedOption(
         await canvas.findByRole('combobox', { name: m.candidate_field() }),
-        'schema:inLanguage',
+        candidateFieldLabel('schema:inLanguage'),
       );
       await canvas.findAllByRole('checkbox');
     };
@@ -470,9 +478,9 @@ export const RetiredReaderCompletion: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
-    await userEvent.selectOptions(
+    await selectSharedOption(
       await canvas.findByRole('combobox', { name: m.candidate_field() }),
-      'schema:datePublished',
+      candidateFieldLabel('schema:datePublished'),
     );
     await canvas.findByText(m.candidate_loading());
     const trigger = canvas.getByRole('button', { name: m.account_sign_out() });

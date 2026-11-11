@@ -38,6 +38,8 @@ exception. Account forms, locale choice, creator offer/review fields and moderat
 without native exceptions. Keep controlled labels available through `items` before the popup opens, and put the
 field ID and accessible description on the trigger; keep `name`, `required` and the value on the root. Use links or buttons for a no-script navigation fallback. `Menu` is for actions and navigation, not values.
 
+Page presentations migrate every ordinary fixed-choice selector to the shared Select primitives, preserving its label, selection state, disabled choices and form or route value.
+
 For ordinary sliders, associate a visible label with `aria-labelledby` and use the supported `locale` and `format`
 props for numeric value text. The rating components compose [Base UI slider parts](https://base-ui.com/react/components/slider)
 directly because the native range needs question-specific value text, including the unrated state. The actual

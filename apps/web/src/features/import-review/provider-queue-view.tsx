@@ -1,3 +1,4 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import type { ProviderQueueRead } from './provider-queue';
@@ -10,7 +11,6 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Field, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { pageText } from '../pages/data';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -200,19 +200,30 @@ export function ProviderQueue({
             </Field>
             <Field>
               <FieldLabel htmlFor={`${id}-status`}>{m.prq_status()}</FieldLabel>
-              <NativeSelect
-                id={`${id}-status`}
+              <SharedSelect.Select
                 value={status}
-                onChange={(event) => {
+                items={[
+                  { value: 'pending', label: m.prq_pending() },
+                  { value: 'accepted_unselected', label: m.prq_accepted() },
+                ]}
+                onValueChange={(value) => {
+                  if (value === null) return;
                   if (!visit.live() || renderedForm !== formVersion.current) return;
                   replaceForm();
                   invalidate();
-                  setStatus(event.target.value as QueueScope['status']);
+                  setStatus(value as QueueScope['status']);
                 }}
               >
-                <NativeSelectOption value="pending">{m.prq_pending()}</NativeSelectOption>
-                <NativeSelectOption value="accepted_unselected">{m.prq_accepted()}</NativeSelectOption>
-              </NativeSelect>
+                <SharedSelect.SelectTrigger id={`${id}-status`} className="max-md:min-h-11 pointer-coarse:min-h-11">
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    <SharedSelect.SelectItem value="pending">{m.prq_pending()}</SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem value="accepted_unselected">{m.prq_accepted()}</SharedSelect.SelectItem>
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
             </Field>
             <ProviderContextChoiceField
               key={`${visit.id}:${choiceEpoch}`}

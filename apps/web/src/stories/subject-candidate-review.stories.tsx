@@ -2,8 +2,12 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, mocked, userEvent, waitFor, within } from 'storybook/test';
 import { CandidateStory } from '../subject/candidate-story';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
+import definitions from '../kernel/recorded/definitions-release.json';
 import { candidateProperty } from '../kernel/fake/subject-candidates';
+import { pickText } from '@rezics/composition';
 import { pagePaths, PatternStory } from './page';
+import { selectSharedOption } from './shared-select-interaction';
 
 const meta = {
   title: 'Catalogue/Subject Candidate Review',
@@ -21,10 +25,19 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function candidates(canvasElement: HTMLElement, property = candidateProperty) {
+type CandidateProperty = keyof typeof definitions.release.properties;
+
+function candidateFieldLabel(property: CandidateProperty) {
+  return pickText(definitions.release.properties[property].labels, getLocale()).text;
+}
+
+async function candidates(canvasElement: HTMLElement, property: CandidateProperty = candidateProperty) {
   const canvas = within(canvasElement);
   await userEvent.click(await canvas.findByRole('button', { name: m.candidate_entry() }));
-  await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.candidate_field() }), property);
+  await selectSharedOption(
+    await canvas.findByRole('combobox', { name: m.candidate_field() }),
+    candidateFieldLabel(property),
+  );
   await canvas.findAllByRole('button', { name: m.candidate_review() });
   return canvas;
 }
@@ -93,7 +106,7 @@ export const Confirmation: Story = {
     const selection = within(draft).getAllByRole('checkbox');
     const selected = selection.map((choice) => choice.getAttribute('aria-checked'));
     const rank = within(draft).getByRole('combobox', { name: m.candidate_rank() });
-    await userEvent.selectOptions(rank, 'preferred');
+    await selectSharedOption(rank, m.candidate_rank_preferred());
 
     const accept = canvas.getByRole('button', { name: m.candidate_accept() });
     const reject = canvas.getByRole('button', { name: m.candidate_reject() });
@@ -120,14 +133,14 @@ export const Confirmation: Story = {
       await expect(canvas.queryByRole('region', { name: title })).toBeNull();
       await expect(trigger).toHaveFocus();
       await expect(trigger).toBeEnabled();
-      await expect(field).toHaveValue(candidateProperty);
+      await expect(field).toHaveTextContent(candidateFieldLabel(candidateProperty));
       await expect(canvas.getByRole('heading', { name: m.candidate_proposed() })).toBe(proposed);
       await expect(
         within(draft)
           .getAllByRole('checkbox')
           .map((choice) => choice.getAttribute('aria-checked')),
       ).toEqual(selected);
-      await expect(rank).toHaveValue('preferred');
+      await expect(rank).toHaveTextContent(m.candidate_rank_preferred());
       await expect(commands()).toHaveLength(0);
     }
 
@@ -188,9 +201,9 @@ export const Unavailable: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
-    await userEvent.selectOptions(
+    await selectSharedOption(
       await canvas.findByRole('combobox', { name: m.candidate_field() }),
-      candidateProperty,
+      candidateFieldLabel(candidateProperty),
     );
     await canvas.findByText(m.candidate_unavailable());
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_reload() }));
@@ -223,7 +236,7 @@ async function rankedDraft(canvasElement: HTMLElement) {
   expect(choices.filter((choice) => choice.getAttribute('aria-checked') === 'true')).toHaveLength(2);
   await userEvent.click(choices.at(-1)!);
   const ranks = canvas.getAllByRole('combobox', { name: m.candidate_rank() });
-  await userEvent.selectOptions(ranks.at(-1)!, 'preferred');
+  await selectSharedOption(ranks.at(-1)!, m.candidate_rank_preferred());
   await userEvent.click(canvas.getByRole('button', { name: m.candidate_more() }));
   await canvas.findByText(m.candidate_unselected());
   expect(
@@ -254,7 +267,7 @@ export const StaleRankedSelection: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_reload() }));
     await canvas.findAllByRole('button', { name: m.candidate_review() });
     const ranks = canvas.getAllByRole('combobox', { name: m.candidate_rank() });
-    expect(ranks.at(-1)!).toHaveValue('preferred');
+    expect(ranks.at(-1)!).toHaveTextContent(m.candidate_rank_preferred());
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_adopt() }));
     await userEvent.click(confirmationButton(canvasElement, m.candidate_adopt()));
     await canvas.findByText(m.candidate_selection_confirmed());
@@ -265,9 +278,9 @@ export const Empty: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
-    await userEvent.selectOptions(
+    await selectSharedOption(
       await canvas.findByRole('combobox', { name: m.candidate_field() }),
-      candidateProperty,
+      candidateFieldLabel(candidateProperty),
     );
     await canvas.findByText(m.candidate_empty());
   },
@@ -277,9 +290,9 @@ export const Loading: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_entry() }));
-    await userEvent.selectOptions(
+    await selectSharedOption(
       await canvas.findByRole('combobox', { name: m.candidate_field() }),
-      candidateProperty,
+      candidateFieldLabel(candidateProperty),
     );
     await canvas.findByText(m.candidate_loading());
   },

@@ -394,7 +394,9 @@ export const Proposed: Story = {
     await userEvent.click(review);
     const candidates = within(await field.findByRole('region', { name: m.candidate_title() }));
     await expect(await candidates.findByRole('button', { name: m.candidate_accept() })).toBeEnabled();
-    await expect(candidates.getByRole('combobox', { name: m.candidate_field() })).toHaveValue('schema:cookTime');
+    await expect(candidates.getByRole('combobox', { name: m.candidate_field() })).toHaveTextContent(
+      pickText(definitions.release.properties['schema:cookTime']!.labels, getLocale()).text,
+    );
     await expect(candidates.getByRole('combobox', { name: m.candidate_field() })).toBeDisabled();
     const exact = [...fixture.candidates.keys()][0]!;
     await userEvent.click(candidates.getByRole('button', { name: m.candidate_accept() }));

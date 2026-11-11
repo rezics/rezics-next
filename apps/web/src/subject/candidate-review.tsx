@@ -1,3 +1,4 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useEffect, useId, useRef, useState, type ComponentProps } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useCandidateWork, type CandidateWork } from './candidate-lifetime';
@@ -6,7 +7,6 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { CandidateValue, pageText } from '../features/pages/data';
 import { webUrl } from '../features/pages/shared';
 import { m } from '../paraglide/messages.js';
@@ -538,7 +538,7 @@ function CandidateReviewLive({
     <section
       id="candidate-review"
       aria-label={m.candidate_title({}, options)}
-      className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 [overflow-wrap:anywhere] sm:p-6 [&_button]:h-auto [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:text-start [&_select]:max-w-full max-md:[&_select]:min-h-11 pointer-coarse:[&_select]:min-h-11 pointer-coarse:[&_[role=checkbox]]:size-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:[overflow-wrap:anywhere] max-md:[&_a]:inline-flex max-md:[&_a]:min-h-11 max-md:[&_a]:min-w-11 max-md:[&_a]:items-center max-md:[&_a]:py-2 pointer-coarse:[&_a]:inline-flex pointer-coarse:[&_a]:min-h-11 pointer-coarse:[&_a]:min-w-11 pointer-coarse:[&_a]:items-center pointer-coarse:[&_a]:py-2 [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-ring"
+      className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 [overflow-wrap:anywhere] sm:p-6 [&_button]:h-auto [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:text-start pointer-coarse:[&_[role=checkbox]]:size-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:[overflow-wrap:anywhere] max-md:[&_a]:inline-flex max-md:[&_a]:min-h-11 max-md:[&_a]:min-w-11 max-md:[&_a]:items-center max-md:[&_a]:py-2 pointer-coarse:[&_a]:inline-flex pointer-coarse:[&_a]:min-h-11 pointer-coarse:[&_a]:min-w-11 pointer-coarse:[&_a]:items-center pointer-coarse:[&_a]:py-2 [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-ring"
     >
       <div className="space-y-1">
         <ContentItemHeading level={2} className="text-xl font-semibold">
@@ -668,26 +668,37 @@ function CandidateReviewLive({
               )}
               <Field>
                 <FieldLabel htmlFor="candidate-field">{m.candidate_field({}, options)}</FieldLabel>
-                <NativeSelect
-                  id="candidate-field"
-                  className="min-h-11 w-full"
-                  value={property}
+                <SharedSelect.Select
+                  value={property || null}
                   disabled={locked || !!exactCandidate || !!slot}
-                  onChange={(event) => {
+                  items={[
+                    { value: null, label: m.candidate_choose_field({}, options) },
+                    ...current.fields.map((field) => ({ value: field.id, label: field.label })),
+                  ]}
+                  onValueChange={(value) => {
                     if (!work.live()) return;
-                    const field = event.target.value;
+                    const field = value ?? '';
                     setProperty(field);
                     setLifecycleCandidate(exactCandidate && field === initialProperty ? exactCandidate : undefined);
                     void load(field);
                   }}
                 >
-                  <NativeSelectOption value="">{m.candidate_choose_field({}, options)}</NativeSelectOption>
-                  {current.fields.map((field) => (
-                    <NativeSelectOption key={field.id} value={field.id}>
-                      {field.label}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SharedSelect.SelectTrigger id="candidate-field" className="min-h-11 w-full">
+                    <SharedSelect.SelectValue />
+                  </SharedSelect.SelectTrigger>
+                  <SharedSelect.SelectContent>
+                    <SharedSelect.SelectGroup>
+                      <SharedSelect.SelectItem value={null}>
+                        {m.candidate_choose_field({}, options)}
+                      </SharedSelect.SelectItem>
+                      {current.fields.map((field) => (
+                        <SharedSelect.SelectItem key={field.id} value={field.id}>
+                          {field.label}
+                        </SharedSelect.SelectItem>
+                      ))}
+                    </SharedSelect.SelectGroup>
+                  </SharedSelect.SelectContent>
+                </SharedSelect.Select>
               </Field>
               {current.page && (!isContextReview || !result) && (
                 <>
@@ -881,27 +892,48 @@ function CandidateReviewLive({
                         {isContextReview && current.contextReview && (
                           <Field>
                             <FieldLabel htmlFor="context-mode">{m.context_mode({}, options)}</FieldLabel>
-                            <NativeSelect
-                              id="context-mode"
+                            <SharedSelect.Select
                               value={mode}
                               disabled={locked || requiresReload}
-                              onChange={(event) =>
-                                work.live() &&
-                                setModes((previous) => ({ ...previous, [property]: event.target.value as typeof mode }))
-                              }
+                              items={[
+                                { value: 'replace', label: m.context_replace({}, options) },
+                                ...(current.contextReview.context.kind === 'community'
+                                  ? [
+                                      { value: 'inherit', label: m.context_inherit({}, options) },
+                                      { value: 'suppress', label: m.context_suppress({}, options) },
+                                    ]
+                                  : []),
+                              ]}
+                              onValueChange={(value) => {
+                                if (value !== null && work.live()) {
+                                  setModes((previous) => ({ ...previous, [property]: value as typeof mode }));
+                                }
+                              }}
                             >
-                              <NativeSelectOption value="replace">{m.context_replace({}, options)}</NativeSelectOption>
-                              {current.contextReview.context.kind === 'community' && (
-                                <>
-                                  <NativeSelectOption value="inherit">
-                                    {m.context_inherit({}, options)}
-                                  </NativeSelectOption>
-                                  <NativeSelectOption value="suppress">
-                                    {m.context_suppress({}, options)}
-                                  </NativeSelectOption>
-                                </>
-                              )}
-                            </NativeSelect>
+                              <SharedSelect.SelectTrigger
+                                id="context-mode"
+                                className="max-md:min-h-11 pointer-coarse:min-h-11"
+                              >
+                                <SharedSelect.SelectValue />
+                              </SharedSelect.SelectTrigger>
+                              <SharedSelect.SelectContent>
+                                <SharedSelect.SelectGroup>
+                                  <SharedSelect.SelectItem value="replace">
+                                    {m.context_replace({}, options)}
+                                  </SharedSelect.SelectItem>
+                                  {current.contextReview.context.kind === 'community' && (
+                                    <>
+                                      <SharedSelect.SelectItem value="inherit">
+                                        {m.context_inherit({}, options)}
+                                      </SharedSelect.SelectItem>
+                                      <SharedSelect.SelectItem value="suppress">
+                                        {m.context_suppress({}, options)}
+                                      </SharedSelect.SelectItem>
+                                    </>
+                                  )}
+                                </SharedSelect.SelectGroup>
+                              </SharedSelect.SelectContent>
+                            </SharedSelect.Select>
                           </Field>
                         )}
                         <p className="text-sm text-muted-foreground">
@@ -959,22 +991,31 @@ function CandidateReviewLive({
                                           <FieldLabel htmlFor={`rank-${choice}`}>
                                             {m.candidate_rank({}, options)}
                                           </FieldLabel>
-                                          <NativeSelect
-                                            id={`rank-${choice}`}
-                                            className="min-h-11"
+                                          <SharedSelect.Select
                                             value={entry.rank}
                                             disabled={locked || !value?.eligible}
-                                            onChange={(event) =>
-                                              edit(choice, event.target.value as 'normal' | 'preferred')
-                                            }
+                                            items={[
+                                              { value: 'normal', label: m.candidate_rank_normal({}, options) },
+                                              { value: 'preferred', label: m.candidate_rank_preferred({}, options) },
+                                            ]}
+                                            onValueChange={(value) => {
+                                              if (value !== null) edit(choice, value as 'normal' | 'preferred');
+                                            }}
                                           >
-                                            <NativeSelectOption value="normal">
-                                              {m.candidate_rank_normal({}, options)}
-                                            </NativeSelectOption>
-                                            <NativeSelectOption value="preferred">
-                                              {m.candidate_rank_preferred({}, options)}
-                                            </NativeSelectOption>
-                                          </NativeSelect>
+                                            <SharedSelect.SelectTrigger id={`rank-${choice}`} className="min-h-11">
+                                              <SharedSelect.SelectValue />
+                                            </SharedSelect.SelectTrigger>
+                                            <SharedSelect.SelectContent>
+                                              <SharedSelect.SelectGroup>
+                                                <SharedSelect.SelectItem value="normal">
+                                                  {m.candidate_rank_normal({}, options)}
+                                                </SharedSelect.SelectItem>
+                                                <SharedSelect.SelectItem value="preferred">
+                                                  {m.candidate_rank_preferred({}, options)}
+                                                </SharedSelect.SelectItem>
+                                              </SharedSelect.SelectGroup>
+                                            </SharedSelect.SelectContent>
+                                          </SharedSelect.Select>
                                         </Field>
                                       )}
                                     </ContentItemFrame>

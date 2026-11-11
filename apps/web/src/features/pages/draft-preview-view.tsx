@@ -1,9 +1,9 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { profileDigest, UI_LOCALES, VIEWS, type PresentationProfile, type View } from '@rezics/composition';
 import { useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../../paraglide/messages.js';
 import { presentationMessageOptions } from './curate-view-editor-messages';
@@ -476,16 +476,32 @@ export function DraftPreviewPanel({
             <div className="grid min-w-0 gap-3 sm:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor={`${id}-kind`}>{m.presentation_preview_target({}, options)}</FieldLabel>
-                <NativeSelect
-                  id={`${id}-kind`}
+                <SharedSelect.Select
                   value={kind}
-                  className="w-full min-w-0 [&_select]:min-h-11"
-                  onChange={(event) => setKind(event.target.value as Kind)}
+                  items={[
+                    { value: 'subject', label: m.presentation_preview_subject({}, options) },
+                    { value: 'account', label: m.draft_preview_account({}, options) },
+                    { value: 'route', label: m.presentation_preview_route({}, options) },
+                  ]}
+                  onValueChange={(value) => value !== null && setKind(value as Kind)}
                 >
-                  <NativeSelectOption value="subject">{m.presentation_preview_subject({}, options)}</NativeSelectOption>
-                  <NativeSelectOption value="account">{m.draft_preview_account({}, options)}</NativeSelectOption>
-                  <NativeSelectOption value="route">{m.presentation_preview_route({}, options)}</NativeSelectOption>
-                </NativeSelect>
+                  <SharedSelect.SelectTrigger id={`${id}-kind`} className="w-full min-w-0 min-h-11">
+                    <SharedSelect.SelectValue />
+                  </SharedSelect.SelectTrigger>
+                  <SharedSelect.SelectContent>
+                    <SharedSelect.SelectGroup>
+                      <SharedSelect.SelectItem value="subject">
+                        {m.presentation_preview_subject({}, options)}
+                      </SharedSelect.SelectItem>
+                      <SharedSelect.SelectItem value="account">
+                        {m.draft_preview_account({}, options)}
+                      </SharedSelect.SelectItem>
+                      <SharedSelect.SelectItem value="route">
+                        {m.presentation_preview_route({}, options)}
+                      </SharedSelect.SelectItem>
+                    </SharedSelect.SelectGroup>
+                  </SharedSelect.SelectContent>
+                </SharedSelect.Select>
               </Field>
               <Field data-invalid={!!addressError}>
                 <FieldLabel htmlFor={`${id}-address`}>{addressLabel}</FieldLabel>
@@ -532,18 +548,24 @@ export function DraftPreviewPanel({
               {kind !== 'route' && (
                 <Field>
                   <FieldLabel htmlFor={`${id}-view`}>{m.draft_preview_view({}, options)}</FieldLabel>
-                  <NativeSelect
-                    id={`${id}-view`}
+                  <SharedSelect.Select
                     value={view}
-                    className="w-full min-w-0 [&_select]:min-h-11"
-                    onChange={(event) => setView(event.target.value as View)}
+                    items={VIEWS.map((name) => ({ value: name, label: views[name] }))}
+                    onValueChange={(value) => value !== null && setView(value as View)}
                   >
-                    {VIEWS.map((name) => (
-                      <NativeSelectOption key={name} value={name}>
-                        {views[name]}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SharedSelect.SelectTrigger id={`${id}-view`} className="w-full min-w-0 min-h-11">
+                      <SharedSelect.SelectValue />
+                    </SharedSelect.SelectTrigger>
+                    <SharedSelect.SelectContent>
+                      <SharedSelect.SelectGroup>
+                        {VIEWS.map((name) => (
+                          <SharedSelect.SelectItem key={name} value={name}>
+                            {views[name]}
+                          </SharedSelect.SelectItem>
+                        ))}
+                      </SharedSelect.SelectGroup>
+                    </SharedSelect.SelectContent>
+                  </SharedSelect.Select>
                 </Field>
               )}
             </div>

@@ -6,6 +6,7 @@ import type { CurationAdvice } from '../features/pages/curation-advice';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime';
 import { PatternStory } from './page';
+import { selectSharedOption } from './shared-select-interaction';
 
 type Scenario = 'read-only' | 'publish-only' | 'activate-only' | 'unavailable';
 const reader = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10';
@@ -100,7 +101,7 @@ type Story = StoryObj<typeof meta>;
 
 async function draftRoute(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.curation_scope() }), 'route');
+  await selectSharedOption(canvas.getByRole('combobox', { name: m.curation_scope() }), m.curation_route());
   await userEvent.type(canvas.getByRole('textbox', { name: m.curation_key() }), '/books');
   await userEvent.click(canvas.getByRole('button', { name: m.curation_add() }));
   await userEvent.click(await canvas.findByRole('button', { name: m.curation_close() }));

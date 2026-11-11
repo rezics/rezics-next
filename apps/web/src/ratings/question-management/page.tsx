@@ -1,4 +1,6 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { useSession } from '../../session/query';
@@ -468,27 +470,41 @@ export function QuestionManagementContent({
                       }}
                     />
                   </label>
-                  <label className="space-y-1">
-                    <span className="block text-sm font-medium">{m.home_question_all()}</span>
-                    <select
-                      className="w-full rounded-md border bg-background px-3 py-2"
+                  <Field>
+                    <FieldLabel htmlFor="question-management-grain">{m.home_question_all()}</FieldLabel>
+                    <SharedSelect.Select
                       value={definition.grain}
                       disabled={createState === 'uncertain' || requireFreshInspection}
-                      onChange={(event) => {
-                        const grain = event.currentTarget.value as QuestionDefinitionInput['grain'];
+                      items={(['work', 'release', 'episode', 'character'] as const).map((grain) => ({
+                        value: grain,
+                        label: grainLabel(grain),
+                      }))}
+                      onValueChange={(value) => {
+                        if (value === null) return;
+                        const grain = value as QuestionDefinitionInput['grain'];
                         setDefinition((current) => ({
                           ...current,
                           grain,
                         }));
                       }}
                     >
-                      {(['work', 'release', 'episode', 'character'] as const).map((grain) => (
-                        <option key={grain} value={grain}>
-                          {grainLabel(grain)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      <SharedSelect.SelectTrigger
+                        id="question-management-grain"
+                        className="w-full rounded-md border bg-background px-3 py-2"
+                      >
+                        <SharedSelect.SelectValue />
+                      </SharedSelect.SelectTrigger>
+                      <SharedSelect.SelectContent>
+                        <SharedSelect.SelectGroup>
+                          {(['work', 'release', 'episode', 'character'] as const).map((grain) => (
+                            <SharedSelect.SelectItem key={grain} value={grain}>
+                              {grainLabel(grain)}
+                            </SharedSelect.SelectItem>
+                          ))}
+                        </SharedSelect.SelectGroup>
+                      </SharedSelect.SelectContent>
+                    </SharedSelect.Select>
+                  </Field>
                   <fieldset className="grid gap-3 sm:col-span-2 sm:grid-cols-3">
                     <legend className="mb-2 text-sm font-medium">{m.realm_question_management_units()}</legend>
                     {(

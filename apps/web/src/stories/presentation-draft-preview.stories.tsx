@@ -19,6 +19,8 @@ import recorded from '../kernel/recorded/subject.json';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
+import { presentationViewNames } from '../features/pages/curate-view-editor';
+import { selectSharedOption } from './shared-select-interaction';
 
 // Contract-shaped native aggregates reuse a recorded anonymous subject; these examples do not attest native execution.
 const reader = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10';
@@ -150,7 +152,10 @@ async function capture(canvasElement: HTMLElement) {
   const panel = within(canvasElement).getByRole('region', { name: m.draft_preview_title() });
   const controls = within(panel);
   await userEvent.type(controls.getByRole('textbox', { name: m.draft_preview_address() }), recorded.subject.id);
-  await userEvent.selectOptions(controls.getByRole('combobox', { name: m.draft_preview_view() }), 'details');
+  await selectSharedOption(
+    controls.getByRole('combobox', { name: m.draft_preview_view() }),
+    presentationViewNames(getLocale()).details,
+  );
   await userEvent.click(controls.getByRole('button', { name: m.draft_preview_capture() }));
   return controls;
 }

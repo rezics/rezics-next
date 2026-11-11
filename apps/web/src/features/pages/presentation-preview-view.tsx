@@ -1,8 +1,8 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { createContext, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { AnonymousSessionContext } from '../../session/query';
@@ -123,7 +123,7 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
   const referenceClassName =
     'min-w-0 rounded-sm break-all select-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
   const previewControlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
-  const previewSelectClass = 'w-full min-w-0 max-w-full [&_select]:min-h-11';
+  const previewSelectClass = 'w-full min-w-0 max-w-full min-h-11';
   const previewInputClass = 'min-h-11';
   const [kind, setKind] = useState<'subject' | 'route'>(initial?.ok && 'route' in initial.target ? 'route' : 'subject');
   const [address, setAddress] = useState(
@@ -238,20 +238,32 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
         <div className="flex flex-wrap items-end gap-3">
           <Field className="w-full sm:w-44">
             <FieldLabel htmlFor={kindId}>{m.presentation_preview_target({}, o)}</FieldLabel>
-            <NativeSelect
-              id={kindId}
-              className={previewSelectClass}
+            <SharedSelect.Select
               value={kind}
-              onChange={(event) => {
+              items={[
+                { value: 'subject', label: m.presentation_preview_subject({}, o) },
+                { value: 'route', label: m.presentation_preview_route({}, o) },
+              ]}
+              onValueChange={(value) => {
+                if (value === null) return;
                 clear();
-                setKind(event.target.value as 'subject' | 'route');
+                setKind(value as 'subject' | 'route');
                 setAddress('');
                 setRealm('');
               }}
             >
-              <NativeSelectOption value="subject">{m.presentation_preview_subject({}, o)}</NativeSelectOption>
-              <NativeSelectOption value="route">{m.presentation_preview_route({}, o)}</NativeSelectOption>
-            </NativeSelect>
+              <SharedSelect.SelectTrigger id={kindId} className={previewSelectClass}>
+                <SharedSelect.SelectValue />
+              </SharedSelect.SelectTrigger>
+              <SharedSelect.SelectContent>
+                <SharedSelect.SelectGroup>
+                  <SharedSelect.SelectItem value="subject">
+                    {m.presentation_preview_subject({}, o)}
+                  </SharedSelect.SelectItem>
+                  <SharedSelect.SelectItem value="route">{m.presentation_preview_route({}, o)}</SharedSelect.SelectItem>
+                </SharedSelect.SelectGroup>
+              </SharedSelect.SelectContent>
+            </SharedSelect.Select>
           </Field>
           <Field className="min-w-0 flex-1 basis-full sm:basis-0">
             <FieldLabel htmlFor={addressId}>{m.presentation_preview_address({}, o)}</FieldLabel>

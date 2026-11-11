@@ -1,3 +1,4 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import {
   useContext,
   useEffect,
@@ -10,7 +11,6 @@ import {
   type MouseEvent,
 } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
 import {
   CharacterAssociationBinding,
@@ -408,23 +408,42 @@ function ConnectionsReading({
                 className={characterChoices.length === 1 && choices.length === 1 ? 'hidden' : 'block min-w-0 space-y-2'}
               >
                 <span className="text-sm font-medium">{m.subject_connections_relation({}, o)}</span>
-                <NativeSelect
-                  className="min-h-11 w-full max-w-full"
-                  value={current?.stream.key ?? ''}
+                <SharedSelect.Select
+                  value={current?.stream.key ?? null}
                   disabled={busy}
-                  onChange={(event) => {
+                  items={[
+                    ...(!current ? [{ value: null, label: m.subject_relation_loading({}, o) }] : []),
+                    ...choices.map((stream) => ({
+                      value: stream.key,
+                      label: `${stream.label} · ${stream.direction === 'in' ? m.subject_connections_in({}, o) : m.subject_connections_out({}, o)}`,
+                    })),
+                  ]}
+                  onValueChange={(value) => {
                     setCompletion('');
-                    void window.load(group, { stream: event.target.value });
+                    void window.load(group, { stream: value ?? '' });
                   }}
                 >
-                  {!current && <NativeSelectOption value="">{m.subject_relation_loading({}, o)}</NativeSelectOption>}
-                  {choices.map((stream) => (
-                    <NativeSelectOption key={stream.key} value={stream.key}>
-                      {stream.label} ·{' '}
-                      {stream.direction === 'in' ? m.subject_connections_in({}, o) : m.subject_connections_out({}, o)}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SharedSelect.SelectTrigger className="min-h-11 w-full max-w-full">
+                    <SharedSelect.SelectValue />
+                  </SharedSelect.SelectTrigger>
+                  <SharedSelect.SelectContent>
+                    <SharedSelect.SelectGroup>
+                      {!current && (
+                        <SharedSelect.SelectItem value={null}>
+                          {m.subject_relation_loading({}, o)}
+                        </SharedSelect.SelectItem>
+                      )}
+                      {choices.map((stream) => (
+                        <SharedSelect.SelectItem key={stream.key} value={stream.key}>
+                          {stream.label} ·{' '}
+                          {stream.direction === 'in'
+                            ? m.subject_connections_in({}, o)
+                            : m.subject_connections_out({}, o)}
+                        </SharedSelect.SelectItem>
+                      ))}
+                    </SharedSelect.SelectGroup>
+                  </SharedSelect.SelectContent>
+                </SharedSelect.Select>
               </label>
               {snapshot.pages?.[group] ? (
                 snapshot.pages[group]!.page !== undefined ? (
@@ -693,14 +712,24 @@ function NativeNeighbourhood({
             </div>
             <label className="block space-y-2">
               <span>{m.subject_connections_depth({}, o)}</span>
-              <NativeSelect
+              <SharedSelect.Select
                 value={depth}
-                onChange={(event) => setDepth(event.target.value === '2' ? 2 : 1)}
-                className="min-h-11"
+                items={[
+                  { value: 1, label: '1' },
+                  { value: 2, label: '2' },
+                ]}
+                onValueChange={(value) => value !== null && setDepth(value)}
               >
-                <NativeSelectOption value={1}>1</NativeSelectOption>
-                <NativeSelectOption value={2}>2</NativeSelectOption>
-              </NativeSelect>
+                <SharedSelect.SelectTrigger className="min-h-11">
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    <SharedSelect.SelectItem value={1}>1</SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem value={2}>2</SharedSelect.SelectItem>
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
             </label>
           </fieldset>
           <Button

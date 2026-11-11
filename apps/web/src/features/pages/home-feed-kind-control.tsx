@@ -1,7 +1,7 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useId } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Label } from '@rezics/ui/shadcn/label';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { DefinitionMeaning } from '../catalogue/definition-meaning';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
@@ -44,26 +44,41 @@ export function HomeFeedKindControl({
     >
       <div className="flex flex-wrap items-center gap-3">
         <Label htmlFor={id}>{m.home_kind_label({}, options)}</Label>
-        <NativeSelect
-          id={id}
-          className="max-w-full [&_select]:min-h-11 [&_select]:max-w-full"
-          aria-describedby={selected?.description ? `${id}-meaning` : undefined}
-          value={selected?.id ?? ''}
-          onChange={(event) => {
-            if (event.target.value === '') onSelect(undefined);
+        <SharedSelect.Select
+          value={selected?.id ?? null}
+          items={[
+            { value: null, label: m.home_kind_all({}, options) },
+            ...[...retained, ...values].map((kind) => ({
+              value: kind.id,
+              label: kind.text || m.home_kind_unnamed({}, options),
+            })),
+          ]}
+          onValueChange={(value) => {
+            if (value === null) onSelect(undefined);
             else {
-              const choice = [...retained, ...values].find((kind) => kind.id === event.target.value);
+              const choice = [...retained, ...values].find((kind) => kind.id === value);
               if (choice) onSelect(choice);
             }
           }}
         >
-          <NativeSelectOption value="">{m.home_kind_all({}, options)}</NativeSelectOption>
-          {[...retained, ...values].map((kind) => (
-            <NativeSelectOption key={kind.id} value={kind.id} lang={kind.lang}>
-              {kind.text || m.home_kind_unnamed({}, options)}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SharedSelect.SelectTrigger
+            id={id}
+            aria-describedby={selected?.description ? `${id}-meaning` : undefined}
+            className="max-w-full min-h-11 max-w-full"
+          >
+            <SharedSelect.SelectValue />
+          </SharedSelect.SelectTrigger>
+          <SharedSelect.SelectContent>
+            <SharedSelect.SelectGroup>
+              <SharedSelect.SelectItem value={null}>{m.home_kind_all({}, options)}</SharedSelect.SelectItem>
+              {[...retained, ...values].map((kind) => (
+                <SharedSelect.SelectItem key={kind.id} value={kind.id} lang={kind.lang}>
+                  {kind.text || m.home_kind_unnamed({}, options)}
+                </SharedSelect.SelectItem>
+              ))}
+            </SharedSelect.SelectGroup>
+          </SharedSelect.SelectContent>
+        </SharedSelect.Select>
         <Button
           className="min-h-11 whitespace-normal"
           variant="outline"

@@ -16,6 +16,8 @@ import type { SubjectPageData } from '../features/pages/subject';
 import type { CurationAdmissionLease } from '../features/pages/curation-reader-admission';
 import type { DraftPreviewInput, DraftPreviewRead, DraftPreviewResult } from '../features/pages/draft-preview';
 import { DraftPreviewPanel } from '../features/pages/draft-preview-view';
+import { m } from '../paraglide/messages.js';
+import { selectSharedOption } from './shared-select-interaction';
 
 const sampleDocument: CompositionDocument = {
   root: { props: {} },
@@ -118,11 +120,11 @@ export const ChangedAccountAndRouteCandidate: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: 'Target' }), 'account');
+    await selectSharedOption(canvas.getByRole('combobox', { name: 'Target' }), m.draft_preview_account());
     await userEvent.type(canvas.getByRole('textbox', { name: 'Account handle' }), 'public-reader');
     await userEvent.click(canvas.getByRole('button', { name: 'Capture current candidate' }));
     await waitFor(() => expect(canvas.getByRole('heading', { name: 'A captured reading view' })).toBeVisible());
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: 'Target' }), 'route');
+    await selectSharedOption(canvas.getByRole('combobox', { name: 'Target' }), m.presentation_preview_route());
     await userEvent.type(canvas.getByRole('textbox', { name: 'Route' }), '/');
     await expect(canvas.getByText(/Current input differs from this captured preview/)).toBeVisible();
   },
@@ -151,7 +153,7 @@ export const UnavailableRetryVersusRecapture: Story = {
     await waitFor(() =>
       expect(canvas.getByText(/preview service or one of its required reads is unavailable/i)).toBeVisible(),
     );
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: 'Target' }), 'account');
+    await selectSharedOption(canvas.getByRole('combobox', { name: 'Target' }), m.draft_preview_account());
     await userEvent.type(canvas.getByRole('textbox', { name: 'Account handle' }), 'current-reader');
     await userEvent.click(within(panel).getByRole('button', { name: 'Retry captured target' }));
     await waitFor(() => expect(unavailableInputs).toHaveLength(2));

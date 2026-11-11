@@ -1,3 +1,4 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
@@ -191,22 +192,39 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
               <label htmlFor={`${prefix}-destination`} className="text-sm font-medium">
                 {m.revision_history_choose()}
               </label>
-              <select
-                id={`${prefix}-destination`}
-                value={destination}
-                onChange={(event) => {
-                  if (ownsInteraction()) setDestination(event.currentTarget.value);
+              <SharedSelect.Select
+                value={destination || null}
+                items={[
+                  { value: null, label: m.revision_history_choose_placeholder() },
+                  ...summaries.map((summary) => ({
+                    value: String(summary.index),
+                    label: m.thread_history_version({ number: number(summary.index + 1) }),
+                  })),
+                ]}
+                onValueChange={(value) => {
+                  if (ownsInteraction()) setDestination(value ?? '');
                 }}
-                aria-describedby={helpId}
-                className="min-h-11 w-full min-w-0 max-w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
-                <option value="">{m.revision_history_choose_placeholder()}</option>
-                {summaries.map((summary) => (
-                  <option key={summary.revisionId} value={String(summary.index)}>
-                    {m.thread_history_version({ number: number(summary.index + 1) })}
-                  </option>
-                ))}
-              </select>
+                <SharedSelect.SelectTrigger
+                  id={`${prefix}-destination`}
+                  aria-describedby={helpId}
+                  className="min-h-11 w-full min-w-0 max-w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    <SharedSelect.SelectItem value={null}>
+                      {m.revision_history_choose_placeholder()}
+                    </SharedSelect.SelectItem>
+                    {summaries.map((summary) => (
+                      <SharedSelect.SelectItem key={summary.revisionId} value={String(summary.index)}>
+                        {m.thread_history_version({ number: number(summary.index + 1) })}
+                      </SharedSelect.SelectItem>
+                    ))}
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
             </div>
             <Button
               type="button"

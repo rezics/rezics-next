@@ -1,3 +1,4 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { platformRegistry, validateProfile, type CompositionDocument, type View } from '@rezics/composition';
 import { ClientOnly } from '@tanstack/react-router';
 import {
@@ -19,7 +20,6 @@ import {
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -98,7 +98,7 @@ import type { DraftPreviewRead } from './draft-preview';
 const PageEditor = lazy(() => import('./editor').then((module) => ({ default: module.PageEditor })));
 
 const editorControlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
-const editorSelectClass = 'w-full min-w-0 max-w-full [&_select]:min-h-11';
+const editorSelectClass = 'w-full min-w-0 max-w-full min-h-11';
 const editorInputClass = 'min-h-11';
 const editorDisclosureClass =
   'min-h-11 min-w-11 cursor-pointer rounded-md py-2 text-muted-foreground [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
@@ -1356,14 +1356,15 @@ function AdmittedPresentationViewEditor({
           <div className="grid min-w-0 gap-4 sm:grid-cols-2">
             <Field className="min-w-0">
               <FieldLabel htmlFor={`${formId}-template`}>{m.curation_template({}, options)}</FieldLabel>
-              <NativeSelect
-                id={`${formId}-template`}
-                className={editorSelectClass}
-                aria-describedby={selection.template.key !== null ? `${formId}-template-value` : undefined}
+              <SharedSelect.Select
                 value={JSON.stringify(selection.template)}
-                onChange={(event) => {
+                items={templates.map((template) => ({
+                  value: JSON.stringify(template),
+                  label: templateLabel(template),
+                }))}
+                onValueChange={(value) => {
                   if (!isCurrent()) return;
-                  const template = templates.find((item) => JSON.stringify(item) === event.target.value);
+                  const template = templates.find((item) => JSON.stringify(item) === value);
                   if (template) {
                     setOwned(setCorrection, null);
                     setOwned(setDraft, (value) => value && selectTemplate(value, template));
@@ -1371,12 +1372,23 @@ function AdmittedPresentationViewEditor({
                   }
                 }}
               >
-                {templates.map((template) => (
-                  <NativeSelectOption key={JSON.stringify(template)} value={JSON.stringify(template)}>
-                    {templateLabel(template)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SharedSelect.SelectTrigger
+                  id={`${formId}-template`}
+                  aria-describedby={selection.template.key !== null ? `${formId}-template-value` : undefined}
+                  className={editorSelectClass}
+                >
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    {templates.map((template) => (
+                      <SharedSelect.SelectItem key={JSON.stringify(template)} value={JSON.stringify(template)}>
+                        {templateLabel(template)}
+                      </SharedSelect.SelectItem>
+                    ))}
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
               {selection.template.key !== null && (
                 <p
                   id={`${formId}-template-value`}
@@ -1404,13 +1416,12 @@ function AdmittedPresentationViewEditor({
             </Field>
             <Field className="min-w-0">
               <FieldLabel htmlFor={`${formId}-view`}>{m.curation_view({}, options)}</FieldLabel>
-              <NativeSelect
-                id={`${formId}-view`}
-                className={editorSelectClass}
+              <SharedSelect.Select
                 value={selection.view}
-                onChange={(event) => {
+                items={views.map((view) => ({ value: view, label: viewNames[view] }))}
+                onValueChange={(value) => {
                   if (!isCurrent()) return;
-                  const view = views.find((item) => item === event.target.value);
+                  const view = views.find((item) => item === value);
                   if (view) {
                     setOwned(setCorrection, null);
                     setOwned(setDraft, (value) => value && { ...value, selection: { ...value.selection, view } });
@@ -1418,12 +1429,19 @@ function AdmittedPresentationViewEditor({
                   }
                 }}
               >
-                {views.map((view) => (
-                  <NativeSelectOption key={view} value={view}>
-                    {viewNames[view]}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SharedSelect.SelectTrigger id={`${formId}-view`} className={editorSelectClass}>
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    {views.map((view) => (
+                      <SharedSelect.SelectItem key={view} value={view}>
+                        {viewNames[view]}
+                      </SharedSelect.SelectItem>
+                    ))}
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
             </Field>
           </div>
           <CurationCompanionViews
@@ -1519,16 +1537,28 @@ function AdmittedPresentationViewEditor({
           <div className="grid min-w-0 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
             <Field className="min-w-0">
               <FieldLabel htmlFor={`${formId}-scope`}>{m.curation_scope({}, options)}</FieldLabel>
-              <NativeSelect
-                id={`${formId}-scope`}
-                className={editorSelectClass}
+              <SharedSelect.Select
                 value={scope}
-                onChange={(event) => isCurrent() && setOwned(setScope, event.target.value as 'base' | 'type' | 'route')}
+                items={[
+                  { value: 'base', label: scopeNames.base },
+                  { value: 'type', label: scopeNames.type },
+                  { value: 'route', label: scopeNames.route },
+                ]}
+                onValueChange={(value) =>
+                  value !== null && isCurrent() && setOwned(setScope, value as 'base' | 'type' | 'route')
+                }
               >
-                <NativeSelectOption value="base">{scopeNames.base}</NativeSelectOption>
-                <NativeSelectOption value="type">{scopeNames.type}</NativeSelectOption>
-                <NativeSelectOption value="route">{scopeNames.route}</NativeSelectOption>
-              </NativeSelect>
+                <SharedSelect.SelectTrigger id={`${formId}-scope`} className={editorSelectClass}>
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    <SharedSelect.SelectItem value="base">{scopeNames.base}</SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem value="type">{scopeNames.type}</SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem value="route">{scopeNames.route}</SharedSelect.SelectItem>
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
             </Field>
             <Field className="min-w-0">
               <FieldLabel htmlFor={`${formId}-key`}>{m.curation_key({}, options)}</FieldLabel>

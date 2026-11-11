@@ -9,6 +9,7 @@ import type { PublicationTransport } from '../features/pages/curation-publish';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime';
 import { PatternStory } from './page';
+import { selectSharedOption } from './shared-select-interaction';
 
 type Scenario = 'unknown-publish' | 'partial-activation' | 'current-head-conflict' | 'revoked-replay';
 const initialProfile: PresentationProfile = {
@@ -103,7 +104,7 @@ type Story = StoryObj<typeof meta>;
 async function editDraft(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await expect(canvas.getByRole('button', { name: m.curation_publish() })).toBeDisabled();
-  await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.curation_scope() }), 'route');
+  await selectSharedOption(canvas.getByRole('combobox', { name: m.curation_scope() }), m.curation_route());
   await userEvent.type(canvas.getByRole('textbox', { name: m.curation_key() }), '/books');
   await userEvent.click(canvas.getByRole('button', { name: m.curation_add() }));
   await userEvent.click(await canvas.findByRole('button', { name: m.curation_close() }));

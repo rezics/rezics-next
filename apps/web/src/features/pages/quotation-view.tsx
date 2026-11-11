@@ -1,3 +1,4 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { pageLanguageName } from './locale-presentation';
 import { correctionProposalAvailability } from '../catalogue/statement-edit-application';
@@ -438,25 +439,43 @@ function SelectedText({
       {selected.statements.length > 1 && (
         <label className="block space-y-2">
           <span>{m.quotation_language({}, o)}</span>
-          <select
-            className="block min-h-11 max-w-full rounded border bg-background p-2"
-            value={text?.statementId ?? ''}
-            onChange={(event) => choose(event.target.value)}
+          <SharedSelect.Select
+            value={text?.statementId ?? null}
+            items={selected.statements.map((statement, index) => ({
+              value: statement.statementId ?? null,
+              label: m.quotation_language_choice(
+                {
+                  number: index + 1,
+                  language: statement.language
+                    ? (pageLanguageName(statement.language, locale) ?? statement.language)
+                    : m.quotation_unknown_context({}, o),
+                },
+                o,
+              ),
+            }))}
+            onValueChange={(value) => choose(value ?? undefined)}
           >
-            {selected.statements.map((statement, index) => (
-              <option key={statement.statementId ?? index} value={statement.statementId ?? ''}>
-                {m.quotation_language_choice(
-                  {
-                    number: index + 1,
-                    language: statement.language
-                      ? (pageLanguageName(statement.language, locale) ?? statement.language)
-                      : m.quotation_unknown_context({}, o),
-                  },
-                  o,
-                )}
-              </option>
-            ))}
-          </select>
+            <SharedSelect.SelectTrigger className="block min-h-11 max-w-full rounded border bg-background p-2">
+              <SharedSelect.SelectValue />
+            </SharedSelect.SelectTrigger>
+            <SharedSelect.SelectContent>
+              <SharedSelect.SelectGroup>
+                {selected.statements.map((statement, index) => (
+                  <SharedSelect.SelectItem key={statement.statementId ?? index} value={statement.statementId ?? null}>
+                    {m.quotation_language_choice(
+                      {
+                        number: index + 1,
+                        language: statement.language
+                          ? (pageLanguageName(statement.language, locale) ?? statement.language)
+                          : m.quotation_unknown_context({}, o),
+                      },
+                      o,
+                    )}
+                  </SharedSelect.SelectItem>
+                ))}
+              </SharedSelect.SelectGroup>
+            </SharedSelect.SelectContent>
+          </SharedSelect.Select>
         </label>
       )}
       {text && (

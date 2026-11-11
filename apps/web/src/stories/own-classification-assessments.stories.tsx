@@ -10,6 +10,7 @@ import type {
 } from '../ratings/own-classifications/types';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
+import { selectSharedOption } from './shared-select-interaction';
 
 const subjectId = '00000000-0000-8000-8000-000000000010';
 const associationId = '00000000-0000-8000-8000-000000000011';
@@ -224,7 +225,7 @@ export const KeyboardAssessmentChange: StoryType = {
     inspect.focus();
     await userEvent.keyboard('{Enter}');
     const assessment = canvas.getByRole('combobox');
-    await userEvent.selectOptions(assessment, 'oppose');
+    await selectSharedOption(assessment, m.subject_classification_assessment_oppose());
     await userEvent.click(canvas.getByRole('button', { name: m.subject_classification_assessment_change() }));
     await expect(canvas.getByText(m.own_classifications_acknowledged())).toBeVisible();
     await expect(assessment).toBeDisabled();

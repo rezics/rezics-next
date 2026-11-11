@@ -1,3 +1,4 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -565,22 +566,43 @@ function MusicContextReadingBound({
               <label className="block font-medium" htmlFor="music-context-stream">
                 {m.music_context_stream_label({}, o)}
               </label>
-              <select
-                id="music-context-stream"
-                className="min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                value={selectedStream ?? ''}
-                onChange={(event) => selectStream(event.currentTarget.value)}
+              <SharedSelect.Select
+                value={selectedStream ?? null}
+                items={[
+                  ...(!selectedStream ? [{ value: null, label: m.music_context_stream_choose({}, o) }] : []),
+                  ...(selectedStream && !streamAdmitted
+                    ? [{ value: selectedStream, label: m.music_context_stream_missing({}, o) }]
+                    : []),
+                  ...profile.streams.map((stream) => ({ value: stream.id, label: stream.label })),
+                ]}
+                onValueChange={(value) => selectStream(value ?? '')}
               >
-                {!selectedStream && <option value="">{m.music_context_stream_choose({}, o)}</option>}
-                {selectedStream && !streamAdmitted && (
-                  <option value={selectedStream}>{m.music_context_stream_missing({}, o)}</option>
-                )}
-                {profile.streams.map((stream) => (
-                  <option key={stream.id} value={stream.id}>
-                    {stream.label}
-                  </option>
-                ))}
-              </select>
+                <SharedSelect.SelectTrigger
+                  id="music-context-stream"
+                  className="min-h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    {!selectedStream && (
+                      <SharedSelect.SelectItem value={null}>
+                        {m.music_context_stream_choose({}, o)}
+                      </SharedSelect.SelectItem>
+                    )}
+                    {selectedStream && !streamAdmitted && (
+                      <SharedSelect.SelectItem value={selectedStream}>
+                        {m.music_context_stream_missing({}, o)}
+                      </SharedSelect.SelectItem>
+                    )}
+                    {profile.streams.map((stream) => (
+                      <SharedSelect.SelectItem key={stream.id} value={stream.id}>
+                        {stream.label}
+                      </SharedSelect.SelectItem>
+                    ))}
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
             </div>
           )}
 

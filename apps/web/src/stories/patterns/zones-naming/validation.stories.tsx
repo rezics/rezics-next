@@ -6,6 +6,13 @@ import { createOwnedZone } from '../../../features/zones/manage/request';
 import { zoneEditorFixture } from '../../../features/zones/editor/fixture';
 import { getLocale } from '../../../paraglide/runtime.js';
 import { m } from '../../../paraglide/messages.js';
+import { pickText } from '@rezics/composition';
+import { starterChoices } from '../../../features/zones/manage/starters';
+import { selectSharedOption } from '../../shared-select-interaction';
+
+function starterLabel(id: string) {
+  return pickText(starterChoices.find((choice) => choice.id === id)!.labels, getLocale()).text;
+}
 
 function CreateNames() {
   const [fixture] = useState(zoneEditorFixture);
@@ -59,8 +66,11 @@ type Story = StoryObj<typeof meta>;
 export const CorrectOrRemoveTranslation: Story = {
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await userEvent.selectOptions(view.getByLabelText(m.zones_create_starter()), 'book');
-    await userEvent.selectOptions(view.getByLabelText(m.zone_name_language()), 'ja');
+    await selectSharedOption(view.getByLabelText(m.zones_create_starter()), starterLabel('book'));
+    await selectSharedOption(
+      view.getByLabelText(m.zone_name_language()),
+      new Intl.DisplayNames([getLocale()], { type: 'language' }).of('ja')!,
+    );
     await expect(view.getAllByRole('textbox')).toHaveLength(1);
     const primary = view.getByLabelText(m.zone_name_primary());
     await expect(primary).toHaveValue('');
@@ -71,7 +81,10 @@ export const CorrectOrRemoveTranslation: Story = {
     await expect(primary).toHaveAttribute('aria-invalid', 'false');
 
     await userEvent.click(view.getByText(m.zone_name_translations()));
-    await userEvent.selectOptions(view.getByLabelText(m.zone_name_add()), 'de');
+    await selectSharedOption(
+      view.getByLabelText(m.zone_name_add()),
+      new Intl.DisplayNames([getLocale()], { type: 'language' }).of('de')!,
+    );
     await userEvent.click(view.getByText(m.zone_name_translations()));
     await userEvent.click(view.getByRole('button', { name: m.zones_create_submit() }));
     const language = new Intl.DisplayNames([getLocale()], { type: 'language' }).of('de')!;

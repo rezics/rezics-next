@@ -11,6 +11,7 @@ import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
+import { selectSharedOption } from './shared-select-interaction';
 
 function EditorExample({ scenario }: { scenario: AuthoredScenario | 'loading' }) {
   const locale = getLocale();
@@ -263,7 +264,8 @@ export const Unavailable: Story = {
           text.selectNodeContents(originalLabel);
           await expect(text.getClientRects().length).toBeGreaterThan(1);
         }
-        await userEvent.selectOptions(property, within(property).getByRole('option', { selected: true }));
+        await expect(property.textContent).not.toBe('');
+        await selectSharedOption(property, property.textContent!.trim());
         await waitFor(() => expect(reload).toBeEnabled());
         await userEvent.click(reload);
         await waitFor(() => expect(reload).toBeEnabled());

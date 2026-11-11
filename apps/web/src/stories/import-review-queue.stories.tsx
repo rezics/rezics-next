@@ -10,6 +10,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
+import { selectSharedOption } from './shared-select-interaction';
 import { pickText } from '@rezics/composition';
 import { languageName } from '../subject/language';
 
@@ -47,7 +48,7 @@ type Story = StoryObj<typeof meta>;
 export const Loaded: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.prq_status() }), 'accepted_unselected');
+    await selectSharedOption(canvas.getByRole('combobox', { name: m.prq_status() }), m.prq_accepted());
     await userEvent.click(canvas.getByRole('button', { name: m.prq_load() }));
     expect(await canvas.findAllByText(m.prq_accepted())).toHaveLength(2);
     expect(canvas.getByRole('button', { name: m.candidate_accept() }).hasAttribute('disabled')).toBe(true);

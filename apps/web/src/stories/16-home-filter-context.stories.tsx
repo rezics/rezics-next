@@ -13,6 +13,8 @@ import {
 } from '../kernel/fake/home-feed-stories';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { pickText } from '@rezics/composition';
+import { selectSharedOption } from './shared-select-interaction';
 
 type State = 'ready' | 'preparing' | 'denied' | 'lost' | 'delayed';
 function PreparedContext({ long = false, initial = 'ready' }: { long?: boolean; initial?: State }) {
@@ -151,14 +153,17 @@ async function journey({ canvasElement }: { canvasElement: HTMLElement }) {
   const dialog = within(await canvas.findByRole('dialog', { name: m.home_filter_title() }));
   await expect(canvas.getByLabelText('Prepared feed reads')).toHaveTextContent(before!);
   await userEvent.click(dialog.getByRole('button', { name: m.home_kinds_load() }));
-  await userEvent.selectOptions(dialog.getByLabelText(m.home_kind_label()), homeKindStoryPage().values[0]!.id);
+  await selectSharedOption(
+    dialog.getByLabelText(m.home_kind_label()),
+    pickText(homeKindStoryPage().values[0]!.labels, getLocale()).text,
+  );
   await userEvent.type(dialog.getByLabelText(m.home_space_label()), homeStorySpace.address);
   await userEvent.click(dialog.getByRole('button', { name: m.home_space_lookup() }));
   await userEvent.click(await dialog.findByRole('button', { name: m.home_space_select() }));
   await userEvent.click(dialog.getByRole('button', { name: m.home_questions_load() }));
-  await userEvent.selectOptions(
+  await selectSharedOption(
     dialog.getByLabelText(m.home_question_label()),
-    homeQuestionStoryPage().ratingQuestions[0]!.id,
+    homeQuestionStoryPage().ratingQuestions[0]!.label,
   );
   const footer = within(canvasElement.querySelector('[data-home-filter-surface]')!.lastElementChild as HTMLElement);
   await expect(footer.getByRole('list', { name: m.refinement_selected() })).toBeVisible();
@@ -186,9 +191,9 @@ export const LongStrings: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
     const dialog = within(canvas.getByRole('dialog'));
     await userEvent.click(dialog.getByRole('button', { name: m.home_questions_load() }));
-    await userEvent.selectOptions(
+    await selectSharedOption(
       dialog.getByLabelText(m.home_question_label()),
-      homeQuestionStoryPage().ratingQuestions[0]!.id,
+      homeQuestionStoryPage().ratingQuestions[0]!.label,
     );
     await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth);
   },
@@ -215,9 +220,9 @@ export const UnavailableRetainedChoice: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
     let dialog = within(canvas.getByRole('dialog'));
     await userEvent.click(dialog.getByRole('button', { name: m.home_questions_load() }));
-    await userEvent.selectOptions(
+    await selectSharedOption(
       dialog.getByLabelText(m.home_question_label()),
-      homeQuestionStoryPage().ratingQuestions[0]!.id,
+      homeQuestionStoryPage().ratingQuestions[0]!.label,
     );
     await userEvent.keyboard('{Escape}');
     await userEvent.selectOptions(canvas.getByLabelText('Prepared source state'), 'lost');
@@ -233,9 +238,9 @@ export const OpenSheetAccountReplacement: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
     const dialog = within(canvas.getByRole('dialog'));
     await userEvent.click(dialog.getByRole('button', { name: m.home_questions_load() }));
-    await userEvent.selectOptions(
+    await selectSharedOption(
       dialog.getByLabelText(m.home_question_label()),
-      homeQuestionStoryPage().ratingQuestions[0]!.id,
+      homeQuestionStoryPage().ratingQuestions[0]!.label,
     );
     // An external account observation can replace a visit while the modal contains keyboard focus.
     canvas.getByRole('button', { name: 'Prepared account A: replace', hidden: true }).click();

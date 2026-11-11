@@ -16,6 +16,7 @@ import recorded from '../kernel/recorded/subject.json';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
+import { selectSharedOption } from './shared-select-interaction';
 
 // Contract-shaped aggregate fixtures around the recorded public subject body. They are UI examples, not native receipts.
 const document: CompositionDocument = {
@@ -203,7 +204,7 @@ export const DraftDistinction: Story = {
   render: () => <ConnectedCuration />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.curation_scope() }), 'route');
+    await selectSharedOption(canvas.getByRole('combobox', { name: m.curation_scope() }), m.curation_route());
     await userEvent.type(canvas.getByRole('textbox', { name: m.curation_key() }), '/unpublished-draft');
     await userEvent.click(canvas.getByRole('button', { name: m.curation_add() }));
     await expect(canvas.getByText(m.curation_unsaved())).toBeVisible();
@@ -259,7 +260,7 @@ export const IndependentForms: Story = {
     }
     const context = first.getByText(/Published Realm with a long readable title/);
     await expect(context.scrollWidth).toBeLessThanOrEqual(context.clientWidth + 1);
-    await userEvent.selectOptions(first.getByLabelText(m.presentation_preview_target()), 'route');
+    await selectSharedOption(first.getByLabelText(m.presentation_preview_target()), m.presentation_preview_route());
     await userEvent.type(first.getByLabelText(m.presentation_preview_address()), '/');
     await userEvent.click(first.getByRole('button', { name: m.presentation_preview_inspect() }));
     await first.findByRole('heading', { name: m.presentation_editor_preview_current() });

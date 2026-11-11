@@ -1,10 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { pickText } from '@rezics/composition';
 import { CandidateStory } from '../subject/candidate-story';
 import { m } from '../paraglide/messages.js';
-import { candidateProperty } from '../kernel/fake/subject-candidates';
+import definitions from '../kernel/recorded/definitions-release.json';
 import { AppShell } from '../shell/shell';
 import { pagePaths, PatternStory } from './page';
+import { getLocale } from '../paraglide/runtime.js';
+import { selectSharedOption } from './shared-select-interaction';
 
 const meta = {
   title: 'Subjects/Candidate Review',
@@ -29,9 +32,9 @@ export const ReviewImportedSuggestion: Story = {
     const canvas = within(canvasElement);
     const region = within(await canvas.findByRole('region', { name: m.candidate_title() }));
     await userEvent.click(region.getByRole('button', { name: m.candidate_entry() }));
-    await userEvent.selectOptions(
+    await selectSharedOption(
       await region.findByRole('combobox', { name: m.candidate_field() }),
-      candidateProperty,
+      pickText(definitions.release.properties['schema:datePublished'].labels, getLocale()).text,
     );
     await userEvent.click(await region.findByRole('button', { name: m.candidate_review() }));
     expect(region.getByRole('heading', { name: m.candidate_current() })).toBeTruthy();

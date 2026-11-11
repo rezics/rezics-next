@@ -3,6 +3,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../../../paraglide/messages.js';
 import { localizeHref } from '../../../paraglide/runtime.js';
 import { EditionPublicationExample, editionId, fixedText, imageAlt, subjectId } from './edition-publication-fixtures';
+import { selectSharedOption } from '../../shared-select-interaction';
 
 const meta = {
   title: 'Content/EditionPublication Workflow',
@@ -18,7 +19,7 @@ export const Selection: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(fixedText);
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.edition_publication_subject() }), subjectId);
+    await selectSharedOption(canvas.getByRole('combobox', { name: m.edition_publication_subject() }), '夜の航路');
     await userEvent.click(canvas.getByRole('button', { name: m.edition_publication_create() }));
     await canvas.findByRole('heading', { name: m.edition_publication_draft_heading() });
     await expect(canvas.queryByRole('link', { name: m.edition_publication_open() })).toBeNull();
@@ -60,7 +61,7 @@ export const Uncertain: Story = {
     const canvas = within(canvasElement);
     await canvas.findByText(m.edition_publication_uncertain());
     await expect(canvas.getByText(fixedText)).toBeVisible();
-    await expect(canvas.getByRole('combobox')).toHaveValue(subjectId);
+    await expect(canvas.getByRole('combobox')).toHaveTextContent('夜の航路');
     await userEvent.click(canvas.getByRole('button', { name: m.edition_publication_retry() }));
     await canvas.findByRole('heading', { name: m.edition_publication_draft_heading() });
     await expect(canvas.queryByText(m.edition_publication_uncertain())).toBeNull();
@@ -120,7 +121,7 @@ export const ImagePreviewUnavailable: Story = {
     await expect(await canvas.findByRole('img', { name: imageAlt })).toHaveTextContent(
       m.content_edition_image_unavailable(),
     );
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.edition_publication_subject() }), subjectId);
+    await selectSharedOption(canvas.getByRole('combobox', { name: m.edition_publication_subject() }), '夜の航路');
     // A missing independent media presentation neither grants nor refuses native edition creation.
     await expect(canvas.getByRole('button', { name: m.edition_publication_create() })).toBeEnabled();
     await expect(canvas.queryByRole('link', { name: m.edition_publication_create_offer() })).toBeNull();

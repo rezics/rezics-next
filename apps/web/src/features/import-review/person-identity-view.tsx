@@ -1,5 +1,7 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useId, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { pickText } from '@rezics/composition';
 import { m } from '../../paraglide/messages.js';
@@ -111,16 +113,32 @@ export function ProviderPersonReview({
             {(['bangumi', 'vndb'] as const).map((source) => (
               <fieldset key={source} className="min-w-0 space-y-2 rounded border p-4">
                 <legend>{source === 'bangumi' ? 'Bangumi · wdt:P6298' : 'VNDB · wdt:P3180'}</legend>
-                <label htmlFor={`${id}-${source}-source`}>{m.person_review_claim_source({}, o)}</label>
-                <select
-                  id={`${id}-${source}-source`}
-                  name={`${source}-source`}
-                  defaultValue={`${source}_cross_media`}
-                  className="min-h-11 w-full rounded border bg-background px-3"
-                >
-                  <option value={`${source}_cross_media`}>{source}_cross_media</option>
-                  <option value={source}>{source}</option>
-                </select>
+                <Field>
+                  <FieldLabel htmlFor={`${id}-${source}-source`}>{m.person_review_claim_source({}, o)}</FieldLabel>
+                  <SharedSelect.Select
+                    name={`${source}-source`}
+                    defaultValue={`${source}_cross_media`}
+                    items={[
+                      { value: `${source}_cross_media`, label: `${source}_cross_media` },
+                      { value: source, label: source },
+                    ]}
+                  >
+                    <SharedSelect.SelectTrigger
+                      id={`${id}-${source}-source`}
+                      className="min-h-11 w-full rounded border bg-background px-3"
+                    >
+                      <SharedSelect.SelectValue />
+                    </SharedSelect.SelectTrigger>
+                    <SharedSelect.SelectContent>
+                      <SharedSelect.SelectGroup>
+                        <SharedSelect.SelectItem value={`${source}_cross_media`}>
+                          {source}_cross_media
+                        </SharedSelect.SelectItem>
+                        <SharedSelect.SelectItem value={source}>{source}</SharedSelect.SelectItem>
+                      </SharedSelect.SelectGroup>
+                    </SharedSelect.SelectContent>
+                  </SharedSelect.Select>
+                </Field>
                 <label htmlFor={`${id}-${source}-subject`}>{m.person_review_original({}, o)}</label>
                 <Input id={`${id}-${source}-subject`} name={`${source}-subject`} required pattern="[0-9a-fA-F-]{36}" />
                 <label htmlFor={`${id}-${source}-key`}>{m.person_review_source_key({}, o)}</label>
