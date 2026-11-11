@@ -258,7 +258,7 @@ function CollectionRowView({
   const options = [...new Set([...visibilityOptions(current), ...(desired !== current.visibility ? [desired] : [])])];
   const canChangeVisibility = current.revision !== null && current.allowedVisibilityActions.length > 0;
   const href = `/${getLocale()}/collections/${encodeURIComponent(current.id)}`;
-  const visibilityOptions = options.map((value) => ({ value, label: label(value) }));
+  const visibilityItems = options.map((value) => ({ value, label: label(value) }));
   return (
     <ListRow className="grid gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)] sm:items-center">
       <div className="min-w-0">
@@ -280,7 +280,7 @@ function CollectionRowView({
             {m.settings_privacy_visibility_label()}
           </FieldLabel>
           <Select<string, false>
-            items={visibilityOptions}
+            items={visibilityItems}
             disabled={
               !isCurrent() ||
               pageState?.loading ||
@@ -307,7 +307,7 @@ function CollectionRowView({
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
               <SelectGroup>
-                {visibilityOptions.map(({ value, label, ...itemProps }) => (
+                {visibilityItems.map(({ value, label, ...itemProps }) => (
                   <SelectItem key={value ?? ''} value={value} {...itemProps}>
                     {label}
                   </SelectItem>
