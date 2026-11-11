@@ -14,6 +14,10 @@ Two measures run together, and neither replaces the other:
 
 Landings and attempts are diagnostics; allowance and worker occupancy explain cost.
 
+Each coding worker targets at least 1,000 landed product lines per worker-hour. Review workers individually and
+separate source delivery, check waits, and unknown attribution. When a worker is below target, repair the brief,
+admission, or verification cause and keep independent code moving. Do not add code merely to meet the count.
+
 Throughput target: product code landed on the integrated branch, held steadily at 20,000 lines an hour and aiming
 for 40,000. Lines measure throughput; they are not the goal. The target is a lot of good code: quality comes first,
 never write code to raise the count, and never lower throughput to gain quality. Count added product lines only.
@@ -118,7 +122,8 @@ Decision: enforce the six-task per-Goal limit at worker start admission; waiting
 - The supermanager initiates efficiency work without a maintainer prompt. In the existing hourly review, identify the
   largest evidenced avoidable loss, take the smallest action that addresses its cause, and report the action and
   observed effect or the next measurement. When evidence is insufficient, name what is missing and collect the
-  smallest useful observation. Do not add a watcher or increase allowance or concurrency to meet this duty.
+  smallest useful observation. Use existing watchers and tune worker width within authorized allowance and measured
+  host limits. Adding workers does not require adding managers; first clear obsolete work and assign independent repairs.
 - An alarm fires only on a real problem, and its receiver fixes the cause at once. An alarm that repeats for the same
   cause without a fix escalates to the supermanager. Throttling or batching an alarm hides the problem; fix the cause or
   the threshold.
@@ -130,8 +135,10 @@ Decision: enforce the six-task per-Goal limit at worker start admission; waiting
 Token efficiency is a primary measure, beside output: allowance spent per landed product line and per landed
 outcome, tracked per Goal, task class and model profile. It improves in three ways:
 
-- **Clear prompts.** Briefs and role prompts are short, current and free of contradiction, as set out in
-  [instructions and documentation](documentation.md).
+- **Clear prompts.** The dispatching manager owns brief quality. Preflight against current source, name the concrete
+  evidence and owning code, and separate the worker's permitted checks from later acceptance. Replace a brief that
+  sent a worker into the same failure twice; preserve the completed source and remove superseded tasks and instructions.
+  Follow [instructions and documentation](documentation.md).
 - **The simplest model that does the work.** A well-specified implementation journey runs on GPT-6 Luna at max
   effort. Stronger models are kept for the work that needs them: review-prone or citation-heavy work, hard
   debugging, and design. Change a routing default only after comparing profiles on representative accepted work.
