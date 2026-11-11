@@ -30,7 +30,7 @@ import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { systemClock, type KernelClock } from '../../src/clock.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
-import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
+import { configureTestReceiptKeys, testReceiptKeys, testReceiptKeysEnv } from '../support/receipt-keys.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -118,6 +118,7 @@ export type SemanticOutcomeDriver = SemanticDriver & {
       databaseUrl: string;
       routeKey: string;
       sessionKeys: string;
+      receiptKeys: string;
       authIssuer: string;
       authAudience: string;
       authJwksUrl: string;
@@ -239,15 +240,13 @@ async function startDriver(
     owned.push(kernelName);
     await owner.query(`CREATE DATABASE "${kernelName}" TEMPLATE "${template}"`);
     const kernelUrl = databaseUrl(source, kernelName);
-    pool = createPool(kernelUrl);
-    configureTestReceiptKeys(pool);
-    runtimePool = options.kernelPool ? await options.kernelPool(kernelUrl) : pool;
-    const receiptKeyEnv = [...testReceiptKeys().keys]
-      .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
-      .join(',');
+    const receiptKeys = testReceiptKeys();
+    const receiptKeyEnv = testReceiptKeysEnv(receiptKeys).KERNEL_RECEIPT_KEYS;
     process.env.KERNEL_RECEIPT_KEYS = receiptKeyEnv;
-    configureTestReceiptKeys(pool);
-    if (runtimePool !== pool) configureTestReceiptKeys(runtimePool);
+    pool = createPool(kernelUrl);
+    configureTestReceiptKeys(pool, receiptKeys);
+    runtimePool = options.kernelPool ? await options.kernelPool(kernelUrl) : pool;
+    if (runtimePool !== pool) configureTestReceiptKeys(runtimePool, receiptKeys);
     timer.mark('kernel database');
 
     if (!nativePreloadInstalled) {
@@ -257,7 +256,6 @@ async function startDriver(
 
     const routeKey = randomBytes(32);
     const sessionKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
-    const receiptKeys = testReceiptKeys();
     const auth = options.isolatedAuth
       ? await isolatedOutcomeAuth(source, kernelUrl, routeKey, sessionKeys, receiptKeys, options.onOwnedResource)
       : await sharedAuth(source, options.onOwnedResource, options.strictCleanup ?? false);
@@ -764,6 +762,7 @@ async function startDriver(
           sessionKeys: [...sessionKeys.keys]
             .map(([id, key]) => `${id}:${Buffer.from(key).toString('base64url')}`)
             .join(','),
+          receiptKeys: receiptKeyEnv,
           authIssuer: required(runtimeAuth?.issuer, 'Kernel did not construct Access with the Auth issuer'),
           authAudience: required(runtimeAuth?.audience, 'Kernel did not construct Access with the Auth audience'),
           authJwksUrl: required(runtimeAuth?.jwksUrl, 'Kernel did not construct Access with the Auth JWKS URL'),

@@ -26,6 +26,9 @@ production changes are limited to code that violates those contracts.
 Decision: Materialize pinned historical publication modules under `.temp/` and route only historical publication to
 that graph; current Definitions imports retain their live module identities.
 
+Decision: Semantic cold publication children receive the exact serialized native test receipt ring from the parent
+runtime snapshot, preserving required production key validation and pinned historical module identities.
+
 Decision: the installed Character read contract admits includeDocuments and reuses Content's public document type;
 preserve native preview bounds and exact bindings, with typed anonymous and signed-in readback coverage.
 
