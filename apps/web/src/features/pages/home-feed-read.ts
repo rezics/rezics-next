@@ -129,6 +129,7 @@ export function createHomeFeedWindow(
   initial: HomeFeedResult,
   read: (input: FeedInput, signal: AbortSignal) => Promise<HomeFeedResult>,
 ) {
+  let seed = initial;
   let snapshot: FeedWindow = { result: initial, busy: false, input: { stream: 'home' } };
   let generation = 0;
   let pending: AbortController | undefined;
@@ -162,8 +163,27 @@ export function createHomeFeedWindow(
     clear: () => {
       generation++;
       pending?.abort();
-      snapshot = { result: initial, busy: false, input: { stream: 'home' } };
+      snapshot = { result: seed, busy: false, input: { stream: 'home' } };
       emit();
+    },
+    adoptSeed(result: HomeFeedResult) {
+      seed = result;
+      const { stream, cursor, kind, spaceId, ratingQuestionId } = snapshot.input;
+      if (
+        result.state !== 'ready' ||
+        stream !== 'home' ||
+        cursor !== undefined ||
+        kind !== undefined ||
+        spaceId !== undefined ||
+        ratingQuestionId !== undefined
+      )
+        return false;
+      generation++;
+      pending?.abort();
+      pending = undefined;
+      snapshot = { result, busy: false, input: { stream: 'home' } };
+      emit();
+      return true;
     },
     retire: (result: HomeFeedResult = { state: 'loading', code: 'loading' }, input: FeedInput = snapshot.input) => {
       generation++;

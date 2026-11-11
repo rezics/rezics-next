@@ -360,6 +360,7 @@ export function HomeFeedConsumer({
   catalogueObservation?: string;
 }) {
   const window = useState(() => createHomeFeedWindow(initial, read))[0];
+  const seed = useRef(initial);
   const choices = useState(() => createHomeKindChoices(readKinds))[0];
   const restoreGeneration = useRef(0);
   const clearingSelections = useRef(false);
@@ -640,6 +641,11 @@ export function HomeFeedConsumer({
     }
     void restoreSelection(input, descriptor?.frontierUnavailable === true);
   };
+  useEffect(() => {
+    if (seed.current === initial) return;
+    seed.current = initial;
+    if (!signedIn) window.adoptSeed(initial);
+  }, [initial, signedIn, window]);
   useEffect(() => {
     const popstate = () => restoreFromHistory(true);
     const pageshow = (event: PageTransitionEvent) => {
