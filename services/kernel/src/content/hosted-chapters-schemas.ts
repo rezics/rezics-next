@@ -57,3 +57,25 @@ export const HostedSelectionSchema = t.Object(selection, closed);
 export const HostedChildrenQuerySchema = t.Object({ ...paging, parentId: t.Optional(HostedIdSchema) }, closed);
 export const HostedNavigationQuerySchema = t.Object({ ...paging,
   direction: t.Union([t.Literal('previous'), t.Literal('next')]) }, closed);
+
+const ownerScope = t.Object({
+  kind: t.Literal('same-home'), route: t.Integer({ minimum: 0, maximum: 65535 }),
+  crossHome: t.Literal('unavailable'),
+}, closed);
+const ownerViewer = t.Object({ accountId: HostedIdSchema, authnEpoch: t.Integer({ minimum: 0 }) }, closed);
+const ownerEntry = t.Object({
+  catalogueId: HostedIdSchema, threadId: HostedIdSchema,
+  createdAt: t.String({ format: 'date-time' }), postRevisionId: HostedIdSchema,
+  postVisibility: t.Union([t.Literal('draft'), t.Literal('published'), t.Literal('protected')]),
+  headRevisionId: HostedIdSchema, publicationId: nullableId,
+}, closed);
+export const HostedOwnerInventoryQuerySchema = t.Object({
+  scope: t.Optional(t.Union([t.Literal('same-home'), t.Literal('all-homes')])),
+  cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+  limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
+}, closed);
+export const HostedOwnerInventorySchema = t.Object({
+  scope: ownerScope, viewer: ownerViewer, items: t.Array(ownerEntry, { maxItems: HOSTED_PAGE_LIMIT }),
+  nextCursor: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
+}, closed);
+export const HostedOwnerInventoryReadSchema = t.Object({ scope: ownerScope, viewer: ownerViewer, item: ownerEntry }, closed);

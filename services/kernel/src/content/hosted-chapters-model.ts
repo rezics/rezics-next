@@ -50,6 +50,39 @@ export type HostedOccurrenceView = Readonly<{
   | Readonly<{ availability: 'available'; kind: 'chapter'; title: string; target: HostedChapterTarget }>
 );
 export type HostedReadSelection = Readonly<{ revisionId?: string; kind?: 'structure' | 'publication' }>;
+/** Inventory covers only the acting account's route. A complete cross-home
+ * catalogue locator is not installed; an empty home page proves nothing abroad. */
+export type HostedOwnerInventoryScope = Readonly<{
+  kind: 'same-home';
+  route: number;
+  crossHome: 'unavailable';
+}>;
+export type HostedOwnerInventoryInput = Readonly<{
+  scope?: 'same-home' | 'all-homes';
+  limit?: number;
+  cursor?: string;
+}>;
+export type HostedOwnerInventoryEntry = Readonly<{
+  catalogueId: string;
+  threadId: string;
+  createdAt: string;
+  postRevisionId: string;
+  postVisibility: 'draft' | 'published' | 'protected';
+  headRevisionId: string;
+  publicationId: string | null;
+}>;
+export type HostedOwnerInventoryView = Readonly<{
+  scope: HostedOwnerInventoryScope;
+  viewer: Readonly<{ accountId: string; authnEpoch: number }>;
+  items: readonly HostedOwnerInventoryEntry[];
+  nextCursor: string | null;
+}>;
+export class HostedOwnerInventoryUnavailableError extends Error {
+  constructor() {
+    super('Cross-home hosted catalogue inventory is unavailable');
+    this.name = 'HostedOwnerInventoryUnavailableError';
+  }
+}
 export type HostedChildrenInput = HostedReadSelection & Readonly<{
   parentId?: string;
   limit?: number;

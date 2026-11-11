@@ -13,17 +13,21 @@ import type { contentRoutes } from './routes.ts';
 import { strictContentSchema } from './schema-validation.ts';
 import { ContentNotFoundError as CommandNotFoundError, ContentForbiddenError, RevisionPreconditionError } from './commands.ts';
 import { ContentNotFoundError } from './reads.ts';
-import { InvalidHostedStructureError, InvalidHostedCursorError } from './hosted-chapters-model.ts';
+import { InvalidHostedStructureError, InvalidHostedCursorError, HostedOwnerInventoryUnavailableError } from './hosted-chapters-model.ts';
 import { createHostedCatalogue, reviseHostedCatalogue, publishHostedCatalogue, type HostedCommandDependencies } from './hosted-chapters-commands.ts';
 import { readHostedCatalogue, listHostedChildren, navigateHostedChapters, resolveHostedOccurrence } from './hosted-chapters-reads.ts';
+import { listOwnHostedCatalogues, readOwnHostedCatalogue } from './hosted-chapters-owner.ts';
 import {
   HostedIdSchema, HostedCreateSchema, HostedReviseSchema, HostedPublishSchema, HostedCommandSchema,
   HostedRevisionSchema, HostedPageSchema, HostedResolutionSchema, HostedSelectionSchema,
   HostedChildrenQuerySchema, HostedNavigationQuerySchema,
+  HostedOwnerInventoryQuerySchema, HostedOwnerInventorySchema, HostedOwnerInventoryReadSchema,
 } from './hosted-chapters-schemas.ts';
 
 const params = t.Object({ id: HostedIdSchema }, { additionalProperties: false });
 const occurrenceParams = t.Object({ id: HostedIdSchema, occurrenceId: HostedIdSchema }, { additionalProperties: false });
+const ownerParams = t.Object({ accountId: HostedIdSchema }, { additionalProperties: false });
+const ownerReadParams = t.Object({ accountId: HostedIdSchema, id: HostedIdSchema }, { additionalProperties: false });
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const responseHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
 const failures = {
@@ -41,6 +45,7 @@ const failures = {
 };
 const readSecurity: Record<string, string[]>[] = [{}, { bearerAuth: [] }];
 const readDetail = { 'x-exposure': 'public', 'x-resource-types': ['content.post'], 'x-action': 'post:read', security: readSecurity };
+const ownerDetail = { 'x-exposure': 'public', 'x-action': 'account:read', security: [{ bearerAuth: [] }] };
 const writeDetail = { 'x-exposure': 'public', 'x-resource-types': ['content.post'], 'x-action': 'post:revise',
   'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }), security: [{ bearerAuth: [] }] };
 
@@ -52,6 +57,8 @@ async function operation<T>(run: () => Promise<T>): Promise<T> {
     if (error instanceof RevisionPreconditionError) throw new ProblemError('precondition_failed');
     if (error instanceof InvalidHostedCursorError) throw new ProblemError('invalid_cursor');
     if (error instanceof InvalidHostedStructureError) throw new ProblemError('invalid_request');
+    if (error instanceof HostedOwnerInventoryUnavailableError)
+      throw new ProblemError('dependency_unavailable', { detail: error.message });
     throw error;
   }
 }
@@ -63,10 +70,38 @@ function commandContext(request: Request, deadline: number) {
 export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps: HostedCommandDependencies) {
   app.wrap((handle) => async (request) => {
     const response = await handle(request);
-    if (new URL(request.url).pathname.startsWith('/v1/hostedCatalogues')) response.headers.set('cache-control', 'private, no-store');
+    const path = new URL(request.url).pathname;
+    if (path.startsWith('/v1/hostedCatalogues') || /^\/v1\/accounts\/[^/]+\/hostedCatalogues(?:\/|$)/.test(path))
+      response.headers.set('cache-control', 'private, no-store');
     return response;
   });
   return app
+    .get('/v1/accounts/:accountId/hostedCatalogues', {
+      params: ownerParams, query: strictContentSchema(HostedOwnerInventoryQuerySchema),
+      response: { 200: withHeaders(strictContentSchema(HostedOwnerInventorySchema), responseHeaders), ...failures },
+      detail: { ...ownerDetail, operationId: 'own_hosted_catalogues.list' },
+    }, async ({ actor, params: { accountId }, query, admission, job, session, set }) => {
+      if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+      const { limit, ...selection } = query;
+      const result = await operation(() => admission.run('normal', job,
+        () => listOwnHostedCatalogues(deps, accountId, { actor, deadline: job.deadline },
+          { ...selection, ...(limit === undefined ? {} : { limit: Number(limit) }) })));
+      for (const anchor of result.anchors) session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
+      set.headers['cache-control'] = 'private, no-store';
+      return { ...result.value, items: [...result.value.items] };
+    })
+    .get('/v1/accounts/:accountId/hostedCatalogues/:id', {
+      params: ownerReadParams, query: strictContentSchema(t.Object({}, { additionalProperties: false })),
+      response: { 200: withHeaders(strictContentSchema(HostedOwnerInventoryReadSchema), responseHeaders), ...failures },
+      detail: { ...ownerDetail, operationId: 'own_hosted_catalogues.get' },
+    }, async ({ actor, params: { accountId, id }, admission, job, session, set }) => {
+      if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+      const result = await operation(() => admission.run('normal', job,
+        () => readOwnHostedCatalogue(deps, accountId, id, { actor, deadline: job.deadline })));
+      for (const anchor of result.anchors) session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
+      set.headers['cache-control'] = 'private, no-store';
+      return result.value;
+    })
     .post('/v1/hostedCatalogues', {
       headers, body: strictContentSchema(HostedCreateSchema),
       response: { 201: withHeaders(strictContentSchema(HostedCommandSchema), responseHeaders), ...failures },
