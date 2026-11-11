@@ -3524,10 +3524,10 @@ with identical raw prefixes, including cwd/env arguments. Service file lists inc
 after tests, starting at the first input. Exact whole original Auth/Kernel workspace checks require their same-Goal
 integrated original provenance; they need no invented explicit test list. Mixed bare and `env -u` groups stay separate.
 Shortened selections, changed flags and broad root/gate campaigns are refused. Explicit command files must exist in
-the captured Git tree before execution can be granted. Registration and new-attempt admission require current
-integration. Once proof preparation records `proof-command-ready`, launch and same-session resume check the
-registered fingerprint and exact clean captured HEAD/tree. A later integration change does not prevent that original observation, but its
-result cannot verify the new integration head.
+the captured Git tree before execution can be granted. Registration captures current integration. A queued proof keeps
+its authorized source while that commit remains in integration history, even when other work lands before it starts.
+Once proof preparation records `proof-command-ready`, launch and same-session resume check the registered fingerprint
+and exact clean captured HEAD/tree. A result on an earlier snapshot cannot verify the new integration head.
 
 For a never-started held task, submit the typed brief on the SAME task id:
 
