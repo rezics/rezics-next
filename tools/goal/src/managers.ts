@@ -97,14 +97,16 @@ export type ManagerState = ManagedManagerState | ResidentSupermanagerState;
 /** Observational projection shared by public status; native Goal state remains independent of lifecycle status. */
 export function readManagerOperationalStatus(db: Database) {
   if (!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()) return [];
-  const states = (db.query('SELECT id, state FROM manager_sessions').all() as { id: string; state: string }[]).flatMap((row) => {
-    try {
-      const state = JSON.parse(row.state) as ManagerState;
-      return state && typeof state.status === 'string' ? [{ ...state, id: row.id }] : [];
-    } catch {
-      return [];
-    }
-  });
+  const states = (db.query('SELECT id, state FROM manager_sessions').all() as { id: string; state: string }[]).flatMap(
+    (row) => {
+      try {
+        const state = JSON.parse(row.state) as ManagerState;
+        return state && typeof state.status === 'string' ? [{ ...state, id: row.id }] : [];
+      } catch {
+        return [];
+      }
+    },
+  );
   const byId = new Map(states.map((state) => [state.id, state]));
   return managerOwnership(states).map((owner) => {
     const state = byId.get(owner.id)!;
@@ -113,10 +115,16 @@ export function readManagerOperationalStatus(db: Database) {
     const unexpected = unexpectedManagerTurn(state);
     return {
       ...owner,
-      operation: state.status !== 'running' ? state.status
-        : state.waitingForInbox ? 'waiting-for-inbox'
-        : unexpected ? `turn-${turn?.status}`
-        : state.activeTurnId ? 'active-turn' : 'idle',
+      operation:
+        state.status !== 'running'
+          ? state.status
+          : state.waitingForInbox
+            ? 'waiting-for-inbox'
+            : unexpected
+              ? `turn-${turn?.status}`
+              : state.activeTurnId
+                ? 'active-turn'
+                : 'idle',
       threadId: state.threadId,
       activeTurnId: state.activeTurnId,
       waitingForInbox: state.waitingForInbox === true,
@@ -157,8 +165,11 @@ function isManagedManager(state: ManagerState): state is ManagedManagerState {
 
 function unexpectedManagerTurn(state: ManagedManagerState): boolean {
   const turn = state.turnDisposition;
-  return turn?.threadId === state.threadId && turn?.intent === 'work' &&
-    (turn.status === 'interrupted' || turn.status === 'failed');
+  return (
+    turn?.threadId === state.threadId &&
+    turn?.intent === 'work' &&
+    (turn.status === 'interrupted' || turn.status === 'failed')
+  );
 }
 
 const managerDecisionMigration = {
@@ -927,24 +938,30 @@ export class ManagerSessions {
   }
   private reportStrandedTurn(state: ManagedManagerState): void {
     if (
-      state.status !== 'running' || state.waitingForInbox || state.activeTurnId ||
-      !unexpectedManagerTurn(state) || state.turnDisposition?.strandedReported ||
+      state.status !== 'running' ||
+      state.waitingForInbox ||
+      state.activeTurnId ||
+      !unexpectedManagerTurn(state) ||
+      state.turnDisposition?.strandedReported ||
       (state.goalState?.status !== 'active' && state.goalState?.status !== 'blocked') ||
       (this.services.canStartTurn && !this.services.canStartTurn(state))
-    ) return;
+    )
+      return;
     const pending = this.inbox.notifications(state.id);
     if (!pending.length) return;
     const turn = state.turnDisposition!;
-    this.db.transaction(() => {
-      turn.strandedReported = true;
-      this.save(state);
-      this.inbox.deliver({
-        managerId: state.supermanager,
-        kind: 'environment',
-        goalId: state.goal,
-        summary: `Manager ${state.id} turn ${turn.turnId} on thread ${turn.threadId} ${turn.status} unexpectedly; ${pending.length} undelivered waking inbox event(s) remain. Use the existing manager wake/recovery path on this thread; native Goal is ${state.goalState!.status}.`,
-      });
-    }).immediate();
+    this.db
+      .transaction(() => {
+        turn.strandedReported = true;
+        this.save(state);
+        this.inbox.deliver({
+          managerId: state.supermanager,
+          kind: 'environment',
+          goalId: state.goal,
+          summary: `Manager ${state.id} turn ${turn.turnId} on thread ${turn.threadId} ${turn.status} unexpectedly; ${pending.length} undelivered waking inbox event(s) remain. Use the existing manager wake/recovery path on this thread; native Goal is ${state.goalState!.status}.`,
+        });
+      })
+      .immediate();
   }
   async noteCommand(id: string): Promise<void> {
     this.get(id);
@@ -1117,7 +1134,9 @@ export class ManagerSessions {
         if (state.activeTurnId !== turnId) this.adoptActiveTurn(state, turnId);
         state.activeTurnId = turnId;
         state.turnDisposition = {
-          threadId, turnId, status: 'inProgress',
+          threadId,
+          turnId,
+          status: 'inProgress',
           intent: state.status === 'running' && state.waitingForInbox ? 'controller-park' : 'controller-stop',
           at: this.now(),
         };
@@ -1453,7 +1472,9 @@ export class ManagerSessions {
               this.adoptActiveTurn(current, resumed.activeTurnId);
               current.goalState = await this.transport.getGoal(client, current.threadId);
               if (
-                current.status === 'running' && current.activeTurnId === null && current.turns > 0 &&
+                current.status === 'running' &&
+                current.activeTurnId === null &&
+                current.turns > 0 &&
                 !unexpectedManagerTurn(current)
               ) {
                 await this.markWaitingForInbox(current.id);

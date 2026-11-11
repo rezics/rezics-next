@@ -141,10 +141,10 @@ export class ManagerSessionTransport {
     const resumed = await client.request('thread/resume', threadAccess(spec, threadId));
     const latest = resumed.thread.turns?.at(-1);
     const status = latest?.status;
-    const latestTurn = latest &&
-      (status === 'inProgress' || status === 'completed' || status === 'interrupted' || status === 'failed')
-      ? { id: latest.id as string, status: status as ManagerTurnDisposition['status'] }
-      : undefined;
+    const latestTurn =
+      latest && (status === 'inProgress' || status === 'completed' || status === 'interrupted' || status === 'failed')
+        ? { id: latest.id as string, status: status as ManagerTurnDisposition['status'] }
+        : undefined;
     return { activeTurnId: activeTurnId(resumed), latestTurn };
   }
   private async steer(client: AppServer, threadId: string, expectedTurnId: string, summary: string): Promise<void> {

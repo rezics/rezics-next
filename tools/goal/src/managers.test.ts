@@ -5,12 +5,7 @@ import { homedir } from 'node:os';
 import { StdioAppServer, type CodexPool, type Notification } from './app-server.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import {
-  ManagerSessions,
-  readManagerOperationalStatus,
-  resolveGoalManager,
-  type ManagerSpec,
-} from './managers.ts';
+import { ManagerSessions, readManagerOperationalStatus, resolveGoalManager, type ManagerSpec } from './managers.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { ProcessIdentity } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
@@ -804,7 +799,12 @@ test('current interrupted and failed work turns stay visible and surface only re
       );
       expect(s.managers.get(manager.id)).toMatchObject({ threadId, activeTurnId: 'turn-2', turns: 2 });
       expect(s.requests().filter((request) => request.method === 'turn/start')).toHaveLength(2);
-      expect(s.requests().filter((request) => request.method === 'turn/start').at(-1)?.params.threadId).toBe(threadId);
+      expect(
+        s
+          .requests()
+          .filter((request) => request.method === 'turn/start')
+          .at(-1)?.params.threadId,
+      ).toBe(threadId);
       expect(s.inbox.notifications(manager.id)).toHaveLength(0);
 
       await s.managers.wake(manager.id);
