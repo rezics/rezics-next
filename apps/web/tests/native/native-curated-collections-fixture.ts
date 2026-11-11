@@ -18,7 +18,10 @@ export type NativeCuratedCollectionsFixture = {
   bob: AuthJourney;
   page(persona: NativeCuratedPersona): Promise<Page>;
   context(persona: NativeCuratedPersona): Promise<BrowserContext>;
-  createSubject(label: string): Promise<NativeCuratedSubject>;
+  createSubject(
+    label: string,
+    options?: { type?: string; statements?: Record<string, unknown[]> },
+  ): Promise<NativeCuratedSubject>;
   createPrivateCollection(title: string): Promise<Record<string, unknown>>;
   hideSubject(subjectId: string): Promise<void>;
   close(): Promise<void>;
@@ -99,7 +102,10 @@ export async function startNativeCuratedCollectionsFixture(): Promise<NativeCura
     const context = async (persona: NativeCuratedPersona): Promise<BrowserContext> =>
       persona === 'alice' ? alice.context : persona === 'bob' ? bob.context : auth!.context('anonymous');
 
-    const createSubject = async (label: string): Promise<NativeCuratedSubject> => {
+    const createSubject = async (
+      label: string,
+      options: { type?: string; statements?: Record<string, unknown[]> } = {},
+    ): Promise<NativeCuratedSubject> => {
       const created = await kernelJson<{ subject: { id: string } }>(
         await stack.kernel(
           '/v1/subjects',
@@ -110,8 +116,9 @@ export async function startNativeCuratedCollectionsFixture(): Promise<NativeCura
               'idempotency-key': requestKey(),
             },
             body: JSON.stringify({
-              type: 'schema:Book',
+              type: options.type ?? 'schema:Book',
               labels: { en: label },
+              ...(options.statements ? { statements: options.statements } : {}),
             }),
           },
           'editor',

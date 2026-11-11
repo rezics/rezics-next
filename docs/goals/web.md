@@ -328,9 +328,19 @@ Decision: extend existing routes on small owner-backed seams; keep ten slices in
   the results seam remains in [saved-query results](../../apps/web/src/library/saved-query-results.md).
 - **Advanced facets.** Extend the common Collection filter surface with released property selection and native
   count-free value continuation for that exact Collection. Eight active properties is a UI window; changing the
-  property window does not discard applied operands. This is shared by curated and built-in dynamic readers. The
-  installed `subjects:facets` client has no Collection resource scope, so Web keeps this read unavailable until
-  Search binds it and never requests Global values.
+  property window does not discard applied operands. Curated and dynamic readers use the same current-reader
+  receiver. It sends the released type and applied filter with the exact Collection scope through Search's installed
+  `subjects:facets` operation; the count-free empty `200`, retryable preparation and refusal remain distinct, and
+  no Global values replace an exact-Collection result.
+  Decision: use Search's installed scoped facet operation for the default Web reader, keep applied operands when one
+  field changes, and show a native empty page separately from preparation or refusal.
+  Focused native acceptance is `bun test apps/web/tests/native/collection-advanced-facets.host.test.ts`: seed eleven
+  matching Books in a curated Collection plus an outside-scope match, page the exact count-free values, preserve the
+  type and applied operands, repeat through a saved dynamic Collection and owner review, observe an empty native
+  `200`, and refuse a reader without Collection admission. The Web verifier runs this after integration; it stays
+  separate from worker typing. Focused interaction acceptance is
+  `bun test apps/web/tests/collection-advanced-facets.test.tsx apps/web/tests/saved-filter-review.test.tsx`; it pins
+  retained off-page/off-window operands and distinct preparing, empty and refused feedback in the receivers.
 - **Scopes.** Search offers viewer-self Library and exact Collection, Realm or Zone resource conditions using the
   adopted request-only grammar. Review an explicitly resolved identity before applying it; retain a refused
   selection for correction or removal. Choice metadata grants no membership or read authority.

@@ -179,20 +179,27 @@ The existing `f.`, `r.` and `l.` address grammar, inclusive quantity bounds, fil
 adapter remain authoritative. Released range operators and units come from the definitions release. Decision: eight
 active properties is a UI window, not a filter limit; applied fields and values outside the window remain in the
 Collection predicate. The overlay introduces no member reads, writes or scans. The installed
-`subjects:facets` client has no Collection resource scope, so this overlay reports unavailable until Search binds
-that scope instead of requesting Global values.
-Preparing, unsupported, unavailable and empty results retain their existing distinct feedback. Opening and editing
-filters leave the current member projection and order intact; applying starts the existing filtered members read.
+`subjects:facets` operation receives the current released type and applied filter with the exact Collection scope
+through the default reader. It returns count-free value pages; a native empty `200`, retryable preparation, refusal
+and transport unavailability remain distinct, with no Global fallback. Opening and editing filters leave the current
+member projection and order intact; applying starts the existing filtered members read.
 
 `ActualCombined` enters the generated Collection route through PageStory with the product reader, filter dialog and
 common renderer. Pattern stories remain supporting apply/clear and no-match/preparing/unavailable interactions on
 the same illustrative Collection fixture. Combined long property labels stay a pattern overlay because the Collection
 reader takes property labels from the definitions release; Concept IDs, property IDs and the long range bound travel
 in explicit `f.`/`l.`/`r.` route search. `Pages/Collections/Advanced facets` records the released property picker,
-count-free paging, retained selections outside the window and honest unavailable scope seam. Its fixture pages are
-illustrative, not native evidence. Inspect both reader contexts at `phone390`/`desktop1280`, with locale and theme
-globals. The focused `collection-filter-route-story.test.ts` regression pins the routed composition; keyboard, 44px
-and original screenshots remain unmeasured until admitted. Native query semantics stay with Commerce.
+count-free paging and retained selections outside the window. Its fixture pages are illustrative interaction evidence;
+the focused native/default-reader acceptance is `apps/web/tests/native/collection-advanced-facets.host.test.ts`.
+It seeds matching and outside-scope Books, follows a second value page, checks curated and dynamic scope, saved
+review labels, empty `200` and a refused reader through native Search. The Web verifier runs it after integration
+with `bun test apps/web/tests/native/collection-advanced-facets.host.test.ts`. The focused interaction acceptance
+is `bun test apps/web/tests/collection-advanced-facets.test.tsx apps/web/tests/saved-filter-review.test.tsx` and
+covers retained off-page/off-window operands, preparing/empty/refused feedback and saved-review empty operands.
+Inspect both reader contexts at
+`phone390`/`desktop1280`, with locale and theme globals. The focused `collection-filter-route-story.test.ts`
+regression pins the routed composition; keyboard, 44px and original screenshots remain unmeasured until admitted.
+Native query semantics stay with Search.
 
 The launcher remains page-local. A future header filter region should open this same editor with the page's supplied
 properties and applied params, without introducing another filter store or claiming unsupported backend scopes.
@@ -221,11 +228,11 @@ saved condition. Return closes the review unchanged; clearing a condition opens 
 explicit edits use current native admission and retain an incompatible draft. Public readers never receive the
 predicate.
 
-Current value labels reuse the Collection-scoped count-free Search seam in collection-facet-values.ts. The installed
-generated Search operation still lacks exact Collection scope, so review reports refused or unavailable metadata,
-leaves exact operands inspectable, and offers a deliberate retry. It does not substitute Global values or hydrate
-values one chip at a time. Search retains the missing native Collection-value binding; Commerce retains accepted
-rule execution, admission and native outcome proof.
+Current value labels reuse the default Collection-scoped count-free Search reader in collection-facet-values.ts.
+It queries the exact saved Collection through the installed scoped operation and keeps returned value pages,
+preparing results, empty pages, refusals and unavailability distinct. Exact saved operands remain inspectable in
+every outcome; labels never come from Global values or one-chip hydration. Search owns native facet production and
+admission; Commerce owns accepted rule execution and Collection membership.
 
 # Identifying work context
 

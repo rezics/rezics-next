@@ -6,6 +6,7 @@ import type { CollectionFacetRequest } from '../src/library/collection-facet-val
 import { readCollectionFilterParams } from '../src/library/collection-filter-params';
 import type { FacetState, RequestedFacet } from '../src/search/refinement/request';
 import { refinementProperties } from '../src/search/refinement/model';
+import { m } from '../src/paraglide/messages.js';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -50,7 +51,12 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
   };
   const properties = refinementProperties(release, 'fixture:Book').filter((entry) => entry.property !== 'type');
   const kept = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'];
-  const appliedParams = new URLSearchParams(kept.map((value) => [`f.${properties[0]!.property}`, value]));
+  const offPage = '00000000-0000-4000-8000-000000000021';
+  const offWindow = '00000000-0000-4000-8000-000000000022';
+  const appliedParams = new URLSearchParams();
+  for (const value of kept) appliedParams.append(`f.${properties[0]!.property}`, value);
+  appliedParams.append(`f.${properties[8]!.property}`, offPage);
+  appliedParams.append(`f.${properties[9]!.property}`, offWindow);
   const filter = readCollectionFilterParams(appliedParams, release, 'fixture:Book').document!;
   const beyondWindow = readCollectionFilterParams(
     new URLSearchParams(`f.${properties[9]!.property}=00000000-0000-4000-8000-000000000009`),
@@ -58,7 +64,13 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
     'fixture:Book',
   );
   expect(beyondWindow.selected[properties[9]!.property]).toEqual(['00000000-0000-4000-8000-000000000009']);
-  expect(filter).toEqual({ statement: { property: properties[0]!.property, in: kept } });
+  expect(filter).toEqual({
+    and: [
+      { statement: { property: properties[0]!.property, in: kept } },
+      { statement: { property: properties[8]!.property, in: [offPage] } },
+      { statement: { property: properties[9]!.property, in: [offWindow] } },
+    ],
+  });
   const admitted: FilterDocument = filter;
   const common = {
     type: 'fixture:Book',
@@ -69,18 +81,20 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
   };
   const reads: CollectionFacetRequest[] = [];
   const pending: { resolve: (state: FacetState) => void }[] = [];
-  let outcome: 'ready' | 'refused' | 'unavailable' = 'ready';
-  const page = (facet: RequestedFacet, offset: number): FacetState => ({
+  let outcome: 'ready' | 'refused' | 'unavailable' | 'preparing' | 'empty' = 'ready';
+  const page = (facet: RequestedFacet, offset: number, empty = false): FacetState => ({
     status: 'ready',
     page: {
       as_of: new Date(0).toISOString(),
       facets: [
         {
           property: facet.property,
-          values: Array.from({ length: 10 }, (_, index) => ({
-            value: `value-${offset + index + 1}`,
-            labels: { en: `Value ${offset + index + 1}` },
-          })),
+          values: empty
+            ? []
+            : Array.from({ length: 10 }, (_, index) => ({
+                value: `value-${offset + index + 1}`,
+                labels: { en: `Value ${offset + index + 1}` },
+              })),
           next: offset ? null : 'opaque-next',
         },
       ],
@@ -95,12 +109,20 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
     const request = collectionFacetRequest(contexts[reader]!, facets);
     reads.push(request);
     if (reader === 0) return await new Promise<FacetState>((resolve) => pending.push({ resolve }));
-    if (outcome !== 'ready') return { status: outcome, code: `collection_${outcome}` };
+    if (outcome === 'preparing') return { status: outcome, code: 'semantic_not_ready' };
+    if (outcome === 'refused' || outcome === 'unavailable') return { status: outcome, code: `collection_${outcome}` };
+    if (outcome === 'empty') return page(facets[0]!, 0, true);
     return page(facets[0]!, facets[0]!.cursor ? 10 : 0);
   };
   let props: ComponentProps<typeof Refinement> = {
     data: { key: 'curated:anonymous:release-7', properties },
-    conditions: { facetValues: { [properties[0]!.property]: kept } },
+    conditions: {
+      facetValues: {
+        [properties[0]!.property]: kept,
+        [properties[8]!.property]: [offPage],
+        [properties[9]!.property]: [offWindow],
+      },
+    },
     query: '',
     locale: 'en',
     perPropertyState: true,
@@ -142,11 +164,19 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
     await choose(properties[8]!.property);
     expect(await host.querySelector('input[value="value-1"]')).not.toBeNull();
     expect(host.querySelector<HTMLInputElement>(`input[type="checkbox"][value="${kept[0]}"]`)?.checked).toBe(true);
+    expect(host.querySelector<HTMLInputElement>(`input[type="checkbox"][value="${offPage}"]`)?.checked).toBe(true);
+    expect(
+      host.querySelector<HTMLInputElement>(`input[name="f.${properties[9]!.property}"][value="${offWindow}"]`),
+    ).not.toBeNull();
     const more = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent === 'More values',
     )!;
     await act(async () => more.click());
     expect(await host.querySelector('input[value="value-20"]')).not.toBeNull();
+    expect(host.querySelector<HTMLInputElement>(`input[type="checkbox"][value="${offPage}"]`)?.checked).toBe(true);
+    expect(
+      host.querySelector<HTMLInputElement>(`input[name="f.${properties[9]!.property}"][value="${offWindow}"]`),
+    ).not.toBeNull();
     expect(reads.slice(1)).toEqual([
       { ...contexts[1], facets: [{ property: properties[8]!.property, size: 10 }] },
       { ...contexts[1], facets: [{ property: properties[8]!.property, size: 10, cursor: 'opaque-next' }] },
@@ -159,7 +189,18 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
     await act(async () => refresh());
     await choose(properties[7]!.property);
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('not available for refinement');
-    expect(host.textContent).not.toContain('No values found');
+    expect(host.textContent).not.toContain(m.refinement_no_values());
+    outcome = 'preparing';
+    props = { ...props, data: { ...props.data, key: 'builtin:owner:preparing' } };
+    await act(async () => refresh());
+    await choose(properties[6]!.property);
+    expect(host.textContent).toContain(m.search_reader_facets_not_ready());
+    expect(host.textContent).not.toContain(m.refinement_no_values());
+    outcome = 'empty';
+    props = { ...props, data: { ...props.data, key: 'builtin:owner:empty' } };
+    await act(async () => refresh());
+    await choose(properties[5]!.property);
+    expect(host.textContent).toContain(m.refinement_no_values());
     outcome = 'unavailable';
     props = { ...props, data: { ...props.data, key: 'builtin:owner:unavailable' } };
     await act(async () => refresh());

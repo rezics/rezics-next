@@ -175,6 +175,27 @@ test('owner review lists all retained operands, pins accepted labels, and keeps 
   }
 });
 
+test('an empty current Collection value page stays distinct from refusal and keeps exact operands visible', async () => {
+  const ui = await mount({
+    readValues: async (request) => ({
+      status: 'ready',
+      page: {
+        as_of: new Date(0).toISOString(),
+        facets: request.facets.map(({ property }) => ({ property, values: [], next: null })),
+      },
+    }),
+  });
+  try {
+    await ui.click(m.saved_filter_review_open());
+    await ui.click(m.saved_filter_review_value_labels());
+    expect(ui.host.textContent).toContain(m.refinement_no_values());
+    expect(ui.host.textContent).not.toContain(m.saved_filter_review_value_labels_refused());
+    for (const id of ids) expect(ui.host.textContent).toContain(id);
+  } finally {
+    await ui.unmount();
+  }
+});
+
 test('a replaced owner reading retires its pending private response', async () => {
   const pending = deferred<SavedFilterReviewPage>();
   const ui = await mount({ read: () => pending.promise });

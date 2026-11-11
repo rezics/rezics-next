@@ -93,7 +93,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The shared Collection overlay uses illustrative count-free pages for UI states only. Search has not delivered a generated Collection resource binding, so the installed loader remains privately unavailable and never falls back to Global facets. Review each state at phone390 and desktop1280, in both themes and all launch locales. ReleasedFields and NextValues exercise the public curated reader; SelectedOutsideWindow and ScopeUnavailable exercise the signed-in built-in owner. Fixture pages are not native proof.',
+          'The shared Collection overlay uses illustrative count-free pages for UI states only. Product readers use Search’s installed exact-Collection scoped operation; ScopeUnavailable injects an illustrative transport failure. Review each state at phone390 and desktop1280, in both themes and all launch locales. ReleasedFields and NextValues exercise the public curated reader; SelectedOutsideWindow and ScopeUnavailable exercise the signed-in built-in owner. Fixture pages are not native proof.',
       },
     },
     viewport: {
