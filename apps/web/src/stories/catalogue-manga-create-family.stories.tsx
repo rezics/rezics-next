@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { pickText } from '@rezics/composition';
@@ -130,7 +131,7 @@ async function add(canvasElement: HTMLElement, group: string, property: string) 
   await expect(label).toHaveTextContent(group);
   await userEvent.click(label);
   await expect(select).toHaveFocus();
-  await userEvent.selectOptions(select, property);
+  await chooseSelectValue(select, property);
   await userEvent.tab();
   const button = within(select.closest('section')!).getByRole('button', { name: m.correction_add() });
   await expect(button).toHaveFocus();
@@ -172,9 +173,10 @@ async function inspect(canvasElement: HTMLElement) {
   await expect(canvas.getByRole('group', { name: m.catalogue_create_terms() })).toBeVisible();
   await expect(canvas.getByRole('heading', { name: m.manga_grain(), level: 2 })).toBeVisible();
   await expect(canvas.getByRole('heading', { name: m.catalogue_create_terms(), level: 2 })).toBeVisible();
-  await expect(canvasElement.querySelector('[data-slot="list-row-link"], a button, a input, a select')).toBeNull();
-  for (const control of canvasElement.querySelectorAll('select')) {
-    await expect(control.tagName).toBe('SELECT');
+  await expect(
+    canvasElement.querySelector('[data-slot="list-row-link"], a button, a input, a [data-slot="select-trigger"]'),
+  ).toBeNull();
+  for (const control of canvasElement.querySelectorAll<HTMLElement>('[data-slot="select-trigger"]')) {
     const label = [...canvasElement.querySelectorAll<HTMLLabelElement>('label')].find(
       (label) => label.htmlFor === control.id,
     );
@@ -246,7 +248,7 @@ export const CompleteVolume: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await terms(canvasElement);
-    await userEvent.selectOptions(
+    await chooseSelectValue(
       await enabled(canvas.getByRole('combobox', { name: m.manga_grain() })),
       'schema:PublicationVolume',
     );
@@ -261,7 +263,7 @@ export const CompleteVolume: Story = {
     )!;
     await userEvent.click(qualifierLabel);
     await expect(qualifier).toHaveFocus();
-    await userEvent.selectOptions(qualifier, 'schema:position');
+    await chooseSelectValue(qualifier, 'schema:position');
     await userEvent.tab();
     await expect(work.getByRole('button', { name: m.relation_add_qualifier() })).toHaveFocus();
     await userEvent.keyboard('{Enter}');
@@ -269,7 +271,7 @@ export const CompleteVolume: Story = {
     await expect(work.getByRole('heading', { name: name('schema:position'), level: 4 })).toBeVisible();
     const pages = await add(canvasElement, groups().publication, 'schema:numberOfPages');
     await replace(pages.getByRole('textbox', { name: m.correction_amount() }), '+192');
-    await userEvent.selectOptions(pages.getByRole('combobox', { name: m.correction_unit() }), '1');
+    await chooseSelectValue(pages.getByRole('combobox', { name: m.correction_unit() }), '1');
     await replace(pages.getByRole('textbox', { name: m.relation_citation() }), mangaVolumeCitation);
     const isbn = await add(canvasElement, groups().publication, 'schema:isbn');
     await replace(isbn.getByRole('textbox', { name: m.correction_value() }), '9781234567897');

@@ -40,6 +40,9 @@ field ID and accessible description on the trigger; keep `name`, `required` and 
 
 Page presentations migrate every ordinary fixed-choice selector to the shared Select primitives, preserving its label, selection state, disabled choices and form or route value.
 
+Decision: Catalogue and search fixed-choice controls use shared shadcn `Select` with labelled `Field` composition;
+native select is reserved for a documented browser-native interaction.
+
 For ordinary sliders, associate a visible label with `aria-labelledby` and use the supported `locale` and `format`
 props for numeric value text. The rating components compose [Base UI slider parts](https://base-ui.com/react/components/slider)
 directly because the native range needs question-specific value text, including the unrated state. The actual

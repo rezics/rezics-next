@@ -20,7 +20,7 @@ import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlertDialog,
@@ -89,7 +89,7 @@ const recipePanelClassName =
   'min-w-0 space-y-4 p-4 [overflow-wrap:anywhere] sm:p-6 ' +
   '[&_label]:relative [&_label]:z-10 [&_label]:min-w-0 [&_label]:max-w-full [&_label]:flex-wrap ' +
   '[&_input]:relative [&_input]:z-10 [&_input]:min-h-11 [&_input]:min-w-0 ' +
-  '[&_select]:relative [&_select]:z-10 [&_select]:min-h-11 [&_select]:min-w-11 ' +
+  'relative z-10 min-h-11 min-w-11 ' +
   '[&_textarea]:relative [&_textarea]:z-10 [&_textarea]:min-h-11 [&_textarea]:min-w-0 ' +
   '[&_a]:relative [&_a]:z-10 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center ' +
   '[&_button]:relative [&_button]:z-10 [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:break-words ' +
@@ -1192,21 +1192,29 @@ function RecipeEditorLive({
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
               <Field className="w-full min-w-0 sm:flex-1">
                 <FieldLabel htmlFor={`${termsId}-recipe-field`}>{m.character_add_fact({}, o)}</FieldLabel>
-                <NativeSelect
-                  id={`${termsId}-recipe-field`}
-                  className="w-full min-w-0 [&>select]:relative [&>select]:z-10 [&>select]:min-h-11 [&>select]:min-w-11 [&>select:focus-visible]:outline-2 [&>select:focus-visible]:outline-offset-2 [&>select:focus-visible]:outline-ring"
+                <Select
                   disabled={locked}
-                  value={selectedAdditionalField}
-                  aria-describedby={withdrawnChoice ? `${termsId}-recipe-field-stale` : undefined}
-                  onChange={(event) => setProperty(event.target.value)}
+                  value={selectedAdditionalField === '' ? null : selectedAdditionalField}
+                  onValueChange={(nextSelectValue) => setProperty(nextSelectValue ?? '')}
                 >
-                  <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                  {offeredAdditionalFields.map((field) => (
-                    <NativeSelectOption key={field} value={field}>
-                      {name(field)}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SelectTrigger
+                    id={`${termsId}-recipe-field`}
+                    className="w-full min-w-0 relative z-10 min-h-11 min-w-11 [&:focus-visible]:outline-2 [&:focus-visible]:outline-offset-2 [&:focus-visible]:outline-ring"
+                    aria-describedby={withdrawnChoice ? `${termsId}-recipe-field-stale` : undefined}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+                      {offeredAdditionalFields.map((field) => (
+                        <SelectItem key={field} value={field}>
+                          {name(field)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </Field>
               {withdrawnChoice && (
                 <p id={`${termsId}-recipe-field-stale`} role="status">

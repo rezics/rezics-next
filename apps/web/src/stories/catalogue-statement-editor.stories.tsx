@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -197,7 +198,7 @@ export const Unavailable: Story = {
 
     await userEvent.click(canvas.getByRole('button', { name: m.correction_add_reference() }));
     const addPart = canvas.getAllByRole('combobox', { name: m.correction_add_part() }).at(-1)!;
-    await userEvent.selectOptions(addPart, 'schema:url');
+    await chooseSelectValue(addPart, 'schema:url');
     await userEvent.click(
       within(addPart.closest('[data-slot="field"]')!.parentElement!).getByRole('button', { name: m.correction_add() }),
     );
@@ -283,7 +284,7 @@ export const InvalidDate: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const precision = await canvas.findByRole('combobox', { name: m.correction_precision() });
-    await userEvent.selectOptions(precision, '11');
+    await chooseSelectValue(precision, '11');
     const year = canvas.getByRole('textbox', { name: m.correction_year() });
     await userEvent.clear(year);
     await userEvent.type(year, '1946');
@@ -406,7 +407,7 @@ async function familyJourney(canvasElement: HTMLElement) {
   )!;
   await userEvent.click(label);
   await expect(addQualifier).toHaveFocus();
-  await userEvent.selectOptions(addQualifier, 'schema:position');
+  await chooseSelectValue(addQualifier, 'schema:position');
   await userEvent.tab();
   const add = within(addQualifier.closest('[data-slot="field"]')!.parentElement!).getByRole('button', {
     name: m.correction_add(),
@@ -415,11 +416,11 @@ async function familyJourney(canvasElement: HTMLElement) {
   await userEvent.keyboard('{Enter}');
   await expect(within(first).getAllByRole('textbox', { name: m.correction_value() })).toHaveLength(4);
   await expect(within(second).getAllByRole('textbox', { name: m.correction_value() })).toHaveLength(3);
-  await expect(within(second).getByRole('combobox', { name: m.correction_add_qualifier() })).toHaveValue('');
+  await expectSelectValue(within(second).getByRole('combobox', { name: m.correction_add_qualifier() }), '');
 
   // A citation addition belongs only to its own group and editor, retaining every supplied part.
   const part = within(second).getAllByRole('combobox', { name: m.correction_add_part() })[1]!;
-  await userEvent.selectOptions(part, 'schema:url');
+  await chooseSelectValue(part, 'schema:url');
   await userEvent.click(
     within(part.closest('[data-slot="field"]')!.parentElement!).getByRole('button', { name: m.correction_add() }),
   );

@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useMemo, useState } from 'react';
@@ -154,7 +155,7 @@ const fact = (root: HTMLElement, property: string) =>
   root.querySelector<HTMLElement>(`fieldset[id="people-fact-${property}"]`)!;
 async function select(root: HTMLElement, type: FamilyType) {
   const canvas = within(root);
-  await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.catalogue_create_type() }), type);
+  await chooseSelectValue(await canvas.findByRole('combobox', { name: m.catalogue_create_type() }), type);
 }
 async function add(root: HTMLElement, property: string, long = false) {
   const button = within(root).getByRole('button', {
@@ -241,7 +242,7 @@ async function family(root: HTMLElement, type: FamilyType, long = false) {
     let valueControl: HTMLElement | undefined;
     let valueText: string | undefined;
     if (datatype === 'time') {
-      await userEvent.selectOptions(group.getByRole('combobox', { name: m.correction_precision() }), '11');
+      await chooseSelectValue(group.getByRole('combobox', { name: m.correction_precision() }), '11');
       await userEvent.type(group.getByRole('textbox', { name: m.correction_year() }), '1980');
       await userEvent.type(group.getByRole('spinbutton', { name: m.correction_month() }), '4');
       await userEvent.type(group.getByRole('spinbutton', { name: m.correction_day() }), '3');

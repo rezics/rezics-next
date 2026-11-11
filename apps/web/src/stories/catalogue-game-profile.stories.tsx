@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { useMemo, useState } from 'react';
@@ -103,10 +104,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 async function fill(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  await userEvent.selectOptions(
-    await canvas.findByRole('combobox', { name: m.catalogue_create_type() }),
-    'schema:VideoGame',
-  );
+  await chooseSelectValue(await canvas.findByRole('combobox', { name: m.catalogue_create_type() }), 'schema:VideoGame');
   await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'The Lantern Game');
   return canvas;
 }
@@ -123,10 +121,7 @@ export const Concealed: Story = { args: { correction: true, scenario: 'concealed
 export const Created: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
-    await userEvent.selectOptions(
-      canvas.getByRole('combobox', { name: m.character_add_fact() }),
-      'schema:gamePlatform',
-    );
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:gamePlatform');
     await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
     const label = pickText(definitions.release.properties['schema:gamePlatform'].labels, getLocale()).text;
     const row = within(canvas.getByRole('heading', { name: label }).closest('section')!);
@@ -134,10 +129,7 @@ export const Created: Story = {
     await userEvent.click(
       await within(canvasElement.ownerDocument.body).findByRole('option', { name: /Example platform/ }),
     );
-    await userEvent.selectOptions(
-      row.getByRole('combobox', { name: m.correction_add_qualifier() }),
-      'schema:inLanguage',
-    );
+    await chooseSelectValue(row.getByRole('combobox', { name: m.correction_add_qualifier() }), 'schema:inLanguage');
     await userEvent.click(row.getByRole('button', { name: m.correction_add() }));
     await userEvent.type(row.getByRole('textbox', { name: m.correction_value() }), 'ja');
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));

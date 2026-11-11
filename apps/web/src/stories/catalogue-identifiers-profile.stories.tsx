@@ -1,3 +1,4 @@
+import { chooseSelectValue, readSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useState } from 'react';
 import { pickText } from '@rezics/composition';
@@ -160,10 +161,8 @@ export const ExactCurrentValue: Story = {
     const fixture = identifiersProfileFixture();
     const label = pickText(fixture.release.properties['schema:sameAs']!.labels, getLocale()).text;
     const field = within(await canvas.findByRole('region', { name: label }));
-    await userEvent.selectOptions(
-      field.getByRole('combobox', { name: m.facts_choose_value() }),
-      field.getByRole('option', { name: m.facts_selected_value({ number: 1 }) }),
-    );
+    const selector = field.getByRole('combobox', { name: m.facts_choose_value() });
+    await chooseSelectValue(selector, readSelectValue(selector));
     await userEvent.click(field.getByRole('button', { name: m.facts_edit_field() }));
     const values = field.getAllByRole('textbox', { name: m.correction_value() });
     await expect(values[0]!).toHaveValue(identifiersCitation);

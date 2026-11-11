@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectValue } from './select-option';
 import { mixedResultKindNavigation } from './search.stories';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
@@ -13,7 +14,11 @@ import {
   searchTypedReady,
 } from './page';
 
-const meta = { title: 'Discovery/Search', id: 'pages-discovery-search', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Discovery/Search',
+  id: 'pages-discovery-search',
+  parameters: { layout: 'fullscreen' },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -183,10 +188,10 @@ export const SortNavigation: Story = {
     await canvas.findByText('Mira Reading Room');
     await expect(context.canvasElement.querySelectorAll('[data-slot="discovery-results"] > li')).toHaveLength(3);
 
-    await userEvent.selectOptions(canvas.getByLabelText(m.search_sort_label()), 'rating');
+    await chooseSelectValue(canvas.getByLabelText(m.search_sort_label()), 'rating');
     // The actual loader receives a fresh traversal and returns the fixture's first page.
     await waitFor(async () => {
-      await expect(canvas.getByLabelText(m.search_sort_label())).toHaveValue('rating');
+      await expectSelectValue(canvas.getByLabelText(m.search_sort_label()), 'rating');
       await expect(context.canvasElement.querySelectorAll('[data-slot="discovery-results"] > li')).toHaveLength(1);
     });
     const more = await canvas.findByRole('link', { name: m.search_more() });
@@ -196,9 +201,9 @@ export const SortNavigation: Story = {
     await expect(ratingUrl.searchParams.get('sort')).toBe('rating');
     await expect(ratingUrl.searchParams.get('cursor')).toBe('opaque-hits-page+/=');
 
-    await userEvent.selectOptions(canvas.getByLabelText(m.search_sort_label()), 'relevance');
+    await chooseSelectValue(canvas.getByLabelText(m.search_sort_label()), 'relevance');
     await waitFor(async () => {
-      await expect(canvas.getByLabelText(m.search_sort_label())).toHaveValue('relevance');
+      await expectSelectValue(canvas.getByLabelText(m.search_sort_label()), 'relevance');
     });
     const relevanceUrl = new URL(
       canvas.getByRole('link', { name: m.search_more() }).getAttribute('href')!,

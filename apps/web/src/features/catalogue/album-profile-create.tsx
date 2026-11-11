@@ -7,7 +7,7 @@ import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from 
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
@@ -39,16 +39,16 @@ type Row = AlbumRow;
 type TermRow = TermDraft & { id: number };
 type StatementEdit = (current: StatementInput) => StatementInput | undefined;
 
-// Semantic form owners retain their native controls; the lower family supplies only presentation.
+// Semantic form owners retain form state; the lower family supplies only presentation.
 const panelClassName =
-  'min-w-0 max-w-full space-y-4 p-4 sm:p-5 [overflow-wrap:anywhere] [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring [&_input:focus-visible]:outline-2 [&_input:focus-visible]:outline-offset-2 [&_input:focus-visible]:outline-ring [&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring [&_textarea:focus-visible]:outline-2 [&_textarea:focus-visible]:outline-offset-2 [&_textarea:focus-visible]:outline-ring';
+  'min-w-0 max-w-full space-y-4 p-4 sm:p-5 [overflow-wrap:anywhere] [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring [&_input:focus-visible]:outline-2 [&_input:focus-visible]:outline-offset-2 [&_input:focus-visible]:outline-ring [&:focus-visible]:outline-2 [&:focus-visible]:outline-offset-2 [&:focus-visible]:outline-ring [&_textarea:focus-visible]:outline-2 [&_textarea:focus-visible]:outline-offset-2 [&_textarea:focus-visible]:outline-ring';
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
 const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
 const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
-// NativeSelect accepts the wrapper class; size the actual native target as well.
-const selectClassName = 'w-full min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
+// Keep the shared Select trigger at the same phone target size as its neighboring fields.
+const selectClassName = 'w-full min-w-0 max-w-full min-h-11 md:pointer-fine:min-h-8';
 // QualifierInput has no class prop. Keep its caller's input/label sizing local to these rows.
 const qualifierClassName =
   'min-w-0 w-full sm:w-auto sm:basis-64 sm:flex-1 [&_input]:min-h-11 md:pointer-fine:[&_input]:min-h-8 [&_[data-slot=field-label]]:min-w-0 [&_[data-slot=field-label]]:max-w-full [&_[data-slot=field-label]]:flex-wrap [&_[data-slot=field-label]]:[overflow-wrap:anywhere]';
@@ -238,7 +238,9 @@ function AlbumProfileCreateLive({
     if (first instanceof HTMLElement && !first.matches(':disabled')) first.focus();
     else
       formRef.current
-        ?.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled), select:not(:disabled)')
+        ?.querySelector<HTMLElement>(
+          'input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [role="combobox"]:not(:disabled)',
+        )
         ?.focus();
   }, [review.status, termsId, metadataReady]);
 
@@ -660,7 +662,7 @@ function AlbumProfileCreateLive({
             disabled={locked}
             fieldClassName="w-full min-w-0 sm:flex-1"
             labelClassName={labelClassName}
-            selectClassName="w-full [&>select]:min-h-11"
+            selectClassName="w-full min-h-11"
             buttonClassName="h-auto min-h-11 max-w-full whitespace-normal"
             add={(property) => {
               if (!editable()) return false;
@@ -1244,26 +1246,33 @@ function AlbumInitialField({
                 <FieldLabel className={labelClassName} htmlFor={`album-qualifier-${row.id}`}>
                   {m.relation_qualifier({}, o)}
                 </FieldLabel>
-                <NativeSelect
-                  className={selectClassName}
-                  id={`album-qualifier-${row.id}`}
-                  value={qualifierAllowed ? qualifierChoice : ''}
+                <Select
+                  value={
+                    (qualifierAllowed ? qualifierChoice : '') === '' ? null : qualifierAllowed ? qualifierChoice : ''
+                  }
                   disabled={disabled || qualifiers.length >= 16}
-                  onChange={(event) => {
-                    const selected = event.target.value;
+                  onValueChange={(nextSelectValue) => {
+                    const selected = nextSelectValue ?? '';
                     const state = qualifierState.current;
                     if (!editable() || !state.metadataReady) return;
                     if (!selected) setQualifierChoice('');
                     else if (state.qualifierOptions.includes(selected)) setQualifierChoice(selected);
                   }}
                 >
-                  <NativeSelectOption value="">{m.relation_add_qualifier({}, o)}</NativeSelectOption>
-                  {qualifierOptions.map((id) => (
-                    <NativeSelectOption key={id} value={id}>
-                      {named(id)}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SelectTrigger className={selectClassName} id={`album-qualifier-${row.id}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={null}>{m.relation_add_qualifier({}, o)}</SelectItem>
+                      {qualifierOptions.map((id) => (
+                        <SelectItem key={id} value={id}>
+                          {named(id)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </Field>
               <Button
                 className={actionClassName}

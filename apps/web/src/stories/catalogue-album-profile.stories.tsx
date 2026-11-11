@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { useMemo } from 'react';
@@ -134,10 +135,10 @@ const fieldName = (id: string) =>
 async function fill(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await userEvent.type(await canvas.findByRole('textbox', { name: m.catalogue_create_label() }), 'Harbour sessions');
-  await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:datePublished');
+  await chooseSelectValue(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:datePublished');
   await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
   const date = within(canvas.getByRole('group', { name: fieldName('schema:datePublished') }));
-  await userEvent.selectOptions(date.getByRole('combobox', { name: m.correction_precision() }), '9');
+  await chooseSelectValue(date.getByRole('combobox', { name: m.correction_precision() }), '9');
   await userEvent.type(date.getByRole('textbox', { name: m.correction_year() }), '2024');
   await userEvent.type(date.getByRole('textbox', { name: m.relation_citation() }), 'https://artist.example/harbour');
   return canvas;
@@ -214,7 +215,7 @@ export const LanguageRowRecovery: Story = {
       }
     };
     await phoneControls(form);
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:contributor');
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:contributor');
     await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
     const artist = within(canvas.getByRole('group', { name: fieldName('schema:contributor') }));
     await userEvent.type(artist.getByRole('combobox', { name: fieldName('schema:contributor') }), 'Harbour');
@@ -225,10 +226,10 @@ export const LanguageRowRecovery: Story = {
       artist.getByRole('textbox', { name: m.relation_citation() }),
       'https://artist.example/harbour',
     );
-    await userEvent.selectOptions(artist.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P1932');
+    await chooseSelectValue(artist.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P1932');
     const creditedAs = artist.getByRole('textbox', { name: fieldName('wdt:P1932') });
     await userEvent.type(creditedAs, 'The Harbour Ensemble');
-    await userEvent.selectOptions(artist.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P3831');
+    await chooseSelectValue(artist.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P3831');
     await userEvent.type(artist.getByRole('combobox', { name: fieldName('wdt:P3831') }), 'Performer');
     await userEvent.click(await within(document.body).findByRole('option', { name: /Performer/ }));
     await phoneControls(form);
@@ -320,14 +321,14 @@ export const ReaderUnavailable = failure('reader-unavailable', () => m.catalogue
 export const Created: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:contributor');
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'schema:contributor');
     await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
     const artist = within(canvas.getByRole('group', { name: fieldName('schema:contributor') }));
     await userEvent.type(artist.getByRole('combobox', { name: fieldName('schema:contributor') }), 'Harbour');
     await userEvent.click(
       await within(canvasElement.ownerDocument.body).findByRole('option', { name: /The Harbour Ensemble/ }),
     );
-    await userEvent.selectOptions(artist.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P3831');
+    await chooseSelectValue(artist.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P3831');
     await userEvent.type(artist.getByRole('combobox', { name: fieldName('wdt:P3831') }), 'Performer');
     await userEvent.click(await within(canvasElement.ownerDocument.body).findByRole('option', { name: /Performer/ }));
     await userEvent.type(
@@ -373,10 +374,7 @@ export const CreditCorrection: Story = {
   args: { correction: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(
-      await canvas.findByRole('combobox', { name: m.relation_property() }),
-      'schema:contributor',
-    );
+    await chooseSelectValue(await canvas.findByRole('combobox', { name: m.relation_property() }), 'schema:contributor');
     await userEvent.click(canvas.getByRole('button', { name: m.relation_edit_existing() }));
     const position = canvas.getByRole('textbox', { name: fieldName('schema:position') });
     await userEvent.clear(position);

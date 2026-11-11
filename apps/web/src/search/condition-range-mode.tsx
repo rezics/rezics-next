@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { FilterRange } from '@rezics/filter';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 
@@ -21,7 +21,7 @@ export function ConditionRangeMode({
   const [pending, setPending] = useState<'calendar' | 'year'>();
   const id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
-  const select = useRef<HTMLSelectElement>(null);
+  const select = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (pending && !dialog.current?.open) dialog.current?.showModal();
   }, [pending]);
@@ -34,20 +34,25 @@ export function ConditionRangeMode({
     <>
       <Field>
         <FieldLabel htmlFor={id}>{m.condition_range_mode({}, options)}</FieldLabel>
-        <NativeSelect
-          ref={select}
-          id={id}
+        <Select
           value={mode}
-          onChange={(event) => {
-            const next = event.currentTarget.value === 'calendar' ? 'calendar' : 'year';
+          onValueChange={(nextSelectValue) => {
+            const next = (nextSelectValue ?? '') === 'calendar' ? 'calendar' : 'year';
             if (next === mode) return;
             // Confirm even empty operands: unfinished raw drafts may still belong to this occurrence.
             setPending(next);
           }}
         >
-          <NativeSelectOption value="year">{m.condition_range_year_mode({}, options)}</NativeSelectOption>
-          <NativeSelectOption value="calendar">{m.condition_range_calendar_mode({}, options)}</NativeSelectOption>
-        </NativeSelect>
+          <SelectTrigger ref={select} id={id}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="year">{m.condition_range_year_mode({}, options)}</SelectItem>
+              <SelectItem value="calendar">{m.condition_range_calendar_mode({}, options)}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </Field>
       {pending && (
         <dialog

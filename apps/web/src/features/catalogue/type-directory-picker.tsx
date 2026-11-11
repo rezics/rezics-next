@@ -3,7 +3,7 @@ import type { CreateType, TypeDirectoryQuery, TypeDirectoryTransport } from './c
 import { Button } from '@rezics/ui/shadcn/button';
 import { FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import { DefinitionMeaning } from './definition-meaning';
 
@@ -200,18 +200,24 @@ export function TypeDirectoryPicker({
         </div>
         <div className="min-w-0 space-y-2">
           <FieldLabel htmlFor="create-type-search-mode">{m.catalogue_create_type_search_mode({}, options)}</FieldLabel>
-          <NativeSelect
-            id="create-type-search-mode"
+          <Select
             value={mode}
             disabled={disabled}
-            onChange={(event) => {
-              setMode(event.target.value as 'prefix' | 'id');
+            onValueChange={(nextSelectValue) => {
+              setMode((nextSelectValue ?? '') as 'prefix' | 'id');
               invalidateSearch();
             }}
           >
-            <NativeSelectOption value="prefix">{m.catalogue_create_type_prefix({}, options)}</NativeSelectOption>
-            <NativeSelectOption value="id">{m.catalogue_create_type_exact_id({}, options)}</NativeSelectOption>
-          </NativeSelect>
+            <SelectTrigger id="create-type-search-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="prefix">{m.catalogue_create_type_prefix({}, options)}</SelectItem>
+                <SelectItem value="id">{m.catalogue_create_type_exact_id({}, options)}</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
         <Button type="button" variant="outline" disabled={disabled} onClick={runSearch}>
           {m.catalogue_create_type_search_action({}, options)}

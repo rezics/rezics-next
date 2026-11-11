@@ -5,7 +5,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { XIcon } from 'lucide-react';
 import { m } from '../../paraglide/messages.js';
 import { localizedLabel } from '../results';
@@ -960,28 +960,34 @@ function RangeControl({
       {!time && (
         <Field>
           <FieldLabel htmlFor={`${id}-unit`}>{m.refinement_unit({}, options)}</FieldLabel>
-          <NativeSelect
-            id={`${id}-unit`}
-            value={unit}
-            onChange={(event) => {
-              const next = event.currentTarget.value || undefined;
+          <Select
+            value={unit === '' ? null : unit}
+            onValueChange={(nextSelectValue) => {
+              const next = (nextSelectValue ?? '') || undefined;
               if (quantityUnitChangeNeedsConfirmation(unit || undefined, next, [lower, upper]))
                 setPendingUnitChange({ from: unit || undefined, to: next, identity, magnitudes: [lower, upper] });
               else onDraftChange({ ...draft, unit: next ?? '' });
             }}
           >
-            <NativeSelectOption value="">{unitText(undefined)}</NativeSelectOption>
-            {unit && !definition.units.includes(unit) && (
-              <NativeSelectOption value={unit} title={unit}>
-                {unitText(unit)}
-              </NativeSelectOption>
-            )}
-            {definition.units.map((value) => (
-              <NativeSelectOption key={value} value={value} title={value}>
-                {unitText(value)}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger id={`${id}-unit`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value={null}>{unitText(undefined)}</SelectItem>
+                {unit && !definition.units.includes(unit) && (
+                  <SelectItem value={unit} title={unit}>
+                    {unitText(unit)}
+                  </SelectItem>
+                )}
+                {definition.units.map((value) => (
+                  <SelectItem key={value} value={value} title={value}>
+                    {unitText(value)}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
       )}
       {!time && <p className="text-sm text-muted-foreground">{m.search_quantity_range_help({}, options)}</p>}

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import { correctionInspectionAvailability, type EditorRead } from './statement-editor';
 import { EditorFailure, PartValue } from './statement-editor-view';
@@ -246,20 +246,25 @@ export function LiteraryCurrentAssertionInspection({
       <h3 className="font-semibold">{m.literary_visit_inspect({}, o)}</h3>
       <label className="block min-w-0 space-y-2">
         <span>{m.literary_visit_statement({}, o)}</span>
-        <NativeSelect
-          aria-label={m.literary_visit_statement({}, o)}
-          className="w-full min-w-0 [&>select]:min-h-11"
-          value={selected}
+        <Select
+          value={selected === '' ? null : selected}
           disabled={busy}
-          onChange={(event) => choose(event.currentTarget.value)}
+          onValueChange={(nextSelectValue) => choose(nextSelectValue ?? '')}
         >
-          <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-          {statements.map(({ locator, index, label }) => (
-            <NativeSelectOption key={locator.statement} value={locatorKey(locator)}>
-              {label || locator.property} · {m.facts_selected_value({ number: index + 1 }, o)}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger aria-label={m.literary_visit_statement({}, o)} className="w-full min-w-0 min-h-11">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+              {statements.map(({ locator, index, label }) => (
+                <SelectItem key={locator.statement} value={locatorKey(locator)}>
+                  {label || locator.property} · {m.facts_selected_value({ number: index + 1 }, o)}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </label>
       <Button
         type="button"
