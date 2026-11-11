@@ -931,16 +931,22 @@ is not implemented.
 Built-ins have stable deterministic identities and private defaults. Empty logical Everything and owner state
 reference discovery need no stored header or write scope. Dynamic DTOs omit curated count, creation/update times,
 order epoch and occurrence fields; no fake zeros. Every account also has a stable logical Liked that is always private, including
-empty `200`; that adopted meaning does not establish implemented identity or members runtime. First authorized
+empty `200`; the native builtin identity and members reader expose its current reaction-backed membership without
+materializing a Collection header or changing Library state facts. First authorized
 materialization moves revision 0 to 1 atomically with native Collection resource grants and `shareAccount`, without a read-grant override. Denied writes create nothing.
+
+The released-discovery fixture composes the native Library once with Kernel's pool, Access, route key, Search service
+and clock; it advances current owner-index and pin metadata through the registered `library.ownerIndex` workflow.
+Continue fixtures open `personal_library` and `reading_progress` through the ordinary platform gates. Empty eligible
+state siblings use the common owner-authorized header reader and remain unmaterialized.
 
 Library contains Continue, Everything, Liked, pins and All Collections; Following and History are separate
 destinations. State is a tile chip in the profile's wording and a filter; state Collections can be pinned, never
 mandatory navigation tabs. Continue is a bounded native read using active-session/profile-active-state eligibility,
 ranked by session activity, never full-library browser sorting. Liked uses current SUBJECT like/love reactions;
 clearing or another kind removes membership. Thread/post reactions never qualify; reactions alone add neither
-Everything nor explicit state. Content owns the owner-scoped reaction adapter; complete Liked source-version,
-epoch/disclosure coverage and shared members integration remain missing. There is no following feed or public
+Everything nor explicit state. Content owns the owner-scoped reaction adapter, and the native members reader checks
+its current source version and disclosure before returning private Liked results. There is no following feed or public
 follower total. An interim entry-only page is named tracked entries, never Everything.
 
 Stored personal subject IDs and curated occurrences are immutable; new writes target the terminal. Canonical views

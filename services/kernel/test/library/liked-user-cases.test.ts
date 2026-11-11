@@ -1,7 +1,8 @@
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import type { HttpResponse } from '../../../../specs/semantic-driver.ts';
-import { derivedId, newId, routeOf } from '../../src/route/route.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
+import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import {
   createReleasedDiscoveryFixture,
   discoveryKey,
@@ -44,9 +45,7 @@ function privateOutput(response: HttpResponse) {
   expect(cache).toContain('no-store');
 }
 function logicalId(owner: Owner, kind: 'liked' | 'everything') {
-  const id = fixture.personas[owner].accountId;
-  // Use the existing deterministic primitive; the production builtin helper still lacks 'liked'.
-  return derivedId(id, JSON.stringify(['library.collection.builtin', 1, kind]), routeOf(id)!);
+  return builtinCollectionId(fixture.personas[owner].accountId, { kind });
 }
 async function collections(owner: Owner) {
   const response = await fixture.request(

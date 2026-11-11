@@ -65,6 +65,7 @@ async function stateSupport(f: World) {
     201,
   );
   expect(created.body.libraryEntry).toMatchObject({ subjectId: subject.id, state: choice.id });
+  await f.prepareOwnerIndex('alice');
   return { profileId: profile.id, stateSetId: set.id, stateId: choice.id, siblings: set.states.map((s) => s.id) };
 }
 function dynamic(c: Header, f: World, kind: Kind) {
@@ -87,7 +88,7 @@ async function pinDiscovered(f: World, kind: Kind) {
       (state === undefined ||
         (c.builtin?.profileId === state.profileId &&
           c.builtin.stateSetId === state.stateSetId &&
-          c.builtin.stateId === state.stateId)),
+          c.builtin.stateId !== state.stateId)),
   );
   expect(found, `Actual native ${kind} discovery: ${JSON.stringify(all)}`).toHaveLength(1);
   const target = found[0]!;
@@ -100,6 +101,8 @@ async function pinDiscovered(f: World, kind: Kind) {
         c.builtin.stateSetId === state.stateSetId,
     );
     expect(siblings.map((c) => c.builtin!.stateId).sort()).toEqual([...state.siblings].sort());
+    expect(siblings.find((c) => c.builtin!.stateId === state.stateId)).toBeDefined();
+    expect(state.siblings.some((stateId) => stateId !== state.stateId)).toBe(true);
   }
   await noMaterialization(f, target.id);
   const ordinary = status(await f.request('alice', 'GET', `/v1/collections/${target.id}`), 200).body.collection;

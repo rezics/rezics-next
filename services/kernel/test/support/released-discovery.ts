@@ -35,6 +35,15 @@ import type { Pool, QueryResult, QueryResultRow } from 'pg';
 import type { HttpResponse, Persona, StatementInput, Subject } from '../../../../specs/semantic-driver.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
+import { composeLibraryDomain } from '../../src/composition/library.ts';
+import { bindLibraryDomain, peekLibraryDomain, unbindLibraryDomain } from '../../src/library/domain-binding.ts';
+import { withConnection } from '../../src/database/pool.ts';
+import { readOwnerIndexFrontier, type OwnerIndexFrontier } from '../../src/library/owner-index.ts';
+import { nextOwnerPin } from '../../src/library/owner-index-metadata.ts';
+import { OWNER_INDEX_WORKFLOW } from '../../src/library/owner-index-work.ts';
+import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { workerTestEnv } from './worker-env.ts';
+import { startOutcomeWorkerProcess } from '../search/support/outcome-rpc.ts';
 import { nativeSubjectReadingApplication } from '../../src/semantic/adapters/index.ts';
 import { systemClock, type KernelClock } from '../../src/clock.ts';
 import { isRelationProperty } from '../../src/semantic/item.ts';
@@ -210,6 +219,8 @@ export interface ReleasedDiscoveryFixture {
     dietTime: Filter;
   }>;
   catchUp(subjects: readonly CreatedSubject[]): Promise<void>;
+  /** Run the installed owner-index workflow to the current native frontier for one named account. */
+  prepareOwnerIndex(persona: DiscoveryAccountName): Promise<void>;
   /** Existing native grant administration, for current-disclosure acceptance controls. */
   grant(persona: Persona, actions: string[], resourceId: string): Promise<void>;
   close(): Promise<void>;
@@ -254,12 +265,20 @@ export async function createReleasedDiscoveryFixture(
   let frozenAt: number | undefined;
   // This same function remains callable by native cleanup after the public controls close.
   const kernelClock: KernelClock = () => new Date(frozenAt ?? systemClock().getTime());
+  let ownerIndexWorker: ReturnType<typeof startOutcomeWorkerProcess> | undefined;
+  let ownerIndexWorkerStart: Promise<void> | undefined;
+  let ownerIndexClock = Promise.resolve();
+  let ownerIndexWork: WorkClient | undefined;
+  let ownerIndexWorkStart: Promise<WorkClient> | undefined;
+  let installedKernelPool: Pool | undefined;
+  let previousLibraryDomain: ReturnType<typeof peekLibraryDomain> = undefined;
+  let libraryDomain: ReturnType<typeof composeLibraryDomain> | undefined;
   const clock: ReleasedDiscoveryClock = {
     now: kernelClock,
     freeze() {
       requireOpen();
       frozenAt ??= systemClock().getTime();
-      native?.onClockChange(new Date(frozenAt));
+      onClockChange(new Date(frozenAt));
       return kernelClock();
     },
     advanceBy(milliseconds) {
@@ -271,11 +290,18 @@ export async function createReleasedDiscoveryFixture(
       if (!Number.isSafeInteger(next) || next > 8_640_000_000_000_000)
         throw new Error('Released discovery clock overflow');
       frozenAt = next;
-      native?.onClockChange(new Date(next));
+      onClockChange(new Date(next));
       return kernelClock();
     },
   };
   const native = options.search === 'native' ? releasedDiscoveryRuntime(options.kernelPool) : undefined;
+  const onClockChange = (instant: Date) => {
+    native?.onClockChange(instant);
+    if (ownerIndexWorker) {
+      const worker = ownerIndexWorker;
+      ownerIndexClock = ownerIndexClock.then(() => worker.setClock(instant.getTime()));
+    }
+  };
   let nativeStart: Promise<void> | undefined;
   const flushNativeClock = async () => {
     // Setup sends precede start(); join the actual lifecycle only after it exists.
@@ -283,38 +309,62 @@ export async function createReleasedDiscoveryFixture(
       await nativeStart;
       await native!.flushClock();
     }
+    if (ownerIndexWorkerStart) await ownerIndexWorkerStart;
+    await ownerIndexClock;
   };
   const driver = await createSemanticDriver(
-    (config) =>
-      createKernel({
+    (config) => {
+      const search = native?.service(config) ?? config.search;
+      return createKernel({
         receiptKeys: testReceiptKeys(),
         ...config,
         subjectReading: nativeSubjectReadingApplication(),
-        ...(config.onAccessReady || native
-          ? {
-              onAccessReady(access, viewerActions) {
-                config.onAccessReady?.(access, viewerActions);
-                native?.onAccessReady(access);
-              },
-            }
-          : {}),
-        ...(native ? { search: native.service(config) } : {}),
+        onAccessReady(access, viewerActions) {
+          config.onAccessReady?.(access, viewerActions);
+          native?.onAccessReady(access);
+          if (libraryDomain) throw new Error('Released discovery Library composition already installed');
+          installedKernelPool = config.pool;
+          previousLibraryDomain = peekLibraryDomain();
+          libraryDomain = composeLibraryDomain({
+            pool: config.pool,
+            access,
+            routeKey: config.routeKey,
+            clock: config.clock ?? kernelClock,
+            ...(search === undefined ? {} : { search }),
+          });
+        },
+        ...(search === undefined ? {} : { search }),
         writeRate: createWriteRateLimiter({
           secret: 'released-discovery-native-test-rate-secret',
           overrides: JSON.stringify({ 'new-account': { write: { maximum: 1000, seconds: 60 } } }),
         }),
-      }),
+      });
+    },
     {
       strictCleanup: true,
       clock: kernelClock,
       ...(options.kernelPool ? { kernelPool: options.kernelPool } : {}),
-      ...(native
-        ? {
-            isolatedAuth: true,
-            linkProjection: 'external',
-            beforeClose: () => native.close(),
+      ...(native ? { isolatedAuth: true, linkProjection: 'external' } : {}),
+      beforeClose: async () => {
+        const errors: unknown[] = [];
+        if (libraryDomain && peekLibraryDomain() === libraryDomain) {
+          if (previousLibraryDomain) bindLibraryDomain(previousLibraryDomain);
+          else unbindLibraryDomain();
+        }
+        for (const close of [
+          () => ownerIndexWorker?.close(),
+          () => ownerIndexWorkStart?.then((work) => work.close()),
+          () => native?.close(),
+        ]) {
+          try {
+            await close();
+          } catch (error) {
+            errors.push(error);
           }
-        : {}),
+        }
+        if (errors.length === 1) throw errors[0];
+        if (errors.length) throw new AggregateError(errors, 'Released discovery runtime cleanup failed');
+      },
     },
   );
   try {
@@ -332,6 +382,91 @@ export async function createReleasedDiscoveryFixture(
         return driver.fixtures.send(personas[persona], method, path, body, headers);
       if (method === 'DELETE') throw new Error('Semantic persona transport does not expose DELETE');
       return driver.request(persona, method, path, body, headers);
+    };
+    const ownerIndexClient = async () => {
+      requireOpen();
+      if (!native && !ownerIndexWorkerStart) {
+        const runtime = driver.fixtures.runtime;
+        const env = workerTestEnv({
+          DATABASE_URL: runtime.databaseUrl,
+          KERNEL_ROUTE_KEY: runtime.routeKey,
+          KERNEL_SESSION_KEYS: runtime.sessionKeys,
+          AUTH_ISSUER: runtime.authIssuer,
+          AUTH_AUDIENCE: runtime.authAudience,
+          AUTH_JWKS_URL: runtime.authJwksUrl,
+          KERNEL_PORT: '0',
+        });
+        delete env.OPENSEARCH_URL;
+        delete env.KERNEL_SEARCH_PREFIX;
+        ownerIndexWorker = startOutcomeWorkerProcess(env, {
+          searchDisabled: true,
+          ...(frozenAt === undefined ? {} : { frozenInstant: frozenAt }),
+        });
+        ownerIndexWorkerStart = ownerIndexWorker.ready.then(() => {});
+      }
+      if (ownerIndexWorkerStart) await ownerIndexWorkerStart;
+      ownerIndexWorkStart ??= createWorkClient(
+        driver.fixtures.runtime.databaseUrl,
+        installedKernelPool ?? driver.fixtures.pool,
+      );
+      ownerIndexWork = await ownerIndexWorkStart;
+      await flushNativeClock();
+      return ownerIndexWork;
+    };
+    const ownerIndexPool = () => installedKernelPool ?? driver.fixtures.pool;
+    const readOwnerIndexControl = async (accountId: string) =>
+      withConnection(ownerIndexPool(), async (client) => {
+        const frontier = await readOwnerIndexFrontier(client, accountId);
+        const result = await client.query<{
+          phase: string;
+          chronology_ready: boolean;
+          activity_after_subject: string | null;
+        }>(
+          `SELECT phase, chronology_ready, activity_after_subject
+           FROM library.owner_index_control WHERE route=$1 AND account_id=$2`,
+          [routeOf(accountId), accountId],
+        );
+        const control = result.rows[0];
+        if (!control) return null;
+        return {
+          frontier,
+          chronologyReady: control.chronology_ready,
+          activityAfter: control.activity_after_subject,
+        };
+      });
+    const runOwnerIndexPage = async (accountId: string, frontier: OwnerIndexFrontier | null, metadata: boolean) => {
+      const work = await ownerIndexClient();
+      const workflowID = `${OWNER_INDEX_WORKFLOW}:released-discovery:${randomUUID()}`;
+      const handle = await work.enqueue(
+        { workflowName: OWNER_INDEX_WORKFLOW, workflowID, queueName: 'maintenance' },
+        { accounts: [accountId], frontier, metadata },
+      );
+      await handle.getResult();
+    };
+    const prepareOwnerIndex: ReleasedDiscoveryFixture['prepareOwnerIndex'] = async (persona) => {
+      requireOpen();
+      const accountId = personas[persona].accountId;
+      let control = await readOwnerIndexControl(accountId);
+      while (control === null || control.frontier?.phase !== 'ready') {
+        await runOwnerIndexPage(accountId, control?.frontier ?? null, false);
+        control = await readOwnerIndexControl(accountId);
+      }
+      if (control === null) throw new Error('Owner index workflow did not create its native control row');
+      while (!control.chronologyReady) {
+        const previous = control.activityAfter;
+        await runOwnerIndexPage(accountId, control.frontier, false);
+        control = await readOwnerIndexControl(accountId);
+        if (!control.chronologyReady && control.activityAfter === previous)
+          throw new Error('Owner chronology workflow did not advance its native frontier');
+      }
+      let pin = await withConnection(ownerIndexPool(), (client) => nextOwnerPin(client, accountId));
+      while (pin !== undefined) {
+        await runOwnerIndexPage(accountId, control.frontier, true);
+        const next = await withConnection(ownerIndexPool(), (client) => nextOwnerPin(client, accountId));
+        if (next !== undefined && isDeepStrictEqual(pin, next))
+          throw new Error('Owner pin metadata workflow did not settle its native pin');
+        pin = next;
+      }
     };
     const active = await request('anonymous', 'GET', '/v1/definitions/active');
     expectStatus(active, 200, 'Read actual active release');
@@ -1063,6 +1198,7 @@ export async function createReleasedDiscoveryFixture(
           if (!done) throw new Error(`Native link projection did not catch up in partition ${partition}`);
         }
       },
+      prepareOwnerIndex,
       close: async () => {
         closed = true;
         const errors: unknown[] = [];
