@@ -70,18 +70,15 @@ export function materializeHistoricalConstruction(directory: string, publication
             const dependency = resolveHistoricalDependency(origin, specifier);
             return `from ${quote}${targets.get(dependency) ?? dependency}${quote}`;
           })
-          .replace(
-            /import\.meta\.resolve\((['"])([^'"]+)\1\)/g,
-            (match, _quote: string, specifier: string) => {
-              // Resolve from the pinned module's original location before it is
-              // moved under .temp. In particular, the old checker must use the
-              // verified historical alias, not a process-wide resolver hook.
-              if (specifier.startsWith('node:') || /^[a-z][a-z\d+.-]*:/i.test(specifier)) return match;
-              const dependency = resolveHistoricalDependency(origin, specifier);
-              const materialized = targets.get(dependency) ?? dependency;
-              return `import.meta.resolve(${JSON.stringify(pathToFileURL(materialized).href)})`;
-            },
-          );
+          .replace(/import\.meta\.resolve\((['"])([^'"]+)\1\)/g, (match, _quote: string, specifier: string) => {
+            // Resolve from the pinned module's original location before it is
+            // moved under .temp. In particular, the old checker must use the
+            // verified historical alias, not a process-wide resolver hook.
+            if (specifier.startsWith('node:') || /^[a-z][a-z\d+.-]*:/i.test(specifier)) return match;
+            const dependency = resolveHistoricalDependency(origin, specifier);
+            const materialized = targets.get(dependency) ?? dependency;
+            return `import.meta.resolve(${JSON.stringify(pathToFileURL(materialized).href)})`;
+          });
     writeFileSync(target, rewritten);
   }
   return targets;
