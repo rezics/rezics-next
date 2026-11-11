@@ -188,7 +188,10 @@ export function MemberReadingItem({
       title={title}
       {...(titleLang ? { titleLang } : {})}
       titleDataSlot="member-list-row-title"
-      className="max-w-4xl [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className={cn(
+        'max-w-4xl [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+        !evidence && 'sm:max-h-48',
+      )}
       visual={
         cover ? (
           <div
@@ -202,7 +205,7 @@ export function MemberReadingItem({
           </div>
         ) : undefined
       }
-      metadata={<div className="min-w-0 w-full space-y-1">{metadata}</div>}
+      metadata={<div className="line-clamp-4 min-w-0 w-full space-y-1">{metadata}</div>}
       preview={
         <div className="min-w-0 space-y-1">
           <p data-slot="collection-member-position" className="text-xs text-muted-foreground">

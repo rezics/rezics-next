@@ -45,12 +45,19 @@ const plain: MenuEntry[] = [
 export const PlainEntries: Story = {
   args: { entries: plain },
   play: async () => {
-    await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+    const trigger = await screen.findByRole('button', { name: 'Open menu' });
+    await userEvent.click(trigger);
     const panel = await screen.findByRole(sheetPresentation() ? 'dialog' : 'menu');
     const labels = [...panel.querySelectorAll('button, a, [role="menuitem"]')]
       .map((row) => row.textContent?.trim())
       .filter(Boolean);
     await expect(labels).toEqual(['Open', 'Visit subject', 'Copy link']);
+    if (!sheetPresentation()) {
+      await userEvent.click(trigger);
+      await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'));
+      await userEvent.click(trigger);
+      await waitFor(() => expect(screen.getByRole('menu')).toBeVisible());
+    }
   },
 };
 
