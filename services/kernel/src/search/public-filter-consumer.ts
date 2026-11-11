@@ -724,6 +724,8 @@ function stateValue(value: any): any {
 const encodeState = (value: unknown) => JSON.stringify(stateTree(value));
 const decodeState = <T>(value: string): T => stateValue(JSON.parse(value));
 type RetainedWindow = Readonly<{
+  /** Native Suggestions without sort tuples cannot seed an ordered refill. */
+  continuation?: false;
   parent: string | null;
   consumed: number;
   before: readonly (string | number | null)[] | undefined;
@@ -1949,6 +1951,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (!row?.consumer_window) return m.unavailable('observation_lost');
         previousEncoded = row.consumer_window;
         previous = decodeState<RetainedWindow>(row.consumer_window);
+        if (previous.continuation === false) return m.unavailable('observation_lost');
         if (prefix.consumed > previous.raw.length) throw new TypeError('Consumed prefix exceeds retained execution');
         // Only the actual latest execution may branch; a consumed prefix never admits caller keysets.
         if (work.execution !== prefix.execution) return m.unavailable('observation_lost');

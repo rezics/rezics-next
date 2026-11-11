@@ -47,14 +47,26 @@ Each observation is tied to the current committed main document's query-free URL
 Unsettled navigation, a missing section, a busy reader, context replacement and target loss retain their exact
 reason in diagnostics; only that browser probe is unavailable, while its native and SQL probes still complete.
 Readiness remains scoped to the requested reader, so unrelated preparation text and delayed resources do not block a
-ready section. A settled empty reader records `browserProbe=run` and `reader=empty`; an unrun reader records
-`browserProbe=unrun` and `reader=missing`.
+ready section. A settled empty reader records `browserProbe=run` and `reader=empty`. An unrun reader retains
+`browserProbe=unrun`; its result classification is missing, while diagnostics report its reader DOM as unobserved.
+
+Decision: A reader timeout reports the independent native response, same-origin browser ServerFn request stages,
+section action stage, Home client-mount notification and selected reader DOM separately. `independentNative=unsettled`
+means that the native probe produced no HTTP response; a settled native response says nothing about the browser
+request. `browserServerFn` counts request starts, HTTP responses, completed or failed transports and requests still
+pending, without retaining request URLs or payloads. Home's `data-home-feed-mounted` marker is false until its
+client effect notifies the mounted state; false means that notification was not observed, while an absent marker
+leaves Home mount unobserved. A missing selected section is a selector mismatch only after the Home mount marker is
+true. The action stage distinguishes not started, started, settled and failed, so a native 200 cannot imply that a
+browser action ran. The manifest selectors and shared readiness deadline stay unchanged.
 
 The bounded Chromium fixture suite is `bun test scripts/page-data-check.test.ts`. It covers redirect recovery,
 delayed unrelated resources, context replacement, independently unready sections, redirect deadline expiry, target
 loss and the distinction between genuine empty content and an unrun reader. The fixture uses local Web and Kernel
 HTTP endpoints and read-only SQL-count stubs; original native integration acceptance remains a separate controller
-cycle.
+cycle. The readiness regression pins a settled native 200 alongside a pending browser ServerFn request, a present
+busy reader, a missing selected section after Home mount, an unobserved Home mount notification, and a browser action
+that never started.
 
 Decision: member browser sign-in uses that same committed-document navigation, then the visible email, password and
 Sign in controls under a form reader deadline. Submission waits explicitly for the Web callback redirect and requires

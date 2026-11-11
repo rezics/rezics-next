@@ -15,6 +15,7 @@ import { sourceTuple } from './fences.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { factDataTypes, resolveItem, type FactRow, type Statement } from './item.ts';
 import { indexedStatement } from './search-source.ts';
+import { readRelease } from './definition-release-read.ts';
 import type {
   PrivacyReductionHead,
   PublicFilterCost,
@@ -388,6 +389,10 @@ async function storedMeaningRelease(pool: Pool, digest: string, deadline: number
       body: unknown;
     }[];
     const body = found.find((row) => row.digest === digest)?.body;
+    // Binding accepts persisted composite digests through the release owner.
+    // Resolve that same immutable authority instead of treating a missing base
+    // release row as missing meaning or trusting the caller's release body.
+    if (body === undefined) return readRelease(client, digest);
     if (!object(body)) return null;
     try {
       return releaseDigest(body as unknown as Release) === digest ? (body as unknown as Release) : null;
@@ -945,6 +950,12 @@ export async function readPublicFilterProjectionPage(
             } catch {
               // A malformed stored release is unresolved metadata, never an empty facet.
             }
+          }
+          const storedDigests = new Set(found.map((row) => row.digest));
+          for (const digest of missingDigests) {
+            if (storedDigests.has(digest)) continue;
+            const release = await readRelease(client, digest);
+            if (release) result.set(digest, release);
           }
           requireAccessDeadline(deadline);
           await client.query('COMMIT');

@@ -152,7 +152,19 @@ export type PageObservation = {
   text: string;
   dataState: string | null;
   busy: boolean;
+  homeMounted: boolean | null;
+  homeState: string | null;
+  homeBusy: boolean | null;
   document?: ReaderDocumentIdentity;
+};
+
+export type BrowserServerFunctionObservation = {
+  started: number;
+  responses: number;
+  settled: number;
+  failed: number;
+  pending: number;
+  truncated: boolean;
 };
 
 export type ReaderDocumentIdentity = {
@@ -179,6 +191,11 @@ export type SectionResult = {
     nativeProbe: 'run' | 'unrun';
     browserProbe: 'run' | 'unrun';
     sqlProbe: 'run' | 'unrun' | 'not-declared';
+    browserServerFunctions: BrowserServerFunctionObservation;
+    action: 'not-required' | 'not-started' | 'started' | 'settled' | 'failed';
+    homeMounted: boolean | null;
+    homeState: string | null;
+    homeBusy: boolean | null;
     readerDocument?: ReaderDocumentIdentity;
     nativeProblem?: NativeProblemEvidence;
     unrun?: UnrunProbeEvidence;
@@ -644,6 +661,9 @@ type SectionProbe = {
   text: string;
   dataState: string | null;
   busy: boolean;
+  homeMounted: boolean | null;
+  homeState: string | null;
+  homeBusy: boolean | null;
   document: ReaderDocumentIdentity;
 };
 
@@ -685,6 +705,79 @@ type PageDocumentTracker = {
   failure(): Error | undefined;
   dispose(): void;
 };
+
+type BrowserServerFunctionTracker = {
+  reset(): void;
+  snapshot(): BrowserServerFunctionObservation;
+  dispose(): void;
+};
+
+/** Aggregate same-origin ServerFn transport only; opaque URLs and payloads stay private. */
+function browserServerFunctionTracker(page: Page, origin: string): BrowserServerFunctionTracker {
+  type RequestState = { generation: number; failed: boolean };
+  let generation = 0;
+  let counts: Omit<BrowserServerFunctionObservation, 'pending'> = {
+    started: 0,
+    responses: 0,
+    settled: 0,
+    failed: 0,
+    truncated: false,
+  };
+  const requests = new Map<PlaywrightRequest, RequestState>();
+  const observeRequest = (request: PlaywrightRequest) => {
+    let url: URL;
+    try {
+      url = new URL(request.url());
+    } catch {
+      return;
+    }
+    if (url.origin !== origin || !(url.pathname === '/_serverFn' || url.pathname.startsWith('/_serverFn/'))) return;
+    if (counts.started >= 64) {
+      counts.truncated = true;
+      return;
+    }
+    counts.started++;
+    requests.set(request, { generation, failed: false });
+  };
+  const observeResponse = (response: PlaywrightResponse) => {
+    const state = requests.get(response.request());
+    if (!state || state.generation !== generation) return;
+    counts.responses++;
+    if (response.status() >= 400) {
+      counts.failed++;
+      state.failed = true;
+    }
+  };
+  const finishRequest = (request: PlaywrightRequest, transportFailed: boolean) => {
+    const state = requests.get(request);
+    if (!state) return;
+    requests.delete(request);
+    if (state.generation !== generation) return;
+    counts.settled++;
+    if (transportFailed && !state.failed) counts.failed++;
+  };
+  const observeFinished = (request: PlaywrightRequest) => finishRequest(request, false);
+  const observeFailed = (request: PlaywrightRequest) => finishRequest(request, true);
+  page.on('request', observeRequest);
+  page.on('response', observeResponse);
+  page.on('requestfinished', observeFinished);
+  page.on('requestfailed', observeFailed);
+  return {
+    reset() {
+      generation++;
+      counts = { started: 0, responses: 0, settled: 0, failed: 0, truncated: false };
+      requests.clear();
+    },
+    snapshot: () => ({ ...counts, pending: requests.size }),
+    dispose() {
+      page.off('request', observeRequest);
+      page.off('response', observeResponse);
+      page.off('requestfinished', observeFinished);
+      page.off('requestfailed', observeFailed);
+      requests.clear();
+    },
+  };
+}
 
 function pageDocumentTracker(page: Page): PageDocumentTracker {
   let revision = 0;
@@ -913,7 +1006,16 @@ async function observeSection(
     const timeoutMs = remainingUntil(readerDeadline);
     if (timeoutMs === 0) {
       return {
-        observation: { present: false, itemCount: 0, text: '', dataState: null, busy: true },
+        observation: {
+          present: false,
+          itemCount: 0,
+          text: '',
+          dataState: null,
+          busy: true,
+          homeMounted: null,
+          homeState: null,
+          homeBusy: null,
+        },
         timedOut: true,
         readinessReason: 'shared-reader-deadline-elapsed',
       };
@@ -1035,6 +1137,10 @@ async function observeSection(
             url: `${documentUrl.origin}${documentUrl.pathname}`,
             timeOrigin: performance.timeOrigin,
           };
+          const home = document.querySelector<HTMLElement>('[data-home-feed-mounted]');
+          const homeMounted = home ? home.getAttribute('data-home-feed-mounted') === 'true' : null;
+          const homeState = home?.getAttribute('data-home-feed-state') ?? null;
+          const homeBusy = home ? home.getAttribute('aria-busy') === 'true' : null;
           if (!node)
             return {
               present: false,
@@ -1042,6 +1148,9 @@ async function observeSection(
               text: '',
               dataState: null,
               busy: true,
+              homeMounted,
+              homeState,
+              homeBusy,
               documentIdentity,
               documentHref: location.href,
             };
@@ -1055,6 +1164,9 @@ async function observeSection(
             text: (node.innerText ?? node.textContent ?? '').slice(0, 4000),
             dataState: node.getAttribute('data-state') ?? node.getAttribute('data-feed-result-state'),
             busy: timedOut || unsettled,
+            homeMounted,
+            homeState,
+            homeBusy,
             documentIdentity,
             documentHref: location.href,
           };
@@ -1082,13 +1194,24 @@ async function observeSection(
         text: observation.text,
         dataState: observation.dataState,
         busy: observation.busy,
+        homeMounted: observation.homeMounted,
+        homeState: observation.homeState,
+        homeBusy: observation.homeBusy,
         document: observation.documentIdentity,
       };
       return {
         observation: finalObservation,
         timedOut,
         ...(timedOut
-          ? { readinessReason: finalObservation.present ? 'reader-remained-loading' : 'reader-selector-not-found' }
+          ? {
+              readinessReason: finalObservation.present
+                ? 'reader-remained-loading'
+                : finalObservation.homeMounted === true
+                  ? 'reader-selector-not-found'
+                  : finalObservation.homeMounted === false
+                    ? 'home-mount-notification-unobserved'
+                    : 'reader-mount-or-selector-unobserved',
+            }
           : {}),
       };
     } catch (error) {
@@ -1104,10 +1227,11 @@ async function observeSection(
   }
 }
 
-async function clickSectionAction(page: Page, section: ManifestSection, readerDeadline: number): Promise<void> {
-  const action = section.native.action!;
-  const timeoutMs = remainingUntil(readerDeadline);
-  if (timeoutMs === 0) throw new Error('Reader readiness deadline elapsed before section action');
+async function clickSectionAction(
+  page: Page,
+  action: NonNullable<NativeCall['action']>,
+  timeoutMs: number,
+): Promise<void> {
   await page.getByRole(action.role, { name: action.name, exact: true }).click({ timeout: timeoutMs });
 }
 
@@ -1529,6 +1653,9 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
     text: '',
     dataState: null,
     busy: true,
+    homeMounted: null,
+    homeState: null,
+    homeBusy: null,
   });
   const results: SectionResult[] = [];
   let seedCounter: ReturnType<typeof createSeedCounter> | undefined;
@@ -1547,6 +1674,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
       let context: BrowserContext | undefined;
       let page: Page | undefined;
       let documentTracker: PageDocumentTracker | undefined;
+      let serverFunctionTracker: BrowserServerFunctionTracker | undefined;
       try {
         // Native authorization and browser sign-in are independent prerequisites.
         if (browser && (persona === 'anonymous' || options.memberStorageState || signIn)) {
@@ -1561,6 +1689,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
             if (persona === 'member' && signIn && !options.memberStorageState)
               await signInBrowser(page, base, signIn, pageTimeout, report);
             documentTracker = pageDocumentTracker(page);
+            serverFunctionTracker = browserServerFunctionTracker(page, base.origin);
           } catch (error) {
             incomplete = true;
             report(`${persona} browser setup unavailable: ${displayError(error)}`);
@@ -1579,6 +1708,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
         for (const manifestPage of pages) {
           const sections = manifestPage.sections.filter((section) => personasOf(section).includes(persona));
           if (sections.length === 0) continue;
+          serverFunctionTracker?.reset();
           const identity = seedIdentities.get(manifestPage.id);
           if (identity?.status === 'unrun') {
             incomplete = true;
@@ -1612,6 +1742,18 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
                   nativeProbe: 'unrun',
                   browserProbe: 'unrun',
                   sqlProbe,
+                  browserServerFunctions: {
+                    started: 0,
+                    responses: 0,
+                    settled: 0,
+                    failed: 0,
+                    pending: 0,
+                    truncated: false,
+                  },
+                  action: section.native.action ? 'not-started' : 'not-required',
+                  homeMounted: null,
+                  homeState: null,
+                  homeBusy: null,
                   unrun,
                 },
               };
@@ -1671,6 +1813,8 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
             };
             vars.filter = section.native.query?.filter ? expand(section.native.query.filter, vars) : NIL_UUID;
             let browserProbe: 'run' | 'unrun' = navigationFailed ? 'unrun' : 'run';
+            let action: SectionResult['evidence']['action'] = section.native.action ? 'not-started' : 'not-required';
+            let readFailure: string | undefined;
             const readSection = async (): Promise<{
               observation: PageObservation;
               timedOut: boolean;
@@ -1679,14 +1823,19 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
               if (!page || !documentTracker || navigationFailed || !admittedDocument)
                 return { observation: unread(), timedOut: false };
               try {
-                if (section.native.action) await clickSectionAction(page, section, readerDeadline);
+                if (section.native.action) {
+                  const actionTimeout = remainingUntil(readerDeadline);
+                  if (actionTimeout === 0) throw new Error('Reader readiness deadline elapsed before section action');
+                  action = 'started';
+                  await clickSectionAction(page, section.native.action, actionTimeout);
+                  action = 'settled';
+                }
                 return await observeSection(page, documentTracker, section, readerDeadline, admittedDocument);
               } catch (error) {
                 incomplete = true;
                 browserProbe = 'unrun';
-                report(
-                  `Reader unavailable for ${manifestPage.id} ${persona} ${section.id}: reason=${readerFailureReason(error)}; ${displayError(error)}`,
-                );
+                if (action === 'started') action = 'failed';
+                readFailure = displayError(error);
                 return { observation: unread(), timedOut: false };
               }
             };
@@ -1715,6 +1864,14 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
                   ),
               readSection(),
             ]);
+            const browserServerFunctions = serverFunctionTracker?.snapshot() ?? {
+              started: 0,
+              responses: 0,
+              settled: 0,
+              failed: 0,
+              pending: 0,
+              truncated: false,
+            };
             let seedCount: number | null = null;
             let sqlProbe: 'run' | 'unrun' | 'not-declared' = section.sql ? 'unrun' : 'not-declared';
             if (section.sql) {
@@ -1741,13 +1898,34 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
               }
             }
             if (native?.error) report(`${manifestPage.id} ${persona} ${section.id}: ${native.error}`);
+            const observed = read.observation;
+            const independentNative = !native
+              ? 'unrun'
+              : native.status === 0
+                ? 'unsettled'
+                : `settled:${native.status}`;
+            const browserRequestStage = `browserServerFn=started:${browserServerFunctions.started},responses:${browserServerFunctions.responses},settled:${browserServerFunctions.settled},failed:${browserServerFunctions.failed},pending:${browserServerFunctions.pending}${browserServerFunctions.truncated ? ',truncated' : ''}`;
+            const homeStage = `homeMountNotification=${observed.homeMounted === null ? 'unobserved' : observed.homeMounted ? 'received' : 'not-received'} homeState=${observed.homeState ?? 'none'} homeBusy=${observed.homeBusy === null ? 'unobserved' : observed.homeBusy}`;
+            const readerStage =
+              browserProbe === 'unrun'
+                ? 'reader=unobserved state=unobserved busy=unobserved'
+                : `reader=${observed.present ? 'present' : 'missing'} state=${observed.dataState ?? 'none'} busy=${observed.busy}`;
             if (read.timedOut) {
               incomplete = true;
               report(
-                `Reader readiness timed out for ${manifestPage.id} ${persona} ${section.id}: reason=${read.readinessReason ?? 'reader-not-ready-before-shared-deadline'}`,
+                `Reader readiness timed out for ${manifestPage.id} ${persona} ${section.id}: reason=${read.readinessReason ?? 'reader-not-ready-before-shared-deadline'}; independentNative=${independentNative} ${browserRequestStage} action=${action} ${homeStage}; ${readerStage}`,
+              );
+            } else if (section.native.action && action === 'not-started' && readFailure) {
+              incomplete = true;
+              report(
+                `Browser action not started for ${manifestPage.id} ${persona} ${section.id}: reason=${readFailure}; independentNative=${independentNative} ${browserRequestStage} action=${action} ${homeStage}; ${readerStage}`,
+              );
+            } else if (browserProbe === 'unrun') {
+              incomplete = true;
+              report(
+                `Reader observation unrun for ${manifestPage.id} ${persona} ${section.id}: reason=${readFailure ?? (navigationFailed ? 'document-not-admitted' : 'reader-not-observed')}; independentNative=${independentNative} ${browserRequestStage} action=${action} ${homeStage}; ${readerStage}`,
               );
             }
-            const observed = read.observation;
             const classified = native
               ? classifySection(
                   native,
@@ -1781,6 +1959,11 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
                 nativeProbe: native ? 'run' : 'unrun',
                 browserProbe,
                 sqlProbe,
+                browserServerFunctions,
+                action,
+                homeMounted: observed.homeMounted,
+                homeState: observed.homeState,
+                homeBusy: observed.homeBusy,
                 ...(observed.document ? { readerDocument: observed.document } : {}),
                 ...(nativeProblem ? { nativeProblem } : {}),
                 ...(authorityMissing && scopedRead
@@ -1798,7 +1981,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
             if (native?.error) incomplete ||= native.status === 0;
             if (DEFECTS.has(classified) || !native || browserProbe === 'unrun') {
               report(
-                `Evidence ${manifestPage.id} ${persona} ${section.id}: native=${native?.status ?? 'unrun'} browser=${browserProbe} selected=${result.evidence.nativeItems}; reader=${pageKind(observed)} items=${observed.itemCount} state=${observed.dataState ?? 'none'} busy=${observed.busy}; ${section.sql ? `SQL=${seedCount ?? 'unavailable'}` : 'SQL=not-declared'}`,
+                `Evidence ${manifestPage.id} ${persona} ${section.id}: independentNative=${independentNative} browser=${browserProbe} selected=${result.evidence.nativeItems}; ${browserRequestStage} action=${action} ${homeStage}; ${readerStage} kind=${pageKind(observed)} items=${observed.itemCount}; ${section.sql ? `SQL=${seedCount ?? 'unavailable'}` : 'SQL=not-declared'}`,
               );
             }
             return result;
@@ -1817,6 +2000,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
         }
       } finally {
         documentTracker?.dispose();
+        serverFunctionTracker?.dispose();
         await close(`${persona} page`, page);
         await close(`${persona} context`, context);
       }

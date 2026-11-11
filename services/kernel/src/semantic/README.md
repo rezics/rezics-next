@@ -56,6 +56,15 @@ supplies Account repair/enrollment, authorization and deadline classification th
 runtime defaults compose this application before Search runtime factories are used. Existing pool, route key, Access,
 request deadline, transaction, reached-child work and publication writer ownership flow through unchanged.
 
+Decision: public-filter projection resolves missing base-release rows through the immutable release owner, matching
+Source binding's support for persisted composite releases. Selected-statement digests are deduplicated within the
+bounded page and resolved in its release snapshot; malformed stored base bodies remain unresolved. Caller release
+bodies, current extension heads and process startup never substitute for stored meaning or privacy coverage.
+Queried reduction starts use the native population reader. Final reads recover the original start from the exact
+execution through Source binding, charge that join and retain every population/current-owner check. A diagnostic
+status is not a start. Search must retain the execution's complete `consumer_window` before final observation;
+Suggestions' `appendExecution` own-row list alone does not supply that authority.
+
 Decision: retained Source repair receipts batch up to `min(inputLimit, 128)` contiguous empty Semantic/Account homes
 and empty creation windows. Each immutable step stores the exact scanned-prefix digest; creation batches additionally
 retain compact per-home window tuples so settlement can revalidate the acknowledged home without replaying the whole

@@ -300,6 +300,63 @@ export function createNativePublicFilterSource(
       if (request.kind === 'population') {
         return readPublicFilterPopulation(config.pool, config.routeKey, request, search, accessPort);
       }
+      if (request.kind === 'queried') {
+        const input = structuredClone(request);
+        const context = { deadline: readContext.deadline };
+        if (input.phase === 'start')
+          return readPublicFilterPopulation(
+            config.pool,
+            config.routeKey,
+            { kind: 'population', queried: input.queried, start: null, context },
+            search,
+            accessPort,
+          );
+        // Diagnostic status has neither an original start nor a retained execution.
+        if (input.phase !== 'final') return unready('metadata_missing');
+        const joined = await bindingFactory(config.pool, config.routeKey, config.access).join(
+          { queried: input.queried, execution: input.execution },
+          context,
+        );
+        if (joined.status !== 'joined')
+          return {
+            ...(joined.status === 'unavailable'
+              ? unavailable(joined.reason === 'deadline' ? 'deadline' : 'dependency_unavailable')
+              : unready(joined.reason === 'identity_pending' ? 'identity_pending' : 'metadata_missing')),
+            cost: joined.cost,
+          };
+        if (!joined.execution || joined.execution.id !== input.execution)
+          return { ...unready('metadata_missing'), cost: joined.cost };
+        // Recover the original start from native custody. The population reader
+        // still requires the exact consumer window and all owner/coverage fences.
+        const observed = await readPublicFilterPopulation(
+          config.pool,
+          config.routeKey,
+          {
+            kind: 'population',
+            queried: joined.queried,
+            start: joined.execution.start,
+            execution: joined.execution.id,
+            context,
+          },
+          search,
+          accessPort,
+        );
+        return {
+          ...observed,
+          cost: {
+            ...observed.cost,
+            inputKeys: observed.cost.inputKeys + joined.cost.inputKeys,
+            candidates: observed.cost.candidates + joined.cost.candidates,
+            accessPoints: observed.cost.accessPoints + joined.cost.accessPoints,
+            dependencyPoints: observed.cost.dependencyPoints + joined.cost.dependencyPoints,
+            engineSearches: observed.cost.engineSearches + joined.cost.engineSearches,
+            engineIteratorSteps: observed.cost.engineIteratorSteps + joined.cost.engineIteratorSteps,
+            outputSlots: observed.cost.outputSlots + joined.cost.outputSlots,
+            resultWrites: observed.cost.resultWrites + joined.cost.resultWrites,
+            frontierWrites: observed.cost.frontierWrites + joined.cost.frontierWrites,
+          },
+        };
+      }
       if (request.kind !== 'home') return unready('metadata_missing');
       try {
         accessPort.requireDeadline(readContext.deadline);

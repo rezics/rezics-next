@@ -123,6 +123,7 @@ export function loadPublicHomeFeed(
 }
 
 export type FeedWindow = { result: HomeFeedResult; busy: boolean; input: FeedInput };
+
 /** A single displayed page. Replaced pages and late responses never accumulate in a query cache. */
 export function createHomeFeedWindow(
   initial: HomeFeedResult,
@@ -216,6 +217,7 @@ export function createHomeFeedWindow(
             result = { state: 'unavailable', code: 'dependency_unavailable' };
           }
           if (generation !== current) return;
+          pending = undefined;
           snapshot = { result, busy: false, input };
           emit();
         } finally {
