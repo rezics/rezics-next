@@ -12,6 +12,9 @@ import { WideDocumentReading } from './wide-document-inspector';
 import './post-reading.css';
 
 type ReadingProps = ComponentProps<typeof DocumentBody> & {
+  /** A native document language/direction, independent of the interface locale. */
+  documentLanguage?: string | null;
+  documentDirection?: 'ltr' | 'rtl' | 'auto';
   /** The supplied source/viewer/route visit; replacing it retires equal document bytes as well. */
   readerIdentity?: unknown;
   isReaderCurrent?: () => boolean;
@@ -57,6 +60,8 @@ function ReadingVisit({
   readerIdentity: _identity,
   isReaderCurrent: _current,
   wideVisitKey,
+  documentLanguage,
+  documentDirection,
   locale = getLocale(),
   headingAttributes: callerAttributes,
   onDisclosureChange: callerDisclosure,
@@ -158,8 +163,8 @@ function ReadingVisit({
       ref={setRoot}
       data-slot="post-reading-body"
       className="post-reading-body min-w-0"
-      lang=""
-      dir="auto"
+      lang={documentLanguage ?? ''}
+      dir={documentDirection ?? 'auto'}
       tabIndex={-1}
       onFocusCapture={(event) => position.rememberFocus(event.target as HTMLElement)}
     >
