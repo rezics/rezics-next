@@ -7,7 +7,7 @@ import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts
 import type { Attempt, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
 import type { CheckRecord, CheckPhysicalRecord } from '../../../scripts/worker-check.ts';
-import { physicalHistoryPath, sameRunnerIdentity, validateRunnerIdentity } from '../../../scripts/check-custody.ts';
+import { isCheckId, isPhysicalRunId, physicalHistoryPath, validateRunnerIdentity } from '../../../scripts/check-custody.ts';
 import {
   pressureBrake,
   readHostPressure,
@@ -33,9 +33,21 @@ export type HostCapacityStore = {
   goalReadyTaskIdsBefore?(goal: string, sequence: number): readonly string[];
 };
 
-type WorkerScopes = { parked: Set<string>; writers: Set<string> };
+type WorkerScopes = { parked: Set<string>; writers: Set<string>; active?: Set<string> };
 function attemptKey(taskId: string, attempt: number): string {
   return JSON.stringify([taskId, attempt]);
+}
+function matchingRunnerIdentity(value: unknown, expected: ProcessIdentity): boolean {
+  const identity = validateRunnerIdentity(value);
+  return identity.pid === expected.pid && identity.start === expected.start &&
+    identity.boot === expected.boot && identity.group === expected.group;
+}
+/** Require the physical generation on the command line; legacy runners keep their conservative reserve. */
+function detachedCheckRunner(identity: ProcessIdentity, worktree: string, id: string, physicalRunId: string): boolean {
+  const args = readFileSync(`/proc/${identity.pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
+  return identity.pid === identity.group && args.length === 6 &&
+    args[1] === join(worktree, 'scripts/worker-check.ts') && args[2] === '--run' && args[3] === id &&
+    args[4] === '--physical-run' && args[5] === physicalRunId;
 }
 /** Require both process identity and its exact current owned cgroup; unit-name resemblance is insufficient. */
 function ownedWorkerScope(identity: ProcessIdentity, taskId: string, attempt: number): string | undefined {
@@ -55,13 +67,20 @@ function ownedWorkerScope(identity: ProcessIdentity, taskId: string, attempt: nu
 function workerScopes(store: HostCapacityStore): WorkerScopes {
   const result: WorkerScopes = { parked: new Set(), writers: new Set() };
   if (!store.db) return result;
-  const rows = store.db.query(`
+  result.active = new Set();
+  let rows: { task_id: string; current_attempt: number; attempt_state: string; body: string; worktree: string }[];
+  try {
+    rows = store.db.query(`
     SELECT c.task_id, c.current_attempt, c.attempt_state, a.body, json_extract(t.body, '$.worktree') AS worktree
     FROM worker_current_attempts AS c INDEXED BY worker_current_attempts_state
     JOIN worker_attempts AS a ON a.task_id=c.task_id AND a.attempt=c.current_attempt
     JOIN worker_tasks AS t ON t.id=c.task_id AND t.current_attempt=c.current_attempt
     WHERE c.attempt_state IN ('running', 'waiting') AND c.task_state='running'
-  `).all() as { task_id: string; current_attempt: number; attempt_state: string; body: string; worktree: string }[];
+    `).all() as typeof rows;
+  } catch {
+    // An unavailable projection grants no parked exemption or ticket transfer. Every running count keeps its reserve.
+    return result;
+  }
   for (const row of rows) {
     try {
       const attempt = JSON.parse(row.body) as Attempt;
@@ -71,20 +90,23 @@ function workerScopes(store: HostCapacityStore): WorkerScopes {
       if (attempt.state === 'running') {
         if (!writer) continue;
         result.writers.add(attemptKey(row.task_id, row.current_attempt));
+        result.active.add(writer);
       } else if (attempt.process !== null) continue;
       for (const id of attempt.checks ?? []) {
-        if (!/^[0-9a-f-]{36}$/i.test(id)) continue;
+        if (!isCheckId(id)) continue;
         try {
           const record = JSON.parse(readFileSync(join(row.worktree, '.temp/goal/checks/results', `${id}.json`), 'utf8')) as CheckRecord;
           if (record.id !== id || record.cwd !== row.worktree || record.status !== 'running' ||
               record.ownership?.taskId !== row.task_id || record.ownership.attempt !== row.current_attempt ||
-              record.runnerHost !== hostname() || !record.runnerIdentity || !record.physicalRunId) continue;
+              record.runnerHost !== hostname() || !record.runnerIdentity || !isPhysicalRunId(record.physicalRunId)) continue;
           const identity = validateRunnerIdentity(record.runnerIdentity);
           const physical = JSON.parse(readFileSync(physicalHistoryPath(row.worktree, id, record.physicalRunId), 'utf8')) as CheckPhysicalRecord;
-          if (physical.id !== id || physical.physicalRunId !== record.physicalRunId || physical.status !== 'running' ||
+          if (physical.version !== 1 || physical.cwd !== row.worktree ||
+              physical.id !== id || physical.physicalRunId !== record.physicalRunId || physical.status !== 'running' ||
               physical.ownership?.taskId !== row.task_id || physical.ownership.attempt !== row.current_attempt ||
-              physical.runnerHost !== record.runnerHost || !physical.remoteExpected ||
-              !sameRunnerIdentity(physical.runnerIdentity, identity)) continue;
+              physical.runnerHost !== record.runnerHost || physical.remoteExpected !== true ||
+              !matchingRunnerIdentity(physical.runnerIdentity, identity) ||
+              !detachedCheckRunner(identity, row.worktree, id, record.physicalRunId)) continue;
           const scope = ownedWorkerScope(identity, row.task_id, row.current_attempt);
           // A running session can share a scope with its check. It releases no writing reserve until parked,
           // or until a resumed writer is positively identified in a different, newly launched scope.
@@ -97,6 +119,8 @@ function workerScopes(store: HostCapacityStore): WorkerScopes {
       // Unknown worker identity cannot release a reservation.
     }
   }
+  // Even contradictory ownership must never exempt a scope containing a positively identified current writer.
+  for (const scope of result.active) result.parked.delete(scope);
   return result;
 }
 
@@ -132,7 +156,7 @@ export function capacityAvailable(
       capacity,
     ) &&
     !pressureBrake(readPressureBrake(stateDirectory), readHostPressure(), Date.now()).paused &&
-    workerHeadroomMiB(running, WORKER_SLICE_ROOT, scopes.parked) >=
+    workerHeadroomMiB(running, WORKER_SLICE_ROOT, scopes.parked, scopes.active) >=
       admittedMemoryMiB(stateDirectory, scopes.writers) + HEAVY_WORKER_MIB
   );
 }
@@ -192,6 +216,9 @@ export async function awaitHostCapacity(
   mkdirSync(queue, { recursive: true });
   const owner = processIdentity();
   if (!owner) throw new Error('Cannot identify capacity ticket owner');
+  const memoryReservation = options.resume
+    ? HEAVY_WORKER_MIB
+    : workerReservationMiB(options.goal ?? (taskId ? store.taskGoal?.(taskId) : undefined));
   writeFileSync(
     join(queue, ticket),
     JSON.stringify({
@@ -200,7 +227,7 @@ export async function awaitHostCapacity(
       attempt: targetAttempt,
       goal: options.goal,
       goalSequence,
-      memoryMiB: options.resume ? HEAVY_WORKER_MIB : workerReservationMiB(options.goal ?? (taskId ? store.taskGoal?.(taskId) : undefined)),
+      memoryMiB: memoryReservation,
     }),
   );
   let reported = false;
@@ -246,9 +273,10 @@ export async function awaitHostCapacity(
         );
         if (hostCapacity) writeFileSync(join(stateDirectory, 'capacity-pressure.json'), JSON.stringify(brake));
         const scopes = workerScopes(store);
-        const memoryReservation = options.resume ? HEAVY_WORKER_MIB : workerReservationMiB(options.goal ?? (taskId ? store.taskGoal?.(taskId) : undefined));
         const sliceAvailable =
-          (options.workerHeadroomMiB ?? workerHeadroomMiB)(running + otherRunning, WORKER_SLICE_ROOT, scopes.parked) >=
+          (options.workerHeadroomMiB ?? workerHeadroomMiB)(
+            running + otherRunning, WORKER_SLICE_ROOT, scopes.parked, scopes.active,
+          ) >=
           admittedMemoryMiB(stateDirectory, scopes.writers) + memoryReservation;
         const ahead = hostCapacity ? waitersAhead(queue, ticket) : 0;
         const limit = urgent ? capacity.urgentSlots : capacity.maxWorkers;

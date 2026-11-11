@@ -76,6 +76,13 @@ the brief.
 sublimit inside the shared `maxWorkers` cap. Both lanes and admitted-but-not-started tickets consume that cap;
 ordinary tasks never consume the urgent sublimit. Urgent work still waits for `minAvailableMiB` of memory.
 Only running sessions and pending launch reservations occupy slots; attempts parked for checks release them.
+The worker slice always charges aggregate actual memory. Only the indexed current attempt's owned detached runner,
+with matching live process, worker scope and physical remote-check generation, releases its scope's writing reserve.
+Active scopes retain their measured-peak reserve; stale or unknown scopes retain conservative accounting and cannot
+stand in for an unidentified current writer. Check wakes use the existing capacity ticket and task lease to reserve
+the active minimum before launch. That ticket's memory charge transfers to the reconciled current writer's scope;
+pending or unreconciled launches keep their ticket charge until start or explicit release. Memory floors, PSI,
+worker caps and check slots remain independent limits.
 Urgent admission enforces its limits even without `capacity.json`; ordinary admission retains its opt-in behaviour.
 `status`, `report`, `report --flow` and the hourly report mark urgent work and count its outcomes separately from
 ordinary throughput. Resource usage totals still include urgent work.

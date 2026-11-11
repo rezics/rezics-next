@@ -35,6 +35,7 @@ export function workerHeadroomMiB(
   running: number,
   root = WORKER_SLICE_ROOT,
   parkedScopes: ReadonlySet<string> = new Set(),
+  activeScopes?: ReadonlySet<string>,
 ): number {
   const read = (path: string) => Number(readFileSync(path, 'utf8').trim());
   let maximum: number;
@@ -54,10 +55,11 @@ export function workerHeadroomMiB(
         const current = read(join(scope, 'memory.current'));
         // Aggregate memory.current already charges parked checks in full. Only a reconciled owned scope may
         // relinquish its writing reserve, and it cannot stand in for a missing running worker below.
-        if (parkedScopes.has(entry.name)) continue;
+        if (parkedScopes.has(entry.name) && !activeScopes?.has(entry.name)) continue;
         const peak = read(join(scope, 'memory.peak'));
         reserved += Math.max(0, Math.max(HEAVY_WORKER_MIB * MIB, peak) - current);
-        scopes++;
+        // An old or unidentified scope keeps its own reserve, but cannot replace an unreconciled current writer.
+        if (!activeScopes || activeScopes.has(entry.name)) scopes++;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
         // A scope removed during this read is covered conservatively by the running counter below.
