@@ -1,6 +1,7 @@
 import { useId, type ComponentType, type HTMLAttributes, type MouseEvent, type ReactNode } from 'react';
 import { cn } from '../utils.ts';
 import { ListRow, ListRowControl, ListRowLink, listRowFrameClassName } from './list-row.tsx';
+import { independentControlsClassName } from './content-interaction.ts';
 
 export type ContentItemHeadingLevel = 2 | 3 | 4;
 
@@ -91,22 +92,6 @@ function hasSlot(value: ReactNode): boolean {
   return value !== null && value !== undefined && typeof value !== 'boolean';
 }
 
-const independentInteractiveLayerClassName = cn(
-  '[&_a]:relative [&_a]:z-10',
-  '[&_button]:relative [&_button]:z-10',
-  '[&_summary]:relative [&_summary]:z-10',
-  '[&_label]:relative [&_label]:z-10',
-  '[&_input]:relative [&_input]:z-10',
-  '[&_select]:relative [&_select]:z-10',
-  '[&_textarea]:relative [&_textarea]:z-10',
-  '[&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring',
-  '[&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring',
-  '[&_summary:focus-visible]:outline-2 [&_summary:focus-visible]:outline-offset-2 [&_summary:focus-visible]:outline-ring',
-  '[&_input:focus-visible]:outline-2 [&_input:focus-visible]:outline-offset-2 [&_input:focus-visible]:outline-ring',
-  '[&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring',
-  '[&_textarea:focus-visible]:outline-2 [&_textarea:focus-visible]:outline-offset-2 [&_textarea:focus-visible]:outline-ring',
-);
-
 /** A semantic content-list item built on the shared hover, focus and press behavior. */
 export function ContentItem({
   title,
@@ -134,7 +119,7 @@ export function ContentItem({
     <ListRow
       {...liProps}
       forceOverlay={forceOverlay}
-      className={cn('flex min-w-0 items-start gap-3 py-3 sm:gap-4 sm:py-4', className)}
+      className={cn('@container/content-item flex min-w-0 items-start gap-3 py-3 sm:gap-4 sm:py-4', className)}
     >
       {href !== undefined && (
         <ListRowLink
@@ -147,18 +132,24 @@ export function ContentItem({
         </ListRowLink>
       )}
       {hasSlot(visual) && (
-        <div data-content-item-slot="visual" className={cn('shrink-0', independentInteractiveLayerClassName)}>
+        <div data-content-item-slot="visual" className={cn('shrink-0', independentControlsClassName)}>
           {visual}
         </div>
       )}
-      <div className="min-w-0 flex-1 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-4">
+      <div
+        className={cn(
+          'min-w-0 flex-1 wrap-anywhere',
+          hasRail &&
+            '@min-[40rem]/content-item:grid @min-[40rem]/content-item:grid-cols-[minmax(0,1fr)_fit-content(40%)] @min-[40rem]/content-item:items-start @min-[40rem]/content-item:gap-x-4',
+        )}
+      >
         <div className="min-w-0">
           {hasSlot(context) && (
             <div
               data-content-item-slot="context"
               className={cn(
-                'mb-2 text-[13px] leading-snug text-muted-foreground sm:text-sm',
-                independentInteractiveLayerClassName,
+                'mb-2 min-w-0 whitespace-normal text-[13px] leading-snug text-muted-foreground sm:text-sm',
+                independentControlsClassName,
               )}
             >
               {context}
@@ -169,37 +160,36 @@ export function ContentItem({
             id={titleId}
             lang={titleLang}
             data-slot={titleDataSlot}
-            className="line-clamp-2 text-[17px] leading-snug font-semibold sm:text-lg md:text-xl sm:line-clamp-1"
+            className="whitespace-normal text-[17px] leading-snug font-semibold wrap-anywhere sm:text-lg md:text-xl"
           >
             {title}
           </ContentItemHeading>
           {hasSlot(metadata) && (
-            <ListRowControl
+            <div
               data-content-item-slot="metadata"
-              className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] leading-snug text-muted-foreground sm:text-sm"
+              className={cn(
+                'mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 whitespace-normal text-[13px] leading-snug text-muted-foreground sm:text-sm [&>*]:min-w-0 [&>*]:max-w-full',
+                independentControlsClassName,
+              )}
             >
               {metadata}
-            </ListRowControl>
+            </div>
           )}
           {hasSlot(preview) && (
             <div
               data-content-item-slot="preview"
-              className={cn('mt-2 min-w-0 text-sm leading-relaxed', independentInteractiveLayerClassName)}
+              className={cn('mt-2 min-w-0 text-sm leading-relaxed', independentControlsClassName)}
             >
               {preview}
             </div>
           )}
         </div>
         {hasRail && (
-          <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 sm:col-start-2 sm:row-start-1 sm:mt-0 sm:justify-end">
+          <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 @min-[40rem]/content-item:col-start-2 @min-[40rem]/content-item:row-start-1 @min-[40rem]/content-item:mt-0 @min-[40rem]/content-item:justify-end [&>*]:max-w-full">
             {hasSlot(state) && (
               <ListRowControl
                 data-content-item-slot="state"
-                className={cn(
-                  'min-w-0',
-                  '[&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center [&_a]:px-2',
-                  '[&_button]:min-h-11 [&_button]:min-w-11',
-                )}
+                className={cn('min-w-0 whitespace-normal', independentControlsClassName)}
               >
                 {state}
               </ListRowControl>
@@ -207,11 +197,7 @@ export function ContentItem({
             {hasSlot(actions) && (
               <ListRowControl
                 data-content-item-slot="actions"
-                className={cn(
-                  'flex min-h-11 flex-wrap items-center gap-2',
-                  '[&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center [&_a]:px-2',
-                  '[&_button]:min-h-11 [&_button]:min-w-11',
-                )}
+                className={cn('flex min-h-11 min-w-0 flex-wrap items-center gap-2', independentControlsClassName)}
               >
                 {actions}
               </ListRowControl>
@@ -219,11 +205,7 @@ export function ContentItem({
             {hasSlot(trailing) && (
               <ListRowControl
                 data-content-item-slot="trailing"
-                className={cn(
-                  'flex items-center gap-2',
-                  '[&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center [&_a]:px-2',
-                  '[&_button]:min-h-11 [&_button]:min-w-11',
-                )}
+                className={cn('flex min-w-0 flex-wrap items-center gap-2', independentControlsClassName)}
               >
                 {trailing}
               </ListRowControl>

@@ -60,10 +60,7 @@ export function MemberListRow({
       visual={
         <div
           data-slot="member-list-row-cover"
-          className={cn(
-            'shrink-0 [&_button]:relative [&_button]:z-10',
-            presentation?.imageAspect === 'landscape' ? 'w-32 sm:w-48' : 'w-[72px] sm:w-24',
-          )}
+          className={cn('shrink-0', presentation?.imageAspect === 'landscape' ? 'w-32 sm:w-48' : 'w-[72px] sm:w-24')}
         >
           <Cover
             subject={subject}
@@ -188,15 +185,12 @@ export function MemberReadingItem({
       title={title}
       {...(titleLang ? { titleLang } : {})}
       titleDataSlot="member-list-row-title"
-      className="max-w-4xl [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:max-h-48"
+      className="max-w-4xl [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       visual={
         cover ? (
           <div
             data-slot="member-list-row-cover"
-            className={cn(
-              'shrink-0 [&_button]:relative [&_button]:z-10',
-              presentation?.imageAspect === 'landscape' ? 'w-32 sm:w-48' : 'w-[72px] sm:w-24',
-            )}
+            className={cn('shrink-0', presentation?.imageAspect === 'landscape' ? 'w-32 sm:w-48' : 'w-[72px] sm:w-24')}
           >
             <Cover {...cover} size="fill" decorative />
           </div>

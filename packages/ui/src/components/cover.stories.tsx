@@ -89,7 +89,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The image area of any subject, which always renders. Every kind defaults to the same portrait frame and its width from a named size, so nothing shifts while an image loads, fails or is withheld. A missing, failed or taken-down image shows the typographic placeholder: the title in the Work title face and the byline in the interface face on a colour fixed by the subject. Covers withheld for suitability stay blurred behind a label and a reveal control. A subject page opens its cover viewer from a usable image.',
+          'Illustrative supplied image responses with inline fixture artwork. The image area of any subject, which always renders. Every kind defaults to the same portrait frame and its width from a named size, so nothing shifts while an image loads, fails or is withheld. A missing, failed or taken-down image shows the typographic placeholder: the title in the Work title face and the byline in the interface face on a colour fixed by the subject. Covers withheld for suitability stay blurred behind a label and a reveal control. A subject page opens its cover viewer from a usable image.',
       },
     },
   },
