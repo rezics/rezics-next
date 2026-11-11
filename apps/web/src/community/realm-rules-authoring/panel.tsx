@@ -1,3 +1,4 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import type { DocumentSnapshot } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
@@ -356,33 +357,62 @@ export function RealmRulesAuthoringPanel({
           <label htmlFor={`${ids}-board`} className="block font-medium">
             {m.realm_rules_authoring_destination()}
           </label>
-          <select
-            id={`${ids}-board`}
-            className="min-h-11 w-full rounded-md border bg-background px-3"
-            value={boardId}
-            onChange={(event) => setBoardId(event.currentTarget.value)}
+          <SharedSelect.Select
+            value={boardId || null}
+            items={[
+              { value: null, label: m.realm_rules_authoring_choose_destination() },
+              ...destinations.map((item) => ({
+                value: item.boardId,
+                label: `${item.title ?? item.boardId}${item.create.state === 'allowed' ? '' : ` (${m.thread_write_forbidden()})`}`,
+              })),
+            ]}
+            onValueChange={(value) => setBoardId(value ?? '')}
           >
-            <option value="">{m.realm_rules_authoring_choose_destination()}</option>
-            {destinations.map((item) => (
-              <option key={item.boardId} value={item.boardId}>
-                {item.title ?? item.boardId}
-                {item.create.state === 'allowed' ? '' : ` (${m.thread_write_forbidden()})`}
-              </option>
-            ))}
-          </select>
+            <SharedSelect.SelectTrigger
+              id={`${ids}-board`}
+              className="min-h-11 w-full rounded-md border bg-background px-3"
+            >
+              <SharedSelect.SelectValue />
+            </SharedSelect.SelectTrigger>
+            <SharedSelect.SelectContent>
+              <SharedSelect.SelectGroup>
+                <SharedSelect.SelectItem value={null}>
+                  {m.realm_rules_authoring_choose_destination()}
+                </SharedSelect.SelectItem>
+                {destinations.map((item) => (
+                  <SharedSelect.SelectItem key={item.boardId} value={item.boardId}>
+                    {item.title ?? item.boardId}
+                    {item.create.state === 'allowed' ? '' : ` (${m.thread_write_forbidden()})`}
+                  </SharedSelect.SelectItem>
+                ))}
+              </SharedSelect.SelectGroup>
+            </SharedSelect.SelectContent>
+          </SharedSelect.Select>
           {chosenDestination && !canCreate ? <p role="status">{m.thread_write_forbidden()}</p> : null}
           <label htmlFor={`${ids}-licence`} className="block font-medium">
             {m.thread_history_licence()}
           </label>
-          <select
-            id={`${ids}-licence`}
-            className="min-h-11 w-full rounded-md border bg-background px-3"
-            value={licence}
-            onChange={(event) => setLicence(event.currentTarget.value)}
+          <SharedSelect.Select
+            value={licence || null}
+            items={[
+              { value: null, label: m.realm_appearance_choose() },
+              { value: nativeRuleLicence, label: nativeRuleLicence },
+            ]}
+            onValueChange={(value) => setLicence(value ?? '')}
           >
-            <option value="">{m.realm_appearance_choose()}</option>
-            <option value={nativeRuleLicence}>{nativeRuleLicence}</option>
-          </select>
+            <SharedSelect.SelectTrigger
+              id={`${ids}-licence`}
+              className="min-h-11 w-full rounded-md border bg-background px-3"
+            >
+              <SharedSelect.SelectValue />
+            </SharedSelect.SelectTrigger>
+            <SharedSelect.SelectContent>
+              <SharedSelect.SelectGroup>
+                <SharedSelect.SelectItem value={null}>{m.realm_appearance_choose()}</SharedSelect.SelectItem>
+                <SharedSelect.SelectItem value={nativeRuleLicence}>{nativeRuleLicence}</SharedSelect.SelectItem>
+              </SharedSelect.SelectGroup>
+            </SharedSelect.SelectContent>
+          </SharedSelect.Select>
           <label className="flex min-h-11 items-start gap-3 text-sm leading-6">
             <input
               type="checkbox"

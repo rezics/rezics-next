@@ -1,10 +1,10 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import {
   EditionIdentitySummary,
   EditionTechnicalDetails,
   editionSubjectName,
   editionRevisionDate,
 } from './edition-identity';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { DocumentBody } from '../document-body';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -608,29 +608,46 @@ export function EditionPublication({
             <Field>
               <FieldLabel htmlFor={subjectId}>{m.edition_publication_subject()}</FieldLabel>
               <p className="text-sm text-muted-foreground">{m.edition_publication_subject_help()}</p>
-              <NativeSelect
-                id={subjectId}
-                className="w-full [&_select]:min-h-11"
-                value={state.targetSubjectId}
+              <SharedSelect.Select
+                value={state.targetSubjectId || null}
                 disabled={state.busy || !!state.intent || !!edition}
-                onChange={(event) => controller.chooseSubject(event.target.value)}
+                items={[
+                  { value: null, label: m.edition_publication_choose_subject() },
+                  ...previewSource.subjectIds.map((id, index) => {
+                    const subject = previewSource.recognition?.subjects.find((subject) => subject.id === id);
+                    return {
+                      value: id,
+                      label: `${editionSubjectName(subject)}${subject?.kind !== 'available' ? ` (${index + 1})` : ''}`,
+                    };
+                  }),
+                ]}
+                onValueChange={(value) => controller.chooseSubject(value ?? '')}
               >
-                <NativeSelectOption value="">{m.edition_publication_choose_subject()}</NativeSelectOption>
-                {previewSource.subjectIds.map((id, index) => {
-                  const subject = previewSource.recognition?.subjects.find((subject) => subject.id === id);
-                  return (
-                    <NativeSelectOption
-                      key={id}
-                      value={id}
-                      disabled={subject?.kind !== 'available'}
-                      lang={subject?.label?.language}
-                    >
-                      {editionSubjectName(subject)}
-                      {subject?.kind !== 'available' ? ` (${index + 1})` : ''}
-                    </NativeSelectOption>
-                  );
-                })}
-              </NativeSelect>
+                <SharedSelect.SelectTrigger id={subjectId} className="w-full min-h-11">
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    <SharedSelect.SelectItem value={null}>
+                      {m.edition_publication_choose_subject()}
+                    </SharedSelect.SelectItem>
+                    {previewSource.subjectIds.map((id, index) => {
+                      const subject = previewSource.recognition?.subjects.find((subject) => subject.id === id);
+                      return (
+                        <SharedSelect.SelectItem
+                          key={id}
+                          value={id}
+                          disabled={subject?.kind !== 'available'}
+                          lang={subject?.label?.language}
+                        >
+                          {editionSubjectName(subject)}
+                          {subject?.kind !== 'available' ? ` (${index + 1})` : ''}
+                        </SharedSelect.SelectItem>
+                      );
+                    })}
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
             </Field>
             <p className="text-sm text-muted-foreground">
               {m.edition_identity_revision_date({

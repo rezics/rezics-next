@@ -1,3 +1,4 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import type { PresentationProfile, View } from '@rezics/composition';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import {
@@ -12,7 +13,6 @@ import {
 } from '@rezics/ui/shadcn/alert-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
 import { overviewOf, type CompanionViewSource } from './curate';
 import type { ViewSelection } from './curate-view-editor-state';
@@ -29,7 +29,7 @@ import {
 } from './curation-companion-state';
 
 const controlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
-const selectClass = 'w-full min-w-0 max-w-full [&_select]:min-h-11';
+const selectClass = 'w-full min-w-0 max-w-full min-h-11';
 
 type CompanionViewControlsProps = {
   profile: PresentationProfile;
@@ -90,48 +90,71 @@ export function CurationCompanionViews({
         <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
           <Field className="min-w-0">
             <FieldLabel htmlFor={`${id}-view`}>{m.curation_companion_view({}, options)}</FieldLabel>
-            <NativeSelect
-              id={`${id}-view`}
-              className={selectClass}
+            <SharedSelect.Select
               value={admitted.view}
               disabled={disabled}
-              onChange={(event) => {
-                const view = availableViews.find((item) => item === event.target.value);
+              items={[
+                { value: null, label: m.curation_companion_choose_view({}, options) },
+                ...availableViews.map((view) => ({ value: view, label: viewNames[view] })),
+              ]}
+              onValueChange={(value) => {
+                const view = availableViews.find((item) => item === value);
                 if (view) setChoice((current) => ({ ...current, view }));
               }}
             >
-              <NativeSelectOption value="" disabled>
-                {m.curation_companion_choose_view({}, options)}
-              </NativeSelectOption>
-              {availableViews.map((candidate) => (
-                <NativeSelectOption key={candidate} value={candidate}>
-                  {viewNames[candidate]}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              <SharedSelect.SelectTrigger id={`${id}-view`} className={selectClass}>
+                <SharedSelect.SelectValue />
+              </SharedSelect.SelectTrigger>
+              <SharedSelect.SelectContent>
+                <SharedSelect.SelectGroup>
+                  <SharedSelect.SelectItem value={null} disabled>
+                    {m.curation_companion_choose_view({}, options)}
+                  </SharedSelect.SelectItem>
+                  {availableViews.map((candidate) => (
+                    <SharedSelect.SelectItem key={candidate} value={candidate}>
+                      {viewNames[candidate]}
+                    </SharedSelect.SelectItem>
+                  ))}
+                </SharedSelect.SelectGroup>
+              </SharedSelect.SelectContent>
+            </SharedSelect.Select>
           </Field>
           <Field className="min-w-0">
             <FieldLabel htmlFor={`${id}-source`}>{m.curation_companion_source({}, options)}</FieldLabel>
-            <NativeSelect
-              id={`${id}-source`}
-              className={selectClass}
+            <SharedSelect.Select
               value={admitted.source}
               disabled={disabled}
-              onChange={(event) => {
-                const source = event.target.value;
+              items={[
+                { value: null, label: m.curation_companion_choose_source({}, options) },
+                ...(hasOverview
+                  ? [{ value: 'overview', label: m.curation_companion_source_overview({}, options) }]
+                  : []),
+                { value: 'empty', label: m.curation_companion_source_empty({}, options) },
+              ]}
+              onValueChange={(value) => {
+                const source = value;
                 if (source === 'overview' || source === 'empty') setChoice((current) => ({ ...current, source }));
               }}
             >
-              <NativeSelectOption value="" disabled>
-                {m.curation_companion_choose_source({}, options)}
-              </NativeSelectOption>
-              {hasOverview && (
-                <NativeSelectOption value="overview">
-                  {m.curation_companion_source_overview({}, options)}
-                </NativeSelectOption>
-              )}
-              <NativeSelectOption value="empty">{m.curation_companion_source_empty({}, options)}</NativeSelectOption>
-            </NativeSelect>
+              <SharedSelect.SelectTrigger id={`${id}-source`} className={selectClass}>
+                <SharedSelect.SelectValue />
+              </SharedSelect.SelectTrigger>
+              <SharedSelect.SelectContent>
+                <SharedSelect.SelectGroup>
+                  <SharedSelect.SelectItem value={null} disabled>
+                    {m.curation_companion_choose_source({}, options)}
+                  </SharedSelect.SelectItem>
+                  {hasOverview && (
+                    <SharedSelect.SelectItem value="overview">
+                      {m.curation_companion_source_overview({}, options)}
+                    </SharedSelect.SelectItem>
+                  )}
+                  <SharedSelect.SelectItem value="empty">
+                    {m.curation_companion_source_empty({}, options)}
+                  </SharedSelect.SelectItem>
+                </SharedSelect.SelectGroup>
+              </SharedSelect.SelectContent>
+            </SharedSelect.Select>
           </Field>
           <Button
             className={controlClass}

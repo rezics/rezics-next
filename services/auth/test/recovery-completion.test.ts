@@ -1,9 +1,10 @@
 import { trustedAccessPorts } from './support/trusted-access.ts';
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
+import { runPlacedTests } from '../scripts/placed-tests.ts';
 import { createAuthService, type AuthService, type AccessAccount, type AuthServiceOptions } from '../src/index.ts';
 
 const issuer = 'https://completion.auth.test';
@@ -13,7 +14,7 @@ let fixture: ReturnType<typeof testDatabase>;
 let database: Pool;
 let service: AuthService;
 let options: AuthServiceOptions;
-let token = '';
+let token = 'invalid';
 let failCompletion = false;
 let calls = 0;
 let clears = 0;
@@ -63,7 +64,16 @@ const snapshot = async () => ({
     .rows,
 });
 
-beforeAll(async () => {
+beforeEach(async () => {
+  // Retained sources belong to their scenario. A failed callback or unconsumed
+  // proof in another test must not change replay, expiry or fence assertions.
+  token = 'invalid';
+  failCompletion = false;
+  calls = 0;
+  clears = 0;
+  lastReference = undefined;
+  expectedFence = { accountId: 'human', receiptId: '', minimumAuthnEpoch: 7 };
+  current = { accountId: 'human', kind: 'actor', state: 'pending', automated: false, authnEpoch: 7, fenced: false };
   fixture = testDatabase();
   database = new Pool({ connectionString: fixture.url, max: 1, connectionTimeoutMillis: 2000 });
   const key = {
@@ -133,7 +143,7 @@ beforeAll(async () => {
   current.state = 'active';
   await service.internal.registerClient({ clientId: 'completion-client', firstParty: true, scopes: ['read'] });
 }, 60000);
-afterAll(async () => {
+afterEach(async () => {
   await database?.end();
   fixture?.close();
 });
@@ -157,7 +167,6 @@ test('missing completion is unavailable and invalid Auth never invokes the trust
 });
 
 test('cross-service failure retains committed witness and exact resume never mutates credentials or consumes proof again', async () => {
-  // Keep this targeted recovery selector independent of the preceding test's setup.
   await start();
   failCompletion = true;
   expect(await projected(await complete())).toEqual([503, '{"error":"authentication_denied"}']);
@@ -213,24 +222,42 @@ test('original witness expiry denies completion without maintenance or a renewed
   const reference = lastReference!;
   const witness = (await service.internal.resolveRecoveryEstablishment(reference))!;
   expect(witness).not.toBeNull();
+  const saved = await snapshot();
   await Bun.sleep(Math.max(0, Date.parse(witness.expiresAt) - Date.now() + 20));
   expect(await service.internal.resolveRecoveryEstablishment(reference)).toBeNull();
   expect((await complete()).status).toBe(401);
+  expect(await snapshot()).toEqual(saved);
   expect(
     (await database.query('SELECT reference FROM auth_recovery_establishment WHERE reference=$1', [reference]))
       .rowCount,
   ).toBe(1);
 });
 
-test('native completion validation and rate-limit refusals keep their admitted status envelope', async () => {
-  await database.query('DELETE FROM auth_attempt_counter');
-  for (let attempt = 0; attempt < 3; attempt++)
-    expect(await projected(await complete('short'))).toEqual([400, '{"error":"authentication_denied"}']);
-  const limited = await request('/recovery/complete', {
-    account_id: 'human',
-    token,
-    new_password: 'short',
-  });
-  expect(await projected(limited)).toEqual([429, '{"error":"authentication_denied"}']);
-  expect(limited.headers.get('retry-after')).toMatch(/^\d+$/);
-});
+const rateLimitCase = 'native completion validation and rate-limit refusals keep their admitted status envelope';
+test(
+  rateLimitCase,
+  async () => {
+    if (process.env.AUTH_COMPLETION_LIMIT_CHILD !== '1') {
+      // Better Auth's production admission is disabled in the ordinary test graph.
+      // Reuse the owning runner's migrated lane and cleanup in a fresh graph.
+      const child = await runPlacedTests(['bun', 'test', 'test/recovery-completion.test.ts', '-t', rateLimitCase], {
+        cwd: import.meta.dir + '/..',
+        env: { ...process.env, NODE_ENV: 'production', AUTH_COMPLETION_LIMIT_CHILD: '1' },
+      });
+      if (child.output) console.info(child.output);
+      expect(child.code).toBe(0);
+      return;
+    }
+    await database.query('DELETE FROM auth_attempt_counter');
+    for (let attempt = 0; attempt < 3; attempt++)
+      expect(await projected(await complete('short'))).toEqual([400, '{"error":"authentication_denied"}']);
+    const limited = await request('/recovery/complete', {
+      account_id: 'human',
+      token,
+      new_password: 'short',
+    });
+    expect(await projected(limited)).toEqual([429, '{"error":"authentication_denied"}']);
+    expect(limited.headers.get('retry-after')).toMatch(/^\d+$/);
+  },
+  120000,
+);

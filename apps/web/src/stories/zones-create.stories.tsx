@@ -8,6 +8,13 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
+import { pickText } from '@rezics/composition';
+import { starterChoices } from '../features/zones/manage/starters';
+import { selectSharedOption } from './shared-select-interaction';
+
+function bookStarterLabel() {
+  return pickText(starterChoices.find((choice) => choice.id === 'book')!.labels, getLocale()).text;
+}
 
 function CreateStory({ scenario = 'list' }: { scenario?: Scenario | 'loading' | 'signed-out' }) {
   const locale = getLocale();
@@ -80,7 +87,7 @@ export const Loading: Story = { args: { scenario: 'loading' } };
 export const SignedOut: Story = { args: { scenario: 'signed-out' } };
 async function submit(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.zones_create_starter() }), 'book');
+  await selectSharedOption(await canvas.findByRole('combobox', { name: m.zones_create_starter() }), bookStarterLabel());
   await userEvent.click(canvas.getByRole('button', { name: m.zones_create_submit() }));
   return canvas;
 }
@@ -108,7 +115,10 @@ export const Validation: Story = {
 export const Names: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.zones_create_starter() }), 'book');
+    await selectSharedOption(
+      await canvas.findByRole('combobox', { name: m.zones_create_starter() }),
+      bookStarterLabel(),
+    );
     expect(canvas.getAllByRole('textbox')).toHaveLength(8);
   },
 };

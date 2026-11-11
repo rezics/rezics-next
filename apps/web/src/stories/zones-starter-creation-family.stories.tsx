@@ -15,6 +15,15 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
+import { selectSharedOption } from './shared-select-interaction';
+
+function starterLabel(id: string, locale: string) {
+  return pickText(starterChoices.find((choice) => choice.id === id)!.labels, locale).text;
+}
+
+function languageLabel(language: string, locale: string) {
+  return new Intl.DisplayNames([locale], { type: 'language' }).of(language)!;
+}
 
 function CreationFamily({
   scenario = 'list',
@@ -129,9 +138,9 @@ type Story = StoryObj<typeof meta>;
 async function prepare(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   const locale = getLocale();
-  await userEvent.selectOptions(await canvas.findByLabelText(m.zones_create_starter()), 'book');
+  await selectSharedOption(await canvas.findByLabelText(m.zones_create_starter()), starterLabel('book', locale));
   await expect(canvas.getByLabelText(m.zone_name_primary())).toHaveValue('');
-  await userEvent.selectOptions(canvas.getByLabelText(m.zone_name_language()), 'ja');
+  await selectSharedOption(canvas.getByLabelText(m.zone_name_language()), languageLabel('ja', locale));
   await userEvent.type(
     canvas.getByLabelText(m.zone_name_primary()),
     '長い名前の本棚と読書の記録、旅先で出会った物語と大切な思い出',
@@ -149,7 +158,7 @@ export const Starter: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const select = await canvas.findByLabelText(m.zones_create_starter());
-    await expect(select.tagName).toBe('SELECT');
+    await expect(select).toHaveAttribute('role', 'combobox');
     await expect(select).toHaveAccessibleDescription(m.zones_create_starter_help());
     await expect(canvas.getByText(m.zones_create_visibility())).toBeVisible();
     select.focus();
@@ -182,11 +191,11 @@ export const IndependentVisits: Story = {
     await userEvent.click(second.getByRole('button', { name: m.zones_create_submit() }));
     await expect(b).toHaveFocus();
     await expect(a).toHaveAttribute('aria-invalid', 'false');
-    await userEvent.selectOptions(a, 'book');
+    await selectSharedOption(a, starterLabel('book', getLocale()));
     await userEvent.type(first.getByRole('textbox'), '私の本棚');
-    await userEvent.selectOptions(b, 'game');
+    await selectSharedOption(b, starterLabel('game', getLocale()));
     await userEvent.type(second.getByRole('textbox'), '独立したゲームの記録');
-    await userEvent.selectOptions(a, 'manga');
+    await selectSharedOption(a, starterLabel('manga', getLocale()));
     await expect(first.getByRole('textbox')).toHaveValue('私の本棚');
     await expect(second.getByRole('textbox')).toHaveValue('独立したゲームの記録');
   },
@@ -195,17 +204,20 @@ export const AuthoredNaming: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await prepare(canvasElement);
     await userEvent.click(canvas.getByText(m.zone_name_translations()));
-    await userEvent.selectOptions(canvas.getByLabelText(m.zone_name_add()), 'de');
+    await selectSharedOption(canvas.getByLabelText(m.zone_name_add()), languageLabel('de', getLocale()));
     const german = new Intl.DisplayNames([getLocale()], { type: 'language' }).of('de')!;
     await userEvent.type(canvas.getByLabelText(german), 'Meine Bücher und Geschichten von langen Reisen');
-    await userEvent.selectOptions(canvas.getByLabelText(m.zones_create_starter()), 'visual-novel');
+    await selectSharedOption(
+      canvas.getByLabelText(m.zones_create_starter()),
+      starterLabel('visual-novel', getLocale()),
+    );
     await expect(canvas.getByLabelText(m.zone_name_primary())).toHaveValue(
       '長い名前の本棚と読書の記録、旅先で出会った物語と大切な思い出',
     );
     await expect(canvas.getByLabelText(german)).toHaveValue('Meine Bücher und Geschichten von langen Reisen');
-    await userEvent.selectOptions(canvas.getByLabelText(m.zone_name_language()), 'en');
+    await selectSharedOption(canvas.getByLabelText(m.zone_name_language()), languageLabel('en', getLocale()));
     await expect(canvas.getByLabelText(m.zone_name_primary())).toHaveValue('');
-    await userEvent.selectOptions(canvas.getByLabelText(m.zone_name_language()), 'ja');
+    await selectSharedOption(canvas.getByLabelText(m.zone_name_language()), languageLabel('ja', getLocale()));
     await expect(canvas.getByLabelText(m.zone_name_primary())).not.toHaveValue('');
   },
 };
@@ -216,7 +228,7 @@ export const LongLocalizedHelp: Story = {
     const longest = [...starterChoices].sort(
       (a, b) => pickText(b.labels, 'de').text.length - pickText(a.labels, 'de').text.length,
     )[0]!;
-    await userEvent.selectOptions(canvas.getByLabelText(m.zones_create_starter()), longest.id);
+    await selectSharedOption(canvas.getByLabelText(m.zones_create_starter()), pickText(longest.labels, 'de').text);
     await expect(canvas.getByLabelText(m.zones_create_starter())).toHaveAccessibleDescription(
       m.zones_create_starter_help(),
     );
@@ -238,7 +250,7 @@ export const InvalidTranslation: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await prepare(canvasElement);
     await userEvent.click(canvas.getByText(m.zone_name_translations()));
-    await userEvent.selectOptions(canvas.getByLabelText(m.zone_name_add()), 'de');
+    await selectSharedOption(canvas.getByLabelText(m.zone_name_add()), languageLabel('de', getLocale()));
     await userEvent.click(canvas.getByText(m.zone_name_translations()));
     await userEvent.click(canvas.getByRole('button', { name: m.zones_create_submit() }));
     const german = new Intl.DisplayNames([getLocale()], { type: 'language' }).of('de')!;

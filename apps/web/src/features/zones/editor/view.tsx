@@ -1,9 +1,9 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { type CompositionDocument } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useBlocker, useRouter } from '@tanstack/react-router';
 import { Alert, AlertTitle, AlertDescription } from '@rezics/ui/shadcn/alert';
@@ -459,23 +459,34 @@ export function ZoneConfigurationEditor({
             <p className="text-sm text-muted-foreground">{m.zone_editor_navigation_note()}</p>
             <Field>
               <FieldLabel htmlFor="zone-page">{m.zone_editor_page()}</FieldLabel>
-              <NativeSelect
-                id="zone-page"
+              <SharedSelect.Select
                 disabled={disabled}
                 value={String(draft.configuration.pages.indexOf(page!))}
-                onChange={(event) => {
+                items={draft.configuration.pages.map((item, index) => ({
+                  value: String(index),
+                  label: item.route || m.zone_home(),
+                }))}
+                onValueChange={(value) => {
+                  if (value === null) return;
                   if (!currentDraft()) return;
-                  setSelected(Number(event.target.value));
+                  setSelected(Number(value));
                   setComposing(false);
                   session.clearPreview();
                 }}
               >
-                {draft.configuration.pages.map((item, index) => (
-                  <NativeSelectOption key={`${index}:${item.route}`} value={String(index)}>
-                    {item.route || m.zone_home()}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SharedSelect.SelectTrigger id="zone-page" className="max-md:min-h-11 pointer-coarse:min-h-11">
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    {draft.configuration.pages.map((item, index) => (
+                      <SharedSelect.SelectItem key={`${index}:${item.route}`} value={String(index)}>
+                        {item.route || m.zone_home()}
+                      </SharedSelect.SelectItem>
+                    ))}
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
             </Field>
             {page ? (
               <div className="flex flex-wrap items-end gap-3">
@@ -710,20 +721,36 @@ export function ZoneConfigurationEditor({
               data-correction-section=""
             >
               <FieldLabel htmlFor="zone-visibility">{m.zone_editor_visibility()}</FieldLabel>
-              <NativeSelect
-                id="zone-visibility"
-                aria-invalid={invalid('zone-visibility')}
-                aria-describedby={descriptions['zone-visibility']}
+              <SharedSelect.Select
                 value={visibility}
                 disabled={disabled || !writeEnabled || !loaded.permissions.publish}
-                onChange={(event) => {
-                  if (current()) setVisibility(event.target.value as Visibility);
+                items={[
+                  { value: 'private', label: m.library_visibility_private() },
+                  { value: 'unlisted', label: m.library_visibility_unlisted() },
+                  { value: 'public', label: m.library_visibility_public() },
+                ]}
+                onValueChange={(value) => {
+                  if (value !== null && current()) setVisibility(value as Visibility);
                 }}
               >
-                <NativeSelectOption value="private">{m.library_visibility_private()}</NativeSelectOption>
-                <NativeSelectOption value="unlisted">{m.library_visibility_unlisted()}</NativeSelectOption>
-                <NativeSelectOption value="public">{m.library_visibility_public()}</NativeSelectOption>
-              </NativeSelect>
+                <SharedSelect.SelectTrigger
+                  id="zone-visibility"
+                  aria-invalid={invalid('zone-visibility')}
+                  aria-describedby={descriptions['zone-visibility']}
+                  className="max-md:min-h-11 pointer-coarse:min-h-11"
+                >
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    <SharedSelect.SelectItem value="private">{m.library_visibility_private()}</SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem value="unlisted">
+                      {m.library_visibility_unlisted()}
+                    </SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem value="public">{m.library_visibility_public()}</SharedSelect.SelectItem>
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
             </Field>
             <Button
               className="h-auto max-w-full whitespace-normal py-2 text-start"

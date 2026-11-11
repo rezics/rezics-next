@@ -236,6 +236,12 @@ export function credentialEffects(database: Pool, secret: string) {
       expected,
     );
   }
+  function replayResult(stage: CredentialStage, authorization: string) {
+    // Auth owns the committed reference. Current Access authority cannot turn
+    // another approval (spent or fresh) into permission to disclose this result.
+    if (stage.row.opening_reference !== authorization) deny(403);
+    return { receiptId: stage.row.receipt_id, replayed: true };
+  }
   async function current(query: Query, stage: CredentialStage) {
     const row = await selected(query, stage.binding.subjectAccountId, stage.credential);
     if (row.id !== stage.binding.credentialRowId || row.version !== stage.binding.credentialRowVersion) deny(409);
@@ -405,6 +411,7 @@ export function credentialEffects(database: Pool, secret: string) {
     stage,
     read,
     current,
+    replayResult,
     mutate,
     verify,
   };

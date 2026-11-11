@@ -11,6 +11,13 @@ import workspaceMeta from './zones-owner-workspace.stories';
 import createMeta from './zones-create.stories';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
+import { pickText } from '@rezics/composition';
+import { starterChoices } from '../features/zones/manage/starters';
+import { selectSharedOption } from './shared-select-interaction';
+
+function bookStarterLabel() {
+  return pickText(starterChoices.find((choice) => choice.id === 'book')!.labels, getLocale()).text;
+}
 
 const longReturnTo = `/ja/my/zones/new?name=${'読書と旅の記録 مكتبة الرحلات & "<書棚>" +/#?'.repeat(8)}&cursor=opaque+/cursor==#names`;
 const desktop = {};
@@ -176,7 +183,10 @@ export const CreateUncertainRetry: Story = {
   globals: phone,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.zones_create_starter() }), 'book');
+    await selectSharedOption(
+      await canvas.findByRole('combobox', { name: m.zones_create_starter() }),
+      bookStarterLabel(),
+    );
     await userEvent.type(canvas.getByRole('textbox', { name: m.zone_name_primary() }), '読書と旅の記録 مكتبة الرحلات');
     await userEvent.click(canvas.getByRole('button', { name: m.zones_create_submit() }));
     const alert = await canvas.findByRole('alert');

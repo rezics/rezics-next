@@ -1,7 +1,7 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { catalogueEditor, CatalogueCurrentReading, useEditorLifetime } from '../catalogue/editor-lifetime';
@@ -246,19 +246,28 @@ function ProducerHistoryPageLive({
         {!!reader.streams.length && (
           <Field>
             <FieldLabel htmlFor={streamId}>{m.producer_history_relation({}, o)}</FieldLabel>
-            <NativeSelect
-              id={streamId}
-              className="min-w-0 max-w-full [&_select]:min-h-11"
-              value={reader.key ?? ''}
-              onChange={(event) => load(reader.replace(event.target.value))}
+            <SharedSelect.Select
+              value={reader.key ?? null}
+              items={reader.streams.map((item) => ({
+                value: item.key,
+                label: `${meaningLabel(item.meaning, locale)}${item.label.text ? ` · ${item.label.text}` : ''}`,
+              }))}
+              onValueChange={(value) => load(reader.replace(value ?? ''))}
             >
-              {reader.streams.map((item) => (
-                <NativeSelectOption key={item.key} value={item.key}>
-                  {meaningLabel(item.meaning, locale)}
-                  {item.label.text ? ` · ${item.label.text}` : ''}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              <SharedSelect.SelectTrigger id={streamId} className="min-w-0 max-w-full min-h-11">
+                <SharedSelect.SelectValue />
+              </SharedSelect.SelectTrigger>
+              <SharedSelect.SelectContent>
+                <SharedSelect.SelectGroup>
+                  {reader.streams.map((item) => (
+                    <SharedSelect.SelectItem key={item.key} value={item.key}>
+                      {meaningLabel(item.meaning, locale)}
+                      {item.label.text ? ` · ${item.label.text}` : ''}
+                    </SharedSelect.SelectItem>
+                  ))}
+                </SharedSelect.SelectGroup>
+              </SharedSelect.SelectContent>
+            </SharedSelect.Select>
           </Field>
         )}
       </div>

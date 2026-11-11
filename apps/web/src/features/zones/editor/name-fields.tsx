@@ -1,8 +1,8 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { UI_LOCALES, zonePrimaryLanguage, type ZoneConfiguration, type ZoneLanguage } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { useEffect, useRef } from 'react';
 import { m } from '../../../paraglide/messages.js';
 
@@ -64,22 +64,33 @@ export function ZoneNameFields({
       {!primaryLanguage ? <p className="text-sm text-muted-foreground">{m.zone_name_legacy({}, options)}</p> : null}
       <Field data-invalid={!!descriptions?.['zone-primary-language']}>
         <FieldLabel htmlFor="zone-primary-language">{m.zone_name_language({}, options)}</FieldLabel>
-        <NativeSelect
-          id="zone-primary-language"
+        <SharedSelect.Select
           value={primary}
-          aria-invalid={!!descriptions?.['zone-primary-language']}
-          aria-describedby={['zone-name-help', descriptions?.['zone-primary-language']].filter(Boolean).join(' ')}
-          onChange={(event) => {
-            const language = event.target.value as ZoneLanguage;
+          items={UI_LOCALES.map((language) => ({ value: language, label: languageName(language) }))}
+          onValueChange={(value) => {
+            if (value === null) return;
+            const language = value as ZoneLanguage;
             change({ ...labels }, language);
           }}
         >
-          {UI_LOCALES.map((language) => (
-            <NativeSelectOption key={language} value={language}>
-              {languageName(language)}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SharedSelect.SelectTrigger
+            id="zone-primary-language"
+            aria-invalid={!!descriptions?.['zone-primary-language']}
+            aria-describedby={['zone-name-help', descriptions?.['zone-primary-language']].filter(Boolean).join(' ')}
+            className="max-md:min-h-11 pointer-coarse:min-h-11"
+          >
+            <SharedSelect.SelectValue />
+          </SharedSelect.SelectTrigger>
+          <SharedSelect.SelectContent>
+            <SharedSelect.SelectGroup>
+              {UI_LOCALES.map((language) => (
+                <SharedSelect.SelectItem key={language} value={language}>
+                  {languageName(language)}
+                </SharedSelect.SelectItem>
+              ))}
+            </SharedSelect.SelectGroup>
+          </SharedSelect.SelectContent>
+        </SharedSelect.Select>
       </Field>
       <Field data-invalid={invalid(primary)}>
         <FieldLabel htmlFor={`zone-label-${primary}`}>{m.zone_name_primary({}, options)}</FieldLabel>
@@ -126,23 +137,36 @@ export function ZoneNameFields({
         ))}
         <Field>
           <FieldLabel htmlFor="zone-add-translation">{m.zone_name_add({}, options)}</FieldLabel>
-          <NativeSelect
-            id="zone-add-translation"
-            value=""
-            onChange={(event) => {
-              const language = event.target.value as ZoneLanguage;
-              if (language) change({ ...labels, [language]: '' });
+          <SharedSelect.Select
+            value={null}
+            items={[
+              { value: null, label: m.zone_name_choose({}, options) },
+              ...UI_LOCALES.filter((language) => language !== primary && !Object.hasOwn(labels, language)).map(
+                (language) => ({ value: language, label: languageName(language) }),
+              ),
+            ]}
+            onValueChange={(value) => {
+              if (value === null) return;
+              const language = value as ZoneLanguage;
+              change({ ...labels, [language]: '' });
             }}
           >
-            <NativeSelectOption value="">{m.zone_name_choose({}, options)}</NativeSelectOption>
-            {UI_LOCALES.filter((language) => language !== primary && !Object.hasOwn(labels, language)).map(
-              (language) => (
-                <NativeSelectOption key={language} value={language}>
-                  {languageName(language)}
-                </NativeSelectOption>
-              ),
-            )}
-          </NativeSelect>
+            <SharedSelect.SelectTrigger id="zone-add-translation" className="max-md:min-h-11 pointer-coarse:min-h-11">
+              <SharedSelect.SelectValue />
+            </SharedSelect.SelectTrigger>
+            <SharedSelect.SelectContent>
+              <SharedSelect.SelectGroup>
+                <SharedSelect.SelectItem value={null}>{m.zone_name_choose({}, options)}</SharedSelect.SelectItem>
+                {UI_LOCALES.filter((language) => language !== primary && !Object.hasOwn(labels, language)).map(
+                  (language) => (
+                    <SharedSelect.SelectItem key={language} value={language}>
+                      {languageName(language)}
+                    </SharedSelect.SelectItem>
+                  ),
+                )}
+              </SharedSelect.SelectGroup>
+            </SharedSelect.SelectContent>
+          </SharedSelect.Select>
         </Field>
       </details>
     </fieldset>

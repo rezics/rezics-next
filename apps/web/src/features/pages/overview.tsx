@@ -1,3 +1,4 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import type { MemberPageTarget } from './member-list-query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { PAGE_GLOBAL_CONTEXT, type SelectedContext } from '@rezics/composition';
@@ -1571,35 +1572,54 @@ function SummaryContent({
           <label htmlFor={`${id}-synopsis-choice`} className="block text-sm font-medium">
             {m.subject_synopsis_choice({}, options)}
           </label>
-          <select
-            id={`${id}-synopsis-choice`}
-            className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          <SharedSelect.Select
             value={selectedChoice.statement.id}
-            onChange={(event) => {
+            items={choiceSet.choices.map((choice, index, choices) => {
+              const languageChoices = choices.filter((candidate) => candidate.language === choice.language);
+              return {
+                value: choice.statement.id,
+                label: `${languageChoices.length > 1 ? `${m.subject_synopsis_candidate({ number: languageChoices.indexOf(choice) + 1 }, options)} · ` : ''}${choice.statement.rank === 'preferred' ? m.candidate_rank_preferred({}, options) : m.candidate_rank_normal({}, options)}`,
+              };
+            })}
+            onValueChange={(value) => {
+              if (value === null) return;
               setRetryState(null);
               retryDocument.current = null;
-              setSelectionState({ sourceKey, candidateId: event.currentTarget.value, expanded: false });
+              setSelectionState({ sourceKey, candidateId: value, expanded: false });
             }}
           >
-            {[...new Set(choiceSet.choices.map((choice) => choice.language))].map((language) => {
-              const languageChoices = choiceSet.choices.filter((choice) => choice.language === language);
-              const displayName = synopsisLanguageName(language, value.locale);
-              return (
-                <optgroup key={language} label={displayName === language ? language : `${displayName} (${language})`}>
-                  {languageChoices.map((choice, index) => (
-                    <option key={choice.statement.id} value={choice.statement.id}>
-                      {languageChoices.length > 1
-                        ? `${m.subject_synopsis_candidate({ number: index + 1 }, options)} · `
-                        : ''}
-                      {choice.statement.rank === 'preferred'
-                        ? m.candidate_rank_preferred({}, options)
-                        : m.candidate_rank_normal({}, options)}
-                    </option>
-                  ))}
-                </optgroup>
-              );
-            })}
-          </select>
+            <SharedSelect.SelectTrigger
+              id={`${id}-synopsis-choice`}
+              className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <SharedSelect.SelectValue />
+            </SharedSelect.SelectTrigger>
+            <SharedSelect.SelectContent>
+              <SharedSelect.SelectGroup>
+                {[...new Set(choiceSet.choices.map((choice) => choice.language))].map((language) => {
+                  const languageChoices = choiceSet.choices.filter((choice) => choice.language === language);
+                  const displayName = synopsisLanguageName(language, value.locale);
+                  return (
+                    <SharedSelect.SelectGroup key={language}>
+                      <SharedSelect.SelectLabel>
+                        {displayName === language ? language : `${displayName} (${language})`}
+                      </SharedSelect.SelectLabel>
+                      {languageChoices.map((choice, index) => (
+                        <SharedSelect.SelectItem key={choice.statement.id} value={choice.statement.id}>
+                          {languageChoices.length > 1
+                            ? `${m.subject_synopsis_candidate({ number: index + 1 }, options)} · `
+                            : ''}
+                          {choice.statement.rank === 'preferred'
+                            ? m.candidate_rank_preferred({}, options)
+                            : m.candidate_rank_normal({}, options)}
+                        </SharedSelect.SelectItem>
+                      ))}
+                    </SharedSelect.SelectGroup>
+                  );
+                })}
+              </SharedSelect.SelectGroup>
+            </SharedSelect.SelectContent>
+          </SharedSelect.Select>
         </div>
       )}
       {choiceSet.kind === 'ready' && selectedChoice && (

@@ -10,11 +10,16 @@ import {
 } from '@tanstack/react-router';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { PROFILE_FORMAT, profileDigest, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
-import { PresentationViewEditor, type CurationEditorTransport } from '../features/pages/curate-view-editor';
+import {
+  PresentationViewEditor,
+  presentationViewNames,
+  type CurationEditorTransport,
+} from '../features/pages/curate-view-editor';
 import { m } from '../paraglide/messages.js';
 import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime';
 import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory } from './page';
+import { selectSharedOption } from './shared-select-interaction';
 
 // Explicit inert profile data exercises the real editor. These are behavior states, not native publication receipts.
 const pageDocument = (id: string, level = 2): CompositionDocument => ({
@@ -85,6 +90,29 @@ const meta = {
 } satisfies Meta<typeof PresentationViewEditor>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+type TemplateScope = 'generic' | 'base' | 'type' | 'route';
+
+function scopeLabel(scope: TemplateScope) {
+  switch (scope) {
+    case 'generic':
+      return m.curation_generic();
+    case 'base':
+      return m.curation_base();
+    case 'type':
+      return m.curation_type();
+    case 'route':
+      return m.curation_route();
+  }
+}
+
+function templateLabel(scope: TemplateScope, key: string | null) {
+  return key === null ? scopeLabel('generic') : `${scopeLabel(scope)}: ${key}`;
+}
+
+function viewLabel(view: 'overview' | 'details') {
+  return presentationViewNames(getLocale())[view];
+}
+
 const render: NonNullable<Story['render']> = (args) => (
   <PatternStory visitor="Signed In" path="/curate/presentation">
     <AppShell>
@@ -133,8 +161,8 @@ function headingTextField(canvasElement: HTMLElement) {
 async function editDetails(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   const controls = templateControls(canvasElement);
-  await userEvent.selectOptions(controls.template, JSON.stringify({ scope: 'type', key: 'schema:Book' }));
-  await userEvent.selectOptions(controls.view, 'details');
+  await selectSharedOption(controls.template, templateLabel('type', 'schema:Book'));
+  await selectSharedOption(controls.view, viewLabel('details'));
   await selectDetailsHeading(canvasElement);
   const field = await headingTextField(canvasElement);
   await userEvent.clear(field);
@@ -146,16 +174,10 @@ export const RetainedViewDraft: Story = {
   ...Authoring,
   play: async ({ canvasElement }) => {
     const canvas = await editDetails(canvasElement);
-    await userEvent.selectOptions(templateControls(canvasElement).view, 'overview');
-    await userEvent.selectOptions(
-      templateControls(canvasElement).template,
-      JSON.stringify({ scope: 'generic', key: null }),
-    );
-    await userEvent.selectOptions(
-      templateControls(canvasElement).template,
-      JSON.stringify({ scope: 'type', key: 'schema:Book' }),
-    );
-    await userEvent.selectOptions(templateControls(canvasElement).view, 'details');
+    await selectSharedOption(templateControls(canvasElement).view, viewLabel('overview'));
+    await selectSharedOption(templateControls(canvasElement).template, templateLabel('generic', null));
+    await selectSharedOption(templateControls(canvasElement).template, templateLabel('type', 'schema:Book'));
+    await selectSharedOption(templateControls(canvasElement).view, viewLabel('details'));
     await expect(canvas.getByText(m.curation_unsaved())).toBeVisible();
     // Restoring a view restores the document even though Puck's selected block may be reset.
     await selectDetailsHeading(canvasElement);
@@ -204,10 +226,8 @@ export const NativeValidation: Story = {
     await expect(await canvas.findByText(m.curation_invalid_retained())).toBeVisible();
     await expect(canvas.queryByRole('button', { name: m.curation_retry_original() })).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: m.curation_correct() }));
-    await expect(templateControls(canvasElement).template).toHaveValue(
-      JSON.stringify({ scope: 'type', key: 'schema:Book' }),
-    );
-    await expect(templateControls(canvasElement).view).toHaveValue('details');
+    await expect(templateControls(canvasElement).template).toHaveTextContent(templateLabel('type', 'schema:Book'));
+    await expect(templateControls(canvasElement).view).toHaveTextContent(viewLabel('details'));
     const field = await headingTextField(canvasElement);
     await waitFor(() => expect(field).toHaveFocus());
     await userEvent.clear(field);
@@ -294,10 +314,8 @@ export const UnsavedNavigation: Story = {
     await expect(dialog).toHaveAccessibleDescription(m.curation_leave_warning());
     await userEvent.click(within(dialog).getByRole('button', { name: m.curation_stay() }));
     await waitFor(() => expect(body.queryByRole('alertdialog')).not.toBeInTheDocument());
-    await expect(templateControls(canvasElement).template).toHaveValue(
-      JSON.stringify({ scope: 'type', key: 'schema:Book' }),
-    );
-    await expect(templateControls(canvasElement).view).toHaveValue('details');
+    await expect(templateControls(canvasElement).template).toHaveTextContent(templateLabel('type', 'schema:Book'));
+    await expect(templateControls(canvasElement).view).toHaveTextContent(viewLabel('details'));
     await expect(await headingTextField(canvasElement)).toHaveValue('Retained draft');
     await waitFor(() => expect(origin).toHaveFocus());
     await userEvent.click(searchLink());
@@ -349,19 +367,21 @@ export const IndependentEditors: Story = {
     }
     const ids = [...canvasElement.querySelectorAll('[id]')].map((node) => node.id);
     await expect(new Set(ids).size).toBe(ids.length);
-    await userEvent.selectOptions(templateControls(first).template, JSON.stringify({ scope: 'type', key: longType }));
-    await userEvent.selectOptions(templateControls(first).view, 'details');
-    await expect(templateControls(second).template).toHaveValue(JSON.stringify({ scope: 'generic', key: null }));
-    await expect(templateControls(second).view).toHaveValue('overview');
+    await selectSharedOption(templateControls(first).template, templateLabel('type', longType));
+    await selectSharedOption(templateControls(first).view, viewLabel('details'));
+    await expect(templateControls(second).template).toHaveTextContent(templateLabel('generic', null));
+    await expect(templateControls(second).view).toHaveTextContent(viewLabel('overview'));
     await userEvent.click(within(second).getByRole('button', { name: `generic: ${m.curation_generic()}` }));
     await expect(within(first).getByRole('region', { name: m.curation_editor() })).toBeVisible();
     await expect(within(second).getByRole('region', { name: m.curation_editor() })).toBeVisible();
-    await userEvent.selectOptions(within(second).getByRole('combobox', { name: m.curation_scope() }), 'route');
+    await selectSharedOption(within(second).getByRole('combobox', { name: m.curation_scope() }), m.curation_route());
     await userEvent.type(within(second).getByRole('textbox', { name: m.curation_key() }), '/second-editor');
-    await expect(within(first).getByRole('combobox', { name: m.curation_scope() })).toHaveValue('type');
+    await expect(within(first).getByRole('combobox', { name: m.curation_scope() })).toHaveTextContent(
+      m.curation_type(),
+    );
     await expect(within(first).getByRole('textbox', { name: m.curation_key() })).toHaveValue('');
-    await expect(templateControls(first).template).toHaveValue(JSON.stringify({ scope: 'type', key: longType }));
-    await expect(templateControls(first).view).toHaveValue('details');
+    await expect(templateControls(first).template).toHaveTextContent(templateLabel('type', longType));
+    await expect(templateControls(first).view).toHaveTextContent(viewLabel('details'));
     const mountedIds = [...canvasElement.querySelectorAll('[id]')].map((node) => node.id);
     await expect(new Set(mountedIds).size).toBe(mountedIds.length);
     await expect(args.transport.read).not.toHaveBeenCalled();
@@ -374,11 +394,8 @@ export const LongKeysFocus: Story = {
   render,
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(
-      templateControls(canvasElement).template,
-      JSON.stringify({ scope: 'route', key: longRoute }),
-    );
-    await expect(templateControls(canvasElement).view).toHaveValue('overview');
+    await selectSharedOption(templateControls(canvasElement).template, templateLabel('route', longRoute));
+    await expect(templateControls(canvasElement).view).toHaveTextContent(viewLabel('overview'));
     const selected = canvasElement.ownerDocument.getElementById(
       templateControls(canvasElement).template.getAttribute('aria-describedby')!,
     )!;
@@ -402,7 +419,7 @@ export const LongKeysFocus: Story = {
       await userEvent.keyboard(' ');
       await expect(summary.closest('details')).not.toHaveAttribute('open');
     }
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.curation_scope() }), 'route');
+    await selectSharedOption(canvas.getByRole('combobox', { name: m.curation_scope() }), m.curation_route());
     const key = canvas.getByRole('textbox', { name: m.curation_key() });
     await userEvent.type(key, longRoute);
     await expect(key).toHaveValue(longRoute);

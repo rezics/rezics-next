@@ -1,3 +1,4 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
@@ -136,16 +137,30 @@ export function ClassificationEditor({
           <legend>{m.subject_classification_assessment_select({}, options)}</legend>
           <label className="grid gap-2">
             <span>{m.subject_classification_assessment_select({}, options)}</span>
-            <select
-              className="min-h-11 max-w-full rounded border bg-background p-2"
+            <SharedSelect.Select
               value={assessment}
-              onChange={(event) =>
-                current() && setAssessment(event.currentTarget.value === 'oppose' ? 'oppose' : 'support')
+              items={[
+                { value: 'support', label: m.subject_classification_assessment_support({}, options) },
+                { value: 'oppose', label: m.subject_classification_assessment_oppose({}, options) },
+              ]}
+              onValueChange={(value) =>
+                value !== null && current() && setAssessment(value === 'oppose' ? 'oppose' : 'support')
               }
             >
-              <option value="support">{m.subject_classification_assessment_support({}, options)}</option>
-              <option value="oppose">{m.subject_classification_assessment_oppose({}, options)}</option>
-            </select>
+              <SharedSelect.SelectTrigger className="min-h-11 max-w-full rounded border bg-background p-2">
+                <SharedSelect.SelectValue />
+              </SharedSelect.SelectTrigger>
+              <SharedSelect.SelectContent>
+                <SharedSelect.SelectGroup>
+                  <SharedSelect.SelectItem value="support">
+                    {m.subject_classification_assessment_support({}, options)}
+                  </SharedSelect.SelectItem>
+                  <SharedSelect.SelectItem value="oppose">
+                    {m.subject_classification_assessment_oppose({}, options)}
+                  </SharedSelect.SelectItem>
+                </SharedSelect.SelectGroup>
+              </SharedSelect.SelectContent>
+            </SharedSelect.Select>
           </label>
           <label className="flex min-h-11 items-center gap-2">
             <input

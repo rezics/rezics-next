@@ -1,9 +1,9 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useId, useState } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 import {
@@ -26,7 +26,7 @@ const actionClassName =
 const formControlClass =
   'h-auto min-h-8 min-w-0 max-w-full max-md:min-h-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
 const languageControlClass =
-  'max-w-full max-md:w-full pointer-coarse:w-full md:pointer-fine:w-fit max-md:[&_select]:h-11 max-md:[&_select]:min-h-11 pointer-coarse:[&_select]:h-11 pointer-coarse:[&_select]:min-h-11 md:pointer-fine:[&_select]:h-8';
+  'max-w-full max-md:h-11 max-md:min-h-11 max-md:w-full pointer-coarse:h-11 pointer-coarse:min-h-11 pointer-coarse:w-full md:pointer-fine:h-8 md:pointer-fine:w-fit';
 const summaryClassName =
   'min-h-11 min-w-11 cursor-pointer content-center py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const options = (locale: string) => ({ locale: locale as never });
@@ -74,23 +74,32 @@ export function ContextLabelRows({
             <legend className="px-1 text-sm font-semibold">{nameText}</legend>
             <Field data-invalid={issue === 'language' || issue === 'duplicate' || undefined}>
               <FieldLabel htmlFor={languageId}>{languageText}</FieldLabel>
-              <NativeSelect
-                id={languageId}
-                className={languageControlClass}
-                data-editorial-control={control}
+              <SharedSelect.Select
                 value={row.language}
                 disabled={disabled}
-                onChange={(event) => {
-                  const language = event.target.value;
+                items={locales.map((language) => ({ value: language, label: names.of(language) ?? language }))}
+                onValueChange={(value) => {
+                  const language = value ?? row.language;
                   onChange(rows.map((entry) => (entry.id === row.id ? { ...entry, language } : entry)));
                 }}
               >
-                {locales.map((language) => (
-                  <NativeSelectOption key={language} value={language}>
-                    {names.of(language) ?? language}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SharedSelect.SelectTrigger
+                  id={languageId}
+                  data-editorial-control={control}
+                  className={languageControlClass}
+                >
+                  <SharedSelect.SelectValue />
+                </SharedSelect.SelectTrigger>
+                <SharedSelect.SelectContent>
+                  <SharedSelect.SelectGroup>
+                    {locales.map((language) => (
+                      <SharedSelect.SelectItem key={language} value={language}>
+                        {names.of(language) ?? language}
+                      </SharedSelect.SelectItem>
+                    ))}
+                  </SharedSelect.SelectGroup>
+                </SharedSelect.SelectContent>
+              </SharedSelect.Select>
               {issue === 'duplicate' ? (
                 <FieldError>{m.ctxw_label_duplicate({}, o)}</FieldError>
               ) : issue === 'language' ? (

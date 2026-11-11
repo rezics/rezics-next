@@ -1,8 +1,8 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { ListRowLink } from '@rezics/ui/list-row';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import type { MouseEvent, ReactNode, Ref } from 'react';
 import { m } from '../../paraglide/messages.js';
@@ -238,19 +238,31 @@ export function CharacterRelationshipsGroups({
         <>
           <Field>
             <FieldLabel htmlFor={streamId}>{m.character_relationships_stream({}, o)}</FieldLabel>
-            <NativeSelect
-              id={streamId}
-              className="min-w-0 max-w-full max-md:[&_select]:min-h-11 max-md:[&_select]:min-w-11 pointer-coarse:[&_select]:min-h-11 pointer-coarse:[&_select]:min-w-11"
+            <SharedSelect.Select
               value={stream.key}
               disabled={busy}
-              onChange={(event) => onSelectStream?.(event.target.value)}
+              items={read.streams.map((item) => ({
+                value: item.key,
+                label: `${kindMessage(item.kind, locale)} · ${item.label.text || m.subject_value_unlabelled({}, o)}`,
+              }))}
+              onValueChange={(value) => value !== null && onSelectStream?.(value)}
             >
-              {read.streams.map((item) => (
-                <NativeSelectOption key={item.key} value={item.key} lang={item.label.lang ?? undefined}>
-                  {`${kindMessage(item.kind, locale)} · ${item.label.text || m.subject_value_unlabelled({}, o)}`}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              <SharedSelect.SelectTrigger
+                id={streamId}
+                className="min-w-0 max-w-full max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+              >
+                <SharedSelect.SelectValue />
+              </SharedSelect.SelectTrigger>
+              <SharedSelect.SelectContent>
+                <SharedSelect.SelectGroup>
+                  {read.streams.map((item) => (
+                    <SharedSelect.SelectItem key={item.key} value={item.key} lang={item.label.lang ?? undefined}>
+                      {`${kindMessage(item.kind, locale)} · ${item.label.text || m.subject_value_unlabelled({}, o)}`}
+                    </SharedSelect.SelectItem>
+                  ))}
+                </SharedSelect.SelectGroup>
+              </SharedSelect.SelectContent>
+            </SharedSelect.Select>
           </Field>
           <p ref={sliceStatus} role="status" tabIndex={-1}>
             {m.character_relationships_slice({}, o)}{' '}

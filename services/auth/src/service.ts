@@ -1702,9 +1702,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           );
         };
         if (stage.row.committed_at) {
+          const result = credentials.replayResult(stage, authorization);
           await revalidate(true, undefined, undefined, stage.row.opening_receipt_id ?? undefined);
           await humanProof(input.headers);
-          return { receiptId: stage.row.receipt_id, replayed: true } satisfies CredentialEffectApplyResponse;
+          return result;
         }
         await credentials.current(database, stage);
         const consumeInput = {
@@ -1776,10 +1777,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           await connection.query('SELECT auth_assert_session_capacity($1,true)', [subject.accountId]);
           const locked = await credentials.read(input.effectRef, b, connection, true);
           if (locked.row.committed_at) {
+            const result = credentials.replayResult(locked, authorization);
             await revalidate(true, undefined, undefined, locked.row.opening_receipt_id ?? undefined);
             await humanProof(input.headers);
             await connection.query('COMMIT');
-            return { receiptId: locked.row.receipt_id, replayed: true };
+            return result;
           }
           await credentials.current(connection, locked);
           if (

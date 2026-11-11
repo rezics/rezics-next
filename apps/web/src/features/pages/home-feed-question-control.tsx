@@ -1,7 +1,7 @@
+import * as SharedSelect from '@rezics/ui/shadcn/select';
 import { useId } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Label } from '@rezics/ui/shadcn/label';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import type { createHomeQuestionChoices } from './home-feed-questions';
@@ -53,30 +53,48 @@ export function HomeFeedQuestionControl({
     >
       <div className="flex flex-wrap items-center gap-3">
         <Label htmlFor={id}>{m.home_question_label({}, options)}</Label>
-        <NativeSelect
-          id={id}
-          className="max-w-full [&_select]:min-h-11 [&_select]:max-w-full"
-          value={selected?.id ?? selectedId ?? ''}
+        <SharedSelect.Select
+          value={selected?.id ?? (selectedId || null)}
           disabled={!snapshot.page && !selected && !selectedId}
-          onChange={(event) => {
-            const question = [...retained, ...values].find((value) => value.id === event.target.value);
-            if (question || event.target.value === '') void choices.select(question);
+          items={[
+            ...(snapshot.status !== 'idle' || selected || selectedId
+              ? [{ value: null, label: m.home_question_all({}, options) }]
+              : []),
+            ...(selectedId && !selected && !values.some((question) => question.id === selectedId)
+              ? [{ value: selectedId, label: m.home_filter_metadata_unavailable({}, options) }]
+              : []),
+            ...[...retained, ...values].map((question) => ({ value: question.id, label: question.label })),
+          ]}
+          onValueChange={(value) => {
+            if (value === null) {
+              void choices.select(undefined);
+              return;
+            }
+            const question = [...retained, ...values].find((question) => question.id === value);
+            if (question) void choices.select(question);
           }}
         >
-          {snapshot.status !== 'idle' || selected || selectedId ? (
-            <NativeSelectOption value="">{m.home_question_all({}, options)}</NativeSelectOption>
-          ) : null}
-          {selectedId && !selected && !values.some((question) => question.id === selectedId) ? (
-            <NativeSelectOption value={selectedId}>
-              {m.home_filter_metadata_unavailable({}, options)}
-            </NativeSelectOption>
-          ) : null}
-          {[...retained, ...values].map((question) => (
-            <NativeSelectOption key={question.id} value={question.id}>
-              {question.label}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SharedSelect.SelectTrigger id={id} className="max-w-full min-h-11 max-w-full">
+            <SharedSelect.SelectValue />
+          </SharedSelect.SelectTrigger>
+          <SharedSelect.SelectContent>
+            <SharedSelect.SelectGroup>
+              {snapshot.status !== 'idle' || selected || selectedId ? (
+                <SharedSelect.SelectItem value={null}>{m.home_question_all({}, options)}</SharedSelect.SelectItem>
+              ) : null}
+              {selectedId && !selected && !values.some((question) => question.id === selectedId) ? (
+                <SharedSelect.SelectItem value={selectedId}>
+                  {m.home_filter_metadata_unavailable({}, options)}
+                </SharedSelect.SelectItem>
+              ) : null}
+              {[...retained, ...values].map((question) => (
+                <SharedSelect.SelectItem key={question.id} value={question.id}>
+                  {question.label}
+                </SharedSelect.SelectItem>
+              ))}
+            </SharedSelect.SelectGroup>
+          </SharedSelect.SelectContent>
+        </SharedSelect.Select>
         <Button
           className="min-h-11 whitespace-normal"
           variant="outline"
