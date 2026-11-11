@@ -19,6 +19,7 @@ import {
   type BrowserContext,
   type Frame,
   type Page,
+  type Request as PlaywrightRequest,
   type Response as PlaywrightResponse,
 } from '../packages/ui/node_modules/playwright/index.js';
 
@@ -1289,8 +1290,45 @@ export async function signInBrowser(
   let phase: BrowserSignInPhase = 'response/redirect';
   let lastDocument = 'none';
   let callbackStatus: number | undefined;
+  let sessionStep: 'document' | 'cookie' | 'control' = 'document';
+  type BootKind = 'script' | 'server-function';
+  const boot = { script: { started: 0, failed: 0 }, 'server-function': { started: 0, failed: 0 } };
+  const pending = new Map<PlaywrightRequest, { kind: BootKind; failed: boolean }>();
+  let truncated = false;
+  let clientErrors = 0;
+  const observeBoot = () => phase === 'callback' || phase === 'session';
+  const observeRequest = (request: PlaywrightRequest) => {
+    if (!observeBoot()) return;
+    const url = new URL(request.url());
+    if (url.origin !== base.origin) return;
+    const kind = url.pathname.startsWith('/_serverFn/')
+      ? 'server-function'
+      : request.resourceType() === 'script'
+        ? 'script'
+        : null;
+    if (!kind) return;
+    if (pending.size >= 64) {
+      truncated = true;
+      return;
+    }
+    boot[kind].started++;
+    pending.set(request, { kind, failed: false });
+  };
+  const finishRequest = (request: PlaywrightRequest, transportFailed: boolean) => {
+    const observed = pending.get(request);
+    if (!observed) return;
+    if (observed.failed || transportFailed) boot[observed.kind].failed++;
+    pending.delete(request);
+  };
+  const observeFinished = (request: PlaywrightRequest) => finishRequest(request, false);
+  const observeFailed = (request: PlaywrightRequest) => finishRequest(request, true);
+  const observeClientError = () => {
+    if (observeBoot()) clientErrors++;
+  };
   const observeResponse = (response: PlaywrightResponse) => {
     const request = response.request();
+    const observed = pending.get(request);
+    if (observed && response.status() >= 400) observed.failed = true;
     if (!request.isNavigationRequest() || request.frame() !== page.mainFrame()) return;
     const url = new URL(response.url());
     // Omit query strings: authorization redirects contain state, codes and other private operands.
@@ -1300,6 +1338,10 @@ export async function signInBrowser(
     if (phase === 'response/redirect' && response.status() >= 300 && response.status() < 400) phase = 'issuer-document';
   };
   page.on('response', observeResponse);
+  page.on('request', observeRequest);
+  page.on('requestfinished', observeFinished);
+  page.on('requestfailed', observeFailed);
+  page.on('pageerror', observeClientError);
   try {
     const navigation = await navigateToDocument(page, new URL('/auth/sign-in', base).href, timeoutMs);
     if (!navigation.responseReceived) throw navigation.error;
@@ -1342,12 +1384,31 @@ export async function signInBrowser(
       timeout: timeoutMs,
     });
     // The cookie alone does not prove that Web accepts the session. The account control reads actual session state.
+    sessionStep = 'cookie';
     const cookies = await page.context().cookies(base.href);
     if (!cookies.some((cookie) => cookie.name === '__Host-rezics_session' && cookie.value))
       throw new Error('Web session cookie missing');
+    sessionStep = 'control';
     await page.locator('#account-menu-button').waitFor({ state: 'visible', timeout: timeoutMs });
     report('Member browser sign-in phase=session verified');
   } catch (error) {
+    if (phase === 'session') {
+      const hydrated = await page
+        .locator('html')
+        .getAttribute('data-hydrated', { timeout: 250 })
+        .then(
+          (marker) => (marker === null ? 'no' : 'yes'),
+          () => 'unknown',
+        );
+      const counts = (kind: BootKind) => {
+        const outstanding = [...pending.values()].filter((request) => request.kind === kind).length;
+        return `${kind}=${boot[kind].started} started/${boot[kind].failed} failed/${outstanding} pending`;
+      };
+      // Server functions are aggregate transport evidence; their opaque IDs do not identify the session read.
+      report(
+        `Member browser sign-in observation step=${sessionStep} hydrated=${hydrated}; ${counts('script')}; ${counts('server-function')}; client-errors=${clientErrors}; truncated=${truncated}`,
+      );
+    }
     // Playwright errors can embed redirect query strings; keep only the phase and observed public document address.
     throw new Error(
       `Member browser sign-in failed phase=${phase}; last document=${lastDocument}; cause=${isTimeout(error) ? 'timeout' : 'error'}`,
@@ -1355,6 +1416,10 @@ export async function signInBrowser(
     );
   } finally {
     page.off('response', observeResponse);
+    page.off('request', observeRequest);
+    page.off('requestfinished', observeFinished);
+    page.off('requestfailed', observeFailed);
+    page.off('pageerror', observeClientError);
   }
 }
 

@@ -1036,6 +1036,7 @@ test('member browser sign-in uses visible controls before document lifecycle and
     fetch(request): Response {
       const path = new URL(request.url).pathname;
       if (path === '/auth/sign-in') return Response.redirect(`${issuer.url}login?state=private-state`);
+      if (path === '/member-entry.js' || path === '/_serverFn/fixture-state') return new Response('', { status: 503 });
       if (path === '/auth/callback' && failure === 'callback') return new Response('Refused', { status: 400 });
       if (path === '/auth/callback')
         return new Response(null, {
@@ -1048,7 +1049,9 @@ test('member browser sign-in uses visible controls before document lifecycle and
       return new Response(
         failure !== 'session' && request.headers.get('cookie')?.includes('__Host-rezics_session=fixture')
           ? '<button id="account-menu-button">Account</button>'
-          : '<a href="/auth/sign-in">Sign in</a>',
+          : `<a href="/auth/sign-in">Sign in</a>
+             <script src="/member-entry.js?token=private-module"></script>
+             <script>fetch('/_serverFn/fixture-state?state=private-function')</script>`,
         { headers: { 'content-type': 'text/html' } },
       );
     },
@@ -1084,11 +1087,23 @@ test('member browser sign-in uses visible controls before document lifecycle and
     for (failure of ['callback', 'session'] as const) {
       const fresh = await browser.newContext();
       try {
-        const error = await signInBrowser(await fresh.newPage(), web.url, credentials, 1_000).catch((error: Error) => {
+        const failedEvidence: string[] = [];
+        const error = await signInBrowser(await fresh.newPage(), web.url, credentials, 1_000, (line) =>
+          failedEvidence.push(line),
+        ).catch((error: Error) => {
           if (!error.message.includes(`failed phase=${failure};`)) throw error;
           return error;
         });
         expect(error).toBeInstanceOf(Error);
+        if (failure === 'session') {
+          const observation = failedEvidence.join('\n');
+          expect(observation).toContain('observation step=control hydrated=no');
+          expect(observation).toContain('script=1 started/1 failed/0 pending');
+          expect(observation).toContain('server-function=1 started/1 failed/0 pending');
+          expect(observation).not.toMatch(
+            /private-state|private-code|private-module|private-function|private-password/,
+          );
+        }
       } finally {
         await fresh.close();
       }
