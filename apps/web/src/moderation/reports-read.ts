@@ -77,11 +77,12 @@ class ReportReadFailure extends Error {
   }
 }
 function reportResult(result: {
+  status: number;
   data?: NativeReportList | null;
-  error?: { status: number | string; value: unknown } | null;
+  error?: { value: unknown } | null;
 }): ReportPage {
   if (result.error) {
-    const status = Number(result.error.status);
+    const status = result.status;
     const { value } = result.error;
     if (
       value &&
