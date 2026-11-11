@@ -8,6 +8,7 @@ import type { WorkerJob } from './job.ts';
 import {
   isPageDataRiskRefusal,
   pageDataRepairTarget,
+  pageDataRepairEvidence,
   type PageDataRepair,
   type PageDataRepairRoute,
 } from './page-data.ts';
@@ -110,6 +111,7 @@ function pageDataRepairBrief(
   riskAreas: string[],
   paths = repair.section.files,
 ): string {
+  const additional = repair.additional?.length ? '\n' + pageDataRepairEvidence(repair) : '';
   return `---\n${JSON.stringify(
     {
       goal,
@@ -126,7 +128,7 @@ function pageDataRepairBrief(
     },
     null,
     2,
-  )}\n---\n\n# Repair a seeded page-data defect\n\npage-data-repair-key: ${repair.repairKey}\n\nRepair section \`${repair.section.page}/${repair.section.persona}/${repair.section.section}\` in class \`${repair.section.class}\` (previously \`${repair.previousClass}\`).\n\nIntegrated dev head: \`${repair.head}\`. First error line: \`${repair.section.firstErrorLine ?? 'unavailable'}\`.\n`;
+  )}\n---\n\n# Repair a seeded page-data defect\n\npage-data-repair-key: ${repair.repairKey}\n\nRepair section \`${repair.section.page}/${repair.section.persona}/${repair.section.section}\` in class \`${repair.section.class}\` (previously \`${repair.previousClass}\`).\n\nIntegrated dev head: \`${repair.head}\`. First error line: \`${repair.section.firstErrorLine ?? 'unavailable'}\`.\n${additional}`;
 }
 
 export async function routePageDataRepair(
@@ -146,17 +148,26 @@ export async function routePageDataRepair(
       (task) =>
         task.state !== 'cancelled' &&
         (!seed || task.brief.goal === target.goal) &&
-        task.brief.markdown.includes(`page-data-repair-key: ${repair.repairKey}`),
+        (task.brief.markdown.includes(`page-data-repair-key: ${repair.repairKey}`) ||
+          (seed && task.id === owner?.id && ['ready', 'running', 'held', 'landing'].includes(task.state))),
     );
   if (!existing && owner && (await job.resumePageDataRepair({ ...repair, owner }))) return 'resumed';
   const goal = owner?.brief.goal ?? target.goal;
   const manager = owner?.brief.manager ?? (seed ? settings.integration.supermanager : goal);
   if (existing) {
+    const evidence = pageDataRepairEvidence(repair);
+    const evidencePath = join(settings.stateDirectory, 'page-data-repairs', `${repair.repairKey}.observed.md`);
+    mkdirSync(dirname(evidencePath), { recursive: true });
+    if (existsSync(evidencePath)) {
+      if (readFileSync(evidencePath, 'utf8') !== evidence)
+        throw new Error('page-data repair observation changed for an existing cause');
+    } else writeFileSync(evidencePath, evidence, { flag: 'wx', mode: 0o600 });
     inbox.deliver({
       managerId: existing.brief.manager,
       taskId: existing.id,
       kind: 'instruction',
-      summary: `Seeded page-data section ${repair.section.page}/${repair.section.section} is ${repair.section.class}; first error line: ${repair.section.firstErrorLine ?? 'unavailable'}.`,
+      summary: `Continue the current page-data repair with ${1 + (repair.additional?.length ?? 0)} retained section observations at ${repair.head}.`,
+      evidencePath,
     });
     return 'dispatched';
   }
@@ -172,7 +183,8 @@ export async function routePageDataRepair(
       // Replace only the exact unadmitted brief emitted by the previous generator.
       const previousGoal = repair.owner?.brief.goal ?? repair.section.goal;
       const previousManager = repair.owner?.brief.manager ?? previousGoal;
-      const previousEmpty = pageDataRepairBrief(repair, previousGoal, previousManager, []);
+      const { additional: _additional, ...singleCause } = repair;
+      const previousEmpty = pageDataRepairBrief(singleCause, previousGoal, previousManager, []);
       const currentEmpty = pageDataRepairBrief(repair, goal, manager, [], target.files);
       if (!repair.reconcileRiskRefusal || (previous !== previousEmpty && previous !== currentEmpty))
         throw new Error('page-data repair brief changed for an existing cause');

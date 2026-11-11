@@ -93,7 +93,7 @@ import {
 } from './tasks.ts';
 import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt, Task } from './types.ts';
-import type { PageDataRepair } from './page-data.ts';
+import { pageDataRepairEvidence, type PageDataRepair } from './page-data.ts';
 import type { RunningWorker } from './launch.ts';
 import { applyRenderedPrompt, checkWaitMs, launch, renderWorkerPrompt, workerActivityBaseline } from './launch.ts';
 import { awaitHostCapacity, capacityWaiters, startsFirst } from './launch-capacity.ts';
@@ -536,16 +536,7 @@ export class WorkerJob implements GateOutcomeSink {
     )
       return false;
     const evidencePath = join(this.tasks.settings.stateDirectory, 'page-data-repairs', `${repair.repairKey}.md`);
-    const evidence = [
-      `page-data-repair-key: ${repair.repairKey}`,
-      `Integrated head: ${repair.head}`,
-      `Section: ${repair.section.page}/${repair.section.persona}/${repair.section.section}`,
-      `Class: ${repair.section.class} (previously ${repair.previousClass})`,
-      `First error line: ${repair.section.firstErrorLine ?? 'unavailable'}`,
-      '',
-      'Repair this section in the same task and continue the retained provider session.',
-      '',
-    ].join('\n');
+    const evidence = pageDataRepairEvidence(repair);
     mkdirSync(join(this.tasks.settings.stateDirectory, 'page-data-repairs'), { recursive: true });
     if (existsSync(evidencePath)) {
       if (readFileSync(evidencePath, 'utf8') !== evidence)
