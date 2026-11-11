@@ -101,6 +101,16 @@ async function archive(d: Descriptor, accountId = ownerId()): Promise<Row[]> {
     )
   ).rows.map(({ row }) => row);
 }
+async function clearRegister(subjectId: string, accountId = ownerId()): Promise<Row[]> {
+  return (
+    await reader.query<{ row: Row }>(
+      `SELECT jsonb_build_object('owner_write_seq', owner_write_seq::text,
+        'transaction_id', transaction_id::text) AS row
+       FROM library.entry_clear WHERE route=$1 AND account_id=$2 AND subject_id=$3`,
+      [routeOf(accountId), accountId, subjectId],
+    )
+  ).rows.map(({ row }) => row);
+}
 async function one(subjectId: string, accountId = ownerId()) {
   const rows = await live(subjectId, accountId);
   expect(rows).toHaveLength(1);
@@ -137,6 +147,7 @@ async function observed(subjectId: string, ds: Descriptor[] = [], accountId = ow
     counter: await counter(accountId),
     live: await live(subjectId, accountId),
     archives: await Promise.all(ds.map((d) => archive(d, accountId))),
+    clears: await clearRegister(subjectId, accountId),
     native: await f.inspect(accountId),
   };
 }
@@ -198,6 +209,22 @@ test('native equal-kernelT state sets on different own subjects allocate increas
   expect(await counter()).toBe(sb + 1n);
   expect(changedRow.updated_at).toEqual((await one(b.subjectId)).updated_at);
   await committed(changed.key, a.subjectId, updated);
+});
+
+test('native simultaneous state writes serialize on one owner counter without assigning a tie', async () => {
+  const firstSubject = await f.createSubject('game');
+  const secondSubject = await f.createSubject('game');
+  const before = await counter();
+  const writes = await Promise.all([
+    put(firstSubject, { state: 'planned' }),
+    put(secondSubject, { state: 'completed' }),
+  ]);
+  const sequences = (await Promise.all([one(firstSubject), one(secondSubject)]))
+    .map(sequence)
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  expect(sequences).toEqual([before + 1n, before + 2n]);
+  expect(await counter()).toBe(before + 2n);
+  await Promise.all(writes.map((write) => committed(write.key, write.entry.subjectId, updated)));
 });
 
 test('native separate owners have independent counters at identical kernelT', async () => {
@@ -262,6 +289,9 @@ test('native physical clear advances the owner counter and archives original seq
   expect(Date.parse(String(saved.deleted_at))).toBe(kernelT);
   expect(Date.parse(String(saved.restore_until)) - kernelT).toBe(windowMs);
   expect(await counter()).toBe(beforeClear + 1n);
+  expect(await clearRegister(a.subjectId)).toEqual([
+    { owner_write_seq: String(beforeClear + 1n), transaction_id: deletion.d.deletionId },
+  ]);
   expect(await live(a.subjectId)).toEqual([]);
   await problem(await f.send('owner', 'GET', path(a.subjectId)), 404, 'not_found');
   const before = await observed(a.subjectId, [deletion.d]);
@@ -299,6 +329,9 @@ test('native exact restore Undo preserves accepted pin dates subject and incarna
   expect(sequence(current)).toBe(clearedOrder + 1n);
   expect(sequence(current)).toBeGreaterThan(sequence(source));
   expect(await counter()).toBe(sequence(current));
+  expect(await clearRegister(a.subjectId)).toEqual([
+    { owner_write_seq: String(clearedOrder), transaction_id: deletion.d.deletionId },
+  ]);
   expect(await archive(deletion.d)).toEqual([]);
   const before = await observed(a.subjectId, [deletion.d]);
   expect(await body(await undo(a.subjectId, deletion.d, restoreKey), 200)).toEqual(restored);

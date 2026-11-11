@@ -566,6 +566,9 @@ original fact, stored subject reference and accepted pin. They
 union labels and keep copies/sessions separate. Browsing shows one card per canonical subject; the editor
 preserves every curated occurrence, note and order.
 
+Decision: Reduce canonical entry state by the greatest owner write sequence among original live states and retained
+original-keyed clear registers; clear-only originals participate in reduction but never establish live presence.
+
 ### Native occurrence boundary moves
 
 The single-occurrence `POST /v1/collections/{collectionId}/members/{memberId}:move` accepts `{after?: string | null}`:
