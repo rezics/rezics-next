@@ -95,6 +95,17 @@ test('the watchdog starts counting missing-starter time after a retry backoff ex
   expect(found[0]?.summary).toContain('11 min of eligible time');
 });
 
+test('a newly queued retry does not inherit days of idle time from a stopped attempt', () => {
+  const tasks = [{ id: 'reopened', state: 'ready' as const, currentAttempt: 1 }];
+  const attempts = [{ taskId: 'reopened', attempt: 1, state: 'exited' as const, endedAt: minutesAgo(2700) }];
+  const intents = [{ taskId: 'reopened', attempt: 1, status: 'pending' as const, queuedAt: minutesAgo(2) }];
+  const fixture = store(tasks, attempts, intents);
+  expect(violations(fixture, now)).toEqual([]);
+  const found = violations(fixture, now + 9 * 60_000);
+  expect(found.map((item) => item.key)).toEqual(['no-worker:reopened:1']);
+  expect(found[0]?.summary).toContain('11 min of eligible time');
+});
+
 test('an exited attempt with a live driver is not reported while its driver settles it', () => {
   const driver = processIdentity();
   expect(driver).not.toBeNull();

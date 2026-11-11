@@ -363,6 +363,8 @@ export type DevVerifierFinding = {
   createdAt: string;
 };
 export type RetryIntent = AttemptRef & {
+  /** When this intent entered the queue. Older records may lack the timestamp. */
+  queuedAt?: string;
   options: {
     evidence?: string;
     escalation?: string;

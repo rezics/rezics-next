@@ -2465,9 +2465,11 @@ test('authenticated stopped UNKNOWN proof retry captures fresh SAME-ID source wi
       proofRun: retainedRun,
     });
     const oldRecord = h.store.record(h.current);
+    const queuedAt = h.store.retryIntent(h.current)?.queuedAt;
+    expect(queuedAt).toBeString();
     h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1 }, h.actor);
     expect(h.store.retryIntents().filter((intent) => intent.taskId === h.proof.id)).toEqual([
-      { taskId: h.proof.id, attempt: 1, options: {}, status: 'pending' },
+      { taskId: h.proof.id, attempt: 1, options: {}, status: 'pending', queuedAt: queuedAt! },
     ]);
     expect(h.store.record(h.current)).toEqual(oldRecord);
     expect(h.store.events(h.proof.id).filter((event) => event.kind === 'proof-registration-replaced')).toHaveLength(1);
