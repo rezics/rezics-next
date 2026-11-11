@@ -682,7 +682,7 @@ Every item property in a definition release declares how it reads in both direct
 - `targets`: the admitted value types, as for every item property.
 - `order`: `position` (the statement's `schema:position`), `date` (the holder's earliest `schema:datePublished`) or `name` (its default label). Missing values sort last; ties use holder id and statement id. Properties without an order retain holder-id order.
 - `filter`: one admitted item qualifier whose values select inverse pages, for example a credit role.
-- `acyclic: true` when the relation must form a directed acyclic graph (part of, prequel, based on). A write that would close a cycle is refused.
+- `acyclic: true` when a relation family requires its effective selected graph to be a directed acyclic graph. The flag declares an invariant; it does not prove that every write path enforces it. Each family contract names its graph identity, Context semantics and mutation boundaries.
 
 A fact is stored once, on the side the release names as canonical. The other side is a read of the inverse, never a second statement, so the two directions cannot disagree. The inverse is served from inbound-edge rows in the target's partition, maintained from the forward statement and rebuildable from it.
 
@@ -707,6 +707,12 @@ Spoiler level is a qualifier on the statement, not a property of the character: 
 Detailed roles are concepts in a role scheme, so every staff position and cast role a source uses has a place; a credit is never dropped or flattened because a closed role list lacks it. Credits are read through the same inverse and forward reads as every other relation, so a credit list and a relation list can never disagree about roles.
 
 The relation properties a subject can take, with their labels and admitted qualifiers, are read from the active release for the subject's type. Every editor builds its choices from that read; none keeps its own list.
+
+### Selected follows DAG
+
+Decision: `follows` (`wdt:P155`, inverse `wdt:P156`) is the first hard-DAG family. Normalize `P156` into `P155` orientation once. Vertices are current canonical Subject identities. For each Context and release, the effective graph includes selected Global edges inherited by that Context and its local replacements or suppressions. Canonical self-loops and directed cycles violate the invariant.
+
+Raw sourced candidates, original endpoint identities, references, disputes and history survive graph normalization. An identity merge must reconcile affected selected edges before the merged graph is treated as conforming; quotienting an acyclic graph is not presumed to preserve acyclicity. This contract does not add proposal or merge refusals, choose a factual winner, or claim broad runtime enforcement. The native evidence driver is `test/semantic/selected-follows-native.test.ts`; production enforcement follows its integrated native result.
 
 ### Inverse reads
 

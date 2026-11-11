@@ -1937,6 +1937,13 @@
       "researcher": "codex",
       "state": "adopted",
       "decision": "docs/goals/accounts.capabilities.md#post-seed-api-capture"
+    },
+    {
+      "path": "docs/research/selected-follows-graph-gpt-6-luna.md",
+      "topic": "selected-follows-graph",
+      "researcher": "gpt-6-luna",
+      "state": "adopted",
+      "decision": "services/kernel/src/semantic/README.md#selected-follows-dag"
     }
   ]
 }
