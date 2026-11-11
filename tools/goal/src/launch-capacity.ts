@@ -340,7 +340,8 @@ function readPressureBrake(stateDirectory: string): PressureBrake {
     return { paused: false };
   }
 }
-function admittedMemoryMiB(stateDirectory: string, writers: ReadonlySet<string>): number {
+/** Charge each live admission ticket until its exact current writer scope takes over the reservation. */
+export function admittedMemoryMiB(stateDirectory: string, writers: ReadonlySet<string>): number {
   let total = 0;
   for (const lane of ['capacity-queue', 'urgent-capacity-queue']) {
     const queue = join(stateDirectory, lane);

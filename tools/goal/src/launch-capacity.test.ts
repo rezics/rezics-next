@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openDb } from './db.ts';
 import {
@@ -11,6 +11,7 @@ import {
   waitersAhead,
 } from './launch.ts';
 import * as launchCapacity from './launch-capacity.ts';
+import { admittedMemoryMiB } from './launch-capacity.ts';
 import { defaultPolicy } from './policy.ts';
 import { WorkerStore } from './store.ts';
 import { temporaryDirectory } from './test-support.ts';
@@ -173,6 +174,82 @@ test('urgent and ordinary reservations share one count and working-set budget', 
     expect(admitted).toBe(true);
   } finally {
     releases.forEach((release) => release());
+    directory.close();
+  }
+});
+
+
+test('slice headroom, system memory and PSI each hold admission until available', async () => {
+  const directory = temporaryDirectory();
+  const store = { capacityAttemptsCount: () => 0, attempts: () => [], goalInFlightCount: () => 0 };
+  let headroom = 2047;
+  let available = 100;
+  let pressure = { memoryFull: 0, ioFull: 0 };
+  let now = 0;
+  let started = false;
+  let release: (() => void) | undefined;
+  try {
+    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 32, minAvailableMiB: 100 }));
+    const policy = { ...defaultPolicy.capacity, maxWorkers: 32, minAvailableMiB: 100, pollIntervalMs: 5 };
+    const pending = awaitHostCapacity(store, directory.path, false, 'independent', 1, {
+      policy, pollIntervalMs: 5, goal: 'imports', goalMaxInFlight: Infinity, excludeTaskId: 'independent',
+      availableMiB: () => available, pressure: () => pressure, now: () => now,
+      workerHeadroomMiB: () => headroom,
+    }).then((unlock) => { started = true; release = unlock; return unlock; });
+    const pause = () => new Promise((resolve) => setTimeout(resolve, 15));
+    await pause();
+    expect(started).toBe(false);
+    headroom = 2048;
+    available = 99;
+    await pause();
+    expect(started).toBe(false);
+    available = 100;
+    pressure = { memoryFull: 1, ioFull: 0 };
+    await pause();
+    expect(started).toBe(false);
+    pressure = { memoryFull: 0, ioFull: 0 };
+    now = 1;
+    await pause();
+    expect(started).toBe(false);
+    now = 31_001;
+    await pending;
+    expect(started).toBe(true);
+  } finally {
+    release?.();
+    directory.close();
+  }
+});
+test('a resumed attempt reserves four GiB on its ticket and transfers that charge only to its current writer', async () => {
+  const directory = temporaryDirectory();
+  const taskId = 'resumed-worker';
+  let headroom = 3072;
+  let release: (() => void) | undefined;
+  const store = {
+    capacityAttemptsCount: () => 0,
+    attempts: () => [{ attempt: 1, state: 'waiting' as const }],
+    goalInFlightCount: () => 0,
+  };
+  try {
+    writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 32, minAvailableMiB: 0 }));
+    const policy = { ...defaultPolicy.capacity, maxWorkers: 32, minAvailableMiB: 0, pollIntervalMs: 5 };
+    const options = {
+      policy, pollIntervalMs: 5, goal: 'library', goalMaxInFlight: Infinity, excludeTaskId: taskId,
+      availableMiB: () => Infinity, pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+      workerHeadroomMiB: () => headroom,
+    };
+    const resumed = awaitHostCapacity(store, directory.path, false, taskId, 1, { ...options, resume: true });
+    const queue = join(directory.path, 'capacity-queue');
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    const waiting = readdirSync(queue).find((name) => name.endsWith(`-${taskId}`))!;
+    expect(JSON.parse(readFileSync(join(queue, waiting), 'utf8')).memoryMiB).toBe(4096);
+    headroom = 4096;
+    release = await resumed;
+    const writer = JSON.stringify([taskId, 1]);
+    expect(admittedMemoryMiB(directory.path, new Set())).toBe(4096);
+    expect(admittedMemoryMiB(directory.path, new Set([writer]))).toBe(0);
+    expect(admittedMemoryMiB(directory.path, new Set([JSON.stringify(['other-worker', 1])]))).toBe(4096);
+  } finally {
+    release?.();
     directory.close();
   }
 });

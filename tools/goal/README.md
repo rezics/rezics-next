@@ -76,6 +76,8 @@ the brief.
 sublimit inside the shared `maxWorkers` cap. Both lanes and admitted-but-not-started tickets consume that cap;
 ordinary tasks never consume the urgent sublimit. Urgent work still waits for `minAvailableMiB` of memory.
 Only running sessions and pending launch reservations occupy slots; attempts parked for checks release them.
+Decision: a verified parked scope keeps its actual charge but releases its writing reserve; resume reacquires 4 GiB
+through the existing admission ticket before the task lease and launch.
 The worker slice always charges aggregate actual memory. Only the indexed current attempt's owned detached runner,
 with matching live process, worker scope and physical remote-check generation, releases its scope's writing reserve.
 Active scopes retain their measured-peak reserve; stale or unknown scopes retain conservative accounting and cannot
