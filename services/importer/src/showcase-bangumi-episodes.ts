@@ -90,7 +90,8 @@ export async function discoverShowcaseBangumiEpisodes(input: {
 
   for await (const row of input.tables.rows('bangumi', 'episode')) {
     const parentId = positiveId(row.subject_id);
-    const family = parentId === undefined ? undefined : input.selectedAnime.get(parentId);
+    if (parentId === undefined) continue;
+    const family = input.selectedAnime.get(parentId);
     if (!family) continue;
     const parentIsWellFormed =
       typeof row.subject_id === 'number' && Number.isSafeInteger(row.subject_id) && row.subject_id > 0;

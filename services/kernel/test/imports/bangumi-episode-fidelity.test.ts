@@ -314,7 +314,7 @@ test('production operator imports authored Bangumi episodes through ordinary acc
     );
     expect(firstInversePage.status).toBe(200);
     const firstInverse = firstInversePage.body as { links: { subject: string }[]; next: string | null };
-    expect(firstInverse.links.map((link) => link.subject)).toEqual([specialEpisodeId, fractionalId]);
+    expect(firstInverse.links.map((link) => link.subject)).toEqual([specialEpisodeId!, fractionalId!]);
     expect(firstInverse.next).toBeTruthy();
     const secondInversePage = await editor.http(
       `/v1/subjects/${parentId}/links?${new URLSearchParams({
@@ -325,7 +325,7 @@ test('production operator imports authored Bangumi episodes through ordinary acc
     );
     expect(secondInversePage.status).toBe(200);
     const secondInverse = secondInversePage.body as { links: { subject: string }[]; next: string | null };
-    expect(secondInverse.links.map((link) => link.subject)).toEqual([unknownId]);
+    expect(secondInverse.links.map((link) => link.subject)).toEqual([unknownId!]);
     expect(secondInverse.next).toBeNull();
     const again = await importBangumiEpisodeFidelity({
       tables: tables(baseEpisodes),
