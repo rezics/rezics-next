@@ -11,8 +11,14 @@ export type BookTocRow = Readonly<{
 /** Adapt an admitted bounded ordered placement set; preserve occurrence IDs and exact Post addresses. */
 export function bookTocRows(structure: BookStructure): readonly BookTocRow[] {
   const { placements, limits } = structure;
-  if (!Number.isSafeInteger(limits.maxDepth) || limits.maxDepth < 1 || limits.maxDepth > 64 ||
-      !Number.isSafeInteger(limits.maxPlacements) || limits.maxPlacements < 1 || placements.length > limits.maxPlacements)
+  if (
+    !Number.isSafeInteger(limits.maxDepth) ||
+    limits.maxDepth < 1 ||
+    limits.maxDepth > 64 ||
+    !Number.isSafeInteger(limits.maxPlacements) ||
+    limits.maxPlacements < 1 ||
+    placements.length > limits.maxPlacements
+  )
     throw new Error('The table of contents exceeds its admitted bounds.');
   const byId = new Map<string, BookPlacement>();
   const children = new Map<string | null, BookPlacement[]>();
@@ -43,16 +49,25 @@ export function bookTocRows(structure: BookStructure): readonly BookTocRow[] {
   return rows;
 }
 
-export function bookPublicationTarget(structure: BookStructure, selected: ReadonlySet<string>): PublicationTarget | null {
+export function bookPublicationTarget(
+  structure: BookStructure,
+  selected: ReadonlySet<string>,
+): PublicationTarget | null {
   const chapters = bookTocRows(structure).flatMap(({ placement }) =>
     placement.target.kind === 'chapter' && selected.has(placement.occurrenceId)
-      ? [{ occurrenceId: placement.occurrenceId, document: placement.target.document }] : []);
+      ? [{ occurrenceId: placement.occurrenceId, document: placement.target.document }]
+      : [],
+  );
   if (!chapters.length) return null;
   return { kind: 'book', catalogueId: structure.catalogueId, structureRevision: structure.revision, chapters };
 }
 
 /** All movements are expressed by stable sibling identities, never by array offsets sent to native. */
-export function moveBookOccurrence(row: BookTocRow, direction: 'up' | 'down' | 'in' | 'out', rows: readonly BookTocRow[]): BookStructureChange | null {
+export function moveBookOccurrence(
+  row: BookTocRow,
+  direction: 'up' | 'down' | 'in' | 'out',
+  rows: readonly BookTocRow[],
+): BookStructureChange | null {
   const { placement, siblings, index } = row;
   let parentOccurrenceId = placement.parentOccurrenceId;
   let beforeOccurrenceId: string | null;

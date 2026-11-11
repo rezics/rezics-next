@@ -4,20 +4,32 @@ import { revisePost, type EditFailure } from '../threads/actions';
 import { draftFetch } from '../threads/composer';
 import { readExactRevision } from '../threads/exact-revision-read';
 import {
-  createHistoricalReadBinding, historicalActualMatches, historicalBindingCurrent,
-  historicalSessionReaderReady, sameHistoricalReadBinding,
-  type HistoricalReadBinding, type HistoricalReadEnvelope, type HistoricalReaderSource,
+  createHistoricalReadBinding,
+  historicalActualMatches,
+  historicalBindingCurrent,
+  historicalSessionReaderReady,
+  sameHistoricalReadBinding,
+  type HistoricalReadBinding,
+  type HistoricalReadEnvelope,
+  type HistoricalReaderSource,
 } from '../threads/historical-reader-provenance';
 import { readPostHistory } from '../threads/reads';
 import {
-  sameExact, type ExactDocument, type StudioFailure, type StudioPort,
-  type StudioResult, type StudioRevision, type StudioSelection,
+  sameExact,
+  type ExactDocument,
+  type StudioFailure,
+  type StudioPort,
+  type StudioResult,
+  type StudioRevision,
+  type StudioSelection,
 } from './contract';
 import { readPostDocumentHead } from './post-document-read';
 
 /** Compose with the catalogue owner's ports; Content has no project inventory or title-only draft creator. */
-export type PostDocumentPort = Pick<StudioPort,
-  'isCurrent' | 'documents' | 'open' | 'createDraft' | 'saveDraft' | 'versions' | 'revision'>;
+export type PostDocumentPort = Pick<
+  StudioPort,
+  'isCurrent' | 'documents' | 'open' | 'createDraft' | 'saveDraft' | 'versions' | 'revision'
+>;
 export type PostDocumentVisit = Readonly<{
   projectId: string;
   accountId: string;
@@ -31,8 +43,13 @@ export type PostDocumentVisit = Readonly<{
 }>;
 
 type NativeDocument = Readonly<{
-  id: string; revisionId: string; sha256: string; body: DocumentSnapshot;
-  mediaIds: readonly string[]; createdAt: string; revisedAt: string | null;
+  id: string;
+  revisionId: string;
+  sha256: string;
+  body: DocumentSnapshot;
+  mediaIds: readonly string[];
+  createdAt: string;
+  revisedAt: string | null;
 }>;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const digest = /^[a-f0-9]{64}$/;
@@ -45,24 +62,40 @@ const stale = () => failure('stale', 'The saved revision changed. Reopen the doc
 
 function writeFailure(result: EditFailure): { ok: false; error: StudioFailure } {
   switch (result.reason) {
-    case 'stale': case 'conflict': return stale();
-    case 'forbidden': return failure('denied', 'You cannot edit this document with the current account.');
-    case 'invalid': return failure('invalid', 'The document could not be saved. Check its contents.');
-    case 'media-unavailable': return failure('unavailable', 'Document media is unavailable. Retry this save when it is ready.');
-    case 'rate-limited': return failure('unavailable', 'Saving is temporarily limited. Retry the same save later.');
-    case 'closed': return failure('unavailable', 'Saving is currently closed. Retry the same save later.');
-    case 'not-found': return unavailable();
-    case 'unavailable': return uncertain();
+    case 'stale':
+    case 'conflict':
+      return stale();
+    case 'forbidden':
+      return failure('denied', 'You cannot edit this document with the current account.');
+    case 'invalid':
+      return failure('invalid', 'The document could not be saved. Check its contents.');
+    case 'media-unavailable':
+      return failure('unavailable', 'Document media is unavailable. Retry this save when it is ready.');
+    case 'rate-limited':
+      return failure('unavailable', 'Saving is temporarily limited. Retry the same save later.');
+    case 'closed':
+      return failure('unavailable', 'Saving is currently closed. Retry the same save later.');
+    case 'not-found':
+      return unavailable();
+    case 'unavailable':
+      return uncertain();
   }
 }
 
 async function projectRevision(post: NativeDocument, title: string): Promise<StudioRevision | null> {
-  if (!digest.test(post.sha256) || !checkDocument(post.body) ||
-      !Number.isFinite(Date.parse(post.revisedAt ?? post.createdAt)) ||
-      await editionDocumentDigest(post.body) !== post.sha256) return null;
+  if (
+    !digest.test(post.sha256) ||
+    !checkDocument(post.body) ||
+    !Number.isFinite(Date.parse(post.revisedAt ?? post.createdAt)) ||
+    (await editionDocumentDigest(post.body)) !== post.sha256
+  )
+    return null;
   return {
     exact: { postId: post.id, revisionId: post.revisionId, sha256: post.sha256 },
-    title, body: post.body, mediaIds: [...post.mediaIds], savedAt: post.revisedAt ?? post.createdAt,
+    title,
+    body: post.body,
+    mediaIds: [...post.mediaIds],
+    savedAt: post.revisedAt ?? post.createdAt,
   };
 }
 
@@ -79,8 +112,14 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
   let attempt: { key: string; intent: string; title: string } | null = null;
   function isCurrent() {
     const now = visit.source.read();
-    if (!visit.isCurrent() || now.sourceId !== origin.sourceId || now.generation !== origin.generation ||
-        !historicalSessionReaderReady(now) || now.subject !== visit.accountId) retired = true;
+    if (
+      !visit.isCurrent() ||
+      now.sourceId !== origin.sourceId ||
+      now.generation !== origin.generation ||
+      !historicalSessionReaderReady(now) ||
+      now.subject !== visit.accountId
+    )
+      retired = true;
     return !retired;
   }
   function admitted(projectId: string, postId: string, signal: AbortSignal) {
@@ -90,12 +129,17 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
     return createHistoricalReadBinding(visit.source, target, 0, 0, ++reads);
   }
   function accepts<T>(request: HistoricalReadBinding, response: HistoricalReadEnvelope<T>) {
-    return sameHistoricalReadBinding(request, response.provenance.binding) &&
+    return (
+      sameHistoricalReadBinding(request, response.provenance.binding) &&
       response.provenance.actualReader.credentialMode === 'session' &&
       historicalActualMatches(request, response.provenance.actualReader) &&
-      historicalBindingCurrent(visit.source, request, response.provenance.actualReader);
+      historicalBindingCurrent(visit.source, request, response.provenance.actualReader)
+    );
   }
-  async function open(input: Parameters<StudioPort['open']>[0], signal: AbortSignal): Promise<StudioResult<StudioSelection>> {
+  async function open(
+    input: Parameters<StudioPort['open']>[0],
+    signal: AbortSignal,
+  ): Promise<StudioResult<StudioSelection>> {
     if (!admitted(input.projectId, input.postId, signal)) return unavailable();
     try {
       const result = await readPostDocumentHead({ data: { postId: input.postId, accountId: visit.accountId }, signal });
@@ -105,12 +149,19 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
       if (post.id !== input.postId || viewerId !== visit.accountId) return unavailable();
       const revision = await projectRevision(post, title);
       if (!revision || !admitted(input.projectId, input.postId, signal)) return unavailable();
-      return { ok: true, value: { revision, permissions: {
-        edit: post.visibility === 'draft' && post.authorId === visit.accountId &&
-          origin.csrfReady && !!visit.csrfToken,
-        // Content's draft-to-published command does not implement Studio's reviewed publication contract.
-        publish: false,
-      }, visibility: post.visibility } };
+      return {
+        ok: true,
+        value: {
+          revision,
+          permissions: {
+            edit:
+              post.visibility === 'draft' && post.authorId === visit.accountId && origin.csrfReady && !!visit.csrfToken,
+            // Content's draft-to-published command does not implement Studio's reviewed publication contract.
+            publish: false,
+          },
+          visibility: post.visibility,
+        },
+      };
     } catch {
       return unavailable();
     }
@@ -124,13 +175,24 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
     async saveDraft(input, signal) {
       if (!admitted(input.projectId, input.postId, signal)) return unavailable();
       if (!visit.csrfToken || !origin.csrfReady) return failure('denied', 'Editing requires a current write session.');
-      if (!uuid.test(input.idempotencyKey) || !checkDocument(input.body) || input.body.profile !== 'blocks' ||
-          !hasDocumentContent(input.body) || input.mediaIds.length > 32 ||
-          input.mediaIds.some((id) => typeof id !== 'string' || !id) ||
-          new Set(input.mediaIds).size !== input.mediaIds.length)
+      if (
+        !uuid.test(input.idempotencyKey) ||
+        !checkDocument(input.body) ||
+        input.body.profile !== 'blocks' ||
+        !hasDocumentContent(input.body) ||
+        input.mediaIds.length > 32 ||
+        input.mediaIds.some((id) => typeof id !== 'string' || !id) ||
+        new Set(input.mediaIds).size !== input.mediaIds.length
+      )
         return failure('invalid', 'The draft contents or save key are invalid.');
-      const intent = JSON.stringify([input.projectId, input.postId, input.expectedRevisionId, input.title,
-        serializeDocument(input.body), input.mediaIds]);
+      const intent = JSON.stringify([
+        input.projectId,
+        input.postId,
+        input.expectedRevisionId,
+        input.title,
+        serializeDocument(input.body),
+        input.mediaIds,
+      ]);
       if (attempt?.key === input.idempotencyKey && attempt.intent !== intent)
         return failure('invalid', 'A save key cannot be reused for different edits.');
       if (attempt && attempt.key !== input.idempotencyKey)
@@ -150,9 +212,16 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
       try {
         // revisePost delegates to post-writes.ts: original If-Match, key, media and native refusal behavior.
         const result = await revisePost({
-          data: { postId: input.postId, revisionId: input.expectedRevisionId, body: input.body,
-            mediaIds: [...input.mediaIds], idempotencyKey: input.idempotencyKey },
-          headers: { 'X-CSRF-Token': visit.csrfToken }, signal, fetch: draftFetch(input.body),
+          data: {
+            postId: input.postId,
+            revisionId: input.expectedRevisionId,
+            body: input.body,
+            mediaIds: [...input.mediaIds],
+            idempotencyKey: input.idempotencyKey,
+          },
+          headers: { 'X-CSRF-Token': visit.csrfToken },
+          signal,
+          fetch: draftFetch(input.body),
         });
         if (!admitted(input.projectId, input.postId, signal)) return uncertain();
         if (!result.ok) {
@@ -161,13 +230,22 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
           return mapped;
         }
         const post = result.post;
-        if (post.id !== input.postId || post.availability !== 'available' ||
-            post.visibility !== 'draft' || post.authorId !== visit.accountId) return uncertain();
+        if (
+          post.id !== input.postId ||
+          post.availability !== 'available' ||
+          post.visibility !== 'draft' ||
+          post.authorId !== visit.accountId
+        )
+          return uncertain();
         const revision = await projectRevision(post, command.title);
-        if (!revision || serializeDocument(revision.body) !== serializeDocument(input.body) ||
-            revision.mediaIds.length !== input.mediaIds.length ||
-            !revision.mediaIds.every((id, index) => id === input.mediaIds[index]) ||
-            !admitted(input.projectId, input.postId, signal)) return uncertain();
+        if (
+          !revision ||
+          serializeDocument(revision.body) !== serializeDocument(input.body) ||
+          revision.mediaIds.length !== input.mediaIds.length ||
+          !revision.mediaIds.every((id, index) => id === input.mediaIds[index]) ||
+          !admitted(input.projectId, input.postId, signal)
+        )
+          return uncertain();
         attempt = null;
         return { ok: true, value: { revision, visibility: 'draft', permissions: { edit: true, publish: false } } };
       } catch {
@@ -176,12 +254,24 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
     },
     async versions(input, signal) {
       if (!admitted(input.projectId, input.postId, signal)) return unavailable();
-      const request = binding({ kind: 'post-history', postId: input.postId, cursor: input.cursor,
-        locale: visit.locale, credentialMode: 'session' });
+      const request = binding({
+        kind: 'post-history',
+        postId: input.postId,
+        cursor: input.cursor,
+        locale: visit.locale,
+        credentialMode: 'session',
+      });
       try {
-        const response = await readPostHistory({ data: { postId: input.postId,
-          ...(input.cursor === null ? {} : { cursor: input.cursor }),
-          locale: visit.locale, credentialMode: 'session', binding: request }, signal });
+        const response = await readPostHistory({
+          data: {
+            postId: input.postId,
+            ...(input.cursor === null ? {} : { cursor: input.cursor }),
+            locale: visit.locale,
+            credentialMode: 'session',
+            binding: request,
+          },
+          signal,
+        });
         if (!admitted(input.projectId, input.postId, signal) || !accepts(request, response)) return unavailable();
         const page = response.data;
         if (!page.available || !page.context || page.context.conversation.title === null) return unavailable();
@@ -191,8 +281,11 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
           // Studio's summary cannot express withheld/erased identities. Do not forge a digest or an empty page.
           if (post.id !== input.postId || post.availability !== 'available' || !digest.test(post.sha256))
             return unavailable();
-          items.push({ exact: { postId: post.id, revisionId: post.revisionId, sha256: post.sha256 },
-            title, savedAt: post.revisedAt ?? post.createdAt });
+          items.push({
+            exact: { postId: post.id, revisionId: post.revisionId, sha256: post.sha256 },
+            title,
+            savedAt: post.revisedAt ?? post.createdAt,
+          });
         }
         return { ok: true, value: { items, nextCursor: page.next } };
       } catch {
@@ -202,11 +295,24 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
     async revision(input, signal) {
       const exact: ExactDocument = input.document;
       if (!admitted(input.projectId, exact.postId, signal)) return unavailable();
-      const request = binding({ kind: 'exact-revision', postId: exact.postId, revisionId: exact.revisionId,
-        locale: visit.locale, credentialMode: 'session' });
+      const request = binding({
+        kind: 'exact-revision',
+        postId: exact.postId,
+        revisionId: exact.revisionId,
+        locale: visit.locale,
+        credentialMode: 'session',
+      });
       try {
-        const response = await readExactRevision({ data: { postId: exact.postId, revisionId: exact.revisionId,
-          locale: visit.locale, credentialMode: 'session', binding: request }, signal });
+        const response = await readExactRevision({
+          data: {
+            postId: exact.postId,
+            revisionId: exact.revisionId,
+            locale: visit.locale,
+            credentialMode: 'session',
+            binding: request,
+          },
+          signal,
+        });
         if (!admitted(input.projectId, exact.postId, signal) || !accepts(request, response)) return unavailable();
         const page = response.data;
         if (page.state !== 'ready' || page.thread.title === null) return unavailable();

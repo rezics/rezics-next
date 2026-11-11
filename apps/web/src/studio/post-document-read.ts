@@ -22,7 +22,8 @@ export const readPostDocumentHead = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<StudioResult<PostDocumentHead>> => {
     setResponseHeader('cache-control', 'private, no-store');
     const unavailable = (): StudioResult<PostDocumentHead> => ({
-      ok: false, error: { kind: 'unavailable', message: 'This document is unavailable. Try again.' },
+      ok: false,
+      error: { kind: 'unavailable', message: 'This document is unavailable. Try again.' },
     });
     try {
       const request = getRequest();
