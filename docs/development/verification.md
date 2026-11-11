@@ -298,6 +298,16 @@ the run has a valid supervisor marker; environment flags alone do not establish 
 to a, b and the loopback workstation c; ordinary workstation workers and managers are outside check runs. The marker
 validates physical identity, while the configured performance flag authorizes admission.
 
+For managed remote `worker-check`, the wrapper writes a per-physical custody binding for the exact logical check,
+task/attempt owner, original argv and handed-off remote argv before it starts `remote-check`. `remote-check` persists
+each allocated host/run identity before probing, upload, admission or command execution. It retains the native
+command receipt, final settlement, returned results and cleanup evidence in separate fields. If the detached wrapper
+worker disappears, recovery observes and settles only the exact stored host/run and the same original logical check;
+an exact terminal result with verified settlement can finish that check once. A pending reservation remains pending.
+Missing or mismatched binding, no reservation identity, ambiguous attempts or incomplete terminal evidence stay
+unknown with custody retained. Do not reconstruct a host/run from log text, host names or timestamps, and do not
+signal another run or launch a replacement check during recovery.
+
 Provision c with `performance: true`, 10 slots, `memoryMaxGiB: 20`, `cpuQuotaPercent: 3200` and
 `processorsPerSlot: 1`. These admission limits apply in addition to its `rezics-check.slice` limit of 24 GiB and
 4800% CPU; preserve at least 12 GiB of workstation memory for worker admission. Keep addresses and identity paths

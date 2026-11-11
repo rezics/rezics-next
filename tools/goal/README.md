@@ -3657,9 +3657,16 @@ Authenticated registered verification receives its original-command protocol ahe
 exact ordinary wrapper once and returns the actual bare UUID while active. Goal waits and wakes the same session
 with the actual wrapper result; unknown/missing/nonzero results remain non-green. The wrapper record must name the
 current task, attempt, cwd and exact original command (the recorded child for an already wrapped original), with
-one invocation only. No producer token, physical receipt or terminal cleanup chain is needed to verify an ordinary
-wrapper's successful exit. Terminal zero, unchanged captured source and structured worker success with `checks: []`
-settle as `verified`, without a source commit, landing or main advancement. Optional native evidence stays separate.
+one invocation only. No producer token or optional native-proof adapter is needed for ordinary wrapper success.
+Terminal zero, unchanged captured source and structured worker success with `checks: []` settle as `verified`,
+without a source commit, landing or main advancement. If the worker exits without its report, the exact owned
+ordinary wrapper record may settle the same proof once when its terminal result is zero and the captured source is
+unchanged. A still-running wrapper is awaited by its exact UUID even when the worker's logical release omitted linked
+check IDs; duplicate wakes read that same record. Missing, mismatched or ambiguous ownership remains unknown and
+keeps custody. Optional native evidence retains its separate, strict acceptance path.
+
+Disposition: fb066745 attempt 1 is unknown and custody stays retained because no durable authoritative host/run
+binding exists; do not reconstruct it from logs, signal or replay Auth, infer success, or fabricate a receipt.
 Reports count `verifiedProofs` separately from landed source tasks; verification does not complete a Goal. Failures
 retain exact assertion/setup evidence and log references for a separate owner product fix.
 
