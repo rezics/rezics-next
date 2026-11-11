@@ -163,6 +163,17 @@ export function pageDataRepairTarget(section: PageDataSection): PageDataRepairTa
   return section;
 }
 
+type PageDataStackResult = {
+  output: string;
+  exitCode: number;
+  registry?: ReadonlyMap<string, SectionConfig>;
+  stackOutput?: string;
+  diagnostics?: string;
+  seed?: PageDataSeedStatus;
+  scopeLimitExceeded?: boolean;
+  scopeKilled?: boolean;
+};
+
 export type PageDataOptions = {
   settings: Settings;
   db: Database;
@@ -170,19 +181,7 @@ export type PageDataOptions = {
   inbox: Pick<ManagerInbox, 'deliver'>;
   routeDefect: (repair: PageDataRepair) => Promise<PageDataRepairRoute>;
   now?: () => Date;
-  runStack?: (
-    head: string,
-    invocation: string,
-  ) => Promise<{
-    output: string;
-    exitCode: number;
-    registry?: ReadonlyMap<string, SectionConfig>;
-    stackOutput?: string;
-    diagnostics?: string;
-    seed?: PageDataSeedStatus;
-    scopeLimitExceeded?: boolean;
-    scopeKilled?: boolean;
-  }>;
+  runStack?: (head: string, invocation: string) => Promise<PageDataStackResult>;
 };
 
 export type SectionConfig = Pick<
@@ -1859,14 +1858,7 @@ async function runDedicatedPageDataStack(
   settings: Settings,
   head: string,
   invocation: string,
-): Promise<{
-  output: string;
-  exitCode: number;
-  registry: ReadonlyMap<string, SectionConfig>;
-  stackOutput: string;
-  diagnostics: string;
-  seed?: PageDataSeedStatus;
-}> {
+): Promise<PageDataStackResult> {
   const { policy, worktree, config, names, env: preparedEnv } = await prepareDedicatedPageDataStack(settings, head);
   const bun = process.execPath;
   let env = preparedEnv;
