@@ -13,7 +13,7 @@ import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { m } from '../../paraglide/messages.js';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
@@ -725,12 +725,10 @@ function MangaCreate({
           <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
             <Field className="min-w-0">
               <FieldLabel htmlFor="manga-type">{m.manga_grain({}, o)}</FieldLabel>
-              <NativeSelect
-                className="w-full min-w-0"
-                id="manga-type"
-                value={type}
-                onChange={(event) => {
-                  const nextType = event.target.value as MangaType;
+              <Select
+                value={type === '' ? null : type}
+                onValueChange={(nextSelectValue) => {
+                  const nextType = (nextSelectValue ?? '') as MangaType;
                   addFocusIntent.current = null;
                   if (nextType !== currentType.current) typeActivation.current++;
                   currentType.current = nextType;
@@ -741,22 +739,29 @@ function MangaCreate({
                   setFailure(undefined);
                 }}
               >
-                {!read?.release.types[type] && (
-                  <NativeSelectOption value="" disabled>
-                    {m.correction_choose({}, o)}
-                  </NativeSelectOption>
-                )}
-                {mangaTypes
-                  .filter((id) => read?.release.types[id])
-                  .map((id) => {
-                    const text = definitionText(read!.release.types[id]!.labels, locale);
-                    return (
-                      <NativeSelectOption key={id} value={id} lang={text.lang ?? undefined}>
-                        {text.text}
-                      </NativeSelectOption>
-                    );
-                  })}
-              </NativeSelect>
+                <SelectTrigger className="w-full min-w-0" id="manga-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {!read?.release.types[type] && (
+                      <SelectItem value={null} disabled>
+                        {m.correction_choose({}, o)}
+                      </SelectItem>
+                    )}
+                    {mangaTypes
+                      .filter((id) => read?.release.types[id])
+                      .map((id) => {
+                        const text = definitionText(read!.release.types[id]!.labels, locale);
+                        return (
+                          <SelectItem key={id} value={id} lang={text.lang ?? undefined}>
+                            {text.text}
+                          </SelectItem>
+                        );
+                      })}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
             <p className="text-sm text-muted-foreground">{m.manga_grain_help({}, o)}</p>
             {read?.release.types[type] && (
@@ -1256,21 +1261,25 @@ function AddField({
         <FieldLabel htmlFor={selectId} className="whitespace-normal [overflow-wrap:anywhere]">
           {label}
         </FieldLabel>
-        <NativeSelect
-          id={selectId}
-          className="w-full min-w-0"
-          aria-label={label}
-          value={fields.includes(property) ? property : ''}
+        <Select
+          value={(fields.includes(property) ? property : '') === '' ? null : fields.includes(property) ? property : ''}
           disabled={disabled}
-          onChange={(event) => setProperty(event.target.value)}
+          onValueChange={(nextSelectValue) => setProperty(nextSelectValue ?? '')}
         >
-          <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-          {fields.map((id) => (
-            <NativeSelectOption key={id} value={id} lang={name(id).lang ?? undefined}>
-              {name(id).text}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger id={selectId} className="w-full min-w-0" aria-label={label}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+              {fields.map((id) => (
+                <SelectItem key={id} value={id} lang={name(id).lang ?? undefined}>
+                  {name(id).text}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </Field>
       <Button
         className="h-auto min-h-11 max-w-full whitespace-normal text-start"

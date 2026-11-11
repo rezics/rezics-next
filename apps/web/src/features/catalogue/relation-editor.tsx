@@ -12,7 +12,7 @@ import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { EntityPicker, type EntityPickerSubject, type EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { CandidateValue } from '../pages/scalar-value';
 import { coverSrc } from '../../media/cover-src';
@@ -52,18 +52,18 @@ import {
   type RelationField,
 } from '../../subject/relation-candidates';
 
-// Presentation only: native actions keep their own targets and focus, with no stretched row action.
+// Presentation only: each action keeps its own target and focus, with no stretched row action.
 const relationSurface = [
   'min-w-0 space-y-6 [overflow-wrap:anywhere]',
   '[&_button]:min-h-11 [&_button]:min-w-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:py-2',
-  '[&_input:not([type=hidden])]:min-h-11 [&_select]:min-h-11 [&_select]:min-w-11',
-  '[&_[data-slot=native-select-wrapper]]:w-full [&_[data-slot=input-group]]:min-h-11',
+  '[&_input:not([type=hidden])]:min-h-11 min-h-11 min-w-11',
+  '[&_[data-slot=select-trigger]]:w-full [&_[data-slot=input-group]]:min-h-11',
   '[&_summary]:min-h-11 [&_summary]:min-w-11 [&_summary]:cursor-pointer [&_summary]:py-2',
   '[&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center',
   '[&_label]:whitespace-normal [&_label]:[overflow-wrap:anywhere]',
-  '[&_:is(a,button,input,select,summary):focus-visible]:outline-2',
-  '[&_:is(a,button,input,select,summary):focus-visible]:outline-offset-2',
-  '[&_:is(a,button,input,select,summary):focus-visible]:outline-ring',
+  '[&_:is(a,button,input,summary):focus-visible]:outline-2',
+  '[&_:is(a,button,input,summary):focus-visible]:outline-offset-2',
+  '[&_:is(a,button,input,summary):focus-visible]:outline-ring',
 ].join(' ');
 
 type Snak = RelationDraft['qualifiers'][number];
@@ -223,7 +223,7 @@ function RelationEditorLive({
   const candidatePageBoundary = useRef<HTMLElement>(null);
   const candidatePageEmpty = useRef<HTMLParagraphElement>(null);
   const candidateReadFailure = useRef<HTMLDivElement>(null);
-  const openingControl = useRef<HTMLSelectElement>(null);
+  const openingControl = useRef<HTMLButtonElement>(null);
   const openingBoundary = useRef<HTMLParagraphElement>(null);
   const openingIntent = useRef<
     | {
@@ -1517,14 +1517,12 @@ function RelationEditorLive({
                           returnTo: `${subjectHref({ id, label: pickText(current.public.subject.labels, locale).text }, locale).href}/relation-edit`,
                         }}
                       />
-                      <NativeSelect
-                        ref={openingControl}
-                        id={`${formId}-property`}
+                      <Select
                         disabled={!!composition}
-                        value={draft.property.id}
-                        onChange={(event) => {
+                        value={draft.property.id === '' ? null : draft.property.id}
+                        onValueChange={(nextSelectValue) => {
                           if (!editable()) return;
-                          const property = event.target.value;
+                          const property = nextSelectValue ?? '';
                           const replacement = blankDraft(property);
                           if (hasLocalDraftWork())
                             requestDraftDecision(
@@ -1533,7 +1531,7 @@ function RelationEditorLive({
                                 propertyName: fields?.find((item) => item.id === property)?.label ?? property,
                                 replacement,
                               },
-                              event.currentTarget,
+                              openingControl.current!,
                             );
                           else {
                             edit(replacement);
@@ -1541,13 +1539,20 @@ function RelationEditorLive({
                           }
                         }}
                       >
-                        <NativeSelectOption value="">{m.candidate_choose_field({}, options)}</NativeSelectOption>
-                        {(fields ?? []).map((item) => (
-                          <NativeSelectOption key={item.id} value={item.id}>
-                            {item.label}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
+                        <SelectTrigger ref={openingControl} id={`${formId}-property`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value={null}>{m.candidate_choose_field({}, options)}</SelectItem>
+                            {(fields ?? []).map((item) => (
+                              <SelectItem key={item.id} value={item.id}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
                     </Field>
                     {field && (
                       <>
@@ -1782,25 +1787,31 @@ function RelationEditorLive({
                             <FieldLabel htmlFor={`${formId}-add-qualifier`}>
                               {m.relation_qualifier({}, options)}
                             </FieldLabel>
-                            <NativeSelect
-                              id={`${formId}-add-qualifier`}
+                            <Select
                               disabled={!field.qualifiers.some(qualifierAvailable)}
-                              value={qualifierDefinition?.id ?? ''}
-                              onChange={(event) => {
+                              value={(qualifierDefinition?.id ?? '') === '' ? null : (qualifierDefinition?.id ?? '')}
+                              onValueChange={(nextSelectValue) => {
                                 if (qualifierAdmission.current !== admission || !visible || !editable()) return;
                                 const definition = field.qualifiers.find(
-                                  (item) => item.id === event.target.value && qualifierAvailable(item),
+                                  (item) => item.id === (nextSelectValue ?? '') && qualifierAvailable(item),
                                 );
                                 setQualifierChoice(definition ? { field, definition } : undefined);
                               }}
                             >
-                              <NativeSelectOption value="">{m.relation_add_qualifier({}, options)}</NativeSelectOption>
-                              {field.qualifiers.filter(qualifierAvailable).map((item) => (
-                                <NativeSelectOption key={item.id} value={item.id}>
-                                  {item.label}
-                                </NativeSelectOption>
-                              ))}
-                            </NativeSelect>
+                              <SelectTrigger id={`${formId}-add-qualifier`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectGroup>
+                                  <SelectItem value={null}>{m.relation_add_qualifier({}, options)}</SelectItem>
+                                  {field.qualifiers.filter(qualifierAvailable).map((item) => (
+                                    <SelectItem key={item.id} value={item.id}>
+                                      {item.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
                             <Button
                               type="button"
                               variant="outline"
@@ -2084,21 +2095,23 @@ function RelationEditorLive({
                               {candidate.decision === 'accepted' && allows('adopt') && (
                                 <Field>
                                   <FieldLabel htmlFor={`${formId}-rank`}>{m.relation_rank({}, options)}</FieldLabel>
-                                  <NativeSelect
-                                    id={`${formId}-rank`}
-                                    value={rank}
+                                  <Select
+                                    value={rank === '' ? null : rank}
                                     disabled={frozen}
-                                    onChange={(event) =>
-                                      editable() && setRank(event.target.value as 'normal' | 'preferred')
+                                    onValueChange={(nextSelectValue) =>
+                                      editable() && setRank((nextSelectValue ?? '') as 'normal' | 'preferred')
                                     }
                                   >
-                                    <NativeSelectOption value="normal">
-                                      {m.relation_normal({}, options)}
-                                    </NativeSelectOption>
-                                    <NativeSelectOption value="preferred">
-                                      {m.relation_preferred({}, options)}
-                                    </NativeSelectOption>
-                                  </NativeSelect>
+                                    <SelectTrigger id={`${formId}-rank`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectGroup>
+                                        <SelectItem value="normal">{m.relation_normal({}, options)}</SelectItem>
+                                        <SelectItem value="preferred">{m.relation_preferred({}, options)}</SelectItem>
+                                      </SelectGroup>
+                                    </SelectContent>
+                                  </Select>
                                 </Field>
                               )}
                               <div className="flex flex-wrap gap-2">

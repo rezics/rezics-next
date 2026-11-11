@@ -3,7 +3,7 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { coverSrc } from '../../../media/cover-src';
 import { m } from '../../../paraglide/messages.js';
 import { defaultReader } from '../../../subject/reader';
@@ -271,19 +271,24 @@ export function PeopleSelectedItems({
           {!!selected.length && (
             <Field className="min-w-0 flex-1 basis-full sm:basis-56">
               <FieldLabel htmlFor={chooser}>{m.facts_choose_value({}, o)}</FieldLabel>
-              <NativeSelect
-                id={chooser}
-                className="w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8"
-                value={sourceChoice}
-                onChange={(event) => usable() && setSource(event.target.value)}
+              <Select
+                value={sourceChoice === '' ? null : sourceChoice}
+                onValueChange={(nextSelectValue) => usable() && setSource(nextSelectValue ?? '')}
               >
-                <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                {selected.map((statement, index) => (
-                  <NativeSelectOption key={statement.id} value={statement.id}>
-                    {m.facts_selected_value({ number: index + 1 }, o)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SelectTrigger id={chooser} className="w-full min-h-11 md:pointer-fine:min-h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+                    {selected.map((statement, index) => (
+                      <SelectItem key={statement.id} value={statement.id}>
+                        {m.facts_selected_value({ number: index + 1 }, o)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
           )}
           <Button

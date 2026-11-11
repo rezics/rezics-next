@@ -24,7 +24,7 @@ import {
   FieldSet,
 } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { pickText } from '@rezics/composition';
 import { m } from '../../paraglide/messages.js';
@@ -77,8 +77,8 @@ function termsTransportKey(transport: TermsTransport): number {
 const inputClassName = 'min-h-11 md:pointer-fine:min-h-8';
 // Leave room for the shared frame's focus/hover surface within the phone column.
 const frameClassName = 'm-1 flex min-w-0 flex-col gap-4 p-3 sm:p-4';
-// NativeSelect applies className to its wrapper; enlarge the actual select inside it.
-const selectClassName = 'min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11 md:pointer-fine:[&_select]:min-h-8';
+// Keep the shared Select trigger at the same phone target size as its neighboring fields.
+const selectClassName = 'min-w-0 max-w-full min-h-11 min-w-11 md:pointer-fine:min-h-8';
 const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
 
@@ -521,7 +521,7 @@ function SubjectTermsPageLive({
   }
 
   function navigateLanguage(next: string) {
-    // Native selection stays quiet and keeps its existing uncertain-delivery admission.
+    // Shared Select changes stay quiet and keep the existing uncertain-delivery admission.
     if (!isCurrentLanguageWorkspace() || busy || localDecisionRef.current) return;
     chooseLanguage(next);
   }
@@ -1224,20 +1224,28 @@ function SubjectTermsPageLive({
               <FieldGroup>
                 <Field data-disabled={busy || undefined}>
                   <FieldLabel htmlFor={domId('language')}>{m.catalogue_create_language({}, options)}</FieldLabel>
-                  <NativeSelect
-                    className={selectClassName}
-                    id={domId('language')}
-                    aria-describedby={domId('language-help')}
-                    value={language}
+                  <Select
+                    value={language === '' ? null : language}
                     disabled={busy || !!activeDecision}
-                    onChange={(event) => navigateLanguage(event.target.value)}
+                    onValueChange={(nextSelectValue) => navigateLanguage(nextSelectValue ?? '')}
                   >
-                    {languages.map((tag) => (
-                      <NativeSelectOption key={tag} value={tag}>
-                        {tag}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger
+                      className={selectClassName}
+                      id={domId('language')}
+                      aria-describedby={domId('language-help')}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {languages.map((tag) => (
+                          <SelectItem key={tag} value={tag}>
+                            {tag}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
                   <FieldDescription id={domId('language-help')}>
                     {m.catalogue_create_language_help({}, options)}
                   </FieldDescription>
@@ -1343,29 +1351,31 @@ function SubjectTermsPageLive({
                             <FieldLabel htmlFor={domId(`${field}-mode`)}>
                               {m.catalogue_terms_action({}, options)}
                             </FieldLabel>
-                            <NativeSelect
-                              className={`${selectClassName} [&_select:focus]:outline-2 [&_select:focus]:outline-offset-2 [&_select:focus]:outline-ring`}
-                              ref={(element) => {
-                                controls.current[`${field}-mode`] = element;
-                              }}
-                              id={domId(`${field}-mode`)}
-                              value={row[field].mode}
-                              aria-invalid={invalid}
-                              aria-describedby={errorId}
-                              onChange={(event) =>
-                                update(field, { mode: event.target.value as LanguageDraft[TermField]['mode'] })
+                            <Select
+                              value={row[field].mode === '' ? null : row[field].mode}
+                              onValueChange={(nextSelectValue) =>
+                                update(field, { mode: (nextSelectValue ?? '') as LanguageDraft[TermField]['mode'] })
                               }
                             >
-                              <NativeSelectOption value="keep">
-                                {m.catalogue_terms_keep({}, options)}
-                              </NativeSelectOption>
-                              <NativeSelectOption value="set">
-                                {m.catalogue_terms_replace({}, options)}
-                              </NativeSelectOption>
-                              <NativeSelectOption value="remove">
-                                {m.catalogue_terms_remove({}, options)}
-                              </NativeSelectOption>
-                            </NativeSelect>
+                              <SelectTrigger
+                                className={`${selectClassName} [&:focus]:outline-2 [&:focus]:outline-offset-2 [&:focus]:outline-ring`}
+                                ref={(element) => {
+                                  controls.current[`${field}-mode`] = element;
+                                }}
+                                id={domId(`${field}-mode`)}
+                                aria-invalid={invalid}
+                                aria-describedby={errorId}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectGroup>
+                                  <SelectItem value="keep">{m.catalogue_terms_keep({}, options)}</SelectItem>
+                                  <SelectItem value="set">{m.catalogue_terms_replace({}, options)}</SelectItem>
+                                  <SelectItem value="remove">{m.catalogue_terms_remove({}, options)}</SelectItem>
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
                           </Field>
                           {row[field].mode === 'set' && (
                             <Field data-invalid={invalid || undefined} data-disabled={locked || undefined}>

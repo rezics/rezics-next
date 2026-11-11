@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import { localizedLabel } from '../results';
 import type { RefinementProperty } from './model';
@@ -57,23 +57,29 @@ export function PropertyPicker({
       )}
       <Field>
         <FieldLabel htmlFor={`${id}-property`}>{m.refinement_property({}, options)}</FieldLabel>
-        <NativeSelect
-          id={`${id}-property`}
+        <Select
           value=""
-          onChange={(event) => {
-            const property = event.currentTarget.value;
+          onValueChange={(nextSelectValue) => {
+            const property = nextSelectValue ?? '';
             if (!property) return;
             onSelect(property);
             setQuery('');
           }}
         >
-          <NativeSelectOption value="">{m.refinement_choose_property({}, options)}</NativeSelectOption>
-          {names.map(([entry, name]) => (
-            <NativeSelectOption key={entry.property} value={entry.property}>
-              {counts.get(name)! > 1 ? `${name} (${entry.property})` : name}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger id={`${id}-property`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value={null}>{m.refinement_choose_property({}, options)}</SelectItem>
+              {names.map(([entry, name]) => (
+                <SelectItem key={entry.property} value={entry.property}>
+                  {counts.get(name)! > 1 ? `${name} (${entry.property})` : name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </Field>
     </div>
   );

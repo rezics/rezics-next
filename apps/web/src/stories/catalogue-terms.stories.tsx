@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
@@ -50,9 +51,9 @@ type Story = StoryObj<typeof meta>;
 
 async function fill(canvasElement: HTMLElement, value = 'Corrected title') {
   const canvas = within(canvasElement);
-  await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.catalogue_create_language() }), 'en');
+  await chooseSelectValue(await canvas.findByRole('combobox', { name: m.catalogue_create_language() }), 'en');
   const label = within(canvas.getByRole('group', { name: m.catalogue_create_label() }));
-  await userEvent.selectOptions(label.getByRole('combobox'), 'set');
+  await chooseSelectValue(label.getByRole('combobox'), 'set');
   await userEvent.clear(label.getByRole('textbox'));
   if (value) await userEvent.type(label.getByRole('textbox'), value);
   return canvas;
@@ -91,7 +92,7 @@ export const EmptyLanguage: Story = {
 export const PatchAndRemove: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
-    await userEvent.selectOptions(
+    await chooseSelectValue(
       within(canvas.getByRole('group', { name: m.catalogue_create_description() })).getByRole('combobox'),
       'remove',
     );
@@ -129,14 +130,14 @@ export const StaleDraft: Story = {
     await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_terms_new_language() }), 'it');
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_add_language() }));
     const aliases = within(canvas.getByRole('group', { name: m.catalogue_create_aliases() }));
-    await userEvent.selectOptions(aliases.getByRole('combobox'), 'set');
+    await chooseSelectValue(aliases.getByRole('combobox'), 'set');
     const multiline = aliases.getByRole('textbox');
     await expect(multiline.tagName).toBe('TEXTAREA');
     await expect(multiline).toHaveAttribute('rows', '3');
     await userEvent.clear(multiline);
     await userEvent.type(multiline, 'Primo{Enter}Secondo');
     await phoneControls(canvasElement);
-    await userEvent.selectOptions(language, 'en');
+    await chooseSelectValue(language, 'en');
     await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('Corrected title');
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_save() }));
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_terms_stale());
@@ -146,13 +147,13 @@ export const StaleDraft: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_compare() }));
     expect(await canvas.findByText('Another editor’s title')).toBeVisible();
     await phoneControls(canvasElement);
-    await userEvent.selectOptions(language, 'it');
+    await chooseSelectValue(language, 'it');
     await expect(canvas.getByRole('textbox', { name: m.catalogue_create_aliases() })).toHaveValue('Primo\nSecondo');
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.catalogue_create_language() }), 'ja');
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.catalogue_create_language() }), 'ja');
     expect(canvas.getAllByText('元の映画', { selector: 'span[lang="ja"]' })[0]).toBeVisible();
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.catalogue_create_language() }), 'en');
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.catalogue_create_language() }), 'en');
     expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('Corrected title');
-    await userEvent.selectOptions(
+    await chooseSelectValue(
       within(canvas.getByRole('group', { name: `en: ${m.catalogue_create_label()}` })).getByRole('combobox', {
         name: m.catalogue_terms_resolve_choice(),
       }),
@@ -219,8 +220,8 @@ export const TwoEditedLanguages: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
     const language = canvas.getByRole('combobox', { name: m.catalogue_create_language() });
-    await userEvent.selectOptions(language, 'ja');
-    await userEvent.selectOptions(
+    await chooseSelectValue(language, 'ja');
+    await chooseSelectValue(
       within(canvas.getByRole('group', { name: m.catalogue_create_description() })).getByRole('combobox'),
       'remove',
     );
@@ -237,9 +238,9 @@ export const TwoEditedLanguages: Story = {
     await expect(canvas.queryByRole('button', { name: m.catalogue_create_remove_language() })).toBeNull();
     await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_terms_new_language() }), 'it');
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_add_language() }));
-    await userEvent.selectOptions(language, 'ja');
-    await userEvent.selectOptions(language, 'it');
-    await userEvent.selectOptions(
+    await chooseSelectValue(language, 'ja');
+    await chooseSelectValue(language, 'it');
+    await chooseSelectValue(
       within(canvas.getByRole('group', { name: m.catalogue_create_aliases() })).getByRole('combobox'),
       'set',
     );
@@ -265,7 +266,7 @@ export const UncertainDraftRevision: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_save() }));
     await expect(canvas.findByRole('alert')).resolves.toHaveTextContent(m.catalogue_terms_uncertain());
     await expect(canvas.getByRole('button', { name: m.catalogue_create_remove_language() })).toBeDisabled();
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.catalogue_create_language() }), 'en');
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.catalogue_create_language() }), 'en');
     await expect(
       canvas.getByRole('button', { name: m.catalogue_terms_discard_language({ language: 'en' }) }),
     ).toBeDisabled();
@@ -334,13 +335,13 @@ export const IndependentForms: Story = {
     const b = await fill(right, 'Second independent draft');
     await userEvent.type(a.getByRole('textbox', { name: m.catalogue_terms_new_language() }), 'it');
     await userEvent.click(a.getByRole('button', { name: m.catalogue_create_add_language() }));
-    await expect(b.getByRole('combobox', { name: m.catalogue_create_language() })).toHaveValue('en');
+    await expectSelectValue(b.getByRole('combobox', { name: m.catalogue_create_language() }), 'en');
     await expect(b.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('Second independent draft');
     const aliases = within(a.getByRole('group', { name: m.catalogue_create_aliases() }));
-    await userEvent.selectOptions(aliases.getByRole('combobox'), 'set');
+    await chooseSelectValue(aliases.getByRole('combobox'), 'set');
     await userEvent.type(aliases.getByRole('textbox'), 'Primo{Enter}Secondo');
     await expect(aliases.getByRole('textbox')).toHaveAccessibleDescription(m.catalogue_terms_alias_limits());
-    await userEvent.selectOptions(a.getByRole('combobox', { name: m.catalogue_create_language() }), 'en');
+    await chooseSelectValue(a.getByRole('combobox', { name: m.catalogue_create_language() }), 'en');
     await expect(a.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('First independent draft');
     independentArticles(canvasElement);
     await userEvent.click(a.getByRole('button', { name: m.catalogue_terms_save() }));
@@ -356,9 +357,9 @@ export const LongText: Story = {
     const languages = await within(canvasElement).findAllByRole('combobox', { name: m.catalogue_create_language() });
     const [left] = independentArticles(canvasElement);
     const canvas = within(left);
-    await userEvent.selectOptions(languages[0]!, 'en');
+    await chooseSelectValue(languages[0]!, 'en');
     for (const name of [m.catalogue_create_label(), m.catalogue_create_description(), m.catalogue_create_aliases()]) {
-      await userEvent.selectOptions(within(canvas.getByRole('group', { name })).getByRole('combobox'), 'set');
+      await chooseSelectValue(within(canvas.getByRole('group', { name })).getByRole('combobox'), 'set');
     }
     await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue(
       `A supplied name ${'星'.repeat(225)}`,
@@ -409,9 +410,9 @@ export const KeyboardLabelAndErrorAssociations: Story = {
     await userEvent.type(newLanguage, 'it');
     await userEvent.tab();
     await userEvent.keyboard('{Enter}');
-    await expect(language).toHaveValue('it');
-    await expect(b.getByRole('combobox', { name: m.catalogue_create_language() })).toHaveValue('en');
-    await userEvent.selectOptions(language, 'en');
+    await expectSelectValue(language, 'it');
+    await expectSelectValue(b.getByRole('combobox', { name: m.catalogue_create_language() }), 'en');
+    await chooseSelectValue(language, 'en');
     await expect(a.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('');
     independentArticles(canvasElement);
   },

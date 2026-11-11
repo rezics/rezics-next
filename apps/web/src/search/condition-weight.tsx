@@ -2,7 +2,7 @@ import type { FilterQualifier } from '@rezics/filter';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useId } from 'react';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
@@ -87,18 +87,23 @@ export function ConceptWeightRange({
         ))}
         <Field>
           <FieldLabel htmlFor={`${id}-unit`}>{m.refinement_unit({}, options)}</FieldLabel>
-          <NativeSelect
-            id={`${id}-unit`}
+          <Select
             name="unit"
-            defaultValue={range?.unit ?? definition.units[0]}
-            className="w-full min-w-0 max-w-full [&_select]:h-auto [&_select]:min-h-11 [&_select]:max-w-full"
+            defaultValue={(range?.unit ?? definition.units[0]) === '' ? null : (range?.unit ?? definition.units[0])}
           >
-            {definition.units.map((unit) => (
-              <NativeSelectOption key={unit} value={unit}>
-                {searchQuantityUnitText(unit, definition.units ?? [], locale, unitMessages)}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger id={`${id}-unit`} className="w-full min-w-0 max-w-full h-auto min-h-11 max-w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {definition.units.map((unit) => (
+                  <SelectItem key={unit} value={unit}>
+                    {searchQuantityUnitText(unit, definition.units ?? [], locale, unitMessages)}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
       </div>
       <Button type="submit" variant="outline" className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2">

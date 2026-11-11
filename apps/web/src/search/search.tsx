@@ -36,7 +36,7 @@ import { BottomSheet } from '@rezics/ui/bottom-sheet';
 
 import { SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { cn } from '@rezics/ui/utils';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { getLocale, locales } from '../paraglide/runtime.js';
@@ -280,19 +280,25 @@ function AdvancedScope({
       <legend className="px-1 text-sm font-medium">{m.access_resource({}, options)}</legend>
       <Field>
         <FieldLabel htmlFor={typeId}>{m.library_follow_count_context_select_type({}, options)}</FieldLabel>
-        <NativeSelect
-          id={typeId}
-          value={kind}
-          onChange={(event) => {
-            const next = event.currentTarget.value as SearchResourceScope['kind'] | '';
+        <Select
+          value={kind === '' ? null : kind}
+          onValueChange={(nextSelectValue) => {
+            const next = (nextSelectValue ?? '') as SearchResourceScope['kind'] | '';
             setKind(next);
             if (!next && scope) onRemove();
           }}
         >
-          <NativeSelectOption value="">{m.header_search_global({}, options)}</NativeSelectOption>
-          <NativeSelectOption value="realm">Realm</NativeSelectOption>
-          <NativeSelectOption value="collection">Collection</NativeSelectOption>
-        </NativeSelect>
+          <SelectTrigger id={typeId}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value={null}>{m.header_search_global({}, options)}</SelectItem>
+              <SelectItem value="realm">Realm</SelectItem>
+              <SelectItem value="collection">Collection</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </Field>
       {kind && (
         <Field>
@@ -1079,26 +1085,32 @@ export function SearchPage({
         <Field>
           <FieldLabel htmlFor={`${typeControlId}-${surface}`}>{m.search_subject_type({}, options)}</FieldLabel>
           <p className="text-sm text-muted-foreground">{m.search_subject_type_help({}, options)}</p>
-          <NativeSelect
-            id={`${typeControlId}-${surface}`}
+          <Select
             name="type"
-            value={type ?? ''}
-            onChange={(event) => {
-              if (hydrated) event.currentTarget.form?.requestSubmit();
+            value={(type ?? '') === '' ? null : (type ?? '')}
+            onValueChange={(nextSelectValue) => {
+              if (hydrated) document.getElementById(`${typeControlId}-${surface}`)?.closest('form')?.requestSubmit();
             }}
           >
-            <NativeSelectOption value="">{m.search_all_subject_types({}, options)}</NativeSelectOption>
-            {type && !data?.conditionMetadata?.types[type] && (
-              <NativeSelectOption value={type}>
-                {label(data?.typeLabels, m.search_constraint_identity_kind_unavailable({}, options))}
-              </NativeSelectOption>
-            )}
-            {Object.entries(data?.conditionMetadata?.types ?? {}).map(([id, definition]) => (
-              <NativeSelectOption key={id} value={id}>
-                {label(definition.labels, m.search_constraint_identity_kind_unavailable({}, options))}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger id={`${typeControlId}-${surface}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value={null}>{m.search_all_subject_types({}, options)}</SelectItem>
+                {type && !data?.conditionMetadata?.types[type] && (
+                  <SelectItem value={type}>
+                    {label(data?.typeLabels, m.search_constraint_identity_kind_unavailable({}, options))}
+                  </SelectItem>
+                )}
+                {Object.entries(data?.conditionMetadata?.types ?? {}).map(([id, definition]) => (
+                  <SelectItem key={id} value={id}>
+                    {label(definition.labels, m.search_constraint_identity_kind_unavailable({}, options))}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
       ) : null}
       {data?.refinement && filterRefinementProperties.length > 0 && (

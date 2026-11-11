@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { useMemo } from 'react';
@@ -81,7 +82,7 @@ async function fill(canvasElement: HTMLElement) {
     'https://publisher.example/edition',
   );
   const field = canvas.getByRole('combobox', { name: m.publication_field() });
-  await userEvent.selectOptions(field, 'schema:isbn');
+  await chooseSelectValue(field, 'schema:isbn');
   await userEvent.click(within(field.closest('fieldset')!).getByRole('button', { name: m.correction_add() }));
   await userEvent.type(canvas.getByRole('textbox', { name: m.correction_value() }), '978-0-140-44430-8');
   return canvas;
@@ -121,8 +122,8 @@ export const AnthologyWorkLink: Story = {
   args: { workType: 'schema:Movie' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.relation_property() }), 'bf:hasPart');
-    expect(canvas.getByRole('combobox', { name: m.relation_property() })).toHaveValue('bf:hasPart');
+    await chooseSelectValue(await canvas.findByRole('combobox', { name: m.relation_property() }), 'bf:hasPart');
+    await expectSelectValue(canvas.getByRole('combobox', { name: m.relation_property() }), 'bf:hasPart');
   },
 };
 export const Denied: Story = {
@@ -243,7 +244,7 @@ export const UncertainRetry: Story = {
         await expect(independent).toBeChecked();
         await userEvent.click(confirmation);
         await expect(independent).not.toBeChecked();
-        await userEvent.selectOptions(field, 'schema:isbn');
+        await chooseSelectValue(field, 'schema:isbn');
         await userEvent.click(add);
         const remove = canvas.getByRole('button', { name: m.relation_remove() });
         await target(remove);

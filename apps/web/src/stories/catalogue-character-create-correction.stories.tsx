@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useRef, useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
@@ -160,14 +161,14 @@ export const InvalidInitialFact: Story = {
   args: { onAttempt: observer() },
   play: async ({ canvasElement, args }) => {
     const { canvas, name } = await draft(canvasElement);
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_initial_fact() }), 'schema:height');
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.character_initial_fact() }), 'schema:height');
     await userEvent.click(canvas.getByRole('button', { name: m.character_add_fact() }));
     await submit(canvasElement);
     await corrections(canvasElement);
     await expect(name).toHaveValue('旅人 — A new traveler');
     await expect(args.onAttempt).not.toHaveBeenCalled();
     await userEvent.type(canvas.getByRole('textbox', { name: m.correction_amount() }), '+170');
-    await userEvent.selectOptions(
+    await chooseSelectValue(
       canvas.getByRole('combobox', { name: m.correction_unit() }),
       'http://www.wikidata.org/entity/Q174728',
     );

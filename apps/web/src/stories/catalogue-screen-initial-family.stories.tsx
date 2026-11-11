@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectOptionAvailability, expectSelectValue } from './select-option';
 import { useMemo, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
@@ -280,15 +281,12 @@ async function page(canvasElement: HTMLElement) {
 async function fill(canvasElement: HTMLElement, long = false) {
   const canvas = within(canvasElement);
   const name = (property: string) => (long ? longName(property) : field(property));
-  await userEvent.selectOptions(
-    await canvas.findByRole('combobox', { name: m.catalogue_create_type() }),
-    'schema:Episode',
-  );
+  await chooseSelectValue(await canvas.findByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Episode');
   await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'The observatory');
   const add = canvas.getByRole('button', { name: m.correction_add() });
   for (const property of ['schema:director', 'schema:duration', 'schema:episodeNumber', 'schema:isPartOf']) {
     const select = canvas.getByRole('combobox', { name: m.character_add_fact() });
-    await userEvent.selectOptions(select, property);
+    await chooseSelectValue(select, property);
     await target(select, select.closest('fieldset')!);
     await target(add, select.closest('fieldset')!);
     select.focus();
@@ -301,7 +299,7 @@ async function fill(canvasElement: HTMLElement, long = false) {
     await expect(region.closest('fieldset')?.querySelector('legend')).toHaveTextContent(m.screen_initial_facts());
     if (property === 'schema:duration') {
       await userEvent.type(section.getByRole('textbox', { name: m.correction_amount() }), '+1440');
-      await userEvent.selectOptions(
+      await chooseSelectValue(
         section.getByRole('combobox', { name: m.correction_unit() }),
         'http://www.wikidata.org/entity/Q11574',
       );
@@ -320,7 +318,7 @@ async function fill(canvasElement: HTMLElement, long = false) {
         }),
       );
       if (property === 'schema:director') {
-        await userEvent.selectOptions(
+        await chooseSelectValue(
           section.getByRole('combobox', { name: m.correction_add_qualifier() }),
           'schema:position',
         );
@@ -336,7 +334,8 @@ async function fill(canvasElement: HTMLElement, long = false) {
   }
   const duration = within(factSection(canvas, name('schema:duration')));
   await expect(duration.getByRole('textbox', { name: m.correction_amount() })).toHaveValue('+1440');
-  await expect(duration.getByRole('combobox', { name: m.correction_unit() })).toHaveValue(
+  await expectSelectValue(
+    duration.getByRole('combobox', { name: m.correction_unit() }),
     'http://www.wikidata.org/entity/Q11574',
   );
   await expect(canvas.getByText(m.screen_authored_after())).toBeVisible();
@@ -359,7 +358,7 @@ export const IndependentSelectors: Story = {
       await expect(scope.getByText(m.character_add_fact(), { selector: 'label' })).toHaveAttribute('for', control.id);
       await target(control, control.closest('fieldset')!);
     }
-    await userEvent.selectOptions(b, 'schema:director');
+    await chooseSelectValue(b, 'schema:director');
     b.focus();
     await userEvent.tab();
     await focused(second!.getByRole('button', { name: m.correction_add() }));
@@ -371,7 +370,7 @@ export const IndependentSelectors: Story = {
     remove.focus();
     await userEvent.keyboard('{Enter}');
     await expect(second!.queryByRole('heading', { name: field('schema:director') })).not.toBeInTheDocument();
-    await expect(a).toHaveValue('');
+    await expectSelectValue(a, '');
   },
 };
 const longPlay: NonNullable<Story['play']> = async ({ canvasElement }) => {
@@ -499,10 +498,10 @@ export const MultiplicityAndExplicitRemoval: Story = {
     const scope = within(region);
     const select = scope.getByRole('combobox', { name: m.character_add_fact() });
     for (const property of ['schema:duration', 'schema:director', 'schema:director']) {
-      await userEvent.selectOptions(select, property);
+      await chooseSelectValue(select, property);
       await userEvent.click(scope.getByRole('button', { name: m.correction_add() }));
     }
-    await expect(within(select).queryByRole('option', { name: field('schema:duration') })).not.toBeInTheDocument();
+    await expectSelectOptionAvailability(select, 'schema:duration', false);
     const credits = scope.getAllByRole('heading', { name: field('schema:director'), level: 3 });
     await expect(credits).toHaveLength(2);
     const retained = credits[1]!.closest('section')!;

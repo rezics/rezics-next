@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { PAGE_GLOBAL_CONTEXT, pickText } from '@rezics/composition';
 import { useMemo, useState } from 'react';
@@ -292,7 +293,7 @@ async function reviewSlot(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   const work = within(await canvas.findByRole('region', { name: m.story_arc_work() }));
   await userEvent.click(work.getByRole('button', { name: m.relation_open() }));
-  await userEvent.selectOptions(await work.findByRole('combobox', { name: m.relation_property() }), storyArcProperty);
+  await chooseSelectValue(await work.findByRole('combobox', { name: m.relation_property() }), storyArcProperty);
   await userEvent.click(work.getAllByRole('button', { name: m.relation_edit_existing() })[0]!);
   await userEvent.click(work.getByRole('button', { name: m.relation_review_slot() }));
   await expect(work.findByRole('button', { name: m.candidate_review() })).resolves.toBeVisible();
@@ -310,7 +311,7 @@ async function adopt(canvasElement: HTMLElement) {
   await expect(work.findByText(m.candidate_accepted())).resolves.toBeVisible();
   await userEvent.click(work.getByRole('button', { name: m.candidate_reload() }));
   await userEvent.click(await work.findByRole('button', { name: m.candidate_review() }));
-  await userEvent.selectOptions(work.getByRole('combobox', { name: m.relation_rank() }), 'preferred');
+  await chooseSelectValue(work.getByRole('combobox', { name: m.relation_rank() }), 'preferred');
   await confirm(work, m.candidate_adopt());
   return work;
 }

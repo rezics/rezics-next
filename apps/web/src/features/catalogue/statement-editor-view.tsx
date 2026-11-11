@@ -6,7 +6,7 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -66,12 +66,12 @@ export type { StatementFieldsRead };
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 const julian = 'http://www.wikidata.org/entity/Q1985786';
 
-// Caller sizing keeps native controls usable on phones and coarse pointers, with dense fine-pointer desktops.
+// Caller sizing keeps fields usable on phones and coarse pointers, with dense fine-pointer desktops.
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
 const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
-// NativeSelect's className belongs to its wrapper; the target is the select itself.
-const selectClassName = 'w-full min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
+// Size shared Select triggers with their neighboring editable fields.
+const selectClassName = 'w-full min-w-0 max-w-full min-h-11 md:pointer-fine:min-h-8';
 const labelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
 const sectionClassName =
   'min-w-0 space-y-3 [overflow-wrap:anywhere] rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -84,8 +84,8 @@ const reviewControlsClassName = [
   '[&_[data-slot=button]]:h-auto [&_[data-slot=button]]:min-h-11 [&_[data-slot=button]]:min-w-11',
   '[&_[data-slot=button]]:max-w-full [&_[data-slot=button]]:whitespace-normal [&_[data-slot=button]]:py-2',
   'md:pointer-fine:[&_[data-slot=button]]:min-h-8 md:pointer-fine:[&_[data-slot=button]]:py-1',
-  '[&_[data-slot=native-select-wrapper]]:w-full [&_[data-slot=native-select-wrapper]]:min-w-0',
-  '[&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8 [&_label]:min-w-0 [&_label]:flex-wrap',
+  '[&_[data-slot=select-trigger]]:w-full [&_[data-slot=select-trigger]]:min-w-0',
+  '[&_[data-slot=select-trigger]]:min-h-11 md:pointer-fine:[&_[data-slot=select-trigger]]:min-h-8 [&_label]:min-w-0 [&_label]:flex-wrap',
   '[&_label]:max-w-full [&_label]:whitespace-normal [&_label]:[overflow-wrap:anywhere]',
   '[&_[data-slot=button]]:[overflow-wrap:anywhere]',
   '[&_[role=status]_a]:inline-flex [&_[role=status]_a]:min-h-11 [&_[role=status]_a]:min-w-11',
@@ -300,13 +300,10 @@ function ScalarControl({
         <FieldLabel className={labelClassName} htmlFor={id('state')}>
           {m.correction_value_state({}, o)}
         </FieldLabel>
-        <NativeSelect
-          className={selectClassName}
-          {...control('state')}
-          aria-label={m.correction_value_state({}, o)}
-          value={part.value.type}
-          onChange={(event) => {
-            const type = event.target.value;
+        <Select
+          value={part.value.type === '' ? null : part.value.type}
+          onValueChange={(nextSelectValue) => {
+            const type = nextSelectValue ?? '';
             if (type === 'somevalue' || type === 'novalue') onChange({ type });
             else
               onChange({
@@ -320,10 +317,17 @@ function ScalarControl({
               });
           }}
         >
-          <NativeSelectOption value="value">{m.correction_known({}, o)}</NativeSelectOption>
-          <NativeSelectOption value="somevalue">{m.subject_value_unknown({}, o)}</NativeSelectOption>
-          <NativeSelectOption value="novalue">{m.subject_value_none({}, o)}</NativeSelectOption>
-        </NativeSelect>
+          <SelectTrigger className={selectClassName} {...control('state')} aria-label={m.correction_value_state({}, o)}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="value">{m.correction_known({}, o)}</SelectItem>
+              <SelectItem value="somevalue">{m.subject_value_unknown({}, o)}</SelectItem>
+              <SelectItem value="novalue">{m.subject_value_none({}, o)}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </Field>
       {part.value.type === 'value' &&
         (definition.datatype === 'quantity' ? (
@@ -338,25 +342,35 @@ function ScalarControl({
               <FieldLabel className={labelClassName} htmlFor={id('unit')}>
                 {m.correction_unit({}, o)}
               </FieldLabel>
-              <NativeSelect
-                className={selectClassName}
-                {...control('unit')}
-                aria-label={m.correction_unit({}, o)}
-                value={typeof record.unit === 'string' ? record.unit : ''}
-                onChange={(event) => patch('unit', event.target.value)}
+              <Select
+                value={
+                  (typeof record.unit === 'string' ? record.unit : '') === ''
+                    ? null
+                    : typeof record.unit === 'string'
+                      ? record.unit
+                      : ''
+                }
+                onValueChange={(nextSelectValue) => patch('unit', nextSelectValue ?? '')}
               >
-                <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                {units.map((id) => (
-                  <NativeSelectOption key={id} value={id}>
-                    {unitName(id)}
-                  </NativeSelectOption>
-                ))}
-                {typeof record.unit === 'string' && !units.includes(record.unit) && (
-                  <NativeSelectOption value={record.unit}>
-                    {unitName(record.unit) ?? m.quantity_unit_unavailable({}, o)}
-                  </NativeSelectOption>
-                )}
-              </NativeSelect>
+                <SelectTrigger className={selectClassName} {...control('unit')} aria-label={m.correction_unit({}, o)}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+                    {units.map((id) => (
+                      <SelectItem key={id} value={id}>
+                        {unitName(id)}
+                      </SelectItem>
+                    ))}
+                    {typeof record.unit === 'string' && !units.includes(record.unit) && (
+                      <SelectItem value={record.unit}>
+                        {unitName(record.unit) ?? m.quantity_unit_unavailable({}, o)}
+                      </SelectItem>
+                    )}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
             {!isRecord(properties.lowerBound) && !isRecord(properties.upperBound) ? null : (
               <div className="grid gap-3 sm:grid-cols-2">
@@ -391,37 +405,45 @@ function ScalarControl({
               <FieldLabel className={labelClassName} htmlFor={id('precision')}>
                 {m.correction_precision({}, o)}
               </FieldLabel>
-              <NativeSelect
-                className={selectClassName}
-                id={id('precision')}
-                {...invalid('date')}
-                aria-label={m.correction_precision({}, o)}
-                value={precision ?? ''}
-                onChange={(event) => setDate(0, date?.[1] ?? '', Number(event.target.value))}
+              <Select
+                value={(precision ?? '') === '' ? null : (precision ?? '')}
+                onValueChange={(nextSelectValue) => setDate(0, date?.[1] ?? '', Number(nextSelectValue ?? ''))}
               >
-                <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                {typeof precision === 'number' && ![9, 10, 11].includes(precision) && (
-                  <NativeSelectOption value={precision}>
-                    {m.time_unsupported_precision({ precision: String(precision) }, o)}
-                  </NativeSelectOption>
-                )}
-                {[9, 10, 11]
-                  .filter(
-                    (value) =>
-                      !isRecord(properties.precision) ||
-                      !Array.isArray(properties.precision.enum) ||
-                      properties.precision.enum.includes(value),
-                  )
-                  .map((value) => (
-                    <NativeSelectOption key={value} value={value}>
-                      {value === 9
-                        ? m.correction_year({}, o)
-                        : value === 10
-                          ? m.correction_month({}, o)
-                          : m.correction_day({}, o)}
-                    </NativeSelectOption>
-                  ))}
-              </NativeSelect>
+                <SelectTrigger
+                  className={selectClassName}
+                  id={id('precision')}
+                  {...invalid('date')}
+                  aria-label={m.correction_precision({}, o)}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+                    {typeof precision === 'number' && ![9, 10, 11].includes(precision) && (
+                      <SelectItem value={precision}>
+                        {m.time_unsupported_precision({ precision: String(precision) }, o)}
+                      </SelectItem>
+                    )}
+                    {[9, 10, 11]
+                      .filter(
+                        (value) =>
+                          !isRecord(properties.precision) ||
+                          !Array.isArray(properties.precision.enum) ||
+                          properties.precision.enum.includes(value),
+                      )
+                      .map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {value === 9
+                            ? m.correction_year({}, o)
+                            : value === 10
+                              ? m.correction_month({}, o)
+                              : m.correction_day({}, o)}
+                        </SelectItem>
+                      ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
             <div className="grid gap-3 sm:grid-cols-3">
               {field('year', m.correction_year({}, o), date?.[1] ?? '', (value) => setDate(0, value))}
@@ -447,26 +469,40 @@ function ScalarControl({
               <FieldLabel className={labelClassName} htmlFor={id('calendar')}>
                 {m.correction_calendar({}, o)}
               </FieldLabel>
-              <NativeSelect
-                className={selectClassName}
-                {...control('calendar')}
-                aria-label={m.correction_calendar({}, o)}
-                value={typeof record.calendarmodel === 'string' ? record.calendarmodel : ''}
-                onChange={(event) => patch('calendarmodel', event.target.value)}
+              <Select
+                value={
+                  (typeof record.calendarmodel === 'string' ? record.calendarmodel : '') === ''
+                    ? null
+                    : typeof record.calendarmodel === 'string'
+                      ? record.calendarmodel
+                      : ''
+                }
+                onValueChange={(nextSelectValue) => patch('calendarmodel', nextSelectValue ?? '')}
               >
-                <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                {supportedCalendars.map((value) => (
-                  <NativeSelectOption key={value} value={value}>
-                    {value === gregorian ? m.time_calendar_gregorian({}, o) : m.time_calendar_julian({}, o)}
-                  </NativeSelectOption>
-                ))}
-                {typeof record.calendarmodel === 'string' &&
-                  !supportedCalendars.some((calendar) => calendar === record.calendarmodel) && (
-                    <NativeSelectOption value={record.calendarmodel}>
-                      {m.time_unsupported_calendar({ calendar: record.calendarmodel }, o)}
-                    </NativeSelectOption>
-                  )}
-              </NativeSelect>
+                <SelectTrigger
+                  className={selectClassName}
+                  {...control('calendar')}
+                  aria-label={m.correction_calendar({}, o)}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+                    {supportedCalendars.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {value === gregorian ? m.time_calendar_gregorian({}, o) : m.time_calendar_julian({}, o)}
+                      </SelectItem>
+                    ))}
+                    {typeof record.calendarmodel === 'string' &&
+                      !supportedCalendars.some((calendar) => calendar === record.calendarmodel) && (
+                        <SelectItem value={record.calendarmodel}>
+                          {m.time_unsupported_calendar({ calendar: record.calendarmodel }, o)}
+                        </SelectItem>
+                      )}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
             <div className="grid gap-3 sm:grid-cols-3">
               {field(
@@ -596,20 +632,24 @@ function AddPart({
         <FieldLabel className={labelClassName} htmlFor={selectId}>
           {label}
         </FieldLabel>
-        <NativeSelect
-          className={selectClassName}
-          id={selectId}
-          aria-label={label}
-          value={property}
-          onChange={(event) => setProperty(event.target.value)}
+        <Select
+          value={property === '' ? null : property}
+          onValueChange={(nextSelectValue) => setProperty(nextSelectValue ?? '')}
         >
-          <NativeSelectOption value="">{m.correction_choose({}, { locale: locale as never })}</NativeSelectOption>
-          {choices.map(({ id, name }) => (
-            <NativeSelectOption key={id} value={id}>
-              {name}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger className={selectClassName} id={selectId} aria-label={label}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value={null}>{m.correction_choose({}, { locale: locale as never })}</SelectItem>
+              {choices.map(({ id, name }) => (
+                <SelectItem key={id} value={id}>
+                  {name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </Field>
       <Button
         className={actionClassName}
@@ -814,7 +854,7 @@ export function StatementFields({
     const scope = button.closest<HTMLElement>(kind === 'part' ? 'fieldset' : 'section');
     return kind === 'reference'
       ? addReference.current
-      : ((scope?.querySelector('[data-add-part] select') as HTMLSelectElement | null) ?? scope);
+      : (scope?.querySelector<HTMLButtonElement>('[data-add-part] [data-slot="select-trigger"]') ?? scope);
   }
   function hasContent(value: unknown): boolean {
     if (typeof value === 'string') return value.trim().length > 0;

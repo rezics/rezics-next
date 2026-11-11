@@ -16,7 +16,7 @@ import {
 } from '@rezics/ui/shadcn/alert-dialog';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { cn } from '@rezics/ui/utils';
 import { useId, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
@@ -51,7 +51,7 @@ import type { StatementFieldsRead } from './statement-editor-view';
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
 const recoveryFocusClassName = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const selectClassName = 'w-full min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
+const selectClassName = 'w-full min-w-0 max-w-full min-h-11 md:pointer-fine:min-h-8';
 const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
 const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center underline [overflow-wrap:anywhere] md:pointer-fine:min-h-8';
@@ -821,31 +821,39 @@ function PublicationEditorLive({
                         <FieldLabel className={labelClassName} htmlFor={`${id}-relation`}>
                           {m.relation_property({}, o)}
                         </FieldLabel>
-                        <NativeSelect
-                          className={selectClassName}
-                          id={`${id}-relation`}
-                          aria-describedby={controlErrorId(`${id}-relation`)}
-                          aria-invalid={hasControlError(`${id}-relation`) || undefined}
-                          value={relation}
-                          onChange={(event) =>
+                        <Select
+                          value={relation === '' ? null : relation}
+                          onValueChange={(nextSelectValue) =>
                             edit(() => {
-                              const next = event.target.value;
+                              const next = nextSelectValue ?? '';
                               setRelation(next);
                               setWorkLink((current) => (current ? { ...current, property: { id: next } } : current));
                             })
                           }
                         >
-                          {unsupportedRelation && (
-                            <NativeSelectOption value={relation} disabled>
-                              {name(relation) || relation}
-                            </NativeSelectOption>
-                          )}
-                          {(read ? (currentProfile?.relations ?? []) : profile.relations).map((property) => (
-                            <NativeSelectOption key={property} value={property}>
-                              {name(property)}
-                            </NativeSelectOption>
-                          ))}
-                        </NativeSelect>
+                          <SelectTrigger
+                            className={selectClassName}
+                            id={`${id}-relation`}
+                            aria-describedby={controlErrorId(`${id}-relation`)}
+                            aria-invalid={hasControlError(`${id}-relation`) || undefined}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              {unsupportedRelation && (
+                                <SelectItem value={relation} disabled>
+                                  {name(relation) || relation}
+                                </SelectItem>
+                              )}
+                              {(read ? (currentProfile?.relations ?? []) : profile.relations).map((property) => (
+                                <SelectItem key={property} value={property}>
+                                  {name(property)}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
                         {unsupportedRelation && <FieldError>{m.publication_choice_review({}, o)}</FieldError>}
                       </Field>
                       <Field orientation="horizontal" data-invalid={hasControlError(`${id}-independent`) || undefined}>

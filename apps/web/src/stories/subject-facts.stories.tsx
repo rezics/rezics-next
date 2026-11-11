@@ -1,3 +1,4 @@
+import { chooseSelectOptionByName, chooseSelectValue, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -87,9 +88,9 @@ async function editFields(canvasElement: HTMLElement) {
   await userEvent.clear(year);
   await userEvent.type(year, '1946');
   const language = within(canvas.getByRole('region', { name: name('schema:inLanguage') }));
-  await userEvent.selectOptions(
+  await chooseSelectOptionByName(
     language.getByRole('combobox', { name: m.facts_choose_value() }),
-    language.getByRole('option', { name: m.facts_selected_value({ number: 1 }) }),
+    m.facts_selected_value({ number: 1 }),
   );
   await userEvent.click(language.getByRole('button', { name: m.facts_edit_field() }));
   // Value language is authored data; changing the UI locale never changes this field.
@@ -112,7 +113,7 @@ export const ExactCurrentValue: Story = {
     const select = field.getByRole('combobox', { name: m.facts_choose_value() });
     await expect(select).toHaveAccessibleName(m.facts_choose_value());
     await expect(field.getByRole('button', { name: m.facts_edit_field() })).toBeDisabled();
-    await userEvent.selectOptions(select, field.getByRole('option', { name: m.facts_selected_value({ number: 2 }) }));
+    await chooseSelectOptionByName(select, m.facts_selected_value({ number: 2 }));
     await userEvent.click(field.getByRole('button', { name: m.facts_edit_field() }));
     await expect(field.getAllByRole('textbox', { name: m.correction_value() })[0]!).toHaveValue('fr');
   },
@@ -213,16 +214,10 @@ async function independentKeyboard(canvasElement: HTMLElement) {
   const firstSelect = first.getByRole('combobox', { name: m.facts_choose_value() });
   const secondSelect = second.getByRole('combobox', { name: m.facts_choose_value() });
   await expect(firstSelect.id).not.toBe(secondSelect.id);
-  await userEvent.selectOptions(
-    secondSelect,
-    second.getByRole('option', { name: m.facts_selected_value({ number: 2 }) }),
-  );
+  await chooseSelectOptionByName(secondSelect, m.facts_selected_value({ number: 2 }));
   await expect(first.getByRole('button', { name: m.facts_edit_field() })).toBeDisabled();
-  await expect(firstSelect).toHaveValue('');
-  await userEvent.selectOptions(
-    firstSelect,
-    first.getByRole('option', { name: m.facts_selected_value({ number: 1 }) }),
-  );
+  await expectSelectValue(firstSelect, '');
+  await chooseSelectOptionByName(firstSelect, m.facts_selected_value({ number: 1 }));
   const firstEdit = first.getByRole('button', { name: m.facts_edit_field() });
   firstEdit.focus();
   await expect(firstEdit).toHaveFocus();
@@ -390,7 +385,7 @@ export const LongSelectedEvidence: Story = {
     citation.focus();
     await expect(citation).toHaveFocus();
     await waitFor(() => expect(getComputedStyle(citation).outlineStyle).not.toBe('none'));
-    await userEvent.selectOptions(field.getByRole('combobox', { name: m.facts_choose_value() }), chosenStatement);
+    await chooseSelectValue(field.getByRole('combobox', { name: m.facts_choose_value() }), chosenStatement);
     await userEvent.click(field.getByRole('button', { name: m.facts_edit_field() }));
     const value = field.getAllByRole('textbox', { name: m.correction_value() })[0]!;
     await expect(value).toHaveValue(longSelectedValue);

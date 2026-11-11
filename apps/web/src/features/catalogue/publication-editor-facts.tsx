@@ -5,7 +5,7 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { DefinitionMeaning } from './definition-meaning';
@@ -22,7 +22,7 @@ import { publicationTarget, type PublicationProfile } from './publication-editor
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
-const selectClassName = 'w-full min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
+const selectClassName = 'w-full min-w-0 max-w-full min-h-11 md:pointer-fine:min-h-8';
 const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
 const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center underline [overflow-wrap:anywhere] md:pointer-fine:min-h-8';
@@ -444,24 +444,29 @@ export function PublicationFacts({
             <FieldLabel className={labelClassName} htmlFor={`${id}-field`}>
               {m.publication_field({}, o)}
             </FieldLabel>
-            <NativeSelect
-              className={selectClassName}
-              id={`${id}-field`}
-              value={field}
-              onChange={(event) => onFieldChoice(event.target.value)}
+            <Select
+              value={field === '' ? null : field}
+              onValueChange={(nextSelectValue) => onFieldChoice(nextSelectValue ?? '')}
             >
-              <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-              {fields(currentProfile?.fields ?? profile.fields).map((property) => (
-                <NativeSelectOption key={property} value={property}>
-                  {name(property)}
-                </NativeSelectOption>
-              ))}
-              {field && currentProfile && !currentProfile.fields.includes(field) && (
-                <NativeSelectOption value={field} disabled>
-                  {name(field) || field}
-                </NativeSelectOption>
-              )}
-            </NativeSelect>
+              <SelectTrigger className={selectClassName} id={`${id}-field`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+                  {fields(currentProfile?.fields ?? profile.fields).map((property) => (
+                    <SelectItem key={property} value={property}>
+                      {name(property)}
+                    </SelectItem>
+                  ))}
+                  {field && currentProfile && !currentProfile.fields.includes(field) && (
+                    <SelectItem value={field} disabled>
+                      {name(field) || field}
+                    </SelectItem>
+                  )}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             {field && currentProfile && !currentProfile.fields.includes(field) && (
               <FieldError>{m.publication_choice_review({}, o)}</FieldError>
             )}

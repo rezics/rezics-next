@@ -18,7 +18,7 @@ import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { ContentItem, ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import type { Violation } from '@rezics/definitions/validate';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import { subjectHref } from '../../subject/subject-href';
@@ -59,8 +59,8 @@ import type { StatementInput } from './statement-editor';
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
 const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
-// NativeSelect puts className on the wrapper, so size its actual native control as well.
-const selectClassName = 'min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
+// Keep the shared Select trigger at the same phone target size as its neighboring fields.
+const selectClassName = 'min-w-0 max-w-full min-h-11 md:pointer-fine:min-h-8';
 const labelClassName = 'min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -1115,19 +1115,24 @@ function AuthoredFieldLive({
             <FieldLabel htmlFor={ids.property} className={labelClassName}>
               {m.candidate_field({}, o)}
             </FieldLabel>
-            <NativeSelect
-              id={ids.property}
-              className={selectClassName}
-              value={property}
+            <Select
+              value={property === '' ? null : property}
               disabled={locked || confirmingDiscard}
-              onChange={(event) => void refresh(event.target.value)}
+              onValueChange={(nextSelectValue) => void refresh(nextSelectValue ?? '')}
             >
-              {authoredProperties(current.release, current.public.subject.type).map((id) => (
-                <NativeSelectOption key={id} value={id}>
-                  {pageText(current.release.properties[id]!.labels, locale).text}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              <SelectTrigger id={ids.property} className={selectClassName}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {authoredProperties(current.release, current.public.subject.type).map((id) => (
+                    <SelectItem key={id} value={id}>
+                      {pageText(current.release.properties[id]!.labels, locale).text}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </Field>
           {selectedSection}
         </>

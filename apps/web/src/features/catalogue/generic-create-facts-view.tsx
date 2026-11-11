@@ -4,7 +4,7 @@ import type { PropertyDefinition, Release } from '@rezics/definitions';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { quantityUnitLabel } from '../../subject/quantity-presentation';
@@ -96,20 +96,26 @@ function ItemTargetControl({
     <div className="min-w-0 space-y-3">
       <Field className="min-w-0">
         <FieldLabel>{m.correction_value_state({}, o)}</FieldLabel>
-        <NativeSelect
-          aria-label={m.correction_value_state({}, o)}
-          value={part.value.type}
+        <Select
+          value={part.value.type === '' ? null : part.value.type}
           disabled={disabled}
-          onChange={(event) => {
-            const state = event.target.value;
+          onValueChange={(nextSelectValue) => {
+            const state = nextSelectValue ?? '';
             if (state === 'somevalue' || state === 'novalue') setValue({ type: state });
             else setValue({ type: 'value', content: selected?.id ?? '' }, selected);
           }}
         >
-          <NativeSelectOption value="value">{m.correction_known({}, o)}</NativeSelectOption>
-          <NativeSelectOption value="somevalue">{m.subject_value_unknown({}, o)}</NativeSelectOption>
-          <NativeSelectOption value="novalue">{m.subject_value_none({}, o)}</NativeSelectOption>
-        </NativeSelect>
+          <SelectTrigger aria-label={m.correction_value_state({}, o)}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="value">{m.correction_known({}, o)}</SelectItem>
+              <SelectItem value="somevalue">{m.subject_value_unknown({}, o)}</SelectItem>
+              <SelectItem value="novalue">{m.subject_value_none({}, o)}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </Field>
       {part.value.type === 'value' && (
         <Field className="min-w-0">
@@ -603,24 +609,30 @@ export function GenericCreateFactsWorkspace({
           <div className="flex min-w-0 flex-wrap items-end gap-3">
             <Field className="min-w-0 flex-1 basis-full sm:basis-64">
               <FieldLabel htmlFor="generic-create-property">{m.correction_add({}, options)}</FieldLabel>
-              <NativeSelect
-                id="generic-create-property"
-                value={choice}
+              <Select
+                value={choice === '' ? null : choice}
                 disabled={disabled || !!descriptorIssue || !canEdit()}
-                onChange={(event) => setChoice(event.target.value)}
+                onValueChange={(nextSelectValue) => setChoice(nextSelectValue ?? '')}
               >
-                <NativeSelectOption value="">{m.correction_choose({}, options)}</NativeSelectOption>
-                {descriptor.definition.properties.map((property) => {
-                  const definition = descriptor.propertyDefinitions[property];
-                  const label = pageText(definition?.labels, locale).text || property;
-                  const canAdd = canAddGenericFact(facts, definition);
-                  return (
-                    <NativeSelectOption key={property} value={property} disabled={!canAdd}>
-                      {label}
-                    </NativeSelectOption>
-                  );
-                })}
-              </NativeSelect>
+                <SelectTrigger id="generic-create-property">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value={null}>{m.correction_choose({}, options)}</SelectItem>
+                    {descriptor.definition.properties.map((property) => {
+                      const definition = descriptor.propertyDefinitions[property];
+                      const label = pageText(definition?.labels, locale).text || property;
+                      const canAdd = canAddGenericFact(facts, definition);
+                      return (
+                        <SelectItem key={property} value={property} disabled={!canAdd}>
+                          {label}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
             <Button
               type="button"

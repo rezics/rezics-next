@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import type { CollectionFilterParams } from '../library/collection-filter-params';
@@ -80,7 +81,7 @@ async function openFields(canvasElement: HTMLElement, property: string) {
   await userEvent.click(within(canvasElement).getByRole('button', { name: m.collection_filters() }));
   const fields = within(await within(document.body).findByRole('dialog', { name: m.collection_filters() }));
   const picker = fields.getByRole('combobox', { name: m.refinement_property() });
-  await userEvent.selectOptions(picker, property);
+  await chooseSelectValue(picker, property);
   return fields;
 }
 

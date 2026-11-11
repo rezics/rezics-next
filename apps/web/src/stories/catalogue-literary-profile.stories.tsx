@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectOptionAvailability, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { useMemo } from 'react';
@@ -107,16 +108,16 @@ type Story = StoryObj<typeof meta>;
 
 async function enterWork(canvasElement: HTMLElement, type = 'schema:Book') {
   const canvas = within(canvasElement);
-  await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.catalogue_create_type() }), type);
+  await chooseSelectValue(await canvas.findByRole('combobox', { name: m.catalogue_create_type() }), type);
   const language = canvas.getByRole('textbox', { name: m.catalogue_create_language() });
   await userEvent.clear(language);
   await userEvent.type(language, 'ja');
   await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), '原語の作品名');
   if (type === 'schema:Book') {
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.refinement_property() }), 'schema:wordCount');
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.refinement_property() }), 'schema:wordCount');
     await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
     await userEvent.type(canvas.getByRole('textbox', { name: m.correction_amount() }), '+12000');
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.correction_unit() }), '1');
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.correction_unit() }), '1');
   }
   return canvas;
 }
@@ -139,9 +140,11 @@ export const CreateOriginalLanguageWork: Story = {
 export const CreateBookSeries: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await enterWork(canvasElement, 'schema:BookSeries');
-    expect(
-      canvas.getByRole('combobox', { name: m.refinement_property() }).querySelector('option[value="schema:wordCount"]'),
-    ).toBeNull();
+    await expectSelectOptionAvailability(
+      canvas.getByRole('combobox', { name: m.refinement_property() }),
+      'schema:wordCount',
+      false,
+    );
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
     expect(await canvas.findByRole('link', { name: m.catalogue_create_open() })).toHaveAttribute(
       'href',
@@ -440,7 +443,7 @@ function initialBibliographyPanel(scope: HTMLElement) {
 
 async function addInitialFact(scope: HTMLElement, property: string) {
   const panel = within(initialBibliographyPanel(scope));
-  await userEvent.selectOptions(panel.getByRole('combobox', { name: m.refinement_property() }), property);
+  await chooseSelectValue(panel.getByRole('combobox', { name: m.refinement_property() }), property);
   await userEvent.click(panel.getByRole('button', { name: m.correction_add() }));
 }
 
@@ -493,7 +496,7 @@ async function inspectInitialBibliography(canvasElement: HTMLElement) {
   await userEvent.tab();
   await expect(select).toHaveFocus();
   await expect(view.getComputedStyle(select).outlineWidth).not.toBe('0px');
-  await userEvent.selectOptions(select, 'schema:inLanguage');
+  await chooseSelectValue(select, 'schema:inLanguage');
   await userEvent.tab();
   const add = within(fieldset).getByRole('button', { name: m.correction_add() });
   await expect(add).toHaveFocus();
@@ -532,7 +535,7 @@ export const InitialBibliographyIndependent: Story = {
     ];
     for (const region of regions) {
       const type = await within(region).findByRole('combobox');
-      await userEvent.selectOptions(type, 'schema:Book');
+      await chooseSelectValue(type, 'schema:Book');
     }
     const selectors = regions.map((region) =>
       within(initialBibliographyPanel(region)).getByRole('combobox', {
@@ -547,8 +550,8 @@ export const InitialBibliographyIndependent: Story = {
       await expect(label.control).toBe(selectors[index]);
       await expect(canvasElement.ownerDocument.getElementById(label.htmlFor)).toBe(selectors[index]);
     }
-    await userEvent.selectOptions(selectors[0]!, 'schema:wordCount');
-    await expect(selectors[1]).toHaveValue('');
+    await chooseSelectValue(selectors[0]!, 'schema:wordCount');
+    await expectSelectValue(selectors[1]!, '');
     await userEvent.click(
       within(initialBibliographyPanel(regions[0]!)).getByRole('button', { name: m.correction_add() }),
     );
@@ -564,26 +567,26 @@ export const InitialBibliographyDraftsAndLimit: Story = {
     const canvas = await enterWork(canvasElement);
     const type = canvas.getByRole('combobox', { name: m.catalogue_create_type() });
     const bookRow = canvasElement.querySelector('section[id^="literary-fact-"]')!;
-    await userEvent.selectOptions(type, 'schema:BookSeries');
+    await chooseSelectValue(type, 'schema:BookSeries');
     await expect(canvas.queryByRole('textbox', { name: m.correction_amount() })).toBeNull();
     await addInitialFact(canvasElement, 'wdt:P2635');
     await userEvent.type(canvas.getByRole('textbox', { name: m.correction_amount() }), '+6');
     const seriesRow = canvasElement.querySelector('section[id^="literary-fact-"]')!;
-    await userEvent.selectOptions(type, 'schema:Book');
+    await chooseSelectValue(type, 'schema:Book');
     await expect(canvasElement.querySelector('section[id^="literary-fact-"]')!.id).toBe(bookRow.id);
     await expect(canvas.getByRole('textbox', { name: m.correction_amount() })).toHaveValue('+12000');
     const fieldset = initialBibliographyPanel(canvasElement);
     const property = within(fieldset).getByRole('combobox', { name: m.refinement_property() });
-    await expect(property.querySelector('option[value="schema:wordCount"]')).toBeNull();
+    await expectSelectOptionAvailability(property, 'schema:wordCount', false);
     for (let index = 1; index < 12; index++) await addInitialFact(canvasElement, 'schema:inLanguage');
-    await userEvent.selectOptions(property, 'schema:inLanguage');
+    await chooseSelectValue(property, 'schema:inLanguage');
     await expect(fieldset.querySelectorAll('h3')).toHaveLength(12);
     await expect(within(fieldset).getByRole('button', { name: m.correction_add() })).toBeDisabled();
     await userEvent.click(within(fieldset).getAllByRole('button', { name: m.literary_remove_fact() })[0]!);
     await expect(fieldset.querySelectorAll('h3')).toHaveLength(11);
     await expect(within(fieldset).getByRole('button', { name: m.correction_add() })).toBeEnabled();
-    await expect(property.querySelector('option[value="schema:wordCount"]')).not.toBeNull();
-    await userEvent.selectOptions(type, 'schema:BookSeries');
+    await expectSelectOptionAvailability(property, 'schema:wordCount', true);
+    await chooseSelectValue(type, 'schema:BookSeries');
     await expect(canvasElement.querySelector('section[id^="literary-fact-"]')!.id).toBe(seriesRow.id);
     await expect(canvas.getByRole('textbox', { name: m.correction_amount() })).toHaveValue('+6');
   },

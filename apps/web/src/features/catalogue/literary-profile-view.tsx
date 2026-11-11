@@ -11,7 +11,7 @@ import { flushSync } from 'react-dom';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import { ViewHeading } from '../pages/view-heading';
 import { subjectHref } from '../../subject/subject-href';
@@ -66,7 +66,7 @@ const touchAction = `${coarseTarget} max-md:w-full pointer-coarse:w-full`;
 const disclosureSummary = `min-h-8 min-w-0 cursor-pointer break-words text-xl font-semibold max-md:min-h-11 pointer-coarse:min-h-11 ${keyboardFocus} [overflow-wrap:anywhere]`;
 
 const initialAction = `h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] ${keyboardFocus} max-md:w-full pointer-coarse:w-full`;
-const initialPropertySelect = `w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11 [&_select]:max-w-full [&_select]:whitespace-normal [&_select]:[overflow-wrap:anywhere] [&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring [&_select]:ps-3 [&_select]:pe-8 rtl:[&_[data-slot=native-select-icon]]:right-auto rtl:[&_[data-slot=native-select-icon]]:left-2.5`;
+const initialPropertySelect = `w-full min-w-0 max-w-full min-h-11 min-w-11 whitespace-normal [overflow-wrap:anywhere] [&:focus-visible]:outline-2 [&:focus-visible]:outline-offset-2 [&:focus-visible]:outline-ring`;
 
 /** Resolve native ordinals once; retained feedback must never follow a removed row's neighbour. */
 function initialFactControl(pointer: string, rows: InitialRow[], read: Ready, type: string, locale: string) {
@@ -421,24 +421,32 @@ export function InitialFacts({
             >
               {m.refinement_property({}, o)}
             </FieldLabel>
-            <NativeSelect
-              id={propertyId}
-              className={initialPropertySelect}
-              value={fields.includes(property) ? property : ''}
-              onChange={(event) => setProperty(event.target.value)}
+            <Select
+              value={
+                (fields.includes(property) ? property : '') === '' ? null : fields.includes(property) ? property : ''
+              }
+              onValueChange={(nextSelectValue) => setProperty(nextSelectValue ?? '')}
             >
-              <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-              {fields
-                .filter(
-                  (id) =>
-                    read.release.properties[id]!.multivalued || !rows.some((row) => row.statement.property.id === id),
-                )
-                .map((id) => (
-                  <NativeSelectOption key={id} value={id}>
-                    {pickText(read.release.properties[id]!.labels, locale).text}
-                  </NativeSelectOption>
-                ))}
-            </NativeSelect>
+              <SelectTrigger id={propertyId} className={initialPropertySelect}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+                  {fields
+                    .filter(
+                      (id) =>
+                        read.release.properties[id]!.multivalued ||
+                        !rows.some((row) => row.statement.property.id === id),
+                    )
+                    .map((id) => (
+                      <SelectItem key={id} value={id}>
+                        {pickText(read.release.properties[id]!.labels, locale).text}
+                      </SelectItem>
+                    ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </Field>
           <Button
             type="button"

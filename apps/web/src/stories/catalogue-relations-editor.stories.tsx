@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
@@ -82,7 +83,7 @@ async function draft(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   const view = within(await canvas.findByRole('region', { name: m.relation_title() }));
   await userEvent.click(view.getByRole('button', { name: m.relation_open() }));
-  await userEvent.selectOptions(await view.findByRole('combobox', { name: m.relation_property() }), relationProperty);
+  await chooseSelectValue(await view.findByRole('combobox', { name: m.relation_property() }), relationProperty);
   return view;
 }
 async function review(canvasElement: HTMLElement) {
@@ -108,7 +109,7 @@ async function adopt(canvasElement: HTMLElement) {
   await view.findByText(m.candidate_accepted());
   await userEvent.click(view.getByRole('button', { name: m.candidate_reload() }));
   await userEvent.click(await view.findByRole('button', { name: m.candidate_review() }));
-  await userEvent.selectOptions(view.getByRole('combobox', { name: m.relation_rank() }), 'preferred');
+  await chooseSelectValue(view.getByRole('combobox', { name: m.relation_rank() }), 'preferred');
   await userEvent.click(view.getByRole('button', { name: m.candidate_adopt() }));
   await userEvent.click(view.getByRole('button', { name: m.candidate_adopt() }));
   return view;
@@ -120,7 +121,7 @@ export const Journey: Story = {
     const target = view.getByRole('combobox', { name: m.relation_target() });
     await userEvent.type(target, 'Aoi');
     await userEvent.click(await within(document.body).findByRole('option', { name: /Aoi Yuki/ }));
-    await userEvent.selectOptions(view.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P453');
+    await chooseSelectValue(view.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P453');
     const role = fixtureRoleLabel();
     await userEvent.type(view.getByRole('combobox', { name: role }), 'traveler');
     await userEvent.click(await within(document.body).findByRole('option', { name: /The traveler/ }));
@@ -230,7 +231,7 @@ export const Unresolved: Story = {
     const canvas = within(canvasElement);
     const view = within(await canvas.findByRole('region', { name: m.relation_title() }));
     await userEvent.click(view.getByRole('button', { name: m.relation_open() }));
-    await userEvent.selectOptions(await view.findByRole('combobox', { name: m.relation_property() }), 'schema:author');
+    await chooseSelectValue(await view.findByRole('combobox', { name: m.relation_property() }), 'schema:author');
     await userEvent.click(view.getByRole('button', { name: m.relation_edit_existing() }));
     await view.findByText(m.relation_unresolved());
     await userEvent.click(view.getByRole('button', { name: m.relation_review_slot() }));
@@ -251,7 +252,7 @@ const relationFamilyParameters = {
   docs: {
     description: {
       story:
-        'Authored UNRUN: actual connected editors, full supplied evidence and independent native controls. Review at phone390/desktop1280, enlarged text, light/dark and locale globals. Browser geometry, native acceptance and private SSR remain deferred.',
+        'Authored UNRUN: actual connected editors, full supplied evidence and independent shared Select controls. Review at phone390/desktop1280, enlarged text, light/dark and locale globals. Browser geometry, native acceptance and private SSR remain deferred.',
     },
   },
 };
@@ -339,9 +340,9 @@ async function independentDrafts(canvasElement: HTMLElement) {
     const view = within(region);
     await userEvent.click(view.getByRole('button', { name: m.relation_open() }));
     const property = await view.findByRole('combobox', { name: m.relation_property() });
-    expect(property.tagName).toBe('SELECT');
+    expect(property).toHaveAttribute('data-slot', 'select-trigger');
     if (index !== 2) {
-      await userEvent.selectOptions(property, relationProperty);
+      await chooseSelectValue(property, relationProperty);
       await userEvent.click(view.getAllByRole('button', { name: m.relation_edit_existing() })[0]!);
     }
     assertOwnNativeAssociations(region);
@@ -464,10 +465,7 @@ export const IndependentOwnConsent: Story = {
     for (const region of regions) {
       const view = within(region);
       await userEvent.click(view.getByRole('button', { name: m.relation_open() }));
-      await userEvent.selectOptions(
-        await view.findByRole('combobox', { name: m.relation_property() }),
-        'rezics:penNameOf',
-      );
+      await chooseSelectValue(await view.findByRole('combobox', { name: m.relation_property() }), 'rezics:penNameOf');
       assertOwnNativeAssociations(region);
       expect(view.getByText(m.statement_consent_unsourced())).toBeVisible();
     }
@@ -522,8 +520,8 @@ export const IndependentAdoptionControls: Story = {
         expect(other.contains(document.activeElement)).toBe(false);
       expect(view.queryByRole('link', { name: m.candidate_view_public() })).toBeNull();
     }
-    await userEvent.selectOptions(within(regions[0]!).getByRole('combobox', { name: m.relation_rank() }), 'preferred');
+    await chooseSelectValue(within(regions[0]!).getByRole('combobox', { name: m.relation_rank() }), 'preferred');
     for (const region of regions.slice(1))
-      expect(within(region).getByRole('combobox', { name: m.relation_rank() })).toHaveValue('normal');
+      await expectSelectValue(within(region).getByRole('combobox', { name: m.relation_rank() }), 'normal');
   },
 };

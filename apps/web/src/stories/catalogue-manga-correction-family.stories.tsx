@@ -4,6 +4,7 @@ import {
   mangaGlobalVisitHref,
   mangaObservedOrigin,
 } from '../features/catalogue/manga-public-visit';
+import { expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { pickText } from '@rezics/composition';
@@ -109,7 +110,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Actual correction route and whole-component independent mounts. Full supplied groups, native FactField controls and deliberate submission; phone390/desktop1440, locale/theme and RTL review. Every new assertion is UNRUN; geometry, native authorization and lifecycle acceptance remain deferred.',
+          'Actual correction route and whole-component independent mounts. Full supplied groups, shared Select controls and deliberate submission; phone390/desktop1440, locale/theme and RTL review. Every new assertion is UNRUN; geometry, native authorization and lifecycle acceptance remain deferred.',
       },
     },
   },
@@ -180,7 +181,7 @@ async function editPages(canvasElement: HTMLElement) {
   await userEvent.keyboard('{Enter}');
   const amount = pages.getByRole('textbox', { name: m.correction_amount({}, options()) });
   await expect(amount).toHaveValue('+192');
-  await expect(pages.getByRole('combobox', { name: m.correction_unit({}, options()) })).toHaveValue('1');
+  await expectSelectValue(pages.getByRole('combobox', { name: m.correction_unit({}, options()) }), '1');
   await expect(pages.getByRole('textbox', { name: m.correction_value({}, options()) })).toHaveValue(
     mangaVolumeCitation,
   );

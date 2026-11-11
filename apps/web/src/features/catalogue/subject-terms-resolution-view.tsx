@@ -2,7 +2,7 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../../paraglide/messages.js';
 import type { TermEdit, TermField, TermsPatch } from './subject-terms';
@@ -19,7 +19,7 @@ const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
 const inputClassName = 'min-h-11 md:pointer-fine:min-h-8';
 const frameClassName = 'm-1 flex min-w-0 flex-col gap-4 p-3 sm:p-4';
-const selectClassName = 'min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11 md:pointer-fine:[&_select]:min-h-8';
+const selectClassName = 'min-w-0 max-w-full min-h-11 min-w-11 md:pointer-fine:min-h-8';
 
 function readout(presence: TermPresence, language: string, absent: string) {
   return (
@@ -114,25 +114,29 @@ export function TermsConflictResolution({
                   <FieldLabel htmlFor={controlId(`resolve-${key}-choice`)}>
                     {m.catalogue_terms_resolve_choice({}, options)}
                   </FieldLabel>
-                  <NativeSelect
-                    className={selectClassName}
-                    id={controlId(`resolve-${key}-choice`)}
-                    value={kind}
-                    aria-invalid={invalid}
-                    aria-describedby={errorId}
-                    onChange={(event) =>
-                      onChoose(change.language, change.field, event.target.value as ResolutionKind | '')
+                  <Select
+                    value={kind === '' ? null : kind}
+                    onValueChange={(nextSelectValue) =>
+                      onChoose(change.language, change.field, (nextSelectValue ?? '') as ResolutionKind | '')
                     }
                   >
-                    <NativeSelectOption value="">{m.catalogue_terms_resolve_choose({}, options)}</NativeSelectOption>
-                    <NativeSelectOption value="current">
-                      {m.catalogue_terms_keep_current({}, options)}
-                    </NativeSelectOption>
-                    <NativeSelectOption value="draft">{m.catalogue_terms_use_draft({}, options)}</NativeSelectOption>
-                    <NativeSelectOption value="replacement">
-                      {m.catalogue_terms_edit_replacement({}, options)}
-                    </NativeSelectOption>
-                  </NativeSelect>
+                    <SelectTrigger
+                      className={selectClassName}
+                      id={controlId(`resolve-${key}-choice`)}
+                      aria-invalid={invalid}
+                      aria-describedby={errorId}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value={null}>{m.catalogue_terms_resolve_choose({}, options)}</SelectItem>
+                        <SelectItem value="current">{m.catalogue_terms_keep_current({}, options)}</SelectItem>
+                        <SelectItem value="draft">{m.catalogue_terms_use_draft({}, options)}</SelectItem>
+                        <SelectItem value="replacement">{m.catalogue_terms_edit_replacement({}, options)}</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
                 </Field>
                 {kind === 'replacement' && (
                   <Field data-invalid={invalid || undefined} data-disabled={disabled || undefined}>

@@ -1,3 +1,4 @@
+import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
@@ -137,7 +138,7 @@ async function draft(canvasElement: HTMLElement) {
   await userEvent.type(languages[1]!, 'ja');
   await userEvent.type(canvas.getAllByRole('textbox', { name: m.catalogue_create_label() })[1]!, '旅人');
   await userEvent.type(canvas.getAllByRole('textbox', { name: m.catalogue_create_aliases() })[1]!, '旅の人\n旅行者');
-  await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_initial_fact() }), 'schema:url');
+  await chooseSelectValue(canvas.getByRole('combobox', { name: m.character_initial_fact() }), 'schema:url');
   await userEvent.click(canvas.getByRole('button', { name: m.character_add_fact() }));
   await userEvent.type(
     canvas.getByRole('textbox', { name: m.correction_url() }),

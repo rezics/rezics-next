@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import type { FilterDocument } from '@rezics/filter';
@@ -135,7 +136,7 @@ export const NativePointerRetention: Story = {
     const input = await page.findByRole('combobox', { name: m.refinement_unit() });
     await expect(input).toHaveAttribute('aria-invalid', 'true');
     await expect(input).toHaveValue('1');
-    await expect(page.getByRole('combobox', { name: m.condition_language() })).toHaveValue('ja');
+    await expectSelectValue(page.getByRole('combobox', { name: m.condition_language() }), 'ja');
   },
 };
 export const LanguageAndRestart: Story = {
@@ -143,7 +144,7 @@ export const LanguageAndRestart: Story = {
   play: async ({ canvasElement }) => {
     const page = within(canvasElement.ownerDocument.body);
     const language = await page.findByRole('combobox', { name: m.condition_language() });
-    await userEvent.selectOptions(language, 'fr');
+    await chooseSelectValue(language, 'fr');
     const restart = page.getByRole('link', { name: m.discovery_restart_action() });
     const url = new URL(restart.getAttribute('href')!, 'https://example.test');
     await expect(url.searchParams.get('cursor')).toBeNull();

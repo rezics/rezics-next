@@ -1,3 +1,4 @@
+import { chooseCurrentSelectOption, chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -205,7 +206,7 @@ export const Unavailable: Story = {
     docs: {
       description: {
         story:
-          'UNRUN: the existing default composition at 390px checks native control targets, wrapped labels, retained uncertain submission, exact-proposal retry, independent comparison and public readback after selection. Browser, native and visual verification remain deferred.',
+          'UNRUN: the existing default composition at 390px checks shared Select targets, wrapped labels, retained uncertain submission, exact-proposal retry, independent comparison and public readback after selection. Browser, native and visual verification remain deferred.',
       },
     },
   },
@@ -263,7 +264,7 @@ export const Unavailable: Story = {
           text.selectNodeContents(originalLabel);
           await expect(text.getClientRects().length).toBeGreaterThan(1);
         }
-        await userEvent.selectOptions(property, within(property).getByRole('option', { selected: true }));
+        await chooseCurrentSelectOption(property);
         await waitFor(() => expect(reload).toBeEnabled());
         await userEvent.click(reload);
         await waitFor(() => expect(reload).toBeEnabled());

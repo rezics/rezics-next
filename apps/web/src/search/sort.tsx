@@ -3,7 +3,7 @@ import { discoverySearchHref, searchFormFields } from './search-params';
 import { useId } from 'react';
 import { m } from '../paraglide/messages.js';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { RatingPopulationControl } from './rating-population-control';
 import type { RealmRatingPopulationOption, RealmRatingReadiness } from './rating-population';
 import { changeRatingOrder } from './rating-order-state';
@@ -79,16 +79,21 @@ export function SearchSort({
         <FieldLabel htmlFor={sortId} className="text-sm text-muted-foreground">
           {m.search_sort_label({}, messageLocale)}
         </FieldLabel>
-        <NativeSelect
-          id={sortId}
+        <Select
           name={disabled ? undefined : 'sort'}
           disabled={disabled}
-          defaultValue={sort === 'rating' ? 'rating' : ''}
-          className="w-full min-w-0 [&_select]:block [&_select]:min-h-11"
+          defaultValue={(sort === 'rating' ? 'rating' : '') === '' ? null : sort === 'rating' ? 'rating' : ''}
         >
-          <NativeSelectOption value="">{m.search_sort_relevance({}, messageLocale)}</NativeSelectOption>
-          <NativeSelectOption value="rating">{m.search_sort_rating({}, messageLocale)}</NativeSelectOption>
-        </NativeSelect>
+          <SelectTrigger id={sortId} className="w-full min-w-0 block min-h-11">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value={null}>{m.search_sort_relevance({}, messageLocale)}</SelectItem>
+              <SelectItem value="rating">{m.search_sort_rating({}, messageLocale)}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </Field>
       <RatingPopulationControl
         locale={locale}

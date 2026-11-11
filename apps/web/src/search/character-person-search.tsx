@@ -34,6 +34,7 @@ import {
 } from './character-person';
 import { resolveConditionEntityLabels } from './condition-entity';
 import { readCharacterPersonKinds, prepareCharacterPersonShare } from './character-person-window-server';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 
 function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
@@ -123,22 +124,28 @@ function CharacterPersonForm({
     >
       <label className="grid gap-1 text-sm font-medium">
         <span>{m.character_person_mode({}, options)}</span>
-        <select
-          className="h-10 rounded-md border bg-background px-3"
+        <Select
           name="mode"
-          value={mode}
-          onChange={(event) => {
-            const next = formMode(event.currentTarget.value);
+          value={mode === '' ? null : mode}
+          onValueChange={(nextSelectValue) => {
+            const next = formMode(nextSelectValue ?? '');
             setMode(next);
             const edited = editCharacterPersonSelection(selection, { kind: 'mode' });
             // Work operands do not apply to works mode, so none remains in a hidden draft.
             changeSelection(next === 'works' ? { ...edited, works: [] } : edited);
           }}
         >
-          <option value="characters">{m.character_person_characters({}, options)}</option>
-          <option value="people">{m.character_person_people({}, options)}</option>
-          <option value="works">{m.character_person_credited_works({}, options)}</option>
-        </select>
+          <SelectTrigger className="h-10 rounded-md border bg-background px-3">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="characters">{m.character_person_characters({}, options)}</SelectItem>
+              <SelectItem value="people">{m.character_person_people({}, options)}</SelectItem>
+              <SelectItem value="works">{m.character_person_credited_works({}, options)}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </label>
       <label className="grid gap-1 text-sm font-medium">
         <span>{m.character_person_name({}, options)}</span>
@@ -171,23 +178,36 @@ function CharacterPersonForm({
       </label>
       <label className="grid gap-1 text-sm font-medium">
         <span>{m.character_person_threshold({}, options)}</span>
-        <select
-          className="h-10 rounded-md border bg-background px-3"
+        <Select
           name="threshold"
-          value={threshold}
-          onChange={(event) => setThreshold(event.currentTarget.value)}
+          value={threshold === '' ? null : threshold}
+          onValueChange={(nextSelectValue) => setThreshold(nextSelectValue ?? '')}
         >
-          <option value="0">{m.character_person_threshold_0({}, options)}</option>
-          <option value="1">{m.character_person_threshold_1({}, options)}</option>
-          <option value="2">{m.character_person_threshold_2({}, options)}</option>
-        </select>
+          <SelectTrigger className="h-10 rounded-md border bg-background px-3">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="0">{m.character_person_threshold_0({}, options)}</SelectItem>
+              <SelectItem value="1">{m.character_person_threshold_1({}, options)}</SelectItem>
+              <SelectItem value="2">{m.character_person_threshold_2({}, options)}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </label>
       <label className="grid gap-1 text-sm font-medium">
         <span>{m.character_person_sort({}, options)}</span>
-        <select className="h-10 rounded-md border bg-background px-3" name="sort" defaultValue={form.sort}>
-          <option value="name">{m.character_person_sort_name({}, options)}</option>
-          <option value="relevance">{m.character_person_sort_relevance({}, options)}</option>
-        </select>
+        <Select name="sort" defaultValue={form.sort === '' ? null : form.sort}>
+          <SelectTrigger className="h-10 rounded-md border bg-background px-3">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="name">{m.character_person_sort_name({}, options)}</SelectItem>
+              <SelectItem value="relevance">{m.character_person_sort_relevance({}, options)}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </label>
       <div className="sm:col-span-2">
         <button className={buttonVariants()} type="submit" disabled={!canApply || !reader.ready}>

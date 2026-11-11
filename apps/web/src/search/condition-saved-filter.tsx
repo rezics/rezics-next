@@ -5,7 +5,7 @@ import { presetText, type ConditionPresetCatalogue } from './condition-preset-mo
 import type { FilterDocument } from '@rezics/filter';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { editConditionTree, type ConditionTreeEdit, type ConditionTreePath } from './condition-tree-edit';
@@ -94,26 +94,31 @@ function SavedFilterPicker({ catalogue, value, locale, canSelect, onSelect }: Pi
           <FieldLabel htmlFor={selectId}>
             {adding ? m.condition_saved_filter_add_label({}, options) : m.condition_saved_filter_reference({}, options)}
           </FieldLabel>
-          <NativeSelect
-            id={selectId}
-            value={selected}
+          <Select
+            value={selected === '' ? null : selected}
             disabled={!catalogue.choices.length}
-            className="max-w-full"
-            onChange={(event) => setSelected(event.currentTarget.value)}
+            onValueChange={(nextSelectValue) => setSelected(nextSelectValue ?? '')}
           >
-            <NativeSelectOption value="">{m.condition_saved_filter_choose({}, options)}</NativeSelectOption>
-            {unavailable && (
-              <NativeSelectOption value={selected} disabled>
-                {m.condition_saved_filter_unavailable_reference({ id: selected }, options)}
-              </NativeSelectOption>
-            )}
-            {choices.map(({ id, text, lang }) => (
-              <NativeSelectOption key={id} value={id} lang={lang}>
-                {presetText(text)}
-                {text !== id ? ` (${id})` : ''}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger id={selectId} className="max-w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value={null}>{m.condition_saved_filter_choose({}, options)}</SelectItem>
+                {unavailable && (
+                  <SelectItem value={selected} disabled>
+                    {m.condition_saved_filter_unavailable_reference({ id: selected }, options)}
+                  </SelectItem>
+                )}
+                {choices.map(({ id, text, lang }) => (
+                  <SelectItem key={id} value={id} lang={lang}>
+                    {presetText(text)}
+                    {text !== id ? ` (${id})` : ''}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
         <Button
           type="button"

@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
@@ -177,7 +178,8 @@ async function readable(canvasElement: HTMLElement, width: number) {
     m.correction_review(),
   ];
   for (const control of section.querySelectorAll<HTMLElement>('button, select')) {
-    if (control.tagName !== 'SELECT' && !actions.includes(control.textContent ?? '')) continue;
+    if (!control.matches('select,[data-slot="select-trigger"]') && !actions.includes(control.textContent ?? ''))
+      continue;
     const rect = control.getBoundingClientRect();
     const coarse = document.defaultView!.matchMedia('(pointer: coarse)').matches;
     await expect(rect.height).toBeGreaterThanOrEqual(width < 768 || coarse ? 44 : 32);
@@ -224,7 +226,7 @@ export const MultipleSelectedValues: Story = {
     await expect(canvas.getByRole('button', { name: m.facts_edit_field() })).toBeDisabled();
     await userEvent.click(canvas.getByText(m.facts_choose_value(), { selector: 'label' }));
     await expect(select).toHaveFocus();
-    await userEvent.selectOptions(select, '00000000-0000-4000-8000-000000000800');
+    await chooseSelectValue(select, '00000000-0000-4000-8000-000000000800');
     await userEvent.tab();
     await expect(canvas.getByRole('button', { name: m.facts_edit_field() })).toHaveFocus();
   },
@@ -265,10 +267,10 @@ export const IndependentInstances: Story = {
     const canvas = within(canvasElement);
     const choices = canvas.getAllByRole('combobox', { name: m.facts_choose_value() });
     await expect(choices[0]!.id).not.toBe(choices[1]!.id);
-    await userEvent.selectOptions(choices[1]!, '00000000-0000-4000-8000-000000000801');
+    await chooseSelectValue(choices[1]!, '00000000-0000-4000-8000-000000000801');
     await userEvent.click(canvas.getAllByRole('button', { name: m.facts_edit_field() })[1]!);
     await expect(canvas.getByRole('textbox', { name: m.correction_value() })).toHaveValue(otherConcept);
-    await expect(canvas.getByRole('combobox', { name: m.facts_choose_value() })).toHaveValue('');
+    await expectSelectValue(canvas.getByRole('combobox', { name: m.facts_choose_value() }), '');
   },
 };
 export const ValidTargetFiltering: Story = {

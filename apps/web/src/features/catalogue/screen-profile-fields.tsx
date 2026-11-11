@@ -4,7 +4,15 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@rezics/ui/shadcn/select';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import {
@@ -24,7 +32,7 @@ import { screenFactId, screenGroups, screenName, screenTarget, type ScreenGroup 
 const screenActionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
 const screenSelectClassName =
-  'w-full min-w-0 max-w-full max-md:[&>select]:min-h-11 md:pointer-fine:[&>select]:min-h-8 pointer-coarse:[&>select]:min-h-11';
+  'w-full min-w-0 max-w-full max-md:min-h-11 md:pointer-fine:min-h-8 pointer-coarse:min-h-11';
 const screenLabelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
 
 export type ScreenRow = { key: string; statement: StatementInput };
@@ -470,38 +478,45 @@ export function ScreenInitialFields({
         <FieldLabel className={screenLabelClassName} htmlFor={propertySelectId}>
           {m.character_add_fact({}, o)}
         </FieldLabel>
-        <NativeSelect
-          className={screenSelectClassName}
-          id={propertySelectId}
-          value={fields.includes(property) ? property : ''}
-          onChange={(event) => {
+        <Select
+          value={(fields.includes(property) ? property : '') === '' ? null : fields.includes(property) ? property : ''}
+          onValueChange={(nextSelectValue) => {
             const state = current.current;
-            const selected = event.target.value;
+            const selected = nextSelectValue ?? '';
             if (mounted.current && !state.disabled && (!selected || state.fields.includes(selected))) {
               pendingFocus.current = undefined;
               setProperty(selected);
             }
           }}
         >
-          <NativeSelectOption value="">{m.character_add_fact({}, o)}</NativeSelectOption>
-          {Object.entries(groups)
-            .filter(([group]) => group !== 'authored')
-            .map(([group, ids]) => (
-              <optgroup key={group} label={screenGroupLabel(group as ScreenGroup, locale)}>
-                {ids
-                  .filter(
-                    (id) =>
-                      fields.includes(id) &&
-                      (release.properties[id]!.multivalued || !rows.some((row) => row.statement.property.id === id)),
-                  )
-                  .map((id) => (
-                    <NativeSelectOption key={id} value={id} lang={name(id).lang ?? undefined}>
-                      {name(id).text}
-                    </NativeSelectOption>
-                  ))}
-              </optgroup>
-            ))}
-        </NativeSelect>
+          <SelectTrigger className={screenSelectClassName} id={propertySelectId}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value={null}>{m.character_add_fact({}, o)}</SelectItem>
+              {Object.entries(groups)
+                .filter(([group]) => group !== 'authored')
+                .map(([group, ids]) => (
+                  <SelectGroup key={group}>
+                    <SelectLabel>{screenGroupLabel(group as ScreenGroup, locale)}</SelectLabel>
+                    {ids
+                      .filter(
+                        (id) =>
+                          fields.includes(id) &&
+                          (release.properties[id]!.multivalued ||
+                            !rows.some((row) => row.statement.property.id === id)),
+                      )
+                      .map((id) => (
+                        <SelectItem key={id} value={id} lang={name(id).lang ?? undefined}>
+                          {name(id).text}
+                        </SelectItem>
+                      ))}
+                  </SelectGroup>
+                ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </Field>
       <Button
         className={screenActionClassName}

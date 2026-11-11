@@ -1,7 +1,7 @@
 import { FilterError, parseFilter, type FilterDocument, type FilterQualifier } from '@rezics/filter';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '../../../session/query';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
@@ -43,7 +43,7 @@ type Props = {
 const loading: DiscoveryState = { status: 'loading' };
 const worksActionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const worksSelectClass = 'w-full min-w-0 max-w-full [&_select]:h-auto [&_select]:min-h-11 [&_select]:max-w-full';
+const worksSelectClass = 'w-full min-w-0 max-w-full h-auto min-h-11 max-w-full';
 
 function requestCondition(value: string | undefined): FilterDocument | undefined {
   if (!value) return;
@@ -195,108 +195,142 @@ function ConceptWorksVisit({
       <div className="grid min-w-0 gap-3 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor="concept-work-property">{m.concept_tagged_works_property({}, options)}</FieldLabel>
-          <NativeSelect
-            id="concept-work-property"
-            className={worksSelectClass}
+          <Select
             value={
-              route.property ??
-              (read.requestedRole && read.works?.properties.some((entry) => entry.id === read.requestedRole)
-                ? read.requestedRole
-                : '')
+              (route.property ??
+                (read.requestedRole && read.works?.properties.some((entry) => entry.id === read.requestedRole)
+                  ? read.requestedRole
+                  : '')) === ''
+                ? null
+                : (route.property ??
+                  (read.requestedRole && read.works?.properties.some((entry) => entry.id === read.requestedRole)
+                    ? read.requestedRole
+                    : ''))
             }
-            onChange={(event) =>
+            onValueChange={(nextSelectValue) =>
               onChange?.({
-                property: event.currentTarget.value || undefined,
+                property: (nextSelectValue ?? '') || undefined,
                 type: undefined,
                 cursor: undefined,
                 tagQualifiersText: undefined,
               })
             }
           >
-            <NativeSelectOption value="">{m.concept_tagged_works_choose({}, options)}</NativeSelectOption>
-            {read.works?.state === 'available' &&
-              read.works.properties.map((property) => (
-                <NativeSelectOption key={property.id} value={property.id}>
-                  {localizedLabel(property.labels, locale).text.trim() || property.id}
-                </NativeSelectOption>
-              ))}
-          </NativeSelect>
+            <SelectTrigger id="concept-work-property" className={worksSelectClass}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value={null}>{m.concept_tagged_works_choose({}, options)}</SelectItem>
+                {read.works?.state === 'available' &&
+                  read.works.properties.map((property) => (
+                    <SelectItem key={property.id} value={property.id}>
+                      {localizedLabel(property.labels, locale).text.trim() || property.id}
+                    </SelectItem>
+                  ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
         <Field>
           <FieldLabel htmlFor="concept-work-scheme">{m.concept_tagged_works_scheme({}, options)}</FieldLabel>
-          <NativeSelect
-            id="concept-work-scheme"
-            className={worksSelectClass}
-            value={route.scheme ?? ''}
-            onChange={(event) => onChange?.({ scheme: event.currentTarget.value || undefined, cursor: undefined })}
+          <Select
+            value={(route.scheme ?? '') === '' ? null : (route.scheme ?? '')}
+            onValueChange={(nextSelectValue) =>
+              onChange?.({ scheme: (nextSelectValue ?? '') || undefined, cursor: undefined })
+            }
           >
-            <NativeSelectOption value="">{m.concept_tagged_works_choose({}, options)}</NativeSelectOption>
-            {read.schemes
-              .filter((scheme) => scheme.readable && scheme.conceptPage)
-              .map((scheme) => (
-                <NativeSelectOption key={scheme.id} value={scheme.id}>
-                  {scheme.label || scheme.id}
-                </NativeSelectOption>
-              ))}
-          </NativeSelect>
+            <SelectTrigger id="concept-work-scheme" className={worksSelectClass}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value={null}>{m.concept_tagged_works_choose({}, options)}</SelectItem>
+                {read.schemes
+                  .filter((scheme) => scheme.readable && scheme.conceptPage)
+                  .map((scheme) => (
+                    <SelectItem key={scheme.id} value={scheme.id}>
+                      {scheme.label || scheme.id}
+                    </SelectItem>
+                  ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
         <Field>
           <FieldLabel htmlFor="concept-work-type">{m.concept_tagged_works_type({}, options)}</FieldLabel>
-          <NativeSelect
-            id="concept-work-type"
-            className={worksSelectClass}
-            value={route.type ?? ''}
+          <Select
+            value={(route.type ?? '') === '' ? null : (route.type ?? '')}
             disabled={!route.property && !read.requestedRole}
-            onChange={(event) => onChange?.({ type: event.currentTarget.value || undefined, cursor: undefined })}
+            onValueChange={(nextSelectValue) =>
+              onChange?.({ type: (nextSelectValue ?? '') || undefined, cursor: undefined })
+            }
           >
-            <NativeSelectOption value="">{m.search_all_subject_types({}, options)}</NativeSelectOption>
-            {read.works?.state === 'available' &&
-              conceptWorksKindOptions(
-                read.works.types.filter((type) => {
-                  const propertyId = route.property ?? read.requestedRole;
-                  return (
-                    !propertyId ||
-                    read.works?.properties.find((entry) => entry.id === propertyId)?.types.includes(type.id)
-                  );
-                }),
-                receiveConceptWorksPage(source).kinds,
-                locale,
-              ).map((type) => (
-                <NativeSelectOption key={type.id} value={type.id}>
-                  {type.label}
-                </NativeSelectOption>
-              ))}
-          </NativeSelect>
+            <SelectTrigger id="concept-work-type" className={worksSelectClass}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value={null}>{m.search_all_subject_types({}, options)}</SelectItem>
+                {read.works?.state === 'available' &&
+                  conceptWorksKindOptions(
+                    read.works.types.filter((type) => {
+                      const propertyId = route.property ?? read.requestedRole;
+                      return (
+                        !propertyId ||
+                        read.works?.properties.find((entry) => entry.id === propertyId)?.types.includes(type.id)
+                      );
+                    }),
+                    receiveConceptWorksPage(source).kinds,
+                    locale,
+                  ).map((type) => (
+                    <SelectItem key={type.id} value={type.id}>
+                      {type.label}
+                    </SelectItem>
+                  ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
         <Field>
           <FieldLabel htmlFor="concept-work-sort">{m.search_sort_label({}, options)}</FieldLabel>
-          <NativeSelect
-            id="concept-work-sort"
-            className={worksSelectClass}
-            value={route.sort ?? 'name'}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
+          <Select
+            value={(route.sort ?? 'name') === '' ? null : (route.sort ?? 'name')}
+            onValueChange={(nextSelectValue) => {
+              const value = nextSelectValue ?? '';
               if (value === 'name' || value === 'rating') onChange?.({ sort: value, cursor: undefined });
             }}
           >
-            <NativeSelectOption value="name">{m.release_search_sort_name({}, options)}</NativeSelectOption>
-            <NativeSelectOption value="rating">{m.release_search_sort_rating({}, options)}</NativeSelectOption>
-          </NativeSelect>
+            <SelectTrigger id="concept-work-sort" className={worksSelectClass}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="name">{m.release_search_sort_name({}, options)}</SelectItem>
+                <SelectItem value="rating">{m.release_search_sort_rating({}, options)}</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
         <Field>
           <FieldLabel htmlFor="concept-work-spoiler">{m.concept_tagged_works_spoiler({}, options)}</FieldLabel>
-          <NativeSelect
-            id="concept-work-spoiler"
-            className={worksSelectClass}
-            value={String(route.spoilerThreshold ?? 0)}
-            onChange={(event) =>
-              onChange?.({ spoilerThreshold: Number(event.currentTarget.value) as 0 | 1 | 2, cursor: undefined })
+          <Select
+            value={String(route.spoilerThreshold ?? 0) === '' ? null : String(route.spoilerThreshold ?? 0)}
+            onValueChange={(nextSelectValue) =>
+              onChange?.({ spoilerThreshold: Number(nextSelectValue ?? '') as 0 | 1 | 2, cursor: undefined })
             }
           >
-            <NativeSelectOption value="0">{m.character_person_threshold_0({}, options)}</NativeSelectOption>
-            <NativeSelectOption value="1">{m.character_person_threshold_1({}, options)}</NativeSelectOption>
-            <NativeSelectOption value="2">{m.character_person_threshold_2({}, options)}</NativeSelectOption>
-          </NativeSelect>
+            <SelectTrigger id="concept-work-spoiler" className={worksSelectClass}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="0">{m.character_person_threshold_0({}, options)}</SelectItem>
+                <SelectItem value="1">{m.character_person_threshold_1({}, options)}</SelectItem>
+                <SelectItem value="2">{m.character_person_threshold_2({}, options)}</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
       </div>
       <label className="flex min-h-11 items-center gap-2 text-sm" htmlFor="concept-work-descendants">

@@ -6,7 +6,7 @@ import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { ListRowLink } from '@rezics/ui/list-row';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { CandidateValue } from '../../pages/data';
@@ -648,20 +648,23 @@ function ReleaseFidelityLive({
             {(priorPage || (streamFailure && admitted)) && (
               <Field className="min-w-0">
                 <FieldLabel htmlFor={`${headingId}-recovery-stream`}>{m.release_fidelity_related({}, o)}</FieldLabel>
-                <NativeSelect
-                  id={`${headingId}-recovery-stream`}
+                <Select
                   value={
-                    reader.kind === 'loading-page'
+                    (reader.kind === 'loading-page'
                       ? (reader.intent.stream ?? '')
-                      : (read?.stream?.key ?? priorPage?.read.stream?.key ?? '')
+                      : (read?.stream?.key ?? priorPage?.read.stream?.key ?? '')) === ''
+                      ? null
+                      : reader.kind === 'loading-page'
+                        ? (reader.intent.stream ?? '')
+                        : (read?.stream?.key ?? priorPage?.read.stream?.key ?? '')
                   }
                   disabled={!!draft}
-                  onChange={(event) => {
+                  onValueChange={(nextSelectValue) => {
                     const source = priorPage ?? admitted;
                     void startRead(
                       {
                         kind: 'page',
-                        stream: event.currentTarget.value,
+                        stream: nextSelectValue ?? '',
                         ...(source?.address.session ? { session: source.address.session } : {}),
                       },
                       undefined,
@@ -669,12 +672,19 @@ function ReleaseFidelityLive({
                     );
                   }}
                 >
-                  {(priorPage?.read.streams ?? read?.streams ?? []).map((item) => (
-                    <NativeSelectOption key={item.key} value={item.key}>
-                      {item.label.text || item.property}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SelectTrigger id={`${headingId}-recovery-stream`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {(priorPage?.read.streams ?? read?.streams ?? []).map((item) => (
+                        <SelectItem key={item.key} value={item.key}>
+                          {item.label.text || item.property}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </Field>
             )}
             <a href={destination(href, 'subject', 'related')} className={linkClass}>
@@ -903,19 +913,22 @@ function ReleaseFidelityLive({
                 {read.streams.length > 0 && (
                   <Field className="min-w-0">
                     <FieldLabel htmlFor={`${headingId}-stream`}>{m.release_fidelity_related({}, o)}</FieldLabel>
-                    <NativeSelect
-                      id={`${headingId}-stream`}
+                    <Select
                       value={
-                        reader.kind === 'loading-page'
+                        (reader.kind === 'loading-page'
                           ? (reader.intent.stream ?? read.stream?.key ?? '')
-                          : (read.stream?.key ?? '')
+                          : (read.stream?.key ?? '')) === ''
+                          ? null
+                          : reader.kind === 'loading-page'
+                            ? (reader.intent.stream ?? read.stream?.key ?? '')
+                            : (read.stream?.key ?? '')
                       }
                       disabled={!!draft}
-                      onChange={(event) => {
+                      onValueChange={(nextSelectValue) => {
                         void startRead(
                           {
                             kind: 'page',
-                            stream: event.currentTarget.value,
+                            stream: nextSelectValue ?? '',
                             ...(admitted?.address.session ? { session: admitted.address.session } : {}),
                           },
                           undefined,
@@ -923,12 +936,19 @@ function ReleaseFidelityLive({
                         );
                       }}
                     >
-                      {read.streams.map((item) => (
-                        <NativeSelectOption key={item.key} value={item.key}>
-                          {item.label.text || item.property}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                      <SelectTrigger id={`${headingId}-stream`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {read.streams.map((item) => (
+                            <SelectItem key={item.key} value={item.key}>
+                              {item.label.text || item.property}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
                   </Field>
                 )}
                 <p ref={sliceStatus} tabIndex={-1} className="sr-only">

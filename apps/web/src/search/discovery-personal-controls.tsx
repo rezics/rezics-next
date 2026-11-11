@@ -13,6 +13,7 @@ import {
   type DiscoveryEntryCapability,
 } from './discovery-personal-actions';
 import type { DiscoveryPersonalPage, DiscoveryPersonalTarget } from './discovery-personal-state';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 
 const subscribeBrowser = () => () => {};
 const browserSnapshot = () => true;
@@ -117,26 +118,34 @@ export function DiscoveryPersonalControls({
             {m.discovery_personal_state({ title }, options)}
           </label>
           <div className="flex flex-wrap gap-2">
-            <select
-              id={id}
-              className={controlClass}
+            <Select
               disabled={!hydrated}
-              aria-disabled={!active}
-              onKeyDown={(event) => {
-                if (!active && event.key !== 'Tab' && event.key !== 'Escape') event.preventDefault();
-              }}
-              value={suppressed ? '' : draft}
-              onChange={(event) => {
-                if (active) setDraft(event.target.value);
+              value={(suppressed ? '' : draft) === '' ? null : suppressed ? '' : draft}
+              onValueChange={(nextSelectValue) => {
+                if (active) setDraft(nextSelectValue ?? '');
               }}
             >
-              {suppressed ? <option value="" /> : null}
-              {choices.map((choice) => (
-                <option key={choice.id} value={choice.id} lang={choice.label.lang}>
-                  {choice.label.text}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                id={id}
+                className={controlClass}
+                aria-disabled={!active}
+                onKeyDown={(event) => {
+                  if (!active && event.key !== 'Tab' && event.key !== 'Escape') event.preventDefault();
+                }}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {suppressed ? <SelectItem value={null} /> : null}
+                  {choices.map((choice) => (
+                    <SelectItem key={choice.id} value={choice.id} lang={choice.label.lang}>
+                      {choice.label.text}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             <button type="submit" className={controlClass} disabled={!hydrated} aria-disabled={!active}>
               {m.library_subject_save({}, options)}
             </button>

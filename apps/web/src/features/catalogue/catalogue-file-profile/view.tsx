@@ -6,7 +6,7 @@ import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { ListRowLink } from '@rezics/ui/list-row';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { CandidateValue } from '../../pages/data';
@@ -418,22 +418,28 @@ function CatalogueFileProfileLive({
                   {read.streams.length > 0 && (
                     <Field className="min-w-0">
                       <FieldLabel htmlFor={`${headingId}-stream`}>{m.catalogue_file_related({}, o)}</FieldLabel>
-                      <NativeSelect
-                        id={`${headingId}-stream`}
-                        value={read.stream?.key ?? ''}
-                        onChange={(event) => {
-                          streamKey.current = event.currentTarget.value;
+                      <Select
+                        value={(read.stream?.key ?? '') === '' ? null : (read.stream?.key ?? '')}
+                        onValueChange={(nextSelectValue) => {
+                          streamKey.current = nextSelectValue ?? '';
                           cursor.current = undefined;
                           detailId.current = undefined;
-                          void load({ stream: event.currentTarget.value, cursor: undefined, detail: undefined });
+                          void load({ stream: nextSelectValue ?? '', cursor: undefined, detail: undefined });
                         }}
                       >
-                        {read.streams.map((item) => (
-                          <NativeSelectOption key={item.key} value={item.key}>
-                            {item.label.text || item.property}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
+                        <SelectTrigger id={`${headingId}-stream`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {read.streams.map((item) => (
+                              <SelectItem key={item.key} value={item.key}>
+                                {item.label.text || item.property}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
                     </Field>
                   )}
                   <p ref={sliceStatus} tabIndex={-1} className="sr-only">

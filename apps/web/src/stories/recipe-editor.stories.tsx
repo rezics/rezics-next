@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { useEffect, useMemo } from 'react';
@@ -114,7 +115,7 @@ function fieldName(property: string) {
 }
 async function addField(canvasElement: HTMLElement, property: string) {
   const canvas = within(canvasElement);
-  await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.character_add_fact() }), property);
+  await chooseSelectValue(await canvas.findByRole('combobox', { name: m.character_add_fact() }), property);
   await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
   const heading = canvas.getAllByRole('heading', { name: fieldName(property) }).at(-1)!;
   return within(heading.closest('section')!);
@@ -125,7 +126,7 @@ async function cite(scope: ReturnType<typeof within>, url: string) {
     .filter((node) => node.querySelector('legend')?.textContent?.includes(m.correction_references()))
     .at(-1)!;
   const region = within(group as HTMLElement);
-  await userEvent.selectOptions(region.getByRole('combobox', { name: m.correction_add_part() }), 'schema:url');
+  await chooseSelectValue(region.getByRole('combobox', { name: m.correction_add_part() }), 'schema:url');
   await userEvent.click(region.getByRole('button', { name: m.correction_add() }));
   await userEvent.type(region.getByRole('textbox', { name: m.correction_url() }), url);
 }
@@ -148,11 +149,11 @@ async function fill(canvasElement: HTMLElement) {
   }
   const yieldField = await addField(canvasElement, 'schema:recipeYield');
   await userEvent.type(yieldField.getByRole('textbox', { name: m.correction_amount() }), '+2');
-  await userEvent.selectOptions(yieldField.getByRole('combobox', { name: m.correction_unit() }), '1');
+  await chooseSelectValue(yieldField.getByRole('combobox', { name: m.correction_unit() }), '1');
   await cite(yieldField, 'https://cook.example/my-lentil-soup');
   const duration = await addField(canvasElement, 'schema:cookTime');
   await userEvent.type(duration.getByRole('textbox', { name: m.correction_amount() }), '+25');
-  await userEvent.selectOptions(
+  await chooseSelectValue(
     duration.getByRole('combobox', { name: m.correction_unit() }),
     'http://www.wikidata.org/entity/Q7727',
   );
@@ -320,7 +321,8 @@ export const Proposed: Story = {
     const field = within(region);
     const amount = field.getByRole('textbox', { name: m.correction_amount() });
     await expect(amount).toHaveValue('+25');
-    await expect(field.getByRole('combobox', { name: m.correction_unit() })).toHaveValue(
+    await expectSelectValue(
+      field.getByRole('combobox', { name: m.correction_unit() }),
       'http://www.wikidata.org/entity/Q7727',
     );
     await userEvent.clear(amount);
@@ -394,7 +396,7 @@ export const Proposed: Story = {
     await userEvent.click(review);
     const candidates = within(await field.findByRole('region', { name: m.candidate_title() }));
     await expect(await candidates.findByRole('button', { name: m.candidate_accept() })).toBeEnabled();
-    await expect(candidates.getByRole('combobox', { name: m.candidate_field() })).toHaveValue('schema:cookTime');
+    await expectSelectValue(candidates.getByRole('combobox', { name: m.candidate_field() }), 'schema:cookTime');
     await expect(candidates.getByRole('combobox', { name: m.candidate_field() })).toBeDisabled();
     const exact = [...fixture.candidates.keys()][0]!;
     await userEvent.click(candidates.getByRole('button', { name: m.candidate_accept() }));
@@ -518,8 +520,8 @@ const exerciseRecipeFamily: NonNullable<Story['play']> = async ({ canvasElement,
   const calls = fixture.calls.length;
   const ownAdd = creation.getByRole('combobox', { name: m.character_add_fact() });
   const otherAdd = correction.getByRole('combobox', { name: m.character_add_fact() });
-  await expect(ownAdd.tagName).toBe('SELECT');
-  await expect(otherAdd.tagName).toBe('SELECT');
+  await expect(ownAdd).toHaveAttribute('data-slot', 'select-trigger');
+  await expect(otherAdd).toHaveAttribute('data-slot', 'select-trigger');
   const ids = () => [...canvasElement.querySelectorAll('[id]')].map((node) => node.id);
   const assertAssociations = async () => {
     await expect(new Set(ids()).size).toBe(ids().length);
@@ -552,8 +554,8 @@ const exerciseRecipeFamily: NonNullable<Story['play']> = async ({ canvasElement,
     await expect(select).toHaveFocus();
     await target(select, region);
   }
-  await userEvent.selectOptions(ownAdd, property);
-  await expect(otherAdd).toHaveValue('');
+  await chooseSelectValue(ownAdd, property);
+  await expectSelectValue(otherAdd, '');
   await userEvent.tab();
   const add = creation.getByRole('button', { name: m.correction_add() });
   await expect(add).toHaveFocus();
@@ -601,7 +603,7 @@ const exerciseRecipeFamily: NonNullable<Story['play']> = async ({ canvasElement,
     [createRegion, ownAdd],
     [correctRegion, otherAdd],
   ] as const) {
-    await userEvent.selectOptions(select, 'schema:recipeInstructions');
+    await chooseSelectValue(select, 'schema:recipeInstructions');
     await userEvent.click(within(region).getByRole('button', { name: m.correction_add() }));
     const method = [...region.querySelectorAll('section')].at(-1)!;
     const methodCanvas = within(method);

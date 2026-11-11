@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { pickText } from '@rezics/composition';
 import { useMemo, useState } from 'react';
@@ -134,7 +135,7 @@ export const LanguageRowRecovery: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.type(await canvas.findByRole('textbox', { name: m.catalogue_create_label() }), 'A new traveler');
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.character_initial_fact() }), 'schema:url');
+    await chooseSelectValue(canvas.getByRole('combobox', { name: m.character_initial_fact() }), 'schema:url');
     await userEvent.click(canvas.getByRole('button', { name: m.character_add_fact() }));
     await userEvent.type(canvas.getByRole('textbox', { name: m.correction_value() }), 'https://example.org/traveler');
     const observed = args.onCreate as ReturnType<typeof createObserver>;
@@ -176,7 +177,7 @@ export const WorkCredits: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.relation_open() }));
-    await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.relation_property() }), 'wdt:P725');
+    await chooseSelectValue(await canvas.findByRole('combobox', { name: m.relation_property() }), 'wdt:P725');
     await userEvent.click(canvas.getAllByRole('button', { name: m.relation_edit_existing() })[0]!);
     await userEvent.click(canvas.getByRole('button', { name: m.relation_review_slot() }));
     await expect(canvas.findByRole('button', { name: m.candidate_review() })).resolves.toBeVisible();
@@ -265,17 +266,17 @@ export const UncertainRetry: Story = {
     const initial = canvas.getByRole('combobox', { name: m.character_initial_fact() });
     const addFact = canvas.getByRole('button', { name: m.character_add_fact() });
     await expect(addFact).toBeDisabled();
-    await userEvent.selectOptions(initial, 'schema:url');
+    await chooseSelectValue(initial, 'schema:url');
     await userEvent.click(addFact);
     await userEvent.type(canvas.getByRole('textbox', { name: m.correction_value() }), 'https://example.org/removed');
     await phoneControls();
     await userEvent.click(canvas.getByRole('button', { name: m.recipe_remove_field() }));
     await userEvent.click(canvas.getByRole('button', { name: m.recipe_remove_field() }));
     await expect(canvas.queryByRole('textbox', { name: m.correction_value() })).toBeNull();
-    await userEvent.selectOptions(initial, 'schema:url');
+    await chooseSelectValue(initial, 'schema:url');
     await userEvent.click(addFact);
     await userEvent.type(canvas.getByRole('textbox', { name: m.correction_value() }), 'https://example.org/traveler');
-    await expect(initial).toHaveValue('');
+    await expectSelectValue(initial, '');
     await expect(addFact).toBeDisabled();
     await phoneControls();
     const observed = args.onCreate as ReturnType<typeof createObserver>;

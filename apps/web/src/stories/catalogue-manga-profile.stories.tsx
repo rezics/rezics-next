@@ -1,3 +1,4 @@
+import { chooseSelectValue, expectSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { pickText } from '@rezics/composition';
@@ -128,7 +129,7 @@ async function enabled(control: HTMLElement) {
 async function addField(canvasElement: HTMLElement, group: string, property: string) {
   const canvas = within(canvasElement);
   const select = await enabled(await canvas.findByRole('combobox', { name: group }));
-  await userEvent.selectOptions(select, property);
+  await chooseSelectValue(select, property);
   await userEvent.click(
     await enabled(within(select.closest('section')!).getByRole('button', { name: m.correction_add() })),
   );
@@ -234,7 +235,7 @@ export const CreateSeries: Story = {
 export const CreateVolume: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(
+    await chooseSelectValue(
       await enabled(await canvas.findByRole('combobox', { name: m.manga_grain() })),
       'schema:PublicationVolume',
     );
@@ -248,7 +249,7 @@ export const CreateVolume: Story = {
     await userEvent.click(
       await within(canvasElement.ownerDocument.body).findByRole('option', { name: /The Paper Observatory|紙の天文台/ }),
     );
-    await userEvent.selectOptions(
+    await chooseSelectValue(
       await enabled(work.getByRole('combobox', { name: m.correction_add_qualifier() })),
       'schema:position',
     );
@@ -256,7 +257,7 @@ export const CreateVolume: Story = {
     await userEvent.type(await enabled(work.getByRole('textbox', { name: m.correction_value() })), '2');
     const pages = await addField(canvasElement, m.manga_publication(), 'schema:numberOfPages');
     await userEvent.type(await enabled(pages.getByRole('textbox', { name: m.correction_amount() })), '+192');
-    await userEvent.selectOptions(await enabled(pages.getByRole('combobox', { name: m.correction_unit() })), '1');
+    await chooseSelectValue(await enabled(pages.getByRole('combobox', { name: m.correction_unit() })), '1');
     await userEvent.click(await enabled(canvas.getByRole('button', { name: m.manga_title() })));
     await expect(await canvas.findByText(m.manga_created())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.candidate_view_public() })).toHaveAttribute(
@@ -274,12 +275,12 @@ export const CorrectVolume: Story = {
     await userEvent.click(await enabled(pages.getByRole('button', { name: m.facts_edit_field() })));
     const amount = await enabled(await pages.findByRole('textbox', { name: m.correction_amount() }));
     await expect(amount).toHaveValue('+192');
-    await expect(pages.getByRole('combobox', { name: m.correction_unit() })).toHaveValue('1');
+    await expectSelectValue(pages.getByRole('combobox', { name: m.correction_unit() }), '1');
     await expect(pages.getByRole('textbox', { name: m.correction_value() })).toHaveValue(mangaVolumeCitation);
     await userEvent.clear(amount);
     await userEvent.type(amount, '+196');
     await expect(amount).toHaveValue('+196');
-    await expect(pages.getByRole('combobox', { name: m.correction_unit() })).toHaveValue('1');
+    await expectSelectValue(pages.getByRole('combobox', { name: m.correction_unit() }), '1');
     await expect(pages.getByRole('textbox', { name: m.correction_value() })).toHaveValue(mangaVolumeCitation);
     await userEvent.click(await enabled(canvas.getByRole('button', { name: m.facts_submit() })));
     await expect(await pages.findByText(m.correction_proposed())).toBeVisible();
@@ -342,7 +343,7 @@ export const StaleCorrection: Story = {
     await userEvent.click(await enabled(pages.getByRole('button', { name: m.facts_edit_field() })));
     const amount = await enabled(await pages.findByRole('textbox', { name: m.correction_amount() }));
     await expect(amount).toHaveValue('+192');
-    await expect(pages.getByRole('combobox', { name: m.correction_unit() })).toHaveValue('1');
+    await expectSelectValue(pages.getByRole('combobox', { name: m.correction_unit() }), '1');
     await expect(pages.getByRole('textbox', { name: m.correction_value() })).toHaveValue(mangaVolumeCitation);
     await userEvent.clear(amount);
     await userEvent.type(amount, '+196');

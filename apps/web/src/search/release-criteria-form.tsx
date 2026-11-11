@@ -20,6 +20,7 @@ import {
   type ReleaseSearchSubjectSelection,
   type ReleaseSearchType,
 } from './release-search';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 
 const fieldClass = 'h-10 rounded-md border bg-background px-3 font-normal';
 const subjectFields = ['platform', 'developer', 'publisher'] as const;
@@ -605,24 +606,32 @@ export function ReleaseSearchFormView({
       )}
       <label className="grid gap-1 text-sm font-medium">
         <span>{m.release_search_subtype({}, options)}</span>
-        <select
-          id="release-search-subtype"
-          className={fieldClass}
+        <Select
           name="subtype"
-          value={draft.form.subtype}
-          aria-invalid={errors.includes('subtype') || undefined}
-          aria-describedby={errors.includes('subtype') ? issueId('subtype') : undefined}
-          onChange={(event) => changeSubtype(event.currentTarget.value)}
+          value={draft.form.subtype === '' ? null : draft.form.subtype}
+          onValueChange={(nextSelectValue) => changeSubtype(nextSelectValue ?? '')}
         >
-          {!types.some((type) => type.id === draft.form.subtype) && (
-            <option value={draft.form.subtype}>{draft.form.subtype}</option>
-          )}
-          {types.map((type) => (
-            <option key={type.id} value={type.id}>
-              {type.label}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            id="release-search-subtype"
+            className={fieldClass}
+            aria-invalid={errors.includes('subtype') || undefined}
+            aria-describedby={errors.includes('subtype') ? issueId('subtype') : undefined}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {!types.some((type) => type.id === draft.form.subtype) && (
+                <SelectItem value={draft.form.subtype}>{draft.form.subtype}</SelectItem>
+              )}
+              {types.map((type) => (
+                <SelectItem key={type.id} value={type.id}>
+                  {type.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         {errors.includes('subtype') && <span id={issueId('subtype')}>{issue('subtype')}</span>}
       </label>
       {fieldInput('q', m.release_search_text({}, options))}
@@ -703,25 +712,33 @@ export function ReleaseSearchFormView({
           )}
           <div className="grid gap-1 text-sm font-medium">
             <label htmlFor="release-search-ageUnit">{m.release_search_age_unit({}, options)}</label>
-            <select
-              id="release-search-ageUnit"
-              className={fieldClass}
+            <Select
               name="ageUnit"
-              value={draft.form.ageUnit}
-              aria-invalid={errors.includes('ageUnit') || undefined}
-              aria-describedby={errors.includes('ageUnit') ? issueId('ageUnit') : undefined}
-              onChange={(event) => setField('ageUnit', event.currentTarget.value)}
+              value={draft.form.ageUnit === '' ? null : draft.form.ageUnit}
+              onValueChange={(nextSelectValue) => setField('ageUnit', nextSelectValue ?? '')}
             >
-              <option value="">—</option>
-              {draft.form.ageUnit && !controls?.ageRating?.units.includes(draft.form.ageUnit) && (
-                <option value={draft.form.ageUnit}>{unitLabel(draft.form.ageUnit, locale)}</option>
-              )}
-              {controls?.ageRating?.units.map((unit) => (
-                <option key={unit} value={unit}>
-                  {unitLabel(unit, locale)}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                id="release-search-ageUnit"
+                className={fieldClass}
+                aria-invalid={errors.includes('ageUnit') || undefined}
+                aria-describedby={errors.includes('ageUnit') ? issueId('ageUnit') : undefined}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value={null}>—</SelectItem>
+                  {draft.form.ageUnit && !controls?.ageRating?.units.includes(draft.form.ageUnit) && (
+                    <SelectItem value={draft.form.ageUnit}>{unitLabel(draft.form.ageUnit, locale)}</SelectItem>
+                  )}
+                  {controls?.ageRating?.units.map((unit) => (
+                    <SelectItem key={unit} value={unit}>
+                      {unitLabel(unit, locale)}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             {errors.includes('ageUnit') && (
               <p id={issueId('ageUnit')} className="font-normal text-destructive">
                 {issue('ageUnit')}
@@ -745,41 +762,57 @@ export function ReleaseSearchFormView({
       )}
       <label className="grid gap-1 text-sm font-medium">
         <span>{m.release_search_sort({}, options)}</span>
-        <select
-          id="release-search-sort"
-          className={fieldClass}
+        <Select
           name="sort"
-          value={draft.form.sort}
-          aria-invalid={errors.includes('sort') || undefined}
-          aria-describedby={errors.includes('sort') ? issueId('sort') : undefined}
-          onChange={(event) => setField('sort', event.currentTarget.value)}
+          value={draft.form.sort === '' ? null : draft.form.sort}
+          onValueChange={(nextSelectValue) => setField('sort', nextSelectValue ?? '')}
         >
-          {!['name', 'relevance'].includes(draft.form.sort) && (
-            <option value={draft.form.sort}>{draft.form.sort}</option>
-          )}
-          <option value="name">{m.release_search_sort_name({}, options)}</option>
-          <option value="relevance">{m.release_search_sort_relevance({}, options)}</option>
-        </select>
+          <SelectTrigger
+            id="release-search-sort"
+            className={fieldClass}
+            aria-invalid={errors.includes('sort') || undefined}
+            aria-describedby={errors.includes('sort') ? issueId('sort') : undefined}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {!['name', 'relevance'].includes(draft.form.sort) && (
+                <SelectItem value={draft.form.sort}>{draft.form.sort}</SelectItem>
+              )}
+              <SelectItem value="name">{m.release_search_sort_name({}, options)}</SelectItem>
+              <SelectItem value="relevance">{m.release_search_sort_relevance({}, options)}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         {errors.includes('sort') && <span id={issueId('sort')}>{issue('sort')}</span>}
       </label>
       <label className="grid gap-1 text-sm font-medium">
         <span>{m.release_search_spoilers({}, options)}</span>
-        <select
-          id="release-search-threshold"
-          className={fieldClass}
+        <Select
           name="threshold"
-          value={draft.form.threshold}
-          aria-invalid={errors.includes('threshold') || undefined}
-          aria-describedby={errors.includes('threshold') ? issueId('threshold') : undefined}
-          onChange={(event) => setField('threshold', event.currentTarget.value)}
+          value={draft.form.threshold === '' ? null : draft.form.threshold}
+          onValueChange={(nextSelectValue) => setField('threshold', nextSelectValue ?? '')}
         >
-          {!['0', '1', '2'].includes(draft.form.threshold) && (
-            <option value={draft.form.threshold}>{draft.form.threshold}</option>
-          )}
-          <option value="0">{m.release_search_spoilers_0({}, options)}</option>
-          <option value="1">{m.release_search_spoilers_1({}, options)}</option>
-          <option value="2">{m.release_search_spoilers_2({}, options)}</option>
-        </select>
+          <SelectTrigger
+            id="release-search-threshold"
+            className={fieldClass}
+            aria-invalid={errors.includes('threshold') || undefined}
+            aria-describedby={errors.includes('threshold') ? issueId('threshold') : undefined}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {!['0', '1', '2'].includes(draft.form.threshold) && (
+                <SelectItem value={draft.form.threshold}>{draft.form.threshold}</SelectItem>
+              )}
+              <SelectItem value="0">{m.release_search_spoilers_0({}, options)}</SelectItem>
+              <SelectItem value="1">{m.release_search_spoilers_1({}, options)}</SelectItem>
+              <SelectItem value="2">{m.release_search_spoilers_2({}, options)}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         {errors.includes('threshold') && <span id={issueId('threshold')}>{issue('threshold')}</span>}
       </label>
       {draft.form.condition && (

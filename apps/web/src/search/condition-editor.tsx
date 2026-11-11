@@ -9,7 +9,7 @@ import {
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { EntityPicker } from '@rezics/ui/entity-picker';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
@@ -549,26 +549,32 @@ function QualifierRangeFields({
       })}
       <EditorField context={context} pointer={`${pointer}/range/unit`} label={m.refinement_unit({}, context.options)}>
         {(props) => (
-          <NativeSelect
-            {...props}
-            value={qualifier.range.unit ?? ''}
-            onChange={(event) =>
+          <Select
+            value={(qualifier.range.unit ?? '') === '' ? null : (qualifier.range.unit ?? '')}
+            onValueChange={(nextSelectValue) =>
               quantityUnitChangeNeedsConfirmation(
                 qualifier.range.unit,
-                event.currentTarget.value,
+                nextSelectValue ?? '',
                 (['gte', 'lte'] as const).map((bound) => qualifier.range[bound]?.toString() ?? ''),
               )
-                ? setPendingUnit({ qualifier, unit: event.currentTarget.value })
-                : replaceUnit(event.currentTarget.value)
+                ? setPendingUnit({ qualifier, unit: nextSelectValue ?? '' })
+                : replaceUnit(nextSelectValue ?? '')
             }
           >
-            <NativeSelectOption value="">{m.refinement_choose_property({}, context.options)}</NativeSelectOption>
-            {context.metadata.properties[qualifier.property]?.units?.map((unit) => (
-              <NativeSelectOption key={unit} value={unit}>
-                {unit}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger {...props}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value={null}>{m.refinement_choose_property({}, context.options)}</SelectItem>
+                {context.metadata.properties[qualifier.property]?.units?.map((unit) => (
+                  <SelectItem key={unit} value={unit}>
+                    {unit}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         )}
       </EditorField>
       {currentUnitChange && (
@@ -874,11 +880,10 @@ function NodeEditor({
       <div className="flex flex-wrap items-end gap-2">
         <EditorField context={context} pointer={pointer} label={m.condition_group({}, options)} exact>
           {(props) => (
-            <NativeSelect
-              {...props}
-              value={operator}
-              onChange={(event) => {
-                const next = event.currentTarget.value;
+            <Select
+              value={operator === '' ? null : operator}
+              onValueChange={(nextSelectValue) => {
+                const next = nextSelectValue ?? '';
                 const changed =
                   next === 'and' || next === 'or' || next === 'not'
                     ? context.editTree(path, { type: 'operator', operator: next })
@@ -888,28 +893,29 @@ function NodeEditor({
                 if (changed) context.announce(m.condition_group_changed({}, options), pointer);
               }}
             >
-              <NativeSelectOption value="" disabled={!!group}>
-                {operator === 'not' ? m.condition_unwrap({}, options) : m.condition_leaf({}, options)}
-              </NativeSelectOption>
-              <NativeSelectOption
-                value="and"
-                disabled={!context.canEditTree(path, { type: 'operator', operator: 'and' })}
-              >
-                {m.condition_and({}, options)}
-              </NativeSelectOption>
-              <NativeSelectOption
-                value="or"
-                disabled={!context.canEditTree(path, { type: 'operator', operator: 'or' })}
-              >
-                {m.condition_or({}, options)}
-              </NativeSelectOption>
-              <NativeSelectOption
-                value="not"
-                disabled={operator === 'not' || !context.canEditTree(path, { type: 'operator', operator: 'not' })}
-              >
-                {m.condition_not({}, options)}
-              </NativeSelectOption>
-            </NativeSelect>
+              <SelectTrigger {...props}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value={null} disabled={!!group}>
+                    {operator === 'not' ? m.condition_unwrap({}, options) : m.condition_leaf({}, options)}
+                  </SelectItem>
+                  <SelectItem value="and" disabled={!context.canEditTree(path, { type: 'operator', operator: 'and' })}>
+                    {m.condition_and({}, options)}
+                  </SelectItem>
+                  <SelectItem value="or" disabled={!context.canEditTree(path, { type: 'operator', operator: 'or' })}>
+                    {m.condition_or({}, options)}
+                  </SelectItem>
+                  <SelectItem
+                    value="not"
+                    disabled={operator === 'not' || !context.canEditTree(path, { type: 'operator', operator: 'not' })}
+                  >
+                    {m.condition_not({}, options)}
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           )}
         </EditorField>
         <Button type="button" variant="ghost" size="sm" onClick={remove}>
@@ -1015,20 +1021,26 @@ function NodeEditor({
             label={m.refinement_property({}, options)}
           >
             {(props) => (
-              <NativeSelect
-                {...props}
-                value={property}
-                onChange={(event) => {
-                  selectStatementProperty(event.currentTarget.value);
+              <Select
+                value={property === '' ? null : property}
+                onValueChange={(nextSelectValue) => {
+                  selectStatementProperty(nextSelectValue ?? '');
                 }}
               >
-                <NativeSelectOption value="">{m.refinement_choose_property({}, options)}</NativeSelectOption>
-                {fieldChoices(properties, property ?? '').map(({ value, label }) => (
-                  <NativeSelectOption key={value} value={value}>
-                    {label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                <SelectTrigger {...props}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value={null}>{m.refinement_choose_property({}, options)}</SelectItem>
+                    {fieldChoices(properties, property ?? '').map(({ value, label }) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             )}
           </EditorField>
           <p className="text-sm text-muted-foreground">{definition?.datatype}</p>
@@ -1039,11 +1051,10 @@ function NodeEditor({
               label={m.condition_relation_direction({}, options)}
             >
               {(props) => (
-                <NativeSelect
-                  {...props}
-                  value={direction}
-                  onChange={(event) => {
-                    const next = event.currentTarget.value;
+                <Select
+                  value={direction === '' ? null : direction}
+                  onValueChange={(nextSelectValue) => {
+                    const next = nextSelectValue ?? '';
                     if (next !== 'direct' && next !== 'inverse') return;
                     onChange(changeConditionDirection(value, next));
                     context.announce(
@@ -1052,19 +1063,26 @@ function NodeEditor({
                     );
                   }}
                 >
-                  <NativeSelectOption value="direct">
-                    {m.condition_relation_direct(
-                      { property: relationPropertyLabel, values: relationOperandLabel },
-                      options,
-                    )}
-                  </NativeSelectOption>
-                  <NativeSelectOption value="inverse">
-                    {m.condition_relation_inverse(
-                      { property: relationPropertyLabel, values: relationOperandLabel },
-                      options,
-                    )}
-                  </NativeSelectOption>
-                </NativeSelect>
+                  <SelectTrigger {...props}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="direct">
+                        {m.condition_relation_direct(
+                          { property: relationPropertyLabel, values: relationOperandLabel },
+                          options,
+                        )}
+                      </SelectItem>
+                      <SelectItem value="inverse">
+                        {m.condition_relation_inverse(
+                          { property: relationPropertyLabel, values: relationOperandLabel },
+                          options,
+                        )}
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               )}
             </EditorField>
           )}
@@ -1154,11 +1172,10 @@ function NodeEditor({
                   label={m.refinement_unit({}, options)}
                 >
                   {(props) => (
-                    <NativeSelect
-                      {...props}
-                      value={range.unit ?? ''}
-                      onChange={(event) => {
-                        const nextUnit = event.currentTarget.value || undefined;
+                    <Select
+                      value={(range.unit ?? '') === '' ? null : (range.unit ?? '')}
+                      onValueChange={(nextSelectValue) => {
+                        const nextUnit = (nextSelectValue ?? '') || undefined;
                         if (quantityUnitChangeNeedsConfirmation(range.unit, nextUnit, rangeMagnitudes)) {
                           setPendingUnitChange({
                             from: range.unit,
@@ -1169,18 +1186,25 @@ function NodeEditor({
                         } else replaceRangeUnit(nextUnit);
                       }}
                     >
-                      <NativeSelectOption value="">{unitText(undefined, definition?.units ?? [])}</NativeSelectOption>
-                      {range.unit && !definition?.units?.includes(range.unit) && (
-                        <NativeSelectOption value={range.unit} title={range.unit}>
-                          {unitText(range.unit, definition?.units ?? [])}
-                        </NativeSelectOption>
-                      )}
-                      {definition?.units?.map((unit) => (
-                        <NativeSelectOption key={unit} value={unit} title={unit}>
-                          {unitText(unit, definition.units ?? [])}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                      <SelectTrigger {...props}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value={null}>{unitText(undefined, definition?.units ?? [])}</SelectItem>
+                          {range.unit && !definition?.units?.includes(range.unit) && (
+                            <SelectItem value={range.unit} title={range.unit}>
+                              {unitText(range.unit, definition?.units ?? [])}
+                            </SelectItem>
+                          )}
+                          {definition?.units?.map((unit) => (
+                            <SelectItem key={unit} value={unit} title={unit}>
+                              {unitText(unit, definition.units ?? [])}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
                   )}
                 </EditorField>
               )}
@@ -1234,18 +1258,24 @@ function NodeEditor({
                 label={m.refinement_property({}, options)}
               >
                 {(props) => (
-                  <NativeSelect
-                    {...props}
-                    value={qualifier.property}
-                    onChange={(event) => selectQualifierProperty(index, event.currentTarget.value)}
+                  <Select
+                    value={qualifier.property === '' ? null : qualifier.property}
+                    onValueChange={(nextSelectValue) => selectQualifierProperty(index, nextSelectValue ?? '')}
                   >
-                    <NativeSelectOption value="">{m.refinement_choose_property({}, options)}</NativeSelectOption>
-                    {fieldChoices(definition?.qualifiers ?? [], qualifier.property).map(({ value, label }) => (
-                      <NativeSelectOption key={value} value={value}>
-                        {label}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger {...props}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value={null}>{m.refinement_choose_property({}, options)}</SelectItem>
+                        {fieldChoices(definition?.qualifiers ?? [], qualifier.property).map(({ value, label }) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
                 )}
               </EditorField>
               {'range' in qualifier ? (
@@ -1802,23 +1832,29 @@ function ValueFields({
           >
             {(props) =>
               closed && choices?.length ? (
-                <NativeSelect
-                  {...props}
-                  value={value}
-                  onChange={(event) =>
-                    onChange(values.map((entry, at) => (at === index ? event.currentTarget.value : entry)))
+                <Select
+                  value={value === '' ? null : value}
+                  onValueChange={(nextSelectValue) =>
+                    onChange(values.map((entry, at) => (at === index ? (nextSelectValue ?? '') : entry)))
                   }
                 >
-                  <NativeSelectOption value="">{m.condition_choose_value({}, context.options)}</NativeSelectOption>
-                  {value && !choices.some((entry) => entry.value === value) && (
-                    <NativeSelectOption value={value}>{value}</NativeSelectOption>
-                  )}
-                  {options.map((entry) => (
-                    <NativeSelectOption key={entry.value} value={entry.value}>
-                      {entry.label}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SelectTrigger {...props}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={null}>{m.condition_choose_value({}, context.options)}</SelectItem>
+                      {value && !choices.some((entry) => entry.value === value) && (
+                        <SelectItem value={value}>{value}</SelectItem>
+                      )}
+                      {options.map((entry) => (
+                        <SelectItem key={entry.value} value={entry.value}>
+                          {entry.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               ) : (
                 <Input
                   {...props}
