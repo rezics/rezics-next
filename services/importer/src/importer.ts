@@ -706,9 +706,34 @@ export class Importer {
     if (signal.aborted) throw new Interrupted('Import was interrupted');
     const text = JSON.stringify(request);
     if (checkBatch(request).length || Buffer.byteLength(text) > 65536) throw new Error('Invalid public envelope');
-    const response = await write(() => this.options.transport.batchWrite(request));
+    const response = await write(async () => {
+      const result = await this.options.transport.batchWrite(request);
+      if (signal.aborted) throw new Interrupted('Import was interrupted');
+      this.validateResult(request, result);
+      const overloaded = result.results.find(
+        (entry) => entry.status === 503 && 'problem' in entry && entry.problem.retryable,
+      );
+      if (overloaded) {
+        const problem = 'problem' in overloaded ? (overloaded.problem as Record<string, unknown>) : undefined;
+        const code = problem?.code;
+        throw new ImportTransportError(
+          overloaded.status,
+          typeof problem?.type === 'string' ? problem.type : undefined,
+          typeof code === 'string' && /^[a-z0-9_-]{1,80}$/u.test(code) ? code : undefined,
+          problem?.retryable === true,
+          undefined,
+          undefined,
+          {
+            method: 'POST',
+            ...(this.options.destination?.origin === undefined ? {} : { origin: this.options.destination.origin }),
+            path: '/v1/subjects:batchWrite',
+            phase: 'response',
+          },
+        );
+      }
+      return result;
+    });
     if (signal.aborted) throw new Interrupted('Import was interrupted');
-    this.validateResult(request, response);
     if (response.results.some(success)) {
       try {
         await this.options.afterBulkSuccess?.(request, response);
