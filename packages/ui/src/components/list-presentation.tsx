@@ -144,7 +144,18 @@ export function MemberReadingItem({
     'data-collection-member-id': occurrenceId,
     'data-collection-occurrence-availability': cover ? 'available' : 'unavailable',
   };
-  if (layout === 'grid')
+  if (layout === 'grid') {
+    // Keep every grid detail in the card's measured flow; siblings after a height-full card can overlap More.
+    const gridDetails = (
+      <div className="min-w-0 space-y-2 text-left">
+        {metadata}
+        <p data-slot="collection-member-position" className="text-xs text-muted-foreground">
+          {position}
+        </p>
+        {evidence}
+        {opener}
+      </div>
+    );
     return (
       <div
         {...identity}
@@ -158,23 +169,17 @@ export function MemberReadingItem({
             title={title}
             {...(titleLang ? { titleLang } : {})}
             cover={cover}
-            meta={metadata}
+            meta={gridDetails}
           />
         ) : (
-          <div className="space-y-2 py-3">
+          <div className="min-w-0 space-y-2 py-3 [overflow-wrap:anywhere]">
             <h3 className="text-sm font-semibold">{title}</h3>
-            {metadata}
+            {gridDetails}
           </div>
         )}
-        <div className="min-w-0 space-y-1 text-sm">
-          <p data-slot="collection-member-position" className="text-xs text-muted-foreground">
-            {position}
-          </p>
-          {evidence}
-          {opener}
-        </div>
       </div>
     );
+  }
   const presentation = cover && listPresentationForCover(cover.subject, cover.listPresentation);
   return (
     <ContentItem

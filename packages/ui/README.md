@@ -283,6 +283,10 @@ supplies occurrence identity, position, an explicit Inspect action and essential
 that evidence and the Inspect action outside `CoverCard`'s action row. `MemberListRow` remains the adapter for
 existing Search and other list consumers.
 
+Decision: a grid `MemberReadingItem` places its summary, position, action evidence and Inspect control inside the
+same card content flow. The entire item contributes to its grid row, so continuation follows every item and its
+controls stay directly hittable for covered, placeholder and unavailable subjects.
+
 Use one `MemberReadingDetail` after the member list for the selected occurrence's full evidence. It is a named,
 focusable region on the page background, separated by whitespace and a section divider. Opening focuses the
 region; Close or Escape returns focus to the captured opener. Callers retire the selection on page, native
