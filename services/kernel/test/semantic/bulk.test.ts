@@ -186,6 +186,55 @@ test('native sourced batch create, proposal and replay retain command history an
   expect(results(gone.body)).toEqual([{ key: 'after-takedown', status: 404, code: 'not_found' }]);
 });
 
+test('concurrent batch creates on separate pools resolve one source claim under both receipt keys', async () => {
+  const competingPool = createPool(databaseUrl);
+  const competingKernel = createKernel({
+    pool: competingPool,
+    access: realAccess.access,
+    tokens,
+    receiptKeys: testReceiptKeys(),
+    routeKey,
+    writeRate: realAccess.writeRate,
+  });
+  const externalId = `OL${randomUUID()}W`;
+  const source = record(externalId);
+  const command = (key: string): BatchCommand => ({ op: 'create', key, source, subject: work('Concurrent source') });
+  const send = (target: typeof kernel, key: string) =>
+    target.handle(
+      new Request('http://kernel.test/v1/subjects:batchWrite', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${realAccess.bearer('importer')}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ commands: [command(key)] }),
+      }),
+    );
+
+  try {
+    const [left, right] = await Promise.all([
+      send(kernel, 'same-source-left'),
+      send(competingKernel, 'same-source-right'),
+    ]);
+    expect([left.status, right.status]).toEqual([200, 200]);
+    const [leftBody, rightBody] = await Promise.all([left.json(), right.json()]);
+    const results = [leftBody, rightBody].map(
+      (body) => (body as { results: { status: number; value: { id: string } }[] }).results[0]!,
+    );
+    expect(results.map((result) => result.status).sort()).toEqual([200, 201]);
+    expect(new Set(results.map((result) => result.value.id)).size).toBe(1);
+
+    const route = anchorRoute(routeKey, `openlibrary\n${externalId}`);
+    const claims = await admin.query<{ subject_id: string }>(
+      'SELECT subject_id::text FROM semantic.external_claim WHERE route=$1 AND source=$2 AND external_id=$3',
+      [route, source.source, externalId],
+    );
+    expect(claims.rows).toEqual([{ subject_id: results[0]!.value.id }]);
+  } finally {
+    await competingPool.end();
+  }
+});
+
 test('a failing command does not stop the batch and a source retracts only its own candidates', async () => {
   const externalId = `OL${randomUUID()}W`;
   const created = await batch([{ op: 'create', key: 'create', source: record(externalId), subject: work('Botchan') }]);
