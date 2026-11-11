@@ -1742,6 +1742,30 @@ $_$;
 
 
 --
+-- Name: maintain_entry_clear_scope(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.maintain_entry_clear_scope() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='DELETE' THEN
+    DELETE FROM library.owner_member_index i
+    WHERE i.route=OLD.route AND i.account_id=OLD.account_id AND i.subject_id=OLD.subject_id
+      AND NOT EXISTS (SELECT 1 FROM library.owner_member_support s
+        WHERE s.route=i.route AND s.account_id=i.account_id AND s.subject_id=i.subject_id)
+      AND NOT EXISTS (SELECT 1 FROM library.entry_clear c
+        WHERE c.route=i.route AND c.account_id=i.account_id AND c.subject_id=i.subject_id);
+  ELSE
+    INSERT INTO library.owner_member_index(route,account_id,subject_id)
+      VALUES(NEW.route,NEW.account_id,NEW.subject_id) ON CONFLICT DO NOTHING;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: maintain_owner_activity(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -4297,17 +4321,6 @@ CREATE TABLE library.entry (
 -- Name: entry_annotation_review; Type: TABLE; Schema: library; Owner: -
 --
 
-CREATE TABLE library.entry_clear (
-    route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
-    account_id uuid NOT NULL,
-    subject_id uuid NOT NULL,
-    owner_write_seq bigint NOT NULL CHECK (owner_write_seq > 0),
-    transaction_id uuid NOT NULL,
-    PRIMARY KEY (route, account_id, subject_id),
-    CHECK (route = get_byte(uuid_send(account_id), 10) * 256 + get_byte(uuid_send(account_id), 11))
-);
-COMMENT ON TABLE library.entry_clear IS 'Latest private original-keyed clear order. Reduction evidence only, never live entry or owner presence. Retained independently of Undo payload expiry until terminal account erasure.';
-
 CREATE TABLE library.entry_annotation_review (
     route integer NOT NULL,
     account_id uuid NOT NULL,
@@ -4378,6 +4391,29 @@ CREATE TABLE library.entry_annotation_review_item (
 --
 
 COMMENT ON TABLE library.entry_annotation_review_item IS 'At most sixteen fixed selected operands per private review. Set note bytes obey the native 4096-byte limit; item writes use the existing annotation command receipt.';
+
+
+--
+-- Name: entry_clear; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.entry_clear (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    owner_write_seq bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT entry_clear_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT entry_clear_owner_write_seq_check CHECK ((owner_write_seq > 0)),
+    CONSTRAINT entry_clear_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: TABLE entry_clear; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON TABLE library.entry_clear IS 'Latest private original-keyed clear order. Reduction evidence only, never live entry or owner presence. Retained independently of Undo payload expiry until terminal account erasure.';
 
 
 --
@@ -7570,6 +7606,14 @@ ALTER TABLE ONLY library.entry_annotation_review
 
 
 --
+-- Name: entry_clear entry_clear_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.entry_clear
+    ADD CONSTRAINT entry_clear_pkey PRIMARY KEY (route, account_id, subject_id);
+
+
+--
 -- Name: entry_deleted entry_deleted_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -10445,6 +10489,27 @@ CREATE TRIGGER copy_profile_migration_writer BEFORE INSERT OR UPDATE ON library.
 
 
 --
+-- Name: entry_clear entry_clear_fact_source_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER entry_clear_fact_source_rows AFTER INSERT OR DELETE ON library.entry_clear FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: entry_clear entry_clear_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER entry_clear_fact_source_update AFTER UPDATE ON library.entry_clear FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: entry_clear entry_clear_native_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER entry_clear_native_writer AFTER INSERT OR DELETE OR UPDATE ON library.entry_clear FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
 -- Name: entry entry_fact_source_rows; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -11100,6 +11165,13 @@ CREATE TRIGGER subject_collection_version_order BEFORE UPDATE ON library.subject
 --
 
 CREATE TRIGGER type_preparation_header_immutable BEFORE UPDATE ON library.type_preparation_header FOR EACH ROW EXECUTE FUNCTION library.guard_type_preparation_header();
+
+
+--
+-- Name: entry_clear zz_entry_clear_owner_scope; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zz_entry_clear_owner_scope AFTER INSERT OR DELETE OR UPDATE ON library.entry_clear FOR EACH ROW EXECUTE FUNCTION library.maintain_entry_clear_scope();
 
 
 --
@@ -11786,32 +11858,3 @@ ALTER TABLE ONLY library.vndb_label_adoption
 --
 
 
-
--- Private canonical clear reduction metadata.
-CREATE FUNCTION library.maintain_entry_clear_scope() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF TG_OP='DELETE' THEN
-    DELETE FROM library.owner_member_index i
-    WHERE i.route=OLD.route AND i.account_id=OLD.account_id AND i.subject_id=OLD.subject_id
-      AND NOT EXISTS (SELECT 1 FROM library.owner_member_support s
-        WHERE s.route=i.route AND s.account_id=i.account_id AND s.subject_id=i.subject_id)
-      AND NOT EXISTS (SELECT 1 FROM library.entry_clear c
-        WHERE c.route=i.route AND c.account_id=i.account_id AND c.subject_id=i.subject_id);
-  ELSE
-    INSERT INTO library.owner_member_index(route,account_id,subject_id)
-      VALUES(NEW.route,NEW.account_id,NEW.subject_id) ON CONFLICT DO NOTHING;
-  END IF;
-  RETURN NULL;
-END;
-$$;
-
-CREATE TRIGGER entry_clear_fact_source_rows AFTER INSERT OR DELETE ON library.entry_clear
-  FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
-CREATE TRIGGER entry_clear_fact_source_update AFTER UPDATE ON library.entry_clear
-  FOR EACH ROW WHEN (OLD.* IS DISTINCT FROM NEW.*) EXECUTE FUNCTION library.advance_fact_source_head();
-CREATE TRIGGER entry_clear_native_writer AFTER INSERT OR DELETE OR UPDATE ON library.entry_clear
-  FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
-CREATE TRIGGER zz_entry_clear_owner_scope AFTER INSERT OR DELETE OR UPDATE ON library.entry_clear
-  FOR EACH ROW EXECUTE FUNCTION library.maintain_entry_clear_scope();
