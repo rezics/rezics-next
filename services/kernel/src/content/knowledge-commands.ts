@@ -360,7 +360,7 @@ export async function setKnowledgePublication(
     };
   }
   const publicationId = input.revisionId === null ? null : newId(owner.route);
-  return runCommand(
+  return runCommand<{ documentId: string; publicationId: string | null; revisionId?: string }>(
     deps.pool,
     commandOptions(actor, owner.route, context, kind, documentId, input, authorization),
     async (tx, { transactionId, time }) => {

@@ -9,7 +9,7 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { idempotencyKeyOf } from '../http/idempotency-key.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { contentRequestId } from './adapters/bind.ts';
-import type { contentRoutes } from './routes.ts';
+import type { hostedChapterRoutes } from './hosted-chapters-routes.ts';
 import { strictContentSchema } from './schema-validation.ts';
 import { ContentForbiddenError, RevisionPreconditionError } from './commands.ts';
 import { ContentNotFoundError as ReadNotFoundError } from './reads.ts';
@@ -100,7 +100,7 @@ function requireAccount(actor: import('../request/access.ts').Actor) {
 }
 
 /** Native private authoring and exact public document reads. Search candidates never grant current disclosure. */
-export function knowledgeRoutes(app: ReturnType<typeof contentRoutes>, deps: KnowledgeDependencies) {
+export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, deps: KnowledgeDependencies) {
   app.wrap((handle) => async (request) => {
     const response = await handle(request);
     const path = new URL(request.url).pathname;

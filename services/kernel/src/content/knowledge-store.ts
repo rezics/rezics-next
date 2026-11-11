@@ -125,7 +125,7 @@ export async function knowledgePrivateRow(
   notebookId: string,
   documentId: string,
 ): Promise<KnowledgePrivateRow | null> {
-  return (await privateRead.run(tx, { route, notebook_id: notebookId, document_id: documentId }))[0] ?? null;
+  return privateRead.run(tx, { route, notebook_id: notebookId, document_id: documentId });
 }
 
 export async function knowledgePublicRow(
@@ -133,7 +133,7 @@ export async function knowledgePublicRow(
   route: number,
   documentId: string,
 ): Promise<KnowledgePublicRow | null> {
-  return (await publicRead.run(tx, { route, document_id: documentId }))[0] ?? null;
+  return publicRead.run(tx, { route, document_id: documentId });
 }
 
 export async function knowledgePublicSelection(
@@ -141,7 +141,7 @@ export async function knowledgePublicSelection(
   route: number,
   documentId: string,
 ): Promise<KnowledgePublicSelection | null> {
-  return (await publicSelection.run(tx, { route, document_id: documentId }))[0] ?? null;
+  return publicSelection.run(tx, { route, document_id: documentId });
 }
 
 export async function knowledgeAncestorPath(
