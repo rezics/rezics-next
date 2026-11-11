@@ -101,7 +101,31 @@ export type PageDataRepair = {
   owner?: Task;
   head: string;
   reconcileRiskRefusal?: true;
+  additional?: { repairKey: string; section: PageDataSection; previousClass: PageDataClass }[];
 };
+export function pageDataRepairEvidence(repair: PageDataRepair): string {
+  const additional = repair.additional ?? [];
+  return [
+    `page-data-repair-key: ${repair.repairKey}`,
+    `Integrated head: ${repair.head}`,
+    `Section: ${repair.section.page}/${repair.section.persona}/${repair.section.section}`,
+    `Class: ${repair.section.class} (previously ${repair.previousClass})`,
+    `First error line: ${repair.section.firstErrorLine ?? 'unavailable'}`,
+    '',
+    ...additional.flatMap((cause) => [
+      `page-data-repair-key: ${cause.repairKey}`,
+      `Section: ${cause.section.page}/${cause.section.persona}/${cause.section.section}`,
+      `Class: ${cause.section.class} (previously ${cause.previousClass})`,
+      `First error line: ${cause.section.firstErrorLine ?? 'unavailable'}`,
+      '',
+    ]),
+    additional.length
+      ? 'Repair these sections in the same task and continue the retained provider session.'
+      : 'Repair this section in the same task and continue the retained provider session.',
+    '',
+  ].join('\n');
+}
+
 export function isPageDataRiskRefusal(reason: unknown): reason is string {
   return typeof reason === 'string' && /^declared paths touch undeclared risk area: [a-z0-9_-]+$/.test(reason);
 }
@@ -689,6 +713,33 @@ function repairKey(section: PageDataSection, owner: Task | undefined): string {
     .digest('hex');
 }
 
+function groupPageDataRepairs(repairs: PageDataRepair[]): PageDataRepair[][] {
+  const groups = new Map<string, PageDataRepair[]>();
+  for (const repair of repairs) {
+    const key = repair.section.class === 'SEED' ? `seed:${repair.owner?.id ?? 'imports'}` : repair.repairKey;
+    const group = groups.get(key) ?? [];
+    group.push(repair);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
+function combinedPageDataRepair(group: PageDataRepair[]): PageDataRepair {
+  const additional = group
+    .slice(1)
+    .map(({ repairKey, section, previousClass }) => ({ repairKey, section, previousClass }));
+  return { ...group[0]!, ...(additional.length ? { additional } : {}) };
+}
+
+function pageDataRepairDetail(repair: PageDataRepair) {
+  return {
+    repairKey: repair.repairKey,
+    section: repair.section,
+    previousClass: repair.previousClass,
+    ...(repair.owner ? { owner: repair.owner.id } : {}),
+  };
+}
+
 function readRepairClaim(db: Database, key: string): { status: string; detail: string } | undefined {
   const row = db.query('SELECT status,detail FROM page_data_repairs WHERE repair_key=? LIMIT 1').get(key) as {
     status: string;
@@ -742,15 +793,17 @@ export async function reconcilePageDataRepairs(
     if (!head) throw new Error(`No retained page-data run ${runId}`);
     const claims = db
       .query(
-        `SELECT DISTINCT claim.repair_key AS key, claim.detail FROM page_data_repairs claim
+        `SELECT claim.repair_key AS key, claim.detail FROM page_data_repairs claim
          JOIN flow_events event ON json_extract(event.detail, '$.repairKey')=claim.repair_key
          WHERE event.task_id=? AND event.attempt=? AND event.stage='verification' AND event.action='page-data-repair'
-           AND claim.status='refused' AND json_extract(event.detail, '$.route')='refused'`,
+           AND claim.status='refused' AND json_extract(event.detail, '$.route')='refused'
+         GROUP BY claim.repair_key, claim.detail ORDER BY min(event.sequence)`,
       )
       .all(pageDataTaskId, runId) as { key: string; detail: string }[];
     const tasks = options.tasks.tasks();
     const at = (options.now ?? (() => new Date()))().toISOString();
     const result: { routed: number; unresolved: { key: string; reason: string }[] } = { routed: 0, unresolved: [] };
+    const pendingRepairs: PageDataRepair[] = [];
     for (const claim of claims) {
       const detail = JSON.parse(claim.detail) as {
         repairKey: string;
@@ -765,31 +818,36 @@ export async function reconcilePageDataRepairs(
         result.unresolved.push({ key: claim.key, reason: 'The original repair identity could not be recovered' });
         continue;
       }
+      pendingRepairs.push({
+        repairKey: claim.key,
+        section: detail.section,
+        previousClass: detail.previousClass,
+        ...(owner ? { owner } : {}),
+        head,
+        reconcileRiskRefusal: true,
+      });
+    }
+    for (const group of groupPageDataRepairs(pendingRepairs)) {
       try {
-        const route = await options.routeDefect({
-          repairKey: claim.key,
-          section: detail.section,
-          previousClass: detail.previousClass,
-          ...(owner ? { owner } : {}),
-          head,
-          reconcileRiskRefusal: true,
-        });
+        const route = await options.routeDefect(combinedPageDataRepair(group));
         if (typeof route === 'object') {
-          result.unresolved.push({ key: claim.key, reason: route.reason });
+          result.unresolved.push(...group.map((cause) => ({ key: cause.repairKey, reason: route.reason })));
           continue;
         }
-        const repairedDetail = JSON.stringify({ ...detail, route, reason: undefined, reconciled: true });
-        settleRepair(db, claim.key, 'routed', repairedDetail, {
-          taskId: pageDataTaskId,
-          attempt: runId,
-          stage: 'verification',
-          action: 'page-data-repair',
-          at,
-          detail: repairedDetail,
-        });
-        result.routed++;
+        for (const cause of group) {
+          const repairedDetail = JSON.stringify({ ...pageDataRepairDetail(cause), route, reconciled: true });
+          settleRepair(db, cause.repairKey, 'routed', repairedDetail, {
+            taskId: pageDataTaskId,
+            attempt: runId,
+            stage: 'verification',
+            action: 'page-data-repair',
+            at,
+            detail: repairedDetail,
+          });
+          result.routed++;
+        }
       } catch (error) {
-        result.unresolved.push({ key: claim.key, reason: errorMessage(error) });
+        result.unresolved.push(...group.map((cause) => ({ key: cause.repairKey, reason: errorMessage(error) })));
       }
     }
     return result;
@@ -968,6 +1026,7 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
 
     const changes = previous?.head ? projectChanges(options.settings.mainCheckout, previous.head, head) : [];
     const tasks = options.tasks.tasks();
+    const pendingRepairs: PageDataRepair[] = [];
     for (const section of sections.filter((candidate) => PAGE_DATA_DEFECTS.has(candidate.class))) {
       const target = pageDataRepairTarget(section);
       const candidates = section.class === 'SEED' ? tasks.filter((task) => task.brief.goal === target.goal) : tasks;
@@ -1007,28 +1066,34 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
         finishRepair(options.db, key);
         continue;
       }
-      const route = await options.routeDefect({
+      const repair: PageDataRepair = {
         repairKey: key,
         section,
         previousClass,
         ...(owner ? { owner } : {}),
         head,
-      });
+      };
+      pendingRepairs.push(repair);
+    }
+    for (const group of groupPageDataRepairs(pendingRepairs)) {
+      const route = await options.routeDefect(combinedPageDataRepair(group));
       const refusal = typeof route === 'object' ? route : undefined;
       const routeName = refusal ? 'refused' : route;
-      const routeDetail = JSON.stringify({
-        ...repairDetail,
-        route: routeName,
-        ...(refusal ? { reason: refusal.reason } : {}),
-      });
-      settleRepair(options.db, key, refusal ? 'refused' : 'routed', routeDetail, {
-        taskId: pageDataTaskId,
-        attempt: runId,
-        stage: 'verification',
-        action: 'page-data-repair',
-        at,
-        detail: routeDetail,
-      });
+      for (const cause of group) {
+        const routeDetail = JSON.stringify({
+          ...pageDataRepairDetail(cause),
+          route: routeName,
+          ...(refusal ? { reason: refusal.reason } : {}),
+        });
+        settleRepair(options.db, cause.repairKey, refusal ? 'refused' : 'routed', routeDetail, {
+          taskId: pageDataTaskId,
+          attempt: runId,
+          stage: 'verification',
+          action: 'page-data-repair',
+          at,
+          detail: routeDetail,
+        });
+      }
     }
     if (incomplete) {
       const transcript = combineFailureOutput(stackOutput, commandOutput(output, diagnostics));

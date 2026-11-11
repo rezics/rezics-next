@@ -907,3 +907,61 @@ test('page-data member authority provenance survives completion without hiding r
     expect(() => parsePageDataOutput(invalid, registry)).toThrow('invalid page-data unrun provenance');
   }
 });
+
+test('one run routes and reconciles its related fixture defects as a single producer repair', async () => {
+  const h = fixture();
+  const start = new Date('2026-01-01T00:00:00.000Z');
+  let now = start;
+  let outcome: 'EMPTY' | 'SEED' = 'EMPTY';
+  let refused = true;
+  let checkRuns = 0;
+  const routed: PageDataRepair[] = [];
+  const registry = new Map<string, SectionConfig>(
+    ['tags', 'synopsis'].map((section) => [
+      `vn\tmember\t${section}`,
+      { page: 'vn', persona: 'member', section, name: section, goal: 'web', files: ['apps/web/src/routes/index.tsx'] },
+    ]),
+  );
+  const options = {
+    settings: h.settings,
+    db: h.db,
+    tasks: { tasks: () => [] },
+    inbox: { deliver() {} },
+    now: () => now,
+    runStack: async (_head: string, invocation: string) => {
+      checkRuns++;
+      return {
+        output: completed(invocation, `vn member tags ${outcome}\nvn member synopsis ${outcome}\n`),
+        exitCode: outcome === 'SEED' ? 1 : 0,
+        registry,
+      };
+    },
+    routeDefect: async (repair: PageDataRepair) => {
+      routed.push(repair);
+      return refused
+        ? { status: 'refused' as const, reason: 'declared paths touch undeclared risk area: authorization' }
+        : ('dispatched' as const);
+    },
+  };
+  try {
+    expect(await runPageDataCycle(options)).toBe('ran');
+    now = new Date(start.getTime() + 2);
+    outcome = 'SEED';
+    expect(await runPageDataCycle(options)).toBe('ran');
+    expect(routed).toHaveLength(1);
+    expect(routed[0]?.section.section).toBe('tags');
+    expect(routed[0]?.additional?.map(({ section }) => section.section)).toEqual(['synopsis']);
+    const run = readLatestPageDataRun(h.db)!;
+    expect(run.sections).toHaveLength(2);
+    refused = false;
+    expect(await reconcilePageDataRepairs(options, run.runId)).toEqual({ routed: 2, unresolved: [] });
+    expect(routed).toHaveLength(2);
+    expect(routed[1]?.repairKey).toBe(routed[0]?.repairKey);
+    expect(routed[1]?.additional).toEqual(routed[0]?.additional);
+    expect(await reconcilePageDataRepairs(options, run.runId)).toEqual({ routed: 0, unresolved: [] });
+    expect(checkRuns).toBe(2);
+    expect(readLatestPageDataRun(h.db)).toEqual(run);
+  } finally {
+    h.db.close();
+  }
+});
