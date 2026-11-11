@@ -435,7 +435,7 @@ Current implementation evidence is narrower than the capability:
   pin/text hydration requires a same-snapshot size point and a sufficient reservation first. `readPresence` reads only
   fixed-width current native support and does not depend on profile/pin readiness.
   `matchOwnerFilterSupport` checks a profiled supporter against its immutable accepted release, including actual session
-  mode/unit and same-copy kind/status. `ownerFilterStateWinner` selects live native sequence order before
+  mode/unit and same-copy kind/status. `ownerFilterStateWinner` selects live-state/clear native sequence order before
   `matchOwnerFilterState` tests profile/set/state. Missing accepted meaning or sequence stays `not_proven`.
   `matchOwnerFilterCatalogue` consumes the actual shared Semantic leaf evidence and pure matchers; incomplete or
   changed-basis negative evidence stays unknown. `evaluateOwnerFilterLeaves` requires all deduplicated observations
@@ -446,7 +446,7 @@ Current implementation evidence is narrower than the capability:
   the unavailable native Source/support execution.
 - `owner-filter-plan.ts` supplies the common caller, bounded native candidate matching, shared Source reservation
   composition, selective identity revalidation, confidential current-basis cursors and useful-page enforcement.
-  It gathers the current live entry winner before matching state; label, session and holding branches retain
+  It gathers the current live-state/clear winner before matching state; label, session and holding branches retain
   independent native support. FULL attaches the existing shared summary/facts batch and revalidates afterwards.
   A sparse admitted read delegates durable reservation and enqueue to `MembersPreparation`; only an actual
   preparing episode can produce the existing 202 body. BASIC and FULL share the same native admission path.
@@ -463,8 +463,8 @@ Current implementation evidence is narrower than the capability:
   their null built-in kind. State Sources now prepare all independent native entry/label/session/copy ranges in the
   existing canonical generation, through `owner-index.ts:readOwnerNativeFactPage`. Its label range uses the actual
   assignment primary key, including retained and unidentified originals; no assignment witness is manufactured.
-  The generation's committed `originalCoverage: 'owner-facts-v1'` distinguishes this population from older entry-only
-  generations. Closure consumes the same bounded canonical group continuation, then current full-key private facts;
+  Every private generation commits `originalCoverage: 'owner-facts-v2'`, including clear-only originals; older
+  entry-only or live-fact-only generations cannot establish that closure. Closure consumes the same bounded canonical group continuation, then current full-key private facts;
   the existing matcher chooses native state sequence before testing accepted profile/set/state. Unidentified live
   labels, incomplete groups, changed owner/source/scoped fences and denied originals remain unproved under NOT.
   The original per-call raw/physical allowances and retained preparation authority are unchanged. No request-time
@@ -941,8 +941,9 @@ epoch/disclosure coverage and shared members integration remain missing. There i
 follower total. An interim entry-only page is named tracked entries, never Everything.
 
 Stored personal subject IDs and curated occurrences are immutable; new writes target the terminal. Canonical views
-select the live state with highest private `owner_write_seq` among merged originals, show conflicts, retain every
-original fact/reference/pin, union labels and preserve separate copies/sessions. Browsing emits
+reduce live states and original-keyed private clear registers by highest `owner_write_seq` among merged originals.
+A winning clear means absent entry state; it grants no presence. Views show conflicts, retain every original
+fact/reference/pin, union labels and preserve separate copies/sessions. Browsing emits
 one canonical card; the editor retains every occurrence/note/order. Canonical-ID indexes establish browsing order
 and uniqueness. Identity observation, publication and cursor currentness cover the actual source and complete query
 dependencies, including excluded and order originals. Relevant pending work prepares; changed relevant basis restarts
@@ -1078,7 +1079,8 @@ kernel typing; the existing frozen refusal and later six-driver/custody/growth a
 create/update, physical clear and Undo restore must increment one per-account counter in the owner's partition,
 using `UPDATE ... SET seq=seq+1 RETURNING seq` in the same authorized transaction as the fact, receipt, source hooks
 and outbox. Initialization is part of the first authorized write, never GET. Live entries store the result as private
-`owner_write_seq`; all of an owner's entries share that partition and total order, with contention only among that
+`owner_write_seq`; clear stores its new sequence in `entry_clear` in the same transaction as physical deletion,
+archive retention and receipt. All of an owner's state writes share that partition and total order, with contention only among that
 owner's state writes. Do not derive this order from a global coordinator, clock/UUID sorting, max of unrelated
 per-slot revisions or an executor hook.
 
@@ -1093,8 +1095,8 @@ or a disclosed aggregate.
 The delivered [`allocateOwnerWriteSeq` ABI and schema](owner-write-sequence.md) require a live native execute transaction,
 same-owner attribution and matching partition. Private `owner_write_counter` storage and nullable positive bigint
 `entry.owner_write_seq` / `entry_deleted.owner_write_seq` exist; null is legacy/unsequenced, with no default/backfill.
-Production row adapters and set/clear/Undo binding, bounded migration/cutover/readiness, epoch consumer and complete
-terminal cleanup remain missing producers. Existing unsequenced values must not be ordered by dates, transaction UUIDs, source-type positions or fabricated zero.
+Native row adapters and set/clear/Undo binding are delivered, including the original-keyed clear register.
+Bounded migration/cutover/readiness, epoch consumer and complete terminal/shared-custody cleanup remain separate producers. Existing unsequenced values must not be ordered by dates, transaction UUIDs, source-type positions or fabricated zero.
 The [native cutover plan](../../../../docs/library-owner-queries.md#sequencing-cutover-bounded-cuts-and-native-proof)
 requires complete authoritative native state-write evidence, exact verified locators and bounded live-write cutover,
 or explicit real owner reassertion. Affected winner/NOT-state/Continue state stays unready; independent complete
@@ -1259,7 +1261,7 @@ The archive keeps the full pre-delete row: `route`, `account_id`, `subject_id`, 
 source `revision`, `created_at`, `updated_at`, original `transaction_id`, `activity_at`, `finished_at`, `type_id`,
 all `type_source_*` stamps, non-null `incarnation_id`, and the accepted `library_profile_pin` with its existing
 `library.library_profile_pin_valid` validation and the existing pin nullability rules. The required snapshot also
-retains the original `owner_write_seq`; its nullable positive bigint column exists, but writer binding is missing.
+retains the original `owner_write_seq`; the live state's sequence is archived unchanged, separately from clear's newly allocated register sequence.
 The retained schema also has `deletion_id`,
 `deleted_revision`, `deleted_at`, `restore_until`, and generated
 `partition_no = route >> 4`. The due index is exactly
@@ -1270,7 +1272,19 @@ live slot and consumes only the selected deletion after
 the insert succeeds. Occupancy or stale/expired state conflicts and leaves that archive row available. User dates,
 pin, stored subject/alias and source stamps survive unchanged; lifecycle time, the restore transaction and ordering
 metadata are new command facts. Undo does not copy the archive's old sequence into live state. Clear advances the
-owner counter without adding a live tombstone; archive/deleted rows never compete as current live state. Missing
+owner counter without adding a live tombstone. Its private `entry_clear` register competes in current canonical
+state reduction; archive/deleted rows do not. Clear alone contributes neither live family support nor presence.
+The register contains only `(route, account_id, subject_id)`, positive `owner_write_seq` and `transaction_id`, with
+no live-slot/archive foreign key. Keep the latest register per original until terminal account erasure, including
+after Undo payload expiry, because an older aliased state may still require suppression. Splits retain that original
+ownership; set and Undo win with fresh order. Notes, labels, sessions, copies and occurrences retain their own facts.
+
+`entry-clear-state.ts` supplies the shared sequence reducer for owner truth, filters and native state Source groups.
+An unsequenced live value stays unproved; a winning clear needs no profile pin. State Source membership closes its
+bounded canonical group before reducing, rather than accepting the first matching alias. All contributing originals
+retain existing disclosure and Source/account/scoped currentness checks. Clear rows participate in the entry raw
+family and native custody capture, while fixed-width presence reads continue to exclude them. Raw prefix limits
+remain 100. Private generation coverage is versioned so older live-only generations cannot prove clear coverage. Missing
 historical profiles use the actual legacy-null pin handling until the profile owner completes
 the retained-row cutover; never infer a historical accepting type from today's profile or shelf observation. A corrupt
 or unavailable non-null pinned release fails closed rather than guessing.
@@ -1648,9 +1662,10 @@ from these applied tables, but it remains pending when an exact producer locator
 proof is missing. The current schema and shelf/bulk contracts also describe planned logical stores; a planned name
 without an applied table or exact locator is not treated as an existing store.
 
-The applied private `owner_write_counter` (`seq`) and live/archive `owner_write_seq` fields are also terminal
-inventory. The worker deletes the counter after dependent private facts; deleting entries and archives removes
-their embedded sequences. T fences their state writers immediately. This counter is neither an account
+The applied private `owner_write_counter` (`seq`), live/archive `owner_write_seq` and `entry_clear` registers are
+also terminal inventory. The existing `entry_deleted` owned-graph phase drains archives and registers together in
+indexed pages of at most 100 rows, preserving durable numeric phase identities. The worker deletes the counter
+after dependent private facts; deleting entries and archives removes their embedded sequences. T fences their state writers immediately. This counter is neither an account
 lifecycle generation nor a public activity total. Existing `fact_source_head` removal remains last after delete hooks.
 
 This A5 inventory also includes every planned OWNER candidate/support directory and inverse, pin-set/sibling

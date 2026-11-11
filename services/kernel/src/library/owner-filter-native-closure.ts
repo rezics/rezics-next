@@ -358,11 +358,7 @@ export async function readNativeOwnerFilterClosure(
   );
   if (state.state !== 'ready' || state.basis.digest !== source.observation.basis.digest)
     return { status: 'unavailable' } as const;
-  if (
-    metadata.authority === 'private_builtin' &&
-    metadata.builtinKind === 'state' &&
-    state.basis.originalCoverage !== 'owner-facts-v1'
-  )
+  if (metadata.authority === 'private_builtin' && state.basis.originalCoverage !== 'owner-facts-v2')
     return { status: 'unavailable' } as const;
   const keys: CanonicalRawKey[] = [];
   let after: CanonicalRawKey | null = null;
@@ -446,7 +442,7 @@ export async function readNativeOwnerFilterClosure(
               },
               {
                 nativeRows: 32 * remaining + 32,
-                nativePoints: 5,
+                nativePoints: 6,
                 candidateKeys: remaining,
                 witnessKeys: remaining,
                 bytes: 256 * remaining,

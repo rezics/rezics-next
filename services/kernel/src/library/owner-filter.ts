@@ -47,6 +47,7 @@ import entrySize from './owner-filter-entry-size.sql';
 import sessionSize from './owner-filter-session-size.sql';
 import holdingSize from './owner-filter-holding-size.sql';
 import entryPresence from './owner-filter-entry-presence.sql';
+import { newestEntryState } from './entry-clear-state.ts';
 import sessionPresence from './owner-filter-session-presence.sql';
 import holdingPresence from './owner-filter-holding-presence.sql';
 
@@ -54,7 +55,7 @@ type EntryOperand = Extract<OwnerLeaf['owner'], { state: unknown }>['state'];
 type NativeFactBase = { subjectId: string };
 export type OwnerFilterEntryFact = NativeFactBase & {
   kind: 'entry';
-  state: string;
+  state: string | null;
   ownerWriteSeq: bigint | null;
   pin: LibraryProfilePin | null;
 };
@@ -141,13 +142,14 @@ async function nativePoint<T>(
   outputBytes: number,
   read: () => Promise<T | null>,
   parents = 0,
+  registers = 0,
 ): Promise<T | null> {
   const reservation = work.reserve({
     ...NO_WORK,
     candidateKeys: 1,
     // A live-parent label point includes its CTE, exact assignment and exact parent probe.
-    nativeRows: parents ? 20 : 4,
-    nativePoints: 1 + parents,
+    nativeRows: parents ? 20 : registers ? 16 : 4,
+    nativePoints: 1 + parents + registers,
     witnessKeys: 1,
     statements: 1,
     emptySeeks: 1,
@@ -238,10 +240,16 @@ export function leafProvider(accountId: string, filter: FilterDocument, deadline
       const key = { route, account_id: accountId, subject_id: locator.subjectId };
       switch (locator.kind) {
         case 'entry': {
-          const size = await nativePoint(work, entrySize, key, 128, () => entrySize.run(client, key));
+          const size = await nativePoint(work, entrySize, key, 128, () => entrySize.run(client, key), 0, 1);
           if (size === null) return null;
-          const row = await nativePoint(work, entryPoint, key, pinProjectionBytes(size), () =>
-            entryPoint.run(client, key),
+          const row = await nativePoint(
+            work,
+            entryPoint,
+            key,
+            pinProjectionBytes(size),
+            () => entryPoint.run(client, key),
+            0,
+            1,
           );
           if (!row) return null;
           const sequence = row.ownerWriteSeq === null ? null : BigInt(row.ownerWriteSeq);
@@ -327,7 +335,8 @@ export function matchOwnerFilterSupport(
   releases: ReadonlyMap<string, Release>,
 ): RelationFacetMatch {
   // Native live support proves presence; immutable pin meaning is a separate profiled-leaf dependency.
-  if ('presence' in leaf) return true;
+  if ('presence' in leaf) return fact.kind !== 'entry' || fact.state !== null;
+  if (fact.kind === 'entry' && fact.state === null) return false;
   if (fact.kind === 'label') return 'label' in leaf && leaf.label.id === fact.labelId;
   if ('label' in leaf) return false;
   if ('session' in leaf && fact.kind !== 'session') return false;
@@ -335,7 +344,7 @@ export function matchOwnerFilterSupport(
   const profile = factProfile(fact, releases);
   if (!profile) return 'not_proven';
   if (fact.kind === 'entry') {
-    if (!hasEntryState(profile, fact.state)) return 'not_proven';
+    if (fact.state === null || !hasEntryState(profile, fact.state)) return 'not_proven';
     return false;
   }
   if (fact.kind === 'session') {
@@ -354,19 +363,13 @@ export function matchOwnerFilterSupport(
 }
 
 /**
- * Fold already settled LIVE native entry points before testing any requested state. Bounded source work owns
+ * Fold settled live states and private clear registers before testing any requested state. Bounded source work owns
  * enumeration/completeness. Unsequenced entries cannot lose to a sequenced entry by an invented tie-breaker.
  */
 export function ownerFilterStateWinner(
   entries: Iterable<OwnerFilterEntryFact>,
 ): OwnerFilterEntryFact | null | 'not_proven' {
-  let winner: OwnerFilterEntryFact | null = null;
-  for (const entry of entries) {
-    if (entry.ownerWriteSeq === null || entry.ownerWriteSeq <= 0n) return 'not_proven';
-    if (winner?.ownerWriteSeq === entry.ownerWriteSeq && winner.subjectId !== entry.subjectId) return 'not_proven';
-    if (winner === null || entry.ownerWriteSeq > winner.ownerWriteSeq!) winner = entry;
-  }
-  return winner;
+  return newestEntryState(entries);
 }
 
 /** Null is usable only after the shared Source establishes complete no-entry evidence. */
@@ -376,7 +379,7 @@ export function matchOwnerFilterState(
   releases: ReadonlyMap<string, Release>,
 ): RelationFacetMatch {
   if (winner === 'not_proven') return 'not_proven';
-  if (winner === null) return false;
+  if (winner === null || winner.state === null) return false;
   const profile = factProfile(winner, releases);
   if (!profile || !hasEntryState(profile, winner.state)) return 'not_proven';
   return (

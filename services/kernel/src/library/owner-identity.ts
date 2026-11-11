@@ -156,7 +156,8 @@ export async function applyLibraryIdentityCandidate(
   const present =
     input.role === 'member' ||
     (input.role === 'output' && input.sourceScope === 'active_explicit_output') ||
-    truth.presence;
+    truth.presence ||
+    (input.role === 'entry' && truth.clear !== undefined);
   if (!present) return { state: 'applied', truth };
   const inserted = await tx.query(
     `INSERT INTO library.owner_identity_candidate_support
@@ -177,8 +178,9 @@ export async function applyLibraryIdentityCandidate(
   return { state: 'applied', truth };
 }
 
-/** Read a bounded structural original page and recompute the live winner using owner_write_seq.
- * Caller persists the cursor and merges page winners; duplicate max sequences are a source defect.
+/** Read a bounded structural original page and recompute state/clear order using owner_write_seq.
+ * Caller persists the cursor and merges page winners, including winner.clear when state is absent.
+ * Duplicate max sequences are a source defect; clear-only originals never enter the live originals result.
  */
 export async function readLibraryIdentityCandidatePage(
   tx: CommandTransaction,
@@ -199,7 +201,7 @@ export async function readLibraryIdentityCandidatePage(
   const selected = rows.rows.slice(0, limit);
   const truth = await Promise.all(selected.map((row) => readOwnerOriginalTruth(tx, input.owner, row.original)));
   const live = truth.filter((row) => row.presence === true);
-  const winner = currentOwnerState(live);
+  const winner = currentOwnerState(truth);
   return {
     originals: live,
     winner,

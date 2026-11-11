@@ -84,7 +84,7 @@ export interface CanonicalBasis {
   /** Actual admitted meaning/profile/projection commitment, null for curated. */
   readonly meaning: string | null;
   /** State generations predating independent native support preparation cannot prove owner closure. */
-  readonly originalCoverage?: 'owner-facts-v1';
+  readonly originalCoverage?: 'owner-facts-v1' | 'owner-facts-v2';
 }
 
 export interface CanonicalSourceRef {
@@ -467,11 +467,9 @@ async function observe(pool: Pool, input: CanonicalCall, l: CollectionSourceLedg
             ...(metadata.ruleReady ? [metadata.ruleRevision, metadata.ruleReleaseDigest] : []),
           ])
         : null,
-    // Bind coverage into the actual generation commitment. An entry-only generation from an earlier
-    // producer cannot be promoted into complete independent support by a reader or a positive witness.
-    ...(metadata.authority === 'private_builtin' && metadata.builtinKind === 'state'
-      ? { originalCoverage: 'owner-facts-v1' as const }
-      : {}),
+    // Clear-only originals supply reduction evidence, including in private saved-query Sources.
+    // Older generations cannot establish that complete original population.
+    ...(metadata.authority === 'private_builtin' ? { originalCoverage: 'owner-facts-v2' as const } : {}),
   };
   const basis: CanonicalBasis = { ...components, digest: hash(components) };
   return { metadata, basis };

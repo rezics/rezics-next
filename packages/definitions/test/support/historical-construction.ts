@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import manifest from '../fixtures/definition-historical-construction.json';
 import type { validateRelease } from '../../src/index.ts';
 
@@ -8,7 +9,19 @@ const root = resolve(import.meta.dir, '../../../..');
 const definitionsPath = 'packages/definitions/src/index.ts';
 const filterPath = 'packages/filter/src/filter.ts';
 const publicationPath = 'services/kernel/src/semantic/definitions.ts';
-const historicalDependencyAliases = { recheck: 'recheck-historical' };
+const historicalDependencyAliases = { recheck: 'recheck-historical' } as const;
+
+function historicalSpecifier(specifier: string): string {
+  return specifier === 'recheck' || specifier.startsWith('recheck/')
+    ? `${historicalDependencyAliases.recheck}${specifier.slice('recheck'.length)}`
+    : specifier;
+}
+
+function resolveHistoricalDependency(origin: string, specifier: string): string {
+  if (specifier === '@rezics/filter') return resolve(root, filterPath);
+  if (specifier.startsWith('.')) return resolve(dirname(origin), specifier);
+  return Bun.resolveSync(historicalSpecifier(specifier), dirname(origin));
+}
 
 /** Exact Git source bytes, not a reconstruction of old behavior. Unchanged
  * relative dependencies are checked against the same pin before any import.
@@ -49,26 +62,24 @@ export function materializeHistoricalConstruction(directory: string, publication
   );
   for (const [origin, source] of pinned) {
     const target = targets.get(origin)!;
-    writeFileSync(
-      target,
-      origin.endsWith('.json')
-        ? source
-        : source.replace(/from (['"])([^'"]+)\1/g, (match, quote: string, specifier: string) => {
+    const rewritten = origin.endsWith('.json')
+      ? source
+      : source
+          .replace(/from (['"])([^'"]+)\1/g, (match, quote: string, specifier: string) => {
             if (specifier.startsWith('node:')) return match;
-            const dependency =
-              specifier === '@rezics/filter'
-                ? resolve(root, filterPath)
-                : specifier.startsWith('.')
-                  ? resolve(dirname(origin), specifier)
-                  : Bun.resolveSync(
-                      specifier === 'recheck' || specifier.startsWith('recheck/')
-                        ? `${historicalDependencyAliases.recheck}${specifier.slice('recheck'.length)}`
-                        : specifier,
-                      dirname(origin),
-                    );
+            const dependency = resolveHistoricalDependency(origin, specifier);
             return `from ${quote}${targets.get(dependency) ?? dependency}${quote}`;
-          }),
-    );
+          })
+          .replace(/import\.meta\.resolve\((['"])([^'"]+)\1\)/g, (match, _quote: string, specifier: string) => {
+            // Resolve from the pinned module's original location before it is
+            // moved under .temp. In particular, the old checker must use the
+            // verified historical alias, not a process-wide resolver hook.
+            if (specifier.startsWith('node:') || /^[a-z][a-z\d+.-]*:/i.test(specifier)) return match;
+            const dependency = resolveHistoricalDependency(origin, specifier);
+            const materialized = targets.get(dependency) ?? dependency;
+            return `import.meta.resolve(${JSON.stringify(pathToFileURL(materialized).href)})`;
+          });
+    writeFileSync(target, rewritten);
   }
   return targets;
 }

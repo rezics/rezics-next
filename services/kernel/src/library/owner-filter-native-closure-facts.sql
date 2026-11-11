@@ -12,10 +12,11 @@ FROM input i CROSS JOIN LATERAL (
      AND a.deleted_at IS NULL AND (a.slot_no IS NULL OR a.assignment_id IS NULL)
    ORDER BY a.label_id LIMIT 1)
   UNION ALL
-  (SELECT 1 AS driver, e.subject_id AS fact_id, NULL::uuid AS label_id
-   FROM library.entry e
-   WHERE e.route=i.route AND e.account_id=i.account_id AND e.subject_id=i.subject_id
-   LIMIT 1)
+  (SELECT 1 AS driver, i.subject_id AS fact_id, NULL::uuid AS label_id
+   WHERE EXISTS (SELECT 1 FROM library.entry e
+     WHERE e.route=i.route AND e.account_id=i.account_id AND e.subject_id=i.subject_id)
+   OR EXISTS (SELECT 1 FROM library.entry_clear c
+     WHERE c.route=i.route AND c.account_id=i.account_id AND c.subject_id=i.subject_id))
   UNION ALL
   (SELECT 2, a.assignment_id, a.label_id FROM library.label_assignment a
    WHERE a.route=i.route AND a.account_id=i.account_id AND a.subject_id=i.subject_id AND a.slot_no IS NOT NULL
