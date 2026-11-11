@@ -6,6 +6,7 @@ import type { CollectionReadMember } from '../src/library/collection-member-deta
 import type { CollectionMember } from '../src/library/reads';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import { collectionPageAddress } from '../src/library/collection-presentation';
+import { collectionMemberReturnAddress } from '../src/subject/collection-return';
 import * as start from '../.storybook/react-start';
 
 mock.module('@tanstack/react-start', () => start);
@@ -14,8 +15,12 @@ mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics
 const { CollectionReadMembers } = await import('../src/library/collection-page');
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const search = { type: 'work', 'f.genre': 'fiction', 'l.genre': 'Fiction' };
-const address = (layout: 'list' | 'grid', cursor = 'next+/=') =>
-  collectionPageAddress('en', id(1), cursor, search, layout);
+const directoryReturn = '/en/library/collections?cursor=directory-next&layout=previews';
+const address = (layout: 'list' | 'grid', cursor = 'next+/=') => {
+  const route = new URL(collectionPageAddress('en', id(1), cursor, search, layout), 'https://rezics.invalid');
+  route.searchParams.set('returnTo', directoryReturn);
+  return `${route.pathname}${route.search}`;
+};
 const note = `  Supplied note\n\n\t${'界'.repeat(600)}\n `;
 const members: CollectionMember[] = [2, 3].map((n) => ({
   id: id(n),
@@ -133,8 +138,10 @@ for (const layout of ['list', 'grid'] as const) {
         expect(via.searchParams.get('type')).toBe('work');
         expect(via.searchParams.getAll('f.genre')).toEqual(['fiction']);
         expect(via.searchParams.getAll('l.genre')).toEqual(['Fiction']);
-        expect(via.searchParams.get('layout')).toBe(layout);
-        expect(via.searchParams.get('returnTo')).toBe('/en/library/collections');
+        expect(via.searchParams.get('layout')).toBe(layout === 'grid' ? 'grid' : null);
+        expect(via.searchParams.get('layout') ?? 'list').toBe(layout);
+        expect(viaAddress).toBe(collectionMemberReturnAddress(currentHref, id(2)));
+        expect(via.searchParams.get('returnTo')).toBe(directoryReturn);
         expect(via.hash).toBe(`#collection-member-${id(2)}`);
         expect(subjectVisitReturn(viaAddress, 'en')).toBe(viaAddress);
         const copy = detail()!.querySelector<HTMLButtonElement>(`[data-copy-reference="${id(10 + index)}"]`)!;
@@ -188,8 +195,10 @@ for (const layout of ['list', 'grid'] as const) {
       expect(host.querySelector('[data-collection-member-id]')).toBeNull();
       await open(1);
       const projectionLink = detail()!.querySelector<HTMLAnchorElement>('[data-comparison-reference]')!;
-      const projectionVia = new URL(new URL(projectionLink.href).searchParams.get('via')!, 'https://rezics.test');
-      expect(projectionVia.searchParams.get('returnTo')).toBe('/en/library/collections');
+      const projectionViaAddress = new URL(projectionLink.href).searchParams.get('via')!;
+      expect(projectionViaAddress).toBe(collectionMemberReturnAddress(currentHref));
+      const projectionVia = new URL(projectionViaAddress, 'https://rezics.test');
+      expect(projectionVia.searchParams.get('returnTo')).toBe(directoryReturn);
       expect(projectionVia.hash).toBe('');
       expect(detail()!.querySelector('[data-slot="collection-member-note"]')).toBeNull();
 

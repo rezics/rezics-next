@@ -27,8 +27,9 @@ Decision: each comparison departure or fragment navigation admits one return; na
 replacement retires it, and moving focus elsewhere consumes it even if focus later returns to the document body.
 
 Decision: compact-reading Web fixtures derive `currentHref` from `collectionPageAddress` for the active cursor,
-filters and layout, preserving the route's omitted default `list` parameter. Header acceptance checks linked curator
-identity separately from the readable member count and native update time.
+filters and canonical layout, then retain a valid same-locale Collection-directory return. Occurrence and projection
+references assert the `collectionMemberReturnAddress` owner preserves its normalized destination. Header acceptance
+checks linked curator identity separately from the readable member count and native update time.
 
 Source evidence: `docs/research/page-needs-api-render-audit.md` (A06 and Collection), `web-component-parity.md`,
 `api-first-platform-coverage.md`, and `seeded-core-page-review.md`; read-only `legacy-final` work-page/credits.tsx
