@@ -641,6 +641,9 @@ test('native delayed foreign projection blocks a retained page and continuation 
       const page = await started.promise;
       const pageIds = page.result.hits.map((hit) => hit.id);
       expect(pageIds).toHaveLength(2);
+      const retainedContinuationId = pageIds[1];
+      if (retainedContinuationId === undefined)
+        throw new Error('Captured native page did not include its continuation hit');
       expect(pageIds.every((book) => dependentBooks.includes(book))).toBe(true);
       expect(page.window.positions).toHaveLength(2);
       const continuation = {
@@ -725,7 +728,7 @@ test('native delayed foreign projection blocks a retained page and continuation 
             final,
             1,
           );
-          expect(query.result.hits.map((hit) => hit.id)).toEqual([pageIds[1]]);
+          expect(query.result.hits.map((hit) => hit.id)).toEqual([retainedContinuationId]);
           expect(final.pending).toContainEqual(reduction);
           expect(final.blocking).toContainEqual({ head: reduction, phase: 'pending', scope: 'filter_or_order' });
         } else {
@@ -779,7 +782,7 @@ test('native delayed foreign projection blocks a retained page and continuation 
           final,
           1,
         );
-        expect(query.result.hits.map((hit) => hit.id)).toEqual([pageIds[1]]);
+        expect(query.result.hits.map((hit) => hit.id)).toEqual([retainedContinuationId]);
         expect(final.pending).toEqual([]);
         expect(final.changed).toContainEqual(reduction);
         expect(final.blocking).toContainEqual({ head: reduction, phase: 'changed', scope: 'filter_or_order' });
