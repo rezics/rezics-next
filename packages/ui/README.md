@@ -203,7 +203,7 @@ A suitability-withheld cover shows its decoded ThumbHash blurred behind the labe
 
 ### Sizes and loading
 
-`Cover` takes a named size (`xs` 48 px, `sm` 96 px, `md` 160 px, `lg` 240 px, `xl` 320 px wide in CSS pixels) or `fill` for a frame sized by its parent. It writes `srcset` from the variants the kernel returned, offers AVIF before WebP through `<picture>`, and sets `sizes` from the named size so the browser picks the smallest sufficient variant. It sets intrinsic `width` and `height` from the frame. Covers below the first viewport load lazily; the subject page's own cover loads eagerly with high fetch priority because it is usually the largest element.
+`Cover` takes a named size (`xs` 48 px, `sm` 96 px, `md` 160 px, `lg` 240 px, `xl` 320 px wide in CSS pixels) or `fill` for a frame sized by its parent. It writes `srcset` from the variants the kernel returned, offers AVIF before WebP through `<picture>`, and sets `sizes` from the named size so the browser picks the smallest sufficient variant. It sets intrinsic `width` and `height` from the frame. Cover actions and suitability reveal sit outside the clipped artwork frame so even a short landscape thumbnail keeps a 44 px target; the artwork retains its configured ratio. Covers below the first viewport load lazily; the subject page's own cover loads eagerly with high fetch priority because it is usually the largest element.
 
 ### One summary everywhere
 
@@ -224,11 +224,10 @@ mode, relation, edition and character tiles) follows one pattern:
   background, outline, border or shadow, including on hover. Keyboard focus shows a visible ring around the whole
   tile. `Cover` owns the one cover radius. The cover frame in a tile, each `CoverRow` or `CoverGrid` item and a
   standalone `Cover` use that radius; the `CoverRow` rail uses it too, while `CoverCard` sets no radius of its own.
-  At 1280 px about eight tiles fit per row with an 8 px gap; the title is centered on at most two lines with an
-  ellipsis.
-- Below the cover: the title clamped to two lines, then at most one line of secondary text (creator, year or
-  relation label), then the item's one row of state (progress, status or score). Nothing else; details belong on
-  the subject page. The last row places state or progress first and the menu at the end, aligned with the cover’s right edge. It sits at the bottom of the full-height tile so tiles in a grid row line up. A menu alone stays at the end; with neither state, progress nor menu, no last row is rendered.
+  At 1280 px about eight tiles fit per row with an 8 px gap; the title is centered and wraps to remain readable.
+- Below the cover: the wrapping title, then supplied secondary text (creator, year, relation label or active
+  sort context), then the item's state (progress, status or score). Full details belong on
+  the subject page. The last row wraps when needed, with state or progress first and the menu at the end, aligned with the cover’s right edge. It sits at the bottom of the full-height tile so tiles in a grid row line up. A menu alone stays at the end; with neither state, progress nor menu, no last row is rendered.
 - Every card defaults to the shared portrait frame and honors its actual member Type's configured list aspect. Its title and metadata remain attached beneath that image;
   a grid's composition ratio is only the fallback when the member has no known list presentation.
 - The title link stretches across plain card areas to the subject; a site passes its client-side router link as
@@ -244,8 +243,7 @@ their own progress row inside a cover tile.
 
 A tile can take `status={{ label, href? }}`. The caller passes the status label already localized for the subject
 profile. The quiet, neutral chip sits in the caption after the title and byline and before progress; its ink uses the
-foreground or muted-foreground token. A long label stays on one line and truncates while remaining available to
-assistive technology. When `href` is present, the chip is a separate link above the stretched subject link, so pointer
+foreground or muted-foreground token. A long label wraps within the tile. When `href` is present, the chip is a separate link above the stretched subject link, with a 44 px target, so pointer
 and keyboard users can reach it; keyboard order is subject, status, then the menu.
 
 ## Choice controls
@@ -260,18 +258,25 @@ Import `ListRow`, `ListRowLink` and `ListRowControl` from `@rezics/ui/list-row` 
 
 Import `ContentItem` and `ContentItemProps` from `@rezics/ui/content-item` for a shared content row. Place each item in an ordinary `ul` or `ol`; it renders exactly one `li`. The required `title` renders as a named `h2`, `h3` or `h4` (default `h2`). With `href`, one native `ListRowLink` is stretched across the row and labelled by that visible heading; without a destination, the heading remains plain text. No slot is nested inside the primary anchor, and there is no duplicate title link or tab stop.
 
-The optional slots render in this order: `visual`, `context`, `metadata`, `preview`, `state`, `actions`, `trailing`, with the title between context and metadata. A visual supplies its own cover or avatar width; omitting it leaves the content column flush with the row rather than an empty visual column. Use `metadata` for supplied facts and secondary links, `preview` for short content summaries, `state` for progress or status, and `actions`/`trailing` for actual independent controls. Metadata, state and controls sit above the stretched link. Buttons and links in state/action slots have at least 44 px targets, including on touch.
+The optional slots render in this order: `visual`, `context`, `metadata`, `preview`, `state`, `actions`, `trailing`, with the title between context and metadata. A visual supplies its own cover or avatar width; omitting it leaves the content column flush with the row rather than an empty visual column. Use `metadata` for supplied facts and secondary links, `preview` for short content summaries, `state` for progress or status, and `actions`/`trailing` for actual independent controls. Independent controls sit above the stretched link; plain metadata remains part of the primary row hit area. Links, buttons, disclosure summaries and labelled controls have at least 44 px targets, including on touch.
 
-Within `visual`, `context` and `preview`, the row raises each native link, button, disclosure summary, form label and form field individually and supplies a visible focus outline. Those slot wrappers stay in normal flow, so plain preview content keeps the primary row hit area. Do not put an entire preview inside `ListRowControl`; reserve that wrapper for the existing `metadata`, `state`, `actions` and `trailing` layers. See [the supported content-item composition](src/components/content-item.md) for a disclosure and form example.
+Within `visual`, `context`, `metadata` and `preview`, the row raises each native link, button, disclosure summary, form label and form field individually and supplies a visible focus outline. Those slot wrappers stay in normal flow, so plain preview content keeps the primary row hit area. Do not put an entire preview inside `ListRowControl`; reserve that wrapper for the existing `state`, `actions` and `trailing` layers. Absolute and fixed controls keep their positioning; keyboard-focusable composite controls also receive the independent layer. See [the supported content-item composition](src/components/content-item.md) for a disclosure and form example.
 
 `ContentItem` is also the supported composition for feed and post summaries. Put community or author links and age in
 `context`, the supplied title and destination in `title`/`href`, supplied media or text in `visual`/`preview`, and
 independent reactions, comments or sharing controls in `actions` or `trailing`. The same item family reflows on
 phones; the retired `MobileFeedCard` is no longer a package export.
 
+Decision: preserve caller-owned cover ratios and presentation, wrap supplied titles/context/metadata/status, and
+place the independent control rail below text until the row itself reaches 40 rem. Wide rows bound that rail to
+40% of the remaining content width. Shared control layers preserve positioned cover actions, use visible focus and
+44 px targets, and exclude disclosures, labels, fields and composite controls from row selection. No identity
+hydration, synthesized facts or renderer is added. Grid titles and supplied sort context wrap; table sorting retains
+`aria-sort` and a visible direction arrow. Cover reveal, selection and menus remain available without hover.
+
 Titles are 17–18 px on phones and 18–20 px on desktop; metadata is 13–14 px. Rows use 12–16 px vertical breathing room and 12–16 px phone / 16–20 px desktop gaps. The component forwards ordinary `li` attributes, including `data-*`, and uses the `ListRow` overlay for hover, focus and press, with a visible focus outline and reduced-motion transition handling. Native forced-colors behavior is retained by using ordinary headings, links, controls and list semantics.
 
-`ShelfListRow` from `@rezics/ui/shelf-list` remains the compatibility adapter for library callers. It composes the shared item while preserving selection callbacks, status and overflow menus, progress labels (including unknown values), cover presentation, date and progress controls. Metadata remains visible on narrow screens. Status, progress, stepper and date each render once and reflow with the same responsive state composition; unknown progress keeps its position label without a bar. Use `ShelfTable` for tabular data rather than changing table semantics. The shared row keeps the established `ListRow` hover, focus and press overlay as its sole surface feedback.
+`ShelfListRow` from `@rezics/ui/shelf-list` remains the compatibility adapter for library callers. It composes the shared item while preserving selection callbacks, status and overflow menus, progress labels (including unknown values), cover presentation, date and progress controls. Metadata remains visible on narrow screens. Cover wrappers set only width: `Cover` owns the proportional frame, including configured landscape/square presentation and explicit ratios. Table cover cells follow the same rule. Status, progress, stepper and date each render once and reflow with the same responsive state composition; unknown progress keeps its position label without a bar. Use `ShelfTable` for tabular data rather than changing table semantics. The shared row keeps the established `ListRow` hover, focus and press overlay as its sole surface feedback.
 
 ### List presentation
 
@@ -283,18 +288,17 @@ inherited hints or fact values. The caller supplies already available, localized
 
 `MemberListRow` keeps its existing public props for Search and Collection callers while adapting to `ContentItem`: the
 title is the shared named heading and stretched primary link, the decorative `Cover` remains the leading visual, its
-supplied children stay together as raised metadata, and `trailing` remains an independent control slot. Its
+supplied children stay together as metadata with independently raised controls, and `trailing` remains an independent control slot. Its
 `storyOverlay` prop enables the shared forced overlay for stories. The existing `member-list-row-title` selector stays
 on the actual heading alongside ContentItem's `data-content-item-slot="title"`; the cover keeps its
 `member-list-row-cover` selector. The adapter does not fetch or derive member facts; the caller supplies any already
 available localized facts and links.
 
 `MemberReadingItem` is the compact Collection composition for either `list` or `grid`. It uses the same
-proportional thumbnail, semantic title and supplied summary. Horizontal reading rows have a bounded width and a
-12 rem maximum from `sm`. The summary is limited to four lines. Full facts and secondary action evidence belong
+proportional thumbnail, semantic title and supplied summary. Horizontal reading rows have a bounded width and grow with their supplied content. The summary is limited to four lines. Full facts and secondary action evidence belong
 in Inspect detail, leaving the default row compact without an inner scroll area. The caller
 supplies occurrence identity, position, an explicit Inspect action and essential action evidence. A grid keeps
-that evidence and the Inspect action outside `CoverCard`'s action row. `MemberListRow` remains the adapter for
+that evidence and the Inspect action in its card content flow. `MemberListRow` remains the adapter for
 existing Search and other list consumers.
 
 Decision: a grid `MemberReadingItem` places its summary, position, action evidence and Inspect control inside the
@@ -311,7 +315,7 @@ supplied evidence. Keep permission, unavailable and uncertain action outcomes vi
 The current released hints and exact Type fallbacks all select portrait 5:7. Unknown Types retain a valid
 configured composition ratio, otherwise the same portrait default. A Collection kind may guide composition;
 it never rewrites a member's actual Type. Rows use 72/96 px portrait and square frames and 128/192 px explicitly
-configured landscape frames on phone/desktop, with a common radius and two-line attached title. Artwork keeps
+configured landscape frames on phone/desktop, with a common radius and wrapping attached title. Artwork keeps
 its own dimensions and fit independently of the frame. Standalone `Cover` accepts list presentation when passed.
 
 The complete behavior folder is `Components/List Presentation`, with attached docs, keyboard focus, actual menu
@@ -386,7 +390,7 @@ implement them in this stack.
   last activity, and the item menu.
 - **Table.** Status, progress and rating editable in place, a column picker, a sticky header and sorting by column.
 - **Controls.** Each tab offers the sorts that suit it (Completed defaults to date finished, Planned to date added);
-  active filters show as removable chips with Clear filters; selection by a Select button, a checkbox on hover, a
+  active filters show as removable chips with Clear filters; selection by a Select button, a visible checkbox, a
   long press or shift-click ranges, with a bottom bar for Select all matching, status, collections and remove.
 - **Persistence.** Tab, sort, filters, layout and position live in the URL; layout, sort and grid size are also saved
   to the reader's account and follow them across devices; a URL value wins.

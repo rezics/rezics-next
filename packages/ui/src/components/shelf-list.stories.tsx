@@ -16,9 +16,19 @@ const examples = [
   { id: 'game', title: '星を越えて — 彼方の記憶をたどる旅', ratio: '16:9' as const, types: ['schema:VideoGame'] },
   { id: 'unknown', title: 'A title with unknown progress', ratio: '2:3' as const, types: ['schema:Book'] },
 ];
-const meta = { title: 'Components/Shelf List', component: ShelfList, decorators: [withSurface] } satisfies Meta<
-  typeof ShelfList
->;
+const meta = {
+  title: 'Components/Shelf List',
+  component: ShelfList,
+  parameters: {
+    docs: {
+      description: {
+        component:
+          'Illustrative supplied shelf records and local interactions; native and visual acceptance is separate.',
+      },
+    },
+  },
+  decorators: [withSurface],
+} satisfies Meta<typeof ShelfList>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Entries: Story = {

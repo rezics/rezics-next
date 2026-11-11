@@ -1,8 +1,9 @@
 import type { MouseEvent, ReactNode } from 'react';
-import { EllipsisIcon } from 'lucide-react';
+import { EllipsisIcon, MinusIcon, PlusIcon } from 'lucide-react';
 import { Button } from '../shadcn/button.tsx';
 import { Menu, type MenuEntry } from './menu.tsx';
-import { Cover, coverRatio, type CoverProps } from './cover.tsx';
+import { Cover, type CoverProps } from './cover.tsx';
+import { independentControlSelector } from './content-interaction.ts';
 import { ContentItem } from './content-item.tsx';
 import { ListRowControl } from './list-row.tsx';
 import { ProgressRow } from './progress-row.tsx';
@@ -58,7 +59,6 @@ export function ShelfListRow({
   onSelectedChange,
   onSelect,
 }: ShelfListRowProps) {
-  const ratio = cover.ratio ?? coverRatio(cover.subject.types);
   const select = (event: MouseEvent) => {
     onSelectedChange?.(!selected);
     onSelect?.(event);
@@ -69,7 +69,7 @@ export function ShelfListRow({
       <Menu
         title="Status"
         trigger={
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" className="min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere">
             {status}
           </Button>
         }
@@ -100,59 +100,65 @@ export function ShelfListRow({
               </Field>
             </ListRowControl>
           )}
-          <div
-            className="pointer-events-none w-[72px] shrink-0 overflow-hidden rounded sm:w-24"
-            style={{ aspectRatio: ratio.replace(':', ' / ') }}
-          >
-            <Cover {...cover} size="fill" ratio={ratio} decorative />
+          <div className="w-[72px] shrink-0 sm:w-24">
+            <Cover {...cover} size="fill" decorative />
           </div>
         </div>
       }
       metadata={meta}
       state={
-        <div
-          data-slot="shelf-list-row-state"
-          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground"
-        >
-          {chip != null && <div data-slot="shelf-list-row-status">{chip}</div>}
-          {chip != null && progress != null && (
-            <span data-slot="shelf-list-row-separator" aria-hidden="true" className="sm:hidden">
-              ·
-            </span>
-          )}
-          {progress != null && (
-            <div data-slot="shelf-list-row-progress" className="w-24 min-w-0 text-xs">
-              <ProgressRow {...progress} />
-            </div>
-          )}
-          {stepper != null && (
-            <div data-slot="shelf-list-row-stepper" className="flex shrink-0">
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={stepper.decreaseLabel}
-                onClick={() => stepper.onStep(-1)}
-                className="min-h-11 min-w-11"
+        chip != null || progress != null || stepper != null || date != null ? (
+          <div
+            data-slot="shelf-list-row-state"
+            className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground"
+          >
+            {chip != null && (
+              <div data-slot="shelf-list-row-status" className="min-w-0 max-w-full whitespace-normal wrap-anywhere">
+                {chip}
+              </div>
+            )}
+            {chip != null && progress != null && (
+              <span data-slot="shelf-list-row-separator" aria-hidden="true" className="sm:hidden">
+                ·
+              </span>
+            )}
+            {progress != null && (
+              <div data-slot="shelf-list-row-progress" className="w-24 min-w-0 max-w-full text-xs">
+                <ProgressRow {...progress} />
+              </div>
+            )}
+            {stepper != null && (
+              <div data-slot="shelf-list-row-stepper" className="flex shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={stepper.decreaseLabel}
+                  onClick={() => stepper.onStep(-1)}
+                  className="min-h-11 min-w-11"
+                >
+                  <MinusIcon aria-hidden />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={stepper.increaseLabel}
+                  onClick={() => stepper.onStep(1)}
+                  className="min-h-11 min-w-11"
+                >
+                  <PlusIcon aria-hidden />
+                </Button>
+              </div>
+            )}
+            {date != null && (
+              <span
+                data-slot="shelf-list-row-date"
+                className="min-w-0 max-w-full whitespace-normal text-xs text-muted-foreground wrap-anywhere"
               >
-                −
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={stepper.increaseLabel}
-                onClick={() => stepper.onStep(1)}
-                className="min-h-11 min-w-11"
-              >
-                +
-              </Button>
-            </div>
-          )}
-          {date != null && (
-            <span data-slot="shelf-list-row-date" className="text-xs text-muted-foreground">
-              {date}
-            </span>
-          )}
-        </div>
+                {date}
+              </span>
+            )}
+          </div>
+        ) : undefined
       }
       trailing={
         (menu != null || menuEntries != null) && (
@@ -177,12 +183,7 @@ export function ShelfListRow({
                 select(event);
                 return;
               }
-              if (
-                !target.closest(
-                  '[data-slot="list-row-control"], a, button, input, [role="checkbox"], [role="menuitem"]',
-                )
-              )
-                select(event);
+              if (!target.closest(`[data-slot="list-row-control"], ${independentControlSelector}`)) select(event);
             }
           : undefined
       }

@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { createElement, type ReactNode } from 'react';
+import { act, createElement, type ReactNode } from 'react';
+import { dirname, join } from 'node:path';
+import { ReadingDisclosureScope, type CoverSummary } from '@rezics/ui/cover';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ContentItem } from '@rezics/ui/content-item';
 import { CoverCard, CoverGrid, CoverRow, type CoverCardLink } from '@rezics/ui/cover-card';
@@ -285,19 +287,11 @@ test('CoverCard layers each supplied native control above the stretched link wit
   expect(cards).toHaveLength(4);
 
   const controlSelectors = [
-    '[&_a]:relative [&_a]:z-20',
-    '[&_button]:relative [&_button]:z-20',
-    '[&_summary]:relative [&_summary]:z-20',
-    '[&_label]:relative [&_label]:z-20',
-    '[&_input]:relative [&_input]:z-20',
-    '[&_select]:relative [&_select]:z-20',
-    '[&_textarea]:relative [&_textarea]:z-20',
-    '[&_a:focus-visible]:outline-ring',
-    '[&_button:focus-visible]:outline-ring',
-    '[&_summary:focus-visible]:outline-ring',
-    '[&_input:focus-visible]:outline-ring',
-    '[&_select:focus-visible]:outline-ring',
-    '[&_textarea:focus-visible]:outline-ring',
+    ':not(.absolute,.fixed)]:relative',
+    '[&_:is(a,button,summary,label,input,select,textarea,[tabindex],[contenteditable=true])]:z-20',
+    ':focus-visible]:outline-ring',
+    '[&_a]:min-h-11',
+    '[&_button]:min-h-11',
   ];
   const opening = (card: string, slot: string) =>
     card.match(new RegExp(`<div\\b(?=[^>]*data-slot="${slot}")[^>]*>`))?.[0];
@@ -338,4 +332,92 @@ test('CoverCard layers each supplied native control above the stretched link wit
   expect(cards[3]).toContain('data-slot="cover-placeholder-title"');
   expect(cards[3]).toContain('Unavailable destination');
   expect(cards[3]).not.toMatch(/<a\b[^>]*data-slot="cover-card-title"/);
+});
+
+test('current tile reading keeps primary and independent actions separate and retires revealed covers and late failures', async () => {
+  const webTests = join(import.meta.dir, '../../../apps/web/tests');
+  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', webTests))));
+  const window = new Window();
+  const globals = { window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  Object.defineProperty(Object.getPrototypeOf(window.document.createElement('img')), 'complete', {
+    configurable: true,
+    get: () => false,
+  });
+  const { createRoot } = await import('react-dom/client');
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host);
+  const calls: string[] = [];
+  const src = (media: string) => `/media/${media}`;
+  const view = (id: string, reading = 'first') => {
+    const image: CoverSummary = {
+      media: id,
+      width: 500,
+      height: 700,
+      variants: [{ format: 'webp', width: 640 }],
+      placeholder: { color: '#465c72', thumbhash: '' },
+      focalPoint: null,
+      credit: { rightsHolder: 'Supplied owner' },
+      withheld: 'suitability',
+    };
+    return createElement(
+      ReadingDisclosureScope.Provider,
+      { value: reading },
+      createElement(CoverCard, {
+        href: `/works/${id}`,
+        title: `Supplied ${id}`,
+        cover: {
+          subject: { ...subject, id, title: `Supplied ${id}` },
+          cover: image,
+          src,
+          action: { label: 'Open supplied artwork', onActivate: () => calls.push('artwork') },
+        },
+        onClick: (event) => {
+          event.preventDefault();
+          calls.push('primary');
+        },
+        secondary: createElement('button', { type: 'button', onClick: () => calls.push('metadata') }, 'Open creator'),
+        state: createElement('button', { type: 'button', onClick: () => calls.push('state') }, 'Continue'),
+      }),
+    );
+  };
+  const click = async (selector: string) => act(async () => host.querySelector(selector)!.click());
+  try {
+    await act(async () => root.render(view('a')));
+    expect(host.querySelector('img')).toBeNull();
+    await click('[data-slot="cover-card-title"]');
+    await click('[data-slot="cover-card-secondary"] button');
+    await click('[data-slot="cover-card-state-content"] button');
+    await click('button[aria-label="Show cover"]');
+    await click('button[aria-label="Open supplied artwork"]');
+    expect(calls).toEqual(['primary', 'metadata', 'state', 'artwork']);
+    const first = host.querySelector('img')!;
+    const propsKey = Object.getOwnPropertyNames(first).find((key) => key.startsWith('__reactProps$'))!;
+    const staleFailure = (first as unknown as Record<string, { onError: () => void }>)[propsKey]!.onError;
+    for (const id of ['b', 'a']) await act(async () => root.render(view(id)));
+    expect(host.querySelector('img')).toBeNull();
+    await click('button[aria-label="Show cover"]');
+    await act(async () => staleFailure());
+    expect(host.querySelector('[data-slot="cover"]')?.getAttribute('data-state')).toBe('loading');
+    await act(async () => host.querySelector('img')!.dispatchEvent(new window.Event('error')));
+    expect(host.querySelector('[data-slot="cover"]')?.getAttribute('data-state')).toBe('placeholder');
+    expect(host.querySelector('button[aria-label="Open supplied artwork"]')).toBeNull();
+    await act(async () => root.render(view('c')));
+    expect(host.querySelector('[data-slot="cover"]')?.getAttribute('data-state')).toBe('withheld');
+    await click('button[aria-label="Show cover"]');
+    await act(async () => root.render(view('c', 'replacement-reading')));
+    expect(host.querySelector('[data-slot="cover"]')?.getAttribute('data-state')).toBe('withheld');
+    expect(host.querySelector('img')).toBeNull();
+    expect(host.querySelector('[data-slot="cover-card-title"]')?.textContent).toBe('Supplied c');
+  } finally {
+    await act(async () => root.unmount());
+    await window.happyDOM.abort();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
 });

@@ -235,31 +235,22 @@ test('ContentItem layers native independent controls per slot and keeps plain an
   assertPrimaryAnchorHasNoInteractiveDescendants(independentPrimaryLink!);
 
   const raisedSelectors = [
-    '[&_a]:relative',
-    '[&_a]:z-10',
-    '[&_button]:relative',
-    '[&_button]:z-10',
-    '[&_summary]:relative',
-    '[&_summary]:z-10',
-    '[&_label]:relative',
-    '[&_label]:z-10',
-    '[&_input]:relative',
-    '[&_input]:z-10',
-    '[&_select]:relative',
-    '[&_select]:z-10',
-    '[&_textarea]:relative',
-    '[&_textarea]:z-10',
+    ':not(.absolute,.fixed)]:relative',
+    '[&_:is(a,button,summary,label,input,select,textarea,[tabindex],[contenteditable=true])]:z-20',
+    ':focus-visible]:outline-ring',
+    '[&_a]:min-h-11',
+    '[&_a]:min-w-11',
+    '[&_button]:min-h-11',
+    '[&_button]:min-w-11',
   ];
-  for (const slot of ['visual', 'context', 'preview']) {
+  for (const slot of ['visual', 'context', 'metadata', 'preview', 'state', 'actions', 'trailing']) {
     const opening = slotOpening(controlledRow, slot);
     for (const selector of raisedSelectors) expect(opening).toContain(selector);
   }
-  expect(slotOpening(controlledRow, 'preview')).toContain('[&_summary:focus-visible]:outline-ring');
-  expect(slotOpening(controlledRow, 'preview')).toContain('[&_textarea:focus-visible]:outline-ring');
-
-  for (const slot of ['metadata', 'state', 'actions', 'trailing']) {
+  for (const slot of ['state', 'actions', 'trailing']) {
     expect(slotOpening(controlledRow, slot)).toContain('relative z-10');
   }
+  expect(slotOpening(controlledRow, 'metadata')).not.toContain('data-slot="list-row-control"');
   for (const accessibleName of [
     'Artist profile',
     'Visual options',
@@ -327,13 +318,24 @@ test('ShelfListRow preserves its selection controls, independent status link, co
   expect(html).toContain('aria-label="Increase"');
   expect(html).toContain('w-[72px]');
   expect(html).toContain('sm:w-24');
-  expect(html).toContain('style="aspect-ratio:5 / 7"');
+  expect(html).toContain('data-ratio="5:7"');
   const primaryLink = html.match(/<a\b[^>]*data-slot="list-row-link"[^>]*>[\s\S]*?<\/a>/)?.[0];
   expect(primaryLink).toBeDefined();
   assertPrimaryAnchorHasNoInteractiveDescendants(primaryLink!);
   expect(html).toContain('Progress unknown');
   expect(html).not.toContain('aria-label="Progress unknown"');
   expect(html).not.toContain('style="width:0%"');
-  expect(html).toContain('line-clamp-2');
-  expect(html).toContain('sm:line-clamp-1');
+  expect(html).not.toContain('line-clamp-');
+  expect(html).toContain('whitespace-normal');
+  expect(html).toContain('wrap-anywhere');
+  expect(html).toContain('@min-[40rem]/content-item:grid');
+  const plainShelf = renderToStaticMarkup(
+    createElement(ShelfListRow, {
+      title: 'Plain work',
+      href: '/works/plain',
+      cover: { subject: { id: 'plain', title: 'Plain work', types: [] }, cover: null, src: () => '' },
+      labels: { select: 'Select', menu: 'More' },
+    }),
+  );
+  expect(plainShelf).not.toContain('data-content-item-slot="state"');
 });
