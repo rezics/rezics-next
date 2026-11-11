@@ -67,9 +67,9 @@ test('MemberListRow composes its supplied subject facts and trailing control thr
   const primaryLink = html.match(/<a\b[^>]*data-slot="list-row-link"[^>]*>[\s\S]*?<\/a>/)?.[0];
   expect(primaryLink).toBeDefined();
   expect(primaryLink).not.toContain('href="/genres/fantasy"');
-  expect(primaryLink).not.toMatch(/<(?:a|button|input)\b/);
+  expect(primaryLink?.slice(primaryLink.indexOf('>') + 1)).not.toMatch(/<(?:a|button|input)\b/);
   expect(html.match(/<a\b/g)?.length).toBe(2);
-  expect(html).toContain('[&_button]:min-h-11');
+  expect(html).toContain('[&amp;_button]:min-h-11');
 });
 
 test('MemberListRow keeps known Type defaults ahead of ratio and leaves unknown Type geometry to composition', () => {

@@ -269,16 +269,15 @@ export function Menu({
     form === 'dropdown' ? (
       <D.DropdownMenu
         open={open}
-        onOpenChange={(value, details) => {
+        onOpenChange={(value) => {
           if (value) openMenu();
-          else if (formRef.current === 'dropdown' && !ignoreOpeningDismiss(details.reason)) close();
+          else if (formRef.current === 'dropdown') close();
         }}
       >
         <D.DropdownMenuTrigger
           render={trigger}
           onClick={(event) => {
             triggerRef.current = event.currentTarget as HTMLElement;
-            openMenu();
           }}
         />
         <D.DropdownMenuContent>
@@ -336,16 +335,15 @@ export function Menu({
         ) : (
           <D.DropdownMenu
             open={open && form === 'dropdown'}
-            onOpenChange={(value, details) => {
+            onOpenChange={(value) => {
               if (value) openMenu();
-              else if (formRef.current === 'dropdown' && !ignoreOpeningDismiss(details.reason)) close();
+              else if (formRef.current === 'dropdown') close();
             }}
           >
             <D.DropdownMenuTrigger
               render={trigger}
               onClick={(event) => {
                 triggerRef.current = event.currentTarget as HTMLElement;
-                openMenu();
               }}
             />
             {form === 'dropdown' && (

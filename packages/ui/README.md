@@ -278,7 +278,9 @@ on the actual heading alongside ContentItem's `data-content-item-slot="title"`; 
 available localized facts and links.
 
 `MemberReadingItem` is the compact Collection composition for either `list` or `grid`. It uses the same
-proportional thumbnail, semantic title and supplied summary; list rows have a bounded reading width. The caller
+proportional thumbnail, semantic title and supplied summary. Horizontal reading rows have a bounded width and a
+12 rem maximum from `sm` when no separate action evidence needs more room. The summary is limited to four lines;
+the full facts stay in the Inspect detail and interactive evidence remains in normal flow. The caller
 supplies occurrence identity, position, an explicit Inspect action and essential action evidence. A grid keeps
 that evidence and the Inspect action outside `CoverCard`'s action row. `MemberListRow` remains the adapter for
 existing Search and other list consumers.
