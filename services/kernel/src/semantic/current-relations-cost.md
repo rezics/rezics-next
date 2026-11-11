@@ -27,6 +27,10 @@ page completion, `currentRelationStatements` repeats the keyed current read once
 the page. `readAnchoredFences` opens one checkout per distinct source partition and 100-tuple batch, with BEGIN and
 COMMIT controls; those batches are independent of Subject population.
 
+Decision: HTTP relation and link reads carry the original request deadline through release resolution and page reads.
+Read snapshot checkout and SQL obey that deadline. Freshness polling uses at most half the remaining request time; if
+it expires, the response reports `caught_up: false` and leaves the remaining budget for the current page read.
+
 Input bytes are linear in `U`: route integers, UUID keys, property/context IDs and bounded defaults. Provenance batches
 carry at most 256 route/Subject/candidate/slot UUID tuples. Expanded output carries at most 32 selected statement
 payloads per slot, under the existing statement and qualifier limits. No helper performs an uncharged catalogue scan.
