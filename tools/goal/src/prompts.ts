@@ -16,6 +16,7 @@ import {
   type ProofReservation,
 } from './verification.ts';
 import { acceptanceRequirements, devProductBrief } from './briefs.ts';
+import { workerCheckHostBudgetLimit } from './worker-check-budget.ts';
 import type { AttemptRef } from './contracts.ts';
 import type {
   AcceptanceRequirement,
@@ -261,12 +262,11 @@ export function selectConditions(input: {
   const authorization = input.authorization ?? task.proofAuthorization;
   if (proofProtocolAuthorized(brief, proofRun)) selected.push('proof-run');
   else if (registeredProof(brief, authorization)) selected.push('registered-proof');
-  // A brief that names its own native or browser acceptance (a seeded walk, for example) runs it in this attempt;
-  // minimal mode defers only checks a brief does not ask for.
+  // A governed attempt must see the same typing-only boundary that its check wrapper enforces. Exempt briefs
+  // keep their original acceptance; the local minimal setting still applies to otherwise unqualified work.
   else if (
-    minimalVerification(input.stateDirectory) &&
-    !brief.acceptance?.requires?.length &&
-    brief.goal !== 'control-plane'
+    (input.stateDirectory && workerCheckHostBudgetLimit(task, task.currentAttempt) !== 'off') ||
+    (minimalVerification(input.stateDirectory) && !brief.acceptance?.requires?.length && brief.goal !== 'control-plane')
   )
     selected.push('minimal-verification');
   else {
@@ -297,7 +297,7 @@ function deferredSentence(items: AcceptanceRequirement[]): string {
   return `${names} ${items.length === 1 ? 'is' : 'are'} deferred to the verifier.`;
 }
 
-function promptView(input: WorkerPromptInput): PromptView {
+function promptView(input: WorkerPromptInput, deferOrdinaryTests = false): PromptView {
   const policy = input.policy ?? defaultPolicy;
   const { task, mainCheckout } = input;
   const brief = task.brief;
@@ -314,7 +314,8 @@ function promptView(input: WorkerPromptInput): PromptView {
   const wrapperFailureRule = product
     ? 'A wrapper-classified shared infrastructure-only failure uses the dev product source-success rule above; keep every failed, skipped and unreached check unverified, and do not retry source solely for infrastructure.'
     : "A failure after the wrapper's own infrastructure rerun is final: a `tool` blocker; type, test and product failures are not infrastructure failures.";
-  const tests = task.workspace ? [] : workerTestCommands(branchChangedPaths(task, policy), task.worktree);
+  const tests =
+    task.workspace || deferOrdinaryTests ? [] : workerTestCommands(branchChangedPaths(task, policy), task.worktree);
   const proofRun =
     input.proofRun ?? (task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined);
   const authorization = input.authorization ?? task.proofAuthorization;
@@ -429,7 +430,8 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
   const policy = input.policy ?? defaultPolicy;
   const directory = input.promptDirectory ?? DEFAULT_PROMPT_DIRECTORY;
   const { task, mainCheckout } = input;
-  const view = promptView(input);
+  const selected = selectConditions(input);
+  const view = promptView(input, selected.includes('minimal-verification'));
   const research = task.brief.kind === 'research';
   const verification = task.brief.kind === 'verification';
   const roleName = research ? 'research.md' : 'worker.md';
@@ -451,7 +453,6 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
           '\n\n',
         ),
       );
-  const selected = selectConditions(input);
   const renderedConditions = selected.map((id) => loadCondition(directory, id, view, policy));
   const conditionText = renderedConditions
     .map((item) => item.text)
