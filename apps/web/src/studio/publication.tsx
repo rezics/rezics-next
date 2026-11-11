@@ -79,7 +79,8 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
       {state.publications.items.length ? <ol className="studio-history-list">
         {state.publications.items.map((publication) => <li key={`${publication.publicationId}:${publication.revision}`}>
           <h3>{publication.state === 'withdrawn' ? 'Withdrawn snapshot' : 'Published snapshot'}</h3>
-          <p><time dateTime={publication.publishedAt}>{publication.publishedAt}</time> · {publication.entries.length} {book ? 'chapters' : 'articles'}</p>
+          <p>{publication.publishedAt ? <><time dateTime={publication.publishedAt}>{publication.publishedAt}</time> · </>
+            : null}{publication.entries.length} {book ? 'chapters' : 'articles'}</p>
           <p className="studio-break">Revision: {publication.revision}</p>
           <details><summary>Included versions</summary>
             <ol>{publication.entries.map((entry) => <li key={entry.occurrenceId ?? entry.document.postId}>

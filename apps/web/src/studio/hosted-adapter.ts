@@ -42,6 +42,9 @@ export class HostedBookAdapter implements BookOrganizerPort {
 
   isCurrent = (): boolean => this.current();
   hasUnresolvedCommand = (): boolean => Boolean(this.attempt?.unresolved);
+  currentStructure = (): BookStructure | null => this.book ? hostedBookStructure(this.book) : null;
+  chapterTargets = () => this.book?.placements.flatMap((placement) =>
+    placement.kind === 'chapter' ? [structuredClone(placement.target)] : []) ?? [];
 
   private async exclusive<T>(signal: AbortSignal, run: () => Promise<StudioResult<T>>): Promise<StudioResult<T>> {
     if (!this.current() || signal.aborted) return ended();

@@ -21,10 +21,11 @@ export type StudioDocument = Readonly<{
   title: string;
   revisionId: string;
   updatedAt: string;
-  state: 'draft' | 'published';
+  state: 'draft' | 'published' | 'protected' | 'taken_down';
 }>;
 export type StudioSelection = Readonly<{
   revision: StudioRevision;
+  visibility?: 'draft' | 'published' | 'protected' | 'taken_down';
   permissions: Readonly<{ edit: boolean; publish: boolean }>;
 }>;
 export type StudioFailure = Readonly<{
@@ -50,8 +51,13 @@ export type BookStructure = Readonly<{
   canOrganize: boolean;
 }>;
 export type BookStructureChange =
-  | { kind: 'insert'; parentOccurrenceId: string | null; beforeOccurrenceId: string | null; title: string;
-      target: BookPlacement['target'] }
+  | {
+      kind: 'insert';
+      parentOccurrenceId: string | null;
+      beforeOccurrenceId: string | null;
+      title: string;
+      target: BookPlacement['target'];
+    }
   | { kind: 'move'; occurrenceId: string; parentOccurrenceId: string | null; beforeOccurrenceId: string | null }
   | { kind: 'rename'; occurrenceId: string; title: string }
   | { kind: 'pin'; occurrenceId: string; document: ExactDocument }
@@ -63,7 +69,9 @@ export type StudioProfile =
   | Readonly<{ kind: 'articles'; seriesTitle: string | null }>;
 export type PublicationTarget =
   | Readonly<{
-      kind: 'book'; catalogueId: string; structureRevision: string;
+      kind: 'book';
+      catalogueId: string;
+      structureRevision: string;
       /** Explicit selection only. The native review includes required ancestors in the frozen TOC. */
       chapters: readonly { occurrenceId: string; document: ExactDocument }[];
     }>
@@ -71,7 +79,8 @@ export type PublicationTarget =
 export type PublicationRecord = Readonly<{
   publicationId: string;
   revision: string;
-  publishedAt: string;
+  /** The hosted API currently omits publication timestamps. */
+  publishedAt: string | null;
   state: 'published' | 'withdrawn';
   entries: readonly { occurrenceId: string | null; title: string; document: ExactDocument }[];
 }>;
@@ -102,6 +111,8 @@ export type StudioInput = Readonly<{
   title: string;
   profile: StudioProfile;
   documents: StudioPage<StudioDocument>;
+  /** A current Post selection admitted by the owning private reader. */
+  initialSelection?: StudioSelection;
   publications: StudioPage<PublicationRecord>;
   canCreateDraft: boolean;
   canPublish: boolean;
@@ -116,25 +127,53 @@ export type StudioInput = Readonly<{
  */
 export interface StudioPort {
   isCurrent(): boolean;
-  documents(input: { projectId: string; cursor: string }, signal: AbortSignal): Promise<StudioResult<StudioPage<StudioDocument>>>;
+  documents(
+    input: { projectId: string; cursor: string },
+    signal: AbortSignal,
+  ): Promise<StudioResult<StudioPage<StudioDocument>>>;
   open(input: { projectId: string; postId: string }, signal: AbortSignal): Promise<StudioResult<StudioSelection>>;
-  createDraft(input: { projectId: string; title: string; idempotencyKey: string }, signal: AbortSignal): Promise<StudioResult<StudioSelection>>;
+  createDraft(
+    input: { projectId: string; title: string; idempotencyKey: string },
+    signal: AbortSignal,
+  ): Promise<StudioResult<StudioSelection>>;
   saveDraft(input: DraftSave, signal: AbortSignal): Promise<StudioResult<StudioSelection>>;
-  versions(input: { projectId: string; postId: string; cursor: string | null }, signal: AbortSignal): Promise<StudioResult<StudioPage<Omit<StudioRevision, 'body' | 'mediaIds'>>>>;
-  revision(input: { projectId: string; document: ExactDocument }, signal: AbortSignal): Promise<StudioResult<StudioRevision>>;
-  reviewPublication(input: { projectId: string; target: PublicationTarget }, signal: AbortSignal): Promise<StudioResult<PublicationReview>>;
-  publish(input: { projectId: string; review: PublicationReview; idempotencyKey: string }, signal: AbortSignal): Promise<StudioResult<PublicationRecord>>;
-  publications(input: { projectId: string; cursor: string }, signal: AbortSignal): Promise<StudioResult<StudioPage<PublicationRecord>>>;
+  versions(
+    input: { projectId: string; postId: string; cursor: string | null },
+    signal: AbortSignal,
+  ): Promise<StudioResult<StudioPage<Omit<StudioRevision, 'body' | 'mediaIds'>>>>;
+  revision(
+    input: { projectId: string; document: ExactDocument },
+    signal: AbortSignal,
+  ): Promise<StudioResult<StudioRevision>>;
+  reviewPublication(
+    input: { projectId: string; target: PublicationTarget },
+    signal: AbortSignal,
+  ): Promise<StudioResult<PublicationReview>>;
+  publish(
+    input: { projectId: string; review: PublicationReview; idempotencyKey: string },
+    signal: AbortSignal,
+  ): Promise<StudioResult<PublicationRecord>>;
+  publications(
+    input: { projectId: string; cursor: string },
+    signal: AbortSignal,
+  ): Promise<StudioResult<StudioPage<PublicationRecord>>>;
 }
 export interface BookOrganizerPort {
   /** Return a fresh complete bounded structure; reject stale structure revisions atomically. */
-  change(input: { catalogueId: string; expectedRevision: string; change: BookStructureChange; idempotencyKey: string }, signal: AbortSignal): Promise<StudioResult<BookStructure>>;
+  change(
+    input: { catalogueId: string; expectedRevision: string; change: BookStructureChange; idempotencyKey: string },
+    signal: AbortSignal,
+  ): Promise<StudioResult<BookStructure>>;
 }
 
 export type StudioPresentation = Readonly<{
   /** Bind media and mention presentation to this document's current native admission. */
-  editor?: (document: ExactDocument) => Pick<RichTextEditorProps, 'labels' | 'upload' | 'lookupMention' | 'renderUpload' | 'lang' | 'dir'>;
-  reader?: (document: ExactDocument) => Pick<ComponentProps<typeof DocumentBody>, 'renderImage' | 'mentions' | 'labels' | 'locale'>;
+  editor?: (
+    document: ExactDocument,
+  ) => Pick<RichTextEditorProps, 'labels' | 'upload' | 'lookupMention' | 'renderUpload' | 'lang' | 'dir'>;
+  reader?: (
+    document: ExactDocument,
+  ) => Pick<ComponentProps<typeof DocumentBody>, 'renderImage' | 'mentions' | 'labels' | 'locale'>;
 }>;
 export function sameExact(a: ExactDocument, b: ExactDocument): boolean {
   return a.postId === b.postId && a.revisionId === b.revisionId && a.sha256 === b.sha256;

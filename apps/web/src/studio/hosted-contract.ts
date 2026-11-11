@@ -1,7 +1,7 @@
 import * as v from 'valibot';
 import type { ExactDocument, StudioResult } from './contract';
 
-// Local wire seam for Content's hosted-chapters-schemas.ts, until the client owner emits it.
+// Runtime response validation for the generated hosted-catalogue client routes.
 export const hostedId = v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/));
 const nullableId = v.nullable(hostedId);
 const title = v.pipe(v.string(), v.minLength(1), v.maxLength(512), v.check((value) => [...value].length <= 256));
@@ -43,6 +43,22 @@ export const hostedSelection = v.strictObject({
   catalogueId: hostedId, kind: v.picklist(['structure', 'publication']), revisionId: v.optional(hostedId),
 });
 export const hostedKey = v.pipe(v.string(), v.uuid());
+const hostedOwnerBook = v.strictObject({
+  catalogueId: hostedId, threadId: hostedId,
+  createdAt: v.pipe(v.string(), v.check((value) => Number.isFinite(Date.parse(value)))),
+  postRevisionId: hostedId,
+  postVisibility: v.picklist(['draft', 'protected', 'published']),
+  headRevisionId: hostedId, publicationId: nullableId,
+});
+const hostedOwnerScope = v.strictObject({ kind: v.literal('same-home'),
+  route: v.pipe(v.number(), v.integer(), v.minValue(1)), crossHome: v.literal('unavailable') });
+const hostedOwnerViewer = v.strictObject({ accountId: hostedId, authnEpoch: v.pipe(v.number(), v.integer(), v.minValue(1)) });
+export const hostedOwnerInventoryResponse = v.strictObject({
+  scope: hostedOwnerScope, viewer: hostedOwnerViewer,
+  items: v.pipe(v.array(hostedOwnerBook), v.maxLength(20)),
+  nextCursor: v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
+});
+export const hostedOwnerBookResponse = v.strictObject({ scope: hostedOwnerScope, viewer: hostedOwnerViewer, item: hostedOwnerBook });
 export type HostedTarget = v.InferOutput<typeof target>;
 export type HostedPlacement = v.InferOutput<typeof hostedPlacement>;
 export type HostedRevision = v.InferOutput<typeof hostedRevision>;
@@ -51,9 +67,14 @@ export type HostedCreate = v.InferOutput<typeof hostedCreate>;
 export type HostedRevise = v.InferOutput<typeof hostedRevise>;
 export type HostedPublish = v.InferOutput<typeof hostedPublish>;
 export type HostedBook = Readonly<{ revision: HostedRevision; placements: readonly HostedPlacement[] }>;
+export type HostedOwnerBook = v.InferOutput<typeof hostedOwnerBook>;
+export type HostedOwnerInventory = Readonly<{ accountId: string; authnEpoch: number; items: readonly HostedOwnerBook[];
+  nextCursor: string | null }>;
 
 /** Reads admit the complete bounded tree or fail; redacted slots never become editable empty chapters. */
 export interface HostedBookNative {
+  listOwn(accountId: string, cursor: string | null, signal: AbortSignal): Promise<StudioResult<HostedOwnerInventory>>;
+  readOwn(accountId: string, catalogueId: string, signal: AbortSignal): Promise<StudioResult<HostedOwnerBook>>;
   read(input: HostedSelection, signal: AbortSignal): Promise<StudioResult<HostedBook>>;
   create(input: HostedCreate, key: string, signal: AbortSignal): Promise<StudioResult<HostedBook>>;
   revise(catalogueId: string, input: HostedRevise, key: string, signal: AbortSignal): Promise<StudioResult<HostedBook>>;

@@ -110,7 +110,7 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
           origin.csrfReady && !!visit.csrfToken,
         // Content's draft-to-published command does not implement Studio's reviewed publication contract.
         publish: false,
-      } } };
+      }, visibility: post.visibility } };
     } catch {
       return unavailable();
     }
@@ -169,7 +169,7 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
             !revision.mediaIds.every((id, index) => id === input.mediaIds[index]) ||
             !admitted(input.projectId, input.postId, signal)) return uncertain();
         attempt = null;
-        return { ok: true, value: { revision, permissions: { edit: true, publish: false } } };
+        return { ok: true, value: { revision, visibility: 'draft', permissions: { edit: true, publish: false } } };
       } catch {
         return uncertain();
       }

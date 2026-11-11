@@ -92,7 +92,7 @@ function working(source: StudioSelection, generation = 0): WorkingDocument {
 }
 function summary(selection: StudioSelection, state: StudioDocument['state'] = 'draft'): StudioDocument {
   return { postId: selection.revision.exact.postId, revisionId: selection.revision.exact.revisionId,
-    title: selection.revision.title, updatedAt: selection.revision.savedAt, state };
+    title: selection.revision.title, updatedAt: selection.revision.savedAt, state: selection.visibility ?? state };
 }
 
 /** One mounted private visit. Document bytes live only here and in the existing editor, never a second store. */
@@ -110,7 +110,8 @@ export class StudioController {
   constructor(readonly input: StudioInput, readonly port: StudioPort, private readonly bookPort?: BookOrganizerPort) {
     this.state = { documents: input.documents, publications: input.publications,
       structure: input.profile.kind === 'book' ? input.profile.structure : null,
-      selectedOccurrences: new Set(), selected: null, versions: null, historical: null, review: null,
+      selectedOccurrences: new Set(), selected: input.initialSelection ? working(input.initialSelection) : null,
+      versions: null, historical: null, review: null,
       published: null, busy: null, issue: null, message: '' };
   }
   snapshot = (): StudioState => this.state;
