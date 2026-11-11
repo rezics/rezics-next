@@ -1,93 +1,128 @@
 # Hosted Book reader
 
-`HostedBookReader` mounts the hosted Book profile of Content's shared Studio. It renders a supplied chapter title,
-actual ancestor/part context, exact Post body and bounded native previous/next observations. Semantic Work, Series
-and Edition bibliography remain with the catalogue. This component creates no editing or publication lifecycle.
+`HostedBookReader` is the mounted Book reading profile of Content's shared Studio. It uses the existing
+`PostReadingBody` for readable measure, outline, spoilers, references and admitted image rendering. It creates no
+editor, publication lifecycle, bibliography, progress conversion or progress command. Semantic Work, Series and
+Edition reading stays with the [literary catalogue reader](../../features/catalogue/literary-reader/README.md).
 
-## Source boundary
+Decision: retain the existing reader and exact native adapter, bind installed generated Content operations, and
+require explicit prepared-viewer/publication/target admission from the host. Do not manufacture that admission
+from a route, a catalogue ID, an illustrative response or a cached body.
 
-`source.ts` owns a consumer projection seam, not an installed Content API. The default source reports
-`not-installed`, makes no native call and displays the localized preparation state. Supply a `HostedBookSource`
-and the host's `readingIdentity` to use the actual reader independently. The source must prepare its real viewer,
-admit the publication and every current structure/target read, and return only that admitted projection. Browser
-identity comparison cannot authorize a native request. All eight launch locales have control and recovery messages.
+## Source and host
 
-A publication address contains its publication ID and frozen structure revision. A chapter additionally names a
-stable authored occurrence and the exact Post ID, revision ID and hash. Reusing the same body under two occurrences
-produces two addresses. Current context has its own supplied `currentStructureRevisionId`; a move can replace the
-ancestors and current contents location without rewriting the exact body selection. No ordinal, title, scalar
-progress value, semantic relation or current Post head is converted into an occurrence or revision.
+`source.ts` defines the consumer projection, independently of transport. Each explicit open, More, Retry or return
+makes one `source.read({ address, locale, limit: 40, ancestorLimit: 24 }, signal)` observation. There is no prefetch,
+refill, per-row hydration or descendant download. A contents level retains its supplied order and distinguishes
+containers, bodies, combined container/body rows and unavailable slots. Empty or sparse windows may continue.
+Opaque continuations replace the window; failed pages retry the exact parent/cursor/selection.
 
-`read({address, locale, limit: 40, ancestorLimit: 24}, signal)` is one bounded observation. A chapter response includes
-its exact document, current ancestor context, contents address and both navigation observations. A contents response
-includes only the requested parent/cursor window. Container, body, combined container/body and unavailable rows
-stay distinct, in supplied order. A container opens its own bounded level; it never expands by fetching descendants.
-The source supplies a complete root-to-parent path, at most 24 entries; it must report unavailable rather than
-silently truncate a deeper path. The frozen publication, current context and selected exact body require coherent
-native admission; the Web seam does not join independent unauthenticated reads to manufacture one.
+A publication has a catalogue ID, frozen source structure revision and (for native reads) a separate publication
+release revision. A chapter selects a stable occurrence plus exact Post ID, revision and SHA-256. Reused bytes have
+separate occurrence addresses. No title, ordinal, semantic relation, scalar progress value or current Post head
+creates that selection. The page separately reports current release/structure context, actual ancestors and
+bounded previous/next observations. Known publication ends and unavailable navigation have distinct presentation.
 
-Each explicit open, More, Retry or return makes one source read. Empty and sparse windows can carry an opaque
-continuation of up to 8,192 characters. More replaces the current window rather than accumulating pages; Retry
-repeats the failed parent/cursor/selection exactly. Known publication ends, unavailable neighbours and the end of
-one contents level have different presentation. An unavailable continuation retries the supplied current window;
-it cannot be treated as a known end. There is no prefetch, tree index, per-row read, refill or speculative neighbour.
+The installed `native-api.ts` calls the generated `KernelClient.hostedCatalogues` catalogue, children, occurrence
+and navigation operations directly. Its response types derive from those operations. Runtime schemas validate
+external responses; exact canonical bytes are decoded and digest-checked before the existing Document validator.
+The [Content owner](../../../../../services/kernel/src/content/hosted-chapters.md) owns native disclosure, immutable
+release selectors, unavailable slots, cursor binding and size limits. The adapter neither synthesizes endpoints
+nor falls back to Web's development fixture transport.
 
-Only one page is retained: at most 40 contents rows or one exact document, plus at most 24 ancestors, two navigation
-observations and one contents return address. Work is linear in those supplied rows/ancestors and the existing
-document renderer's body work. Titles and bodies remain subject to their producer's own size bounds. Repeated
-requests do not grow retained windows or history. A returning chapter keeps only publication, occurrence, exact
-body and bounded contents coordinates; the previous rows/body are discarded. The current source rereads on return.
-A selected occurrence outside the returned window can be reported as `moved`, with separately admitted current
-contents coordinates; an inaccessible selected target is `unavailable`, with no replacement body selected for it.
+`NativeHostedBookReader` mounts that adapter through the private `readNativeHostedBook` server function. Each call
+prepares the real session, compares its anonymous/session subject against the host's expected viewer, carries
+native credentials, and uses private/no-store responses. Expected browser identity only narrows native admission;
+it cannot grant access. Missing credentials, origin or installed host admission remain explicit unavailable states.
+The host also supplies the publication title: the installed Content catalogue metadata has no title field.
 
-`getSnapshot()` returns a stable `BookSourceObservation` object for exactly one native admission incarnation.
-Publication/current-structure admission, target access, prepared viewer or source replacement must replace that
-object and notify `subscribe` synchronously, including equal-value replacement and A/B/A transitions. Source
-replacements must not recycle an old observation. The store retires bodies, rows, requests, return coordinates and
-late focus effects irreversibly. The mounted reader also retires through the existing session-cache observer and
-address/locale visit capability. A retired reading offers deliberate reopening through the current source.
-Transport cancellation is advisory; queued calls, completions and focus work separately check their original visit.
-
-`hrefForAddress`, when installed, maps the same exact typed addresses to real origin-local canonical links. Without
-that binding the reader exposes in-place opening controls. It constructs no hypothetical Content route, and has
-no endpoint discovery or fallback transport. Modified link activation retains ordinary browser behaviour when a
-canonical address is supplied. In-place navigation does not mutate the host router; route/history integration
-belongs to the eventual host binding.
-
-## Documents, focus and progress
-
-The existing `PostReadingBody` supplies the readable measure, document outline, spoiler and reference behaviour,
-wide content inspection and admitted image renderer. Supplied document language/direction are independent of the
-interface locale. The navigation controls wrap at phone widths, keep 44-pixel targets and can be pinned while
-reading. Arrow navigation is scoped to the focused reading region and mirrors RTL. Selection, input methods,
-modifiers, held keys and editable/interactive controls keep their normal behaviour.
-
-Explicit opening focuses the resulting heading; contents return focuses the selected occurrence when present and
-otherwise the heading. Focus movement during the request cancels that transfer. A late result cannot move focus
-in a replaced visit. Source/session retirement removes the selected body even when its bytes are equal.
-
-An optional `renderProgress(page, isCurrent)` mounts a region already admitted and implemented by the existing
-Commerce progress/resume owner. It receives the exact chapter and current-reading guard. Its owner retains reads,
-commands, retries and uncertain outcomes. A rendering failure is isolated from the readable chapter. No supplied
-region means no invented progress control; this reader writes no progress and performs no scalar conversion.
-
-## Illustrative observations and integration
-
-The adjacent stories mount the actual reader with explicitly labelled illustrative projections of this seam.
-They are not generated endpoint recordings or native admission evidence. For example, two native occurrence rows
-may select the same exact body:
+The host supplies a stable `NativeHostedBookAdmissionSource` object for one admission incarnation:
 
 ```ts
-const body = { postId: 'post-7', revisionId: 'revision-3', sha256: '3'.repeat(64) };
-const first = { kind: 'chapter', publication, selection: { occurrenceId: 'placement-a', body } };
-const reused = { kind: 'chapter', publication, selection: { occurrenceId: 'placement-b', body } };
-// A bounded request contains one of these exact operands; it does not request a current Post head.
-source.read({ address: first, locale: 'en', limit: 40, ancestorLimit: 24 }, signal);
+const admitted = {
+  state: 'current' as const,
+  publication: { id: catalogueId, releaseRevisionId, structureRevisionId },
+  currentReleaseRevisionId,
+  currentStructureRevisionId,
+  publicationTitle,
+  viewer: { kind: 'session' as const, subject: preparedSubject },
+};
+// Host-owned native observations, not values parsed from an untrusted route:
+const admission = { getSnapshot: () => admitted, subscribe: observeAdmissionReplacement };
+// <NativeHostedBookReader address={exactChapterAddress} admission={admission} />
 ```
 
-The source checkpoint did not install a generated hosted Content operation for publication/occurrence/exact-body
-reading. The remaining production binding must map that operation and its prepared-viewer/current-admission
-observations to this seam, attach real canonical destinations and mount it in its native host. Commerce supplies
-its existing admitted region when available. Those bindings cannot be inferred from routes or hand-authored DTOs.
-Focused mounted assertions, final-source typing, native parity, browser/theme/locale review and publication remain
-integration work. This code-only sprint runs no checks and authors no new tests.
+Publication/current-structure admission, target access and prepared-viewer replacement must replace the snapshot
+object and notify synchronously, including equal-value and A/B/A replacement. Replacements cannot recycle an old
+snapshot. `HostedBookSource` has the same incarnation rule. Source/session/address/locale/viewer retirement removes
+bodies, rows, return coordinates, pending requests and late focus effects. Transport cancellation is advisory;
+queued dispatch, completion and focus also check their original visit. Retired readings require deliberate reopen.
+
+Native reading observes both frozen and current releases, resolves the selected exact body and current occurrence,
+reads only its bounded ancestor path, and requests at most one neighbour in each direction. It rechecks both
+release observations before disclosure. Native target admission still belongs to each Content read; these separate
+operations do not constitute a cross-request native transaction. Current context uses the current public release,
+not a private Studio draft. Children and neighbours retain the selected frozen release. After a move, an old
+contents window can therefore show a moved-selection notice and an exact return even when that occurrence is
+outside the window. A current parent absent from the frozen release can be unavailable; no body or tree is substituted.
+
+## Return, controls and progress
+
+Opening a chapter retains only its bounded contents coordinates and exact selection. Returning rereads that
+window through the current source; old rows and body are discarded before dispatch. Sparse continuation and failure
+keep the same opaque position. An admitted moved selection retains its exact chapter address. An unavailable
+selection never silently chooses a replacement body.
+
+`hrefForAddress`, when supplied by the host, maps typed addresses to real origin-local canonical links. Modified
+activation keeps ordinary browser behavior. Without that binding the reader exposes in-place buttons and invents
+no Content URL. The eventual host owns route/history integration and canonical deep-link parsing.
+
+Explicit navigation focuses the new heading; contents return focuses the selected occurrence when present,
+otherwise its heading. Moving focus elsewhere during the request cancels the transfer. Arrow navigation is scoped
+to the reading region, mirrors the document's direction, and leaves text selection, editable/interactive controls,
+modifiers, held keys and input methods alone. The controls wrap, have 44px targets and can be pinned on phone or
+desktop. Document language and direction remain independent of interface locale.
+
+An optional `renderProgress(page, isCurrent)` mounts the region admitted and implemented by the existing Commerce
+progress/resume owner. That owner retains reads, commands, retries and uncertain outcomes. A rendering failure is
+isolated from the readable chapter. No region is invented when that producer is absent.
+
+## Cost
+
+### Explicit chapter or contents observation
+
+- Touches: one source read; for the native binding, one BFF observation with catalogue/release checks, bounded
+  children or exact selection, ancestor resolves and at most two one-neighbour navigation reads.
+- Bound: one retained contents window of at most 40 rows (native maximum 20), or one decoded chapter, at most 24
+  ancestors, two neighbours and one return address. Native requests are at most `7 + ancestors + changedRelease`
+  for a chapter, or `5 + parentProbe + ancestors + selectedResolves` for contents; both are at most 32. Each native
+  operation keeps its own Content bounds. Native body bytes are at most 2 MiB per resolution; an exact/current
+  selection may resolve two bodies. Consumer cursors allow 8,192 characters; native cursors allow 4,096. No pages,
+  tree index, body cache or cursor chain accumulate.
+- Growth check: mounted assertions pin source-read count and operands, and illustrative transport assertions pin
+  native limit/selector use. They are not native growth evidence. Native cost and admission acceptance remain with
+  integration and the Content owner.
+
+## Stories, assertions and remaining integration
+
+`illustrative-source.ts` supplies labelled native-format examples through the actual native mapper, never the
+production transport. `stories/hosted-book-reader.stories.tsx` mounts the actual reader. The story ID prefix is
+`interfaces-hosted-book-reader`; named states are `nested-contents`, `exact-chapter`, `sparse-continuation`,
+`failed-page-recovery`, `moved-occurrence`, `unavailable-navigation` and `retired-reading`. Review the same states at
+390px and 1280px, light/dark, with all eight locale globals: en, zh-Hant, zh-Hans, ja, ko, de, fr and es.
+
+`tests/hosted-book-reader.test.tsx` authors mounted assertions for nested bounded reads, reused bodies, exact
+operands, sparse continuation/retry, deliberate return, moved context, RTL/selection/editable keys, focus retirement,
+source/viewer/session/locale replacement, independent progress failure and the generated native transport.
+Execution belongs to the dev verifier: `bun run --cwd apps/web test tests/hosted-book-reader.test.tsx`.
+Source acceptance requires the final Web workspace typecheck. Neither stories nor typing establish native/browser
+acceptance. The production host admission producer, canonical router binding and Commerce-supplied region remain
+integration work; there is no installed Studio/reader route supplying those observations in this source tree.
+
+The design uses [Web's launch owner](../../../../../docs/goals/web.md), the catalogue reader above,
+[Threads](../../threads/README.md), [history lifetime](../../threads/post-history-lifetime.md),
+[session lifetime](../../session/README.md), [Document](../../../../../packages/document/README.md),
+[UI](../../../../../packages/ui/README.md) and [verification](../../../../../docs/development/verification.md).
+The read-only `legacy-final:apps/web/features/work-page/reader.tsx` and `reader-client.tsx` comparison retains
+supplied part/chapter context, readable body, contents return, mirrored keyboard navigation and phone controls.
+Stable occurrence/exact-revision selection improves on ordinal reading links; legacy scalar progress is not ported.
