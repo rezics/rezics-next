@@ -368,9 +368,12 @@ test('known Kernel emission followed by consumer typing qualifies only the recei
     PATH: `${join(root, '.temp/bin')}:${process.env.PATH}`,
     REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(clientPipeline)).toString('base64'),
   };
+  const fixtureEnv = { ...process.env, ...env };
+  delete fixtureEnv.REZICS_CHECK_ARTIFACTS_DIR;
+  delete fixtureEnv.REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID;
   const result = Bun.spawnSync([process.execPath, ...typingInputCommand(clientPipeline).slice(1)], {
     cwd: root,
-    env: { ...process.env, ...env },
+    env: fixtureEnv,
   });
   if (result.exitCode !== 0)
     throw new Error(new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr));
