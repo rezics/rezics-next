@@ -47,9 +47,8 @@ test('native Source live enrollment retains late deletions while restored Auth w
     });
 
     // Commit a real native tombstone after enrollment, using its public command.
-    const { createLifecycleCommands, authenticateAccount, LIFECYCLE_ACTIONS } =
-      await import('../../kernel/src/access/lifecycle.ts');
-    const { admittedAccess } = await import('../../kernel/test/support/admitted-access.ts');
+    const { createLifecycleCommands, LIFECYCLE_ACTIONS } = await import('../../kernel/src/access/lifecycle.ts');
+    const { admittedAccess, authenticateAccount } = await import('../../kernel/test/support/admitted-access.ts');
     const accountId = newId(16);
     await f.kernel.query(
       `INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES(16,$1,'actor','active',$1)`,
