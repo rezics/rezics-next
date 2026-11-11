@@ -406,11 +406,14 @@ records.
 `relayConcurrencyForPool(options.pool)` instead of 2. Keep the existing coverage assertions. Do not loosen
 `startRelays`. The prior Content/Accounts catalogue fixture error did not recur on this product.
 
-**Default-worker init repair, readiness owner `7a3f2fc9`:** both default-discovery cases failed at
-`startOutcomeWorkerProcess` `rpc.request('init')` (`timeoutMs: 90_000`). Child `outcome-worker.ts` `startWorker` never
-replied; `close()` awaits that `ready` then SIGKILLs at 90 s (`Worker did not drain: {"code":null,"signal":"SIGKILL"}`).
-The drain error carried empty child stdout. Capture child stdout in the 90 s init window. Keep the existing assertions.
-This is not a new Imports outcome. Receive those integrated changes in the sole walk; no second native producer.
+**Default public runtime startup, Search readiness:** the retained public journey run failed all three cases at the
+driver init deadline of 180,000 ms, then reported the worker close deadline of 60,000 ms and forced termination. A
+focused base reproduction failed the first public journey the same way; its worker output was empty and did not record
+`child:entry` or IPC readiness. The outcome supervisor's worker environment allowlist dropped the check-owned
+`REYLO_CONFIG`, even though worker SQL imports run before init. Decision: preserve that exact private analysis config
+within the existing environment allowlist and wait for the worker's IPC-ready message before starting its init RPC.
+Keep all deadlines and public readiness, privacy, suggestion and recovery assertions unchanged; forced termination
+remains a failure.
 
 Web Character local-selection and with-dev-server cells were retried 2026-11-07 07:48 UTC after `95e3fac9` became an
 ancestor: focused Web again returned `Web check unavailable: the selected Performance snapshot is not integrated into

@@ -5,6 +5,29 @@ import { systemClock, type KernelClock } from '../../../src/clock.ts';
 
 export const OUTCOME_WORKER_READY_MESSAGE = 'rezics.search.outcome-worker.ready';
 
+/** The check owns one private Reylo project; native child imports must read that same analysis snapshot. */
+export function outcomeWorkerProcessEnvironment(
+  env: Readonly<Record<string, string | undefined>>,
+  inherited: Readonly<Record<string, string | undefined>> = process.env,
+): Record<string, string | undefined> {
+  return {
+    ...Object.fromEntries(
+      Object.entries(inherited).filter(([key]) => /^(PATH|HOME|TMPDIR|TEMP|LANG|TZ|BUN_.+|REYLO_CONFIG)$/.test(key)),
+    ),
+    ...env,
+  };
+}
+
+export function isOutcomeWorkerReadyMessage(packet: unknown): boolean {
+  return (
+    typeof packet === 'object' &&
+    packet !== null &&
+    !Array.isArray(packet) &&
+    'type' in packet &&
+    packet.type === OUTCOME_WORKER_READY_MESSAGE
+  );
+}
+
 /** Private child custody, never fixture credentials or business authority. */
 export interface OutcomeClockState {
   lifecycle: string;
@@ -70,13 +93,8 @@ export function startOutcomeWorkerProcess(
   };
   const child = fork(`${import.meta.dir}/outcome-worker.ts`, [], {
     execPath: process.execPath,
-    env: {
-      ...Object.fromEntries(
-        Object.entries(process.env).filter(([key]) => /^(PATH|HOME|TMPDIR|TEMP|LANG|TZ|BUN_.+)$/.test(key)),
-      ),
-      // Database imports execute before init. They must already address this exact world.
-      ...env,
-    },
+    // Database and SQL imports execute before init. They must use this world and the check's private SQL analysis.
+    env: outcomeWorkerProcessEnvironment(env),
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });
   let output = '';
@@ -122,13 +140,7 @@ export function startOutcomeWorkerProcess(
     rejectIpcReady(error);
   };
   const onIpcMessage = (packet: unknown) => {
-    if (
-      typeof packet === 'object' &&
-      packet !== null &&
-      !Array.isArray(packet) &&
-      'type' in packet &&
-      packet.type === OUTCOME_WORKER_READY_MESSAGE
-    ) {
+    if (isOutcomeWorkerReadyMessage(packet)) {
       finishIpcReady();
     }
   };
