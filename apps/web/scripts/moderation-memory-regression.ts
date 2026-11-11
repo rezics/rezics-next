@@ -26,9 +26,9 @@ const moderationFiles = [
   'tests/moderation-queue-controls-interface.test.tsx',
   'tests/moderation-case-reference-interface.test.tsx',
   'tests/moderation-appeal-read-retry-focus.test.tsx',
-  'tests/moderation-reports.test.tsx',
-  'tests/moderation-appeals.test.tsx',
-  'tests/moderation-appeals-pages.test.tsx',
+  'tests/moderation-reports.test.ts',
+  'tests/moderation-appeals.test.ts',
+  'tests/moderation-appeals-pages.test.ts',
   'tests/moderation-decision.test.tsx',
 ];
 

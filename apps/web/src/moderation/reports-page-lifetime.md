@@ -7,6 +7,11 @@ The Reports branch of the board moderation route now binds
 private no-store responses and generated native reads with limit 20, and independently resolves
 and deduplicates targets, exact reported revisions, authors and declared media.
 
+Decision: classify installed list failures from the numeric top-level HTTP status; Reports keeps cursor failures stale,
+authorization failures denied and dependency failures retryable, while Appeals keeps those outcomes stale, closed and
+unavailable. The delegated Board menu exposes its localized moderation destination only to signed-in viewers, and a
+ready empty Appeals page retains Refresh without appeal rows or resolution actions.
+
 Each native report read allocates a fresh generation and original input object containing the board,
 thread, post, cursor and normalized status/kind/order. Post scope continues to take precedence over
 thread and board scope. Navigation uses the original selectors and scope, clears the cursor on
