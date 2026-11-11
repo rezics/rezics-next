@@ -2133,7 +2133,7 @@ function CollectionPageLifetime({
             />
           </>
         ) : null}
-        <section aria-label={m.library_collection_members()}>
+        <div>
           <h2 className="sr-only">{m.library_collection_members()}</h2>
           {editing && ownerCurrent && boundaryAdmitted ? (
             <div className="mb-3 space-y-1 text-sm text-muted-foreground" data-collection-boundary-guidance>
@@ -2428,7 +2428,7 @@ function CollectionPageLifetime({
               }}
             />
           )}
-        </section>
+        </div>
         {editing && ownerCurrent && (draftChanged || transfer || activeSave) ? (
           <CollectionEditReview
             plan={activePlan}

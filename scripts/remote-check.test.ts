@@ -8180,6 +8180,45 @@ test('cold then warm native preparation reuses verified exact-platform lifecycle
   );
 });
 
+test.skipIf(process.platform !== 'linux')('a disconnected output reader does not kill the host-owned check', () => {
+  const root = mkdtempSync(join(tmpdir(), 'rezics-disconnected-output-'));
+  try {
+    mkdirSync(join(root, '.temp/check-host'), { recursive: true });
+    const harness = String.raw`
+import pathlib, subprocess, sys
+root = pathlib.Path(sys.argv[1])
+program = root / 'supervisor.py'
+program.write_text(sys.stdin.read())
+command = 'read -r start; touch "$1/.bun-install-complete"; printf fixture-stdout; printf fixture-stderr >&2; exit 7'
+child = subprocess.Popen([sys.executable, str(program), 'supervise', '5000', 'a', 'disconnected',
+                          str(root), 'sh', '-c', command, 'fixture', str(root)],
+                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+child.stdout.close()
+child.stderr.close()
+child.stdin.write(b'start\n')
+child.stdin.close()
+print(child.wait(timeout=10))
+`;
+    const result = spawnSync('python3', ['-c', harness, root], {
+      input: dependencyPreparationProgram,
+      encoding: 'utf8',
+      timeout: 12_000,
+    });
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe('7');
+    expect(existsSync(join(root, 'preparation-status.json'))).toBe(false);
+    writeFileSync(join(root, 'exit-status'), '7\n');
+    const recovered = spawnSync('sh', ['-c', statusScript(root)], { encoding: 'utf8' });
+    expect(recovered.stdout).toBe('7\n');
+    expect(recovered.stderr).toContain('remote-check: recovered output after disconnect');
+    expect(recovered.stderr).toContain('fixture-stdout');
+    expect(recovered.stderr).toContain('fixture-stderr');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function sweepArtifacts(directory: string, program = dependencyPreparationProgram) {
   const result = spawnSync('python3', ['-c', program, 'sweep', join(directory, 'dependency-artifacts')], {
     encoding: 'utf8',

@@ -1,5 +1,6 @@
 import { realmReadingReturn } from '../../community/realm-reading-return';
 import { subjectHref } from '../../subject/subject-href';
+import { savedQueryDirectoryReturn } from '../../library/saved-query-results';
 import { realmCatalogueReturnHref } from '../../search/realm-catalogue-handoff';
 import { isView } from '@rezics/composition';
 import { copiesSubjectId } from '../../library/copies-query';
@@ -655,7 +656,11 @@ function collectionReturn(url: URL, locale?: string): string | undefined {
   const seen = new Set<string>();
   let filters = 0;
   for (const [key, value] of url.searchParams) {
-    if (key === 'cursor' || key === 'layout' || key === 'type') {
+    if (key === 'returnTo') {
+      if (seen.has(key)) return undefined;
+      seen.add(key);
+      params.append(key, savedQueryDirectoryReturn(value, match[1]!));
+    } else if (key === 'cursor' || key === 'layout' || key === 'type') {
       if (seen.has(key)) return undefined;
       seen.add(key);
       if (key === 'cursor' && value.length > 4096) return undefined;
@@ -921,8 +926,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       (personBiography !== undefined && selectedContext !== personBiography.context) ||
       (gameReturn !== undefined &&
         (gameReturnAddress.length > gameClassificationReturnLimit ||
-          new TextEncoder().encode(gameReturnAddress).byteLength >
-            gameClassificationReturnLimit ||
+          new TextEncoder().encode(gameReturnAddress).byteLength > gameClassificationReturnLimit ||
           encodeURIComponent(gameReturnAddress).length > gameClassificationReturnLimit ||
           !subject ||
           nested ||
@@ -1005,11 +1009,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     if (
       !(subject?.[2] === 'works' && parseCreditReturn(fragment)) &&
       fragment !== '#literary-reader' &&
-      !(
-        subject &&
-        !subject[2] &&
-        (fragment === '#work-franchise' || parseWorkFranchiseReturn(fragment))
-      ) &&
+      !(subject && !subject[2] && (fragment === '#work-franchise' || parseWorkFranchiseReturn(fragment))) &&
       !(subject?.[2] && (fragment === '#work-franchise' || franchiseReturn !== undefined) && finiteWorkRegion) &&
       !(subject && !subject[2] && organizationHistoryVisitReturn(fragment)) &&
       fragment !== '#connections' &&
