@@ -927,12 +927,9 @@ test('backlog verification registers only for its confirmed Goal owner and retai
       sourceCommit: h.proofBrief.proof?.sourceCommit,
       sourceTasks: h.proofBrief.proof?.sourceTasks,
     });
-    expect(
-      readFileSync(
-        join(root, h.proofBrief.goal, 'dispatched', `${registered.id}-exact.md`),
-        'utf8',
-      ),
-    ).toBe(exactMarkdown);
+    expect(readFileSync(join(root, h.proofBrief.goal, 'dispatched', `${registered.id}-exact.md`), 'utf8')).toBe(
+      exactMarkdown,
+    );
     expect(registered.currentAttempt).toBe(0);
     expect(sweep.refused).toEqual(
       expect.arrayContaining([
@@ -999,9 +996,7 @@ test('an admitted queued proof captures one Dev advance and archives the unchang
         sourceTasks: h.proofBrief.proof!.sourceTasks,
       },
     });
-    expect(
-      readFileSync(join(directory, 'dispatched', `${task.id}-queued.md`), 'utf8'),
-    ).toBe(originalMarkdown);
+    expect(readFileSync(join(directory, 'dispatched', `${task.id}-queued.md`), 'utf8')).toBe(originalMarkdown);
   } finally {
     h.dispose();
   }

@@ -343,7 +343,12 @@ function membershipFileCommands(argv: string[]): ProofFileCommand[] | undefined 
   const parsed = segments.map((segment) => fileCommand(segment.trim().split(/\s+/)));
   if (parsed.some((command) => !command)) return;
   const commands = parsed as { prefix: string[]; files: string[] }[];
-  if (!same(commands.map((command) => fileCommandCwd(command.prefix)), ['services/auth/', 'services/kernel/']))
+  if (
+    !same(
+      commands.map((command) => fileCommandCwd(command.prefix)),
+      ['services/auth/', 'services/kernel/'],
+    )
+  )
     return;
   return commands.map((command) => ({ ...command, cwd: fileCommandCwd(command.prefix) }));
 }
@@ -359,7 +364,10 @@ export function proofExecutionUnavailable(argv: string[]): string | undefined {
 }
 export class ProofUnavailableError extends Error {}
 export class ProofCaptureMovedError extends Error {
-  constructor(readonly expectedHead: string, readonly observedHead: string) {
+  constructor(
+    readonly expectedHead: string,
+    readonly observedHead: string,
+  ) {
     super(`integration head moved during proof registration (${expectedHead} -> ${observedHead})`);
     this.name = 'ProofCaptureMovedError';
   }

@@ -140,8 +140,7 @@ function retainBacklogProposal(
 ): ProofAuthorization {
   const proposal = previous?.backlogProposal;
   const authorizedSources = authorization.originals.map((item) => item.taskId);
-  if (!proposal || JSON.stringify(proposal.sourceTasks) !== JSON.stringify(authorizedSources))
-    return authorization;
+  if (!proposal || JSON.stringify(proposal.sourceTasks) !== JSON.stringify(authorizedSources)) return authorization;
   return { ...authorization, backlogProposal: { ...proposal, sourceTasks: [...proposal.sourceTasks] } };
 }
 
@@ -608,8 +607,7 @@ export class WorkerTasks {
       readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
       this.settings.policy?.brief,
     );
-    if (proposal.kind !== 'verification')
-      return this.dispatchPrepared(briefFile, actor, urgent, from, { markdown });
+    if (proposal.kind !== 'verification') return this.dispatchPrepared(briefFile, actor, urgent, from, { markdown });
     proposal.manager = resolveGoalManager(this.store.db, proposal.goal, proposal.manager);
     authenticateProofManager(
       this.store,
@@ -663,13 +661,11 @@ export class WorkerTasks {
     from?: 'verifier',
     override?: DispatchBriefOverride,
   ): Task {
-    const { brief: submittedBrief, taskClass, authorization } = this.validateBrief(
-      briefFile,
-      undefined,
-      actor,
-      urgent,
-      override,
-    );
+    const {
+      brief: submittedBrief,
+      taskClass,
+      authorization,
+    } = this.validateBrief(briefFile, undefined, actor, urgent, override);
     if (submittedBrief.urgent && from !== 'verifier')
       requireUrgentDispatch(
         this.store.db,
@@ -747,13 +743,7 @@ export class WorkerTasks {
           throw new ProofCaptureMovedError(override.proofCapture.expectedIntegrationHead, observedHead);
         }
       }
-      const created = this.store.createTask(
-        brief,
-        { branch, worktree, briefPath, base },
-        taskClass,
-        id,
-        authorization,
-      );
+      const created = this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id, authorization);
       const held = created.state === 'ready' && brief.after.length > 0 && !this.dependenciesMet(created);
       this.store.updateTask({ taskId: id, attempt: 0 }, (current) => {
         (current as FrozenTask).frozenFiles = frozen.files.map(({ path, hash }) => ({ path, hash }));
