@@ -468,11 +468,7 @@ export class WorkerJob implements GateOutcomeSink {
     // Leave the wait visible through one scheduled recovery pass; the existing lead lets that pass retry on time.
     const now = Date.now();
     const recoveryWindowMs = this.policy.host.recoveryIntervalMs + this.policy.worker.retryIntentLeadMs;
-    const deferredUntil = Math.max(
-      now + this.policy.worker.capacityPauseMs,
-      now + recoveryWindowMs,
-      previousAt ?? 0,
-    );
+    const deferredUntil = Math.max(now + this.policy.worker.capacityPauseMs, now + recoveryWindowMs, previousAt ?? 0);
     this.tasks.store.updateRetryIntent(ref, (value) => {
       value.options.notBefore = new Date(deferredUntil).toISOString();
     });
@@ -1753,8 +1749,9 @@ export class WorkerJob implements GateOutcomeSink {
             try {
               // Follow at once, so the stall and start checks watch an adopted worker too; only its exit waits.
               const exited = (
-                attempt.process && recordedWorkerBootCustody(store,attempt)==='current-boot'
-                  ? waitForProcessGroup(attempt.process, this.policy.process) : Promise.resolve()
+                attempt.process && recordedWorkerBootCustody(store, attempt) === 'current-boot'
+                  ? waitForProcessGroup(attempt.process, this.policy.process)
+                  : Promise.resolve()
               ).then(() => readWorkerExit(attempt.logPath));
               await this.follow({ attempt, exited });
             } catch (error) {

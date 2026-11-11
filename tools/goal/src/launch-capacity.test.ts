@@ -178,7 +178,6 @@ test('urgent and ordinary reservations share one count and working-set budget', 
   }
 });
 
-
 test('slice headroom, system memory and PSI each hold admission until available', async () => {
   const directory = temporaryDirectory();
   const store = { capacityAttemptsCount: () => 0, attempts: () => [], goalInFlightCount: () => 0 };
@@ -192,10 +191,20 @@ test('slice headroom, system memory and PSI each hold admission until available'
     writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 32, minAvailableMiB: 100 }));
     const policy = { ...defaultPolicy.capacity, maxWorkers: 32, minAvailableMiB: 100, pollIntervalMs: 5 };
     const pending = awaitHostCapacity(store, directory.path, false, 'independent', 1, {
-      policy, pollIntervalMs: 5, goal: 'imports', goalMaxInFlight: Infinity, excludeTaskId: 'independent',
-      availableMiB: () => available, pressure: () => pressure, now: () => now,
+      policy,
+      pollIntervalMs: 5,
+      goal: 'imports',
+      goalMaxInFlight: Infinity,
+      excludeTaskId: 'independent',
+      availableMiB: () => available,
+      pressure: () => pressure,
+      now: () => now,
       workerHeadroomMiB: () => headroom,
-    }).then((unlock) => { started = true; release = unlock; return unlock; });
+    }).then((unlock) => {
+      started = true;
+      release = unlock;
+      return unlock;
+    });
     const pause = () => new Promise((resolve) => setTimeout(resolve, 15));
     await pause();
     expect(started).toBe(false);
@@ -233,8 +242,13 @@ test('a resumed attempt reserves four GiB on its ticket and transfers that charg
     writeFileSync(join(directory.path, 'capacity.json'), JSON.stringify({ maxWorkers: 32, minAvailableMiB: 0 }));
     const policy = { ...defaultPolicy.capacity, maxWorkers: 32, minAvailableMiB: 0, pollIntervalMs: 5 };
     const options = {
-      policy, pollIntervalMs: 5, goal: 'library', goalMaxInFlight: Infinity, excludeTaskId: taskId,
-      availableMiB: () => Infinity, pressure: () => ({ memoryFull: 0, ioFull: 0 }),
+      policy,
+      pollIntervalMs: 5,
+      goal: 'library',
+      goalMaxInFlight: Infinity,
+      excludeTaskId: taskId,
+      availableMiB: () => Infinity,
+      pressure: () => ({ memoryFull: 0, ioFull: 0 }),
       workerHeadroomMiB: () => headroom,
     };
     const resumed = awaitHostCapacity(store, directory.path, false, taskId, 1, { ...options, resume: true });

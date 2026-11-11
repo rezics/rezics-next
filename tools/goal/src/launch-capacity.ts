@@ -7,7 +7,12 @@ import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts
 import type { Attempt, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
 import type { CheckRecord, CheckPhysicalRecord } from '../../../scripts/worker-check.ts';
-import { isCheckId, isPhysicalRunId, physicalHistoryPath, validateRunnerIdentity } from '../../../scripts/check-custody.ts';
+import {
+  isCheckId,
+  isPhysicalRunId,
+  physicalHistoryPath,
+  validateRunnerIdentity,
+} from '../../../scripts/check-custody.ts';
 import {
   pressureBrake,
   readHostPressure,
@@ -39,15 +44,25 @@ function attemptKey(taskId: string, attempt: number): string {
 }
 function matchingRunnerIdentity(value: unknown, expected: ProcessIdentity): boolean {
   const identity = validateRunnerIdentity(value);
-  return identity.pid === expected.pid && identity.start === expected.start &&
-    identity.boot === expected.boot && identity.group === expected.group;
+  return (
+    identity.pid === expected.pid &&
+    identity.start === expected.start &&
+    identity.boot === expected.boot &&
+    identity.group === expected.group
+  );
 }
 /** Require the physical generation on the command line; legacy runners keep their conservative reserve. */
 function detachedCheckRunner(identity: ProcessIdentity, worktree: string, id: string, physicalRunId: string): boolean {
   const args = readFileSync(`/proc/${identity.pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
-  return identity.pid === identity.group && args.length === 6 &&
-    args[1] === join(worktree, 'scripts/worker-check.ts') && args[2] === '--run' && args[3] === id &&
-    args[4] === '--physical-run' && args[5] === physicalRunId;
+  return (
+    identity.pid === identity.group &&
+    args.length === 6 &&
+    args[1] === join(worktree, 'scripts/worker-check.ts') &&
+    args[2] === '--run' &&
+    args[3] === id &&
+    args[4] === '--physical-run' &&
+    args[5] === physicalRunId
+  );
 }
 /** Require both process identity and its exact current owned cgroup; unit-name resemblance is insufficient. */
 function ownedWorkerScope(identity: ProcessIdentity, taskId: string, attempt: number): string | undefined {
@@ -60,7 +75,8 @@ function ownedWorkerScope(identity: ProcessIdentity, taskId: string, attempt: nu
     join('/sys/fs/cgroup', group) !== join(WORKER_SLICE_ROOT, scope) ||
     !scope.startsWith(`rezics-worker-${safeTask}-${attempt}-`) ||
     !/^[a-z0-9]+\.scope$/.test(scope.slice(`rezics-worker-${safeTask}-${attempt}-`.length))
-  ) return undefined;
+  )
+    return undefined;
   return scope;
 }
 /** Read only indexed live generations; unreconciled checks and scopes retain their writing reserve. */
@@ -70,13 +86,15 @@ function workerScopes(store: HostCapacityStore): WorkerScopes {
   result.active = new Set();
   let rows: { task_id: string; current_attempt: number; attempt_state: string; body: string; worktree: string }[];
   try {
-    rows = store.db.query(`
+    rows = store.db
+      .query(`
     SELECT c.task_id, c.current_attempt, c.attempt_state, a.body, json_extract(t.body, '$.worktree') AS worktree
     FROM worker_current_attempts AS c INDEXED BY worker_current_attempts_state
     JOIN worker_attempts AS a ON a.task_id=c.task_id AND a.attempt=c.current_attempt
     JOIN worker_tasks AS t ON t.id=c.task_id AND t.current_attempt=c.current_attempt
     WHERE c.attempt_state IN ('running', 'waiting') AND c.task_state='running'
-    `).all() as typeof rows;
+    `)
+      .all() as typeof rows;
   } catch {
     // An unavailable projection grants no parked exemption or ticket transfer. Every running count keeps its reserve.
     return result;
@@ -84,7 +102,11 @@ function workerScopes(store: HostCapacityStore): WorkerScopes {
   for (const row of rows) {
     try {
       const attempt = JSON.parse(row.body) as Attempt;
-      if (attempt.taskId !== row.task_id || attempt.attempt !== row.current_attempt || attempt.state !== row.attempt_state)
+      if (
+        attempt.taskId !== row.task_id ||
+        attempt.attempt !== row.current_attempt ||
+        attempt.state !== row.attempt_state
+      )
         continue;
       const writer = attempt.process && ownedWorkerScope(attempt.process, row.task_id, row.current_attempt);
       if (attempt.state === 'running') {
@@ -95,18 +117,38 @@ function workerScopes(store: HostCapacityStore): WorkerScopes {
       for (const id of attempt.checks ?? []) {
         if (!isCheckId(id)) continue;
         try {
-          const record = JSON.parse(readFileSync(join(row.worktree, '.temp/goal/checks/results', `${id}.json`), 'utf8')) as CheckRecord;
-          if (record.id !== id || record.cwd !== row.worktree || record.status !== 'running' ||
-              record.ownership?.taskId !== row.task_id || record.ownership.attempt !== row.current_attempt ||
-              record.runnerHost !== hostname() || !record.runnerIdentity || !isPhysicalRunId(record.physicalRunId)) continue;
+          const record = JSON.parse(
+            readFileSync(join(row.worktree, '.temp/goal/checks/results', `${id}.json`), 'utf8'),
+          ) as CheckRecord;
+          if (
+            record.id !== id ||
+            record.cwd !== row.worktree ||
+            record.status !== 'running' ||
+            record.ownership?.taskId !== row.task_id ||
+            record.ownership.attempt !== row.current_attempt ||
+            record.runnerHost !== hostname() ||
+            !record.runnerIdentity ||
+            !isPhysicalRunId(record.physicalRunId)
+          )
+            continue;
           const identity = validateRunnerIdentity(record.runnerIdentity);
-          const physical = JSON.parse(readFileSync(physicalHistoryPath(row.worktree, id, record.physicalRunId), 'utf8')) as CheckPhysicalRecord;
-          if (physical.version !== 1 || physical.cwd !== row.worktree ||
-              physical.id !== id || physical.physicalRunId !== record.physicalRunId || physical.status !== 'running' ||
-              physical.ownership?.taskId !== row.task_id || physical.ownership.attempt !== row.current_attempt ||
-              physical.runnerHost !== record.runnerHost || physical.remoteExpected !== true ||
-              !matchingRunnerIdentity(physical.runnerIdentity, identity) ||
-              !detachedCheckRunner(identity, row.worktree, id, record.physicalRunId)) continue;
+          const physical = JSON.parse(
+            readFileSync(physicalHistoryPath(row.worktree, id, record.physicalRunId), 'utf8'),
+          ) as CheckPhysicalRecord;
+          if (
+            physical.version !== 1 ||
+            physical.cwd !== row.worktree ||
+            physical.id !== id ||
+            physical.physicalRunId !== record.physicalRunId ||
+            physical.status !== 'running' ||
+            physical.ownership?.taskId !== row.task_id ||
+            physical.ownership.attempt !== row.current_attempt ||
+            physical.runnerHost !== record.runnerHost ||
+            physical.remoteExpected !== true ||
+            !matchingRunnerIdentity(physical.runnerIdentity, identity) ||
+            !detachedCheckRunner(identity, row.worktree, id, record.physicalRunId)
+          )
+            continue;
           const scope = ownedWorkerScope(identity, row.task_id, row.current_attempt);
           // A running session can share a scope with its check. It releases no writing reserve until parked,
           // or until a resumed writer is positively identified in a different, newly launched scope.
@@ -275,7 +317,10 @@ export async function awaitHostCapacity(
         const scopes = workerScopes(store);
         const sliceAvailable =
           (options.workerHeadroomMiB ?? workerHeadroomMiB)(
-            running + otherRunning, WORKER_SLICE_ROOT, scopes.parked, scopes.active,
+            running + otherRunning,
+            WORKER_SLICE_ROOT,
+            scopes.parked,
+            scopes.active,
           ) >=
           admittedMemoryMiB(stateDirectory, scopes.writers) + memoryReservation;
         const ahead = hostCapacity ? waitersAhead(queue, ticket) : 0;
@@ -352,8 +397,12 @@ export function admittedMemoryMiB(stateDirectory: string, writers: ReadonlySet<s
         const value = JSON.parse(readFileSync(join(queue, name), 'utf8'));
         // Once the exact current writer has a reconciled scope, headroom owns its reserve. Pending/waiting,
         // unknown identities and old tickets keep their charge until explicit release or observed start.
-        if (typeof value.taskId === 'string' && Number.isSafeInteger(value.attempt) &&
-            writers.has(attemptKey(value.taskId, value.attempt))) continue;
+        if (
+          typeof value.taskId === 'string' &&
+          Number.isSafeInteger(value.attempt) &&
+          writers.has(attemptKey(value.taskId, value.attempt))
+        )
+          continue;
         total += value.memoryMiB === 2048 ? 2048 : HEAVY_WORKER_MIB;
       } catch {
         total += HEAVY_WORKER_MIB;
