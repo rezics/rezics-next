@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { startWorkerCheck, workerCheckNeedsStack } from '../../../scripts/worker-check.ts';
 import { openDb } from './db.ts';
@@ -1108,3 +1108,125 @@ test.each([0, 1])(
   },
   15_000,
 );
+
+test('misordered compiler recovery uses its owner and replaces only a proven pre-compiler SIGTERM check once', async () => {
+  const h = harness();
+  try {
+    const intent = ['bun', '--cwd', 'services/kernel', 'run', 'typecheck'];
+    const compiler = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'];
+    const retained = await settleSuccessWithHostCheck(h, 'kernel typecheck completed', (budget, worktree) => {
+      mkdirSync(join(worktree, 'services/kernel/scripts'), { recursive: true });
+      writeFileSync(
+        join(worktree, 'services/kernel/package.json'),
+        JSON.stringify({ scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
+      );
+      writeFileSync(join(worktree, 'services/kernel/tsconfig.json'), '{"include":["scripts"]}');
+      writeFileSync(join(worktree, 'services/kernel/scripts/typecheck.ts'), 'export {};');
+      const file = join(budget, '1');
+      const stamp = JSON.parse(readFileSync(file, 'utf8'));
+      stamp.includedTypecheck = true;
+      stamp.typingRequest = {
+        physicalRunId: 'c3c3c3c3-3333-4333-8333-333333333333',
+        command: intent,
+        capture: 'physical-command',
+        localPrepared: captureTypingInputs(worktree, ['bun', 'scripts/typecheck.ts']).prepared,
+      };
+      writeFileSync(file, JSON.stringify(stamp));
+    });
+    h.settings.integration.operationsManager = 'operations';
+    h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY,state TEXT NOT NULL)');
+    h.store.db.query('INSERT INTO manager_sessions VALUES (?,?)').run(
+      'operations',
+      JSON.stringify({
+        id: 'operations',
+        kind: 'resident-supermanager',
+        provider: 'claude',
+        status: 'running',
+        threadId: 'operations-session',
+      }),
+    );
+    const actor = { id: 'operations', sessionId: 'operations-session' };
+    const recover = () => recoverWorkerTyping(h.tasks, { enqueue: () => {} }, retained.ref, actor);
+    const issued = await recover();
+    expect(issued.status).toBe('pending');
+    expect(issued.proof.commands[0]?.slice(-compiler.length)).toEqual(compiler);
+    const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, retained.task.id, 1);
+    const env = issued.proof.env as NodeJS.ProcessEnv;
+    const admitted = refuseExcessWorkerCheckHostRun({ ...env }, true, retained.task.worktree, compiler);
+    if (!admitted?.ok || !('recovery' in admitted) || !admitted.recovery) throw new Error('recovery was not admitted');
+    const original = admitted.recovery;
+    const originalStamp = readFileSync(join(budget, '2'), 'utf8');
+    const results = join(retained.task.worktree, '.temp/goal/checks/results');
+    const history = join(retained.task.worktree, '.temp/goal/checks/custody/history');
+    mkdirSync(results, { recursive: true });
+    mkdirSync(history, { recursive: true });
+    const writeEvidence = (status: string, commandStartedMonoMs: number | null, terminal: boolean) => {
+      writeFileSync(
+        join(results, `${original.checkId}.json`),
+        JSON.stringify({
+          id: original.checkId,
+          cwd: retained.task.worktree,
+          argv: compiler,
+          ownership: { taskId: retained.task.id, attempt: 1 },
+          status,
+          exitCode: 143,
+          physicalRunId: original.physicalRunId,
+          physicalRun: { exitCode: 143, resources: { commandStartedMonoMs } },
+        }),
+      );
+      writeFileSync(
+        join(history, `${original.checkId}.${original.physicalRunId}.json`),
+        JSON.stringify({
+          version: 1,
+          id: original.checkId,
+          cwd: retained.task.worktree,
+          physicalRunId: original.physicalRunId,
+          status: terminal ? 'finished' : 'running',
+          remoteExpected: true,
+          exitCode: 143,
+          ...(terminal
+            ? { terminalProof: { local: true, remote: true, resultKnown: true, observedAt: new Date().toISOString() } }
+            : {}),
+        }),
+      );
+    };
+
+    writeEvidence('running', null, false);
+    expect((await recover()).proof.env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
+    writeEvidence('finished', null, false);
+    expect((await recover()).proof.env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
+    writeEvidence('finished', 50, true);
+    expect((await recover()).proof.env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
+    writeEvidence('finished', null, true);
+    const competingId = 'd4d4d4d4-4444-4444-8444-444444444444';
+    writeFileSync(
+      join(results, `${competingId}.json`),
+      JSON.stringify({
+        id: competingId,
+        ownership: { taskId: retained.task.id, attempt: 1 },
+        status: 'running',
+      }),
+    );
+    expect((await recover()).proof.env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
+    unlinkSync(join(results, `${competingId}.json`));
+    mkdirSync(join(retained.task.worktree, '.temp/goal/checks/cancellations'), { recursive: true });
+    const cancellation = join(retained.task.worktree, '.temp/goal/checks/cancellations', `${original.checkId}.json`);
+    writeFileSync(cancellation, '{}');
+    expect((await recover()).proof.env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
+    unlinkSync(cancellation);
+
+    const replacement = await recover();
+    expect(replacement.status).toBe('pending');
+    expect(replacement.proof.env[TYPING_RECOVERY_ENV]).not.toBe(env[TYPING_RECOVERY_ENV]);
+    expect(replacement.proof.commands[0]?.slice(-compiler.length)).toEqual(compiler);
+    expect(readFileSync(join(budget, '2'), 'utf8')).toBe(originalStamp);
+    expect(workerCheckHostRunsUsed(budget)).toBe(2);
+    expect((await recover()).proof.env[TYPING_RECOVERY_ENV]).toBe(replacement.proof.env[TYPING_RECOVERY_ENV]);
+    h.store.updateTask(retained.ref, (current) => {
+      current.state = 'cancelled';
+    });
+    await expect(recover()).rejects.toThrow('completed ordinary source with pending compiler evidence');
+  } finally {
+    await h.disposeAsync();
+  }
+});

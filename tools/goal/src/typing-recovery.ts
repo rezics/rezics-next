@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { isKnownTypingCompiler } from './worker-check-typing-inputs.ts';
+import { isKnownTypingCompiler, resolveTypingCompilerCommand } from './worker-check-typing-inputs.ts';
 import type { AttemptRef, LandingQueue } from './contracts.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { sameProcess } from './process.ts';
@@ -81,12 +81,20 @@ export async function recoverWorkerTyping(
     }
     if (!typing.ok) {
       const original = typing.command ?? attempt.typingEvidencePending?.command ?? [];
-      const commands = isKnownTypingCompiler(task.worktree, original)
-        ? [original]
-        : expandCheckCommands(original).filter(
-            (command) => isTypecheckCommand(command) && (!authority || isKnownTypingCompiler(task.worktree, command)),
-          );
-      if (!commands.length) commands.push(['bun', 'scripts/typecheck.ts']);
+      const expanded = expandCheckCommands(original);
+      const commands = expanded
+        .map((command) => resolveTypingCompilerCommand(task.worktree, command) ?? command)
+        .filter(
+          (command) => isTypecheckCommand(command) && (!authority || isKnownTypingCompiler(task.worktree, command)),
+        );
+      const workspaceScoped = expanded.some(
+        (command) =>
+          (command[0] === 'bun' || command[0]?.endsWith('/bun')) &&
+          command.length === 5 &&
+          command[4] === 'typecheck' &&
+          ((command[1] === 'run' && command[2] === '--cwd') || (command[1] === '--cwd' && command[3] === 'run')),
+      );
+      if (!commands.length && !workspaceScoped) commands.push(['bun', 'scripts/typecheck.ts']);
       const grants = authority
         ? commands.map((command) =>
             grantWorkerTypingRecovery({

@@ -2838,16 +2838,29 @@ bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <n>
 The task lease and current generation fence cover reconciliation and re-settlement into the ordinary landing queue.
 A queued source retry for missing compiler evidence uses this same reconciliation boundary. If the original unchanged
 evidence suffices, the existing completed attempt lands. Otherwise the command returns `pending` with the exact
-worktree, ownership environment and smallest typing-only wrapper commands. Run those commands through the returned
-current control-plane wrapper, wait for their real results, then repeat `typing-recover`. Required money/native checks
+worktree, ownership environment and smallest typing-only wrapper commands. Recognized workspace intents use the
+installed owner command `bun run --cwd <workspace> typecheck`; a workspace-scoped intent never falls back to a full
+workspace check. Run those commands through the returned current control-plane wrapper, wait for their real results,
+then repeat `typing-recover`. Required money/native checks
 remain recorded and required; they are not substituted by this proof request. Authenticated recovery grants one
 compiler-only physical run per exact task, attempt, source commit, compiler-input identity and command. It keeps the
 original budget limit and stamps, records the additional work in the next numbered stamp, and reuses the same check
-identity on replay. The grant has no clock expiry: input drift requires fresh authenticated authority, and a changed
-current attempt or completed/cancelled recovery invalidates it. Workers cannot mint grants; unauthenticated controller
-reconciliation can describe pending proof but grants no additional admission. Cancelled tasks and attempts retain
-their existing exclusion from typing recovery. Real source typing failures remain source
-failures. Provider, model CLI and allowance failures keep their separate handling.
+identity on replay. One new grant is permitted only after the previous recovery check has an exact terminal result,
+matching terminal physical custody, a SIGTERM exit before the compiler command started, no competing same-attempt check
+and no explicit cancellation. The old grant, stamp and physical history remain intact; active, uncertain, post-entry and
+already-replaced checks keep their original identity and admission fence. The grant has no clock expiry: input drift
+requires fresh authenticated authority, and a changed current attempt or completed/cancelled recovery invalidates it.
+Workers cannot mint grants; unauthenticated controller reconciliation can describe pending proof but grants no
+additional admission. Cancelled tasks and attempts retain their existing exclusion from typing recovery. Real source
+typing failures remain source failures. Provider, model CLI and allowance failures keep their separate handling.
+
+Decision: recover recognized workspace compiler intent with `bun run --cwd <workspace> typecheck`, and issue one fresh
+recovery grant only after the previous exact check proves terminal SIGTERM before command start, preserving its stamp
+and physical custody.
+
+After this recovery path is live, settle numeric task `8f0c490d` with
+`bun tools/goal/src/cli.ts typing-recover 8f0c490d --expected-attempt 1`, run the returned wrapper command, then repeat
+`typing-recover` after its actual result.
 
 Landing and promotion checks record only clean, successful runs. Each result is keyed by the normalized command, the
 allowlisted environment (`CI`, `DATABASE_URL`, `NODE_ENV`, `PATH`, `PLAYWRIGHT_BROWSERS_PATH`, and `TZ`), the Git tree

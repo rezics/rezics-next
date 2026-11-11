@@ -11,6 +11,8 @@ import {
   captureTypingInputs,
   qualifyTypingInputs,
   kernelClientTypingPipeline,
+  isKnownTypingCompiler,
+  resolveTypingCompilerCommand,
 } from './worker-check-typing-inputs.ts';
 import {
   admitWorkerCheckHostRun,
@@ -492,6 +494,27 @@ function standardFixture() {
   }
   return root;
 }
+
+test('typing recovery canonicalizes only a recognized misordered workspace compiler intent', () => {
+  const root = standardFixture();
+  const misordered = ['bun', '--cwd', 'services/kernel', 'run', 'typecheck'];
+  expect(isKnownTypingCompiler(root, misordered)).toBe(false);
+  expect(resolveTypingCompilerCommand(root, misordered)).toEqual([
+    'bun',
+    'run',
+    '--cwd',
+    'services/kernel',
+    'typecheck',
+  ]);
+  expect(resolveTypingCompilerCommand(root, ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'])).toEqual([
+    'bun',
+    'run',
+    '--cwd',
+    'services/kernel',
+    'typecheck',
+  ]);
+  expect(resolveTypingCompilerCommand(root, ['bun', '--cwd', 'unknown', 'run', 'typecheck'])).toBeUndefined();
+});
 
 test.each(['services/kernel', 'services/auth', 'apps/web', 'chain'])(
   'standard %s typing ignores only unconsumed operational state and retains real inputs',

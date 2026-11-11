@@ -1,5 +1,14 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -192,6 +201,7 @@ type TypingRecoveryGrant = {
   checkId: string;
   physicalRunId: string;
   stamp?: string;
+  replacementOf?: string;
 };
 const recoveryPath = (directory: string, token: string) => {
   if (!/^[0-9a-f-]{36}$/.test(token)) throw new Error('Invalid typing recovery token');
@@ -210,9 +220,119 @@ function recoveryIdentity(worktree: string, command: readonly string[]): string 
     .digest('hex');
 }
 
+type CheckEvidence = {
+  [key: string]: unknown;
+  version?: unknown;
+  id?: unknown;
+  cwd?: unknown;
+  argv?: unknown;
+  status?: unknown;
+  exitCode?: unknown;
+  physicalRunId?: unknown;
+  ownership?: { taskId?: unknown; attempt?: unknown };
+  physicalRun?: {
+    exitCode?: unknown;
+    resources?: { commandStartedMonoMs?: unknown } | null;
+  };
+  remoteExpected?: unknown;
+  terminalProof?: { local?: unknown; resultKnown?: unknown; remote?: unknown };
+};
+
+function readCheckEvidence(path: string): CheckEvidence | undefined {
+  try {
+    const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as CheckEvidence) : undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) return undefined;
+    throw error;
+  }
+}
+
+function terminalPhysicalHistory(worktree: string, checkId: string, physicalRunId: string, exitCode?: number): boolean {
+  const history = readCheckEvidence(
+    join(worktree, '.temp', 'goal', 'checks', 'custody', 'history', `${checkId}.${physicalRunId}.json`),
+  );
+  return Boolean(
+    history?.version === 1 &&
+    history.id === checkId &&
+    history.cwd === worktree &&
+    history.physicalRunId === physicalRunId &&
+    history.status === 'finished' &&
+    Number.isInteger(history.exitCode) &&
+    (exitCode === undefined || history.exitCode === exitCode) &&
+    history.terminalProof?.local === true &&
+    history.terminalProof?.resultKnown === true &&
+    (history.remoteExpected === true
+      ? history.terminalProof?.remote === true
+      : history.remoteExpected === false && history.terminalProof?.remote === null),
+  );
+}
+
+/** A replacement is safe only when the consumed exact check is terminal and its remote command never began. */
+function provenPreCompilerRecoveryCancellation(grant: TypingRecoveryGrant, directory: string): boolean {
+  if (!grant.stamp || !STAMP_NAME.test(grant.stamp)) return false;
+  if (stampNames(directory).some((stamp) => Number(stamp) > Number(grant.stamp))) return false;
+  const stamp = readWorkerCheckHostStamp(directory, grant.stamp);
+  const recovery = stamp.typingRecovery;
+  if (
+    !recovery ||
+    recovery.token !== grant.token ||
+    recovery.checkId !== grant.checkId ||
+    recovery.physicalRunId !== grant.physicalRunId
+  )
+    return false;
+
+  const root = grant.worktree;
+  const recordDirectory = join(root, '.temp', 'goal', 'checks', 'results');
+  const record = readCheckEvidence(join(recordDirectory, `${grant.checkId}.json`));
+  if (
+    !record ||
+    record.id !== grant.checkId ||
+    record.cwd !== root ||
+    JSON.stringify(record.argv) !== JSON.stringify(grant.command) ||
+    record.status !== 'finished' ||
+    record.physicalRunId !== grant.physicalRunId ||
+    record.exitCode !== 143 ||
+    record.physicalRun?.exitCode !== 143 ||
+    record.physicalRun?.resources?.commandStartedMonoMs !== null ||
+    existsSync(join(root, '.temp', 'goal', 'checks', 'cancellations', `${grant.checkId}.json`)) ||
+    !terminalPhysicalHistory(root, grant.checkId, grant.physicalRunId, 143)
+  )
+    return false;
+
+  let files: string[];
+  try {
+    files = readdirSync(recordDirectory).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+  let currentFound = false;
+  for (const file of files) {
+    const candidate = readCheckEvidence(join(recordDirectory, file));
+    if (!candidate) return false;
+    if (candidate.ownership?.taskId !== grant.taskId || candidate.ownership?.attempt !== grant.attempt) continue;
+    if (candidate.id === grant.checkId && candidate.physicalRunId === grant.physicalRunId) {
+      currentFound = true;
+      continue;
+    }
+    if (
+      candidate.status !== 'finished' ||
+      typeof candidate.id !== 'string' ||
+      typeof candidate.physicalRunId !== 'string' ||
+      !terminalPhysicalHistory(root, candidate.id, candidate.physicalRunId)
+    )
+      return false;
+  }
+  return currentFound;
+}
+
 /** Called only after typing-recover authenticates the owner/operations manager under the current task lease. */
 export function grantWorkerTypingRecovery(
-  input: Omit<TypingRecoveryGrant, 'version' | 'token' | 'identity' | 'checkId' | 'physicalRunId' | 'stamp'>,
+  input: Omit<
+    TypingRecoveryGrant,
+    'version' | 'token' | 'identity' | 'checkId' | 'physicalRunId' | 'stamp' | 'replacementOf'
+  >,
 ): TypingRecoveryGrant {
   const directory = workerCheckBudgetDirectory(input.stateDirectory, input.taskId, input.attempt);
   mkdirSync(directory, { recursive: true });
@@ -221,6 +341,7 @@ export function grantWorkerTypingRecovery(
     const identity = recoveryIdentity(input.worktree, input.command);
     const grants = join(directory, 'typing-recovery');
     mkdirSync(grants, { recursive: true });
+    const matching: TypingRecoveryGrant[] = [];
     for (const file of readdirSync(grants)) {
       if (!/^[0-9a-f-]{36}\.json$/.test(file)) continue;
       const prior = JSON.parse(readFileSync(join(grants, file), 'utf8')) as TypingRecoveryGrant;
@@ -232,7 +353,25 @@ export function grantWorkerTypingRecovery(
         prior.identity === identity &&
         JSON.stringify(prior.command) === JSON.stringify(input.command)
       )
-        return prior;
+        matching.push(prior);
+    }
+    const original = matching.find((prior) => !prior.replacementOf);
+    if (matching.length > 0 && !original) return matching[0]!;
+    if (original) {
+      const replacement = matching.find((prior) => prior.replacementOf === original.token);
+      if (replacement) return replacement;
+      if (matching.length !== 1 || !provenPreCompilerRecoveryCancellation(original, directory)) return original;
+      const grant: TypingRecoveryGrant = {
+        ...input,
+        version: 1,
+        token: randomUUID(),
+        identity,
+        checkId: randomUUID(),
+        physicalRunId: randomUUID(),
+        replacementOf: original.token,
+      };
+      writeAtomicJson(recoveryPath(directory, grant.token), grant);
+      return grant;
     }
     const grant: TypingRecoveryGrant = {
       ...input,
