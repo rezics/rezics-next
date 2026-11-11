@@ -1,5 +1,50 @@
 # Content
 
+## Hosted book profile of Studio
+
+Studio uses ordinary Post drafts, ownership, immutable body revisions, preview and publication. A hosted book
+adds one catalogue at an existing Post identity, in that Post's home; `post:revise` on that Post controls structure
+editing and release. Columns and individual articles need no catalogue. No Subject, edition benefit, separate
+editor, scheduler or global grant is created. Bibliographic associations remain with Semantic.
+
+`hosted-chapters` owns immutable structure revisions and release manifests. Each structure is a bounded tree
+of at most 512 occurrences and depth 16. Parts may be empty; a root-only list is a tree. Caller-supplied occurrence
+UUIDs identify placements permanently, including across moves and removals. Distinct occurrences may select the
+same Post. An occurrence cannot change kind or target Post; chapter revision/digest selections may change in a
+new structure revision. Sibling positions are dense zero-based integers; the stored preorder supplies navigation.
+Replacing the structure requires its exact head revision. Commands use native receipts and reauthorize retries;
+an attachment failure rolls back only the structure command, never the independently saved Post.
+
+Release selects an ancestor-closed subset of a specific current structure and compares the previous publication
+ID, atomically appending a frozen manifest and advancing its public pointer. Unselected placements are absent.
+Ordinary Post publication remains the body publication boundary: a release neither publishes a draft Post nor
+grants draft access. Authors publish selected Posts through that existing boundary before public reading; other
+drafts stay private. Later body or structure edits do not change a released revision's bytes. Releasing an empty
+selection withdraws the current TOC; explicit historical manifests still obey current catalogue and target Access.
+
+The mounted `/v1/hostedCatalogues` operations create, revise, publish, read metadata, page children and resolve
+an occurrence at an explicit structure or publication revision. Omitted read revision selects the current release;
+private structure revisions additionally require current `post:revise`. Every read retains and finally rechecks
+the ordinary catalogue Post disclosure. Chapter rows and bytes additionally retain the exact target Post read,
+including Board, Realm, ancestry, erasure and revision disclosure. Unavailable chapter slots expose occurrence,
+parent, order and kind only; their title, target, digest and attribution are withheld. Available resolution delivers
+canonical Document bytes, SHA-256, original Post author and licence. No bodies are copied into hosted storage.
+
+Children and directional chapter navigation inspect at most 20 raw occurrences per page. Continuations bind the
+catalogue, selected revision, parent/direction, original frontier and actor; sparse results never refill or lose
+progress. Moving an occurrence changes only its address in the new revision, preserving old exact links.
+
+### Cost: hosted structure and reading
+
+Mutations inspect at most 512 placements, validate a depth-16 tree and write one immutable snapshot plus its
+placements in the catalogue home. Attachments read only distinct exact selected revisions through the native
+Post reader; release processes only its selected subset. Commands retain ordinary Access admission and receipts.
+Reads select one catalogue/revision and at most 21 indexed placement keys, disclose at most 20 targets and repeat
+their retained native checks before returning. Resolution reads one target and its canonical body (native body
+limit), while TOC pages retain no target bodies between disclosures. All nested native Post, Account, Board,
+Realm and Access work, transaction controls, bytes and serialization remain charged to these operations.
+These are implementation bounds; measured native growth and installed operation publication remain separate.
+
 Decision: Content imports HTTP problem vocabulary, schemas, headers and Idempotency-Key decoding from their defining
 leaves, command request digests from `command/request.ts`, and the authentication error constructor from the Access
 contract. Request-facing authorization, actor resolution and prepared read checks use Content's existing
