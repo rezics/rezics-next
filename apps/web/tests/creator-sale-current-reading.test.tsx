@@ -1,3 +1,5 @@
+import { creatorSaleSettlementLabel } from '../src/checkout/creator-sale-inspection';
+import { chooseSelect } from './select-interaction';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
@@ -289,11 +291,12 @@ test('received-page review keeps exact identities, bounded selections and origin
     await act(async () => button.click());
   };
   const choose = async (id: string, value: string) => {
-    const field = host.querySelector<HTMLSelectElement>(`#${id}`)!;
-    await act(async () => {
-      field.value = value;
-      field.dispatchEvent(new window.Event('change', { bubbles: true }));
-    });
+    const field = host.querySelector<HTMLElement>(`#${id}`)!;
+    const label =
+      id === 'creator-sales-review-settlement'
+        ? creatorSaleSettlementLabel(value as Parameters<typeof creatorSaleSettlementLabel>[0])
+        : value;
+    await chooseSelect(field, new RegExp(label));
   };
   const rows = () => [...host.querySelectorAll('[data-settlement]')];
   try {

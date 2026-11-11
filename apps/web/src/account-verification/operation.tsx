@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import {
   createContext,
   useCallback,
@@ -13,7 +14,6 @@ import { Link, useRouter } from '@tanstack/react-router';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { readAttempt, saveAttempt, clearAttempt } from './attempt';
@@ -381,18 +381,25 @@ export function OperationForm({
     >
       <Field>
         <FieldLabel htmlFor={`${id}-action`}>{m.av_decision()}</FieldLabel>
-        <NativeSelect
-          id={`${id}-action`}
+        <Select
+          items={actions.map((value) => ({ value, label: actionLabel(value) }))}
           value={action}
           disabled={disabled || confirm}
-          onChange={(event) => setAction(event.target.value as Operation['action'])}
+          onValueChange={(value) => setAction(value! as Operation['action'])}
         >
-          {actions.map((value) => (
-            <NativeSelectOption key={value} value={value}>
-              {actionLabel(value)}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger id={`${id}-action`} className="w-full min-w-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {actions.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {actionLabel(value)}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </Field>
       {hasReason && (
         <Field>

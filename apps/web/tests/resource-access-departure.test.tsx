@@ -1,3 +1,4 @@
+import { chooseSelect } from './select-interaction';
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, useLayoutEffect, useState } from 'react';
@@ -127,16 +128,16 @@ test('changed grant draft survives Stay; paging and deliberate Leave retire it t
   await click(handle);
   expect(blocked()).toBe(false);
   await type(handle, 'aki');
-  await act(async () => user.selectOptions(within(host).getByLabelText(m.access_grant_kind()), 'direct'));
-  await act(async () => user.selectOptions(within(host).getByLabelText(m.access_action()), 'collection:update'));
+  await chooseSelect(within(host).getByLabelText(m.access_grant_kind()), m.access_direct_action());
+  await chooseSelect(within(host).getByLabelText(m.access_action()), /collection:update/);
   const end = within(host).getByLabelText(m.access_ends()) as HTMLInputElement;
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
     setter.call(end, '2027-01-01T12:00');
     end.dispatchEvent(new window.Event('input', { bubbles: true }));
   });
-  const draft = [handle, within(host).getByLabelText(m.access_action()), end].map(
-    (node) => (node as HTMLInputElement).value,
+  const draft = [handle, within(host).getByLabelText(m.access_action()), end].map((node) =>
+    node.getAttribute('role') === 'combobox' ? node.textContent : (node as HTMLInputElement).value,
   );
   expect(blocked()).toBe(true);
   const link = within(host).getByRole('link', { name: 'Destination' });
@@ -145,7 +146,9 @@ test('changed grant draft survives Stay; paging and deliberate Leave retire it t
   await stay();
   expect(document.activeElement).toBe(link);
   expect(
-    [handle, within(host).getByLabelText(m.access_action()), end].map((node) => (node as HTMLInputElement).value),
+    [handle, within(host).getByLabelText(m.access_action()), end].map((node) =>
+      node.getAttribute('role') === 'combobox' ? node.textContent : (node as HTMLInputElement).value,
+    ),
   ).toEqual(draft);
   await click(button(m.access_next_page()));
   await stay();

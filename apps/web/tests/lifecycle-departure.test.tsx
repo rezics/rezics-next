@@ -1,3 +1,4 @@
+import { chooseSelect } from './select-interaction';
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
@@ -115,7 +116,7 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
     host.querySelector('textarea')!.focus();
     expect(blocked()).toBe(false);
     await draft();
-    await act(async () => user.selectOptions(host.querySelector('select')!, 'reinstate'));
+    await chooseSelect(host.querySelector<HTMLElement>('[role=combobox]')!, m.lifecycle_reinstate());
     expect(blocked()).toBe(true);
     const reason = host.querySelector('textarea')!;
     reason.focus();
@@ -125,7 +126,7 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
     await click(m.thread_authoring_stay());
     await settle(() => !dialog() && document.activeElement === reason);
     expect(reason.value).toBe('  private reason  ');
-    expect(host.querySelector('select')!.value).toBe('reinstate');
+    expect(host.querySelector('[role=combobox]')!.textContent).toContain(m.lifecycle_reinstate());
     await click(m.lifecycle_review());
     await click(m.lifecycle_confirm());
     await navigate();

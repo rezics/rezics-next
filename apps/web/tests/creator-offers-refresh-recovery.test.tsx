@@ -1,3 +1,4 @@
+import { chooseSelect } from './select-interaction';
 import { afterAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
@@ -230,11 +231,7 @@ async function mount() {
     });
   const draft = async () => {
     await fill('title', 'My draft');
-    await act(async () => {
-      const select = host.querySelector('select')!;
-      select.value = 'usd';
-      select.dispatchEvent(new window.Event('change', { bubbles: true }));
-    });
+    await chooseSelect(host.querySelector<HTMLElement>('[role=combobox]')!, 'USD');
     await fill('price', '12.99');
     await fill('taxCode', 'txcd_10000000');
   };
@@ -324,7 +321,7 @@ describe('Creator offer editing recovery retains real drafts without extending p
       expect(p.input('title').value).toBe('My draft');
       expect(p.input('price').value).toBe('12.99');
       expect(p.input('taxCode').value).toBe('txcd_10000000');
-      expect(p.host.querySelector<HTMLSelectElement>('select')!.value).toBe('usd');
+      expect(p.host.querySelector<HTMLInputElement>('input[name=currency]')!.value).toBe('usd');
       expect(p.writes).toHaveLength(0);
       await p.click(m.creator_offers_refresh());
       expect(p.button(m.creator_offers_refresh()).disabled).toBe(true);
@@ -470,7 +467,7 @@ describe('Creator offer editing recovery retains real drafts without extending p
       await p.refresh();
       await p.settle(p.editorReads.at(-1)!, latest);
       expect(p.input('price').disabled).toBe(true);
-      expect(p.host.querySelector<HTMLSelectElement>('select')!.disabled).toBe(true);
+      expect(p.host.querySelector<HTMLButtonElement>('[role=combobox]')!.disabled).toBe(true);
       await p.submit();
       expect(p.writes[1]!.data).toEqual(p.writes[0]!.data);
       await p.settle(p.writes[1]!.work, { kind: 'rejected' });

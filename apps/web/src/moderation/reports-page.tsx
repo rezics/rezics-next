@@ -1,8 +1,9 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useContext, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import {
   DEFAULT_REPORT_SELECTION,
   reportPageIsCurrent,
@@ -461,47 +462,78 @@ function ReportsView({
         disabled={!onSelection || retired}
       >
         <legend className="sr-only">{m.moderation_filter_label()}</legend>
-        <label htmlFor={`${controlsId}-status`} className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
-          <span className="block">{m.moderation_filter_status()}</span>
-          <NativeSelect
-            id={`${controlsId}-status`}
-            className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11"
+        <Field className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
+          <FieldLabel htmlFor={`${controlsId}-status`}>{m.moderation_filter_status()}</FieldLabel>
+          <Select
+            disabled={!onSelection || retired}
+            items={[
+              { value: 'all', label: m.moderation_filter_all_status() },
+              { value: 'pending', label: m.moderation_filter_pending() },
+              { value: 'resolved', label: m.moderation_filter_resolved() },
+            ]}
             value={selection.status}
-            onChange={(event) => select({ ...selection, status: event.target.value as ReportSelection['status'] })}
+            onValueChange={(value) => select({ ...selection, status: value! as ReportSelection['status'] })}
           >
-            <NativeSelectOption value="all">{m.moderation_filter_all_status()}</NativeSelectOption>
-            <NativeSelectOption value="pending">{m.moderation_filter_pending()}</NativeSelectOption>
-            <NativeSelectOption value="resolved">{m.moderation_filter_resolved()}</NativeSelectOption>
-          </NativeSelect>
-        </label>
-        <label htmlFor={`${controlsId}-kind`} className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
-          <span className="block">{m.moderation_filter_kind()}</span>
-          <NativeSelect
-            id={`${controlsId}-kind`}
-            className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11"
+            <SelectTrigger id={`${controlsId}-status`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">{m.moderation_filter_all_status()}</SelectItem>
+                <SelectItem value="pending">{m.moderation_filter_pending()}</SelectItem>
+                <SelectItem value="resolved">{m.moderation_filter_resolved()}</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
+          <FieldLabel htmlFor={`${controlsId}-kind`}>{m.moderation_filter_kind()}</FieldLabel>
+          <Select
+            disabled={!onSelection || retired}
+            items={[
+              { value: 'all', label: m.moderation_filter_all_kinds() },
+              { value: 'board', label: m.moderation_queue_board() },
+              { value: 'thread', label: m.moderation_queue_thread() },
+              { value: 'post', label: m.moderation_queue_post() },
+            ]}
             value={selection.targetKind}
-            onChange={(event) =>
-              select({ ...selection, targetKind: event.target.value as ReportSelection['targetKind'] })
-            }
+            onValueChange={(value) => select({ ...selection, targetKind: value! as ReportSelection['targetKind'] })}
           >
-            <NativeSelectOption value="all">{m.moderation_filter_all_kinds()}</NativeSelectOption>
-            <NativeSelectOption value="board">{m.moderation_queue_board()}</NativeSelectOption>
-            <NativeSelectOption value="thread">{m.moderation_queue_thread()}</NativeSelectOption>
-            <NativeSelectOption value="post">{m.moderation_queue_post()}</NativeSelectOption>
-          </NativeSelect>
-        </label>
-        <label htmlFor={`${controlsId}-order`} className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
-          <span className="block">{m.moderation_filter_order()}</span>
-          <NativeSelect
-            id={`${controlsId}-order`}
-            className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11"
+            <SelectTrigger id={`${controlsId}-kind`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">{m.moderation_filter_all_kinds()}</SelectItem>
+                <SelectItem value="board">{m.moderation_queue_board()}</SelectItem>
+                <SelectItem value="thread">{m.moderation_queue_thread()}</SelectItem>
+                <SelectItem value="post">{m.moderation_queue_post()}</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
+          <FieldLabel htmlFor={`${controlsId}-order`}>{m.moderation_filter_order()}</FieldLabel>
+          <Select
+            disabled={!onSelection || retired}
+            items={[
+              { value: 'newest', label: m.moderation_filter_newest() },
+              { value: 'oldest', label: m.moderation_filter_oldest() },
+            ]}
             value={selection.order}
-            onChange={(event) => select({ ...selection, order: event.target.value as ReportSelection['order'] })}
+            onValueChange={(value) => select({ ...selection, order: value! as ReportSelection['order'] })}
           >
-            <NativeSelectOption value="newest">{m.moderation_filter_newest()}</NativeSelectOption>
-            <NativeSelectOption value="oldest">{m.moderation_filter_oldest()}</NativeSelectOption>
-          </NativeSelect>
-        </label>
+            <SelectTrigger id={`${controlsId}-order`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="newest">{m.moderation_filter_newest()}</SelectItem>
+                <SelectItem value="oldest">{m.moderation_filter_oldest()}</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
         <Button
           type="button"
           variant="outline"

@@ -1,7 +1,8 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useId, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
 import { workbenchSearch, type WorkbenchSearch } from './scope';
 
@@ -59,22 +60,32 @@ export function ManualModerationScope({
             spellCheck={false}
           />
         </div>
-        <div className="min-w-0 flex-1 basis-48 space-y-1">
-          <label htmlFor={`${id}-queue`} className="block text-sm">
+        <Field className="min-w-0 flex-1 basis-48 space-y-1">
+          <FieldLabel htmlFor={`${id}-queue`} className="block text-sm">
             {m.moderation_workbench_heading()}
-          </label>
-          <NativeSelect
-            id={`${id}-queue`}
+          </FieldLabel>
+          <Select
+            items={[
+              { value: 'reports', label: m.moderation_workbench_queue_reports() },
+              { value: 'appeals', label: m.moderation_workbench_queue_appeals() },
+              { value: 'resolved', label: m.moderation_workbench_queue_resolved() },
+            ]}
             name="queue"
             value={queue}
-            onChange={(event) => setQueue(event.target.value)}
-            className="w-full min-w-0 [&_select]:min-h-11"
+            onValueChange={(value) => setQueue(value!)}
           >
-            <NativeSelectOption value="reports">{m.moderation_workbench_queue_reports()}</NativeSelectOption>
-            <NativeSelectOption value="appeals">{m.moderation_workbench_queue_appeals()}</NativeSelectOption>
-            <NativeSelectOption value="resolved">{m.moderation_workbench_queue_resolved()}</NativeSelectOption>
-          </NativeSelect>
-        </div>
+            <SelectTrigger id={`${id}-queue`} className="w-full min-w-0 min-h-11">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="reports">{m.moderation_workbench_queue_reports()}</SelectItem>
+                <SelectItem value="appeals">{m.moderation_workbench_queue_appeals()}</SelectItem>
+                <SelectItem value="resolved">{m.moderation_workbench_queue_resolved()}</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
         <Button type="submit" className={control}>
           {m.moderation_manual_open()}
         </Button>

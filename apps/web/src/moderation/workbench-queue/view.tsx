@@ -1,6 +1,7 @@
-import { useEffect, type MouseEvent } from 'react';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
+import { useEffect, useId, type MouseEvent } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -145,6 +146,7 @@ export function WorkbenchView({
   onOpenCase,
   onReturnAppeal,
 }: WorkbenchViewProps) {
+  const filterId = useId();
   const departure = useAuthoringDeparture(
     false,
     false,
@@ -368,39 +370,61 @@ export function WorkbenchView({
           {!search.history && queueScope.kind === 'board' && search.queue !== 'appeals' ? (
             <fieldset className="flex min-w-0 flex-wrap items-end gap-3">
               <legend className="sr-only">{m.moderation_filter_kind()}</legend>
-              <label className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
-                <span className="block">{m.moderation_filter_kind()}</span>
-                <NativeSelect
-                  className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11"
+              <Field className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
+                <FieldLabel htmlFor={`${filterId}-kind`}>{m.moderation_filter_kind()}</FieldLabel>
+                <Select
+                  items={[
+                    { value: 'all', label: m.moderation_filter_all_kinds() },
+                    { value: 'board', label: m.moderation_queue_board() },
+                    { value: 'thread', label: m.moderation_queue_thread() },
+                    { value: 'post', label: m.moderation_queue_post() },
+                  ]}
                   value={search.targetKind}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     onSearch(
                       workbenchSearch({
                         ...workbenchWithoutContinuation(search),
-                        targetKind: event.target.value,
+                        targetKind: value!,
                       }),
                     )
                   }
                 >
-                  <NativeSelectOption value="all">{m.moderation_filter_all_kinds()}</NativeSelectOption>
-                  <NativeSelectOption value="board">{m.moderation_queue_board()}</NativeSelectOption>
-                  <NativeSelectOption value="thread">{m.moderation_queue_thread()}</NativeSelectOption>
-                  <NativeSelectOption value="post">{m.moderation_queue_post()}</NativeSelectOption>
-                </NativeSelect>
-              </label>
-              <label className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
-                <span className="block">{m.moderation_filter_order()}</span>
-                <NativeSelect
-                  className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11"
+                  <SelectTrigger id={`${filterId}-kind`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="all">{m.moderation_filter_all_kinds()}</SelectItem>
+                      <SelectItem value="board">{m.moderation_queue_board()}</SelectItem>
+                      <SelectItem value="thread">{m.moderation_queue_thread()}</SelectItem>
+                      <SelectItem value="post">{m.moderation_queue_post()}</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
+                <FieldLabel htmlFor={`${filterId}-order`}>{m.moderation_filter_order()}</FieldLabel>
+                <Select
+                  items={[
+                    { value: 'newest', label: m.moderation_filter_newest() },
+                    { value: 'oldest', label: m.moderation_filter_oldest() },
+                  ]}
                   value={search.order}
-                  onChange={(event) =>
-                    onSearch(workbenchSearch({ ...workbenchWithoutContinuation(search), order: event.target.value }))
+                  onValueChange={(value) =>
+                    onSearch(workbenchSearch({ ...workbenchWithoutContinuation(search), order: value! }))
                   }
                 >
-                  <NativeSelectOption value="newest">{m.moderation_filter_newest()}</NativeSelectOption>
-                  <NativeSelectOption value="oldest">{m.moderation_filter_oldest()}</NativeSelectOption>
-                </NativeSelect>
-              </label>
+                  <SelectTrigger id={`${filterId}-order`} className="w-full min-w-0 max-w-full min-h-11 min-w-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="newest">{m.moderation_filter_newest()}</SelectItem>
+                      <SelectItem value="oldest">{m.moderation_filter_oldest()}</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
             </fieldset>
           ) : null}
           {search.history && scope.kind === 'board' ? (

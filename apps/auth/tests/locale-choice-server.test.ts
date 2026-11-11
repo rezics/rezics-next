@@ -11,7 +11,7 @@ test('actual server negotiation and concurrent shell renders keep request-local 
     import { createElement } from 'react';
     import { renderToString } from 'react-dom/server';
     import { AuthShell } from './src/frame';
-    import { installAuthLocaleNegotiation } from './src/locale-choice';
+    import { localeNames, installAuthLocaleNegotiation } from './src/locale-choice';
     import { paraglideMiddleware } from './src/paraglide/server.js';
     import { getLocale, locales } from './src/paraglide/runtime.js';
     installAuthLocaleNegotiation();
@@ -29,7 +29,8 @@ test('actual server negotiation and concurrent shell renders keep request-local 
       });
       const html = await response.text();
       assert.ok(html.includes('lang="' + wanted + '"'));
-      assert.ok(html.includes('value="' + wanted + '" lang="' + wanted + '" selected=""'));
+      assert.ok(html.includes('role="combobox"'));
+      assert.ok(html.includes(localeNames[wanted]));
       assert.equal(response.headers.get('set-cookie'), null);
     };
     await Promise.all(locales.map(locale => render('rezics_locale=' + locale, 'fr;q=1, en;q=0.5', locale)));

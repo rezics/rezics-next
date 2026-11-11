@@ -165,6 +165,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function chooseValue(trigger: HTMLElement, name: string | RegExp) {
+  await userEvent.click(trigger);
+  await userEvent.click(await screen.findByRole('option', { name }));
+}
+
 export const CurrentAccess: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -182,12 +187,12 @@ export const CurrentAccess: Story = {
     await expect(menu.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     await userEvent.click(canvas.getByRole('button', { name: m.access_grant_actions() }));
     await userEvent.click(await screen.findByText(m.access_edit_grant(), { selector: '[role="menuitem"], button' }));
-    await userEvent.selectOptions(canvas.getByLabelText(m.access_action()), 'collection:update');
+    await chooseValue(canvas.getByLabelText(m.access_action()), /collection:update/);
     await userEvent.click(canvas.getByRole('button', { name: m.access_review_title() }));
     await userEvent.click(canvas.getByRole('button', { name: m.access_review_confirm() }));
     await expect(canvas.getByRole('status')).toHaveTextContent(m.access_saved());
     await userEvent.click(canvas.getByRole('button', { name: m.access_add_grant() }));
-    await userEvent.selectOptions(canvas.getByLabelText(m.access_recipient()), 'active_accounts');
+    await chooseValue(canvas.getByLabelText(m.access_recipient()), m.access_active_accounts());
     await userEvent.click(canvas.getByRole('button', { name: m.access_review_title() }));
     await userEvent.click(canvas.getByRole('button', { name: m.access_review_confirm() }));
     await expect(canvas.getByRole('status')).toHaveTextContent(m.access_saved());
@@ -205,18 +210,18 @@ export const PermissionSelectionReview: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.access_add_grant() }));
-    await userEvent.selectOptions(canvas.getByLabelText(m.access_recipient()), 'active_accounts');
-    await userEvent.selectOptions(canvas.getByLabelText(m.access_grant_kind()), 'direct');
+    await chooseValue(canvas.getByLabelText(m.access_recipient()), m.access_active_accounts());
+    await chooseValue(canvas.getByLabelText(m.access_grant_kind()), m.access_direct_action());
     const permission = canvas.getByLabelText(m.access_action());
     const filter = canvas.getByLabelText(m.access_search_permissions());
-    await userEvent.selectOptions(permission, 'context:accept');
+    await chooseValue(permission, /context:accept/);
     await userEvent.type(filter, 'adopt');
-    await expect(permission).toHaveValue('context:accept');
+    await expect(permission).toHaveTextContent('context:accept');
     await userEvent.click(canvas.getByRole('button', { name: m.access_review_title() }));
     await expect(canvas.getByText(m.access_permission_context_accept())).toBeVisible();
     await expect(canvas.getByText('context:accept')).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: m.access_review_edit() }));
-    await userEvent.selectOptions(permission, 'context:adopt');
+    await chooseValue(permission, /context:adopt/);
     await userEvent.click(canvas.getByRole('button', { name: m.access_review_title() }));
     await expect(canvas.getByText(m.access_permission_context_adopt())).toBeVisible();
     await expect(canvas.getByText('context:adopt')).toBeVisible();
@@ -242,7 +247,7 @@ export const Refused: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.access_add_grant() }));
-    await userEvent.selectOptions(canvas.getByLabelText(m.access_recipient()), 'active_accounts');
+    await chooseValue(canvas.getByLabelText(m.access_recipient()), m.access_active_accounts());
     await userEvent.click(canvas.getByRole('button', { name: m.access_review_title() }));
     await userEvent.click(canvas.getByRole('button', { name: m.access_review_confirm() }));
     await expect(canvas.getByRole('status')).toHaveTextContent(m.access_refused());

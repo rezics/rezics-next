@@ -1,3 +1,4 @@
+import { chooseSelect } from './select-interaction';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
@@ -133,11 +134,7 @@ async function mount(list = false) {
     });
   const draft = async () => {
     await fill('title', '  Exact title  ');
-    await act(async () => {
-      const select = host.querySelector('select')!;
-      select.value = 'usd';
-      select.dispatchEvent(new window.Event('change', { bubbles: true }));
-    });
+    await chooseSelect(host.querySelector<HTMLElement>('[role=combobox]')!, 'USD');
     await fill('price', '12.90');
     await fill('taxCode', 'txcd_10000000');
   };
@@ -179,7 +176,7 @@ test('exact raw create edits prompt once, Stay preserves fields, edition and foc
     await page.click(m.creator_offer_draft_navigation_stay());
     expect(page.input('title').value).toBe('  Exact title  ');
     expect(page.input('price').value).toBe('12.90');
-    expect(page.host.querySelector('select')!.value).toBe('usd');
+    expect(page.host.querySelector<HTMLInputElement>('input[name=currency]')!.value).toBe('usd');
     expect(page.input('taxCode').value).toBe('txcd_10000000');
     expect(page.host.textContent).toContain(editionId);
     expect(document.activeElement).toBe(page.input('price'));
