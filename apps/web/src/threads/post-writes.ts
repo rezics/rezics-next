@@ -75,7 +75,12 @@ export async function startThreadRequest(
         boardId: input.boardId,
         title: input.title,
         body: input.body,
-        licence: input.kind === 'rules' ? input.licence : (input.licence ?? 'LicenseRef-rezics-terms'),
+        licence:
+          input.kind === 'rules'
+            ? input.licence
+            : 'licence' in input
+              ? (input.licence ?? 'LicenseRef-rezics-terms')
+              : 'LicenseRef-rezics-terms',
         ...(input.kind === 'review'
           ? {
               kind: 'review' as const,

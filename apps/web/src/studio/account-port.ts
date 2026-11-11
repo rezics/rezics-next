@@ -329,8 +329,6 @@ export function createStudioAccountPort(
     if (
       post.id !== target.postId ||
       post.threadId !== prior.native.threadId ||
-      post.authorId !== accountId ||
-      post.visibility !== 'published' ||
       post.availability !== 'available' ||
       !checkDocument(post.body) ||
       serializeDocument(post.body) !== serializeDocument(snapshot.body) ||

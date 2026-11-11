@@ -729,12 +729,15 @@ export class StudioController {
           return result;
         }
         const entries = result.value.entries;
-        const localArticle = attempt.review.authority === 'local' && attempt.review.target.kind === 'article';
-        const validLocalReadback = localArticle
+        const localTarget =
+          attempt.review.authority === 'local' && attempt.review.target.kind === 'article'
+            ? attempt.review.target.document
+            : null;
+        const validLocalReadback = localTarget
           ? entries.length === 1 &&
             entries[0]?.occurrenceId === null &&
             entries[0]?.title === attempt.review.entries[0]?.title &&
-            entries[0]?.document.postId === attempt.review.target.document.postId &&
+            entries[0]?.document.postId === localTarget.postId &&
             !!result.value.readbackSelection &&
             result.value.readbackSelection.visibility === 'published' &&
             sameExact(entries[0].document, result.value.readbackSelection.revision.exact) &&

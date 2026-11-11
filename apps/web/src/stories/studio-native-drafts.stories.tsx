@@ -112,9 +112,10 @@ async function prepare(scenario: Scenario): Promise<Prepared> {
       return ok({ items: documents, nextCursor: null });
     },
     async open({ postId: selectedId }) {
+      const title = documents.find((row) => row.postId === selectedId)?.title;
       current = await makeSelection({
         postId: selectedId,
-        title: documents.find((row) => row.postId === selectedId)?.title,
+        ...(title === undefined ? {} : { title }),
       });
       return ok(current);
     },
