@@ -107,6 +107,7 @@ import {
   hostDumpExtractScript,
 } from './cross-media-dump-cache.ts';
 import { crossMediaDumpCacheRoot } from './datasets/fetch-dumps.ts';
+import { readJsonFile, writeAtomicJson, type CheckRemoteAttempt, type CheckRemoteRunCustody } from './check-custody.ts';
 
 /** Exact root-relative files owned by the remote-check producer lifecycle. */
 export const REMOTE_CHECK_PRODUCER_CONTROL_FILES = [
@@ -303,6 +304,12 @@ export type RemoteCheck = {
   ) => ReturnType<typeof Bun.spawn> | Promise<ReturnType<typeof Bun.spawn>>;
   /** Final remote evidence is emitted only after remote cleanup and transport-child reaping. */
   settled?: (settlement: RemoteCheckSettlement) => void | Promise<void>;
+  /** A reservation that failed before runLeased may be retired without implying command success. */
+  notStarted?: (
+    physical: { host: string; run: string },
+    cleanup: RemoteCleanupReceipt | null,
+    reason?: string,
+  ) => void | Promise<void>;
   /** Expected frozen candidate fingerprint; remote upload bytes are checked against this before preparation. */
   expectedSourceSha256?: string;
   /** Trusted per-file input inventory used to reject an incomplete or mixed upload before host preparation. */
@@ -5348,10 +5355,9 @@ async function rankedHosts(
       continue;
     }
     const limit = probe.sliceProcessors * CHECK_HOST_MAX_LOAD_PER_PROCESSOR;
-    const reason =
-      probe.pressurePaused
-        ? `${entry.host.name}: host pressure paused`
-        : probe.load > limit
+    const reason = probe.pressurePaused
+      ? `${entry.host.name}: host pressure paused`
+      : probe.load > limit
         ? `${entry.host.name}: load ${probe.load} exceeds limit ${limit}`
         : probe.availableMemory < CHECK_HOST_MIN_AVAILABLE_BYTES
           ? `${entry.host.name}: MemAvailable ${probe.availableMemory} bytes is under ${CHECK_HOST_MIN_AVAILABLE_BYTES} bytes`
@@ -5787,7 +5793,9 @@ async function acquire(
         ? startableHosts(
             allRanked.filter(
               ({ host }) =>
-                host.name !== placement.name || host.address !== placement.address || host.identity !== placement.identity,
+                host.name !== placement.name ||
+                host.address !== placement.address ||
+                host.identity !== placement.identity,
             ),
             slots,
             gate,
@@ -7293,6 +7301,34 @@ print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':rea
     native = null;
     preparedInputs = null;
   }
+  if (!native) {
+    return {
+      schema: 1,
+      host: hostName,
+      run: runId,
+      native: null,
+      preparedInputs,
+      returns: {
+        schema: 1,
+        status: options.returns?.length ? 'unknown' : 'empty',
+        entries: [],
+        missing: [],
+        failures: evidenceFailures,
+      },
+      cleanup: {
+        schema: 1,
+        host: hostName,
+        run: runId,
+        status: 'unknown',
+        supervisorStopped: false,
+        commandGroupTerminal: false,
+        containersRemoved: false,
+        runDirectoryRemoved: false,
+        failures: ['original remote run remains pending; no stop or cleanup was requested'],
+      },
+      transportChildReaped: true,
+    };
+  }
   let returns: RemoteReturnManifest = {
     schema: 1,
     status: options.returns?.length ? 'unknown' : 'empty',
@@ -7841,10 +7877,12 @@ async function runWithTransportRetries(
     };
     let managedByRun = false;
     let uploaded = false;
+    let allocationPublished = false;
     try {
       const control = sshControlContext.getStore();
       if (control) control.run = id;
       await options.allocated?.({ host: host.name, run: id });
+      allocationPublished = true;
       assertExecutionAllowed(options, signal);
       prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
       Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal, transfer));
@@ -7880,7 +7918,24 @@ async function runWithTransportRetries(
       managedByRun = true;
       return await runLeased(lease, prepared, options, slotWaitStarted, signal);
     } catch (error) {
-      if (!managedByRun && uploaded) await cleanupPreparedRun(prepared);
+      if (!managedByRun && allocationPublished) {
+        let cleanup: RemoteCleanupReceipt | null = null;
+        try {
+          if (uploaded) cleanup = await cleanupPreparedRun(prepared);
+        } catch (cleanupError) {
+          await options.notStarted?.(
+            { host: host.name, run: id },
+            null,
+            cleanupError instanceof Error ? cleanupError.message : 'preparation cleanup could not be verified',
+          );
+          throw cleanupError;
+        }
+        await options.notStarted?.(
+          { host: host.name, run: id },
+          cleanup,
+          error instanceof Error ? error.message : 'remote reservation ended before command execution',
+        );
+      }
       assertExecutionAllowed(options, signal);
       if (
         !(error instanceof RemoteTransportError) ||
@@ -8116,12 +8171,18 @@ function parse(argv: string[]): RemoteCheck {
   if (waitRepeatMs !== undefined && (!Number.isSafeInteger(waitRepeatMs) || waitRepeatMs < 1))
     throw new Error('REMOTE_CHECK_WAIT_REPEAT_MS must be a positive integer');
   const cancellation = executionCancellationFromEnvironment();
+  const custody = remoteCheckCustodyCallbacks(rest, returns ?? [], hostsFile);
+  const { completed: persistCompleted, ...custodyCallbacks } = custody;
   return {
     hosts: readHosts(hostsFile),
     ...(allowedHosts === undefined ? {} : { allowedHosts }),
     ...(excludedHosts === undefined ? {} : { excludedHosts }),
     ...(cancellation === undefined ? {} : { cancellation }),
-    completed: cliPhysicalReceipt,
+    completed: async (receipt) => {
+      await persistCompleted?.(receipt);
+      cliPhysicalReceipt(receipt);
+    },
+    ...custodyCallbacks,
     workspace,
     command: rest,
     ...(cwd === undefined ? {} : { cwd }),
@@ -8136,6 +8197,127 @@ function parse(argv: string[]): RemoteCheck {
     ...(retryBackoffMs === undefined ? {} : { retryBackoffMs }),
     ...(waitRepeatMs === undefined ? {} : { waitRepeatMs }),
     hostsFile,
+  };
+}
+
+export function remoteCheckCustodyCallbacks(
+  command: string[],
+  returns: string[],
+  hostsFile: string,
+): Pick<RemoteCheck, 'allocated' | 'completed' | 'settled' | 'notStarted'> {
+  const file = process.env.REZICS_CHECK_REMOTE_CUSTODY_FILE;
+  const checkId = process.env.REZICS_CHECK_REMOTE_CUSTODY_ID;
+  const physicalRunId = process.env.REZICS_CHECK_PHYSICAL_RUN_ID;
+  if (file === undefined && checkId === undefined && physicalRunId === undefined) return {};
+  if (!file || !checkId || !physicalRunId) throw new Error('remote-check: incomplete per-physical custody binding');
+  const update = (
+    operation: (current: CheckRemoteRunCustody, attempts: CheckRemoteAttempt[]) => CheckRemoteAttempt[],
+  ): void => {
+    const current = readJsonFile<CheckRemoteRunCustody>(file);
+    if (
+      !current ||
+      current.version !== 1 ||
+      current.physicalRunId !== physicalRunId ||
+      current.binding?.checkId !== checkId ||
+      JSON.stringify(current.binding.remoteArgv) !== JSON.stringify(command) ||
+      !Array.isArray(current.attempts)
+    )
+      throw new Error('remote-check: per-physical custody does not match this exact check command');
+    if (
+      (current.binding.hostsFile !== undefined && current.binding.hostsFile !== hostsFile) ||
+      (current.binding.returns !== undefined && JSON.stringify(current.binding.returns) !== JSON.stringify(returns))
+    )
+      throw new Error('remote-check: per-physical source or returns binding changed');
+    const attempts = operation(current, [...current.attempts]);
+    const terminal =
+      attempts.length > 0 &&
+      attempts.every((attempt) => attempt.status === 'terminal' || attempt.status === 'not-started');
+    const status = terminal
+      ? 'terminal'
+      : attempts.some((attempt) => attempt.status === 'uncertain')
+        ? 'uncertain'
+        : 'running';
+    writeAtomicJson(file, {
+      ...current,
+      binding: { ...current.binding, hostsFile, returns: [...returns] },
+      status,
+      attempts,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+  const findAttempt = (attempts: CheckRemoteAttempt[], physical: { host: string; run: string }): number => {
+    const index = attempts.findIndex((attempt) => attempt.host === physical.host && attempt.id === physical.run);
+    if (index < 0) throw new Error('remote-check: remote reservation is absent from per-physical custody');
+    return index;
+  };
+  return {
+    allocated: (physical) => {
+      update((_current, attempts) => {
+        const previous = attempts.find((attempt) => attempt.host === physical.host && attempt.id === physical.run);
+        if (previous) {
+          if (previous.status !== 'running') throw new Error('remote-check: remote reservation was already retired');
+          return attempts;
+        }
+        return [
+          ...attempts,
+          { host: physical.host, id: physical.run, status: 'running', startedAt: new Date().toISOString() },
+        ];
+      });
+    },
+    completed: (receipt) => {
+      update((_current, attempts) => {
+        const index = findAttempt(attempts, receipt);
+        const previous = attempts[index]!;
+        if (previous.native !== undefined && JSON.stringify(previous.native) !== JSON.stringify(receipt))
+          throw new Error('remote-check: conflicting native receipt for one remote reservation');
+        attempts[index] = {
+          ...previous,
+          status: 'terminal',
+          native: receipt,
+          endedAt: previous.endedAt ?? new Date().toISOString(),
+        };
+        return attempts;
+      });
+    },
+    settled: (settlement) => {
+      update((_current, attempts) => {
+        const index = findAttempt(attempts, settlement);
+        const previous = attempts[index]!;
+        const native = settlement.native && parseRemotePhysicalRunReceipt(settlement.native);
+        if (native && (native.host !== settlement.host || native.run !== settlement.run))
+          throw new Error('remote-check: settlement native receipt identity mismatch');
+        if (
+          previous.native !== undefined &&
+          native !== null &&
+          JSON.stringify(previous.native) !== JSON.stringify(native)
+        )
+          throw new Error('remote-check: settlement replaced the native receipt');
+        attempts[index] = {
+          ...previous,
+          status: native ? 'terminal' : 'uncertain',
+          ...(native ? { native } : {}),
+          settlement,
+          cleanup: settlement.cleanup,
+          endedAt: previous.endedAt ?? new Date().toISOString(),
+        };
+        return attempts;
+      });
+    },
+    notStarted: (physical, cleanup, reason) => {
+      update((_current, attempts) => {
+        const index = findAttempt(attempts, physical);
+        const previous = attempts[index]!;
+        if (previous.status !== 'running') throw new Error('remote-check: cannot retire a non-pending reservation');
+        attempts[index] = {
+          ...previous,
+          status: 'not-started',
+          ...(cleanup === null ? {} : { cleanup }),
+          ...(reason === undefined ? {} : { reason: reason.slice(0, 512) }),
+          endedAt: new Date().toISOString(),
+        };
+        return attempts;
+      });
+    },
   };
 }
 
