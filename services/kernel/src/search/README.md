@@ -2022,8 +2022,11 @@ order and name dependencies from that variant. Bounds retain the existing 1–64
 units and 1–50 native candidates; the public route retains at most ten results and twenty candidates.
 `createPublicSuggestionOperations` uses the same capture factory, native custody registry and Source binding.
 Its PIT-only versioned `subjects-suggest-v2` template keeps the released v1 bool-prefix behavior and fields.
-Actual engine completion, incarnation, retained plan, execution start and original/terminal own rows are checked;
-current disclosure and summary hydration precede the final execution-joined status. Neither totals nor an
+Actual engine completion, incarnation, retained plan, execution start and original/terminal own rows are checked.
+The complete bounded native window is retained against that exact execution, observation and live lease before
+final Source observation. Global v2 windows carry no refill permission because the template supplies no sort tuples;
+the shared iterator rejects them as continuation boundaries. Own rows never substitute for missing window evidence.
+Current disclosure and summary hydration precede the final execution-joined status. Neither totals nor an
 arbitrary continuation are exposed. Missing native binding prepares or fails unavailable before engine execution.
 
 `public-preparation.ts` runs locator-only maintenance workflows under the existing Search WorkModule and DBOS owner.

@@ -4,6 +4,7 @@ import type { PublicFilterNativeSource } from '../semantic/index.ts';
 import type { PublicFilterCost, PublicFilterSource } from '../semantic/index.ts';
 import { createPublicFilterConsumerOperations } from './public-filter-consumer.ts';
 import { createPublicFilterCustody } from './public-filter-custody.ts';
+import { encode, tree } from './public-filter-codec.ts';
 import type {
   PublicFilterConsumerCapture,
   PublicFilterConsumerContext,
@@ -233,20 +234,69 @@ export async function createPublicSuggestionOperations(
             ownRows.push({ original: hit.id, terminal: page.source.terminal });
           }
           const execution = randomUUID();
+          const retainedExecution = { id: execution, start: started.start, ownRows };
           const appended = await custody.appendExecution(
             {
               use: acquired.use,
-              execution: { id: execution, start: started.start, ownRows },
+              execution: retainedExecution,
             },
             context,
           );
           add(appended.cost);
           if (appended.status !== 'appended') return unavailable('observation_lost');
+          if (context.deadline <= Date.now()) return unavailable('deadline');
+          if (cost.inputKeys + 3 > 1000) return preparing();
+          // Keep every admitted native candidate, including an empty window. Own rows
+          // alone cannot establish which bounded engine response this execution covered.
+          // The v2 template supplies no sort tuples, so this window cannot seed refill.
+          const window = JSON.stringify(
+            tree(
+              {
+                parent: null,
+                consumed: 0,
+                before: undefined,
+                raw: hits,
+                exhausted: hits.length < plan.size,
+                rounds: 1,
+                charged: hits.length,
+                continuation: false,
+              },
+              'value',
+            ),
+          );
+          const retainWindow = {
+            text: `WITH locked AS (
+              SELECT o.partition_no,o.observation FROM search.public_filter_observation o
+              JOIN search.public_filter_reference f USING (partition_no,observation)
+              WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3
+                AND o.state='open' AND o.expires_at>$4 AND f.token=$5 AND f.expires_at>$4
+              FOR UPDATE OF o)
+            UPDATE search.public_filter_execution e SET consumer_window=$8
+            FROM locked l WHERE (e.partition_no,e.observation)=(l.partition_no,l.observation)
+              AND e.id=$6 AND e.execution=$7 AND e.consumer_window IS NULL AND e.page_id IS NULL
+            RETURNING e.id`,
+            values: [
+              Number(queried.snapshot.observation.split(':')[0]),
+              queried.snapshot.observation,
+              encode(queried),
+              Date.now(),
+              acquired.use.token,
+              execution,
+              encode(retainedExecution),
+              window,
+            ],
+            query_timeout: Math.max(1, context.deadline - Date.now()),
+          };
+          add({ ...emptyCost(), inputKeys: 3, dependencyPoints: 3, resultWrites: 1 });
+          const retainedWindow = await config.pool.query(retainWindow);
+          if (retainedWindow.rowCount !== 1) return unavailable('observation_lost');
+          if (context.deadline <= Date.now()) return unavailable('deadline');
           const final = await config.source.readPrivacyReductionHeads(
             { kind: 'queried', phase: 'final', queried, execution },
             context,
           );
           add(final.cost);
+          if (cost.inputKeys > 1000) return preparing();
           if (final.status !== 'observed') return unavailable('source_pending');
           if (!sourceObservationIsDisclosable(final)) return preparing();
           if (!(await sameIncarnation())) return unavailable('incarnation_changed');
