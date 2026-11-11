@@ -575,6 +575,13 @@ bound and canonical UTC millisecond expiry before projecting it. Apply forwards
 the exact sealed reference through its typed internal call; the host's ordinary
 1,024-unit string limit does not truncate or reject this longer reference.
 
+Decision: Auth compares the supplied approval with the reference atomically saved by the committing transaction
+before either saved-result replay path can disclose success; current Access/session authority and the original
+approval expiry still apply. An older spent approval and a fresh approval for the same stage both receive 403.
+Native recovery completion scenarios own isolated database copies and callback state, and its rate-limit assertion
+runs with production admission in a fresh module graph; retained proofs and test-mode defaults are fixture facts,
+not changes to recovery consumption, original witness expiry or completion authority.
+
 A first operator opening or key installation creates a native credential owner
 with `user.id = account_id` and a `credential` account row. A passwordless owner
 has null password. The schema plugin makes the native email column optional;
