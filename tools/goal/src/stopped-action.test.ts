@@ -128,9 +128,11 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
     expect(backlog.expired).toEqual([{ goal: 'ordinary', taskId: 'ordinary-stop' }]);
     expect(cancelled).toEqual(['ordinary-stop']);
     const typingEvents = inbox.pending('typing');
-    expect(typingEvents.some(({ event: delivered }) => delivered.summary.includes('typing-recover typing-only --expected-attempt 1'))).toBe(
-      true,
-    );
+    expect(
+      typingEvents.some(({ event: delivered }) =>
+        delivered.summary.includes('typing-recover typing-only --expected-attempt 1'),
+      ),
+    ).toBe(true);
     const row = db
       .query<{ body: string }, [string]>('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=1')
       .get('cancel-pending');

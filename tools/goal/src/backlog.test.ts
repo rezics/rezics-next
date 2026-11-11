@@ -481,36 +481,32 @@ test('a product task stopped for over an hour without action is cancelled into i
     .query('INSERT INTO worker_retry_intents(task_id, attempt, body) VALUES (?, 1, ?)')
     .run('retrying', JSON.stringify({ status: 'pending', options: {} }));
   task(f.db, 'typing', 'stopped', { goal: 'web', manager: 'web', markdown: 'Completed source' }, 8);
-  f.db
-    .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)')
-    .run(
-      'typing',
-      JSON.stringify({
-        state: 'exited',
-        endedAt: new Date(old).toISOString(),
-        exitCode: 0,
-        failureKind: null,
-        blocker: null,
-        typingEvidencePending: {
-          result: 'Compiler input closure is unavailable for the last check-host typecheck.',
-          command: ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'],
-        },
-      }),
-    );
+  f.db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)').run(
+    'typing',
+    JSON.stringify({
+      state: 'exited',
+      endedAt: new Date(old).toISOString(),
+      exitCode: 0,
+      failureKind: null,
+      blocker: null,
+      typingEvidencePending: {
+        result: 'Compiler input closure is unavailable for the last check-host typecheck.',
+        command: ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'],
+      },
+    }),
+  );
   event(f.db, 'typing', 'typing-evidence-pending', old);
   task(f.db, 'compiler-failed', 'stopped', { goal: 'web', manager: 'web', markdown: 'Compiler failure' }, 9);
-  f.db
-    .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)')
-    .run(
-      'compiler-failed',
-      JSON.stringify({
-        state: 'exited',
-        endedAt: new Date(old).toISOString(),
-        exitCode: 0,
-        failureKind: 'tool',
-        result: 'Last check-host run failed its typecheck.',
-      }),
-    );
+  f.db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)').run(
+    'compiler-failed',
+    JSON.stringify({
+      state: 'exited',
+      endedAt: new Date(old).toISOString(),
+      exitCode: 0,
+      failureKind: 'tool',
+      result: 'Last check-host run failed its typecheck.',
+    }),
+  );
   event(f.db, 'compiler-failed', 'worker-exited', old);
   const typingRecoveryCalls: { taskId: string; attempt: number }[] = [];
   f.runtime.recoverTyping = async (ref) => {
@@ -533,9 +529,9 @@ test('a product task stopped for over an hour without action is cancelled into i
   expect(reason).toContain('spec-conflict: two requirements disagree');
   expect(existsSync(join(f.state, 'backlog', 'control-plane'))).toBe(false);
   const events = f.inbox.pending('web');
-  expect(events.some(({ event: delivered }) => delivered.summary.includes('typing-recover typing --expected-attempt 1'))).toBe(
-    true,
-  );
+  expect(
+    events.some(({ event: delivered }) => delivered.summary.includes('typing-recover typing --expected-attempt 1')),
+  ).toBe(true);
   const expiryNotice = events.find(({ event: delivered }) => delivered.summary.includes('Stopped-task limit:'));
   expect(expiryNotice?.event.summary).toContain('Stopped-task limit: 3 task(s)');
   expect(expiryNotice?.event.summary).toContain('expired, second, compiler-failed');

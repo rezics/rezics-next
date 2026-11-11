@@ -793,9 +793,9 @@ test('missing compiler evidence parks completed source without a model retry, th
     };
     try {
       expect((await sweepBacklog(backlogRuntime)).expired).toEqual([]);
-      expect((await sweepBacklog({ ...backlogRuntime, now: () => now + STOPPED_TASK_LIMIT_MS + 1_000 })).expired).toEqual(
-        [],
-      );
+      expect(
+        (await sweepBacklog({ ...backlogRuntime, now: () => now + STOPPED_TASK_LIMIT_MS + 1_000 })).expired,
+      ).toEqual([]);
     } finally {
       h.tasks.retry = originalSweepRetry;
     }
@@ -992,18 +992,16 @@ test.each([0, 1])(
         ).toBe(0);
         return JSON.parse(output[0]!);
       };
-      h.store.db
-        .query('INSERT INTO manager_sessions VALUES (?,?)')
-        .run(
-          'foreign',
-          JSON.stringify({
-            id: 'foreign',
-            kind: 'resident-supermanager',
-            provider: 'claude',
-            status: 'running',
-            threadId: 'foreign-session',
-          }),
-        );
+      h.store.db.query('INSERT INTO manager_sessions VALUES (?,?)').run(
+        'foreign',
+        JSON.stringify({
+          id: 'foreign',
+          kind: 'resident-supermanager',
+          provider: 'claude',
+          status: 'running',
+          threadId: 'foreign-session',
+        }),
+      );
       await expect(
         runWorkerCommand('typing-recover', [retained.task.id, '--expected-attempt', '1'], {
           tasks: h.tasks,
