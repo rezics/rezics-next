@@ -5,6 +5,7 @@ import { noticeRoutes } from './notice-routes.ts';
 import type { Dependencies as MediaDependencies } from './media-routes.ts';
 import { mediaRoutes } from './media-routes.ts';
 import { contentDeclaration } from './register.ts';
+import { hostedChapterRoutes } from './hosted-chapters-routes.ts';
 
 /** Explicit operands for Content's HTTP surface. The trusted kernel composition constructs each object; no
  * route reads the environment, the network, a UUID source or a clock by itself. */
@@ -22,7 +23,7 @@ export function mountContentHttp(
   app: Parameters<typeof subjectReactionRoutes>[0],
   dependencies: ContentHttpDependencies,
 ) {
-  const content = contentRoutes(searched, dependencies.content);
+  const content = hostedChapterRoutes(contentRoutes(searched, dependencies.content), dependencies.content);
   noticeRoutes(content as unknown as Parameters<typeof noticeRoutes>[0], dependencies.notice);
   subjectReactionRoutes(app, dependencies.content);
   const media = mediaRoutes(content as unknown as Parameters<typeof mediaRoutes>[0], dependencies.media);
@@ -30,7 +31,7 @@ export function mountContentHttp(
 }
 
 /** The route surface Content contributes to the kernel's composed type. */
-export type ContentHttpRoutes = ReturnType<typeof contentRoutes> &
+export type ContentHttpRoutes = ReturnType<typeof hostedChapterRoutes> &
   ReturnType<typeof noticeRoutes> &
   ReturnType<typeof subjectReactionRoutes> &
   ReturnType<typeof mediaRoutes>;

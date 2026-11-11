@@ -22,6 +22,7 @@ export function orderHostedPlacements(
       (placement.parentId !== null && routeOf(placement.parentId) !== route) ||
       !Number.isSafeInteger(placement.position) || placement.position < 0 ||
       typeof placement.title !== 'string' || placement.title.trim().length === 0 ||
+      placement.title.length > 512 ||
       [...placement.title].length > 256 ||
       (placement.kind !== 'part' && placement.kind !== 'chapter')
     ) throw new InvalidHostedStructureError();
@@ -49,7 +50,9 @@ export function orderHostedPlacements(
     const siblings = children.get(parentId) ?? [];
     if (siblings.length && depth > HOSTED_DEPTH_LIMIT) throw new InvalidHostedStructureError('Tree is too deep');
     for (const placement of siblings) {
-      result.push({ ...placement, ordinal: result.length });
+      result.push(placement.kind === 'chapter'
+        ? { ...placement, target: { ...placement.target }, ordinal: result.length }
+        : { ...placement, ordinal: result.length });
       visit(placement.occurrenceId, depth + 1);
     }
   }

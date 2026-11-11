@@ -522,6 +522,40 @@ function containerAuthorization(
   };
 }
 
+/** Hosted structure edits share the ordinary Post owner and container admission.
+ * They do not create a Post, publish a body or reserve a posting interval. */
+export function hostedPostAuthorization(
+  dependencies: ContentCommandDependencies,
+  actor: Actor,
+  threadId: string,
+  postId: string,
+  context: RequestContext,
+  receipt: BoardSlowReceiptReference,
+): CommandAuthorization {
+  account(actor);
+  const container = containerAuthorization(dependencies, actor, threadId, postId, context, true, receipt);
+  const base = container.wrap(resourceAuthorization({
+    access: dependencies.access,
+    actor,
+    action: 'post:revise',
+    anchor: { resource: container.resource, validate: container.validate },
+    context: { pool: dependencies.pool, deadline: context.deadline, partition: partitionOf(route(postId)) },
+  }), false);
+  return {
+    ...base,
+    async authorize(tx, attempt, evidence) {
+      const mode = await base.authorize(tx, attempt, evidence);
+      if (container.current.posts.some(erasedRow)) throw new ContentNotFoundError();
+      return mode;
+    },
+    async finalize(tx, attempt, evidence) {
+      await container.validate(tx, attempt.time);
+      if (container.current.posts.some(erasedRow)) throw new ContentNotFoundError();
+      await base.finalize?.(tx, attempt, evidence);
+    },
+  };
+}
+
 /** Each declaration proves a unique INSERT, exact provenance and trusted T on
  * this transaction. An existing resource cannot acquire fresh creation rights. */
 function creationEntries(

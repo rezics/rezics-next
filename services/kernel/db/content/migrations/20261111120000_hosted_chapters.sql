@@ -44,6 +44,9 @@ CREATE TABLE content.hosted_occurrence (
   FOREIGN KEY (route, catalogue_id) REFERENCES content.hosted_catalogue(route, catalogue_id),
   CHECK ((kind = 'part' AND thread_id IS NULL AND post_id IS NULL)
       OR (kind = 'chapter' AND thread_id IS NOT NULL AND post_id IS NOT NULL)),
+  CHECK (thread_id IS NULL OR
+    get_byte(uuid_send(thread_id), 10) * 256 + get_byte(uuid_send(thread_id), 11) =
+    get_byte(uuid_send(post_id), 10) * 256 + get_byte(uuid_send(post_id), 11)),
   CHECK (route = get_byte(uuid_send(occurrence_id), 10) * 256 + get_byte(uuid_send(occurrence_id), 11))
 );
 
@@ -69,7 +72,7 @@ CREATE TABLE content.hosted_placement (
   UNIQUE NULLS NOT DISTINCT (route, catalogue_id, revision_id, parent_id, position),
   UNIQUE (route, catalogue_id, revision_id, ordinal),
   CHECK ((target_revision_id IS NULL AND body_sha256 IS NULL)
-      OR (target_revision_id IS NOT NULL AND octet_length(body_sha256) = 32))
+      OR (target_revision_id IS NOT NULL AND body_sha256 IS NOT NULL AND octet_length(body_sha256) = 32))
 );
 CREATE INDEX hosted_placement_navigation_idx
   ON content.hosted_placement(route, catalogue_id, revision_id, ordinal)

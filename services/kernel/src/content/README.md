@@ -24,26 +24,20 @@ selection withdraws the current TOC; explicit historical manifests still obey cu
 
 The mounted `/v1/hostedCatalogues` operations create, revise, publish, read metadata, page children and resolve
 an occurrence at an explicit structure or publication revision. Omitted read revision selects the current release;
-private structure revisions additionally require current `post:revise`. Every read retains and finally rechecks
+`kind=structure` selects the current draft head for Studio resume. An explicit `revisionId` pins either kind;
+an accompanying kind must match. Private structure revisions additionally require current `post:revise`. Every read retains and finally rechecks
 the ordinary catalogue Post disclosure. Chapter rows and bytes additionally retain the exact target Post read,
 including Board, Realm, ancestry, erasure and revision disclosure. Unavailable chapter slots expose occurrence,
 parent, order and kind only; their title, target, digest and attribution are withheld. Available resolution delivers
-canonical Document bytes, SHA-256, original Post author and licence. No bodies are copied into hosted storage.
+ canonical Document bytes, SHA-256, original Post author and licence. No bodies are copied into hosted storage.
 
 Children and directional chapter navigation inspect at most 20 raw occurrences per page. Continuations bind the
 catalogue, selected revision, parent/direction, original frontier and actor; sparse results never refill or lose
 progress. Moving an occurrence changes only its address in the new revision, preserving old exact links.
 
-### Cost: hosted structure and reading
-
-Mutations inspect at most 512 placements, validate a depth-16 tree and write one immutable snapshot plus its
-placements in the catalogue home. Attachments read only distinct exact selected revisions through the native
-Post reader; release processes only its selected subset. Commands retain ordinary Access admission and receipts.
-Reads select one catalogue/revision and at most 21 indexed placement keys, disclose at most 20 targets and repeat
-their retained native checks before returning. Resolution reads one target and its canonical body (native body
-limit), while TOC pages retain no target bodies between disclosures. All nested native Post, Account, Board,
-Realm and Access work, transaction controls, bytes and serialization remain charged to these operations.
-These are implementation bounds; measured native growth and installed operation publication remain separate.
+The [hosted catalogue API contract](hosted-chapters.md) defines operation IDs, request fields, current draft
+selection, canonical byte encoding, continuation binding, cost and integration boundaries. Native growth,
+schema dump refresh and installed client publication remain owned by the existing integration workflows.
 
 Decision: Content imports HTTP problem vocabulary, schemas, headers and Idempotency-Key decoding from their defining
 leaves, command request digests from `command/request.ts`, and the authentication error constructor from the Access
