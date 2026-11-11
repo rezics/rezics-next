@@ -48,7 +48,6 @@ import {
   authorizeProof,
   newProofBinding,
   observeProof,
-  ordinaryProofCommand,
   originalCommandMatches,
   preflightProof,
   unavailableProofProducer,
