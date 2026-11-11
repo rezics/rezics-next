@@ -290,9 +290,7 @@ test('a serializable source-claim insert conflict resolves the committed identit
   try {
     const recovered = await batch([duplicate]);
     expect(recovered.response.status).toBe(200);
-    expect(recovered.body.results).toEqual([
-      { key: duplicate.key, status: 200, value: { id: winnerId, revision: 1 } },
-    ]);
+    expect(recovered.body.results).toEqual([{ key: duplicate.key, status: 200, value: { id: winnerId, revision: 1 } }]);
     expect(staleClaimRead).toBe(true);
     expect(serializationConflict).toBe(true);
     expect(
