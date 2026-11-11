@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import {
+  currentCheckSourceManifest,
   parseCheckRunArguments,
   prepareCheckRunInvocation,
   reconcileRegisteredCheckRun,
@@ -507,6 +508,25 @@ test('source mismatch, unflagged hosts, forbidden env values, and missing genera
     'protected credential or host-local data',
   );
   expect(transports).toBe(0);
+});
+
+test('candidate manifest leaves another Git index lock alone for clean and staged source', async () => {
+  const fixture = candidate();
+  const lock = `${git(fixture.root, 'rev-parse', '--path-format=absolute', '--git-path', 'index')}.lock`;
+  const assertManifest = async (tree: string) => {
+    writeFileSync(lock, 'another Git operation owns this lock');
+    try {
+      expect((await currentCheckSourceManifest(fixture.root)).indexTree).toBe(tree);
+      expect(readFileSync(lock, 'utf8')).toBe('another Git operation owns this lock');
+    } finally {
+      rmSync(lock);
+    }
+  };
+  await assertManifest(git(fixture.root, 'rev-parse', 'HEAD^{tree}'));
+  writeFileSync(join(fixture.root, 'src/staged.ts'), 'staged value\n');
+  git(fixture.root, 'add', 'src/staged.ts');
+  await assertManifest(git(fixture.root, 'write-tree'));
+  expect(git(fixture.root, 'show', ':src/staged.ts')).toBe('staged value');
 });
 
 test('generic driver freezes tracked edits, staged index, deletions, and admitted untracked source', async () => {

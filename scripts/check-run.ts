@@ -245,20 +245,46 @@ function candidateDirectory(root: string, value: string, name: string): string {
   return path;
 }
 
-function git(root: string, args: string[]): string {
-  const result = Bun.spawnSync(['git', '-c', 'core.hooksPath=/dev/null', '-C', root, ...args], {
+function gitResult(root: string, args: string[], environment: NodeJS.ProcessEnv = {}) {
+  return Bun.spawnSync(['git', '-c', 'core.hooksPath=/dev/null', '-C', root, ...args], {
     cwd: root,
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
-    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1' },
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1', ...environment },
     timeout: 30_000,
   });
+}
+
+function git(root: string, args: string[], environment?: NodeJS.ProcessEnv): string {
+  const result = gitResult(root, args, environment);
   if (result.exitCode !== 0)
     throw new CheckRunUnavailable(
       `check-run: Git ${args[0] ?? 'operation'} failed: ${result.stderr.toString().trim()}`,
     );
   return result.stdout.toString().trim();
+}
+
+/** Snapshot the exact staged tree without locking or refreshing another check's candidate index. */
+function candidateIndexTree(root: string, head = git(root, ['rev-parse', '--verify', 'HEAD^{commit}'])): string {
+  const comparison = gitResult(root, ['diff-index', '--cached', '--quiet', '--ignore-submodules=none', head, '--'], {
+    GIT_OPTIONAL_LOCKS: '0',
+  });
+  if (comparison.exitCode === 0) return git(root, ['rev-parse', `${head}^{tree}`]);
+  if (comparison.exitCode !== 1)
+    throw new CheckRunUnavailable(`check-run: Git diff-index failed: ${comparison.stderr.toString().trim()}`);
+
+  const source = git(root, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
+  const scratchParent = join(root, '.temp');
+  mkdirSync(scratchParent, { recursive: true, mode: 0o700 });
+  const scratch = mkdtempSync(join(scratchParent, 'check-index-'));
+  try {
+    const index = join(scratch, 'index');
+    if (existsSync(source)) copyFileSync(source, index);
+    return git(root, ['write-tree'], { GIT_INDEX_FILE: index });
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 function gitList(root: string, args: string[]): string[] {
@@ -403,7 +429,7 @@ async function inputFingerprint(
     hash.update(`deleted\0${file}\0`);
   }
   const head = git(root, ['rev-parse', '--verify', 'HEAD^{commit}']);
-  const indexTree = git(root, ['write-tree']);
+  const indexTree = candidateIndexTree(root, head);
   hash.update(`HEAD\0${head}\0index\0${indexTree}\0`);
   return hash.digest('hex');
 }
@@ -517,7 +543,7 @@ export async function prepareCandidateSnapshot(
   assertCandidateInputs(root, excludedInputs);
   const files = workspaceFiles(root);
   const beforeFingerprint = await inputFingerprint(root, files, excludedInputs);
-  const indexTree = git(root, ['write-tree']);
+  const indexTree = candidateIndexTree(root, head);
   const baseFiles = gitList(root, ['ls-tree', '-rz', '--name-only', head]);
   const scratchBase = scratchParent ?? join(root, '.temp');
   mkdirSync(scratchBase, { recursive: true, mode: 0o700 });
@@ -1012,7 +1038,7 @@ async function buildCandidateSourceManifest(
     .filter((path) => !excludedTransferPath(path) && !isDeclaredOutput(path, returns))
     .sort();
   const head = git(snapshot.workspace, ['rev-parse', '--verify', 'HEAD^{commit}']);
-  const indexTree = git(snapshot.workspace, ['write-tree']);
+  const indexTree = candidateIndexTree(snapshot.workspace, head);
   if (indexTree !== snapshot.indexTree)
     throw new CheckRunUnavailable('check-run: frozen candidate index changed before transfer');
   const hash = createHash('sha256');
@@ -1041,7 +1067,7 @@ export async function currentCheckSourceManifest(
   const inputFiles = workspaceFiles(root);
   const sourceHash = await inputFingerprint(root, inputFiles, returns);
   return buildCandidateSourceManifest(
-    { workspace: root, inputFiles, sourceHash, indexTree: git(root, ['write-tree']), scratch: '' },
+    { workspace: root, inputFiles, sourceHash, indexTree: candidateIndexTree(root), scratch: '' },
     returns,
   );
 }
