@@ -42,12 +42,15 @@ const previous = new Map(Object.keys(globals).map((name) => [name, Object.getOwn
 for (const [name, value] of Object.entries(globals))
   Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
 
-let currentSession: { state: 'signed-out' | 'signed-in'; subject?: string; csrfToken: string | null } = {
-  state: 'signed-out',
-  csrfToken: null,
-};
+let currentSession: { state: 'signed-out' | 'signed-in' | 'unavailable'; subject?: string; csrfToken: string | null } =
+  {
+    state: 'signed-out',
+    csrfToken: null,
+  };
+let communityReads = 0;
 mock.module('../src/shell/community-navigation-actions', () => ({
   readShellCommunities: async () => {
+    communityReads++;
     if (currentSession.state !== 'signed-in' || !currentSession.subject) return null;
     const subject = currentSession.subject;
     return {
@@ -84,7 +87,11 @@ test('the installed root shell renders anonymously and follows admitted viewer r
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   currentSession = { state: 'signed-out', csrfToken: null };
-  client.setQueryData(sessionQuery.queryKey, currentSession);
+  let ready!: (value: typeof currentSession) => void;
+  const prepared = new Promise<typeof currentSession>((resolve) => {
+    ready = resolve;
+  });
+  const preparation = client.fetchQuery({ ...sessionQuery, queryFn: () => prepared });
   client.setQueryData(['exposure', 'anonymous'], { state: 'ready', admitted: ['personal_library'] });
 
   const route = createRootRouteWithContext<{
@@ -99,7 +106,7 @@ test('the installed root shell renders anonymously and follows admitted viewer r
   });
   const router = createRouter({
     routeTree: route,
-    history: createMemoryHistory({ initialEntries: ['/en'] }),
+    history: createMemoryHistory({ initialEntries: ['/en?q=Prince&cursor=next%2Fpage#shelf'] }),
     context: { queryClient: client, credentialMode: 'anonymous' },
   });
   const host = window.document;
@@ -109,6 +116,38 @@ test('the installed root shell renders anonymously and follows admitted viewer r
       <RouterProvider router={router} />
     </QueryClientProvider>
   );
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  const flushMenu = async () => {
+    await frame();
+    await frame();
+    await settle();
+  };
+  const createTrigger = (surface: 'header' | 'phone') => {
+    const scope = host.querySelector(surface === 'header' ? 'header' : '[data-phone-navigation]')!;
+    return [...scope.querySelectorAll('button')].find(
+      (button) => (button.getAttribute('aria-label') ?? button.textContent?.trim()) === 'Create',
+    )!;
+  };
+  const openCreate = async (surface: 'header' | 'phone') => {
+    const trigger = createTrigger(surface);
+    await act(async () => {
+      trigger.focus();
+      trigger.click();
+    });
+    await act(flushMenu);
+    const panel = host.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(panel).not.toBeNull();
+    return { trigger, panel };
+  };
+  const dismiss = async (trigger: HTMLElement) => {
+    await act(async () => {
+      host.activeElement?.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await act(flushMenu);
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+    expect(host.activeElement).toBe(trigger);
+  };
+  const signIn = '/auth/sign-in?return_to=%2Fen%3Fq%3DPrince%26cursor%3Dnext%252Fpage';
   const admit = (subject: string) => {
     const snapshot = viewerExposureLifetime(client).getSnapshot();
     if (snapshot.state !== 'signed-in' || snapshot.observation.subject !== subject)
@@ -127,8 +166,37 @@ test('the installed root shell renders anonymously and follows admitted viewer r
       await settle();
     });
     expect(host.querySelector('h1')?.textContent).toBe('Ordinary root page');
+    expect(host.querySelector('[data-session-pending]')).not.toBeNull();
+    expect(communityReads).toBe(0);
+    window.happyDOM.setWindowSize({ width: 390, height: 844 });
+    const preparing = await openCreate('phone');
+    expect(preparing.panel.querySelector('[role="status"][aria-busy="true"]')).not.toBeNull();
+    expect(preparing.panel.querySelector('a')).toBeNull();
+    await act(async () => {
+      ready(currentSession);
+      await preparation;
+      await settle();
+    });
+    expect(preparing.panel.querySelector('a')?.getAttribute('href')).toBe(signIn);
+    await dismiss(preparing.trigger);
+    for (const surface of ['header', 'phone'] as const) {
+      window.happyDOM.setWindowSize({ width: surface === 'header' ? 1280 : 390, height: 900 });
+      const { trigger, panel } = await openCreate(surface);
+      expect(panel.querySelector('a')?.getAttribute('href')).toBe(signIn);
+      await dismiss(trigger);
+    }
     expect(host.querySelector('a[href^="/auth/sign-in?"]')).not.toBeNull();
     expect(host.querySelector('a[href="/en/spaces/anonymous"]')).toBeNull();
+    await act(async () => {
+      currentSession = { state: 'unavailable', csrfToken: null };
+      client.setQueryData(sessionQuery.queryKey, currentSession);
+      await settle();
+    });
+    const failed = await openCreate('phone');
+    expect(failed.panel.textContent).toContain('Account status unavailable');
+    expect(failed.panel.querySelector('a')?.getAttribute('href')).toBe(signIn);
+    expect(communityReads).toBe(0);
+    await dismiss(failed.trigger);
 
     await act(async () => {
       currentSession = { state: 'signed-in', subject: 'viewer-a', csrfToken: 'csrf-a' };
@@ -146,7 +214,16 @@ test('the installed root shell renders anonymously and follows admitted viewer r
     });
     expect(host.querySelector('a[href="/en/spaces/viewer-b"]')?.textContent).toContain('viewer-b followed space');
     expect(host.querySelector('a[href="/en/spaces/viewer-a"]')).toBeNull();
+    const focused = createTrigger('phone');
+    focused.focus();
+    await act(async () => {
+      await router.navigate({ href: '/en?q=Next#shelf' });
+      await settle();
+    });
+    expect(host.activeElement).toBe(focused);
   } finally {
+    ready(currentSession);
+    await preparation;
     await act(async () => root.unmount());
     client.clear();
   }

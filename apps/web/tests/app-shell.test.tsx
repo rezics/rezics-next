@@ -11,7 +11,7 @@ mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { TopBar, ShellTopActions } = await import('../src/shell/top-bar');
 const { SideNav } = await import('../src/shell/side-nav');
-const { PhoneNavigationView } = await import('../src/shell/phone-navigation');
+const { PhoneNavigationView, PhoneCreationLinks } = await import('../src/shell/phone-navigation');
 const { NavigationLinks, NavigationProvider } = await import('../src/shell/navigation-view');
 const exposure = await import('../src/kernel/exposure');
 afterAll(() => mock.restore());
@@ -147,7 +147,13 @@ test('main and phone navigation mark the current page, and followed communities 
     expect(communities.match(/<a\b[^>]*title="[^"]*"[^>]*><svg\b/g)).toHaveLength(2);
     expect(communities).toContain('Quiet space');
     const phone = html(
-      <PhoneNavigationView pathname="/library" library signedIn actions={[]} account={<button>You</button>} />,
+      <PhoneNavigationView
+        pathname="/library"
+        library
+        session="signed-in"
+        actions={[]}
+        account={<button>You</button>}
+      />,
     );
     expect(phone).toContain('aria-label="Phone navigation"');
     expect(phone).toContain('href="/en/library" aria-current="page"');
@@ -159,10 +165,46 @@ test('main and phone navigation mark the current page, and followed communities 
 
 test('the phone You fallback is a settings link, not serialized markup', () => {
   const phone = html(
-    <PhoneNavigationView pathname="/library" library signedIn actions={[]} account={<button>You</button>} />,
+    <PhoneNavigationView pathname="/library" library session="signed-in" actions={[]} account={<button>You</button>} />,
   );
   expect(phone).toMatch(/<a[^>]*href="\/en\/settings"[^>]*>You<\/a>/);
   expect(phone).not.toMatch(/contents">[^<]*href="\/en\/settings"/);
+});
+
+test('Create gives the same session feedback on phone and desktop and preserves the admitted localized return', () => {
+  const destination = '/en/books?q=The%20Prince&cursor=next%2Fpage';
+  const signIn = `/auth/sign-in?return_to=${encodeURIComponent(destination)}`;
+  const actions = [{ id: 'studio', label: 'Continue writing in Studio', href: '/en/studio' }];
+  for (const session of ['unknown', 'signed-out', 'unavailable', 'signed-in'] as const) {
+    const panel = html(
+      <PhoneCreationLinks actions={actions} pathname="/en/books" session={session} returnTo={destination} />,
+    );
+    if (session === 'signed-in') expect(panel).toContain('href="/en/studio"');
+    else expect(panel).not.toContain('href="/en/studio"');
+    if (session === 'unknown') {
+      expect(panel).toContain('role="status" aria-busy="true"');
+      expect(panel).not.toContain('/auth/sign-in');
+    } else if (session !== 'signed-in') expect(panel).toContain(`href="${signIn}"`);
+    if (session === 'unavailable') expect(panel).toContain('Account status unavailable');
+    const phone = html(
+      <PhoneNavigationView
+        pathname="/en/books"
+        session={session}
+        returnTo={destination}
+        library
+        actions={actions}
+        account={null}
+      />,
+    );
+    if (session === 'signed-out') expect(phone).toContain(`href="${signIn}"`);
+    if (session === 'unknown' || session === 'unavailable')
+      expect(phone).toMatch(/data-phone-inbox-js[^>]*aria-disabled="true"/);
+  }
+  const home = html(
+    <PhoneNavigationView pathname="/en" session="signed-out" library={false} actions={[]} account={null} />,
+  );
+  expect(home).toContain('href="/en" aria-current="page"');
+  expect(home).toContain('/auth/sign-in?return_to=%2Fen');
 });
 
 test('only readable active followed Spaces become navigation, grouped as Realms when readable, with bounded enrichment', async () => {

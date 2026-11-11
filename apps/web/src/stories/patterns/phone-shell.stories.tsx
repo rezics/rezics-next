@@ -540,8 +540,10 @@ export const CreationSessionTransition: Story = {
     for (const state of ['Sign out', 'Session unavailable']) {
       await userEvent.click(canvas.getByRole('button', { name: state }));
       const sheet = await creationSheet(context);
-      await waitFor(() => expect(sheet.queryAllByRole('link')).toHaveLength(0));
-      await expect(sheet.getByText(m.shell_creation_unavailable())).toBeVisible();
+      const signIn = await sheet.findByRole('link', { name: m.account_sign_in() });
+      await expect(signIn.getAttribute('href')).toContain('/auth/sign-in?return_to=');
+      await expect(sheet.queryByRole('link', { name: m.library_collection_new() })).toBeNull();
+      if (state === 'Session unavailable') await expect(sheet.getByText(m.shell_account_unavailable())).toBeVisible();
       await userEvent.keyboard('{Escape}');
     }
     await userEvent.click(canvas.getByRole('button', { name: 'Update first owner' }));
