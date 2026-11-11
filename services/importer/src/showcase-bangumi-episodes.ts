@@ -5,6 +5,7 @@ import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import {
   episodeTypeSchemeUri,
   episodeTypeTaxonomy,
+  bangumiEpisodeDisplayPositions,
   episodeVocabularyAdmission,
   readEpisodeTypeBindings,
 } from './bangumi-episode-fidelity.ts';
@@ -72,6 +73,13 @@ export async function discoverShowcaseBangumiEpisodes(input: {
   const result: ShowcaseEpisodeSelection = { entities: [], members: [], edges: [], gaps: [] };
   const counts = new Map<Franchise, number>();
   const seen = new Set<string>();
+  const selected: {
+    sourceRecord: SourceRecord;
+    member: CrossMediaMember;
+    row: Record<string, unknown>;
+    parentId: number;
+    parentIsWellFormed: boolean;
+  }[] = [];
   const addGap = (gap: CrossMediaGap) => {
     if (result.gaps.length >= MAX_EPISODE_OMISSION_GAPS)
       throw new TypeError(
@@ -82,7 +90,8 @@ export async function discoverShowcaseBangumiEpisodes(input: {
 
   for await (const row of input.tables.rows('bangumi', 'episode')) {
     const parentId = positiveId(row.subject_id);
-    const family = parentId === undefined ? undefined : input.selectedAnime.get(parentId);
+    if (parentId === undefined) continue;
+    const family = input.selectedAnime.get(parentId);
     if (!family) continue;
     const parentIsWellFormed =
       typeof row.subject_id === 'number' && Number.isSafeInteger(row.subject_id) && row.subject_id > 0;
@@ -132,34 +141,43 @@ export async function discoverShowcaseBangumiEpisodes(input: {
       revision: null,
       payload: row,
     };
-    result.entities.push(sourceRecord);
-    result.members.push({
+    const member: CrossMediaMember = {
       source: 'bangumi',
       key: sourceKey,
       kind: 'episode',
       membership: 'referenced',
       franchise: family,
-    });
-    if (parentIsWellFormed) {
-      result.edges.push({
-        source: 'bangumi',
-        alias: input.alias,
-        table: 'episode',
-        holder: sourceKey,
-        target: String(parentId),
-        property: 'schema:isPartOf',
-        url: bangumiRecordUrl(sourceKey),
-        membership: 'referenced',
-        record: row,
-        fields: recordFields(row),
-      });
-    } else {
+    };
+    selected.push({ sourceRecord, member, row, parentId, parentIsWellFormed });
+    if (!parentIsWellFormed) {
       addGap({
         source: 'bangumi',
         fields: ['episode.subject_id'],
         record,
         externalId: sourceKey,
         reason: 'Episode parent key is malformed; only the parent statement is withheld',
+      });
+    }
+  }
+  const positions = bangumiEpisodeDisplayPositions(selected.map((item) => item.row));
+  for (const item of selected) {
+    result.entities.push(item.sourceRecord);
+    result.members.push(item.member);
+    if (item.parentIsWellFormed) {
+      result.edges.push({
+        source: 'bangumi',
+        alias: input.alias,
+        table: 'episode',
+        holder: item.sourceRecord.key,
+        target: String(item.parentId),
+        property: 'schema:isPartOf',
+        url: bangumiRecordUrl(item.sourceRecord.key),
+        membership: 'referenced',
+        record: item.row,
+        fields: recordFields(item.row),
+        ...(positions.has(item.sourceRecord.key)
+          ? { qualifiers: [{ property: 'schema:position', content: positions.get(item.sourceRecord.key)! }] }
+          : {}),
       });
     }
   }

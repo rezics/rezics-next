@@ -24,6 +24,7 @@ export const episodeTypeConceptUri = (code: string) => `${episodeTypeSchemeUri}/
 
 type Row = Record<string, unknown>;
 const EPISODE_CAP = 64;
+const EPISODE_ORDINAL_PATTERN = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/u;
 
 function ensure(value: unknown, message: string): asserts value {
   if (!value) throw new TypeError(message);
@@ -37,6 +38,56 @@ function fieldsOf(table: string, record: Row): string[] {
   return Object.keys(record)
     .sort()
     .map((field) => `${table}.${field}`);
+}
+
+function episodeOrdinal(value: unknown): { integer: string; fraction: string } | undefined {
+  const rendered = typeof value === 'number' && Number.isFinite(value) ? String(value) : value;
+  if (typeof rendered !== 'string' || !EPISODE_ORDINAL_PATTERN.test(rendered)) return;
+  const [integer, fraction = ''] = rendered.split('.');
+  return { integer: integer!, fraction: fraction.replace(/0+$/u, '') };
+}
+
+function compareEpisodeOrdinals(
+  left: { integer: string; fraction: string },
+  right: { integer: string; fraction: string },
+): number {
+  if (left.integer.length !== right.integer.length) return left.integer.length - right.integer.length;
+  const integerOrder = left.integer.localeCompare(right.integer);
+  if (integerOrder !== 0) return integerOrder;
+  const width = Math.max(left.fraction.length, right.fraction.length);
+  for (let index = 0; index < width; index++) {
+    const leftDigit = left.fraction.charCodeAt(index) || 48;
+    const rightDigit = right.fraction.charCodeAt(index) || 48;
+    if (leftDigit !== rightDigit) return leftDigit - rightDigit;
+  }
+  return 0;
+}
+
+/** Give source-ordered episodes dense, one-based display positions within each exact parent. */
+export function bangumiEpisodeDisplayPositions(rows: readonly Row[]): Map<string, string> {
+  const byParent = new Map<number, { id: number; ordinal: { integer: string; fraction: string } }[]>();
+  for (const row of rows) {
+    const id = positiveBangumiId(row.id);
+    const parent = positiveBangumiId(row.subject_id);
+    const ordinal = episodeOrdinal(row.sort);
+    if (id === undefined || parent === undefined || !ordinal) continue;
+    const siblings = byParent.get(parent) ?? [];
+    siblings.push({ id, ordinal });
+    byParent.set(parent, siblings);
+  }
+  const positions = new Map<string, string>();
+  for (const siblings of byParent.values()) {
+    siblings.sort((left, right) => compareEpisodeOrdinals(left.ordinal, right.ordinal) || left.id - right.id);
+    siblings.forEach((episode, index) => positions.set(`episode:${episode.id}`, String(index + 1)));
+  }
+  return positions;
+}
+
+function positiveBangumiId(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return value;
+  if (typeof value !== 'string' || !/^[0-9]{1,32}$/u.test(value)) return;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 export function episodeTypeConceptCode(uri: string): string | undefined {
@@ -164,6 +215,7 @@ export async function planBangumiEpisodeFidelity(input: CrossMediaTables): Promi
     episodes.push(row);
   }
   const parents = new Set(episodes.map((row) => number(row, 'subject_id')));
+  const positions = bangumiEpisodeDisplayPositions(episodes);
   const subjects = new Map<number, Row>();
   for await (const row of input.rows('bangumi', 'subject')) {
     if (!parents.has(number(row, 'id'))) continue;
@@ -200,6 +252,7 @@ export async function planBangumiEpisodeFidelity(input: CrossMediaTables): Promi
       membership: 'referenced',
       record: row,
       fields: fieldsOf('episode', row),
+      ...(positions.has(key) ? { qualifiers: [{ property: 'schema:position', content: positions.get(key)! }] } : {}),
     };
     plan.edges.push(edge);
   }

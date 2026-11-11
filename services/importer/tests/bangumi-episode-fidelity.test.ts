@@ -10,6 +10,7 @@ import type { CrossMediaPort } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { importBangumiEpisodeFidelity } from '../src/selected-import.ts';
 import {
+  bangumiEpisodeDisplayPositions,
   episodeTypeConceptUri,
   episodeTypeSchemeUri,
   planBangumiEpisodeFidelity,
@@ -113,10 +114,21 @@ function port(commands: BatchCommand[]): CrossMediaPort {
 }
 
 test('operator plans authored episodes without using disc as identity and imports through the seed caller', async () => {
+  expect(
+    bangumiEpisodeDisplayPositions([
+      { id: 1, subject_id: 81, sort: 0 },
+      { id: 2, subject_id: 81, sort: 'not a source ordinal' },
+    ]),
+  ).toEqual(new Map([['episode:1', '1']]));
   const plan = await planBangumiEpisodeFidelity(authoredTables());
   expect(plan.records.bangumi.map((row) => row.key)).toEqual(['81']);
   expect(plan.entities.bangumi.map((row) => row.key)).toEqual(['episode:900001', 'episode:900002', 'episode:900003']);
   expect(plan.edges.every((edge) => edge.property === 'schema:isPartOf' && edge.target === '81')).toBe(true);
+  expect(plan.edges.map((edge) => [edge.holder, edge.qualifiers?.[0]?.content])).toEqual([
+    ['episode:900001', '2'],
+    ['episode:900002', '1'],
+    ['episode:900003', '3'],
+  ]);
   const commands: BatchCommand[] = [];
   const directory = await mkdtemp(join(tmpdir(), 'bangumi-episode-fidelity-'));
   try {
