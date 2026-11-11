@@ -118,6 +118,11 @@ test('bases are CURIEs and facets are registered facetable properties', () => {
     crowded.types['ex:T']!.properties.push(key);
     crowded.types['ex:T']!.facets.push(key);
   }
+  expect(validateRelease(crowded)).toEqual([]);
+  const last = 'ex:p17';
+  crowded.properties[last] = { ...crowded.properties['ex:p']!, iri: 'https://example.org/p17' };
+  crowded.types['ex:T']!.properties.push(last);
+  crowded.types['ex:T']!.facets.push(last);
   expect(validateRelease(crowded)).toEqual([{ pointer: '/types/ex:T/facets', code: 'limit' }]);
 
   const missing = fixture() as Release & { types: Record<string, Record<string, unknown>> };

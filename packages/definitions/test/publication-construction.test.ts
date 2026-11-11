@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { bundledRelease } from '../src/bundled.ts';
 import { RELEASE_LIMITS, validateRelease, type Release } from '../src/index.ts';
 import { analyzePattern } from '../src/pattern-safety.ts';
@@ -100,6 +101,18 @@ test('ordinary native outcomes retain catalogue, one-level facets and cheap limi
   ]);
   release.types['grow:Root']!.properties = Array(65).fill('grow:code');
   expect(validateRelease(release)).toEqual([{ pointer: '/types/grow:Root/properties', code: 'limit' }]);
+});
+
+test('current construction admits 17 facets while historical construction snapshots retain 16', () => {
+  expect(RELEASE_LIMITS.facetsPerType).toBe(17);
+  expect(bundledRelease.types['schema:VideoGame']?.facets).toHaveLength(17);
+  expect(validateRelease(bundledRelease)).toEqual([]);
+
+  const historical = historicalBundle as Release;
+  expect(Object.values(historical.types).every(({ facets }) => facets.length <= 16)).toBe(true);
+  expect(
+    readFileSync(new URL('./fixtures/definitions-historical-construction.source', import.meta.url), 'utf8'),
+  ).toContain('facetsPerType: 16');
 });
 
 test('sorted pattern checkpoint observation freezes same-pattern defect versus first excess without making defects safe', async () => {

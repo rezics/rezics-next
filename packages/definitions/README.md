@@ -71,7 +71,7 @@ The published inventory in `catalogue/` gives every Type a portrait 5:7 cover fr
 including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, quotation, person and
 character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
 any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
-is immutable: source targets 1.0.11; the bundled artifact remains 1.0.10 until regeneration. Historical bytes and digests remain loadable for existing pins. Book
+is immutable: source and bundled artifact are 1.0.11. Historical bytes and digests remain loadable for existing pins. Book
 selects author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
 cookTime/suitableForDiet; MusicAlbum selects datePublished/genre; MusicRelease selects datePublished/distribution format;
 MusicRecording selects duration/datePublished. These ordered factual hints, media dimensions,
@@ -153,6 +153,10 @@ Work bases; targets use that same union, including actual subtypes. Editions, re
 Concepts retain their grains. Genre and keywords may disagree with comparisons. Core owns
 all eight forward/inverse labels. Existing references, citation policy, Context acceptance
 and adoption apply; no mandatory citation, Concept creation, focus bridge or qualifier is added.
+
+Decision: Comparative Works use the shared sourced Work-association lifecycle, while Concept
+classification remains independent. The current 17-facet cap preserves both `wdt:P179` and the
+comparison facet on VideoGame Works; historical snapshots retain their original 16-facet data and bytes.
 
 Source inventory mappings may declare `inverse: true`: `term` names the
 canonical bundled property, and the related subject holds the statement whose
@@ -790,7 +794,8 @@ Source conventions:
   release definition. That fourth kind is a code: an identifier such as a language
   tag. A `string` without a pattern, and every other datatype, is refused at the
   same pointer and code as any other unfilterable facet. A slot may appear only
-  once in the inheritance chain, and a type may have at most 16 facets. The type
+  once in the inheritance chain, and a current type may have at most 17 facets. Historical release bytes and pins
+  remain unchanged. The type
   itself is always a facet and is not listed in this annotation.
 - A type's `bases` list contains its `is_a` ancestors that declare `class_uri`,
   nearest first. It omits the type's own CURIE and repeated CURIEs; ancestors

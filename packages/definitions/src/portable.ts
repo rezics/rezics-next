@@ -27,7 +27,7 @@ export const RELEASE_LIMITS = {
   types: 1024,
   properties: 4096,
   propertiesPerType: 64,
-  facetsPerType: 16,
+  facetsPerType: 17,
   contexts: 256,
   defaultsPerContext: 64,
   bytes: 4 * 1024 * 1024,
