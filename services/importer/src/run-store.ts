@@ -54,6 +54,7 @@ import {
 import { SOURCE_DESTINATION_DDL } from './source-destination.ts';
 
 export type Run = { source: string; id: string; lease: string };
+export type AcquisitionMode = 'complete' | 'selected';
 /** Callers supply only the pure converter's sanitized normalized record, never raw dump data. */
 export type SourceProjection = {
   sourceKind: SourceId;
@@ -93,6 +94,7 @@ type Generation = {
   seq: number;
   lease: string;
   status: string;
+  acquisition_mode: AcquisitionMode;
   threshold: number;
   prior: number;
   supplied: number;
@@ -181,6 +183,7 @@ const REQUIRED_EXISTING_COLUMNS: Record<(typeof RUN_TABLES)[number], readonly st
     'seq',
     'lease',
     'status',
+    'acquisition_mode',
     'threshold',
     'prior',
     'supplied',
@@ -690,6 +693,7 @@ export class RunStore<Projection = BatchStatement[]> {
           source TEXT NOT NULL, subject_id TEXT NOT NULL, association_key TEXT NOT NULL,
           digest TEXT NOT NULL, head_json TEXT NOT NULL,
           PRIMARY KEY(source, subject_id, association_key)) WITHOUT ROWID`);
+        this.ensureAcquisitionModeColumn();
         assertExistingRunSchema(this.database);
         this.ensureClassifiedKindColumns();
         this.recoverClassifiedKindCountersUntil(
@@ -704,7 +708,8 @@ export class RunStore<Projection = BatchStatement[]> {
         generation TEXT, present_count INTEGER NOT NULL) WITHOUT ROWID`);
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_generations (
         source TEXT NOT NULL, id TEXT NOT NULL, seq INTEGER NOT NULL, lease TEXT NOT NULL,
-        status TEXT NOT NULL, threshold REAL NOT NULL, prior INTEGER NOT NULL,
+        status TEXT NOT NULL, acquisition_mode TEXT NOT NULL DEFAULT 'complete',
+        threshold REAL NOT NULL, prior INTEGER NOT NULL,
         supplied INTEGER NOT NULL DEFAULT 0, survivors INTEGER NOT NULL DEFAULT 0,
         invalid INTEGER NOT NULL DEFAULT 0, classified INTEGER NOT NULL DEFAULT 0,
         resolved INTEGER NOT NULL DEFAULT 0, expected INTEGER NOT NULL DEFAULT 0,
@@ -715,6 +720,7 @@ export class RunStore<Projection = BatchStatement[]> {
         kind_backfill_cursor TEXT NOT NULL DEFAULT '', kind_backfill_done INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(source,id)) WITHOUT ROWID`);
       // Additive migration leaves existing run journals and immutable prepared work intact.
+      this.ensureAcquisitionModeColumn();
       const generationColumns = this.all<{ name: string }>('PRAGMA table_info(run_generations)');
       if (!generationColumns.some(({ name }) => name === 'skipped'))
         this.database.exec('ALTER TABLE run_generations ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0');
@@ -881,6 +887,15 @@ export class RunStore<Projection = BatchStatement[]> {
   }
   private write(sql: string, ...args: SQLQueryBindings[]) {
     return this.query(sql).run(...args);
+  }
+  private ensureAcquisitionModeColumn(): void {
+    const table = this.get<{ name: string }>(
+      "SELECT name FROM sqlite_schema WHERE type='table' AND name='run_generations'",
+    );
+    if (!table) return;
+    const names = new Set(this.all<{ name: string }>('PRAGMA table_info(run_generations)').map(({ name }) => name));
+    if (!names.has('acquisition_mode'))
+      this.database.exec("ALTER TABLE run_generations ADD COLUMN acquisition_mode TEXT NOT NULL DEFAULT 'complete'");
   }
   private ensureClassifiedKindColumns(): void {
     const names = new Set(this.all<{ name: string }>('PRAGMA table_info(run_generations)').map(({ name }) => name));
@@ -1081,10 +1096,14 @@ export class RunStore<Projection = BatchStatement[]> {
       g.threshold,
     );
   }
-  begin(source: string, options: { disappearanceThreshold?: number } = {}): Run | 'busy' {
+  begin(
+    source: string,
+    options: { disappearanceThreshold?: number; acquisitionMode?: AcquisitionMode } = {},
+  ): Run | 'busy' {
     sourceId(source);
-    exact(options, [], ['disappearanceThreshold']);
+    exact(options, [], ['disappearanceThreshold', 'acquisitionMode']);
     const threshold = options.disappearanceThreshold ?? 0.2;
+    const acquisitionMode = options.acquisitionMode ?? 'complete';
     if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold < 0 || threshold > 1) fail();
     return this.transaction(() => {
       const s = this.get<Source>('SELECT * FROM run_sources WHERE source=?', source);
@@ -1102,12 +1121,15 @@ export class RunStore<Projection = BatchStatement[]> {
         s?.present_count ?? 0,
       );
       this.write(
-        `INSERT INTO run_generations(source,id,seq,lease,status,threshold,prior,kind_backfill_done) VALUES(?,?,?,?,?,?,?,1)`,
+        `INSERT INTO run_generations(
+          source,id,seq,lease,status,acquisition_mode,threshold,prior,kind_backfill_done)
+        VALUES(?,?,?,?,?,?,?,?,1)`,
         source,
         run.id,
         seq,
         run.lease,
         'staging',
+        acquisitionMode,
         threshold,
         s?.present_count ?? 0,
       );
@@ -1117,7 +1139,7 @@ export class RunStore<Projection = BatchStatement[]> {
   beginCheckpointed(
     source: string,
     identity: StagingCaptureIdentity,
-    options: { disappearanceThreshold?: number } = {},
+    options: { disappearanceThreshold?: number; acquisitionMode?: AcquisitionMode } = {},
   ): Run | 'busy' {
     const threshold = options.disappearanceThreshold ?? identity.disappearanceThreshold;
     if (threshold !== identity.disappearanceThreshold) fail();
@@ -1543,7 +1565,7 @@ export class RunStore<Projection = BatchStatement[]> {
       const g = this.generation(run);
       if (g.status !== 'staging') throw new Error('Run is already sealed');
       const skippedCount = input.complete === true ? (input.skipped ?? 0) : 0;
-      const missing = g.prior - g.survivors;
+      const missing = g.acquisition_mode === 'selected' ? 0 : g.prior - g.survivors;
       const status =
         !input.complete || g.invalid
           ? 'invalid-input'
@@ -2456,6 +2478,7 @@ export class RunStore<Projection = BatchStatement[]> {
       ).changes
     )
       throw new Error('Run is not ready');
+    if (this.generation(run).acquisition_mode === 'selected') return [];
     // after is the last emitted key. Its exact membership lookup recovers the seen half of
     // the durable composite cursor, including after failed staging touched some prior members.
     const after = page.after ?? '';
@@ -2559,15 +2582,26 @@ export class RunStore<Projection = BatchStatement[]> {
       );
       for (const e of entries) {
         const row = JSON.parse(e.row_json) as RecordRow;
-        this.write(
-          `INSERT INTO run_members(source,record_key,active,seen,row_json) VALUES(?,?,?,?,?)
-          ON CONFLICT(source,record_key) DO UPDATE SET active=excluded.active,seen=excluded.seen,row_json=excluded.row_json`,
-          run.source,
-          e.record_key,
-          row.state === 'present' ? 1 : 0,
-          g.seq,
-          e.row_json,
-        );
+        if (g.acquisition_mode === 'selected') {
+          // Selected observations can refresh an existing member's last known row,
+          // but cannot add membership to or replace the complete comparison base.
+          this.write(
+            'UPDATE run_members SET row_json=? WHERE source=? AND record_key=?',
+            e.row_json,
+            run.source,
+            e.record_key,
+          );
+        } else {
+          this.write(
+            `INSERT INTO run_members(source,record_key,active,seen,row_json) VALUES(?,?,?,?,?)
+            ON CONFLICT(source,record_key) DO UPDATE SET active=excluded.active,seen=excluded.seen,row_json=excluded.row_json`,
+            run.source,
+            e.record_key,
+            row.state === 'present' ? 1 : 0,
+            g.seq,
+            e.row_json,
+          );
+        }
       }
       if (entries.length === pageCap) {
         this.write(
@@ -2579,17 +2613,22 @@ export class RunStore<Projection = BatchStatement[]> {
         );
         return 'more';
       }
-      // The complete pointer switches only after the durable S+D cursor is exhausted.
-      // Old run_entries remain immutable baseline snapshots across partial/crashed finalization.
-      this.write(
-        `UPDATE run_sources SET generation=CASE WHEN generation IS NULL OR ? > 0 THEN ? ELSE generation END,
-        present_count=?,lease_run=NULL WHERE source=? AND lease_run=?`,
-        g.changed,
-        run.id,
-        g.supplied,
-        run.source,
-        run.id,
-      );
+      // The complete pointer switches only after a complete run exhausts the
+      // durable S+D cursor. Selected observations retain that comparison base.
+      if (g.acquisition_mode === 'selected') {
+        this.write('UPDATE run_sources SET lease_run=NULL WHERE source=? AND lease_run=?', run.source, run.id);
+      } else {
+        // Old run_entries remain immutable baseline snapshots across partial/crashed finalization.
+        this.write(
+          `UPDATE run_sources SET generation=CASE WHEN generation IS NULL OR ? > 0 THEN ? ELSE generation END,
+          present_count=?,lease_run=NULL WHERE source=? AND lease_run=?`,
+          g.changed,
+          run.id,
+          g.supplied,
+          run.source,
+          run.id,
+        );
+      }
       this.write('UPDATE run_generations SET status=? WHERE source=? AND id=?', 'complete', run.source, run.id);
       return 'complete';
     });

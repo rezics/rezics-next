@@ -45,7 +45,12 @@ threshold or replace journal keys to admit it. Reopen keeps exact identities and
 The pinned book case covers a preceding committed non-book generation, complete admission and journal reopen;
 the failure case pins the retained disappearance refusal and private-cause redaction.
 
-Conversion maps one selected normalized record with current bindings and exact released descriptors. It does not acquire, resolve identities, authorize, accept, adopt or read public results. Importer records source and request journals, prepares ordinary create/propose commands and retains exact actor, destination, body, key and response through retry. A run stages and validates one complete generation, checks mass disappearance, then seals before writes. Unknown delivery resumes the same sealed intent before source reacquisition; changed terminal receipts remain distinct. Retryable 429/503 stays bounded; authorization and fence refusals remain refusals.
+Decision: acquisition mode is generation-scoped. `complete` remains the default for declared whole-source input and
+may classify omissions and advance the complete-alias comparison pointer. `selected` updates named records without
+disappearance evidence or membership expansion and preserves that pointer and count. Admission stores the mode so
+sealing and replay use the same intent; existing generations retain their prior complete-alias meaning.
+
+Conversion maps one selected normalized record with current bindings and exact released descriptors. It does not acquire, resolve identities, authorize, accept, adopt or read public results. Importer records source and request journals, prepares ordinary create/propose commands and retains exact actor, destination, body, key and response through retry. A run stages and validates its admitted acquisition mode; only complete mode classifies omissions before sealing. Unknown delivery resumes the same sealed intent before source reacquisition; changed terminal receipts remain distinct. Retryable 429/503 stays bounded; authorization and fence refusals remain refusals.
 
 Decision: a waiter for a staged same-run dependency owned by another active record yields its parent's write-admission slot and reacquires through the adaptive scheduler before continuing; a failed dependency leaves its parent unclassified for sealed replay. This keeps earlier effects and exact pending bytes intact at width one.
 

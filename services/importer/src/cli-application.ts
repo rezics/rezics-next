@@ -902,6 +902,7 @@ async function executeOrdinaryImport(
           await connectTransport();
           await progress?.setPhase(tracked ? 'publishing' : 'staging');
           const runOptions = {
+            acquisitionMode: config.acquisitionMode,
             ...(config.disappearanceThreshold === undefined
               ? {}
               : { disappearanceThreshold: config.disappearanceThreshold }),
@@ -950,6 +951,7 @@ async function executeOrdinaryImport(
           : undefined;
         const records = stream ? (capture ? stream.frames : stream.records) : (async function* () {})();
         const run = await importer.runDumpSet(registration, records, {
+          acquisitionMode: config.acquisitionMode,
           ...(config.disappearanceThreshold === undefined
             ? {}
             : { disappearanceThreshold: config.disappearanceThreshold }),
@@ -992,6 +994,7 @@ async function executeOrdinaryImport(
           decoderModule,
         });
         const run = await importer.runDump(registration, nativeInput, {
+          acquisitionMode: config.acquisitionMode,
           ...(config.disappearanceThreshold === undefined
             ? {}
             : { disappearanceThreshold: config.disappearanceThreshold }),
