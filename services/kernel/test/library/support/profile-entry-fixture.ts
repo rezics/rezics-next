@@ -161,6 +161,48 @@ export async function compileEntryRelease(
 
 export type NativeProfileFixture = Awaited<ReturnType<typeof createProfileEntryFixture>>;
 
+export function profileEntryWorkerEnvironment(routeKey: Uint8Array) {
+  return {
+    ...process.env,
+    KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
+  };
+}
+
+export function profileEntryRouteKey(environment: NodeJS.ProcessEnv = process.env) {
+  return Buffer.from(environment.KERNEL_ROUTE_KEY ?? '', 'base64url');
+}
+
+/** Build the complete native Access and Library composition used by the ordinary profile fixture. */
+export async function composeProfileEntryLibrary(options: { pool: Pool; clock?: KernelClock; routeKey?: Uint8Array }) {
+  const { pool } = options;
+  const tokens = testTokens();
+  const routeKey = options.routeKey ?? testRouteKey();
+  const clock = options.clock;
+  let access!: Access;
+  const kernel = createKernel({
+    pool,
+    tokens,
+    routeKey,
+    receiptKeys: testReceiptKeys(),
+    ...(clock === undefined ? {} : { clock }),
+    requestDeadlineMs: 30_000,
+    access(config) {
+      return (access = admittedAccess(config));
+    },
+    onAccessReady(access) {
+      composeLibraryDomain({ pool, access, routeKey, clock: clock ?? systemClock });
+    },
+    writeRate: createWriteRateLimiter({
+      secret: 'native-profile-entry-test-rate-secret',
+      overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
+    }),
+  });
+  // Resolve Access through the full mounted action catalogue before worker registration.
+  await kernel.handle(new Request('http://kernel.test/v1/definitions/active'));
+  expect(access).toBeDefined();
+  return { access, kernel, tokens, routeKey, workerEnv: profileEntryWorkerEnvironment(routeKey) };
+}
+
 /** No server, remote driver, policy map or raw account/subject/grant inserts. */
 export async function createProfileEntryFixture(
   options: {
@@ -181,33 +223,10 @@ export async function createProfileEntryFixture(
   // Assertions cannot observe an uncommitted writer connection or mutate the fixture.
   const reader = new pg.Pool({ connectionString: url, max: 1, options: '-c default_transaction_read_only=on' });
   try {
-    const tokens = testTokens();
-    const routeKey = testRouteKey();
-    let access!: Access;
-    const kernel = createKernel({
+    const { access, kernel, tokens, routeKey, workerEnv } = await composeProfileEntryLibrary({
       pool,
-      tokens,
-      routeKey,
-      receiptKeys: testReceiptKeys(),
       ...(options.clock === undefined ? {} : { clock: options.clock }),
-      requestDeadlineMs: 30_000,
-      access(config) {
-        return (access = admittedAccess(config));
-      },
-      onAccessReady(access) {
-        composeLibraryDomain({ pool, access, routeKey, clock: options.clock ?? systemClock });
-      },
-      writeRate: createWriteRateLimiter({
-        secret: 'native-profile-entry-test-rate-secret',
-        overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
-      }),
     });
-    // The kernel composes Access lazily from its complete mounted action catalogue.
-    // Resolve it through an ordinary public read before authenticating native actors.
-    // This request only materializes the lazy Access dependency. Its response can time out while the
-    // native test database is loaded; route outcomes are asserted by the command tests themselves.
-    await kernel.handle(new Request('http://kernel.test/v1/definitions/active'));
-    expect(access).toBeDefined();
     // Native commands use the domain installed with lazy Access above.
     const projection = linkProjection(pool);
     const partitions = new Set([0]);
@@ -889,6 +908,7 @@ export async function createProfileEntryFixture(
       handle: (request: Request) => kernel.handle(request),
       pool,
       access,
+      workerEnv,
       tokens,
       commands,
       owner,

@@ -36,7 +36,7 @@ function runtime(mode: string): Runtime {
   const child = Bun.spawn(
     [process.execPath, `${import.meta.dir}/entry-retention-worker-runtime.ts`, mode, executor, timePath],
     {
-      env: process.env,
+      env: f.workerEnv,
       stdin: 'pipe',
       stdout: 'pipe',
       stderr: 'pipe',

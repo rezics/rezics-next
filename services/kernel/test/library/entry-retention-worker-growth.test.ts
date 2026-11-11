@@ -61,7 +61,7 @@ beforeAll(async () => {
         },
       },
     ],
-    { pool: db.pool, client, databaseUrl: db.url, clock: () => new Date(time), env: {} },
+    { pool: db.pool, client, databaseUrl: db.url, clock: () => new Date(time), env: f.workerEnv },
   );
   // Isolate the explicitly queued native cost operation from wall-clock cron dispatch.
   await client.pauseSchedule(ENTRY_RETENTION_SCHEDULE);

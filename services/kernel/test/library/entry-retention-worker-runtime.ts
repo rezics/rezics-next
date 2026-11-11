@@ -8,7 +8,12 @@ import { routeOf } from '../../src/route/route.ts';
 import type { DueEntryDeletionKey } from '../../src/library/entry-due-store.ts';
 import { accountToken } from '../support/admitted-access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
-import { entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
+import {
+  composeProfileEntryLibrary,
+  entryKey,
+  profileEntryRouteKey,
+  type NativeProfileFixture,
+} from './support/profile-entry-fixture.ts';
 
 export async function deletionKey(pool: Pool, accountId: string, deletionId: string): Promise<DueEntryDeletionKey> {
   const result = await pool.query(
@@ -80,42 +85,83 @@ export async function observeRetentionQueries(
 if (import.meta.main) {
   const [mode, executorId, timePath] = process.argv.slice(2);
   if (!executorId || !timePath) throw new Error('Runtime requires executor identity and native clock file');
-  const pool = createPool(process.env.DATABASE_URL!);
-  const client = await createWorkClient(process.env.DATABASE_URL!);
-  let barrierUsed = false;
-  // Test-only transport interception observes the actual native source/COMMIT, never replaces a command or SDK.
-  // Holding after COMMIT leaves the DBOS page output uncheckpointed when this child is killed.
-  if (mode !== 'recover') {
-    const deleted = new WeakSet<PoolClient>();
-    await observeRetentionQueries(pool, async ({ connection, sql, result }) => {
-      if (/DELETE FROM library.entry_deleted/i.test(sql) && result.rows.length) deleted.add(connection);
-      const park = mode === 'park' && /SELECT restore_until::text AS "restoreUntil"/i.test(sql) && result.rows.length;
-      const committed = mode === 'crash' && deleted.has(connection) && /^COMMIT$/i.test(sql.trim());
-      if (/^(COMMIT|ROLLBACK)$/i.test(sql.trim())) deleted.delete(connection);
-      if (!barrierUsed && (park || committed)) {
-        barrierUsed = true;
-        console.log(park ? 'source-parked' : 'native-committed');
-        await new Promise<void>((resolve) => process.stdin.once('data', () => resolve()));
+  const databaseUrl = process.env.DATABASE_URL!;
+  const pool = createPool(databaseUrl);
+  let client: Awaited<ReturnType<typeof createWorkClient>> | undefined;
+  let work: Awaited<ReturnType<typeof composeWork>> | undefined;
+  let settled = false;
+  let stop!: () => void;
+  const stopping = new Promise<void>((resolve) => (stop = resolve));
+  const onSigterm = () => stop();
+  async function settle() {
+    if (settled) return;
+    settled = true;
+    process.off('SIGTERM', onSigterm);
+    const failures: unknown[] = [];
+    for (const release of [async () => work?.shutdown(), async () => client?.close(), async () => pool.end()]) {
+      try {
+        await release();
+      } catch (error) {
+        failures.push(error);
       }
-    });
+    }
+    if (failures.length) throw new AggregateError(failures, 'Retention worker resource settlement failed');
   }
-  const work = await composeWork([libraryWorkModule], {
-    pool,
-    client,
-    databaseUrl: process.env.DATABASE_URL!,
-    executorId,
-    clock: () => new Date(Number(readFileSync(timePath, 'utf8'))),
-    env: {},
-  });
-  await work.launch();
-  console.log('worker-ready');
-  const stop = async () => {
-    await work.shutdown();
-    await client.close();
-    await pool.end();
-    process.exit(0);
-  };
-  process.once('SIGTERM', () => void stop());
+
+  let runtimeError: unknown;
+  let runtimeFailed = false;
+  try {
+    client = await createWorkClient(databaseUrl);
+    const clock = () => new Date(Number(readFileSync(timePath, 'utf8')));
+    // Test-only transport interception observes the actual native source/COMMIT, never replaces a command or SDK.
+    // Holding after COMMIT leaves the DBOS page output uncheckpointed when this child is killed.
+    if (mode !== 'recover') {
+      let barrierUsed = false;
+      const deleted = new WeakSet<PoolClient>();
+      await observeRetentionQueries(pool, async ({ connection, sql, result }) => {
+        if (/DELETE FROM library.entry_deleted/i.test(sql) && result.rows.length) deleted.add(connection);
+        const park = mode === 'park' && /SELECT restore_until::text AS "restoreUntil"/i.test(sql) && result.rows.length;
+        const committed = mode === 'crash' && deleted.has(connection) && /^COMMIT$/i.test(sql.trim());
+        if (/^(COMMIT|ROLLBACK)$/i.test(sql.trim())) deleted.delete(connection);
+        if (!barrierUsed && (park || committed)) {
+          barrierUsed = true;
+          console.log(park ? 'source-parked' : 'native-committed');
+          await new Promise<void>((resolve) => process.stdin.once('data', () => resolve()));
+        }
+      });
+    }
+    const { workerEnv } = await composeProfileEntryLibrary({
+      pool,
+      clock,
+      routeKey: profileEntryRouteKey(process.env),
+    });
+    work = await composeWork([libraryWorkModule], {
+      pool,
+      client,
+      databaseUrl,
+      executorId,
+      clock,
+      env: workerEnv,
+    });
+    process.once('SIGTERM', onSigterm);
+    await work.launch();
+    console.log('worker-ready');
+    await stopping;
+  } catch (error) {
+    runtimeFailed = true;
+    runtimeError = error;
+  }
+
+  let settlementError: unknown;
+  try {
+    await settle();
+  } catch (error) {
+    settlementError = error;
+  }
+  if (runtimeFailed && settlementError !== undefined)
+    throw new AggregateError([runtimeError, settlementError], 'Retention worker failed and could not settle cleanly');
+  if (runtimeFailed) throw runtimeError;
+  if (settlementError !== undefined) throw settlementError;
 }
 
 /** Legal unrelated owners/live replacements/future archives grow both partition-local and remote indexes. */

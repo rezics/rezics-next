@@ -1333,6 +1333,11 @@ Library-local timer. Minimize actual Library receipt, event, outbox and workflow
 their shared owners' retention protocols. Open shared-store and external inventory gaps remain explicit; no broader
 physical-erasure claim follows from empty Library tables.
 
+Default-worker acceptance composes native Access and Library through the ordinary profile Kernel before registering
+the full `libraryWorkModule`. It passes the same Pool, supplied domain clock and matching base64url
+`KERNEL_ROUTE_KEY`; crash children preserve their executor and clock-file identity, remove their SIGTERM listener, and
+settle the work runtime, client and Pool on startup failure or graceful shutdown.
+
 For replacement-safe fresh writes, expose opaque `incarnationId` in entry reads and write results. A revisioned PUT
 body and DELETE query carry `incarnationId` alongside `revision`; the spelling is consistent across both requests.
 A fresh revisioned mutation on a current non-null incarnation requires its exact guard, immediately for both
