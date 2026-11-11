@@ -1,4 +1,4 @@
-import { libraryShelfType, shelfHref } from '../../library/shelf-params';
+import { libraryShelfType, shelfHref } from '../../library/settings-adapter';
 import { m } from '../../paraglide/messages.js';
 
 export const bookLinkClass =

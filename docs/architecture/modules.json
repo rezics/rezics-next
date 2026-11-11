@@ -1703,6 +1703,7 @@
         "apps/web/src/zones/**"
       ],
       "publicEntries": [
+        "apps/web/src/features/catalogue/type-directory.ts",
         "apps/web/src/features/catalogue/definition-publication/actions.ts",
         "apps/web/src/features/catalogue/definition-publication/workspace.tsx",
         "apps/web/src/features/catalogue/work-reading-port.tsx",
@@ -1850,6 +1851,7 @@
         "apps/web/src/reader/lifetime/**"
       ],
       "publicEntries": [
+        "apps/web/src/books/catalogue/shelf-link.tsx",
         "apps/web/src/session/community-application.tsx",
         "apps/web/src/content-editions/sale-review.tsx",
         "apps/web/src/content-editions/edition-create-route.tsx",
