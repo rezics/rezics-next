@@ -2058,6 +2058,10 @@ The installed Semantic Source binding and Source key-page adapters supply the de
 completion and current-definition reads. Composition does not certify native readiness or receiving acceptance;
 those outcomes still require the real worker journeys below.
 
+Decision: installed preparation retains the same admitted native locator when Semantic reports `metadata_missing`;
+the frontier cannot advance until Semantic supplies its projection or reduction proof. Search
+does not infer readiness from a completed scheduling attempt, engine contents or hydrated rows.
+
 Decision: the all-home epoch/position digest binds reconciliation evidence to its Source revision. It complements
 the actual default-worker convergence, generation-switch and current public-rating receiving assertions; by itself
 it certifies none of those outcomes and is not a readiness or switch criterion. The receiving oracle compares the

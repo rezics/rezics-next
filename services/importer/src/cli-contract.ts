@@ -122,6 +122,7 @@ export type ImportCliConfig = {
   client: string;
   auth: string;
   sourceAlias?: string;
+  acquisitionMode: 'complete' | 'selected';
   bangumiGameGenreBindings?: string;
   bangumiPersonCareerBindings?: string;
   disappearanceThreshold?: number;
@@ -165,7 +166,7 @@ export function importCliUsage(): string {
   return [
     'Usage: rezics-import --source <bangumi|vndb|openlibrary|wikidata> --dump <path|-> --state <sqlite-path>',
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
-    '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
+    '       [--source-alias <name>] [--acquisition-mode <complete|selected>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
     '       [--bangumi-game-genre-bindings-file <finite-json-path>]',
     '       [--bangumi-person-career-bindings-file <finite-json-path>]',
     '       [--compression none|gzip|zstd] [--decode-budget <bytes>] [--zstd-executable <absolute-path>]',
@@ -176,7 +177,7 @@ export function importCliUsage(): string {
     '       [--source-alias <name>] [--progress <human|jsonl>]',
     '       rezics-import --source openlibrary --dump-set <manifest-path> --state <sqlite-path>',
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
-    '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>] [--decode-budget <bytes>]',
+    '       [--source-alias <name>] [--acquisition-mode <complete|selected>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>] [--decode-budget <bytes>]',
     '       [--checkpoint-staging] [--resume-staging --generation <id>]',
     '       rezics-import diagnostics --source <bangumi|vndb|openlibrary|wikidata> --state <sqlite-path>',
     '       [--generation <id>] [--record <key>] [--limit <1..100>] [--cursor <token>] [--phase staging|application] [--format json|text]',
@@ -203,7 +204,7 @@ export function importCliUsage(): string {
     '       rezics-import destination --state <sqlite-path> --source <configured-source-id> --api <https-origin>',
     '       --review-revision <64-hex> --declare --acknowledge-unverified [--json]',
     'Exit 6 means a source observation or classification needs explicit resolution; it is not an authorization failure.',
-    'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --bangumi-game-genre-bindings-file --bangumi-person-career-bindings-file --disappearance-threshold --progress --compression --decode-budget --zstd-executable --checkpoint-staging --resume-staging --generation --checkpoint-acquisition --resume-acquisition --acquisition --help',
+    'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --acquisition-mode --bangumi-game-genre-bindings-file --bangumi-person-career-bindings-file --disappearance-threshold --progress --compression --decode-budget --zstd-executable --checkpoint-staging --resume-staging --generation --checkpoint-acquisition --resume-acquisition --acquisition --help',
     'gzip is admitted only for Open Library and Wikidata streamed dumps. zstd is admitted only for VNDB archives and Wikidata streamed dumps, as one regular local file (not stdin). Default --compression none. A suffix is not a source identity. --decode-budget is a whole-set decoded-byte ceiling (default 256 GiB) for one gzip dump, one zstd dump or one complete dump set, never a per-member multiple. Dump-set version 1 stays plain; version 2 requires explicit per-member none or gzip. --compression does not apply to --dump-set. zstd uses /usr/bin/zstd or PATH zstd, or --zstd-executable, with a 128 MiB decoder window.',
     'Each exact source alias records its API origin on first use. A mistyped --api fails before credentials. Legacy unbound history needs rezics-import destination. Same-origin server replacement cannot be detected without a separately released deployment identity.',
     '--checkpoint-staging and --resume-staging admit one uncompressed Bangumi regular file, one Open Library or Wikidata regular file (plain, gzip, or Wikidata zstd), or one Open Library dump-set. They re-hash every original file before any capture or resume mutation, then replay the production decoder from the start of each member. Default import still discards unsealed staging. After sealing, resume with the ordinary dump-free command; do not replace input. Local conversion is not publication, and Bangumi ratings stay omitted. VNDB archives and stdin stay non-resumable.',
@@ -290,6 +291,7 @@ export function parseImportCliConfig(argv: readonly string[]): ImportCliConfig |
     '--client',
     '--auth',
     '--source-alias',
+    '--acquisition-mode',
     '--bangumi-game-genre-bindings-file',
     '--bangumi-person-career-bindings-file',
     '--disappearance-threshold',
@@ -335,6 +337,7 @@ export function parseImportCliConfig(argv: readonly string[]): ImportCliConfig |
   const account = values.get('--account');
   const client = values.get('--client');
   const auth = values.get('--auth');
+  const acquisitionMode = values.get('--acquisition-mode');
   if (
     !source ||
     !VALID_SOURCE.test(source) ||
@@ -347,7 +350,8 @@ export function parseImportCliConfig(argv: readonly string[]): ImportCliConfig |
     !UUID.test(account) ||
     !client ||
     !CLIENT.test(client) ||
-    !auth
+    !auth ||
+    (acquisitionMode !== undefined && acquisitionMode !== 'complete' && acquisitionMode !== 'selected')
   )
     throw new ImportCliInputFailure();
   if (dump !== undefined && dump !== '-' && !dump.trim()) throw new ImportCliInputFailure();
@@ -392,6 +396,7 @@ export function parseImportCliConfig(argv: readonly string[]): ImportCliConfig |
     account,
     client,
     auth,
+    acquisitionMode: (acquisitionMode as 'complete' | 'selected' | undefined) ?? 'complete',
     compression: 'none',
     mode: resumeStaging
       ? 'resume-staging'

@@ -14,6 +14,15 @@ boards, threads, posts, media, Spaces and Realms.
   [document package](../../packages/document/README.md). Persistent board pins never grant visibility; active, hot
   and newest continuations skip pinned threads without losing sparse-page progress under current container-chain
   disclosure.
+- Content owns the hosted-book structure and Post revision contracts for the first-public book library: authors
+  manage drafts, add, reorder and move ordered nested parts and chapters with stable occurrence identities, and
+  edit chapters with revision history and comparison. Explicit publication atomically freezes a public TOC selection
+  with its exact Post revisions; later draft edits leave that selection unchanged. Ordinary author and reader
+  authorization still applies, and unselected drafts stay private. [Native API acceptance](#acceptance) and
+  [Web's mounted author and reader acceptance](web.md#acceptance) are separate launch gates for complete books and
+  hosted novels. Record a legacy parity comparison against the read-only `../rezics` behavior baseline at `95167ceab`,
+  meeting or exceeding it and demonstrating at least one improvement, such as stable exact chapter links across
+  moves plus atomic published-revision selection. A flat native first slice alone does not satisfy the launch gate.
 - Reports retain exact anchors. Takedown targets the resource partition and security revision. Erased revision bodies
   become `NULL` while exact references disclose erased availability. Author thread erasure makes bounded durable
   progress with current per-post authority; point erasure and takedown keep their synchronous contract.
@@ -29,8 +38,8 @@ boards, threads, posts, media, Spaces and Realms.
 - Public Collection, review and Space discovery, mixed Home and moderator work follow their owner disclosure rules.
   The moderator directory stays unavailable where authoritative Access currentness is unavailable; exact and manual
   report queues remain independent.
-- Articles and hosted works stay grant-closed until polished. Email and account mute/block remain deferred under
-  [public scope](../scope.md).
+- Articles and non-book hosted works stay grant-closed until polished; media retains its existing [public-scope
+  policy](../scope.md). Email and account mute/block remain deferred under [public scope](../scope.md).
 
 Completion covers the scoped outcomes on main with recorded HTTP/API, native command/effect/relay, default-worker,
 growth, installed public-root/callable, applicable browser receiving and promoted-commit checks. Specified,
@@ -40,10 +49,11 @@ implemented, exposed, tested and promoted remain separate stages; documentation 
 
 Content includes Kernel content, community and rating services and their composed product outcomes: boards, threads,
 posts, media, publication, reactions, ratings/reviews, Realm rating sorts, moderation, slow mode, watches, discovery
-and minimal in-app notices. Web owns the document package, editor, media transport and shared browser lifetimes.
-Accounts owns membership authority, preferences and lifecycle ports. Semantic owns subjects, Context and identity.
-Commerce owns Library, follows, Collections, financial and rights authority. Search owns public discovery sources,
-results, continuations and their query and default-worker assembly.
+and minimal in-app notices. Content owns hosted-book structures and Post revisions. Web owns the shared Studio and
+book reader, document package, editor, media transport and shared browser lifetimes. Accounts owns membership
+authority, preferences and lifecycle ports. Semantic owns Book/Series/Edition bibliography, subjects, Context and
+identity. Commerce owns personal Library, follows, Collections, financial and rights authority. Search owns public
+discovery sources, results, continuations and their query and default-worker assembly.
 
 ## Ownership
 
@@ -134,6 +144,12 @@ events and durable work; Web uploader transport and authenticated pages; and Sea
 Content owns only its composed outcomes and native adapters.
 
 ## Acceptance
+
+Native book API acceptance covers author draft management, nested part/chapter add/reorder/move, chapter editing,
+history/comparison and explicit atomic publication of exact TOC/body revisions. Read back the frozen public selection
+after further draft edits and moves; exact chapter links retain their selection, and unauthorized readers cannot read
+private drafts. Record the legacy parity comparison and demonstrable improvement required above. This gate does
+not replace [Web's mounted discovery, Library, Studio and reader journeys](web.md#acceptance).
 
 Use [capability acceptance](content.capabilities.md) for frozen scenarios and stage distinctions,
 [thread outcomes](../../specs/content-thread-outcomes.test.ts),

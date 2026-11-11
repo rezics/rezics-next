@@ -1,5 +1,47 @@
 # Content
 
+## Hosted book profile of Studio
+
+Studio uses ordinary Post drafts, ownership, immutable body revisions, preview and publication. A hosted book
+adds one catalogue at an existing Post identity, in that Post's home; `post:revise` on that Post controls structure
+editing and release. Columns and individual articles need no catalogue. No Subject, edition benefit, separate
+editor, scheduler or global grant is created. Bibliographic associations remain with Semantic.
+
+`hosted-chapters` owns immutable structure revisions and release manifests. Each structure is a bounded tree
+of at most 512 occurrences and depth 16. Parts may be empty; a root-only list is a tree. Caller-supplied occurrence
+UUIDs identify placements permanently, including across moves and removals. Distinct occurrences may select the
+same Post. An occurrence cannot change kind or target Post; chapter revision/digest selections may change in a
+new structure revision. Sibling positions are dense zero-based integers; the stored preorder supplies navigation.
+Replacing the structure requires its exact head revision. Commands use native receipts and reauthorize retries;
+an attachment failure rolls back only the structure command, never the independently saved Post.
+
+Release selects an ancestor-closed subset of a specific current structure and compares the previous publication
+ID, atomically appending a frozen manifest and advancing its public pointer. Unselected placements are absent.
+Ordinary Post publication remains the body publication boundary: a release neither publishes a draft Post nor
+grants draft access. Authors publish selected Posts through that existing boundary before public reading; other
+drafts stay private. Later body or structure edits do not change a released revision's bytes. Releasing an empty
+selection withdraws the current TOC; explicit historical manifests still obey current catalogue and target Access.
+
+The mounted `/v1/hostedCatalogues` operations create, revise, publish, read metadata, page children and resolve
+an occurrence at an explicit structure or publication revision. Omitted read revision selects the current release;
+`kind=structure` selects the current draft head for Studio resume. An explicit `revisionId` pins either kind;
+an accompanying kind must match. Private structure revisions additionally require current `post:revise`. Every read retains and finally rechecks
+the ordinary catalogue Post disclosure. Chapter rows and bytes additionally retain the exact target Post read,
+including Board, Realm, ancestry, erasure and revision disclosure. Unavailable chapter slots expose occurrence,
+parent, order and kind only; their title, target, digest and attribution are withheld. Available resolution delivers
+canonical Document bytes, SHA-256, original Post author and licence. No bodies are copied into hosted storage.
+
+Decision: books and columns share ordinary Post ownership and publication boundaries; the book profile adds immutable
+placements and release snapshots, and a release never publishes a target Post or grants draft access.
+
+Children and directional chapter navigation inspect at most 20 raw occurrences per page. Continuations bind the
+catalogue, selected revision, parent/direction, original frontier and actor; sparse results never refill or lose
+progress. Moving an occurrence changes only its address in the new revision, preserving old exact links.
+
+The [hosted catalogue API contract](hosted-chapters.md) defines operation IDs, request fields, current draft
+selection, canonical byte encoding, continuation binding, cost and integration boundaries. Native growth,
+schema dump refresh and installed client publication remain owned by the existing integration workflows.
+
 Decision: Content imports HTTP problem vocabulary, schemas, headers and Idempotency-Key decoding from their defining
 leaves, command request digests from `command/request.ts`, and the authentication error constructor from the Access
 contract. Request-facing authorization, actor resolution and prepared read checks use Content's existing

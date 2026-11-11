@@ -86,22 +86,30 @@ for (const source of ['vndb', 'wikidata'] as const) {
         const session = new ImportSession(state);
         try {
           const active = session.store.activeRun(source);
+          const latest = session.store.database
+            .query('SELECT id,acquisition_mode FROM run_generations WHERE source=? ORDER BY seq DESC LIMIT 1')
+            .get(source) as { id: string; acquisition_mode: string } | null;
           return {
             source: session.store.source(source),
             record: session.store.key(source, source === 'vndb' ? 'v123' : entity.id),
             pending: active ? session.store.pagePending(active, { limit: 100 }) : [],
+            acquisitionMode: latest?.acquisition_mode ?? null,
             acquisition:
-              source === 'vndb'
+              source === 'vndb' && latest
                 ? session.store.database
                     .query('SELECT run_id FROM vndb_table_runs WHERE source=? AND materialized_generation=?')
-                    .get(source, session.store.source(source).generation)
+                    .get(source, latest.id)
                 : null,
           };
         } finally {
           session.close();
         }
       };
-      async function invoke(generation: number, invalid = false) {
+      async function invoke(
+        generation: number,
+        invalid = false,
+        acquisitionMode: 'complete' | 'selected' = 'complete',
+      ) {
         let consumed = 0;
         controller = new AbortController();
         const record = structuredClone(entity);
@@ -129,7 +137,7 @@ for (const source of ['vndb', 'wikidata'] as const) {
             };
           }
         })();
-        const result = await runImportCli(argv, {
+        const result = await runImportCli([...argv, '--acquisition-mode', acquisitionMode], {
           signal: controller.signal,
           ...(source === 'vndb' ? { entries } : {}),
           stdin: (async function* () {
@@ -149,9 +157,10 @@ for (const source of ['vndb', 'wikidata'] as const) {
       expect((await invoke(0)).code).toBe(0);
       const baseline = inspect();
       lose = true;
-      expect([1, 130]).toContain((await invoke(1)).code);
+      expect([1, 130]).toContain((await invoke(1, false, 'selected')).code);
       const pending = inspect();
       expect(pending.source).toEqual(baseline.source);
+      expect(pending.acquisitionMode).toBe('selected');
       expect(pending.pending).toHaveLength(1);
       lose = false;
       const receiptCount = receipts.size;
@@ -163,14 +172,15 @@ for (const source of ['vndb', 'wikidata'] as const) {
         expect(sent.length).toBe(offset);
         expect(statistics.length).toBe(statsCount);
       }
-      const resumed = await invoke(2, source === 'wikidata');
+      const resumed = await invoke(2, source === 'wikidata', 'complete');
       expect(resumed.code).toBe(0);
       if (source === 'wikidata') expect(resumed.consumed).toBe(0);
       else expect(resumed.consumed).toBeGreaterThan(0);
       expect(sent.slice(offset)).toEqual(pending.pending.map((row) => row.bytes));
       expect(receipts.size).toBe(receiptCount);
-      expect(inspect().record.baseline!.recordRevision).toBe(String(source === 'vndb' ? 8 : entity.lastrevid + 1));
+      expect(inspect().record.baseline!.recordRevision).toBe(baseline.record.baseline!.recordRevision);
       const drained = inspect();
+      expect(drained.acquisitionMode).toBe('selected');
       if (source === 'vndb') expect(drained.acquisition).not.toEqual(baseline.acquisition);
       offset = sent.length;
       expect((await invoke(2, true)).code).toBe(2);
@@ -178,6 +188,7 @@ for (const source of ['vndb', 'wikidata'] as const) {
       expect(inspect().source).toEqual(drained.source);
       expect((await invoke(2)).code).toBe(0);
       expect(inspect().record.baseline!.recordRevision).toBe(String(source === 'vndb' ? 9 : entity.lastrevid + 2));
+      expect(inspect().acquisitionMode).toBe('complete');
       expect(sent.length).toBeGreaterThan(offset);
     } finally {
       await rm(directory, { recursive: true, force: true });

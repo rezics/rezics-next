@@ -236,6 +236,19 @@ $$;
 
 
 --
+-- Name: guard_hosted_snapshot(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_hosted_snapshot() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Hosted occurrence identities and snapshots are immutable' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
 -- Name: guard_identity(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -1365,6 +1378,80 @@ CREATE TABLE content.feed_inbox (
 --
 
 COMMENT ON TABLE content.feed_inbox IS 'Private recent candidate inbox, capped at 2000 references and read only within 30 days. No discovery authority.';
+
+
+--
+-- Name: hosted_catalogue; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_catalogue (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    head_revision_id uuid NOT NULL,
+    publication_id uuid,
+    CONSTRAINT hosted_catalogue_check CHECK ((route = ((get_byte(uuid_send(catalogue_id), 10) * 256) + get_byte(uuid_send(catalogue_id), 11)))),
+    CONSTRAINT hosted_catalogue_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: hosted_occurrence; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_occurrence (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    occurrence_id uuid NOT NULL,
+    kind text NOT NULL,
+    thread_id uuid,
+    post_id uuid,
+    CONSTRAINT hosted_occurrence_check CHECK ((((kind = 'part'::text) AND (thread_id IS NULL) AND (post_id IS NULL)) OR ((kind = 'chapter'::text) AND (thread_id IS NOT NULL) AND (post_id IS NOT NULL)))),
+    CONSTRAINT hosted_occurrence_check1 CHECK (((thread_id IS NULL) OR (((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)) = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11))))),
+    CONSTRAINT hosted_occurrence_check2 CHECK ((route = ((get_byte(uuid_send(occurrence_id), 10) * 256) + get_byte(uuid_send(occurrence_id), 11)))),
+    CONSTRAINT hosted_occurrence_kind_check CHECK ((kind = ANY (ARRAY['part'::text, 'chapter'::text])))
+);
+
+
+--
+-- Name: hosted_placement; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_placement (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    revision_id uuid NOT NULL,
+    occurrence_id uuid NOT NULL,
+    parent_id uuid,
+    "position" integer NOT NULL,
+    ordinal integer NOT NULL,
+    title text NOT NULL,
+    target_revision_id uuid,
+    body_sha256 bytea,
+    CONSTRAINT hosted_placement_check CHECK ((((target_revision_id IS NULL) AND (body_sha256 IS NULL)) OR ((target_revision_id IS NOT NULL) AND (body_sha256 IS NOT NULL) AND (octet_length(body_sha256) = 32)))),
+    CONSTRAINT hosted_placement_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 511))),
+    CONSTRAINT hosted_placement_position_check CHECK ((("position" >= 0) AND ("position" <= 511))),
+    CONSTRAINT hosted_placement_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 256)))
+);
+
+
+--
+-- Name: hosted_structure_revision; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_structure_revision (
+    route integer NOT NULL,
+    catalogue_id uuid NOT NULL,
+    revision_id uuid NOT NULL,
+    kind text NOT NULL,
+    source_revision_id uuid,
+    recorded_transaction_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT hosted_structure_revision_check CHECK (((kind = 'structure'::text) = (source_revision_id IS NULL))),
+    CONSTRAINT hosted_structure_revision_check1 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
+    CONSTRAINT hosted_structure_revision_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT hosted_structure_revision_kind_check CHECK ((kind = ANY (ARRAY['structure'::text, 'publication'::text])))
+);
 
 
 --
@@ -2874,6 +2961,54 @@ ALTER TABLE ONLY content.feed_inbox
 
 
 --
+-- Name: hosted_catalogue hosted_catalogue_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_catalogue
+    ADD CONSTRAINT hosted_catalogue_pkey PRIMARY KEY (route, catalogue_id);
+
+
+--
+-- Name: hosted_occurrence hosted_occurrence_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_occurrence
+    ADD CONSTRAINT hosted_occurrence_pkey PRIMARY KEY (route, catalogue_id, occurrence_id);
+
+
+--
+-- Name: hosted_placement hosted_placement_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_placement
+    ADD CONSTRAINT hosted_placement_pkey PRIMARY KEY (route, catalogue_id, revision_id, occurrence_id);
+
+
+--
+-- Name: hosted_placement hosted_placement_route_catalogue_id_revision_id_ordinal_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_placement
+    ADD CONSTRAINT hosted_placement_route_catalogue_id_revision_id_ordinal_key UNIQUE (route, catalogue_id, revision_id, ordinal);
+
+
+--
+-- Name: hosted_placement hosted_placement_route_catalogue_id_revision_id_parent_id_p_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_placement
+    ADD CONSTRAINT hosted_placement_route_catalogue_id_revision_id_parent_id_p_key UNIQUE NULLS NOT DISTINCT (route, catalogue_id, revision_id, parent_id, "position");
+
+
+--
+-- Name: hosted_structure_revision hosted_structure_revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_structure_revision
+    ADD CONSTRAINT hosted_structure_revision_pkey PRIMARY KEY (route, catalogue_id, revision_id);
+
+
+--
 -- Name: imported_field imported_field_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -3670,6 +3805,13 @@ CREATE INDEX feed_inbox_recent ON content.feed_inbox USING btree (route, account
 
 
 --
+-- Name: hosted_placement_navigation_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_placement_navigation_idx ON content.hosted_placement USING btree (route, catalogue_id, revision_id, ordinal) WHERE (target_revision_id IS NOT NULL);
+
+
+--
 -- Name: media_collection_eligible_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -4014,6 +4156,27 @@ CREATE TRIGGER edition_publication_identity BEFORE DELETE OR UPDATE ON content.e
 
 
 --
+-- Name: hosted_occurrence hosted_occurrence_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_occurrence_immutable BEFORE DELETE OR UPDATE ON content.hosted_occurrence FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_snapshot();
+
+
+--
+-- Name: hosted_placement hosted_placement_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_placement_immutable BEFORE DELETE OR UPDATE ON content.hosted_placement FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_snapshot();
+
+
+--
+-- Name: hosted_structure_revision hosted_structure_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_structure_immutable BEFORE DELETE OR UPDATE ON content.hosted_structure_revision FOR EACH ROW EXECUTE FUNCTION content.guard_hosted_snapshot();
+
+
+--
 -- Name: imported_field imported_field_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -4236,6 +4399,78 @@ ALTER TABLE ONLY content.conversation_activity_repair_frontier
 
 ALTER TABLE ONLY content.edition_publication
     ADD CONSTRAINT edition_publication_route_edition_id_fkey FOREIGN KEY (route, edition_id) REFERENCES content.edition(route, edition_id);
+
+
+--
+-- Name: hosted_catalogue hosted_catalogue_route_catalogue_id_head_revision_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_catalogue
+    ADD CONSTRAINT hosted_catalogue_route_catalogue_id_head_revision_id_fkey FOREIGN KEY (route, catalogue_id, head_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: hosted_catalogue hosted_catalogue_route_catalogue_id_publication_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_catalogue
+    ADD CONSTRAINT hosted_catalogue_route_catalogue_id_publication_id_fkey FOREIGN KEY (route, catalogue_id, publication_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: hosted_catalogue hosted_catalogue_route_thread_id_catalogue_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_catalogue
+    ADD CONSTRAINT hosted_catalogue_route_thread_id_catalogue_id_fkey FOREIGN KEY (route, thread_id, catalogue_id) REFERENCES content.post(route, thread_id, post_id);
+
+
+--
+-- Name: hosted_occurrence hosted_occurrence_route_catalogue_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_occurrence
+    ADD CONSTRAINT hosted_occurrence_route_catalogue_id_fkey FOREIGN KEY (route, catalogue_id) REFERENCES content.hosted_catalogue(route, catalogue_id);
+
+
+--
+-- Name: hosted_placement hosted_placement_route_catalogue_id_occurrence_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_placement
+    ADD CONSTRAINT hosted_placement_route_catalogue_id_occurrence_id_fkey FOREIGN KEY (route, catalogue_id, occurrence_id) REFERENCES content.hosted_occurrence(route, catalogue_id, occurrence_id);
+
+
+--
+-- Name: hosted_placement hosted_placement_route_catalogue_id_revision_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_placement
+    ADD CONSTRAINT hosted_placement_route_catalogue_id_revision_id_fkey FOREIGN KEY (route, catalogue_id, revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
+
+
+--
+-- Name: hosted_placement hosted_placement_route_catalogue_id_revision_id_parent_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_placement
+    ADD CONSTRAINT hosted_placement_route_catalogue_id_revision_id_parent_id_fkey FOREIGN KEY (route, catalogue_id, revision_id, parent_id) REFERENCES content.hosted_placement(route, catalogue_id, revision_id, occurrence_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: hosted_structure_revision hosted_structure_revision_route_catalogue_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_structure_revision
+    ADD CONSTRAINT hosted_structure_revision_route_catalogue_id_fkey FOREIGN KEY (route, catalogue_id) REFERENCES content.hosted_catalogue(route, catalogue_id);
+
+
+--
+-- Name: hosted_structure_revision hosted_structure_revision_route_catalogue_id_source_revisi_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_structure_revision
+    ADD CONSTRAINT hosted_structure_revision_route_catalogue_id_source_revisi_fkey FOREIGN KEY (route, catalogue_id, source_revision_id) REFERENCES content.hosted_structure_revision(route, catalogue_id, revision_id);
 
 
 --

@@ -66,7 +66,7 @@ import { DumpInputError } from './dump-input.ts';
 import { readDump } from './dumps.ts';
 import { ImportSession, type ImportOwnership, type ImportProcessIdentity } from './import-session.ts';
 import type { Candidate, Owner } from './record-bindings.ts';
-import type { DeferredCover, Omission, Pending, Run, SourceProjection, Staged } from './run-store.ts';
+import type { AcquisitionMode, DeferredCover, Omission, Pending, Run, SourceProjection, Staged } from './run-store.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import { resolveOwnReferences } from './own-references.ts';
 import { ConversionDiagnosticError, type ConversionDiagnosticPhase } from './conversion-diagnostics.ts';
@@ -141,6 +141,8 @@ export type ImportRunResult = {
   checkpointed?: boolean;
 };
 export type ImportRunOptions = {
+  /** Complete source snapshots are the default; partial observations must opt into selected mode. */
+  acquisitionMode?: AcquisitionMode;
   disappearanceThreshold?: number;
   maxRecordBytes?: number;
   /** Permit explicitly keyed, pinned Bangumi PersonDetail TSV rows. */
@@ -2908,10 +2910,12 @@ export class Importer {
       }
       if (!run) {
         if (checkpoint?.action === 'resume') return finish('invalid-dump', STAGING_MISSING_GENERATION);
-        const beginOptions =
-          options.disappearanceThreshold === undefined
+        const beginOptions = {
+          ...(options.disappearanceThreshold === undefined
             ? {}
-            : { disappearanceThreshold: options.disappearanceThreshold };
+            : { disappearanceThreshold: options.disappearanceThreshold }),
+          ...(options.acquisitionMode === undefined ? {} : { acquisitionMode: options.acquisitionMode }),
+        };
         const next =
           checkpoint?.action === 'acquire'
             ? store.beginCheckpointed(registration.source, checkpoint.identity, beginOptions)

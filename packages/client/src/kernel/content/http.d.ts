@@ -4,6 +4,7 @@ import type { Dependencies as NoticeDependencies } from './notice-routes.ts';
 import { noticeRoutes } from './notice-routes.ts';
 import type { Dependencies as MediaDependencies } from './media-routes.ts';
 import { mediaRoutes } from './media-routes.ts';
+import { hostedChapterRoutes } from './hosted-chapters-routes.ts';
 /** Explicit operands for Content's HTTP surface. The trusted kernel composition constructs each object; no
  * route reads the environment, the network, a UUID source or a clock by itself. */
 export type ContentHttpDependencies = Readonly<{
@@ -18406,6 +18407,1343 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 };
             };
         };
+    } & {
+        v1: {
+            threads: {
+                ":id": {
+                    watch: {
+                        delete: {
+                            body: unknown;
+                            params: {
+                                id: string;
+                            };
+                            query: unknown;
+                            headers: unknown;
+                            response: {
+                                204: void;
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: 'validation';
+                                    code: 'validation';
+                                    title: 'Validation Error';
+                                    status: 422;
+                                    detail?: string;
+                                    on: string;
+                                    found?: unknown;
+                                    property?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
+                                };
+                                500: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        v1: {
+            accounts: {
+                ":accountId": {
+                    hostedCatalogues: {
+                        get: {
+                            body: unknown;
+                            params: {
+                                accountId: string;
+                            };
+                            query: {
+                                scope?: "all-homes" | "same-home";
+                                cursor?: string;
+                                limit?: string;
+                            };
+                            headers: unknown;
+                            response: {
+                                200: {
+                                    scope: {
+                                        kind: "same-home";
+                                        route: number;
+                                        crossHome: "unavailable";
+                                    };
+                                    viewer: {
+                                        accountId: string;
+                                        authnEpoch: number;
+                                    };
+                                    items: {
+                                        catalogueId: string;
+                                        threadId: string;
+                                        createdAt: string;
+                                        postRevisionId: string;
+                                        postVisibility: "draft" | "protected" | "published";
+                                        headRevisionId: string;
+                                        publicationId: string | null;
+                                    }[];
+                                    nextCursor: string | null;
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                412: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                413: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                429: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                500: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        v1: {
+            accounts: {
+                ":accountId": {
+                    hostedCatalogues: {
+                        ":id": {
+                            get: {
+                                body: unknown;
+                                params: {
+                                    accountId: string;
+                                    id: string;
+                                };
+                                query: object;
+                                headers: unknown;
+                                response: {
+                                    200: {
+                                        scope: {
+                                            kind: "same-home";
+                                            route: number;
+                                            crossHome: "unavailable";
+                                        };
+                                        viewer: {
+                                            accountId: string;
+                                            authnEpoch: number;
+                                        };
+                                        item: {
+                                            catalogueId: string;
+                                            threadId: string;
+                                            createdAt: string;
+                                            postRevisionId: string;
+                                            postVisibility: "draft" | "protected" | "published";
+                                            headRevisionId: string;
+                                            publicationId: string | null;
+                                        };
+                                    };
+                                    400: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    403: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    412: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    413: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    429: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    500: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        v1: {
+            hostedCatalogues: {
+                post: {
+                    body: {
+                        postId: string;
+                        threadId: string;
+                        placements: ({
+                            occurrenceId: string;
+                            parentId: string | null;
+                            position: number;
+                            title: string;
+                            kind: "part";
+                        } | {
+                            occurrenceId: string;
+                            parentId: string | null;
+                            position: number;
+                            title: string;
+                            kind: "chapter";
+                            target: {
+                                threadId: string;
+                                postId: string;
+                                revisionId: string;
+                                sha256: string;
+                            };
+                        })[];
+                    };
+                    params: {};
+                    query: unknown;
+                    headers: {
+                        "idempotency-key": string;
+                    };
+                    response: {
+                        200: Readonly<{
+                            catalogueId: string;
+                            revisionId: string;
+                        }>;
+                        201: {
+                            catalogueId: string;
+                            revisionId: string;
+                        };
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        412: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        413: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        429: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        500: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    } & {
+        v1: {
+            hostedCatalogues: {
+                ":id": {
+                    $revise: {
+                        post: {
+                            body: {
+                                expectedRevisionId: string;
+                                placements: ({
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    title: string;
+                                    kind: "part";
+                                } | {
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    title: string;
+                                    kind: "chapter";
+                                    target: {
+                                        threadId: string;
+                                        postId: string;
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                })[];
+                            };
+                            params: {
+                                id: string;
+                            };
+                            query: unknown;
+                            headers: {
+                                "idempotency-key": string;
+                            };
+                            response: {
+                                200: {
+                                    catalogueId: string;
+                                    revisionId: string;
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                412: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                413: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                429: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                500: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        v1: {
+            hostedCatalogues: {
+                ":id": {
+                    $publish: {
+                        post: {
+                            body: {
+                                expectedRevisionId: string;
+                                expectedPublicationId: string | null;
+                                occurrenceIds: string[];
+                            };
+                            params: {
+                                id: string;
+                            };
+                            query: unknown;
+                            headers: {
+                                "idempotency-key": string;
+                            };
+                            response: {
+                                200: {
+                                    catalogueId: string;
+                                    revisionId: string;
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                412: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                413: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                429: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                500: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        v1: {
+            hostedCatalogues: {
+                ":id": {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            revisionId?: string;
+                            kind?: "publication" | "structure";
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                catalogueId: string;
+                                revisionId: string;
+                                kind: "publication" | "structure";
+                                sourceRevisionId: string | null;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            412: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            413: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            429: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    } & {
+        v1: {
+            hostedCatalogues: {
+                ":id": {
+                    children: {
+                        get: {
+                            body: unknown;
+                            params: {
+                                id: string;
+                            };
+                            query: {
+                                revisionId?: string;
+                                kind?: "publication" | "structure";
+                                cursor?: string;
+                                limit?: string;
+                                parentId?: string;
+                            };
+                            headers: unknown;
+                            response: {
+                                200: {
+                                    catalogueId: string;
+                                    revisionId: string;
+                                    kind: "publication" | "structure";
+                                    sourceRevisionId: string | null;
+                                    items: ({
+                                        occurrenceId: string;
+                                        parentId: string | null;
+                                        position: number;
+                                        kind: "chapter" | "part";
+                                        availability: "unavailable";
+                                    } | {
+                                        occurrenceId: string;
+                                        parentId: string | null;
+                                        position: number;
+                                        kind: "part";
+                                        availability: "available";
+                                        title: string;
+                                        target: null;
+                                    } | {
+                                        occurrenceId: string;
+                                        parentId: string | null;
+                                        position: number;
+                                        kind: "chapter";
+                                        availability: "available";
+                                        title: string;
+                                        target: {
+                                            threadId: string;
+                                            postId: string;
+                                            revisionId: string;
+                                            sha256: string;
+                                        };
+                                    })[];
+                                    nextCursor: string | null;
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                412: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                413: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                429: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                500: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        v1: {
+            hostedCatalogues: {
+                ":id": {
+                    occurrences: {
+                        ":occurrenceId": {
+                            get: {
+                                body: unknown;
+                                params: {
+                                    id: string;
+                                    occurrenceId: string;
+                                };
+                                query: {
+                                    revisionId?: string;
+                                    kind?: "publication" | "structure";
+                                };
+                                headers: unknown;
+                                response: {
+                                    200: {
+                                        catalogueId: string;
+                                        revisionId: string;
+                                        kind: "publication" | "structure";
+                                        sourceRevisionId: string | null;
+                                        occurrence: {
+                                            occurrenceId: string;
+                                            parentId: string | null;
+                                            position: number;
+                                            kind: "chapter" | "part";
+                                            availability: "unavailable";
+                                        } | {
+                                            occurrenceId: string;
+                                            parentId: string | null;
+                                            position: number;
+                                            kind: "part";
+                                            availability: "available";
+                                            title: string;
+                                            target: null;
+                                        } | {
+                                            occurrenceId: string;
+                                            parentId: string | null;
+                                            position: number;
+                                            kind: "chapter";
+                                            availability: "available";
+                                            title: string;
+                                            target: {
+                                                threadId: string;
+                                                postId: string;
+                                                revisionId: string;
+                                                sha256: string;
+                                            };
+                                        };
+                                        document: {
+                                            encoding: "base64";
+                                            canonicalBytes: string;
+                                            sha256: string;
+                                            authorId: string;
+                                            licence: string;
+                                        } | null;
+                                    };
+                                    400: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    403: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    412: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    413: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    429: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    500: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
+                    };
+                };
+            };
+        };
     }, import("elysia").DefaultEphemeral, {
         derive: {
             readonly admission: import("../http/admission.ts").Admission;
@@ -18427,10 +19765,64 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
         schemas: {};
         response: {};
         error: [];
-    }, "delete", "/v1/threads/:id/watch", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+    }, "get", "/v1/hostedCatalogues/:id/occurrences/:occurrenceId/navigation", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
             id: import("typebox").TString;
+            occurrenceId: import("typebox").TString;
         }>;
+        query: {
+            '~standard': {
+                version: 1;
+                vendor: string;
+                types: {
+                    input: {
+                        revisionId?: string;
+                        kind?: "publication" | "structure";
+                        cursor?: string;
+                        limit?: string;
+                        direction: "next" | "previous";
+                    };
+                    output: {
+                        revisionId?: string;
+                        kind?: "publication" | "structure";
+                        cursor?: string;
+                        limit?: string;
+                        direction: "next" | "previous";
+                    };
+                } | undefined;
+                validate(value: unknown): {
+                    value: {
+                        revisionId?: string;
+                        kind?: "publication" | "structure";
+                        cursor?: string;
+                        limit?: string;
+                        direction: "next" | "previous";
+                    };
+                    issues?: never;
+                } | {
+                    value?: never;
+                    issues: {
+                        message: string;
+                    }[];
+                };
+                jsonSchema: {
+                    input: () => import("typebox").TObject<{
+                        revisionId: import("typebox").TOptional<import("typebox").TString>;
+                        kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>>;
+                        cursor: import("typebox").TOptional<import("typebox").TString>;
+                        limit: import("typebox").TOptional<import("typebox").TString>;
+                        direction: import("typebox").TUnion<[import("typebox").TLiteral<"previous">, import("typebox").TLiteral<"next">]>;
+                    }>;
+                    output: () => import("typebox").TObject<{
+                        revisionId: import("typebox").TOptional<import("typebox").TString>;
+                        kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>>;
+                        cursor: import("typebox").TOptional<import("typebox").TString>;
+                        limit: import("typebox").TOptional<import("typebox").TString>;
+                        direction: import("typebox").TUnion<[import("typebox").TLiteral<"previous">, import("typebox").TLiteral<"next">]>;
+                    }>;
+                };
+            };
+        };
         response: {
             400: import("typebox").TObject<{
                 type: import("typebox").TSchema;
@@ -18460,7 +19852,77 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
+            403: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
             404: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            412: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            413: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            422: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            429: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -18502,20 +19964,213 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
-            204: import("typebox").TVoid;
+            200: {
+                '~standard': {
+                    version: 1;
+                    vendor: string;
+                    types: {
+                        input: {
+                            catalogueId: string;
+                            revisionId: string;
+                            kind: "publication" | "structure";
+                            sourceRevisionId: string | null;
+                            items: ({
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "chapter" | "part";
+                                availability: "unavailable";
+                            } | {
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "part";
+                                availability: "available";
+                                title: string;
+                                target: null;
+                            } | {
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "chapter";
+                                availability: "available";
+                                title: string;
+                                target: {
+                                    threadId: string;
+                                    postId: string;
+                                    revisionId: string;
+                                    sha256: string;
+                                };
+                            })[];
+                            nextCursor: string | null;
+                        };
+                        output: {
+                            catalogueId: string;
+                            revisionId: string;
+                            kind: "publication" | "structure";
+                            sourceRevisionId: string | null;
+                            items: ({
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "chapter" | "part";
+                                availability: "unavailable";
+                            } | {
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "part";
+                                availability: "available";
+                                title: string;
+                                target: null;
+                            } | {
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "chapter";
+                                availability: "available";
+                                title: string;
+                                target: {
+                                    threadId: string;
+                                    postId: string;
+                                    revisionId: string;
+                                    sha256: string;
+                                };
+                            })[];
+                            nextCursor: string | null;
+                        };
+                    } | undefined;
+                    validate(value: unknown): {
+                        value: {
+                            catalogueId: string;
+                            revisionId: string;
+                            kind: "publication" | "structure";
+                            sourceRevisionId: string | null;
+                            items: ({
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "chapter" | "part";
+                                availability: "unavailable";
+                            } | {
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "part";
+                                availability: "available";
+                                title: string;
+                                target: null;
+                            } | {
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "chapter";
+                                availability: "available";
+                                title: string;
+                                target: {
+                                    threadId: string;
+                                    postId: string;
+                                    revisionId: string;
+                                    sha256: string;
+                                };
+                            })[];
+                            nextCursor: string | null;
+                        };
+                        issues?: never;
+                    } | {
+                        value?: never;
+                        issues: {
+                            message: string;
+                        }[];
+                    };
+                    jsonSchema: {
+                        input: () => import("typebox").TObject<{
+                            catalogueId: import("typebox").TString;
+                            revisionId: import("typebox").TString;
+                            kind: import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>;
+                            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+                                occurrenceId: import("typebox").TString;
+                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                position: import("typebox").TInteger;
+                                kind: import("typebox").TUnion<[import("typebox").TLiteral<"part">, import("typebox").TLiteral<"chapter">]>;
+                                availability: import("typebox").TLiteral<"unavailable">;
+                            }>, import("typebox").TObject<{
+                                occurrenceId: import("typebox").TString;
+                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                position: import("typebox").TInteger;
+                                kind: import("typebox").TLiteral<"part">;
+                                availability: import("typebox").TLiteral<"available">;
+                                title: import("typebox").TString;
+                                target: import("typebox").TNull;
+                            }>, import("typebox").TObject<{
+                                occurrenceId: import("typebox").TString;
+                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                position: import("typebox").TInteger;
+                                kind: import("typebox").TLiteral<"chapter">;
+                                availability: import("typebox").TLiteral<"available">;
+                                title: import("typebox").TString;
+                                target: import("typebox").TObject<{
+                                    threadId: import("typebox").TString;
+                                    postId: import("typebox").TString;
+                                    revisionId: import("typebox").TString;
+                                    sha256: import("typebox").TString;
+                                }>;
+                            }>]>>;
+                            nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        }>;
+                        output: () => import("typebox").TObject<{
+                            catalogueId: import("typebox").TString;
+                            revisionId: import("typebox").TString;
+                            kind: import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>;
+                            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+                                occurrenceId: import("typebox").TString;
+                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                position: import("typebox").TInteger;
+                                kind: import("typebox").TUnion<[import("typebox").TLiteral<"part">, import("typebox").TLiteral<"chapter">]>;
+                                availability: import("typebox").TLiteral<"unavailable">;
+                            }>, import("typebox").TObject<{
+                                occurrenceId: import("typebox").TString;
+                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                position: import("typebox").TInteger;
+                                kind: import("typebox").TLiteral<"part">;
+                                availability: import("typebox").TLiteral<"available">;
+                                title: import("typebox").TString;
+                                target: import("typebox").TNull;
+                            }>, import("typebox").TObject<{
+                                occurrenceId: import("typebox").TString;
+                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                position: import("typebox").TInteger;
+                                kind: import("typebox").TLiteral<"chapter">;
+                                availability: import("typebox").TLiteral<"available">;
+                                title: import("typebox").TString;
+                                target: import("typebox").TObject<{
+                                    threadId: import("typebox").TString;
+                                    postId: import("typebox").TString;
+                                    revisionId: import("typebox").TString;
+                                    sha256: import("typebox").TString;
+                                }>;
+                            }>]>>;
+                            nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        }>;
+                    };
+                };
+            } & {
+                headers: {
+                    "rezics-session-token": import("typebox").TString;
+                    'cache-control': import("typebox").TString;
+                };
+            };
         };
         detail: {
-            operationId: string;
-            'x-authority-resource-types': string[];
-            'x-resource-types': string[];
             'x-exposure': string;
+            'x-resource-types': string[];
             'x-action': string;
-            'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-            security: {
-                bearerAuth: never[];
-            }[];
+            security: Record<string, string[]>[];
+            operationId: string;
         };
-    }, {}, "/v1/threads/:id/watch">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params: { id }, actor, admission, job, set }: {
+    }, {}, "/v1/hostedCatalogues/:id/occurrences/:occurrenceId/navigation">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params: { id, occurrenceId }, query, admission, job, session, set }: {
         server: import("elysia").Server | null;
         redirect: import("elysia").redirect;
         set: {
@@ -18547,7 +20202,62 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 detail: unknown;
                 errors: unknown;
             };
+            403: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
             404: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            412: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            413: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            422: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            429: {
                 type: unknown;
                 title: unknown;
                 status: number;
@@ -18580,7 +20290,41 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 detail: unknown;
                 errors: unknown;
             };
-            204: void;
+            200: {
+                catalogueId: string;
+                revisionId: string;
+                kind: "publication" | "structure";
+                sourceRevisionId: string | null;
+                items: ({
+                    occurrenceId: string;
+                    parentId: string | null;
+                    position: number;
+                    kind: "chapter" | "part";
+                    availability: "unavailable";
+                } | {
+                    occurrenceId: string;
+                    parentId: string | null;
+                    position: number;
+                    kind: "part";
+                    availability: "available";
+                    title: string;
+                    target: null;
+                } | {
+                    occurrenceId: string;
+                    parentId: string | null;
+                    position: number;
+                    kind: "chapter";
+                    availability: "available";
+                    title: string;
+                    target: {
+                        threadId: string;
+                        postId: string;
+                        revisionId: string;
+                        sha256: string;
+                    };
+                })[];
+                nextCursor: string | null;
+            };
         }>;
         problem: import("elysia").SelectiveProblem<{
             400: {
@@ -18605,7 +20349,62 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 detail: unknown;
                 errors: unknown;
             };
+            403: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
             404: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            412: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            413: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            422: {
+                type: unknown;
+                title: unknown;
+                status: number;
+                code: unknown;
+                retryable: unknown;
+                effect_status: "not_applicable" | "not_applied";
+                request_id: string;
+                detail: unknown;
+                errors: unknown;
+            };
+            429: {
                 type: unknown;
                 title: unknown;
                 status: number;
@@ -18638,12 +20437,100 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                 detail: unknown;
                 errors: unknown;
             };
-            204: void;
+            200: {
+                catalogueId: string;
+                revisionId: string;
+                kind: "publication" | "structure";
+                sourceRevisionId: string | null;
+                items: ({
+                    occurrenceId: string;
+                    parentId: string | null;
+                    position: number;
+                    kind: "chapter" | "part";
+                    availability: "unavailable";
+                } | {
+                    occurrenceId: string;
+                    parentId: string | null;
+                    position: number;
+                    kind: "part";
+                    availability: "available";
+                    title: string;
+                    target: null;
+                } | {
+                    occurrenceId: string;
+                    parentId: string | null;
+                    position: number;
+                    kind: "chapter";
+                    availability: "available";
+                    title: string;
+                    target: {
+                        threadId: string;
+                        postId: string;
+                        revisionId: string;
+                        sha256: string;
+                    };
+                })[];
+                nextCursor: string | null;
+            };
         }>;
         defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
             params: import("typebox").TObject<{
                 id: import("typebox").TString;
+                occurrenceId: import("typebox").TString;
             }>;
+            query: {
+                '~standard': {
+                    version: 1;
+                    vendor: string;
+                    types: {
+                        input: {
+                            revisionId?: string;
+                            kind?: "publication" | "structure";
+                            cursor?: string;
+                            limit?: string;
+                            direction: "next" | "previous";
+                        };
+                        output: {
+                            revisionId?: string;
+                            kind?: "publication" | "structure";
+                            cursor?: string;
+                            limit?: string;
+                            direction: "next" | "previous";
+                        };
+                    } | undefined;
+                    validate(value: unknown): {
+                        value: {
+                            revisionId?: string;
+                            kind?: "publication" | "structure";
+                            cursor?: string;
+                            limit?: string;
+                            direction: "next" | "previous";
+                        };
+                        issues?: never;
+                    } | {
+                        value?: never;
+                        issues: {
+                            message: string;
+                        }[];
+                    };
+                    jsonSchema: {
+                        input: () => import("typebox").TObject<{
+                            revisionId: import("typebox").TOptional<import("typebox").TString>;
+                            kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>>;
+                            cursor: import("typebox").TOptional<import("typebox").TString>;
+                            limit: import("typebox").TOptional<import("typebox").TString>;
+                            direction: import("typebox").TUnion<[import("typebox").TLiteral<"previous">, import("typebox").TLiteral<"next">]>;
+                        }>;
+                        output: () => import("typebox").TObject<{
+                            revisionId: import("typebox").TOptional<import("typebox").TString>;
+                            kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>>;
+                            cursor: import("typebox").TOptional<import("typebox").TString>;
+                            limit: import("typebox").TOptional<import("typebox").TString>;
+                            direction: import("typebox").TUnion<[import("typebox").TLiteral<"previous">, import("typebox").TLiteral<"next">]>;
+                        }>;
+                    };
+                };
+            };
             response: {
                 400: import("typebox").TObject<{
                     type: import("typebox").TSchema;
@@ -18673,7 +20560,77 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                         code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                     }>>>;
                 }>;
+                403: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
                 404: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                412: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                413: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                422: import("typebox").TObject<{
+                    type: import("typebox").TSchema;
+                    title: import("typebox").TSchema;
+                    status: import("typebox").TLiteral<number>;
+                    code: import("typebox").TSchema;
+                    retryable: import("typebox").TSchema;
+                    effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                    request_id: import("typebox").TString;
+                    detail?: import("typebox").TOptional<import("typebox").TString>;
+                    errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        pointer: import("typebox").TString;
+                        code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                    }>>>;
+                }>;
+                429: import("typebox").TObject<{
                     type: import("typebox").TSchema;
                     title: import("typebox").TSchema;
                     status: import("typebox").TLiteral<number>;
@@ -18715,20 +20672,213 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                         code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                     }>>>;
                 }>;
-                204: import("typebox").TVoid;
+                200: {
+                    '~standard': {
+                        version: 1;
+                        vendor: string;
+                        types: {
+                            input: {
+                                catalogueId: string;
+                                revisionId: string;
+                                kind: "publication" | "structure";
+                                sourceRevisionId: string | null;
+                                items: ({
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    kind: "chapter" | "part";
+                                    availability: "unavailable";
+                                } | {
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    kind: "part";
+                                    availability: "available";
+                                    title: string;
+                                    target: null;
+                                } | {
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    kind: "chapter";
+                                    availability: "available";
+                                    title: string;
+                                    target: {
+                                        threadId: string;
+                                        postId: string;
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                })[];
+                                nextCursor: string | null;
+                            };
+                            output: {
+                                catalogueId: string;
+                                revisionId: string;
+                                kind: "publication" | "structure";
+                                sourceRevisionId: string | null;
+                                items: ({
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    kind: "chapter" | "part";
+                                    availability: "unavailable";
+                                } | {
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    kind: "part";
+                                    availability: "available";
+                                    title: string;
+                                    target: null;
+                                } | {
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    kind: "chapter";
+                                    availability: "available";
+                                    title: string;
+                                    target: {
+                                        threadId: string;
+                                        postId: string;
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                })[];
+                                nextCursor: string | null;
+                            };
+                        } | undefined;
+                        validate(value: unknown): {
+                            value: {
+                                catalogueId: string;
+                                revisionId: string;
+                                kind: "publication" | "structure";
+                                sourceRevisionId: string | null;
+                                items: ({
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    kind: "chapter" | "part";
+                                    availability: "unavailable";
+                                } | {
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    kind: "part";
+                                    availability: "available";
+                                    title: string;
+                                    target: null;
+                                } | {
+                                    occurrenceId: string;
+                                    parentId: string | null;
+                                    position: number;
+                                    kind: "chapter";
+                                    availability: "available";
+                                    title: string;
+                                    target: {
+                                        threadId: string;
+                                        postId: string;
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                })[];
+                                nextCursor: string | null;
+                            };
+                            issues?: never;
+                        } | {
+                            value?: never;
+                            issues: {
+                                message: string;
+                            }[];
+                        };
+                        jsonSchema: {
+                            input: () => import("typebox").TObject<{
+                                catalogueId: import("typebox").TString;
+                                revisionId: import("typebox").TString;
+                                kind: import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>;
+                                sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+                                    occurrenceId: import("typebox").TString;
+                                    parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    position: import("typebox").TInteger;
+                                    kind: import("typebox").TUnion<[import("typebox").TLiteral<"part">, import("typebox").TLiteral<"chapter">]>;
+                                    availability: import("typebox").TLiteral<"unavailable">;
+                                }>, import("typebox").TObject<{
+                                    occurrenceId: import("typebox").TString;
+                                    parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    position: import("typebox").TInteger;
+                                    kind: import("typebox").TLiteral<"part">;
+                                    availability: import("typebox").TLiteral<"available">;
+                                    title: import("typebox").TString;
+                                    target: import("typebox").TNull;
+                                }>, import("typebox").TObject<{
+                                    occurrenceId: import("typebox").TString;
+                                    parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    position: import("typebox").TInteger;
+                                    kind: import("typebox").TLiteral<"chapter">;
+                                    availability: import("typebox").TLiteral<"available">;
+                                    title: import("typebox").TString;
+                                    target: import("typebox").TObject<{
+                                        threadId: import("typebox").TString;
+                                        postId: import("typebox").TString;
+                                        revisionId: import("typebox").TString;
+                                        sha256: import("typebox").TString;
+                                    }>;
+                                }>]>>;
+                                nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>;
+                            output: () => import("typebox").TObject<{
+                                catalogueId: import("typebox").TString;
+                                revisionId: import("typebox").TString;
+                                kind: import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>;
+                                sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+                                    occurrenceId: import("typebox").TString;
+                                    parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    position: import("typebox").TInteger;
+                                    kind: import("typebox").TUnion<[import("typebox").TLiteral<"part">, import("typebox").TLiteral<"chapter">]>;
+                                    availability: import("typebox").TLiteral<"unavailable">;
+                                }>, import("typebox").TObject<{
+                                    occurrenceId: import("typebox").TString;
+                                    parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    position: import("typebox").TInteger;
+                                    kind: import("typebox").TLiteral<"part">;
+                                    availability: import("typebox").TLiteral<"available">;
+                                    title: import("typebox").TString;
+                                    target: import("typebox").TNull;
+                                }>, import("typebox").TObject<{
+                                    occurrenceId: import("typebox").TString;
+                                    parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                    position: import("typebox").TInteger;
+                                    kind: import("typebox").TLiteral<"chapter">;
+                                    availability: import("typebox").TLiteral<"available">;
+                                    title: import("typebox").TString;
+                                    target: import("typebox").TObject<{
+                                        threadId: import("typebox").TString;
+                                        postId: import("typebox").TString;
+                                        revisionId: import("typebox").TString;
+                                        sha256: import("typebox").TString;
+                                    }>;
+                                }>]>>;
+                                nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>;
+                        };
+                    };
+                } & {
+                    headers: {
+                        "rezics-session-token": import("typebox").TString;
+                        'cache-control': import("typebox").TString;
+                    };
+                };
             };
             detail: {
-                operationId: string;
-                'x-authority-resource-types': string[];
-                'x-resource-types': string[];
                 'x-exposure': string;
+                'x-resource-types': string[];
                 'x-action': string;
-                'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-                security: {
-                    bearerAuth: never[];
-                }[];
+                security: Record<string, string[]>[];
+                operationId: string;
             };
-        }, {}, "/v1/threads/:id/watch">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+        }, {}, "/v1/hostedCatalogues/:id/occurrences/:occurrenceId/navigation">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
             derive: {
                 readonly admission: import("../http/admission.ts").Admission;
                 readonly job: {
@@ -18752,9 +20902,16 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
         request: Request;
         store: {};
         body: unknown;
-        query: Record<string, string | undefined>;
+        query: {
+            revisionId?: string;
+            kind?: "publication" | "structure";
+            cursor?: string;
+            limit?: string;
+            direction: "next" | "previous";
+        };
         params: {
             id: string;
+            occurrenceId: string;
         };
         headers: Record<string, string | undefined>;
         cookie: Record<string, import("elysia").Cookie<unknown>>;
@@ -18772,10 +20929,71 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
         };
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
         readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
-    }) => Promise<void>, {
+    }) => Promise<{
+        catalogueId: string;
+        revisionId: string;
+        kind: 'structure' | 'publication';
+        sourceRevisionId: string | null;
+        nextCursor: string | null;
+        items: import("./hosted-chapters-model.ts").HostedOccurrenceView[];
+    }>, {
         params: import("typebox").TObject<{
             id: import("typebox").TString;
+            occurrenceId: import("typebox").TString;
         }>;
+        query: {
+            '~standard': {
+                version: 1;
+                vendor: string;
+                types: {
+                    input: {
+                        revisionId?: string;
+                        kind?: "publication" | "structure";
+                        cursor?: string;
+                        limit?: string;
+                        direction: "next" | "previous";
+                    };
+                    output: {
+                        revisionId?: string;
+                        kind?: "publication" | "structure";
+                        cursor?: string;
+                        limit?: string;
+                        direction: "next" | "previous";
+                    };
+                } | undefined;
+                validate(value: unknown): {
+                    value: {
+                        revisionId?: string;
+                        kind?: "publication" | "structure";
+                        cursor?: string;
+                        limit?: string;
+                        direction: "next" | "previous";
+                    };
+                    issues?: never;
+                } | {
+                    value?: never;
+                    issues: {
+                        message: string;
+                    }[];
+                };
+                jsonSchema: {
+                    input: () => import("typebox").TObject<{
+                        revisionId: import("typebox").TOptional<import("typebox").TString>;
+                        kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>>;
+                        cursor: import("typebox").TOptional<import("typebox").TString>;
+                        limit: import("typebox").TOptional<import("typebox").TString>;
+                        direction: import("typebox").TUnion<[import("typebox").TLiteral<"previous">, import("typebox").TLiteral<"next">]>;
+                    }>;
+                    output: () => import("typebox").TObject<{
+                        revisionId: import("typebox").TOptional<import("typebox").TString>;
+                        kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>>;
+                        cursor: import("typebox").TOptional<import("typebox").TString>;
+                        limit: import("typebox").TOptional<import("typebox").TString>;
+                        direction: import("typebox").TUnion<[import("typebox").TLiteral<"previous">, import("typebox").TLiteral<"next">]>;
+                    }>;
+                };
+            };
+        };
         response: {
             400: import("typebox").TObject<{
                 type: import("typebox").TSchema;
@@ -18805,7 +21023,77 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
+            403: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
             404: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            412: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            413: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            422: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
+                }>>>;
+            }>;
+            429: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -18847,18 +21135,211 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                     code: import("typebox").TUnion<import("typebox").TLiteral<import("../http/problem-error.ts").FieldErrorCode>[]>;
                 }>>>;
             }>;
-            204: import("typebox").TVoid;
+            200: {
+                '~standard': {
+                    version: 1;
+                    vendor: string;
+                    types: {
+                        input: {
+                            catalogueId: string;
+                            revisionId: string;
+                            kind: "publication" | "structure";
+                            sourceRevisionId: string | null;
+                            items: ({
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "chapter" | "part";
+                                availability: "unavailable";
+                            } | {
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "part";
+                                availability: "available";
+                                title: string;
+                                target: null;
+                            } | {
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "chapter";
+                                availability: "available";
+                                title: string;
+                                target: {
+                                    threadId: string;
+                                    postId: string;
+                                    revisionId: string;
+                                    sha256: string;
+                                };
+                            })[];
+                            nextCursor: string | null;
+                        };
+                        output: {
+                            catalogueId: string;
+                            revisionId: string;
+                            kind: "publication" | "structure";
+                            sourceRevisionId: string | null;
+                            items: ({
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "chapter" | "part";
+                                availability: "unavailable";
+                            } | {
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "part";
+                                availability: "available";
+                                title: string;
+                                target: null;
+                            } | {
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "chapter";
+                                availability: "available";
+                                title: string;
+                                target: {
+                                    threadId: string;
+                                    postId: string;
+                                    revisionId: string;
+                                    sha256: string;
+                                };
+                            })[];
+                            nextCursor: string | null;
+                        };
+                    } | undefined;
+                    validate(value: unknown): {
+                        value: {
+                            catalogueId: string;
+                            revisionId: string;
+                            kind: "publication" | "structure";
+                            sourceRevisionId: string | null;
+                            items: ({
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "chapter" | "part";
+                                availability: "unavailable";
+                            } | {
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "part";
+                                availability: "available";
+                                title: string;
+                                target: null;
+                            } | {
+                                occurrenceId: string;
+                                parentId: string | null;
+                                position: number;
+                                kind: "chapter";
+                                availability: "available";
+                                title: string;
+                                target: {
+                                    threadId: string;
+                                    postId: string;
+                                    revisionId: string;
+                                    sha256: string;
+                                };
+                            })[];
+                            nextCursor: string | null;
+                        };
+                        issues?: never;
+                    } | {
+                        value?: never;
+                        issues: {
+                            message: string;
+                        }[];
+                    };
+                    jsonSchema: {
+                        input: () => import("typebox").TObject<{
+                            catalogueId: import("typebox").TString;
+                            revisionId: import("typebox").TString;
+                            kind: import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>;
+                            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+                                occurrenceId: import("typebox").TString;
+                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                position: import("typebox").TInteger;
+                                kind: import("typebox").TUnion<[import("typebox").TLiteral<"part">, import("typebox").TLiteral<"chapter">]>;
+                                availability: import("typebox").TLiteral<"unavailable">;
+                            }>, import("typebox").TObject<{
+                                occurrenceId: import("typebox").TString;
+                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                position: import("typebox").TInteger;
+                                kind: import("typebox").TLiteral<"part">;
+                                availability: import("typebox").TLiteral<"available">;
+                                title: import("typebox").TString;
+                                target: import("typebox").TNull;
+                            }>, import("typebox").TObject<{
+                                occurrenceId: import("typebox").TString;
+                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                position: import("typebox").TInteger;
+                                kind: import("typebox").TLiteral<"chapter">;
+                                availability: import("typebox").TLiteral<"available">;
+                                title: import("typebox").TString;
+                                target: import("typebox").TObject<{
+                                    threadId: import("typebox").TString;
+                                    postId: import("typebox").TString;
+                                    revisionId: import("typebox").TString;
+                                    sha256: import("typebox").TString;
+                                }>;
+                            }>]>>;
+                            nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        }>;
+                        output: () => import("typebox").TObject<{
+                            catalogueId: import("typebox").TString;
+                            revisionId: import("typebox").TString;
+                            kind: import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>;
+                            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+                                occurrenceId: import("typebox").TString;
+                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                position: import("typebox").TInteger;
+                                kind: import("typebox").TUnion<[import("typebox").TLiteral<"part">, import("typebox").TLiteral<"chapter">]>;
+                                availability: import("typebox").TLiteral<"unavailable">;
+                            }>, import("typebox").TObject<{
+                                occurrenceId: import("typebox").TString;
+                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                position: import("typebox").TInteger;
+                                kind: import("typebox").TLiteral<"part">;
+                                availability: import("typebox").TLiteral<"available">;
+                                title: import("typebox").TString;
+                                target: import("typebox").TNull;
+                            }>, import("typebox").TObject<{
+                                occurrenceId: import("typebox").TString;
+                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                position: import("typebox").TInteger;
+                                kind: import("typebox").TLiteral<"chapter">;
+                                availability: import("typebox").TLiteral<"available">;
+                                title: import("typebox").TString;
+                                target: import("typebox").TObject<{
+                                    threadId: import("typebox").TString;
+                                    postId: import("typebox").TString;
+                                    revisionId: import("typebox").TString;
+                                    sha256: import("typebox").TString;
+                                }>;
+                            }>]>>;
+                            nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        }>;
+                    };
+                };
+            } & {
+                headers: {
+                    "rezics-session-token": import("typebox").TString;
+                    'cache-control': import("typebox").TString;
+                };
+            };
         };
         detail: {
-            operationId: string;
-            'x-authority-resource-types': string[];
-            'x-resource-types': string[];
             'x-exposure': string;
+            'x-resource-types': string[];
             'x-action': string;
-            'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-            security: {
-                bearerAuth: never[];
-            }[];
+            security: Record<string, string[]>[];
+            operationId: string;
         };
     }>;
     media: import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -27624,7 +30105,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
     }>;
 };
 /** The route surface Content contributes to the kernel's composed type. */
-export type ContentHttpRoutes = ReturnType<typeof contentRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof mediaRoutes>;
+export type ContentHttpRoutes = ReturnType<typeof contentRoutes> & ReturnType<typeof hostedChapterRoutes> & ReturnType<typeof noticeRoutes> & ReturnType<typeof subjectReactionRoutes> & ReturnType<typeof mediaRoutes>;
 /** HTTP composition reads the same declaration as the worker: events, operations, permissions, work,
  * effects, plus the mount function this module owns. */
 export declare function contentHttpDeclaration(): Readonly<{

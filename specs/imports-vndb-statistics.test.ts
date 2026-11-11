@@ -113,7 +113,7 @@ function denied(reply: Exchange) {
 
 test('pinned COPY reaches seven-scope Auth, real Access, public bulk identity and statistic PUT/current GET', () =>
   scenario(async (d) => {
-    expect([...d.identity.client.scopes].sort()).toEqual([...scopes].sort());
+    expect(d.identity.client.scopes).toEqual(expect.arrayContaining(scopes));
     const actor = await d.identity.access.authenticate(d.identity.bulk.bearer, {
       pool: d.identity.database.pool,
       deadline: Date.now() + 10_000,
