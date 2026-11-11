@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { useId, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import type {
   PersonalEntryObservation,
@@ -201,20 +203,47 @@ function ModeSelect({
   disabled: boolean;
   onChange: (value: CorrectionOperation) => void;
 }) {
+  const correctionModeSelectId = useId();
+  const correctionModeOptions = [
+    { value: 'preserve', label: m.library_rich_entry_preserve() },
+    { value: 'clear', label: m.library_rich_entry_clear_fact() },
+    { value: 'set', label: m.library_rich_entry_set_fact() },
+  ];
   return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-medium">{label}</span>
-      <select
-        className="min-h-11 w-full rounded-md border bg-background px-3"
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.currentTarget.value as CorrectionOperation)}
+    <Field className="block gap-1">
+      <FieldLabel
+        id={`${correctionModeSelectId}-label`}
+        htmlFor={correctionModeSelectId}
+        className="mb-1 block text-sm font-medium"
       >
-        <option value="preserve">{m.library_rich_entry_preserve()}</option>
-        <option value="clear">{m.library_rich_entry_clear_fact()}</option>
-        <option value="set">{m.library_rich_entry_set_fact()}</option>
-      </select>
-    </label>
+        {label}
+      </FieldLabel>
+      <Select<string, false>
+        items={correctionModeOptions}
+        disabled={disabled}
+        value={value}
+        onValueChange={(next) => {
+          if (next === 'preserve' || next === 'clear' || next === 'set') onChange(next);
+        }}
+      >
+        <SelectTrigger
+          id={correctionModeSelectId}
+          aria-labelledby={`${correctionModeSelectId}-label`}
+          className="min-h-11 w-full rounded-md border bg-background px-3"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false}>
+          <SelectGroup>
+            {correctionModeOptions.map(({ value, label, ...itemProps }) => (
+              <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </Field>
   );
 }
 
@@ -231,7 +260,14 @@ function PrivacyCorrectionField({
   issue: SourceCorrectionIssue | undefined;
   onChange: (draft: PrivacyCorrectionDraft) => void;
 }) {
+  const privacyKindSelectId = useId();
   const errorId = 'source-correction-privacy-error';
+  const privacyKindOptions = [
+    { value: 'private', label: m.library_rich_source_private() },
+    { value: 'source_visible', label: m.library_rich_source_visible() },
+    { value: 'unknown', label: m.library_rich_source_unknown() },
+    { value: 'absent', label: m.library_rich_source_not_supplied() },
+  ];
   return (
     <fieldset className="space-y-3 rounded-md border p-3" aria-describedby={issue ? errorId : undefined}>
       <legend className="px-1 font-semibold">{m.library_rich_entry_privacy()}</legend>
@@ -247,22 +283,41 @@ function PrivacyCorrectionField({
       />
       {draft.operation === 'set' ? (
         <>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_value_kind()}</span>
-            <select
-              className="min-h-11 w-full rounded-md border bg-background px-3"
-              value={valueForPrivacy(draft)}
-              disabled={disabled}
-              onChange={(event) =>
-                onChange({ ...draft, choice: event.currentTarget.value as PrivacyChoice, sourceValue: '' })
-              }
+          <Field className="block gap-1">
+            <FieldLabel
+              id={`${privacyKindSelectId}-label`}
+              htmlFor={privacyKindSelectId}
+              className="mb-1 block text-sm font-medium"
             >
-              <option value="private">{m.library_rich_source_private()}</option>
-              <option value="source_visible">{m.library_rich_source_visible()}</option>
-              <option value="unknown">{m.library_rich_source_unknown()}</option>
-              <option value="absent">{m.library_rich_source_not_supplied()}</option>
-            </select>
-          </label>
+              {m.library_rich_entry_value_kind()}
+            </FieldLabel>
+            <Select<string, false>
+              items={privacyKindOptions}
+              disabled={disabled}
+              value={valueForPrivacy(draft)}
+              onValueChange={(value) => {
+                if (value === 'private' || value === 'source_visible' || value === 'unknown' || value === 'absent')
+                  onChange({ ...draft, choice: value as PrivacyChoice, sourceValue: '' });
+              }}
+            >
+              <SelectTrigger
+                id={privacyKindSelectId}
+                aria-labelledby={`${privacyKindSelectId}-label`}
+                className="min-h-11 w-full rounded-md border bg-background px-3"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {privacyKindOptions.map(({ value, label, ...itemProps }) => (
+                    <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
           {draft.choice === 'unknown' ? (
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_raw_privacy_value()}</span>
@@ -306,10 +361,16 @@ function TimestampCorrectionField({
   issue: SourceCorrectionIssue | undefined;
   onChange: (draft: TimestampCorrectionDraft) => void;
 }) {
+  const timestampKindSelectId = useId();
   const created = name === 'sourceCreated';
   const title = created ? m.library_rich_entry_source_created() : m.library_rich_entry_source_updated();
   const errorId = `source-correction-${name}-error`;
   const valueId = `source-correction-${name}-value`;
+  const timestampKindOptions = [
+    { value: 'known', label: m.library_rich_entry_known_timestamp() },
+    { value: 'unknown', label: m.library_rich_entry_unknown_timestamp() },
+    { value: 'absent', label: m.library_rich_source_not_supplied() },
+  ];
   return (
     <fieldset className="space-y-3 rounded-md border p-3" aria-describedby={issue ? errorId : undefined}>
       <legend className="px-1 font-semibold">{title}</legend>
@@ -325,27 +386,46 @@ function TimestampCorrectionField({
       />
       {draft.operation === 'set' ? (
         <>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_value_kind()}</span>
-            <select
-              className="min-h-11 w-full rounded-md border bg-background px-3"
-              value={valueForTimestamp(draft)}
+          <Field className="block gap-1">
+            <FieldLabel
+              id={`${timestampKindSelectId}-label`}
+              htmlFor={timestampKindSelectId}
+              className="mb-1 block text-sm font-medium"
+            >
+              {m.library_rich_entry_value_kind()}
+            </FieldLabel>
+            <Select<string, false>
+              items={timestampKindOptions}
               disabled={disabled}
-              onChange={(event) => {
-                const choice = event.currentTarget.value as TimestampChoice;
+              value={valueForTimestamp(draft)}
+              onValueChange={(choice) => {
+                if (choice !== 'known' && choice !== 'unknown' && choice !== 'absent') return;
                 onChange({
                   ...draft,
-                  choice,
+                  choice: choice as TimestampChoice,
                   value: choice === 'known' ? draft.value : '',
                   sourceValue: choice === 'unknown' ? draft.sourceValue : '',
                 });
               }}
             >
-              <option value="known">{m.library_rich_entry_known_timestamp()}</option>
-              <option value="unknown">{m.library_rich_entry_unknown_timestamp()}</option>
-              <option value="absent">{m.library_rich_source_not_supplied()}</option>
-            </select>
-          </label>
+              <SelectTrigger
+                id={timestampKindSelectId}
+                aria-labelledby={`${timestampKindSelectId}-label`}
+                className="min-h-11 w-full rounded-md border bg-background px-3"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {timestampKindOptions.map(({ value, label, ...itemProps }) => (
+                    <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
           {draft.choice === 'known' ? (
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_timestamp_text()}</span>

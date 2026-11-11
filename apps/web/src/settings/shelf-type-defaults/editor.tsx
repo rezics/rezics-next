@@ -1,5 +1,7 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import {
@@ -78,6 +80,8 @@ function OwnerShelfTypeDefaults({
   scopeMaxLength?: number;
   readTypes?: (cursor?: string) => Promise<ShelfTypesCurrentRead>;
 }) {
+  const typeScopeSelectId = useId();
+  const typeLayoutSelectId = useId();
   const locale = getLocale();
   const [selected, setSelected] = useState('');
   const [page, setPage] = useState<ShelfTypesView>();
@@ -150,6 +154,20 @@ function OwnerShelfTypeDefaults({
   const knownScope = scopes.includes(selected);
   const saved = savedLayouts[selected];
   const pending = override !== saved;
+  const typeScopeOptions = [
+    { value: null, label: m.settings_shelf_type_choose() },
+    ...scopes.map((scope) => ({
+      value: scope,
+      label: choices.find((item) => item.type === scope)?.label ?? m.settings_shelf_type_unknown({ type: scope }),
+    })),
+  ];
+  const typeLayoutOptions = [
+    { value: null, label: m.settings_shelf_type_inherit() },
+    ...(override && !supportedLayouts.includes(override)
+      ? [{ value: override, label: layoutLabel(override), disabled: true }]
+      : []),
+    ...supportedLayouts.map((layout) => ({ value: layout, label: layoutLabel(layout), disabled: atLimit })),
+  ];
   return (
     <section aria-labelledby="settings-type-layouts" className="space-y-3 border-t pt-5">
       <h3 ref={heading} tabIndex={-1} id="settings-type-layouts" className="font-medium">
@@ -181,24 +199,36 @@ function OwnerShelfTypeDefaults({
         </p>
       ) : null}
       {scopes.length ? (
-        <label className="grid gap-1 text-sm">
-          {m.settings_shelf_type()}
-          <select
-            className="min-h-11 w-full min-w-0 rounded-md border bg-background px-3 py-2"
-            value={knownScope ? selected : ''}
+        <Field className="gap-1">
+          <FieldLabel id={`${typeScopeSelectId}-label`} htmlFor={typeScopeSelectId} className="grid gap-1 text-sm">
+            {m.settings_shelf_type()}
+          </FieldLabel>
+          <Select<string, false>
+            items={typeScopeOptions}
             disabled={!currentChoice() || busy}
-            onChange={(event) => {
-              if (currentChoice()) setSelected(event.currentTarget.value);
+            value={knownScope ? selected : null}
+            onValueChange={(value) => {
+              if (currentChoice()) setSelected(value ?? '');
             }}
           >
-            <option value="">{m.settings_shelf_type_choose()}</option>
-            {scopes.map((scope) => (
-              <option key={scope} value={scope}>
-                {choices.find((item) => item.type === scope)?.label ?? m.settings_shelf_type_unknown({ type: scope })}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger
+              id={typeScopeSelectId}
+              aria-labelledby={`${typeScopeSelectId}-label`}
+              className="min-h-11 w-full min-w-0 rounded-md border bg-background px-3 py-2"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                {typeScopeOptions.map(({ value, label, ...itemProps }) => (
+                  <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
       ) : null}
       {knownScope ? (
         <div className="space-y-3">
@@ -211,32 +241,43 @@ function OwnerShelfTypeDefaults({
           </p>
           {pending ? <p className="text-sm">{m.settings_shelf_type_unsaved()}</p> : null}
           {canSet ? (
-            <label className="grid gap-1 text-sm">
-              {m.settings_shelf_type_layout()}
-              <select
-                className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
-                value={override ?? ''}
+            <Field className="gap-1">
+              <FieldLabel
+                id={`${typeLayoutSelectId}-label`}
+                htmlFor={typeLayoutSelectId}
+                className="grid gap-1 text-sm"
+              >
+                {m.settings_shelf_type_layout()}
+              </FieldLabel>
+              <Select<string, false>
+                items={typeLayoutOptions}
                 disabled={disabled || !currentChoice()}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
+                value={override}
+                onValueChange={(next) => {
+                  const value = next ?? '';
                   if (!currentChoice() || (atLimit && value)) return;
                   const layout = supportedLayouts.find((candidate) => candidate === value);
                   if (!value || layout) onChange(selected, layout);
                 }}
               >
-                <option value="">{m.settings_shelf_type_inherit()}</option>
-                {override && !supportedLayouts.includes(override) ? (
-                  <option value={override} disabled>
-                    {layoutLabel(override)}
-                  </option>
-                ) : null}
-                {supportedLayouts.map((layout) => (
-                  <option key={layout} value={layout} disabled={atLimit}>
-                    {layoutLabel(layout)}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <SelectTrigger
+                  id={typeLayoutSelectId}
+                  aria-labelledby={`${typeLayoutSelectId}-label`}
+                  className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {typeLayoutOptions.map(({ value, label, ...itemProps }) => (
+                      <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
           ) : null}
           {atLimit || (choice && !canSet) ? <p className="text-sm">{m.settings_shelf_type_limit()}</p> : null}
           {override ? (

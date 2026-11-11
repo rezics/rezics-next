@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useId, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { isNotFound, isRedirect } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -11,6 +11,7 @@ import {
 } from '@rezics/ui/content-section';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import {
@@ -942,6 +943,9 @@ export function ShelfPreferencesCard({
   onVersionChange: (version: number) => void;
   readTypes?: (cursor?: string) => Promise<ShelfTypesCurrentRead>;
 }) {
+  const layoutSelectId = useId();
+  const gridSizeSelectId = useId();
+  const sortSelectId = useId();
   const ambient = useSettingsAmbient();
   const writeCurrent = useSettingsCurrent(csrfToken, !!io);
   const readCurrent = useSettingsReadCurrent(csrfToken, !!io);
@@ -1034,6 +1038,20 @@ export function ShelfPreferencesCard({
 
   if (!canRead) return null;
 
+  const layoutOptions = (
+    offeredLayouts.includes(state.draft.layout) ? offeredLayouts : [state.draft.layout, ...offeredLayouts]
+  ).map((layout) => ({
+    value: layout,
+    label: layoutName(layout),
+    disabled: !offeredLayouts.includes(layout),
+  }));
+  const gridSizeOptions = (
+    offeredSizes.includes(state.draft.gridSize) ? offeredSizes : [state.draft.gridSize, ...offeredSizes]
+  ).map((size) => ({
+    value: size,
+    label:
+      size === 'small' ? m.library_size_small() : size === 'large' ? m.library_size_large() : m.library_size_medium(),
+  }));
   return (
     <ContentSection>
       <ContentSectionHeader>
@@ -1066,69 +1084,85 @@ export function ShelfPreferencesCard({
               </Alert>
             )}
             <fieldset disabled={disabled} className="space-y-5">
-              <label className="grid gap-1 text-sm">
-                {m.settings_shelf_layout()}
-                <span className="text-muted-foreground">
-                  {state.current
-                    ? state.known.shelf.layouts?.all
-                      ? m.settings_shelf_saved({ value: layoutName(state.known.shelf.layouts.all) })
-                      : m.settings_shelf_inherited()
-                    : m.settings_shelf_choices_unavailable_text()}
-                </span>
-                <select
-                  className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+              <Field className="gap-1">
+                <FieldLabel id={`${layoutSelectId}-label`} htmlFor={layoutSelectId} className="grid gap-1 text-sm">
+                  {m.settings_shelf_layout()}
+                  <span className="text-muted-foreground">
+                    {state.current
+                      ? state.known.shelf.layouts?.all
+                        ? m.settings_shelf_saved({ value: layoutName(state.known.shelf.layouts.all) })
+                        : m.settings_shelf_inherited()
+                      : m.settings_shelf_choices_unavailable_text()}
+                  </span>
+                </FieldLabel>
+                <Select<string, false>
+                  items={layoutOptions}
                   value={state.draft.layout}
-                  onChange={(event) =>
-                    controller.edit({ layout: event.currentTarget.value as ShelfDraft['layout'] }, 'layout')
-                  }
+                  onValueChange={(value) => {
+                    if (value !== null) controller.edit({ layout: value as ShelfDraft['layout'] }, 'layout');
+                  }}
                 >
-                  {(offeredLayouts.includes(state.draft.layout)
-                    ? offeredLayouts
-                    : [state.draft.layout, ...offeredLayouts]
-                  ).map((layout) => (
-                    <option key={layout} value={layout} disabled={!offeredLayouts.includes(layout)}>
-                      {layoutName(layout)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm">
-                {m.settings_shelf_size()}
-                <span className="text-muted-foreground">
-                  {state.current
-                    ? state.known.shelf.gridSize
-                      ? m.settings_shelf_saved({
-                          value:
-                            state.known.shelf.gridSize === 'small'
-                              ? m.library_size_small()
-                              : state.known.shelf.gridSize === 'large'
-                                ? m.library_size_large()
-                                : m.library_size_medium(),
-                        })
-                      : m.settings_shelf_inherited()
-                    : m.settings_shelf_choices_unavailable_text()}
-                </span>
-                <select
-                  className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                  <SelectTrigger
+                    id={layoutSelectId}
+                    aria-labelledby={`${layoutSelectId}-label`}
+                    className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent alignItemWithTrigger={false}>
+                    <SelectGroup>
+                      {layoutOptions.map(({ value, label, ...itemProps }) => (
+                        <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field className="gap-1">
+                <FieldLabel id={`${gridSizeSelectId}-label`} htmlFor={gridSizeSelectId} className="grid gap-1 text-sm">
+                  {m.settings_shelf_size()}
+                  <span className="text-muted-foreground">
+                    {state.current
+                      ? state.known.shelf.gridSize
+                        ? m.settings_shelf_saved({
+                            value:
+                              state.known.shelf.gridSize === 'small'
+                                ? m.library_size_small()
+                                : state.known.shelf.gridSize === 'large'
+                                  ? m.library_size_large()
+                                  : m.library_size_medium(),
+                          })
+                        : m.settings_shelf_inherited()
+                      : m.settings_shelf_choices_unavailable_text()}
+                  </span>
+                </FieldLabel>
+                <Select<string, false>
+                  items={gridSizeOptions}
                   value={state.draft.gridSize}
-                  onChange={(event) =>
-                    controller.edit({ gridSize: event.currentTarget.value as ShelfDraft['gridSize'] }, 'gridSize')
-                  }
+                  onValueChange={(value) => {
+                    if (value !== null) controller.edit({ gridSize: value as ShelfDraft['gridSize'] }, 'gridSize');
+                  }}
                 >
-                  {(offeredSizes.includes(state.draft.gridSize)
-                    ? offeredSizes
-                    : [state.draft.gridSize, ...offeredSizes]
-                  ).map((size) => (
-                    <option key={size} value={size}>
-                      {size === 'small'
-                        ? m.library_size_small()
-                        : size === 'large'
-                          ? m.library_size_large()
-                          : m.library_size_medium()}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <SelectTrigger
+                    id={gridSizeSelectId}
+                    aria-labelledby={`${gridSizeSelectId}-label`}
+                    className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent alignItemWithTrigger={false}>
+                    <SelectGroup>
+                      {gridSizeOptions.map(({ value, label, ...itemProps }) => (
+                        <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">{m.settings_shelf_columns()}</legend>
                 <p className="text-sm text-muted-foreground">
@@ -1165,46 +1199,72 @@ export function ShelfPreferencesCard({
               </fieldset>
               {tabs.map((tab) => {
                 const current = state.draft.sorts[tab];
-                return (
-                  <label key={tab} className="grid gap-1 text-sm">
-                    {m.settings_shelf_order({ tab: tabLabel(tab) })}
-                    <span className="text-muted-foreground">
-                      {state.current
-                        ? state.known.shelf.sorts?.[tab]
-                          ? m.settings_shelf_saved_choice()
-                          : m.settings_shelf_inherited()
-                        : m.settings_shelf_choices_unavailable_text()}
-                    </span>
-                    <select
-                      className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
-                      value={current}
-                      onChange={(event) => controller.editSort(tab, event.currentTarget.value)}
-                    >
-                      {current.startsWith('unsupported:') ? (
-                        <option value={current} disabled>
-                          {m.settings_shelf_unavailable_option({
+                const sortOptions = [
+                  ...(current.startsWith('unsupported:')
+                    ? [
+                        {
+                          value: current,
+                          label: m.settings_shelf_unavailable_option({
                             field:
                               state.known.shelf.sorts?.[tab]?.field === 'rating'
                                 ? `${m.library_score_order()} · ${state.known.shelf.sorts[tab].direction === 'desc' ? m.library_score_highest() : m.library_score_lowest()}`
                                 : current.slice('unsupported:'.length).replaceAll('_', ' '),
-                          })}
-                        </option>
-                      ) : null}
-                      <option value={defaultSortChoice}>{m.settings_shelf_order_application_default()}</option>
-                      {offeredSorts.flatMap((field) =>
-                        (['desc', 'asc'] as const)
-                          .filter((direction) => shelfAdvice.supported.sortDirections.includes(direction))
-                          .map((direction) => {
-                            const choice = `${field}:${direction}`;
-                            return (
-                              <option key={choice} value={choice}>
-                                {sortLabel(field, direction)}
-                              </option>
-                            );
                           }),
-                      )}
-                    </select>
-                  </label>
+                          disabled: true,
+                        },
+                      ]
+                    : []),
+                  { value: defaultSortChoice, label: m.settings_shelf_order_application_default() },
+                  ...offeredSorts.flatMap((field) =>
+                    (['desc', 'asc'] as const)
+                      .filter((direction) => shelfAdvice.supported.sortDirections.includes(direction))
+                      .map((direction) => {
+                        const choice = `${field}:${direction}`;
+                        return { value: choice, label: sortLabel(field, direction) };
+                      }),
+                  ),
+                ];
+                return (
+                  <Field key={tab} className="gap-1">
+                    <FieldLabel
+                      id={`${sortSelectId}-${tab}-label`}
+                      htmlFor={`${sortSelectId}-${tab}`}
+                      className="grid gap-1 text-sm"
+                    >
+                      {m.settings_shelf_order({ tab: tabLabel(tab) })}
+                      <span className="text-muted-foreground">
+                        {state.current
+                          ? state.known.shelf.sorts?.[tab]
+                            ? m.settings_shelf_saved_choice()
+                            : m.settings_shelf_inherited()
+                          : m.settings_shelf_choices_unavailable_text()}
+                      </span>
+                    </FieldLabel>
+                    <Select<string, false>
+                      items={sortOptions}
+                      value={current}
+                      onValueChange={(value) => {
+                        if (value !== null) controller.editSort(tab, value);
+                      }}
+                    >
+                      <SelectTrigger
+                        id={`${sortSelectId}-${tab}`}
+                        aria-labelledby={`${sortSelectId}-${tab}-label`}
+                        className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          {sortOptions.map(({ value, label, ...itemProps }) => (
+                            <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
                 );
               })}
             </fieldset>

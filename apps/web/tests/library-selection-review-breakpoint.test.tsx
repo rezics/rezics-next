@@ -1,3 +1,4 @@
+import { selectTrigger, selectValue, chooseSelect } from './support/select';
 import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, useRef, useState } from 'react';
@@ -28,6 +29,10 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
     document: browser.document,
     navigator: browser.navigator,
     HTMLElement: browser.HTMLElement,
+    HTMLButtonElement: browser.HTMLButtonElement,
+    ShadowRoot: browser.ShadowRoot,
+    Document: browser.Document,
+    NodeFilter: browser.NodeFilter,
     HTMLInputElement: browser.HTMLInputElement,
     HTMLSelectElement: browser.HTMLSelectElement,
     Element: browser.Element,
@@ -91,11 +96,10 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
     expect(host.querySelector('output')?.getAttribute('data-mobile')).toBe('true');
     expect(browser.document.querySelector('[data-slot="drawer-popup"]')).not.toBeNull();
     expect(browser.document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-    const choice = browser.document.querySelector<HTMLSelectElement>('select[aria-label]')!;
+    const choice = selectTrigger(browser.document);
     choice.focus();
-    choice.value = 'paused';
-    await act(async () => choice.dispatchEvent(new browser.Event('change', { bubbles: true })));
-    expect(choice.value).toBe('paused');
+    await chooseSelect(choice, 'paused');
+    expect(selectValue(choice)).toBe('paused');
 
     await act(async () => {
       width = 1024;
@@ -105,8 +109,8 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
     expect(browser.document.querySelector('[data-slot="dialog-content"]')).not.toBeNull();
     expect(browser.document.querySelector('[data-slot="drawer-popup"]')).toBeNull();
     expect(browser.document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-    expect(browser.document.querySelector('select[aria-label]')).toBe(choice);
-    expect(choice.value).toBe('paused');
+    expect(selectTrigger(browser.document)).toBe(choice);
+    expect(selectValue(choice)).toBe('paused');
     expect(browser.document.activeElement).toBe(choice);
     expect(browser.document.querySelectorAll('[data-selection-review-entry]')).toHaveLength(2);
 
@@ -117,8 +121,8 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
     expect(browser.document.querySelector('[data-slot="dialog-content"]')).toBeNull();
     expect(browser.document.querySelector('[data-slot="drawer-popup"]')).not.toBeNull();
     expect(browser.document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-    expect(browser.document.querySelector('select[aria-label]')).toBe(choice);
-    expect(choice.value).toBe('paused');
+    expect(selectTrigger(browser.document)).toBe(choice);
+    expect(selectValue(choice)).toBe('paused');
     expect(browser.document.activeElement).toBe(choice);
     expect(browser.document.querySelectorAll('[data-selection-review-entry]')).toHaveLength(2);
 

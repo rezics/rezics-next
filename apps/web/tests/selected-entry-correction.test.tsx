@@ -1,3 +1,4 @@
+import { selectValue } from './support/select';
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
@@ -187,6 +188,11 @@ for (const width of [390, 1280])
       document: window.document,
       navigator: window.navigator,
       HTMLElement: window.HTMLElement,
+      HTMLButtonElement: window.HTMLButtonElement,
+      DocumentFragment: window.DocumentFragment,
+      ShadowRoot: window.ShadowRoot,
+      Document: window.Document,
+      NodeFilter: window.NodeFilter,
       Element: window.Element,
       Node: window.Node,
       HTMLInputElement: window.HTMLInputElement,
@@ -248,7 +254,10 @@ for (const width of [390, 1280])
           }),
         );
       });
-      expect([...host.querySelectorAll('select')].map((node) => node.value)).toEqual(['preserve', 'preserve']);
+      expect([...host.querySelectorAll('[data-slot="select-trigger"]')].map(selectValue)).toEqual([
+        'preserve',
+        'preserve',
+      ]);
       expect(host.querySelector('textarea')).toBeNull();
       await click(m.library_annotation_review());
       expect(host.textContent).toContain('native private note');

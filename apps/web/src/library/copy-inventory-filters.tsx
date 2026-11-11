@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 /** Presentation state for retained controls and stories; it grants no transport capability. */
@@ -45,29 +45,44 @@ function InventoryFilter({
   const [value, setValue] = useState(selected ?? '');
   const choices = facet?.choices ?? [];
   const missing = value && !choices.some((choice) => choice.id === value);
+  const inventoryOptions = [
+    { value: null, label: m.library_copy_filter_any() },
+    ...(missing ? [{ value, label: `${value} — ${m.library_copy_filter_unavailable()}` }] : []),
+    ...choices.map((choice) => ({
+      value: choice.id,
+      label: `${choice.label} — ${meaning(choice.meaning)}`,
+      lang: choice.labelLanguage,
+    })),
+  ];
   return (
     <Field className="min-w-0">
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <NativeSelect
-        id={id}
+      <FieldLabel id={`${id}-label`} htmlFor={id}>
+        {label}
+      </FieldLabel>
+      <Select<string, false>
+        items={inventoryOptions}
         name={value ? name : undefined}
-        value={value}
-        aria-describedby={description}
-        className="min-w-0 max-w-full w-full [&_select]:min-h-11 [&_select]:w-full"
-        onChange={(event) => setValue(event.currentTarget.value)}
+        value={value || null}
+        onValueChange={(next) => setValue(next ?? '')}
       >
-        <NativeSelectOption value="">{m.library_copy_filter_any()}</NativeSelectOption>
-        {missing ? (
-          <NativeSelectOption value={value}>
-            {value} — {m.library_copy_filter_unavailable()}
-          </NativeSelectOption>
-        ) : null}
-        {choices.map((choice) => (
-          <NativeSelectOption key={choice.id} value={choice.id} lang={choice.labelLanguage}>
-            {choice.label} — {meaning(choice.meaning)}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
+        <SelectTrigger
+          id={id}
+          aria-labelledby={`${id}-label`}
+          aria-describedby={description}
+          className="min-w-0 max-w-full w-full"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false}>
+          <SelectGroup>
+            {inventoryOptions.map(({ value, label, ...itemProps }) => (
+              <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
       <p id={description} className="text-sm text-muted-foreground">
         {facet?.state === 'available'
           ? choices.length

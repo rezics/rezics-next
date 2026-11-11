@@ -1,4 +1,6 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 
@@ -9,6 +11,12 @@ const recoveryLinkClass =
 export function FollowCountContextRecovery() {
   const destination = `/${getLocale()}/library/follow-counts`;
 
+  const contextTypeOptions = [
+    { value: null, label: m.library_follow_count_context_select_type(), disabled: true },
+    { value: 'subject', label: m.library_follow_count_context_subject() },
+    { value: 'collection', label: m.library_follow_count_context_collection() },
+    { value: 'space', label: m.library_follow_count_context_space() },
+  ];
   return (
     <div className="space-y-4">
       <p role="status">{m.library_follow_counts_invalid_context()}</p>
@@ -16,23 +24,31 @@ export function FollowCountContextRecovery() {
       <p className="max-w-prose text-sm text-muted-foreground">{m.library_follow_count_context_id_help()}</p>
       <form action={destination} method="get" className="max-w-xl space-y-4">
         <div className="space-y-2">
-          <label htmlFor="follow-count-context-type" className="text-sm font-medium">
-            {m.library_follow_count_context_type_label()}
-          </label>
-          <select
-            id="follow-count-context-type"
-            name="targetType"
-            required
-            defaultValue=""
-            className="flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
-          >
-            <option value="" disabled>
-              {m.library_follow_count_context_select_type()}
-            </option>
-            <option value="subject">{m.library_follow_count_context_subject()}</option>
-            <option value="collection">{m.library_follow_count_context_collection()}</option>
-            <option value="space">{m.library_follow_count_context_space()}</option>
-          </select>
+          <Field className="gap-2">
+            <FieldLabel id={`${'follow-count-context-type'}-label`} htmlFor={'follow-count-context-type'}>
+              {m.library_follow_count_context_type_label()}
+            </FieldLabel>
+            <Select<string, false> items={contextTypeOptions} name="targetType" required defaultValue={null}>
+              <SelectTrigger
+                id="follow-count-context-type"
+                aria-labelledby={`${'follow-count-context-type'}-label`}
+                className={
+                  'flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring'
+                }
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {contextTypeOptions.map(({ value, label, ...itemProps }) => (
+                    <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
         </div>
         <div className="space-y-2">
           <label htmlFor="follow-count-context-id" className="text-sm font-medium">

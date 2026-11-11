@@ -1,4 +1,6 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useId } from 'react';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import type {
   MalLabelSelection,
@@ -210,6 +212,15 @@ export function MalRowReview({
           step: reviewedQuestion.scale.stepUnits,
         })
       : null;
+  const scoreUnitsOptions = question
+    ? [
+        { value: null, label: m.library_mal_score_choose_units() },
+        ...Array.from(
+          { length: (question.scale.max - question.scale.min) / question.scale.displayStep + 1 },
+          (_, index) => question.scale.min + index * question.scale.displayStep,
+        ).map((units) => ({ value: String(units), label: String(units) })),
+      ]
+    : [];
   return (
     <article className="space-y-4 rounded-lg border p-4" data-mal-row={row.index} data-mal-kind={row.kind}>
       <header className="space-y-1">
@@ -407,36 +418,42 @@ export function MalRowReview({
               </label>
               {draft.score?.action === 'adopt' ? (
                 <div className="space-y-3">
-                  <label className="block space-y-1" htmlFor={`${base}-units`}>
-                    <span className="font-medium">{m.library_mal_score_units()}</span>
-                    <select
-                      id={`${base}-units`}
-                      className="min-h-11 w-full rounded-md border bg-background px-3"
-                      value={draft.score.units ?? ''}
+                  <Field className="block space-y-1">
+                    <FieldLabel id={`${base}-units-label`} htmlFor={`${base}-units`} className="font-medium">
+                      {m.library_mal_score_units()}
+                    </FieldLabel>
+                    <Select<string, false>
+                      items={scoreUnitsOptions}
                       disabled={busy}
-                      onChange={(event) =>
+                      value={draft.score.units === undefined ? null : String(draft.score.units)}
+                      onValueChange={(value) =>
                         onChange({
                           ...draft,
                           score: {
                             ...draft.score!,
-                            ...(event.currentTarget.value
-                              ? { units: Number(event.currentTarget.value) }
-                              : { units: undefined }),
+                            ...(value ? { units: Number(value) } : { units: undefined }),
                           },
                         })
                       }
                     >
-                      <option value="">{m.library_mal_score_choose_units()}</option>
-                      {Array.from(
-                        { length: (question.scale.max - question.scale.min) / question.scale.displayStep + 1 },
-                        (_, index) => question.scale.min + index * question.scale.displayStep,
-                      ).map((units) => (
-                        <option key={units} value={units}>
-                          {units}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      <SelectTrigger
+                        id={`${base}-units`}
+                        aria-labelledby={`${base}-units-label`}
+                        className="min-h-11 w-full rounded-md border bg-background px-3"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          {scoreUnitsOptions.map(({ value, label, ...itemProps }) => (
+                            <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
                   <MalCheck
                     id={`${base}-replace-vote`}
                     checked={draft.score.replaceCurrent === true}

@@ -1,5 +1,6 @@
 import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useEffect, useId, useState } from 'react';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
@@ -133,6 +134,10 @@ export function VndbRowReview({
     }
   }
 
+  const stateOptions = [
+    { value: null, label: m.library_vndb_state_choose() },
+    ...states.map((item) => ({ value: item.id, label: item.label })),
+  ];
   return (
     <article
       className="min-w-0 space-y-4 rounded-lg border p-4"
@@ -224,23 +229,32 @@ export function VndbRowReview({
           />
           {targetId && action === 'state' ? (
             <Field>
-              <FieldLabel htmlFor={`${id}-state`} className="min-h-11 items-center">
+              <FieldLabel id={`${id}-state-label`} htmlFor={`${id}-state`} className="min-h-11 items-center">
                 {m.library_vndb_state_label()}
               </FieldLabel>
-              <select
-                id={`${id}-state`}
-                className="min-h-11 w-full rounded-md border bg-background px-3"
-                value={stateId}
+              <Select<string, false>
+                items={stateOptions}
                 disabled={busy || loading || states.length === 0}
-                onChange={(event) => setStateId(event.currentTarget.value)}
+                value={stateId || null}
+                onValueChange={(value) => setStateId(value ?? '')}
               >
-                <option value="">{m.library_vndb_state_choose()}</option>
-                {states.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger
+                  id={`${id}-state`}
+                  aria-labelledby={`${id}-state-label`}
+                  className="min-h-11 w-full rounded-md border bg-background px-3"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {stateOptions.map(({ value, label, ...itemProps }) => (
+                      <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
               {loading ? <p role="status">{m.library_vndb_states_loading()}</p> : null}
               {!loading && states.length === 0 ? <p role="status">{m.library_vndb_states_unavailable()}</p> : null}
             </Field>

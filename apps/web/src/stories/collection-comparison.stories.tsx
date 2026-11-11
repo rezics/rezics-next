@@ -226,7 +226,6 @@ async function selectPresentation(canvasElement: HTMLElement, layout: 'list' | '
   await userEvent.click(
     within(popup).getByRole('option', {
       name: layout === 'list' ? m.library_layout_list() : m.library_layout_grid(),
-      exact: true,
     }),
   );
   await mountedPresentation(canvasElement, layout);

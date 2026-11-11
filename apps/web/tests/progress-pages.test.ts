@@ -53,17 +53,17 @@ test('session changes list each changed field once and use a real progress icon'
   expect(session).not.toContain('>…</');
 });
 
-test('progress unit choices use a labelled native form field while row actions use menus', async () => {
+test('progress unit choices use a labelled Select form field while row actions use menus', async () => {
   const [page, picker, session] = await Promise.all([
     read('../src/library/progress-page.tsx'),
     read('../src/library/progress-picker.tsx'),
     read('../src/library/progress-session.tsx'),
   ]);
-  expect(page).toContain('@rezics/ui/shadcn/native-select');
-  expect(page).toContain('<NativeSelect');
+  expect(page).toContain('@rezics/ui/shadcn/select');
+  expect(page).toContain('<Select');
   expect(page).toContain('<FieldLabel htmlFor="progress-unit">');
   expect(page).toContain('name="unit"');
-  expect(page).toContain('onChange={(event) => setUnit(event.currentTarget.value)}');
+  expect(page).toContain('changeDraft(() => setUnit(value))');
   expect(page).not.toContain('title={m.library_progress_unit()}');
   expect(page).toContain('@rezics/ui/menu');
   expect(session).toContain('@rezics/ui/menu');

@@ -1,3 +1,4 @@
+import { selectValue, chooseSelect } from './support/select';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, Fragment, StrictMode, type ReactNode } from 'react';
@@ -417,9 +418,7 @@ test('Subject choices keep the latest selection and isolate replacement-page suc
           await settle(() => current.work.resolve([choices![1]!]));
           if (!oldFirst) await resolveOld();
           expect(h.body.queryByRole('alert')).toBeNull();
-          expect((h.body.getByRole('combobox', { name: m.library_progress_unit() }) as HTMLSelectElement).value).toBe(
-            'position',
-          );
+          expect(selectValue(h.body.getByRole('combobox', { name: m.library_progress_unit() }))).toBe('position');
           const command = await h.start('start');
           expect(command.data).toMatchObject({ subjectId: id(4), mode: 'cursor_position', unit: 'position' });
         } finally {
@@ -449,7 +448,7 @@ test('Current-page creation preserves native subject/version, modes, totals, ret
       });
       if (mode === 'scalar_amount')
         await act(async () => {
-          await h.user.selectOptions(h.body.getByRole('combobox', { name: m.library_progress_unit() }), 'chapters');
+          await chooseSelect(h.body.getByRole('combobox', { name: m.library_progress_unit() }), 'chapters');
         });
       if (mode === 'scalar_amount')
         await act(async () => {

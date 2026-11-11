@@ -21,7 +21,7 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import {
   ContentSection,
   ContentSectionBody,
@@ -258,6 +258,7 @@ function CollectionRowView({
   const options = [...new Set([...visibilityOptions(current), ...(desired !== current.visibility ? [desired] : [])])];
   const canChangeVisibility = current.revision !== null && current.allowedVisibilityActions.length > 0;
   const href = `/${getLocale()}/collections/${encodeURIComponent(current.id)}`;
+  const visibilityItems = options.map((value) => ({ value, label: label(value) }));
   return (
     <ListRow className="grid gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)] sm:items-center">
       <div className="min-w-0">
@@ -275,14 +276,11 @@ function CollectionRowView({
       </div>
       <ListRowControl className="min-w-0 max-w-full">
         <Field className="min-w-0">
-          <FieldLabel className="max-w-full wrap-anywhere" htmlFor={id}>
+          <FieldLabel id={`${id}-label`} className="max-w-full wrap-anywhere" htmlFor={id}>
             {m.settings_privacy_visibility_label()}
           </FieldLabel>
-          <NativeSelect
-            className="w-full min-w-0 max-w-full [&>select]:h-auto [&>select]:min-h-11 [&>select]:min-w-11"
-            id={id}
-            value={desired}
-            aria-describedby={`${id}-current`}
+          <Select<string, false>
+            items={visibilityItems}
             disabled={
               !isCurrent() ||
               pageState?.loading ||
@@ -292,18 +290,31 @@ function CollectionRowView({
               phase === 'abandoned' ||
               (waiting && (phase === 'idle' || phase === 'saved'))
             }
-            onChange={(event) => {
+            value={desired}
+            onValueChange={(next) => {
               if (pageState?.loading) return;
-              const value = options.find((option) => option === event.target.value);
+              const value = options.find((option) => option === next);
               if (value) void editor.edit(value);
             }}
           >
-            {options.map((value) => (
-              <NativeSelectOption key={value} value={value}>
-                {label(value)}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger
+              id={id}
+              aria-labelledby={`${id}-label`}
+              aria-describedby={`${id}-current`}
+              className="w-full min-w-0 max-w-full h-auto min-h-11 min-w-11"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                {visibilityItems.map(({ value, label, ...itemProps }) => (
+                  <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </Field>
       </ListRowControl>
       <ListRowControl className="min-w-0 max-w-full sm:col-span-2">

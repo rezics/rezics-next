@@ -1,3 +1,4 @@
+import { selectTrigger, chooseSelect } from './support/select';
 import { publicCollectionDiscoveryQueryOptions } from '../src/library/public-collection-discovery/query';
 import { renderPublicCollection } from '../src/search/public-collection-directory/presentation';
 import { afterAll, expect, mock, test } from 'bun:test';
@@ -90,6 +91,9 @@ const globals = {
   document: window.document,
   navigator: window.navigator,
   HTMLElement: window.HTMLElement,
+  NodeFilter: window.NodeFilter,
+  ResizeObserver: window.ResizeObserver,
+  HTMLInputElement: window.HTMLInputElement,
   HTMLButtonElement: window.HTMLButtonElement,
   Element: window.Element,
   Node: window.Node,
@@ -451,7 +455,7 @@ test('committing directory filters replaces the cursor and sends the complete se
     (form.elements.namedItem('presentationKind') as HTMLInputElement).value = 'schema:Book';
     (form.elements.namedItem('curator') as HTMLInputElement).value = '00000003-0000-7000-8000-000000000003';
     (form.elements.namedItem('subject') as HTMLInputElement).value = '00000004-0000-7000-8000-000000000004';
-    (form.elements.namedItem('order') as HTMLSelectElement).value = 'recent';
+    await chooseSelect(selectTrigger(form), 'recent');
     await act(async () => {
       form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
       await settle();

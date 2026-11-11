@@ -1,4 +1,5 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useId, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { ANILIST_ROWS, ANILIST_SCORE_FORMATS, ANILIST_UPLOAD_BYTES, type AniListScoreFormat } from './contract';
@@ -37,6 +38,10 @@ export function AniListUploadForm({
     }
     onUpload(await file.text(), scoreFormat || null);
   }
+  const scoreFormatOptions = [
+    { value: null, label: aniListScoreFormatLabel(null) },
+    ...ANILIST_SCORE_FORMATS.map((format) => ({ value: format, label: aniListScoreFormatLabel(format) })),
+  ];
   return (
     <form
       className="space-y-4"
@@ -57,24 +62,33 @@ export function AniListUploadForm({
         {m.library_anilist_guidance({ size: Math.floor(ANILIST_UPLOAD_BYTES / 1024), rows: ANILIST_ROWS })}
       </p>
       <Field>
-        <FieldLabel htmlFor={scoreId} className="min-h-11 items-center">
+        <FieldLabel id={`${scoreId}-label`} htmlFor={scoreId} className="min-h-11 items-center">
           {m.library_anilist_score_format()}
         </FieldLabel>
-        <select
-          id={scoreId}
-          data-anilist-score-format
-          className="min-h-11 w-full max-w-full rounded-md border bg-background px-3"
-          value={scoreFormat}
+        <Select<string, false>
+          items={scoreFormatOptions}
           disabled={busy || disabled}
-          onChange={(event) => setScoreFormat(event.target.value as AniListScoreFormat | '')}
+          value={scoreFormat || null}
+          onValueChange={(value) => setScoreFormat((value ?? '') as AniListScoreFormat | '')}
         >
-          <option value="">{aniListScoreFormatLabel(null)}</option>
-          {ANILIST_SCORE_FORMATS.map((format) => (
-            <option key={format} value={format}>
-              {aniListScoreFormatLabel(format)}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            id={scoreId}
+            aria-labelledby={`${scoreId}-label`}
+            {...{ 'data-anilist-score-format': true }}
+            className="min-h-11 w-full max-w-full rounded-md border bg-background px-3"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              {scoreFormatOptions.map(({ value, label, ...itemProps }) => (
+                <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </Field>
       <Field>
         <FieldLabel htmlFor={inputId} className="min-h-11 items-center">

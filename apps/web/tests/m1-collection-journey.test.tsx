@@ -1,3 +1,4 @@
+import { selectTrigger, selectValue, chooseSelect } from './support/select';
 import { renderPublicCollection } from '../src/search/public-collection-directory/presentation';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
@@ -26,6 +27,8 @@ const globals = {
   navigator: window.navigator,
   location: window.location,
   HTMLElement: window.HTMLElement,
+  ShadowRoot: window.ShadowRoot,
+  NodeFilter: window.NodeFilter,
   HTMLButtonElement: window.HTMLButtonElement,
   HTMLInputElement: window.HTMLInputElement,
   HTMLTextAreaElement: window.HTMLTextAreaElement,
@@ -266,13 +269,10 @@ test('current native actions govern create/add/reorder; review precedes sending 
       <NewCollectionForm csrfToken="original-csrf" types={[{ id: 'work', label: 'Work' }]} sender={sender} />,
     );
     await input(host.querySelector('input[name=title]')!, 'Reviewed title');
-    const visibility = host.querySelector('select')!;
+    const visibility = selectTrigger(host);
     // The first select is the Type; visibility uses the existing radio group.
-    expect(visibility.value).toBe('');
-    await act(async () => {
-      visibility.value = 'work';
-      visibility.dispatchEvent(new window.Event('change', { bubbles: true }) as unknown as Event);
-    });
+    expect(selectValue(visibility)).toBe('');
+    await chooseSelect(visibility, 'work');
     await click(
       [...host.querySelectorAll('[role=radio]')].find(
         (node) => node.getAttribute('value') === 'public' || node.getAttribute('id')?.endsWith('public'),

@@ -1,3 +1,4 @@
+import { selectTrigger, selectValue, selectOptions, chooseSelect } from './support/select';
 import { afterAll, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
@@ -17,6 +18,19 @@ const globals = {
   document: window.document,
   navigator: window.navigator,
   HTMLElement: window.HTMLElement,
+  HTMLButtonElement: window.HTMLButtonElement,
+  DocumentFragment: window.DocumentFragment,
+  ShadowRoot: window.ShadowRoot,
+  Document: window.Document,
+  NodeFilter: window.NodeFilter,
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  getComputedStyle: window.getComputedStyle.bind(window),
+  ResizeObserver: window.ResizeObserver,
+  MutationObserver: window.MutationObserver,
+  HTMLInputElement: window.HTMLInputElement,
+  Node: window.Node,
+  Element: window.Element,
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -56,54 +70,57 @@ const props = {
   current: () => true,
 };
 
-test('bounded named controls use native historical labels and meanings, retaining exact IDs without labels', () => {
+test('bounded named controls use native historical labels and meanings, retaining exact IDs without labels', async () => {
   for (const locale of ['en', 'zh-Hant'] as const) {
     overwriteGetLocale(() => locale);
     const host = window.document.createElement('main');
-    host.innerHTML = renderToStaticMarkup(<CopyInventoryFilters {...props} />);
-    const form = host.querySelector('form')!;
-    expect(form.getAttribute('action')).toBe(`/${locale}/library/copies`);
-    expect(form.getAttribute('method')).toBe('get');
-    expect(form.querySelector('[name="subjectId"]')?.getAttribute('value')).toBe(query.subjectId);
-    expect(form.querySelector('[name="cursor"]')).toBeNull();
-    for (const select of host.querySelectorAll('select')) {
-      expect(host.querySelector(`label[for="${select.id}"]`)?.textContent).toBeTruthy();
-      expect(host.querySelector(`[id="${select.getAttribute('aria-describedby')}"]`)?.textContent).toBeTruthy();
+    window.document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => root.render(<CopyInventoryFilters {...props} />));
+    try {
+      const form = host.querySelector('form')!;
+      expect(form.getAttribute('action')).toBe(`/${locale}/library/copies`);
+      expect(form.getAttribute('method')).toBe('get');
+      expect(form.querySelector('[name="subjectId"]')?.getAttribute('value')).toBe(query.subjectId);
+      expect(form.querySelector('[name="cursor"]')).toBeNull();
+      for (const select of host.querySelectorAll('[data-slot="select-trigger"]')) {
+        expect(host.querySelector(`label[for="${select.id}"]`)?.textContent).toBeTruthy();
+        expect(host.querySelector(`[id="${select.getAttribute('aria-describedby')}"]`)?.textContent).toBeTruthy();
+      }
+      const kinds = selectTrigger(host);
+      expect(selectValue(kinds)).toBe('old.print');
+      expect(kinds.textContent).toContain(m.library_copy_filter_available());
+      expect(selectValue(selectTrigger(host, 1))).toBe('loan');
+      expect(host.textContent).toContain(`loan — ${m.library_copy_filter_unavailable()}`);
+      expect(host.textContent).toContain(m.library_copy_filter_options_unavailable());
+      const options = await selectOptions(kinds);
+      expect(options.find((item) => item.dataset.value === 'old.print')?.getAttribute('lang')).toBe('fr');
+      expect(options.map((item) => item.textContent).join(' ')).toContain(m.library_copy_filter_unsupported());
+      expect(options.map((item) => item.textContent).join(' ')).toContain(m.library_copy_filter_unavailable());
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
     }
-    const kinds = host.querySelector<HTMLSelectElement>('[name="kind"]')!;
-    expect(kinds.value).toBe('old.print');
-    expect(kinds.querySelector('[value="old.print"]')?.getAttribute('lang')).toBe('fr');
-    expect(kinds.textContent).toContain(m.library_copy_filter_available());
-    expect(kinds.textContent).toContain(m.library_copy_filter_unsupported());
-    expect(kinds.textContent).toContain(m.library_copy_filter_unavailable());
-    expect(host.querySelector<HTMLSelectElement>('[name="status"]')!.value).toBe('loan');
-    expect(host.textContent).toContain(`loan — ${m.library_copy_filter_unavailable()}`);
-    expect(host.textContent).toContain(m.library_copy_filter_options_unavailable());
   }
 });
 
 test('filter changes submit the exact Subject and other filter, omit empty predicates and restart the cursor; stale origins cannot submit', async () => {
   overwriteGetLocale(() => 'en');
   const host = window.document.createElement('main');
+  window.document.body.append(host);
   const root = createRoot(host);
   let current = true;
   try {
     await act(async () => root.render(<CopyInventoryFilters {...props} current={() => current} />));
-    const kind = host.querySelector<HTMLSelectElement>('[name="kind"]')!;
-    await act(async () => {
-      kind.value = 'retired';
-      kind.dispatchEvent(new window.Event('change', { bubbles: true }));
-    });
+    const kind = selectTrigger(host);
+    await chooseSelect(kind, 'retired');
     const form = host.querySelector('form')!;
     expect([...new window.FormData(form).entries()]).toEqual([
       ['subjectId', query.subjectId!],
       ['kind', 'retired'],
       ['status', 'loan'],
     ]);
-    await act(async () => {
-      kind.value = '';
-      kind.dispatchEvent(new window.Event('change', { bubbles: true }));
-    });
+    await chooseSelect(kind, '');
     expect([...new window.FormData(form).keys()]).toEqual(['subjectId', 'status']);
     current = false;
     const event = new window.Event('submit', { bubbles: true, cancelable: true });
@@ -113,6 +130,7 @@ test('filter changes submit the exact Subject and other filter, omit empty predi
     expect(event.defaultPrevented).toBe(true);
   } finally {
     await act(async () => root.unmount());
+    host.remove();
   }
 });
 
@@ -129,7 +147,7 @@ test('empty native inventories and unavailable inventories have distinct explana
   expect(host.textContent).toContain(m.library_copy_filter_none());
   expect(host.textContent).not.toContain(m.library_copy_filter_options_unavailable());
   host.innerHTML = renderToStaticMarkup(<CopyInventoryFilters {...props} filterOptions={undefined} />);
-  expect(host.querySelector<HTMLSelectElement>('[name="kind"]')!.value).toBe('old.print');
+  expect(selectValue(selectTrigger(host))).toBe('old.print');
   expect(host.textContent).toContain(m.library_copy_filter_options_unavailable());
   host.innerHTML = renderToStaticMarkup(
     <CopyInventoryFilters {...props} kind={null} status={null} filterOptions={undefined} />,

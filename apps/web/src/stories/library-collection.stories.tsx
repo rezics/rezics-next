@@ -368,7 +368,7 @@ export const DestinationOverflow: Story = {
     await expect(layout).toHaveTextContent(m.library_layout_list());
     await userEvent.click(layout);
     const popup = await document.findByRole('listbox');
-    await userEvent.click(within(popup).getByRole('option', { name: m.library_layout_grid(), exact: true }));
+    await userEvent.click(within(popup).getByRole('option', { name: m.library_layout_grid() }));
     await waitFor(() =>
       expect(context.canvasElement.querySelector('[data-collection-members]')).toHaveAttribute(
         'data-collection-layout',

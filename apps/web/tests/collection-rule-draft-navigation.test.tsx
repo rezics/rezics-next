@@ -1,3 +1,4 @@
+import { selectValue, chooseSelect } from './support/select';
 import { SavedQueryConditionInput } from '../src/search/saved-query-condition-input';
 import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
@@ -17,6 +18,10 @@ test('new and saved rule drafts protect navigation, preserve originals and retir
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    DocumentFragment: window.DocumentFragment,
+    ShadowRoot: window.ShadowRoot,
+    NodeFilter: window.NodeFilter,
     HTMLInputElement: window.HTMLInputElement,
     HTMLAnchorElement: window.HTMLAnchorElement,
     HTMLFormElement: window.HTMLFormElement,
@@ -139,11 +144,10 @@ test('new and saved rule drafts protect navigation, preserve originals and retir
     await settle(() => !!alert());
   };
   const selectLabel = async (id: string) => {
-    await act(async () => {
-      const select = [...host.querySelectorAll('select')].find((node) => node.value === 'a' || node.value === 'b')!;
-      select.value = id;
-      select.dispatchEvent(new window.Event('change', { bubbles: true }));
-    });
+    const select = [...host.querySelectorAll('[data-slot="select-trigger"]')].find(
+      (node) => selectValue(node) === 'a' || selectValue(node) === 'b',
+    )!;
+    await chooseSelect(select, id);
   };
   try {
     await act(async () => {
@@ -218,7 +222,9 @@ test('new and saved rule drafts protect navigation, preserve originals and retir
     await selectLabel('b');
     await depart();
     await click(m.library_rule_draft_navigation_stay());
-    expect([...host.querySelectorAll('select')].some((node) => node.value === 'b')).toBe(true);
+    expect([...host.querySelectorAll('[data-slot="select-trigger"]')].some((node) => selectValue(node) === 'b')).toBe(
+      true,
+    );
     await submit();
     await act(async () => finish({ ok: false, reason: 'conflict' }));
     expect(unload()).toBe(true);

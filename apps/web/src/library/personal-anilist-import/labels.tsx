@@ -1,4 +1,6 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useId, useRef, useState } from 'react';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import type { AniListRow, AniListLabelSelection, AniListLabelTargetsResult, AniListRowMeta } from './contract';
 import { AniListAction, AniListCheck } from './controls';
@@ -127,7 +129,18 @@ export function AniListLabelAdoption({
       <ul className="space-y-3">
         {evidence.values.map((value) => {
           const selection = selections.find((item) => item.key === value.key);
+          const targetLabelId = selection && 'labelId' in selection.target ? selection.target.labelId : null;
           const selectable = evidence.selectable.some((item) => item.key === value.key);
+          const labelTargetOptions = [
+            { value: 'new', label: m.library_anilist_labels_new() },
+            ...(targetLabelId && !targets?.labels.some((item) => item.id === targetLabelId)
+              ? [{ value: targetLabelId, label: targetLabelId }]
+              : []),
+            ...(targets?.labels ?? []).map((label) => ({
+              value: label.id,
+              label: `${label.name} · ${label.id}`,
+            })),
+          ];
           return (
             <li key={value.key} className="space-y-2 rounded border p-3" data-anilist-label-key={value.key}>
               <p>{value.value}</p>
@@ -145,32 +158,37 @@ export function AniListLabelAdoption({
                   />
                   {selection ? (
                     <>
-                      <label htmlFor={`${id}-${value.key}-target`}>{m.library_anilist_labels_mapping()}</label>
-                      <select
-                        id={`${id}-${value.key}-target`}
-                        className="min-h-11 w-full rounded border px-3"
-                        disabled={locked}
-                        value={'name' in selection.target ? 'new' : selection.target.labelId}
-                        onChange={(event) =>
-                          target(
-                            value.key,
-                            event.target.value === 'new' ? { name: value.value } : { labelId: event.target.value },
-                          )
-                        }
-                      >
-                        <option value="new">{m.library_anilist_labels_new()}</option>
-                        {'labelId' in selection.target &&
-                        !targets?.labels.some(
-                          (item) => item.id === ('labelId' in selection.target ? selection.target.labelId : ''),
-                        ) ? (
-                          <option value={selection.target.labelId}>{selection.target.labelId}</option>
-                        ) : null}
-                        {targets?.labels.map((label) => (
-                          <option key={label.id} value={label.id}>
-                            {label.name} · {label.id}
-                          </option>
-                        ))}
-                      </select>
+                      <Field>
+                        <FieldLabel id={`${id}-${value.key}-target-label`} htmlFor={`${id}-${value.key}-target`}>
+                          {m.library_anilist_labels_mapping()}
+                        </FieldLabel>
+                        <Select<string, false>
+                          items={labelTargetOptions}
+                          disabled={locked}
+                          value={'name' in selection.target ? 'new' : selection.target.labelId}
+                          onValueChange={(next) => {
+                            if (next !== null)
+                              target(value.key, next === 'new' ? { name: value.value } : { labelId: next });
+                          }}
+                        >
+                          <SelectTrigger
+                            id={`${id}-${value.key}-target`}
+                            aria-labelledby={`${id}-${value.key}-target-label`}
+                            className="min-h-11 w-full rounded border px-3"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent alignItemWithTrigger={false}>
+                            <SelectGroup>
+                              {labelTargetOptions.map(({ value, label, ...itemProps }) => (
+                                <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                                  {label}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </Field>
                       {'name' in selection.target ? (
                         <>
                           <label htmlFor={`${id}-${value.key}-name`}>{m.library_anilist_labels_new()}</label>

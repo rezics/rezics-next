@@ -1,6 +1,8 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import type { CoverSummary } from '@rezics/ui/cover';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { pageText } from '../../features/pages/shared';
@@ -70,8 +72,8 @@ export function CollectionPresentationFields({
   const [handoffUnavailable, setHandoffUnavailable] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const kindControl = useRef<HTMLSelectElement>(null);
-  const coverControl = useRef<HTMLSelectElement>(null);
+  const kindControl = useRef<HTMLButtonElement>(null);
+  const coverControl = useRef<HTMLButtonElement>(null);
   const focusAfterRender = useRef<'heading' | 'trigger' | 'kind' | 'cover' | null>(null);
   const coverOptions = loadedCoverOptions(members);
   const savedType = presentationTypeChoice(savedKind, savedKind, types, listPresentations);
@@ -133,6 +135,26 @@ export function CollectionPresentationFields({
       : m.collection_choice_selected_cover_unavailable();
   }
 
+  const collectionKindOptions = [
+    { value: null, label: m.library_collection_mixed_label() },
+    ...(kind && !types?.some((type) => type.id === kind)
+      ? [{ value: kind, label: m.collection_choice_type_unavailable() }]
+      : []),
+    ...(types ?? []).map((type) => ({
+      value: type.id,
+      label: type.label || m.collection_choice_type_unavailable(),
+    })),
+  ];
+  const collectionCoverOptions = [
+    { value: null, label: m.library_collection_auto() },
+    ...(coverMediaId && !coverOptions.some((option) => option.mediaId === coverMediaId)
+      ? [{ value: coverMediaId, label: m.collection_choice_selected_cover_unavailable() }]
+      : []),
+    ...coverOptions.map((option) => ({
+      value: option.mediaId,
+      label: pageText(libraryTitleValue(option.subject.label), getLocale()).text,
+    })),
+  ];
   return (
     <section className="min-w-0 space-y-4 [overflow-wrap:anywhere]" data-collection-presentation-fields>
       <div className="space-y-2">
@@ -143,28 +165,36 @@ export function CollectionPresentationFields({
       </div>
       <div className="grid max-w-3xl min-w-0 gap-4 sm:grid-cols-2">
         <div className="min-w-0 space-y-2">
-          <label htmlFor={`${id}-type`} className="block font-medium">
-            {m.library_collection_kind()}
-          </label>
-          <select
-            ref={kindControl}
-            id={`${id}-type`}
-            className={selectClass}
-            value={kind ?? ''}
-            disabled={disabled}
-            aria-describedby={`${id}-type-help`}
-            onChange={(event) => changeKind(event.target.value || null)}
-          >
-            <option value="">{m.library_collection_mixed_label()}</option>
-            {kind && !types?.some((type) => type.id === kind) ? (
-              <option value={kind}>{m.collection_choice_type_unavailable()}</option>
-            ) : null}
-            {types?.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.label || m.collection_choice_type_unavailable()}
-              </option>
-            ))}
-          </select>
+          <Field className="min-w-0 gap-2">
+            <FieldLabel id={`${id}-type-label`} htmlFor={`${id}-type`}>
+              {m.library_collection_kind()}
+            </FieldLabel>
+            <Select<string, false>
+              items={collectionKindOptions}
+              disabled={disabled}
+              value={kind}
+              onValueChange={changeKind}
+            >
+              <SelectTrigger
+                ref={kindControl}
+                id={`${id}-type`}
+                aria-labelledby={`${id}-type-label`}
+                aria-describedby={`${id}-type-help`}
+                className={selectClass}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {collectionKindOptions.map(({ value, label, ...itemProps }) => (
+                    <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
           <div id={`${id}-type-help`} className="space-y-2 text-sm text-muted-foreground">
             <p>
               {kind === null ? m.collection_choice_automatic_type_help() : m.collection_choice_explicit_type_help()}
@@ -201,28 +231,36 @@ export function CollectionPresentationFields({
         </div>
         {onCoverChange ? (
           <div className="min-w-0 space-y-2">
-            <label htmlFor={`${id}-cover`} className="block font-medium">
-              {m.subject_cover()}
-            </label>
-            <select
-              ref={coverControl}
-              id={`${id}-cover`}
-              className={selectClass}
-              value={coverMediaId ?? ''}
-              disabled={disabled}
-              aria-describedby={`${id}-cover-help`}
-              onChange={(event) => changeCover(event.target.value || null)}
-            >
-              <option value="">{m.library_collection_auto()}</option>
-              {coverMediaId && !coverOptions.some((option) => option.mediaId === coverMediaId) ? (
-                <option value={coverMediaId}>{m.collection_choice_selected_cover_unavailable()}</option>
-              ) : null}
-              {coverOptions.map((option) => (
-                <option key={option.mediaId} value={option.mediaId}>
-                  {pageText(libraryTitleValue(option.subject.label), getLocale()).text}
-                </option>
-              ))}
-            </select>
+            <Field className="min-w-0 gap-2">
+              <FieldLabel id={`${id}-cover-label`} htmlFor={`${id}-cover`}>
+                {m.subject_cover()}
+              </FieldLabel>
+              <Select<string, false>
+                items={collectionCoverOptions}
+                disabled={disabled}
+                value={coverMediaId}
+                onValueChange={changeCover}
+              >
+                <SelectTrigger
+                  ref={coverControl}
+                  id={`${id}-cover`}
+                  aria-labelledby={`${id}-cover-label`}
+                  aria-describedby={`${id}-cover-help`}
+                  className={selectClass}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {collectionCoverOptions.map(({ value, label, ...itemProps }) => (
+                      <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
             <div id={`${id}-cover-help`} className="space-y-2 text-sm text-muted-foreground">
               <p>{m.library_collection_cover_existing()}</p>
               {coverPreview.kind === 'unavailable' ? (

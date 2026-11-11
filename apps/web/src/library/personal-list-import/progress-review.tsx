@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import type { VndbReviewInput, VndbRow } from './contract';
 import { VndbAction, VndbCheck } from './controls';
@@ -62,55 +63,92 @@ export function VndbProgressReview({
       },
     });
   }
+  const occurrenceOptions = [
+    { value: null, label: m.library_vndb_progress_choose() },
+    { value: 'start', label: m.library_vndb_progress_start() },
+    ...eligible.map((session) => ({
+      value: session.id,
+      label: `${session.startedAt} · ${
+        (session.unit === 'minute'
+          ? session.amount
+          : session.measures?.find((measure) => measure.unit === 'minute')?.amount) ?? '—'
+      } minute · ${session.id}`,
+    })),
+  ];
+  const progressActionOptions = [
+    { value: 'adopt', label: m.library_vndb_progress_adopt() },
+    { value: 'clear', label: m.library_vndb_progress_clear() },
+  ];
   return (
     <section className="space-y-3 rounded-md border p-3" data-vndb-progress-review>
       <h4 className="font-medium">{m.library_vndb_progress_title()}</h4>
       <p>{m.library_vndb_progress_help()}</p>
       <Field>
-        <FieldLabel htmlFor={`${id}-occurrence`}>{m.library_vndb_progress_occurrence()}</FieldLabel>
-        <select
-          id={`${id}-occurrence`}
-          className="min-h-11 w-full rounded-md border bg-background px-3"
+        <FieldLabel id={`${id}-occurrence-label`} htmlFor={`${id}-occurrence`}>
+          {m.library_vndb_progress_occurrence()}
+        </FieldLabel>
+        <Select<string, false>
+          items={occurrenceOptions}
           disabled={busy || !targetId}
-          value={occurrence}
-          onChange={(event) => {
-            setOccurrence(event.currentTarget.value);
+          value={occurrence || null}
+          onValueChange={(value) => {
+            setOccurrence(value ?? '');
             setAction('adopt');
             setConsent(false);
           }}
         >
-          <option value="">{m.library_vndb_progress_choose()}</option>
-          <option value="start">{m.library_vndb_progress_start()}</option>
-          {eligible.map((session) => (
-            <option key={session.id} value={session.id}>
-              {session.startedAt} ·{' '}
-              {(session.unit === 'minute'
-                ? session.amount
-                : session.measures?.find((measure) => measure.unit === 'minute')?.amount) ?? '—'}{' '}
-              minute · {session.id}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            id={`${id}-occurrence`}
+            aria-labelledby={`${id}-occurrence-label`}
+            className="min-h-11 w-full rounded-md border bg-background px-3"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              {occurrenceOptions.map(({ value, label, ...itemProps }) => (
+                <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </Field>
       {current?.kind === 'unavailable' ? <p role="status">{m.library_vndb_progress_read_unavailable()}</p> : null}
       {current?.kind === 'occurrences' && current.next ? <p>{m.library_vndb_progress_more()}</p> : null}
       {occurrence && occurrence !== 'start' ? (
         <>
           <Field>
-            <FieldLabel htmlFor={`${id}-action`}>{m.library_vndb_review_action()}</FieldLabel>
-            <select
-              id={`${id}-action`}
-              className="min-h-11 w-full rounded-md border bg-background px-3"
-              value={action}
+            <FieldLabel id={`${id}-action-label`} htmlFor={`${id}-action`}>
+              {m.library_vndb_review_action()}
+            </FieldLabel>
+            <Select<string, false>
+              items={progressActionOptions}
               disabled={busy}
-              onChange={(event) => {
-                setAction(event.currentTarget.value as 'adopt' | 'clear');
+              value={action}
+              onValueChange={(value) => {
+                if (value === 'adopt' || value === 'clear') setAction(value);
                 setConsent(false);
               }}
             >
-              <option value="adopt">{m.library_vndb_progress_adopt()}</option>
-              <option value="clear">{m.library_vndb_progress_clear()}</option>
-            </select>
+              <SelectTrigger
+                id={`${id}-action`}
+                aria-labelledby={`${id}-action-label`}
+                className="min-h-11 w-full rounded-md border bg-background px-3"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {progressActionOptions.map(({ value, label, ...itemProps }) => (
+                    <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </Field>
           {action === 'adopt' ? (
             <VndbCheck

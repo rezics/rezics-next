@@ -1,3 +1,4 @@
+import { selectValue, selectOptions } from './support/select';
 import { SavedQueryConditionInput } from '../src/search/saved-query-condition-input';
 import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
@@ -98,6 +99,16 @@ async function mount(initial: Partial<Props> = {}, locale = getLocale()) {
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    DocumentFragment: window.DocumentFragment,
+    ShadowRoot: window.ShadowRoot,
+    Document: window.Document,
+    NodeFilter: window.NodeFilter,
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    ResizeObserver: window.ResizeObserver,
+    MutationObserver: window.MutationObserver,
+    HTMLInputElement: window.HTMLInputElement,
     Element: window.Element,
     Node: window.Node,
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
@@ -144,7 +155,7 @@ async function mount(initial: Partial<Props> = {}, locale = getLocale()) {
     select(label: string) {
       const field = [...host.querySelectorAll('label')].find((node) => node.textContent === label);
       expect(field?.htmlFor).toBeTruthy();
-      return window.document.getElementById(field!.htmlFor) as unknown as HTMLSelectElement;
+      return window.document.getElementById(field!.htmlFor) as unknown as HTMLButtonElement;
     },
     async click(name: string) {
       const button = [...host.querySelectorAll('button')].find(
@@ -185,10 +196,10 @@ test('available choices use supplied localized names, with exact saved and field
         locale,
       );
       try {
-        expect(ui.select(m.library_rule_state()).selectedOptions[0]!.textContent).toBe(stateLabels[locale]);
-        expect(ui.select(m.library_rule_label()).selectedOptions[0]!.textContent).toBe('Weekend reading');
+        expect(ui.select(m.library_rule_state()).textContent).toBe(stateLabels[locale]);
+        expect(ui.select(m.library_rule_label()).textContent).toBe('Weekend reading');
         // The supplied profile has only an ID. Do not invent a profile title.
-        expect(ui.select(m.library_rule_profile()).selectedOptions[0]!.textContent).toBe('profile.books');
+        expect(ui.select(m.library_rule_profile()).textContent).toBe('profile.books');
         for (const raw of [
           'states.books.v2',
           'state.reading',
@@ -305,11 +316,14 @@ test('a mismatched state set retains distinct unknown states and exact identifie
   });
   try {
     const select = ui.select(m.library_rule_state());
-    expect([...select.selectedOptions].map((option) => option.value)).toEqual(['state.reading', 'state.retired']);
-    expect(select.options[0]!.textContent).toContain(m.library_rule_unavailable_choice({ number: 1 }));
-    expect(select.options[1]!.textContent).toContain(m.library_rule_unavailable_choice({ number: 2 }));
+    const options = await selectOptions(select);
+    expect(
+      options.filter((option) => option.getAttribute('aria-selected') === 'true').map((option) => option.dataset.value),
+    ).toEqual(['state.reading', 'state.retired']);
+    expect(options[0]!.textContent).toContain(m.library_rule_unavailable_choice({ number: 1 }));
+    expect(options[1]!.textContent).toContain(m.library_rule_unavailable_choice({ number: 2 }));
     expect(select.textContent).not.toContain(stateLabels[getLocale()]);
-    expect(select.options).toHaveLength(2);
+    expect(options).toHaveLength(2);
     expect(ui.host.querySelector(`[id="${select.getAttribute('aria-describedby')}"]`)!.textContent).toBe(
       m.library_rule_state_set_unavailable(),
     );
@@ -318,7 +332,11 @@ test('a mismatched state set retains distinct unknown states and exact identifie
     await ui.render();
     expect(ui.host.querySelector('form fieldset')!.disabled).toBe(false);
     await ui.click(`${m.library_subject_clear()} · ${m.library_rule_state()}`);
-    expect(ui.select(m.library_rule_state()).selectedOptions).toHaveLength(0);
+    expect(
+      (await selectOptions(ui.select(m.library_rule_state()))).filter(
+        (option) => option.getAttribute('aria-selected') === 'true',
+      ),
+    ).toHaveLength(0);
     expect(ui.host.textContent).toContain('states.books.v1');
     expect(ui.select(m.library_rule_state()).textContent).not.toContain(stateLabels[getLocale()]);
   } finally {
@@ -344,10 +362,10 @@ test('retired profile, label, session and holding operands survive save with exp
     },
   });
   try {
-    expect(ui.select(m.library_rule_label()).selectedOptions[0]!.textContent).toContain(m.library_rule_retained());
-    expect(ui.select(m.library_rule_session()).selectedOptions[0]!.textContent).toBe(m.library_rule_abandoned());
-    expect(ui.select(m.library_rule_holding_kind()).value).toBe('copy.old');
-    expect(ui.select(m.library_rule_holding_status()).value).toBe('copy.missing');
+    expect(ui.select(m.library_rule_label()).textContent).toContain(m.library_rule_retained());
+    expect(ui.select(m.library_rule_session()).textContent).toBe(m.library_rule_abandoned());
+    expect(selectValue(ui.select(m.library_rule_holding_kind()))).toBe('copy.old');
+    expect(selectValue(ui.select(m.library_rule_holding_status()))).toBe('copy.missing');
     await ui.submit();
     expect(calls[0]!.filter).toEqual(filter);
   } finally {
@@ -379,7 +397,7 @@ test('an uncertain save keeps its original binding, key and all operands through
     expect(ui.host.querySelector('fieldset')!.disabled).toBe(true);
     expect(ui.host.textContent).toContain(original.rule.releaseDigest);
     expect(ui.host.textContent).not.toContain(fresh.rule.releaseDigest);
-    expect(ui.select(m.library_rule_state()).value).toBe('state.reading');
+    expect(ui.select(m.library_rule_state()).textContent).toBe(stateLabels[getLocale()]);
     await ui.submit();
     expect(writes[1]!.value).toEqual(writes[0]!.value);
     expect(writes[1]!.value).toEqual({

@@ -1,3 +1,4 @@
+import { selectTrigger, selectValue, selectOptions, chooseSelect } from './support/select';
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, useState } from 'react';
@@ -221,6 +222,8 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    ShadowRoot: window.ShadowRoot,
+    Document: window.Document,
     HTMLButtonElement: window.HTMLButtonElement,
     HTMLFieldSetElement: window.HTMLFieldSetElement,
     HTMLInputElement: window.HTMLInputElement,
@@ -421,15 +424,12 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       });
     };
     const select = async (index: number, value: string) => {
-      const control = host.querySelectorAll<HTMLSelectElement>('select')[index]!;
-      await act(async () => {
-        control.value = value;
-        control.dispatchEvent(new window.Event('change', { bubbles: true }));
-      });
+      const control = selectTrigger(host, index);
+      await chooseSelect(control, value);
     };
     try {
       await render();
-      expect(host.querySelectorAll('select')).toHaveLength(9);
+      expect(host.querySelectorAll('[data-slot="select-trigger"]')).toHaveLength(9);
       expect(host.textContent).toContain(m.settings_shelf_columns_unavailable({ columns: 'creator, rating, started' }));
       expect(host.textContent).not.toContain(
         m.settings_shelf_order_unavailable({ tab: m.library_state_planned(), field: 'title' }),
@@ -439,19 +439,20 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
         [7, m.library_score_lowest()],
         [4, m.library_score_highest()],
       ] as const) {
-        const option = host.querySelectorAll<HTMLSelectElement>('select')[index]!.selectedOptions[0]!;
-        expect(option.disabled).toBe(false);
-        expect(option.value.startsWith('rating:')).toBe(true);
+        const control = selectTrigger(host, index);
+        const option = (await selectOptions(control)).find((item) => item.getAttribute('aria-selected') === 'true')!;
+        expect(option.hasAttribute('data-disabled')).toBe(false);
+        expect(option.dataset.value!.startsWith('rating:')).toBe(true);
         expect(option.textContent).toContain(direction);
       }
 
       await select(0, 'table');
       await click(m.settings_shelf_save());
       expect(host.textContent).toContain(m.settings_shelf_conflict());
-      expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('table');
+      expect(selectValue(selectTrigger(host, 0))).toBe('table');
       await click(m.settings_shelf_reload());
       expect(host.textContent).toContain(m.settings_shelf_review());
-      expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('table');
+      expect(selectValue(selectTrigger(host, 0))).toBe('table');
       await click(m.settings_shelf_keep_local());
       await click(m.settings_shelf_save());
       expect(host.querySelector('[role="status"]')?.textContent).toBe(m.settings_saved());
@@ -509,7 +510,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       expect(patches[3]?.key).toBe(patches[2]?.key);
       expect(patches[3]?.body).toEqual(patches[2]?.body);
       expect(host.textContent).toContain(m.settings_shelf_review());
-      expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('list');
+      expect(selectValue(selectTrigger(host, 0))).toBe('list');
       expect(confirmedVersion).toBe(7);
       await click(m.settings_shelf_keep_local());
       await click(m.settings_shelf_save());
@@ -546,8 +547,8 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       wrong = undefined;
       await click(m.library_types_retry());
       expect(typeCursors.slice(-7)).toEqual(['second', 'third', 'second', 'second', 'second', 'second', 'second']);
-      expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('table');
-      expect((host.querySelectorAll('select')[8] as HTMLSelectElement).value).toBe(book);
+      expect(selectValue(selectTrigger(host, 0))).toBe('table');
+      expect(selectValue(selectTrigger(host, 8))).toBe(book);
       expect(patches).toHaveLength(patchCount);
       typesMode = 'unavailable';
       await click(m.library_types_first());
@@ -618,15 +619,15 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       await click(m.settings_shelf_save());
       expect(host.textContent).toContain(m.settings_shelf_conflict());
       await click(m.settings_shelf_reload());
-      expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('table');
-      expect((host.querySelectorAll('select')[1] as HTMLSelectElement).value).toBe('large');
-      expect((host.querySelectorAll('select')[9] as HTMLSelectElement).value).toBe('grid');
+      expect(selectValue(selectTrigger(host, 0))).toBe('table');
+      expect(selectValue(selectTrigger(host, 1))).toBe('large');
+      expect(selectValue(selectTrigger(host, 9))).toBe('grid');
       await click(m.settings_shelf_keep_local());
       await click(m.settings_shelf_save());
       expect(patches[8]?.body).toEqual({ expectedVersion: 11, shelf: { layouts: { [movie]: 'grid' } } });
       await select(8, absent);
       expect(host.textContent).toContain(m.settings_shelf_type_absent());
-      expect(host.querySelectorAll('select')).toHaveLength(9);
+      expect(host.querySelectorAll('[data-slot="select-trigger"]')).toHaveLength(9);
       await click(m.settings_shelf_type_remove());
       await click(m.settings_shelf_save());
       expect(patches[9]?.body).toEqual({ expectedVersion: 12, shelf: { layouts: { [absent]: null } } });
