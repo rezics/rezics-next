@@ -105,6 +105,8 @@ export type StudioInput = Readonly<{
   publications: StudioPage<PublicationRecord>;
   canCreateDraft: boolean;
   canPublish: boolean;
+  /** A missing native publication flow must not render an empty history as an admitted result. */
+  publicationUnavailableReason?: string;
 }>;
 
 /** All methods recheck current native authority; mutations use exact preconditions and replay-safe keys.

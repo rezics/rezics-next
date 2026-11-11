@@ -26,6 +26,9 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
   const book = Boolean(state.structure);
   let hasTarget = false;
   try { hasTarget = Boolean(controller.publicationTarget()); } catch { /* The organizer presents an invalid structure. */ }
+  if (controller.input.publicationUnavailableReason) return <section className="studio-stack" aria-label="Publication">
+    <h2>Publish</h2><p>{controller.input.publicationUnavailableReason}</p>
+  </section>;
   return <section className="studio-stack" aria-label="Publication">
     <div className="studio-section-heading"><h2>Publish</h2>
       {book ? <span>{state.selectedOccurrences.size} chapters selected</span> : null}
