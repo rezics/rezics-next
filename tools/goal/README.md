@@ -3066,6 +3066,10 @@ including an interrupt retry's discovered turn. Late housekeeping continuations 
 Retired threads, duplicate terminal events and recently retired turn starts are ignored; only one disposition and a
 bounded identity replay fence are retained per session.
 
+Decision: Bind expected park/stop interrupts to the exact current thread and turn, and report a current work
+interruption/failure once only when wakeable mail remains and native Goal/admission permit the existing same-thread
+recovery path.
+
 An unexpected current work interruption or failure remains visible instead of becoming an idle park. The existing
 inbox cadence reports it once to the supermanager when undelivered waking mail remains, the native Goal permits work
 and allowance admits a turn. Unread mail already delivered, quiet events and UI interruption toasts do not establish

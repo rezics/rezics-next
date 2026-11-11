@@ -284,6 +284,28 @@ test('global status summarizes large history while retaining full single-task br
     writeFileSync(h.settings.routingFile, JSON.stringify(routing));
     const fixturePool = h.settings.pools![0]!;
     h.settings.pools = [{ ...fixturePool, policy: { ...fixturePool.policy, allowUnknown: false } }];
+    h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+    h.store.db
+      .query('INSERT INTO manager_sessions(id, state) VALUES (?, ?)')
+      .run(
+        'mail-manager',
+        JSON.stringify({
+          kind: 'managed',
+          goal: 'live',
+          status: 'running',
+          threadId: 'thread-mail',
+          activeTurnId: null,
+          waitingForInbox: true,
+          turnDisposition: {
+            threadId: 'thread-mail',
+            turnId: 'turn-housekeeping',
+            status: 'interrupted',
+            intent: 'controller-park',
+            at: 1,
+          },
+          goalState: { status: 'paused' },
+        }),
+      );
 
     const attemptRead = spyOn(h.store, 'attempt');
     const globalOutput: string[] = [];
@@ -324,6 +346,18 @@ test('global status summarizes large history while retaining full single-task br
       terminationRequest: { operation: 'stop', state: 'requested', processIdentity: 'known' },
     });
     expect(status.pools).toContainEqual(expect.objectContaining({ name: 'fixture', waiting: 1 }));
+    expect(status.managers).toContainEqual(
+      expect.objectContaining({
+        id: 'mail-manager',
+        goals: ['live'],
+        operation: 'waiting-for-inbox',
+        threadId: 'thread-mail',
+        activeTurnId: null,
+        waitingForInbox: true,
+        nativeGoalStatus: 'paused',
+        turnDisposition: expect.objectContaining({ intent: 'controller-park', status: 'interrupted' }),
+      }),
+    );
     expect(attemptRead).toHaveBeenCalledTimes(2);
 
     attemptRead.mockClear();

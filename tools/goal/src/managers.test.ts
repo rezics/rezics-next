@@ -5,7 +5,12 @@ import { homedir } from 'node:os';
 import { StdioAppServer, type CodexPool, type Notification } from './app-server.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import { ManagerSessions, resolveGoalManager, type ManagerSpec } from './managers.ts';
+import {
+  ManagerSessions,
+  readManagerOperationalStatus,
+  resolveGoalManager,
+  type ManagerSpec,
+} from './managers.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { ProcessIdentity } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
@@ -292,16 +297,28 @@ test('turn and wall-clock limits replace the session without waking the superman
       const spec = { ...s.spec, limits: { turns: 1, turnsWithoutDecision: 10, wallMs: 3_600_000 } };
       const state = await s.managers.start(spec);
       await s.managers.flush();
+      const openingTurnId = s.managers.get(state.id).activeTurnId!;
       if (reason === 'wall') s.advance(spec.limits.wallMs + 1);
-      await s.notify({
-        method: 'turn/completed',
-        params: { threadId: state.threadId, turn: { id: state.activeTurnId, status: 'completed' } },
-      });
-      if (reason === 'turns')
+      if (reason === 'turns') {
         await s.notify({
-          method: 'turn/started',
-          params: { threadId: state.threadId, turn: { id: 'next', status: 'inProgress' } },
+          method: 'turn/completed',
+          params: { threadId: state.threadId, turn: { id: openingTurnId, status: 'completed' } },
         });
+        s.inbox.deliver({ managerId: state.id, kind: 'decision', summary: 'Continue on the same thread' });
+        await s.managers.wake(state.id);
+        await s.managers.flush();
+        const activeTurnId = s.managers.get(state.id).activeTurnId!;
+        expect(activeTurnId).not.toBe(openingTurnId);
+        await s.notify({
+          method: 'turn/completed',
+          params: { threadId: state.threadId, turn: { id: activeTurnId, status: 'completed' } },
+        });
+      } else {
+        await s.notify({
+          method: 'turn/completed',
+          params: { threadId: state.threadId, turn: { id: openingTurnId, status: 'completed' } },
+        });
+      }
       await s.managers.flush();
       const renewed = s.managers.get(state.id);
       expect(renewed.status).toBe('running');
@@ -397,13 +414,13 @@ test('turns without a decision pause the manager and notify the supermanager', a
       method: 'turn/completed',
       params: { threadId: state.threadId, turn: { id: state.activeTurnId, status: 'completed' } },
     });
-    await s.notify({
-      method: 'turn/started',
-      params: { threadId: state.threadId, turn: { id: 'next', status: 'inProgress' } },
-    });
+    s.inbox.deliver({ managerId: state.id, kind: 'decision', summary: 'Continue work without a decision' });
+    await s.managers.wake(state.id);
+    await s.managers.flush();
+    const nextTurn = s.managers.get(state.id).activeTurnId!;
     await s.notify({
       method: 'turn/completed',
-      params: { threadId: state.threadId, turn: { id: 'next', status: 'completed' } },
+      params: { threadId: state.threadId, turn: { id: nextTurn, status: 'completed' } },
     });
     await s.managers.flush();
     expect(s.managers.get(state.id).status).toBe('paused');
@@ -626,10 +643,27 @@ test('idle Goals stay parked; a concurrent inbox wake is retained through pool r
       threadId,
       activeTurnId: null,
       waitingForInbox: true,
-      turns: 2,
+      turns: 1,
       usage: { total: { totalTokens: 500 } },
       goalState: { status: 'paused', objective: s.spec.objective, tokenBudget: s.spec.budget },
+      turnDisposition: {
+        threadId,
+        turnId: 'turn-2',
+        status: 'interrupted',
+        intent: 'controller-park',
+      },
     });
+    expect(readManagerOperationalStatus(s.db)).toContainEqual(
+      expect.objectContaining({
+        id: manager.id,
+        operation: 'waiting-for-inbox',
+        threadId,
+        activeTurnId: null,
+        waitingForInbox: true,
+        nativeGoalStatus: 'paused',
+        turnDisposition: expect.objectContaining({ intent: 'controller-park', status: 'interrupted' }),
+      }),
+    );
     expect(
       s
         .requests()
@@ -645,6 +679,7 @@ test('idle Goals stay parked; a concurrent inbox wake is retained through pool r
     expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(startsAtIdle);
     expect(s.requests().filter((r) => r.method === 'thread/resume')).toHaveLength(resumesAtIdle);
     expect(s.managers.get(manager.id)).toMatchObject({ waitingForInbox: true, goalState: { status: 'paused' } });
+    expect(s.inbox.pending('supervisor')).toHaveLength(0);
 
     // Reactivation itself starts the provider Goal turn. The existing start-or-steer path must use that same turn.
     s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Choose the next brief' });
@@ -655,7 +690,7 @@ test('idle Goals stay parked; a concurrent inbox wake is retained through pool r
       status: 'running',
       activeTurnId: 'turn-3',
       waitingForInbox: false,
-      turns: 3,
+      turns: 2,
       usage: { total: { totalTokens: 500 } },
       goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
     });
@@ -698,7 +733,7 @@ test('idle Goals stay parked; a concurrent inbox wake is retained through pool r
       status: 'running',
       activeTurnId: 'turn-4',
       waitingForInbox: false,
-      turns: 4,
+      turns: 3,
       usage: { total: { totalTokens: 500 } },
       goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
     });
@@ -721,6 +756,64 @@ test('idle Goals stay parked; a concurrent inbox wake is retained through pool r
     });
   } finally {
     await s.close();
+  }
+});
+
+test('current interrupted and failed work turns stay visible and surface only real stranded mail once', async () => {
+  for (const terminal of ['interrupted', 'failed'] as const) {
+    const s = await setup();
+    try {
+      const manager = await s.managers.start(s.spec);
+      const threadId = manager.threadId!;
+      const turnId = manager.activeTurnId!;
+      s.inbox.record(manager.id, { kind: 'merged' });
+
+      await s.notify({
+        method: 'turn/completed',
+        params: { threadId, turn: { id: turnId, status: terminal } },
+      });
+      expect(readManagerOperationalStatus(s.db)).toContainEqual(
+        expect.objectContaining({
+          id: manager.id,
+          operation: `turn-${terminal}`,
+          threadId,
+          activeTurnId: null,
+          nativeGoalStatus: 'active',
+          turnDisposition: expect.objectContaining({
+            threadId,
+            turnId,
+            status: terminal,
+            intent: 'work',
+          }),
+        }),
+      );
+      expect(s.inbox.pending('supervisor')).toHaveLength(0);
+
+      await s.notify({
+        method: 'turn/completed',
+        params: { threadId, turn: { id: turnId, status: terminal } },
+      });
+      expect(s.inbox.pending('supervisor')).toHaveLength(0);
+
+      s.inbox.deliver({ managerId: manager.id, kind: 'decision', summary: 'Review the interrupted work' });
+      await s.managers.wake(manager.id);
+      await s.managers.flush();
+      expect(s.inbox.pending('supervisor')).toHaveLength(1);
+      expect(s.inbox.pending('supervisor')[0]?.event.summary).toContain(
+        `turn ${turnId} on thread ${threadId} ${terminal} unexpectedly`,
+      );
+      expect(s.managers.get(manager.id)).toMatchObject({ threadId, activeTurnId: 'turn-2', turns: 2 });
+      expect(s.requests().filter((request) => request.method === 'turn/start')).toHaveLength(2);
+      expect(s.requests().filter((request) => request.method === 'turn/start').at(-1)?.params.threadId).toBe(threadId);
+      expect(s.inbox.notifications(manager.id)).toHaveLength(0);
+
+      await s.managers.wake(manager.id);
+      await s.managers.flush();
+      expect(s.inbox.pending('supervisor')).toHaveLength(1);
+      expect(s.requests().filter((request) => request.method === 'turn/start')).toHaveLength(2);
+    } finally {
+      await s.close();
+    }
   }
 });
 
@@ -934,18 +1027,19 @@ test('a Codex manager opening ends idle turns instead of sleeping and names its 
   try {
     await s.managers.start(s.spec);
     const opening = s.requests().find((r) => r.method === 'turn/start')?.params.input[0]?.text as string;
-    expect(opening).not.toContain('use clock.sleep inside the active turn');
-    expect(opening).toContain('finish with a normal response and no tool call');
-    expect(opening).toContain('Do not read or wait on inbox, sleep, or poll workers/checks to look for work');
-    expect(opening).toContain('The controller resumes this thread on the next inbox event');
-    expect(opening).toContain('Read and acknowledge delivered inbox events');
-    expect(opening).toContain(`ready briefs in ${join(s.path, 'state', 'backlog', 'refactor')}`);
-    expect(opening).toContain("Synthesize your workers' reports");
-    expect(opening).toContain('at most 60 words each');
-    expect(opening).toContain('Do not write receipts, status snapshots or lists of actions not taken.');
-    expect(opening).toContain('Read your brief and continuation once per session');
-    expect(opening).toContain('CONTINUATION.md under 8,000 characters, replaced, not appended');
-    expect(opening).toContain('Act on each stopped task within an hour');
+    const normalizedOpening = opening.replace(/\s+/g, ' ');
+    expect(normalizedOpening).not.toContain('use clock.sleep inside the active turn');
+    expect(normalizedOpening).toContain('finish with a normal response and no tool call');
+    expect(normalizedOpening).toContain('Do not read or wait on inbox, sleep, or poll workers/checks to look for work');
+    expect(normalizedOpening).toContain('The controller resumes this thread on the next inbox event');
+    expect(normalizedOpening).toContain('Read and acknowledge delivered inbox events');
+    expect(normalizedOpening).toContain(`ready briefs in ${join(s.path, 'state', 'backlog', 'refactor')}`);
+    expect(normalizedOpening).toContain("Synthesize your workers' reports");
+    expect(normalizedOpening).toContain('at most 60 words each');
+    expect(normalizedOpening).toContain('Do not write receipts, status snapshots or lists of actions not taken.');
+    expect(normalizedOpening).toContain('Read your brief and continuation once per session');
+    expect(normalizedOpening).toContain('CONTINUATION.md under 8,000 characters, replaced, not appended');
+    expect(normalizedOpening).toContain('Within an hour, handle stopped work in order');
     expect(s.managers.get(s.spec.id).promptManifest?.overBudget).toEqual([]);
   } finally {
     await s.close();
@@ -1106,6 +1200,10 @@ test('a notification from a retired thread does not change the current session',
       turns: 1,
     });
     expect(s.managers.get(manager.id).goalState?.status).toBe('active');
+    expect(readManagerOperationalStatus(s.db)).toContainEqual(
+      expect.objectContaining({ id: manager.id, operation: 'active-turn', threadId: manager.threadId }),
+    );
+    expect(s.inbox.pending('supervisor')).toHaveLength(0);
   } finally {
     await s.close();
   }
@@ -1165,7 +1263,16 @@ test('pause falls back to resume then interrupt when the active turn is gone', a
       'thread/resume',
       'turn/interrupt',
     ]);
+    await s.managers.flush();
     expect(s.managers.get(manager.id).status).toBe('paused');
+    expect(readManagerOperationalStatus(s.db)).toContainEqual(
+      expect.objectContaining({
+        id: manager.id,
+        operation: 'paused',
+        turnDisposition: expect.objectContaining({ intent: 'controller-stop', status: 'interrupted' }),
+      }),
+    );
+    expect(s.inbox.pending('supervisor')).toHaveLength(0);
   } finally {
     await s.close();
   }
