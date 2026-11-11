@@ -13,6 +13,17 @@ capabilities and disclosure rules on every page and device.
   boards, threads, posting/replies and the scoped community, Zone, moderation and notification surfaces.
 - Collections, the personal library, independent labels, holdings, progress and explicit publication are usable
   through their real APIs. Filters remain available wherever the common Collection abstraction appears.
+- Book discovery/catalogue, personal Library, hosted-novel authoring and complete public reading are launch
+  requirements through their owners' real APIs. One shared Studio serves books and columns with common drafts,
+  editing, revision history/comparison, preview and explicit publication; books add an ordered nested TOC, chapter
+  add/reorder/move and navigation, while columns retain article/series presentation. Mounted author and reader
+  journeys are a separate acceptance gate from Content's native API acceptance. Authors manage and compare chapter
+  revisions, preview and explicitly publish a frozen TOC selection with exact body revisions; unselected drafts stay
+  private under ordinary authorization. Public readers get frozen chapters, stable exact chapter links, progress and
+  continue reading. The launch gate meets or exceeds the read-only `../rezics` behavior baseline at `95167ceab` and
+  demonstrates an improvement, such as links surviving chapter moves with atomic published-revision selection. A
+  flat native first slice is not release acceptance. Requiring Book Studio does not expand unrelated article rollout
+  or open paid publishing, Notion, Concept or general Search expansion.
 
 Decision: Independent progress visits expose explicit refresh, adopt newer saved values in untouched units, and
 retain local amount or clear choices by measure unit.
@@ -89,7 +100,9 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 ## Scope
 
 Includes `apps/web` and `apps/auth`, shared UI/document components, BFF/media transport, product routes, library
-pages and SEO. Follow [public scope](../scope.md), [subject pages](../subject-pages.md) and [SEO](../seo.md).
+pages and SEO. Web owns the shared book/column Studio and book reader; Content owns hosted structures and Post
+revisions, Semantic owns Book/Series/Edition bibliography, and Commerce owns personal Library. Follow
+[public scope](../scope.md), [subject pages](../subject-pages.md) and [SEO](../seo.md).
 The adopted mixed Home journey below is in scope; personalized recommendations remain deferred. This Goal adopts
 the complete second-scope features opened in [public scope](../scope.md): saved dynamic queries, advanced facets,
 scopes, Realm rating order, board pins, slow mode, watch, Collection/review/Space discovery and the moderator

@@ -14,6 +14,13 @@ boards, threads, posts, media, Spaces and Realms.
   [document package](../../packages/document/README.md). Persistent board pins never grant visibility; active, hot
   and newest continuations skip pinned threads without losing sparse-page progress under current container-chain
   disclosure.
+- Content owns the hosted-book structure and Post revision contracts for the first-public book library: ordered,
+  nested parts and chapters have stable occurrence identities and support add, reorder and move; chapter revisions
+  support history and comparison; explicit publication freezes a public TOC selection with its exact Post revisions.
+  Unselected drafts stay private under ordinary author and reader authorization. Native API acceptance is a separate
+  gate from Web's mounted author and reader acceptance. Both must meet or exceed the read-only `../rezics` behavior
+  baseline at `95167ceab` and demonstrate an improvement, such as exact chapter links surviving moves with atomic
+  published-revision selection. A flat native first slice alone does not satisfy the launch gate.
 - Reports retain exact anchors. Takedown targets the resource partition and security revision. Erased revision bodies
   become `NULL` while exact references disclose erased availability. Author thread erasure makes bounded durable
   progress with current per-post authority; point erasure and takedown keep their synchronous contract.
@@ -29,8 +36,8 @@ boards, threads, posts, media, Spaces and Realms.
 - Public Collection, review and Space discovery, mixed Home and moderator work follow their owner disclosure rules.
   The moderator directory stays unavailable where authoritative Access currentness is unavailable; exact and manual
   report queues remain independent.
-- Articles and hosted works stay grant-closed until polished. Email and account mute/block remain deferred under
-  [public scope](../scope.md).
+- Articles and non-book hosted works stay grant-closed until polished; media retains its existing [public-scope
+  policy](../scope.md). Email and account mute/block remain deferred under [public scope](../scope.md).
 
 Completion covers the scoped outcomes on main with recorded HTTP/API, native command/effect/relay, default-worker,
 growth, installed public-root/callable, applicable browser receiving and promoted-commit checks. Specified,
@@ -40,10 +47,11 @@ implemented, exposed, tested and promoted remain separate stages; documentation 
 
 Content includes Kernel content, community and rating services and their composed product outcomes: boards, threads,
 posts, media, publication, reactions, ratings/reviews, Realm rating sorts, moderation, slow mode, watches, discovery
-and minimal in-app notices. Web owns the document package, editor, media transport and shared browser lifetimes.
-Accounts owns membership authority, preferences and lifecycle ports. Semantic owns subjects, Context and identity.
-Commerce owns Library, follows, Collections, financial and rights authority. Search owns public discovery sources,
-results, continuations and their query and default-worker assembly.
+and minimal in-app notices. Content owns hosted-book structures and Post revisions. Web owns the shared Studio and
+book reader, document package, editor, media transport and shared browser lifetimes. Accounts owns membership
+authority, preferences and lifecycle ports. Semantic owns Book/Series/Edition bibliography, subjects, Context and
+identity. Commerce owns personal Library, follows, Collections, financial and rights authority. Search owns public
+discovery sources, results, continuations and their query and default-worker assembly.
 
 ## Ownership
 
