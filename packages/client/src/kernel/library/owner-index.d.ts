@@ -30,6 +30,9 @@ export declare function stepOwnerIndex(tx: OperationalTransaction, accountId: st
 export declare function readOwnerOriginalPrefix(client: Client, accountId: string, after: string | null, limit: number): Promise<string[]>;
 /** Native independent supports. Label parent liveness is checked even if directory cleanup is delayed. */
 export declare function readOwnerOriginalTruth(client: Client, accountId: string, original: string): Promise<{
+    clear?: {
+        sequence: bigint;
+    };
     original: string;
     presence: boolean | null;
     families: {
@@ -45,7 +48,7 @@ export declare function readOwnerOriginalTruth(client: Client, accountId: string
     } | null;
 }>;
 export type OwnerOriginalTruth = Awaited<ReturnType<typeof readOwnerOriginalTruth>>;
-/** Chronology is independent of source, type, UUID, time and presentation digest. Preserve all live conflicts. */
+/** Clear is reduction evidence, independent of presence. Preserve every original live conflict. */
 export declare function currentOwnerState(originals: readonly OwnerOriginalTruth[]): {
     status: 'unready';
     reason: 'unsequenced' | 'unpinned';
@@ -57,5 +60,9 @@ export declare function currentOwnerState(originals: readonly OwnerOriginalTruth
         sequence: bigint;
         pin: LibraryProfilePin;
     } | null;
+    clear?: {
+        original: string;
+        sequence: bigint;
+    };
 };
 export {};

@@ -25,6 +25,9 @@ export declare function createBuiltinRuntime(config: Omit<OwnerQueryDependencies
 /** Retained participant input: one native prefix and the producer's exact batched mappings. */
 export declare function readBuiltinOriginalInputs(pool: Pool, accountId: string, after: string | null, limit: number): Promise<{
     fact: {
+        clear?: {
+            sequence: bigint;
+        };
         original: string;
         presence: boolean | null;
         families: {

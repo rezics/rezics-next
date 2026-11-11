@@ -49,6 +49,9 @@ export declare function createNativeBuiltinRuntime(ports: NativeLibraryPresentat
 /** Internal native primitive for the real participant/retained plan integration. Never a successful member page. */
 export declare function readNativeBuiltinOriginalInputs(ports: NativeLibraryPresentationPorts, pool: Pool, accountId: string, after: string | null, limit: number): Promise<{
     fact: {
+        clear?: {
+            sequence: bigint;
+        };
         original: string;
         presence: boolean | null;
         families: {
