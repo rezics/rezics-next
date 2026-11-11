@@ -87,9 +87,9 @@ record remains the source; no second publication store or writer is introduced. 
 the erasure fence has no retained public selection. Moderation and later source withdrawal continue to govern the
 retained contribution.
 
-Decision: the first native loop uses an account-home notebook with a 32-placement-depth bound, exact current
-publication pointers, Search-owned candidate observations, and de-identified retention of eligible current
-publications at account erasure.
+Decision: the native first loop uses account-home notebooks, a 32-placement ancestor bound and exact current Content
+publication pointers for direct anonymous reads; Subject useful-page discovery waits for Search's bounded
+candidate-preparation API, and erasure retains only eligible selected revisions in deidentified form.
 
 Primary placements form a forest under one notebook root. A document has one primary placement there. Later reference
 placements can show the same document elsewhere without moving or copying it; they do not recursively acquire its

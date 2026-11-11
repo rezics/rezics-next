@@ -59,6 +59,11 @@ export type KnowledgePrivateRow = Readonly<{
 
 export type KnowledgeAncestorRow = Readonly<{ placement_id: string; parent_id: string | null; depth: number }>;
 
+/** Revision writes validate every Subject id before storing this JSON array. */
+function storedSubjectIds(ids: (string | null)[]): string[] {
+  return ids as string[];
+}
+
 export async function knowledgeOwner(
   pool: Pool,
   documentId: string,
@@ -125,7 +130,14 @@ export async function knowledgePrivateRow(
   notebookId: string,
   documentId: string,
 ): Promise<KnowledgePrivateRow | null> {
-  return privateRead.run(tx, { route, notebook_id: notebookId, document_id: documentId });
+  const row = await privateRead.run(tx, { route, notebook_id: notebookId, document_id: documentId });
+  if (!row) return null;
+  return {
+    ...row,
+    canonical_bytes: Buffer.from(row.canonical_bytes),
+    body_sha256: Buffer.from(row.body_sha256),
+    subject_ids: storedSubjectIds(row.subject_ids),
+  };
 }
 
 export async function knowledgePublicRow(
@@ -133,7 +145,16 @@ export async function knowledgePublicRow(
   route: number,
   documentId: string,
 ): Promise<KnowledgePublicRow | null> {
-  return publicRead.run(tx, { route, document_id: documentId });
+  const row = await publicRead.run(tx, { route, document_id: documentId });
+  if (!row) return null;
+  return {
+    ...row,
+    publication_sha256: Buffer.from(row.publication_sha256),
+    canonical_bytes: Buffer.from(row.canonical_bytes),
+    body_sha256: Buffer.from(row.body_sha256),
+    subject_ids: storedSubjectIds(row.subject_ids),
+    published_at: new Date(row.published_at),
+  };
 }
 
 export async function knowledgePublicSelection(
@@ -141,7 +162,14 @@ export async function knowledgePublicSelection(
   route: number,
   documentId: string,
 ): Promise<KnowledgePublicSelection | null> {
-  return publicSelection.run(tx, { route, document_id: documentId });
+  const row = await publicSelection.run(tx, { route, document_id: documentId });
+  return row
+    ? {
+        ...row,
+        publication_sha256: Buffer.from(row.publication_sha256),
+        subject_ids: storedSubjectIds(row.subject_ids),
+      }
+    : null;
 }
 
 export async function knowledgeAncestorPath(

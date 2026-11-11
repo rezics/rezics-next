@@ -267,7 +267,7 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
           ...failures,
         },
         detail: {
-          operationId: 'knowledge_document.publication.select',
+          operationId: 'knowledge_document.select_publication',
           'x-exposure': 'public',
           'x-action': 'account:update',
           'x-rate-limit': writeRate(),
