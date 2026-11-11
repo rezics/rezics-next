@@ -14,10 +14,26 @@ import {
 
 export type BookReaderState = Readonly<{
   address: BookAddress;
-  state: 'idle' | 'loading' | 'ready' | 'denied' | 'not-found' | 'unavailable' | 'changed' | 'retired' | 'not-installed';
+  state:
+    | 'idle'
+    | 'loading'
+    | 'ready'
+    | 'denied'
+    | 'not-found'
+    | 'unavailable'
+    | 'changed'
+    | 'retired'
+    | 'not-installed';
   page: BookPage | null;
   focus: Readonly<{ kind: 'heading' | 'occurrence'; occurrenceId?: string }> | null;
 }>;
+
+export type BookReaderFocus = BookReaderState['focus'];
+export type BookReaderNavigation = (
+  address: BookAddress,
+  contentsReturn: BookContentsAddress | null,
+  focus: BookReaderFocus,
+) => void;
 
 /** A single bounded page and return address. No tree, body cache, progress conversion or command. */
 export function createBookReader(
@@ -25,6 +41,12 @@ export function createBookReader(
   initialAddress: BookAddress,
   locale: string,
   guard: () => boolean = () => true,
+  options: {
+    contentsReturn?: BookContentsAddress | null;
+    navigate?: BookReaderNavigation;
+    reload?: () => void;
+    initialFocus?: BookReaderFocus;
+  } = {},
 ) {
   const observation = source.getSnapshot();
   let active = true;
@@ -33,7 +55,7 @@ export function createBookReader(
   let stopSource: (() => void) | undefined;
   let request: AbortController | undefined;
   let ticket = 0;
-  let contentsReturn: BookContentsAddress | null = null;
+  let contentsReturn: BookContentsAddress | null = options.contentsReturn ?? null;
   let snapshot: BookReaderState = { address: initialAddress, state: 'idle', page: null, focus: null };
   const listeners = new Set<() => void>();
   const publish = (value: BookReaderState) => {
@@ -61,7 +83,12 @@ export function createBookReader(
       return;
     }
     if (observation.state !== 'current') {
-      publish({ address, state: observation.state === 'not-installed' ? 'not-installed' : 'unavailable', page: null, focus: null });
+      publish({
+        address,
+        state: observation.state === 'not-installed' ? 'not-installed' : 'unavailable',
+        page: null,
+        focus: null,
+      });
       return;
     }
     const ownTicket = ++ticket;
@@ -79,26 +106,42 @@ export function createBookReader(
       if (!current() || ownTicket !== ticket || ownConnection !== connection) return;
       if (result.state === 'ready' && !bookPageMatches(operands, result.page)) result = { state: 'unavailable' };
       request = undefined;
-      publish(result.state === 'ready'
-        ? { address, state: 'ready', page: result.page, focus }
-        : { address, state: result.state, page: null, focus });
+      publish(
+        result.state === 'ready'
+          ? { address, state: 'ready', page: result.page, focus }
+          : { address, state: result.state, page: null, focus },
+      );
     } catch {
       if (!current() || ownTicket !== ticket || ownConnection !== connection) return;
       request = undefined;
       publish({ address, state: 'unavailable', page: null, focus });
     }
   };
+  const move = (address: BookAddress, focus: BookReaderFocus = { kind: 'heading' }) => {
+    if (!options.navigate) {
+      void read(address, focus);
+      return;
+    }
+    if (!current() || snapshot.state === 'loading') return;
+    const origin = contentsReturn;
+    retire();
+    options.navigate(address, origin, focus);
+  };
   return {
     getSnapshot: () => snapshot,
     subscribe(listener: () => void) {
       listeners.add(listener);
-      return () => { listeners.delete(listener); };
+      return () => {
+        listeners.delete(listener);
+      };
     },
     connect() {
       connected = true;
       const ownConnection = ++connection;
-      stopSource = source.subscribe(() => { current(); });
-      if (current()) void read(snapshot.address, null);
+      stopSource = source.subscribe(() => {
+        current();
+      });
+      if (current()) void read(snapshot.address, options.initialFocus ?? null);
       return () => {
         if (ownConnection !== connection) return;
         connected = false;
@@ -109,7 +152,9 @@ export function createBookReader(
         stopSource = undefined;
         // Strict Mode can reconnect this same visit; its former queued requests stay retired.
         snapshot = { ...snapshot, state: 'idle', page: null, focus: null };
-        queueMicrotask(() => { if (!connected) retire(); });
+        queueMicrotask(() => {
+          if (!connected) retire();
+        });
       };
     },
     current,
@@ -118,24 +163,31 @@ export function createBookReader(
     openChapter(address: BookChapterAddress) {
       if (!current() || snapshot.state === 'loading') return;
       if (snapshot.address.kind === 'contents') contentsReturn = { ...snapshot.address, selection: address.selection };
-      void read(address);
+      move(address);
     },
     openContents(address?: BookContentsAddress) {
       if (!current() || snapshot.state === 'loading') return;
       const chapter = snapshot.page?.kind === 'chapter' ? snapshot.page : null;
-      const target = address ?? contentsReturn ?? chapter?.contents ?? {
-        kind: 'contents' as const,
-        publication: initialAddress.publication,
-        parentOccurrenceId: null,
-        cursor: null,
-        selection: snapshot.address.selection,
-      };
+      const target = address ??
+        contentsReturn ??
+        chapter?.contents ?? {
+          kind: 'contents' as const,
+          publication: initialAddress.publication,
+          parentOccurrenceId: null,
+          cursor: null,
+          selection: snapshot.address.selection,
+        };
       const selection = chapter?.address.selection ?? snapshot.address.selection;
       const selected = selection ? { ...target, selection } : target;
       contentsReturn = selected;
-      void read(selected, selection ? { kind: 'occurrence', occurrenceId: selection.occurrenceId } : { kind: 'heading' });
+      move(selected, selection ? { kind: 'occurrence', occurrenceId: selection.occurrenceId } : { kind: 'heading' });
     },
-    retry() { void read(snapshot.address); },
+    retry() {
+      if (options.reload) {
+        retire();
+        options.reload();
+      } else void read(snapshot.address);
+    },
   };
 }
 export type BookReader = ReturnType<typeof createBookReader>;

@@ -472,3 +472,210 @@ test('native mount does not invent host admission or call Content while the host
   expect(host.textContent).toContain(m.book_reader_not_installed({}, { locale: 'en' }));
   expect(host.querySelector('article')).toBeNull();
 });
+
+test('native host resolves published defaults and frozen exact targets; route operands cannot select a draft', async () => {
+  const { observeHostedBookVisit } = await import('../src/books/reader/visit');
+  const { parseHostedBookSearch } = await import('../src/books/reader/address');
+  const book = createIllustrativeHostedBook('moved');
+  const { api } = await book.ready;
+  const catalogue = mock(api.catalogue);
+  const resolve = mock(api.resolve);
+  const native = { ...api, catalogue, resolve };
+  const visit = await observeHostedBookVisit(
+    native,
+    {
+      catalogueId: ids.catalogue,
+      locale: 'en',
+      search: {
+        release: ids.release,
+        occurrence: ids.first,
+        view: 'chapter',
+        returnParent: ids.nested,
+        returnCursor: illustrativeBookCursor,
+      },
+    },
+    { kind: 'session', subject: ids.author },
+    m.book_reader_title(),
+  );
+  expect(visit.state).toBe('ready');
+  if (visit.state !== 'ready') throw new Error('Expected a native admitted visit');
+  expect(visit.address).toEqual(await book.chapter());
+  expect(visit.admission.viewer).toEqual({ kind: 'session', subject: ids.author });
+  expect(visit.admission.currentReleaseRevisionId).toBe(ids.currentRelease);
+  expect(visit.admission.currentStructureRevisionId).toBe(ids.currentStructure);
+  expect(visit.contentsReturn).toEqual({
+    ...book.contents(ids.nested, illustrativeBookCursor),
+    selection: (await book.chapter()).selection,
+  });
+  expect(catalogue.mock.calls.map((call) => call[1])).toEqual([
+    { kind: 'publication' },
+    { kind: 'publication', revisionId: ids.release },
+  ]);
+  expect(resolve).toHaveBeenCalledTimes(1);
+  expect(resolve.mock.calls[0]![1]).toBe(ids.first);
+  const denied = await observeHostedBookVisit(
+    { ...api, catalogue: async () => ({ state: 'denied' }) },
+    {
+      catalogueId: ids.catalogue,
+      locale: 'en',
+      search: { release: ids.structure },
+    },
+    { kind: 'anonymous' },
+    m.book_reader_title(),
+  );
+  expect(denied).toEqual({ state: 'denied' });
+  expect(parseHostedBookSearch({ kind: 'structure', authorization: 'untrusted', viewer: ids.author })).toEqual({});
+  expect(() => parseHostedBookSearch({ release: 'not-an-id' })).toThrow();
+  expect(() => parseHostedBookSearch({ cursor: 'x'.repeat(4097) })).toThrow();
+  const rootVisit = await observeHostedBookVisit(
+    api,
+    { catalogueId: ids.catalogue, locale: 'en', search: {} },
+    { kind: 'anonymous' },
+    m.book_reader_title(),
+  );
+  expect(rootVisit.state === 'ready' && rootVisit.address.publication.releaseRevisionId).toBe(ids.currentRelease);
+});
+
+test('canonical reader links preserve native occurrence, frozen release and bounded opaque return in all locales', async () => {
+  const { hostedBookAddressHref, hostedBookSearch, parseHostedBookSearch } =
+    await import('../src/books/reader/address');
+  const { HostedBookReaderLink } = await import('../src/books/reader/link');
+  const book = createIllustrativeHostedBook();
+  const chapter = await book.chapter(true);
+  const origin = book.contents(ids.nested, illustrativeBookCursor);
+  const { locales } = await import('../src/paraglide/runtime.js');
+  for (const locale of locales) {
+    const href = hostedBookAddressHref(chapter, locale, origin);
+    const url = new URL(href, 'https://reader.test');
+    expect(url.pathname).toBe(`/${locale}/books/${ids.catalogue}/read`);
+    expect(parseHostedBookSearch(Object.fromEntries(url.searchParams))).toEqual(hostedBookSearch(chapter, origin));
+    expect(url.searchParams.get('returnCursor')).toBe(illustrativeBookCursor);
+    expect(url.searchParams.get('occurrence')).toBe(ids.reused);
+    expect(url.searchParams.get('release')).toBe(ids.release);
+    expect(url.searchParams.has('postId')).toBe(false); // The host resolves the target from the frozen publication.
+  }
+  host = document.createElement('main');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () =>
+    root!.render(<HostedBookReaderLink catalogueId={ids.catalogue} releaseRevisionId={ids.release} locale="de" />),
+  );
+  expect(host.querySelector('a')?.getAttribute('href')).toBe(`/de/books/${ids.catalogue}/read?release=${ids.release}`);
+});
+
+test('the default production route reads native contents and exact chapters, then rereads on browser Back and Forward', async () => {
+  const { createRootRoute, createRouter, createMemoryHistory, Outlet, RouterProvider } =
+    await import('@tanstack/react-router');
+  const { observeHostedBookVisit } = await import('../src/books/reader/visit');
+  const actualVisit = { ...(await import('../src/books/reader/native-visit')) };
+  const actualRead = { ...(await import('../src/books/reader/native-read')) };
+  const book = createIllustrativeHostedBook('failed-page');
+  const { api } = await book.ready;
+  const sourceReads: BookReadRequest[] = [];
+  const hostReads: unknown[] = [];
+  mock.module('../src/books/reader/native-visit', () => ({
+    readHostedBookVisit: async ({ data }: Parameters<typeof actualVisit.readHostedBookVisit>[0]) => {
+      hostReads.push(data);
+      return observeHostedBookVisit(api, data, { kind: 'anonymous' }, m.book_reader_title());
+    },
+  }));
+  mock.module('../src/books/reader/native-read', () => ({
+    ...actualRead,
+    readNativeHostedBook: async ({ data }: Parameters<typeof actualRead.readNativeHostedBook>[0]) => {
+      sourceReads.push(data.request);
+      return readHostedBook(api, data.request, data.publicationTitle, new AbortController().signal);
+    },
+  }));
+  const canonical = document.createElement('link');
+  canonical.rel = 'canonical';
+  canonical.href = 'https://reader.test/en/';
+  document.head.append(canonical);
+  try {
+    const { Route } = await import('../src/routes/books.$id.read');
+    setLocale('en', { reload: false });
+    window.history.replaceState(null, '', 'https://reader.test/en/');
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
+    const parent = createRootRoute({
+      component: () => (
+        <QueryClientProvider client={client}>
+          <Outlet />
+        </QueryClientProvider>
+      ),
+    });
+    const child = Route.update({ getParentRoute: () => parent, path: '/books/$id/read', id: '/books/$id/read' });
+    const history = createMemoryHistory({ initialEntries: [`/en/books/${ids.catalogue}/read`] });
+    const { deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
+    const router = createRouter({
+      routeTree: parent.addChildren([child]),
+      history,
+      rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
+    });
+    host = document.createElement('main');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => {
+      await router.load();
+      root!.render(<RouterProvider router={router} />);
+    });
+    await settle();
+    expect(host.textContent).toContain('Part I · The journey');
+    const link = (text: string) => {
+      const anchor = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((element) => element.textContent === text);
+      expect(anchor).toBeDefined();
+      return anchor!;
+    };
+    await click(link(`${m.book_reader_contents()} · Part I · The journey`));
+    await click(link(`${m.book_reader_contents()} · The observatory`));
+    await click(link(m.book_reader_more()));
+    expect(host.querySelector('article')).toBeNull();
+    expect(host.textContent).toContain(m.book_reader_unavailable());
+    await click(button(m.book_reader_retry()));
+    const chapterLink = link(`${m.book_reader_open_chapter()} · Dawn, an echo / 再読`);
+    expect(new URL(chapterLink.href).searchParams.get('returnParent')).toBe(ids.nested);
+    expect(new URL(chapterLink.href).searchParams.get('returnCursor')).toBe(illustrativeBookCursor);
+    await click(chapterLink);
+    expect(host.querySelector('article')?.textContent).toContain('The keeper opened the eastern shutters.');
+    expect(sourceReads.at(-1)?.address).toEqual(await book.chapter(true));
+    expect(document.activeElement).toBe(host.querySelector('h1'));
+    const beforeBack = sourceReads.length;
+    await act(async () => {
+      history.back();
+    });
+    await settle();
+    expect(sourceReads).toHaveLength(beforeBack + 1);
+    expect(sourceReads.at(-1)?.address).toEqual(book.contents(ids.nested, illustrativeBookCursor));
+    expect(host.querySelector('article')).toBeNull();
+    await act(async () => {
+      history.forward();
+    });
+    await settle();
+    expect(sourceReads).toHaveLength(beforeBack + 2);
+    expect(sourceReads.at(-1)?.address).toEqual(await book.chapter(true));
+    await click(button(m.book_reader_contents()));
+    expect(sourceReads.at(-1)?.address).toEqual({
+      ...book.contents(ids.nested, illustrativeBookCursor),
+      selection: (await book.chapter(true)).selection,
+    });
+    expect(document.activeElement?.getAttribute('aria-current')).toBe('location');
+    expect(hostReads).toHaveLength(sourceReads.length);
+  } finally {
+    canonical.remove();
+    mock.module('../src/books/reader/native-visit', () => actualVisit);
+    mock.module('../src/books/reader/native-read', () => actualRead);
+  }
+});
+
+test('a new native host incarnation can reopen the same address after pagehide without reviving the retired visit', async () => {
+  const book = createIllustrativeHostedBook();
+  const chapter = await book.chapter();
+  const oldSource = observed(book.source);
+  const render = await mount(oldSource, chapter);
+  await act(async () => window.dispatchEvent(new window.Event('pagehide')));
+  expect(host.querySelector('article')).toBeNull();
+  const freshSource = observed(book.source);
+  await render({ source: freshSource, readingIdentity: freshSource });
+  expect(freshSource.read).toHaveBeenCalledTimes(1);
+  expect(host.querySelector('article')?.textContent).toContain('The keeper opened the eastern shutters.');
+  expect(oldSource.read).toHaveBeenCalledTimes(1);
+});

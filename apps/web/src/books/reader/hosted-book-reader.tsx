@@ -17,13 +17,14 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { readerSessionSource, useReaderVisit } from '../../reader/lifetime';
 import { PostReadingBody } from '../../threads/post-reading-body';
-import { createBookReader, type BookReader } from './reader-state';
+import { createBookReader, type BookReader, type BookReaderNavigation, type BookReaderFocus } from './reader-state';
 import {
   sameSelection,
   uninstalledHostedBookSource,
   type BookAddress,
   type BookChapterPage,
   type BookContentsPage,
+  type BookContentsAddress,
   type BookNavigation,
   type HostedBookSource,
 } from './source';
@@ -38,6 +39,11 @@ export type HostedBookReaderProps = {
   readingIdentity: unknown;
   /** Optional installed canonical route mapper. The reader invents no Content URLs. */
   hrefForAddress?: (address: BookAddress) => string | null;
+  /** One bounded originating contents position supplied by the route. */
+  contentsReturn?: BookContentsAddress | null;
+  onNavigate?: BookReaderNavigation;
+  onReload?: () => void;
+  focusOnRead?: { focus: BookReaderFocus; owner: Element | null };
   /** An admitted region rendered by the existing Commerce progress/resume owner. */
   renderProgress?: (page: BookChapterPage, isCurrent: () => boolean) => ReactNode;
 };
@@ -48,14 +54,21 @@ export function HostedBookReader({
   source = uninstalledHostedBookSource,
   locale = getLocale(),
   readingIdentity,
+  contentsReturn,
+  onNavigate,
+  onReload,
+  focusOnRead,
   ...props
 }: HostedBookReaderProps) {
   const client = useContext(QueryClientContext);
   const session = useMemo(() => readerSessionSource(client), [client]);
   const addressKey = JSON.stringify(address);
   const readLocale = useCallback(() => locale, [locale]);
-  const route = useReaderVisit(addressKey, locale, readLocale);
   const owner = useMemo(() => ({}), [source, addressKey, locale, readingIdentity]);
+  const incarnation = useRef({ owner, generation: 0 });
+  if (incarnation.current.owner !== owner)
+    incarnation.current = { owner, generation: incarnation.current.generation + 1 };
+  const route = useReaderVisit(`${addressKey}:${incarnation.current.generation}`, locale, readLocale);
   const [reopening, setReopening] = useState<{ owner: object; address: BookAddress } | null>(null);
   const openingAddress = reopening?.owner === owner ? reopening.address : address;
   const reader = useMemo(() => {
@@ -65,6 +78,7 @@ export function HostedBookReader({
       openingAddress,
       locale,
       () => route.current() && session.snapshot() === sessionVersion,
+      { contentsReturn, navigate: onNavigate, reload: onReload, initialFocus: focusOnRead?.focus },
     );
   }, [source, addressKey, locale, readingIdentity, session, route, reopening, owner]);
   const previous = useRef(reader);
@@ -86,7 +100,12 @@ export function HostedBookReader({
       {...props}
       reader={reader}
       locale={locale}
+      focusOwner={focusOnRead?.owner}
       restart={() => {
+        if (onReload) {
+          onReload();
+          return;
+        }
         if (route.current()) setReopening({ owner, address: reader.getSnapshot().address });
       }}
     />
@@ -97,16 +116,20 @@ type ViewProps = Pick<HostedBookReaderProps, 'hrefForAddress' | 'renderProgress'
   reader: BookReader;
   locale: string;
   restart: () => void;
+  focusOwner?: Element | null;
 };
 
-function BookReaderView({ reader, locale, restart, hrefForAddress, renderProgress }: ViewProps) {
+function BookReaderView({ reader, locale, restart, hrefForAddress, renderProgress, focusOwner }: ViewProps) {
   const state = useSyncExternalStore(reader.subscribe, reader.getSnapshot, reader.getSnapshot);
   const options = { locale: locale as never };
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const root = useRef<HTMLElement>(null);
   const rows = useRef(new Map<string, HTMLElement>());
-  const intent = useRef<{ owner: Element | null } | null>(null);
+  const intent = useMemo<{ current: { owner: Element | null } | null }>(
+    () => ({ current: focusOwner === undefined ? null : { owner: focusOwner } }),
+    [reader],
+  );
   const [showControls, setShowControls] = useState(true);
   const page = state.page;
   const isPageCurrent = useCallback(
