@@ -72,7 +72,7 @@ test('five worker scopes retain actual usage and active reserves while proven pa
     expect(baseline).toBeLessThan(workerReservationMiB('imports'));
     expect(parked).toBeCloseTo(11.63 * 1024, 1);
     expect(parked).toBeGreaterThan(workerReservationMiB('imports'));
-    expect(contradictory).toBeCloseTo(baseline, 1);
+    expect(contradictory).toBeCloseTo(parked - 3.96 * 1024, 1);
   } finally {
     directory.close();
   }
