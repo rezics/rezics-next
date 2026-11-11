@@ -101,7 +101,8 @@ export function readWorkerCheckHistory(id, physical, cwd) { return JSON.parse(re
 `,
   );
   writeFileSync(join(h.root, 'fixture.test.ts'), 'export {}\n');
-  git(h.root, ['add', 'scripts/worker-check.ts', 'fixture.test.ts', 'package.json']);
+  writeFileSync(join(h.root, 'other.test.ts'), 'export {}\n');
+  git(h.root, ['add', 'scripts/worker-check.ts', 'fixture.test.ts', 'other.test.ts', 'package.json']);
   git(h.root, ['commit', '-m', 'Fixture managed check reader']);
   const commit = git(h.root, ['rev-parse', 'HEAD']);
   git(h.root, ['branch', 'dev', commit]);
