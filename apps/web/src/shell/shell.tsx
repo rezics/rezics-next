@@ -45,7 +45,7 @@ import {
 } from 'lucide-react';
 import type { SessionEnv } from '../session/client.ts';
 import { NavigationEntries, NavigationLinks, NavigationProvider } from './navigation-view';
-import type { NavigationContribution, NavigationSession } from './navigation';
+import { navigationPathMatches, type NavigationContribution, type NavigationSession } from './navigation';
 import { FeatureSlotsProvider } from './feature-slots';
 import type { SubjectPurchaseRegions } from '../features/pages/subject-slots';
 import { useSession } from '../session/query';
@@ -89,7 +89,7 @@ const headerControlClass =
 const statusControlClass =
   'h-11 rounded-full px-4 focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background';
 const accountMenuLinkClass =
-  'flex min-h-11 items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground';
+  'flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl px-3 py-2 text-sm wrap-anywhere whitespace-normal [&_svg]:shrink-0 outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground';
 const readAuthIssuer = createServerFn({ method: 'GET' }).handler(async () => {
   const { env } = await import('cloudflare:workers');
   return (env as Partial<SessionEnv>).AUTH_ISSUER ?? '';
@@ -129,7 +129,7 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
                 return (
                   <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton
-                      className="h-10"
+                      className="h-auto min-h-11 whitespace-normal [&>span:last-child]:whitespace-normal [&>span:last-child]:overflow-visible [&>span:last-child]:text-clip"
                       isActive={item.current}
                       aria-current={item.current ? 'page' : undefined}
                       aria-disabled={item.unavailable || undefined}
@@ -145,7 +145,9 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
                       }
                     >
                       {Icon && <Icon aria-hidden="true" className="text-sidebar-primary" />}
-                      <span>{item.label}</span>
+                      <span className="min-w-0 flex-1 wrap-anywhere group-data-[collapsible=icon]:sr-only">
+                        {item.label}
+                      </span>
                       {item.unavailable && <span className="sr-only">{`: ${m.library_subject_unavailable()}`}</span>}
                       {item.id === 'shell.inbox' && <UnreadBadge />}
                     </SidebarMenuButton>
@@ -180,14 +182,26 @@ function ScriptFreeNavigation({ pathname, session }: { pathname: string; session
           <NavigationEntries context={{ locale: getLocale(), pathname }} session={session} desktop>
             {(item) => {
               const Icon = item.icon;
+              if (item.unavailable)
+                return (
+                  <li key={item.id}>
+                    <span
+                      role="link"
+                      aria-disabled="true"
+                      className="flex min-h-11 min-w-0 items-center gap-2 px-3 py-2 text-sm wrap-anywhere text-muted-foreground"
+                    >
+                      {item.label}
+                    </span>
+                  </li>
+                );
               return (
                 <li key={item.id}>
                   <a
                     href={item.href}
                     aria-current={item.current ? 'page' : undefined}
-                    className="flex min-h-9 items-center gap-2 rounded-xl px-3 text-sm aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium"
+                    className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl px-3 py-2 text-sm wrap-anywhere aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium"
                   >
-                    {Icon && <Icon aria-hidden="true" className="size-4 text-sidebar-primary" />}
+                    {Icon && <Icon aria-hidden="true" className="size-4 shrink-0 text-sidebar-primary" />}
                     {item.label}
                   </a>
                 </li>
@@ -265,6 +279,7 @@ export function AccountMenu({
   readIssuer?: () => Promise<string>;
 }) {
   const location = useLocation();
+  const returnTo = location.publicHref.split('#')[0]!;
   const { subject } = useSession();
   const lifecycle = useMemo(() => ({}), [session, subject, csrfToken, readIssuer]);
   const [security, setSecurity] = useState<{ lifecycle: object; href: string | null } | null>(null);
@@ -297,7 +312,11 @@ export function AccountMenu({
       aria-describedby="phone-account-state"
       type="button"
       className={phoneTabClass}
-      aria-current={location.pathname.startsWith('/settings') ? 'page' : undefined}
+      aria-current={
+        navigationPathMatches({ locale: getLocale(), pathname: location.pathname }, '/settings', 'prefix')
+          ? 'page'
+          : undefined
+      }
     >
       <span aria-hidden="true" className="grid size-6 place-items-center rounded-full bg-muted">
         <UserRound className="size-4" />
@@ -308,7 +327,9 @@ export function AccountMenu({
           ? m.shell_avatar_unavailable()
           : session === 'signed-out'
             ? m.account_sign_in()
-            : m.shell_account_unavailable()}
+            : session === 'unknown'
+              ? m.candidate_loading()
+              : m.shell_account_unavailable()}
       </span>
     </button>
   ) : undefined;
@@ -316,10 +337,19 @@ export function AccountMenu({
     return phone ? (
       <Menu
         title={m.shell_you()}
+        closeOnNavigation
         trigger={trigger!}
         content={
           <div className="space-y-4">
-            <p role="status">{m.shell_account_unavailable()}</p>
+            <p role="status" aria-busy={session === 'unknown' || undefined}>
+              {session === 'unknown' ? m.candidate_loading() : m.shell_account_unavailable()}
+            </p>
+            {session === 'unavailable' && (
+              <a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} className={accountMenuLinkClass}>
+                <LogIn aria-hidden="true" className="size-4" />
+                {m.account_sign_in()}
+              </a>
+            )}
             {settings}
           </div>
         }
@@ -422,10 +452,10 @@ export function AccountMenu({
       />
     );
   }
-  const returnTo = location.publicHref.split('#')[0]!;
   return (
     <Menu
       title={phone ? m.shell_you() : m.account_menu()}
+      closeOnNavigation
       trigger={
         trigger ?? (
           <Button
@@ -502,11 +532,13 @@ function ShellContent({
     setRailCollapsed(document.documentElement.dataset.nav === 'collapsed');
   }, []);
   useEffect(() => {
-    let previous = router.state.location.href;
+    let previous = router.state.location.pathname;
     const unsub = router.subscribe('onResolved', () => {
-      const current = router.state.location.href;
-      if (current !== previous) document.getElementById('main-content')?.focus();
-      previous = current;
+      const current = router.state.location;
+      // Query and fragment changes keep the initiating control's focus.
+      if (current.pathname !== previous && !current.hash)
+        document.getElementById('main-content')?.focus({ preventScroll: true });
+      previous = current.pathname;
     });
     return unsub;
   }, [router]);
@@ -563,7 +595,7 @@ function ShellContent({
                 <SidebarInset
                   id="main-content"
                   tabIndex={-1}
-                  className="min-w-0 px-3 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] outline-none md:p-6"
+                  className="min-w-0 px-3 py-6 pb-[calc(var(--bottom-nav-height)+1.5rem)] outline-none md:p-6"
                 >
                   <div className="mx-auto w-full max-w-5xl">{children}</div>
                 </SidebarInset>
@@ -572,6 +604,7 @@ function ShellContent({
                 session={session}
                 csrfToken={csrfToken}
                 pathname={location.pathname}
+                returnTo={location.publicHref.split('#')[0]!}
                 account={<AccountMenu session={session} csrfToken={csrfToken} phone />}
               />
             </SidebarProvider>

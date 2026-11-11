@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { House, Inbox, Library, Plus } from 'lucide-react';
+import { House, Inbox, Library, LogIn, Plus } from 'lucide-react';
 import { Menu } from '@rezics/ui/menu';
 import { UnreadBadgeView, useInboxUnreadCount, type UnreadCount } from '../inbox';
 import { useOperation } from '../kernel/exposure';
@@ -7,7 +7,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import type { SessionState } from '../session/state';
 import { NavigationEntries } from './navigation-view';
-import { navigationPathMatches } from './navigation';
+import { navigationPathMatches, navigationPathname } from './navigation';
 import { useShellStyleNonce } from './csp-rendering/style-nonce';
 
 type Session = SessionState | 'unknown';
@@ -64,33 +64,63 @@ export function PhoneUnreadDot({ session }: { session: Session }) {
   return session === 'signed-in' ? <PhoneUnreadDotView data={data} failed={isError} /> : null;
 }
 export const phoneTabClass =
-  'relative flex min-h-14 w-full min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium text-muted-foreground outline-none transition-colors duration-150 motion-reduce:transition-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:text-primary';
+  'relative flex min-h-14 w-full min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1 text-center text-[11px] leading-tight wrap-anywhere font-medium text-muted-foreground outline-none transition-colors duration-150 motion-reduce:transition-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:text-primary';
 const creationLinkClass =
-  'flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring';
+  'flex min-h-11 min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-sm wrap-anywhere whitespace-normal outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring [&_svg]:shrink-0';
 export function PhoneCreationLinks({
   actions,
   pathname,
   session,
+  returnTo,
 }: {
   actions: readonly PhoneCreationAction[];
   pathname: string;
   session: Session;
+  /** Router-admitted public URL, including its query, without the fragment. */
+  returnTo?: string;
 }) {
+  if (session === 'unknown')
+    return (
+      <p role="status" aria-busy="true" className="p-3 text-sm text-muted-foreground">
+        {m.candidate_loading()}
+      </p>
+    );
+  if (session !== 'signed-in')
+    return (
+      <div className="grid gap-2">
+        {session === 'unavailable' && (
+          <p role="status" className="px-3 pt-3 text-sm text-muted-foreground">
+            {m.shell_account_unavailable()}
+          </p>
+        )}
+        <a className={creationLinkClass} href={shellSignInHref(pathname, returnTo)}>
+          <LogIn aria-hidden="true" className="size-4" />
+          <span className="min-w-0">{m.account_sign_in()}</span>
+        </a>
+      </div>
+    );
   return (
-    <div className="grid gap-2">
+    <div className="grid min-w-0 gap-2">
       {actions.map((action) => (
         <a key={action.id} className={creationLinkClass} href={action.href}>
-          {action.label}
+          <span className="min-w-0">{action.label}</span>
         </a>
       ))}
       <NavigationEntries context={{ locale: getLocale(), pathname }} session={session} kind="creation">
         {(entry) => {
           if (actions.some((action) => action.href === entry.href)) return null;
           const Icon = entry.icon;
+          if (entry.unavailable)
+            return (
+              <span role="link" aria-disabled="true" className={`${creationLinkClass} text-muted-foreground`}>
+                {Icon && <Icon aria-hidden="true" className="size-4" />}
+                <span className="min-w-0">{entry.label}</span>
+              </span>
+            );
           return (
             <a href={entry.href} className={creationLinkClass} aria-current={entry.current ? 'page' : undefined}>
               {Icon && <Icon aria-hidden="true" className="size-4" />}
-              {entry.label}
+              <span className="min-w-0">{entry.label}</span>
             </a>
           );
         }}
@@ -99,10 +129,19 @@ export function PhoneCreationLinks({
     </div>
   );
 }
+// Production passes publicHref. The fallback supports standalone shell patterns with either pathname shape.
+export function shellSignInHref(pathname: string, returnTo?: string): string {
+  const locale = getLocale();
+  const path = navigationPathname({ locale, pathname });
+  const destination = returnTo ?? `/${locale}${path === '/' ? '' : path}`;
+  return `/auth/sign-in?return_to=${encodeURIComponent(destination)}`;
+}
+
 export function PhoneNavigationView({
   pathname,
   library,
-  signedIn,
+  session,
+  returnTo,
   unread,
   failed,
   actions,
@@ -110,7 +149,8 @@ export function PhoneNavigationView({
 }: {
   pathname: string;
   library: boolean;
-  signedIn: boolean;
+  session: Session;
+  returnTo?: string;
   unread?: UnreadCount | undefined;
   failed?: boolean;
   actions: readonly PhoneCreationAction[];
@@ -119,18 +159,36 @@ export function PhoneNavigationView({
   const locale = getLocale();
   const nonce = useShellStyleNonce();
   const navigationContext = { locale, pathname };
-  const signIn = `/auth/sign-in?return_to=${encodeURIComponent(`/${locale}${pathname === '/' ? '' : pathname}`)}`;
+  const signedInSession = session === 'signed-in';
+  const signIn = shellSignInHref(pathname, returnTo);
+  const inboxContent = (
+    <>
+      <span className="relative">
+        <Inbox aria-hidden="true" className="size-5 shrink-0" />
+        {signedInSession && (
+          <span className="absolute -end-4 -top-2">
+            <UnreadBadgeView data={unread} failed={failed ?? false} />
+          </span>
+        )}
+      </span>
+      <span>{m.nav_inbox()}</span>
+    </>
+  );
   return (
     <nav
       data-phone-navigation
       aria-label={m.shell_phone_tabs()}
-      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 items-center gap-1 border-t border-border/60 bg-background/95 px-2 pt-2 pb-[max(.5rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 items-stretch gap-1 border-t border-border/60 bg-background/95 px-2 pt-2 pb-[max(.5rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden"
     >
-      <a className={phoneTabClass} href={`/${locale}`} aria-current={pathname === '/' ? 'page' : undefined}>
-        <House aria-hidden="true" className="size-5" />
-        {m.nav_home()}
+      <a
+        className={phoneTabClass}
+        href={`/${locale}`}
+        aria-current={navigationPathMatches(navigationContext, '/', 'exact') ? 'page' : undefined}
+      >
+        <House aria-hidden="true" className="size-5 shrink-0" />
+        <span>{m.nav_home()}</span>
       </a>
-      {library ? (
+      {signedInSession && library ? (
         <a
           className={phoneTabClass}
           href={`/${locale}/library`}
@@ -141,13 +199,13 @@ export function PhoneNavigationView({
               : undefined
           }
         >
-          <Library aria-hidden="true" className="size-5" />
-          {m.nav_library()}
+          <Library aria-hidden="true" className="size-5 shrink-0" />
+          <span>{m.nav_library()}</span>
         </a>
       ) : (
-        <span className={phoneTabClass} aria-disabled="true">
-          <Library aria-hidden="true" className="size-5" />
-          {m.nav_library()}
+        <span className={phoneTabClass} role="link" aria-disabled="true">
+          <Library aria-hidden="true" className="size-5 shrink-0" />
+          <span>{m.nav_library()}</span>
         </span>
       )}
       <Menu
@@ -156,29 +214,46 @@ export function PhoneNavigationView({
         trigger={
           <button type="button" className={`${phoneTabClass} group`}>
             <span className="grid h-9 w-12 place-items-center rounded-2xl bg-primary text-primary-foreground transition-transform duration-150 group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none">
-              <Plus aria-hidden="true" className="size-5" />
+              <Plus aria-hidden="true" className="size-5 shrink-0" />
             </span>
-            {m.shell_create()}
+            <span>{m.shell_create()}</span>
           </button>
         }
         content={
-          <PhoneCreationLinks actions={actions} pathname={pathname} session={signedIn ? 'signed-in' : 'signed-out'} />
+          <PhoneCreationLinks
+            actions={actions}
+            pathname={pathname}
+            session={session}
+            {...(returnTo ? { returnTo } : {})}
+          />
         }
       />
-      <a
-        className={phoneTabClass}
-        href={signedIn ? `/${locale}/inbox` : signIn}
-        aria-current={navigationPathMatches(navigationContext, '/inbox', 'prefix') ? 'page' : undefined}
-      >
-        <span className="relative">
-          <Inbox aria-hidden="true" className="size-5" />
-          {signedIn ? (
-            <span className="absolute -end-4 -top-2">
-              <UnreadBadgeView data={unread} failed={failed ?? false} />
-            </span>
-          ) : null}
+      {session === 'unknown' || session === 'unavailable' ? (
+        <span
+          data-phone-inbox-js
+          role="link"
+          aria-disabled="true"
+          aria-busy={session === 'unknown' || undefined}
+          className={phoneTabClass}
+        >
+          {inboxContent}
+          <span className="sr-only">
+            {session === 'unknown' ? m.candidate_loading() : m.shell_account_unavailable()}
+          </span>
         </span>
-        {m.nav_inbox()}
+      ) : (
+        <a
+          data-phone-inbox-js
+          className={phoneTabClass}
+          href={signedInSession ? `/${locale}/inbox` : signIn}
+          aria-current={navigationPathMatches(navigationContext, '/inbox', 'prefix') ? 'page' : undefined}
+        >
+          {inboxContent}
+        </a>
+      )}
+      <a data-phone-inbox-fallback className={`${phoneTabClass} hidden`} href={`/${locale}/inbox`}>
+        <Inbox aria-hidden="true" className="size-5 shrink-0" />
+        <span>{m.nav_inbox()}</span>
       </a>
       <div data-phone-you-js className="contents">
         {account}
@@ -188,7 +263,9 @@ export function PhoneNavigationView({
       </a>
       <noscript>
         <style nonce={nonce}>
-          {'[data-phone-you-js]{display:none!important}[data-phone-you-fallback]{display:flex!important}'}
+          {
+            '[data-phone-you-js],[data-phone-inbox-js]{display:none!important}[data-phone-you-fallback],[data-phone-inbox-fallback]{display:flex!important}'
+          }
         </style>
       </noscript>
     </nav>
@@ -219,11 +296,13 @@ export function useShellCreationActions(session: Session) {
 export function PhoneNavigation({
   session,
   pathname,
+  returnTo,
   account,
 }: {
   session: Session;
   pathname: string;
   csrfToken: string | null;
+  returnTo: string;
   account: ReactNode;
 }) {
   const library = useOperation('library_entry.list');
@@ -233,7 +312,8 @@ export function PhoneNavigation({
     <PhoneNavigationView
       pathname={pathname}
       library={session === 'signed-in' && library}
-      signedIn={session === 'signed-in'}
+      session={session}
+      returnTo={returnTo}
       unread={unread.data}
       failed={unread.isError}
       actions={actions}
