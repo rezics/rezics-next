@@ -1,5 +1,5 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useEffect, useId, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type { VndbScoreNotice } from './controller';
@@ -115,6 +115,15 @@ export function VndbScoreReview({
     });
   }
 
+  const scoreUnitsOptions = question
+    ? [
+        { value: null, label: m.library_vndb_score_select_units() },
+        ...Array.from(
+          { length: Math.floor((question.scale.max - question.scale.min) / question.scale.step) + 1 },
+          (_, index) => question.scale.min + index * question.scale.step,
+        ).map((value) => ({ value: String(value), label: String(value) })),
+      ]
+    : [];
   return (
     <section
       className="min-w-0 space-y-3 rounded-md border p-3"
@@ -225,23 +234,31 @@ export function VndbScoreReview({
               <FieldLabel id={`${id}-units-label`} htmlFor={`${id}-units`} className="min-h-11 items-center">
                 {m.library_vndb_score_units()}
               </FieldLabel>
-              <ChoiceSelect
-                id={`${id}-units`}
-                ariaLabelledBy={`${id}-units-label`}
-                triggerClassName="min-h-11 w-full rounded-md border bg-background px-3"
+              <Select<string, false>
+                items={scoreUnitsOptions}
                 value={units || null}
                 onValueChange={(value) => {
                   setUnits(value ?? '');
                   setConsent(false);
                 }}
-                options={[
-                  { value: null, label: m.library_vndb_score_select_units() },
-                  ...Array.from(
-                    { length: Math.floor((question.scale.max - question.scale.min) / question.scale.step) + 1 },
-                    (_, index) => question.scale.min + index * question.scale.step,
-                  ).map((value) => ({ value: String(value), label: String(value) })),
-                ]}
-              />
+              >
+                <SelectTrigger
+                  id={`${id}-units`}
+                  aria-labelledby={`${id}-units-label`}
+                  className="min-h-11 w-full rounded-md border bg-background px-3"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {scoreUnitsOptions.map(({ value, label, ...itemProps }) => (
+                      <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
           ) : null}
           {currentSet ? (

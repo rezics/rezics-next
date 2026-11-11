@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 /** Presentation state for retained controls and stories; it grants no transport capability. */
@@ -45,29 +45,44 @@ function InventoryFilter({
   const [value, setValue] = useState(selected ?? '');
   const choices = facet?.choices ?? [];
   const missing = value && !choices.some((choice) => choice.id === value);
+  const inventoryOptions = [
+    { value: null, label: m.library_copy_filter_any() },
+    ...(missing ? [{ value, label: `${value} — ${m.library_copy_filter_unavailable()}` }] : []),
+    ...choices.map((choice) => ({
+      value: choice.id,
+      label: `${choice.label} — ${meaning(choice.meaning)}`,
+      lang: choice.labelLanguage,
+    })),
+  ];
   return (
     <Field className="min-w-0">
       <FieldLabel id={`${id}-label`} htmlFor={id}>
         {label}
       </FieldLabel>
-      <ChoiceSelect
-        id={id}
+      <Select<string, false>
+        items={inventoryOptions}
         name={value ? name : undefined}
-        ariaLabelledBy={`${id}-label`}
         value={value || null}
-        ariaDescribedBy={description}
-        triggerClassName="min-w-0 max-w-full w-full"
         onValueChange={(next) => setValue(next ?? '')}
-        options={[
-          { value: null, label: m.library_copy_filter_any() },
-          ...(missing ? [{ value, label: `${value} — ${m.library_copy_filter_unavailable()}` }] : []),
-          ...choices.map((choice) => ({
-            value: choice.id,
-            label: `${choice.label} — ${meaning(choice.meaning)}`,
-            lang: choice.labelLanguage,
-          })),
-        ]}
-      />
+      >
+        <SelectTrigger
+          id={id}
+          aria-labelledby={`${id}-label`}
+          aria-describedby={description}
+          className="min-w-0 max-w-full w-full"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false}>
+          <SelectGroup>
+            {inventoryOptions.map(({ value, label, ...itemProps }) => (
+              <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
       <p id={description} className="text-sm text-muted-foreground">
         {facet?.state === 'available'
           ? choices.length

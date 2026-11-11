@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import type { Page, Response } from 'playwright';
+import type { Locator, Page, Response } from 'playwright';
 import {
   createNativeHoldingsHistoryFixture,
   nativeJson,
@@ -17,6 +17,21 @@ beforeAll(async () => {
 afterAll(async () => fixture?.close(), 180_000);
 
 const key = () => `"${crypto.randomUUID()}"`;
+
+async function selectValues(control: Locator) {
+  await control.click();
+  const values = await control
+    .page()
+    .getByRole('option')
+    .evaluateAll((options) => options.map((option) => option.getAttribute('data-value')));
+  await control.page().keyboard.press('Escape');
+  return values;
+}
+
+async function chooseSelect(control: Locator, value: string) {
+  await control.click();
+  await control.page().locator(`[role="option"][data-value="${value}"]`).click();
+}
 
 function redactPostBody(body: string | null): string | null {
   if (body === null) return null;
@@ -77,11 +92,9 @@ async function beginProgress(
   const modeIndex = expectedModes.indexOf(selectedMode);
   expect(modeIndex).toBeGreaterThanOrEqual(0);
   if (modeIndex > 0) await modes.nth(modeIndex).click();
-  const allowedUnits = await unit
-    .locator('option')
-    .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
+  const allowedUnits = await selectValues(unit);
   expect(allowedUnits).toEqual(expectedUnits);
-  await unit.selectOption(selectedUnit);
+  await chooseSelect(unit, selectedUnit);
   if (total !== undefined) await page.getByLabel('Total', { exact: true }).fill(total);
   const postResponses: { response: Response; url: string; status: number; requestBody: string | null }[] = [];
   const capturePostResponse = (response: Response) => {
@@ -187,23 +200,17 @@ describe('native holdings and progress history', () => {
         `The activated Book profile did not render its copy-kind choices. Served copy form: ${await copyForm.innerText()}; page: ${await alicePage.locator('body').innerText()}`,
       );
     }
-    const offeredKinds = await kind
-      .locator('option')
-      .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
+    const offeredKinds = await selectValues(kind);
     expect(offeredKinds).toEqual(['physical', 'digital']);
-    await kind.selectOption('physical');
+    await chooseSelect(kind, 'physical');
     const status = alicePage.getByLabel('Status', { exact: true });
-    const physicalStatuses = await status
-      .locator('option')
-      .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
+    const physicalStatuses = await selectValues(status);
     expect(physicalStatuses).toEqual(['owned', 'disposed']);
-    await kind.selectOption('digital');
-    const digitalStatuses = await status
-      .locator('option')
-      .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
+    await chooseSelect(kind, 'digital');
+    const digitalStatuses = await selectValues(status);
     expect(digitalStatuses).toEqual(['owned']);
-    await kind.selectOption('physical');
-    await status.selectOption('owned');
+    await chooseSelect(kind, 'physical');
+    await chooseSelect(status, 'owned');
     await alicePage.getByRole('button', { name: 'Add copy', exact: true }).click();
     const copyCreateOutcome = await Promise.race([
       alicePage

@@ -1,3 +1,4 @@
+import { selectTrigger, selectValue, chooseSelect } from './support/select';
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, StrictMode } from 'react';
@@ -502,6 +503,18 @@ test('the StrictMode Settings page retires synchronous away/back callbacks and r
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    DocumentFragment: window.DocumentFragment,
+    ShadowRoot: window.ShadowRoot,
+    Document: window.Document,
+    NodeFilter: window.NodeFilter,
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    ResizeObserver: window.ResizeObserver,
+    MutationObserver: window.MutationObserver,
+    HTMLInputElement: window.HTMLInputElement,
+    Element: window.Element,
     Node: window.Node,
     HTMLFormElement: window.HTMLFormElement,
     IS_REACT_ACT_ENVIRONMENT: true,
@@ -1122,7 +1135,7 @@ async function mountedSettingsExample(
     host: HTMLElement;
     render: (node: import('react').ReactNode) => Promise<void>;
     click: (node: Element) => Promise<void>;
-    choose: (node: HTMLSelectElement, value: string) => Promise<void>;
+    choose: (node: HTMLButtonElement, value: string) => Promise<void>;
   }) => Promise<void>,
 ) {
   const { Window } = await import(
@@ -1134,6 +1147,18 @@ async function mountedSettingsExample(
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    ResizeObserver: window.ResizeObserver,
+    MutationObserver: window.MutationObserver,
+    HTMLButtonElement: window.HTMLButtonElement,
+    HTMLInputElement: window.HTMLInputElement,
+    DocumentFragment: window.DocumentFragment,
+    ShadowRoot: window.ShadowRoot,
+    Document: window.Document,
+    NodeFilter: window.NodeFilter,
+    Element: window.Element,
     Node: window.Node,
     HTMLFormElement: window.HTMLFormElement,
     IS_REACT_ACT_ENVIRONMENT: true,
@@ -1159,10 +1184,7 @@ async function mountedSettingsExample(
         });
       },
       choose: async (node, value) => {
-        await act(async () => {
-          node.value = value;
-          node.dispatchEvent(new window.Event('change', { bubbles: true }));
-        });
+        await chooseSelect(node, value);
       },
     });
   } finally {
@@ -1293,7 +1315,7 @@ test('standalone injected CollectionRow has usable controls, exact uncertain ret
       },
     };
     await render(createElement('ul', null, createElement(CollectionRow, { collection, io })));
-    const select = host.querySelector('select')!;
+    const select = selectTrigger(host)!;
     expect(select.disabled).toBe(false);
     await choose(select, 'public');
     const original = calls[0];
@@ -1310,7 +1332,7 @@ test('standalone injected CollectionRow has usable controls, exact uncertain ret
     expect(JSON.stringify(calls[1])).toBe(bytes);
     expect(Object.isFrozen(original)).toBe(true);
     expect(reads).toBe(1);
-    expect(select.value).toBe('unlisted');
+    expect(selectValue(select)).toBe('unlisted');
     expect(host.textContent).toContain(m.settings_privacy_review_title());
     await render(null);
     await choose(select, 'private');
@@ -1358,7 +1380,7 @@ for (const invalid of ['null-token', 'query-error', 'retired', 'missing-query', 
                   : createElement(SettingsSessionContext.Provider, { value: h.owner }, row),
               ),
         );
-        const select = host.querySelector('select')!;
+        const select = selectTrigger(host)!;
         expect(select.disabled).toBe(true);
         await choose(select, 'public'); // Even an injected DOM change cannot start a command.
         expect(calls).toBe(0);
@@ -1404,7 +1426,7 @@ test('standalone row teardown drops a late replay receipt before it can start re
         }),
       ),
     );
-    await choose(host.querySelector('select')!, 'public');
+    await choose(selectTrigger(host)!, 'public');
     const retry = [...host.querySelectorAll('button')].find(
       (node) => node.textContent === m.settings_privacy_retry_original(),
     )!;
@@ -1485,7 +1507,7 @@ test('a standalone injected row still obeys an inherited owner without a QueryCl
           createElement('ul', null, createElement(CollectionRow, { collection, io })),
         ),
       );
-      const select = host.querySelector('select')!;
+      const select = selectTrigger(host)!;
       expect(select.disabled).toBe(false);
       await choose(select, 'public');
       expect(writes).toBe(1);

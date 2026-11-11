@@ -1,7 +1,8 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useLocation } from '@tanstack/react-router';
 import { useRecoveryLifetime } from '../recovery-lifetime';
 import { useEffect, useState } from 'react';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -548,6 +549,19 @@ function MappingForm({
   const [action, setAction] = useState('preserve');
   const [mode, setMode] = useState('existing');
   const prefix = `archive-map-${row.ordinal}`;
+  const labelModeOptions = [
+    { value: 'existing', label: m.library_archive_entry_existing_label() },
+    { value: 'create', label: m.library_archive_entry_create_label() },
+  ];
+  const entryActionOptions = [
+    { value: 'preserve', label: m.library_archive_entry_preserve() },
+    ...(row.section === 'entries'
+      ? [
+          { value: 'create', label: m.library_archive_entry_create() },
+          { value: 'update', label: m.library_archive_entry_update() },
+        ]
+      : [{ value: 'assign', label: m.library_archive_entry_assign() }]),
+  ];
   return (
     <form
       className="space-y-3"
@@ -599,17 +613,33 @@ function MappingForm({
         )}
         {row.section === 'labels' ? (
           <>
-            <ChoiceSelect
-              id={`${prefix}-mode`}
-              label={m.library_archive_entry_label_choice()}
-              value={mode}
-              onValueChange={(value) => value !== null && setMode(value)}
-              triggerClassName={`${control} block w-full`}
-              options={[
-                { value: 'existing', label: m.library_archive_entry_existing_label() },
-                { value: 'create', label: m.library_archive_entry_create_label() },
-              ]}
-            />
+            <Field>
+              <FieldLabel id={`${prefix}-mode-label`} htmlFor={`${prefix}-mode`}>
+                {m.library_archive_entry_label_choice()}
+              </FieldLabel>
+              <Select<string, false>
+                items={labelModeOptions}
+                value={mode}
+                onValueChange={(value) => value !== null && setMode(value)}
+              >
+                <SelectTrigger
+                  id={`${prefix}-mode`}
+                  aria-labelledby={`${prefix}-mode-label`}
+                  className={`${control} block w-full`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {labelModeOptions.map(({ value, label, ...itemProps }) => (
+                      <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
             {mode === 'existing' && (
               <>
                 <label htmlFor={`${prefix}-label`}>{m.library_archive_entry_label_id()}</label>
@@ -626,22 +656,33 @@ function MappingForm({
           </>
         ) : (
           <>
-            <ChoiceSelect
-              id={`${prefix}-action`}
-              label={m.library_archive_entry_action()}
-              value={action}
-              onValueChange={(value) => value !== null && setAction(value)}
-              triggerClassName={`${control} block w-full`}
-              options={[
-                { value: 'preserve', label: m.library_archive_entry_preserve() },
-                ...(row.section === 'entries'
-                  ? [
-                      { value: 'create', label: m.library_archive_entry_create() },
-                      { value: 'update', label: m.library_archive_entry_update() },
-                    ]
-                  : [{ value: 'assign', label: m.library_archive_entry_assign() }]),
-              ]}
-            />
+            <Field>
+              <FieldLabel id={`${prefix}-action-label`} htmlFor={`${prefix}-action`}>
+                {m.library_archive_entry_action()}
+              </FieldLabel>
+              <Select<string, false>
+                items={entryActionOptions}
+                value={action}
+                onValueChange={(value) => value !== null && setAction(value)}
+              >
+                <SelectTrigger
+                  id={`${prefix}-action`}
+                  aria-labelledby={`${prefix}-action-label`}
+                  className={`${control} block w-full`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {entryActionOptions.map(({ value, label, ...itemProps }) => (
+                      <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
             {row.section === 'entries' && action !== 'preserve' && (
               <>
                 <label htmlFor={`${prefix}-state`}>{m.library_archive_entry_state_id()}</label>
@@ -676,21 +717,31 @@ function FieldChoiceSelect({
   label: string;
   disabled: boolean;
 }) {
+  const fieldOperationOptions = [
+    { value: 'preserve', label: m.library_archive_entry_preserve() },
+    { value: 'set', label: m.library_archive_personal_set() },
+    { value: 'clear', label: m.library_archive_personal_clear() },
+  ];
   return (
-    <ChoiceSelect
-      id={id}
-      name={name}
-      label={label}
-      fieldClassName="block space-y-1"
-      triggerClassName={`${control} block w-full`}
-      defaultValue="preserve"
-      disabled={disabled}
-      options={[
-        { value: 'preserve', label: m.library_archive_entry_preserve() },
-        { value: 'set', label: m.library_archive_personal_set() },
-        { value: 'clear', label: m.library_archive_personal_clear() },
-      ]}
-    />
+    <Field className="block space-y-1">
+      <FieldLabel id={`${id}-label`} htmlFor={id}>
+        {label}
+      </FieldLabel>
+      <Select<string, false> items={fieldOperationOptions} name={name} disabled={disabled} defaultValue="preserve">
+        <SelectTrigger id={id} aria-labelledby={`${id}-label`} className={`${control} block w-full`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false}>
+          <SelectGroup>
+            {fieldOperationOptions.map(({ value, label, ...itemProps }) => (
+              <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </Field>
   );
 }
 
@@ -878,6 +929,10 @@ function ObservationMappingForm({
     ['sourceCreated', m.library_rich_entry_source_created()],
     ['sourceUpdated', m.library_rich_entry_source_updated()],
   ] as const;
+  const observationActionOptions = [
+    { value: 'correct', label: m.library_archive_observation_correct() },
+    { value: 'admit', label: m.library_archive_observation_admit() },
+  ];
   return (
     <form
       className="space-y-3"
@@ -938,21 +993,36 @@ function ObservationMappingForm({
             autoComplete="off"
           />
         </label>
-        <ChoiceSelect
-          id={`${prefix}-action`}
-          label={m.library_archive_entry_action()}
-          fieldClassName="block space-y-1"
-          triggerClassName={`${control} block w-full`}
-          name="action"
-          value={action}
-          onValueChange={(value) => {
-            if (value === 'admit' || value === 'correct') setAction(value);
-          }}
-          options={[
-            { value: 'correct', label: m.library_archive_observation_correct() },
-            { value: 'admit', label: m.library_archive_observation_admit() },
-          ]}
-        />
+        <Field className="block space-y-1">
+          <FieldLabel id={`${prefix}-action-label`} htmlFor={`${prefix}-action`}>
+            {m.library_archive_entry_action()}
+          </FieldLabel>
+          <Select<string, false>
+            items={observationActionOptions}
+            name="action"
+            value={action}
+            onValueChange={(value) => {
+              if (value === 'admit' || value === 'correct') setAction(value);
+            }}
+          >
+            <SelectTrigger
+              id={`${prefix}-action`}
+              aria-labelledby={`${prefix}-action-label`}
+              className={`${control} block w-full`}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                {observationActionOptions.map(({ value, label, ...itemProps }) => (
+                  <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
         {action === 'correct' ? (
           <>
             <label htmlFor={`${prefix}-revision`} className="block space-y-1">

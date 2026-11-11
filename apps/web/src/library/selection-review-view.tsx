@@ -1,7 +1,8 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { ResponsiveDialog } from '@rezics/ui/responsive-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
-import { useRef } from 'react';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
+import { useId, useRef } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { m } from '../paraglide/messages.js';
 
@@ -64,6 +65,7 @@ export function SelectionReviewView({
   launcher: RefObject<HTMLButtonElement | null>;
   isCurrent: () => boolean;
 }) {
+  const selectionStateSelectId = useId();
   const observedEpisodeKey = useRef(episodeKey);
   const episodeEpoch = useRef(0);
   if (observedEpisodeKey.current !== episodeKey) {
@@ -88,6 +90,10 @@ export function SelectionReviewView({
   };
   const returnFocus = () =>
     isCurrentEpisode() && isCurrent() && launcher.current?.isConnected ? launcher.current : false;
+  const selectionStateOptions = [
+    { value: null, label: m.library_selection_choose() },
+    ...statusChoices.map((choice) => ({ value: choice.id, label: choice.label.text, lang: choice.label.lang })),
+  ];
   const summary = (
     <>
       <p role="status" className="text-sm">
@@ -96,18 +102,34 @@ export function SelectionReviewView({
       {actionMeaning ? <p>{actionMeaning}</p> : null}
       <SelectionReviewList items={items} labelledBy={m.library_selection_heading()} />
       <section aria-label={m.library_menu_status()} className="space-y-2">
-        <ChoiceSelect
-          label={m.library_selection_state()}
-          fieldClassName="grid gap-2 text-sm"
-          value={statusValue || null}
-          triggerClassName="min-h-11 w-full rounded-md border bg-background px-3"
-          disabled={!statusAllowed || statusBlocked || pending || !hydrated}
-          onValueChange={(value) => onStatusChange(value ?? '')}
-          options={[
-            { value: null, label: m.library_selection_choose() },
-            ...statusChoices.map((choice) => ({ value: choice.id, label: choice.label.text, lang: choice.label.lang })),
-          ]}
-        />
+        <Field className="grid gap-2 text-sm">
+          <FieldLabel id={`${selectionStateSelectId}-label`} htmlFor={selectionStateSelectId}>
+            {m.library_selection_state()}
+          </FieldLabel>
+          <Select<string, false>
+            items={selectionStateOptions}
+            disabled={!statusAllowed || statusBlocked || pending || !hydrated}
+            value={statusValue || null}
+            onValueChange={(value) => onStatusChange(value ?? '')}
+          >
+            <SelectTrigger
+              id={selectionStateSelectId}
+              aria-labelledby={`${selectionStateSelectId}-label`}
+              className="min-h-11 w-full rounded-md border bg-background px-3"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                {selectionStateOptions.map(({ value, label, ...itemProps }) => (
+                  <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
         {!statusAllowed ? <p role="status">{m.library_selection_status_unavailable()}</p> : null}
         {statusAllowed && statusBlocked ? <p role="status">{m.library_selection_unknown()}</p> : null}
         {statusAllowed && !statusBlocked && !statusChoices.length ? (

@@ -1,3 +1,4 @@
+import { selectTrigger, selectValue, selectOptions, chooseSelect } from './support/select';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
@@ -68,6 +69,19 @@ test('mounted sort form retains score addresses until date selection and replace
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    DocumentFragment: window.DocumentFragment,
+    ShadowRoot: window.ShadowRoot,
+    Document: window.Document,
+    NodeFilter: window.NodeFilter,
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    ResizeObserver: window.ResizeObserver,
+    MutationObserver: window.MutationObserver,
+    HTMLInputElement: window.HTMLInputElement,
+    Node: window.Node,
+    Element: window.Element,
     FormData: window.FormData,
     IS_REACT_ACT_ENVIRONMENT: true,
   };
@@ -127,12 +141,9 @@ test('mounted sort form retains score addresses until date selection and replace
   };
   const form = () => host.querySelector('form')!;
   const submitted = () => Object.fromEntries(new window.FormData(form()));
-  const select = (name: string) => host.querySelectorAll('select')[name === 'orderBy' ? 0 : 1]! as HTMLSelectElement;
+  const select = (name: string) => selectTrigger(host, name === 'orderBy' ? 0 : 1);
   const choose = async (name: string, value: string) => {
-    await act(async () => {
-      select(name).value = value;
-      select(name).dispatchEvent(new window.Event('change', { bubbles: true }));
-    });
+    await chooseSelect(select(name), value);
   };
   const submit = async () => {
     await act(async () => form().dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
@@ -148,8 +159,12 @@ test('mounted sort form retains score addresses until date selection and replace
       await render(direction);
       const order = select('orderBy');
       order.focus();
-      expect(order.value).toBe('personalScore');
-      expect(order.querySelector('option[value="personalScore"]')?.hasAttribute('disabled')).toBe(false);
+      expect(selectValue(order)).toBe('personalScore');
+      expect(
+        (await selectOptions(order))
+          .find((item) => item.dataset.value === 'personalScore')
+          ?.hasAttribute('data-disabled'),
+      ).toBe(false);
       expect(select('direction').disabled).toBe(false);
       expect(submitted()).toEqual({ ...retained, orderBy: 'personalScore', direction });
       expect(new window.FormData(form()).getAll('orderBy')).toEqual(['personalScore']);
@@ -172,8 +187,8 @@ test('mounted sort form retains score addresses until date selection and replace
       // Back/Forward replaces the address without remounting the form or losing its focused control.
       await render(changedDirection);
       expect(window.document.activeElement).toBe(order);
-      expect(order.value).toBe('personalScore');
-      expect(select('direction').value).toBe(changedDirection);
+      expect(selectValue(order)).toBe('personalScore');
+      expect(selectValue(select('direction'))).toBe(changedDirection);
       expect(submitted()).toEqual({ ...retained, orderBy: 'personalScore', direction: changedDirection });
       await act(async () => {
         client.setQueryData(['session'], { state: 'signed-in', subject: 'B', csrfToken: 'csrf-B' });
@@ -195,9 +210,11 @@ test('mounted sort form retains score addresses until date selection and replace
     }
     await render('asc', 'added');
     const order = select('orderBy');
-    expect(order.value).toBe('createdAt');
+    expect(selectValue(order)).toBe('createdAt');
     await choose('orderBy', 'priority');
-    expect(order.querySelector('option[value="priority"]')?.hasAttribute('disabled')).toBe(false);
+    expect(
+      (await selectOptions(order)).find((item) => item.dataset.value === 'priority')?.hasAttribute('data-disabled'),
+    ).toBe(false);
     await choose('direction', 'desc');
     expect(submitted()).toEqual({ ...retained, orderBy: 'priority', direction: 'desc' });
     await submit();
@@ -302,6 +319,19 @@ test('mounted unavailable recovery retains display and filters, retires the curs
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    ResizeObserver: window.ResizeObserver,
+    MutationObserver: window.MutationObserver,
+    HTMLButtonElement: window.HTMLButtonElement,
+    HTMLInputElement: window.HTMLInputElement,
+    DocumentFragment: window.DocumentFragment,
+    ShadowRoot: window.ShadowRoot,
+    Document: window.Document,
+    NodeFilter: window.NodeFilter,
+    Node: window.Node,
+    Element: window.Element,
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));

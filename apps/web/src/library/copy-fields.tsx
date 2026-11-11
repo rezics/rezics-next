@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { CalendarDayField } from './calendar-day-field';
@@ -351,21 +351,37 @@ function CopyConditionSelect({
       </Field>
     );
   }
+  const conditionOptions = [
+    { value: null, label: m.library_copy_condition_omit() },
+    { value: COPY_CONDITION_CLEAR, label: m.library_copy_condition_cleared() },
+    ...choices.map((choice) => ({ value: choice.id, label: choice.label })),
+  ];
   return (
-    <ChoiceSelect
-      id={id}
-      name={field}
-      label={label}
-      triggerClassName={`${inputClass} min-h-11 text-base`}
-      value={value || null}
-      disabled={disabled}
-      onValueChange={(next) => onChange(next ?? '')}
-      options={[
-        { value: null, label: m.library_copy_condition_omit() },
-        { value: COPY_CONDITION_CLEAR, label: m.library_copy_condition_cleared() },
-        ...choices.map((choice) => ({ value: choice.id, label: choice.label })),
-      ]}
-    />
+    <Field>
+      <FieldLabel id={`${id}-label`} htmlFor={id}>
+        {label}
+      </FieldLabel>
+      <Select<string, false>
+        items={conditionOptions}
+        name={field}
+        disabled={disabled}
+        value={value || null}
+        onValueChange={(next) => onChange(next ?? '')}
+      >
+        <SelectTrigger id={id} aria-labelledby={`${id}-label`} className={`${inputClass} min-h-11 text-base`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false}>
+          <SelectGroup>
+            {conditionOptions.map(({ value, label, ...itemProps }) => (
+              <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </Field>
   );
 }
 
@@ -384,16 +400,40 @@ export function CopyChoiceField({
 }) {
   const id = useId();
   const selected = choices.find((choice) => choice.id === value);
+  const profileChoiceOptions = choices.map((choice) => ({
+    value: choice.id,
+    label: choice.label,
+    lang: choice.labelLanguage,
+  }));
   return (
-    <ChoiceSelect
-      id={id}
-      name={name}
-      label={label}
-      triggerClassName={`${inputClass} min-h-11 text-base`}
-      value={value}
-      triggerLang={selected?.labelLanguage}
-      onValueChange={(next) => next !== null && onChange(next)}
-      options={choices.map((choice) => ({ value: choice.id, label: choice.label, lang: choice.labelLanguage }))}
-    />
+    <Field>
+      <FieldLabel id={`${id}-label`} htmlFor={id}>
+        {label}
+      </FieldLabel>
+      <Select<string, false>
+        items={profileChoiceOptions}
+        name={name}
+        value={value}
+        onValueChange={(next) => next !== null && onChange(next)}
+      >
+        <SelectTrigger
+          id={id}
+          aria-labelledby={`${id}-label`}
+          lang={selected?.labelLanguage}
+          className={`${inputClass} min-h-11 text-base`}
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false}>
+          <SelectGroup>
+            {profileChoiceOptions.map(({ value, label, ...itemProps }) => (
+              <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </Field>
   );
 }

@@ -1,9 +1,10 @@
+import { Field, FieldLabel } from '../shadcn/field.tsx';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { Button } from '../shadcn/button.tsx';
 import { ToggleGroup, ToggleGroupItem } from '../shadcn/toggle-group.tsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shadcn/tabs.tsx';
 import { Badge } from '../shadcn/badge.tsx';
-import { ChoiceSelect } from './choice-select.tsx';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '../shadcn/select.tsx';
 import { Menu } from './menu.tsx';
 import { LayoutSelect } from './layout-select.tsx';
 
@@ -136,35 +137,79 @@ export function ShelfToolbar(p: Props) {
   const { labels: l } = p;
   const sortId = useId();
   const directionId = useId();
+  const sortOptions = p.sorts;
+  const directionOptions = [
+    { value: 'asc', label: l.ascending },
+    { value: 'desc', label: l.descending },
+  ];
   const sort = (
     <div className="grid min-w-0 gap-3">
-      <ChoiceSelect
-        id={sortId}
-        label={l.sort}
-        fieldClassName="min-w-0 gap-1"
-        labelClassName="min-w-0 max-w-full whitespace-normal break-words text-sm"
-        triggerClassName="w-full min-w-0 max-w-full h-11 min-h-11 md:h-8 md:min-h-8"
-        value={p.sort}
-        onValueChange={(value) => {
-          if (value !== null) p.onSortChange(value, p.direction);
-        }}
-        options={p.sorts}
-      />
-      <ChoiceSelect
-        id={directionId}
-        label={l.direction}
-        fieldClassName="min-w-0 gap-1"
-        labelClassName="min-w-0 max-w-full whitespace-normal break-words text-sm"
-        triggerClassName="w-full min-w-0 max-w-full h-11 min-h-11 md:h-8 md:min-h-8"
-        value={p.direction}
-        onValueChange={(value) => {
-          if (value === 'asc' || value === 'desc') p.onSortChange(p.sort, value);
-        }}
-        options={[
-          { value: 'asc', label: l.ascending },
-          { value: 'desc', label: l.descending },
-        ]}
-      />
+      <Field className="min-w-0 gap-1">
+        <FieldLabel
+          id={`${sortId}-label`}
+          htmlFor={sortId}
+          className="min-w-0 max-w-full whitespace-normal break-words text-sm"
+        >
+          {l.sort}
+        </FieldLabel>
+        <Select<string, false>
+          items={sortOptions}
+          value={p.sort}
+          onValueChange={(value) => {
+            if (value !== null) p.onSortChange(value, p.direction);
+          }}
+        >
+          <SelectTrigger
+            id={sortId}
+            aria-labelledby={`${sortId}-label`}
+            className="w-full min-w-0 max-w-full h-11 min-h-11 md:h-8 md:min-h-8"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              {sortOptions.map(({ value, label, ...itemProps }) => (
+                <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field className="min-w-0 gap-1">
+        <FieldLabel
+          id={`${directionId}-label`}
+          htmlFor={directionId}
+          className="min-w-0 max-w-full whitespace-normal break-words text-sm"
+        >
+          {l.direction}
+        </FieldLabel>
+        <Select<string, false>
+          items={directionOptions}
+          value={p.direction}
+          onValueChange={(value) => {
+            if (value === 'asc' || value === 'desc') p.onSortChange(p.sort, value);
+          }}
+        >
+          <SelectTrigger
+            id={directionId}
+            aria-labelledby={`${directionId}-label`}
+            className="w-full min-w-0 max-w-full h-11 min-h-11 md:h-8 md:min-h-8"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              {directionOptions.map(({ value, label, ...itemProps }) => (
+                <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
     </div>
   );
   const filter = (

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { useId, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { ToggleGroup, ToggleGroupItem } from '@rezics/ui/shadcn/toggle-group';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import type { LibraryEntryStateWrite } from './entries-read';
@@ -254,6 +255,8 @@ export function SortControls({
   presentation?: ShelfPresentationResolution;
   isCurrent?: () => boolean;
 }) {
+  const orderSelectId = useId();
+  const directionSelectId = useId();
   const navigate = useNavigate();
   const entries = useOperation('library_entry.list');
   const progress = useOperation('progress_session.list');
@@ -273,6 +276,36 @@ export function SortControls({
   const scoreOrder = selection.orderBy === 'personalScore';
   const priorityOrder = selection.orderBy === 'priority';
   if (!entries || !progress) return null;
+  const orderOptions = [
+    { value: 'lastActivity', label: m.library_sort_activity() },
+    { value: 'createdAt', label: m.library_sort_created() },
+    { value: 'finishedAt', label: m.library_sort_finished() },
+    { value: 'priority', label: m.library_rich_entry_priority() },
+    { value: 'title', label: m.library_column_title() },
+    { value: 'personalScore', label: m.library_score_order() },
+  ];
+  const directionOptions = [
+    {
+      value: 'desc',
+      label: priorityOrder
+        ? m.library_priority_descending()
+        : scoreOrder
+          ? m.library_score_highest()
+          : selection.orderBy === 'title'
+            ? 'Z–A'
+            : m.library_sort_newest(),
+    },
+    {
+      value: 'asc',
+      label: priorityOrder
+        ? m.library_priority_ascending()
+        : scoreOrder
+          ? m.library_score_lowest()
+          : selection.orderBy === 'title'
+            ? 'A–Z'
+            : m.library_sort_oldest(),
+    },
+  ];
   return (
     <form
       method="get"
@@ -302,60 +335,70 @@ export function SortControls({
       {display.columnsExplicit && display.columns ? (
         <input type="hidden" name="columns" value={display.columns} />
       ) : null}
-      <ChoiceSelect
-        label={m.library_sort_by()}
-        fieldClassName="grid min-w-0 max-w-full gap-1 text-sm"
-        triggerClassName="min-h-11 max-w-full rounded-md border bg-background p-2"
-        name="orderBy"
-        value={selection.orderBy}
-        onValueChange={(value) => {
-          if (value === null || !(isCurrent?.() ?? true)) return;
-          const orderBy = validateShelfSearch({ orderBy: value }).orderBy;
-          if (orderBy) setSelection({ ...selection, orderBy });
-        }}
-        options={[
-          { value: 'lastActivity', label: m.library_sort_activity() },
-          { value: 'createdAt', label: m.library_sort_created() },
-          { value: 'finishedAt', label: m.library_sort_finished() },
-          { value: 'priority', label: m.library_rich_entry_priority() },
-          { value: 'title', label: m.library_column_title() },
-          { value: 'personalScore', label: m.library_score_order() },
-        ]}
-      />
-      <ChoiceSelect
-        label={m.library_sort_direction()}
-        fieldClassName="grid min-w-0 max-w-full gap-1 text-sm"
-        triggerClassName="min-h-11 max-w-full rounded-md border bg-background p-2"
-        name="direction"
-        value={selection.direction}
-        onValueChange={(value) => {
-          if (value === null || !(isCurrent?.() ?? true)) return;
-          const direction = validateShelfSearch({ direction: value }).direction;
-          if (direction) setSelection({ ...selection, direction });
-        }}
-        options={[
-          {
-            value: 'desc',
-            label: priorityOrder
-              ? m.library_priority_descending()
-              : scoreOrder
-                ? m.library_score_highest()
-                : selection.orderBy === 'title'
-                  ? 'Z–A'
-                  : m.library_sort_newest(),
-          },
-          {
-            value: 'asc',
-            label: priorityOrder
-              ? m.library_priority_ascending()
-              : scoreOrder
-                ? m.library_score_lowest()
-                : selection.orderBy === 'title'
-                  ? 'A–Z'
-                  : m.library_sort_oldest(),
-          },
-        ]}
-      />
+      <Field className="grid min-w-0 max-w-full gap-1 text-sm">
+        <FieldLabel id={`${orderSelectId}-label`} htmlFor={orderSelectId}>
+          {m.library_sort_by()}
+        </FieldLabel>
+        <Select<string, false>
+          items={orderOptions}
+          name="orderBy"
+          value={selection.orderBy}
+          onValueChange={(value) => {
+            if (value === null || !(isCurrent?.() ?? true)) return;
+            const orderBy = validateShelfSearch({ orderBy: value }).orderBy;
+            if (orderBy) setSelection({ ...selection, orderBy });
+          }}
+        >
+          <SelectTrigger
+            id={orderSelectId}
+            aria-labelledby={`${orderSelectId}-label`}
+            className="min-h-11 max-w-full rounded-md border bg-background p-2"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              {orderOptions.map(({ value, label, ...itemProps }) => (
+                <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field className="grid min-w-0 max-w-full gap-1 text-sm">
+        <FieldLabel id={`${directionSelectId}-label`} htmlFor={directionSelectId}>
+          {m.library_sort_direction()}
+        </FieldLabel>
+        <Select<string, false>
+          items={directionOptions}
+          name="direction"
+          value={selection.direction}
+          onValueChange={(value) => {
+            if (value === null || !(isCurrent?.() ?? true)) return;
+            const direction = validateShelfSearch({ direction: value }).direction;
+            if (direction) setSelection({ ...selection, direction });
+          }}
+        >
+          <SelectTrigger
+            id={directionSelectId}
+            aria-labelledby={`${directionSelectId}-label`}
+            className="min-h-11 max-w-full rounded-md border bg-background p-2"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              {directionOptions.map(({ value, label, ...itemProps }) => (
+                <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
       <Button type="submit" variant="outline" className="min-h-11">
         {m.library_sort_apply()}
       </Button>

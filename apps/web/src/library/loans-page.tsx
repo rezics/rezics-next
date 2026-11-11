@@ -1,7 +1,8 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useId, useState, type FormEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import type { Loan } from '@rezics/client';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { Exposure, type GatedOperation } from '../kernel/exposure';
@@ -327,6 +328,7 @@ function LoanCreateForm({
   current: LoansOrigin['isCurrent'];
   onCreate: (input: Record<string, unknown>) => void;
 }) {
+  const loanDirectionSelectId = useId();
   const [copyId, setCopyId] = useState('');
   const [copyRevision, setCopyRevision] = useState('1');
   const [direction, setDirection] = useState<'lent' | 'borrowed'>('lent');
@@ -334,6 +336,10 @@ function LoanCreateForm({
   const [startedOn, setStartedOn] = useState(today ?? '');
   const [dueOn, setDueOn] = useState('');
   const fieldsId = useId();
+  const loanDirectionOptions = [
+    { value: 'lent', label: m.library_loans_lent() },
+    { value: 'borrowed', label: m.library_loans_borrowed() },
+  ];
   return (
     <form
       className="space-y-3 border-t border-border pt-4"
@@ -373,20 +379,36 @@ function LoanCreateForm({
             onChange={(event) => current() && setCopyRevision(event.currentTarget.value)}
           />
         </label>
-        <ChoiceSelect
-          label={m.library_loans_direction()}
-          fieldClassName="min-w-0 gap-1"
-          triggerClassName={field}
-          value={direction}
-          disabled={disabled}
-          onValueChange={(value) => {
-            if ((value === 'lent' || value === 'borrowed') && current()) setDirection(value);
-          }}
-          options={[
-            { value: 'lent', label: m.library_loans_lent() },
-            { value: 'borrowed', label: m.library_loans_borrowed() },
-          ]}
-        />
+        <Field className="min-w-0 gap-1">
+          <FieldLabel id={`${loanDirectionSelectId}-label`} htmlFor={loanDirectionSelectId}>
+            {m.library_loans_direction()}
+          </FieldLabel>
+          <Select<string, false>
+            items={loanDirectionOptions}
+            disabled={disabled}
+            value={direction}
+            onValueChange={(value) => {
+              if ((value === 'lent' || value === 'borrowed') && current()) setDirection(value);
+            }}
+          >
+            <SelectTrigger
+              id={loanDirectionSelectId}
+              aria-labelledby={`${loanDirectionSelectId}-label`}
+              className={field}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                {loanDirectionOptions.map(({ value, label, ...itemProps }) => (
+                  <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
         <label className="min-w-0 space-y-1">
           <span className="text-sm">{m.library_loans_counterparty()}</span>
           <input

@@ -1,6 +1,7 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useContext, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import type { EntryAnnotationCorrectionPage } from '@rezics/client';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useSession } from '../../session';
 import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
@@ -243,24 +244,43 @@ function OperationField({
   disabled: boolean;
 }) {
   const id = useId();
+  const fieldOperationOptions = [
+    { value: 'preserve', label: m.library_annotation_unchanged() },
+    { value: 'set', label: m.library_annotation_set() },
+    { value: 'clear', label: m.library_annotation_clear() },
+  ];
   return (
     <div className="min-w-0 space-y-2">
-      <ChoiceSelect
-        id={id}
-        label={field === 'note' ? m.library_rich_entry_note() : m.library_rich_entry_priority()}
-        fieldClassName="min-w-0 gap-2"
-        triggerClassName="min-h-11 w-full rounded-md border bg-background p-2"
-        value={draft[field]}
-        disabled={disabled}
-        onValueChange={(value) => {
-          if (value !== null) onChange({ ...draft, [field]: value });
-        }}
-        options={[
-          { value: 'preserve', label: m.library_annotation_unchanged() },
-          { value: 'set', label: m.library_annotation_set() },
-          { value: 'clear', label: m.library_annotation_clear() },
-        ]}
-      />
+      <Field className="min-w-0 gap-2">
+        <FieldLabel id={`${id}-label`} htmlFor={id}>
+          {field === 'note' ? m.library_rich_entry_note() : m.library_rich_entry_priority()}
+        </FieldLabel>
+        <Select<string, false>
+          items={fieldOperationOptions}
+          disabled={disabled}
+          value={draft[field]}
+          onValueChange={(value) => {
+            if (value !== null) onChange({ ...draft, [field]: value });
+          }}
+        >
+          <SelectTrigger
+            id={id}
+            aria-labelledby={`${id}-label`}
+            className="min-h-11 w-full rounded-md border bg-background p-2"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              {fieldOperationOptions.map(({ value, label, ...itemProps }) => (
+                <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
       {draft[field] === 'set' ? (
         field === 'note' ? (
           <>

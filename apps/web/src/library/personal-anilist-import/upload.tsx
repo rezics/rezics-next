@@ -1,5 +1,5 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { useId, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { ANILIST_ROWS, ANILIST_SCORE_FORMATS, ANILIST_UPLOAD_BYTES, type AniListScoreFormat } from './contract';
@@ -38,6 +38,10 @@ export function AniListUploadForm({
     }
     onUpload(await file.text(), scoreFormat || null);
   }
+  const scoreFormatOptions = [
+    { value: null, label: aniListScoreFormatLabel(null) },
+    ...ANILIST_SCORE_FORMATS.map((format) => ({ value: format, label: aniListScoreFormatLabel(format) })),
+  ];
   return (
     <form
       className="space-y-4"
@@ -61,19 +65,30 @@ export function AniListUploadForm({
         <FieldLabel id={`${scoreId}-label`} htmlFor={scoreId} className="min-h-11 items-center">
           {m.library_anilist_score_format()}
         </FieldLabel>
-        <ChoiceSelect
-          id={scoreId}
-          ariaLabelledBy={`${scoreId}-label`}
-          triggerDataAttributes={{ 'data-anilist-score-format': true }}
-          triggerClassName="min-h-11 w-full max-w-full rounded-md border bg-background px-3"
-          value={scoreFormat || null}
+        <Select<string, false>
+          items={scoreFormatOptions}
           disabled={busy || disabled}
+          value={scoreFormat || null}
           onValueChange={(value) => setScoreFormat((value ?? '') as AniListScoreFormat | '')}
-          options={[
-            { value: null, label: aniListScoreFormatLabel(null) },
-            ...ANILIST_SCORE_FORMATS.map((format) => ({ value: format, label: aniListScoreFormatLabel(format) })),
-          ]}
-        />
+        >
+          <SelectTrigger
+            id={scoreId}
+            aria-labelledby={`${scoreId}-label`}
+            {...{ 'data-anilist-score-format': true }}
+            className="min-h-11 w-full max-w-full rounded-md border bg-background px-3"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              {scoreFormatOptions.map(({ value, label, ...itemProps }) => (
+                <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </Field>
       <Field>
         <FieldLabel htmlFor={inputId} className="min-h-11 items-center">

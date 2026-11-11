@@ -1,7 +1,8 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useRecoveryLifetime } from '../recovery-lifetime';
 import { useLocation } from '@tanstack/react-router';
-import { useEffect, useReducer, useState } from 'react';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
+import { useId, useEffect, useReducer, useState } from 'react';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -278,6 +279,8 @@ export function Pager({
 }
 
 function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
+  const profilePairSelectId = useId();
+  const additionalMeasureSelectId = useId();
   const source = snap.selected!;
   const [subject, setSubject] = useState('');
   const [pair, setPair] = useState('');
@@ -321,6 +324,13 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
   const measures = [
     { unit: source.unit, amount: source.amount, total: source.total },
     ...(source.additional_measures ?? []),
+  ];
+  const profilePairOptions = [
+    { value: null, label: m.library_archive_progress_choose() },
+    ...pairs.map((item) => ({
+      value: `${item.mode}:${item.id}`,
+      label: `${item.mode} · ${item.label || item.id}`,
+    })),
   ];
   return (
     <section className="space-y-4 rounded-md border p-4">
@@ -374,62 +384,99 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
           {!pairs.length ? (
             <p>{m.library_archive_progress_unsupported()}</p>
           ) : (
-            <ChoiceSelect
-              label={m.library_archive_progress_pair()}
-              fieldClassName="block space-y-2"
-              triggerClassName={`${action} w-full`}
-              value={pair || null}
-              disabled={locked}
-              onValueChange={(value) => {
-                setPair(value ?? '');
-                setAdditional({});
-                setIds([]);
-                changed();
-              }}
-              options={[
-                { value: null, label: m.library_archive_progress_choose() },
-                ...pairs.map((item) => ({
-                  value: `${item.mode}:${item.id}`,
-                  label: `${item.mode} · ${item.label || item.id}`,
-                })),
-              ]}
-            />
+            <Field className="block space-y-2">
+              <FieldLabel id={`${profilePairSelectId}-label`} htmlFor={profilePairSelectId}>
+                {m.library_archive_progress_pair()}
+              </FieldLabel>
+              <Select<string, false>
+                items={profilePairOptions}
+                disabled={locked}
+                value={pair || null}
+                onValueChange={(value) => {
+                  setPair(value ?? '');
+                  setAdditional({});
+                  setIds([]);
+                  changed();
+                }}
+              >
+                <SelectTrigger
+                  id={profilePairSelectId}
+                  aria-labelledby={`${profilePairSelectId}-label`}
+                  className={`${action} w-full`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {profilePairOptions.map(({ value, label, ...itemProps }) => (
+                      <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
           )}
         </>
       ) : null}
       {choice?.mode === 'scalar_amount'
-        ? (source.additional_measures ?? []).map((measure) => (
-            <ChoiceSelect
-              key={measure.unit}
-              label={
-                <>
-                  {measure.unit} · {measure.amount ?? m.library_progress_measure_absent()} /{' '}
-                  {measure.total ?? m.library_progress_measure_absent()}
-                </>
-              }
-              fieldClassName="block space-y-2"
-              triggerClassName={`${action} w-full`}
-              disabled={locked}
-              value={additional[measure.unit] || null}
-              onValueChange={(value) => {
-                setAdditional({ ...additional, [measure.unit]: value ?? '' });
-                changed();
-              }}
-              options={[
-                { value: null, label: m.library_archive_progress_omit() },
-                ...pairs
-                  .filter(
-                    (item) =>
-                      item.mode === 'scalar_amount' &&
-                      item.id !== choice.id &&
-                      !Object.entries(additional).some(
-                        ([sourceUnit, unit]) => sourceUnit !== measure.unit && unit === item.id,
-                      ),
-                  )
-                  .map((item) => ({ value: item.id, label: item.label || item.id })),
-              ]}
-            />
-          ))
+        ? (source.additional_measures ?? []).map((measure) => {
+            const additionalMeasureOptions = [
+              { value: null, label: m.library_archive_progress_omit() },
+              ...pairs
+                .filter(
+                  (item) =>
+                    item.mode === 'scalar_amount' &&
+                    item.id !== choice.id &&
+                    !Object.entries(additional).some(
+                      ([sourceUnit, unit]) => sourceUnit !== measure.unit && unit === item.id,
+                    ),
+                )
+                .map((item) => ({ value: item.id, label: item.label || item.id })),
+            ];
+            return (
+              <Field key={measure.unit} className="block space-y-2">
+                <FieldLabel
+                  id={`${additionalMeasureSelectId}-${measure.unit}-label`}
+                  htmlFor={`${additionalMeasureSelectId}-${measure.unit}`}
+                >
+                  {
+                    <>
+                      {measure.unit} · {measure.amount ?? m.library_progress_measure_absent()} /{' '}
+                      {measure.total ?? m.library_progress_measure_absent()}
+                    </>
+                  }
+                </FieldLabel>
+                <Select<string, false>
+                  items={additionalMeasureOptions}
+                  disabled={locked}
+                  value={additional[measure.unit] || null}
+                  onValueChange={(value) => {
+                    setAdditional({ ...additional, [measure.unit]: value ?? '' });
+                    changed();
+                  }}
+                >
+                  <SelectTrigger
+                    id={`${additionalMeasureSelectId}-${measure.unit}`}
+                    aria-labelledby={`${additionalMeasureSelectId}-${measure.unit}-label`}
+                    className={`${action} w-full`}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent alignItemWithTrigger={false}>
+                    <SelectGroup>
+                      {additionalMeasureOptions.map(({ value, label, ...itemProps }) => (
+                        <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+            );
+          })
         : null}
       <details open={choice?.mode === 'completed_units'}>
         <summary className={action}>{m.library_archive_progress_units()}</summary>

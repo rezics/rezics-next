@@ -1,5 +1,6 @@
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useEffect, useId, useState } from 'react';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import type { MalAssignment, MalLabelReview, MalLabelSelection, MalPreviewRow } from './contract';
 import { useMalImportPort } from './port';
@@ -78,23 +79,38 @@ function LabelTarget({
 }) {
   const id = useId();
   const target = selection.target;
+  const targetModeOptions = [
+    { value: 'new', label: m.library_mal_label_new() },
+    { value: 'existing', label: m.library_mal_label_existing() },
+  ];
   return (
     <div className="grid min-w-0 gap-2">
-      <ChoiceSelect
-        id={`${id}-mode`}
-        label={m.library_mal_label_target()}
-        fieldClassName="gap-2"
-        triggerClassName="min-h-11 w-full border"
-        value={'name' in target ? 'new' : 'existing'}
-        onValueChange={(value) => {
-          if (value === 'new' || value === 'existing')
-            onChange({ ...selection, target: value === 'new' ? { name: '' } : { labelId: '', revision: 1 } });
-        }}
-        options={[
-          { value: 'new', label: m.library_mal_label_new() },
-          { value: 'existing', label: m.library_mal_label_existing() },
-        ]}
-      />
+      <Field className="gap-2">
+        <FieldLabel id={`${id}-mode-label`} htmlFor={`${id}-mode`}>
+          {m.library_mal_label_target()}
+        </FieldLabel>
+        <Select<string, false>
+          items={targetModeOptions}
+          value={'name' in target ? 'new' : 'existing'}
+          onValueChange={(value) => {
+            if (value === 'new' || value === 'existing')
+              onChange({ ...selection, target: value === 'new' ? { name: '' } : { labelId: '', revision: 1 } });
+          }}
+        >
+          <SelectTrigger id={`${id}-mode`} aria-labelledby={`${id}-mode-label`} className="min-h-11 w-full border">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectGroup>
+              {targetModeOptions.map(({ value, label, ...itemProps }) => (
+                <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
       {'name' in target ? (
         <>
           <label htmlFor={`${id}-name`}>{m.library_mal_label_name()}</label>

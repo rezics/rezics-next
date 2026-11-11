@@ -43,13 +43,10 @@ Page presentations migrate every ordinary fixed-choice selector to the shared Se
 Decision: Catalogue and search fixed-choice controls use shared shadcn `Select` with labelled `Field` composition;
 native select is reserved for a documented browser-native interaction.
 
-Decision: Library fixed-choice fields use the shared `Select` with `Field` and `FieldLabel`, preserving their existing
-field names, values, labels and disabled choices; no browser-native exception is needed for these fields.
-
-Use `ChoiceSelect` from `@rezics/ui/choice-select` when a page needs the standard labelled field composition. Supply
-each option's submitted `value` and rendered `label`; use `null` for the native empty-string choice so the hidden form
-field still submits `""`. It supports a visible `label` or an existing `ariaLabelledBy`/`ariaLabel`, forwards the form
-name, required and disabled state, and renders the shared Select trigger and grouped items.
+Decision: Library and Settings compose `Field` and shadcn `Select` directly; callers retain options, empty values,
+form names and review/route semantics. Use `null` for an empty-string choice so its named form field still submits
+`""`, and include its human label in `items`. Keep option availability, language, retained unavailable choices and
+multi-selection in the caller. The Select stories exercise these same primitives, without a shared control wrapper.
 
 For ordinary sliders, associate a visible label with `aria-labelledby` and use the supported `locale` and `format`
 props for numeric value text. The rating components compose [Base UI slider parts](https://base-ui.com/react/components/slider)

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { useId, useEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { publicationReadWithin } from '../collection-publication';
@@ -38,6 +39,7 @@ export function QueryPublicationView({
   isCurrent(): boolean;
   canBegin(): boolean;
 }) {
+  const visibilitySelectId = useId();
   const storageKey = JSON.stringify(['collection-query-publication', subject, collectionId]);
   const collectionHref = `/${getLocale()}/collections/${encodeURIComponent(collectionId)}`;
   const [attempt, setAttempt] = useState<Attempt | null>(null);
@@ -123,6 +125,10 @@ export function QueryPublicationView({
 
   const complete = status?.phase === 'complete';
   const refused = status?.phase === 'refused';
+  const visibilityOptions = [
+    { value: 'unlisted', label: m.library_visibility_unlisted() },
+    { value: 'public', label: m.library_visibility_public() },
+  ];
   return (
     <section className="space-y-4 rounded-xl border border-border p-5" aria-labelledby="query-publication-heading">
       <h1 id="query-publication-heading" className="text-xl font-semibold">
@@ -132,20 +138,36 @@ export function QueryPublicationView({
       <p>{m.library_publication_privacy()}</p>
       {!attempt ? (
         <>
-          <ChoiceSelect
-            label={m.library_query_publication_visibility()}
-            fieldClassName="min-w-0 flex-row flex-wrap items-center gap-3"
-            triggerClassName="min-h-11 rounded-md border border-border bg-background px-3"
-            value={target}
-            disabled={busy}
-            onValueChange={(value) => {
-              if (value === 'public' || value === 'unlisted') setTarget(value);
-            }}
-            options={[
-              { value: 'unlisted', label: m.library_visibility_unlisted() },
-              { value: 'public', label: m.library_visibility_public() },
-            ]}
-          />
+          <Field className="min-w-0 flex-row flex-wrap items-center gap-3">
+            <FieldLabel id={`${visibilitySelectId}-label`} htmlFor={visibilitySelectId}>
+              {m.library_query_publication_visibility()}
+            </FieldLabel>
+            <Select<string, false>
+              items={visibilityOptions}
+              disabled={busy}
+              value={target}
+              onValueChange={(value) => {
+                if (value === 'public' || value === 'unlisted') setTarget(value);
+              }}
+            >
+              <SelectTrigger
+                id={visibilitySelectId}
+                aria-labelledby={`${visibilitySelectId}-label`}
+                className="min-h-11 rounded-md border border-border bg-background px-3"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {visibilityOptions.map(({ value, label, ...itemProps }) => (
+                    <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
           <label className="flex items-start gap-3">
             <input
               type="checkbox"

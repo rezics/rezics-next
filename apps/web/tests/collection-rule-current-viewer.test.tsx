@@ -1,3 +1,4 @@
+import { selectTrigger, selectValue, chooseSelect } from './support/select';
 import { SavedQueryConditionInput } from '../src/search/saved-query-condition-input';
 import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
@@ -73,6 +74,16 @@ async function mount(initial: Partial<Props> = {}) {
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    DocumentFragment: window.DocumentFragment,
+    ShadowRoot: window.ShadowRoot,
+    Document: window.Document,
+    NodeFilter: window.NodeFilter,
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    ResizeObserver: window.ResizeObserver,
+    MutationObserver: window.MutationObserver,
+    HTMLInputElement: window.HTMLInputElement,
     Element: window.Element,
     Node: window.Node,
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
@@ -138,12 +149,11 @@ async function mount(initial: Partial<Props> = {}) {
       return input;
     },
     async changeLabel() {
-      const select = [...host.querySelectorAll('select')].find((node) => node.value === 'alice-label')!;
+      const select = [...host.querySelectorAll('[data-slot="select-trigger"]')].find(
+        (node) => selectValue(node) === 'alice-label',
+      )!;
       expect(select).toBeDefined();
-      await act(async () => {
-        select.value = 'changed';
-        select.dispatchEvent(new window.Event('change', { bubbles: true }) as unknown as Event);
-      });
+      await chooseSelect(select, 'changed');
     },
     async unmount() {
       if (!unmounted) await act(async () => root.unmount());
@@ -172,6 +182,16 @@ async function mountCurrent(page: RulePage) {
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    ResizeObserver: window.ResizeObserver,
+    MutationObserver: window.MutationObserver,
+    HTMLButtonElement: window.HTMLButtonElement,
+    HTMLInputElement: window.HTMLInputElement,
+    DocumentFragment: window.DocumentFragment,
+    ShadowRoot: window.ShadowRoot,
+    Document: window.Document,
+    NodeFilter: window.NodeFilter,
     Element: window.Element,
     Node: window.Node,
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
@@ -522,7 +542,7 @@ test('rule label lookup normalizes a copy, corrects invalid prefixes, and retain
       expect(error.getAttribute('role')).toBe('alert');
       await ui.click(m.search_apply());
       expect(reads).toHaveLength(3);
-      expect(ui.host.querySelector('select')!.value).toBe('changed');
+      expect(selectValue(selectTrigger(ui.host))).toBe('changed');
     }
     await ui.render({ csrfToken: 'csrf-alice' });
     await ui.submit();

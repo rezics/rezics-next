@@ -1,3 +1,4 @@
+import { selectTrigger, selectValue, selectOptions, chooseSelect } from './support/select';
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { QueryClient } from '@tanstack/react-query';
@@ -20,6 +21,10 @@ const globals = {
   document: window.document,
   navigator: window.navigator,
   HTMLElement: window.HTMLElement,
+  ShadowRoot: window.ShadowRoot,
+  Document: window.Document,
+  NodeFilter: window.NodeFilter,
+  HTMLInputElement: window.HTMLInputElement,
   HTMLButtonElement: window.HTMLButtonElement,
   Element: window.Element,
   Node: window.Node,
@@ -157,12 +162,7 @@ test('review keeps a retained unsupported visibility labelled and offers Use cur
       },
     }),
     async (host) => {
-      await act(async () => {
-        const select = host.querySelector('select')!;
-        select.value = 'unlisted';
-        select.dispatchEvent(new window.Event('change', { bubbles: true }));
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
+      await chooseSelect(selectTrigger(host), 'unlisted');
       await act(async () => {
         [...host.querySelectorAll('button')]
           .find((button) => button.textContent?.trim() === m.settings_privacy_reload_row())!
@@ -171,9 +171,9 @@ test('review keeps a retained unsupported visibility labelled and offers Use cur
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
       expect(host.textContent).toContain(m.settings_privacy_review_title());
-      const select = host.querySelector('select');
-      expect(select?.value).toBe('unlisted');
-      expect([...select!.querySelectorAll('option')].some((option) => option.value === 'unlisted')).toBe(true);
+      const select = selectTrigger(host);
+      expect(selectValue(select)).toBe('unlisted');
+      expect((await selectOptions(select)).some((option) => option.dataset.value === 'unlisted')).toBe(true);
       const save = [...host.querySelectorAll('button')].find(
         (button) => button.textContent?.trim() === m.settings_privacy_save_choice(),
       );

@@ -5,7 +5,7 @@ import { ProgressAddressCorrection } from './progress-address-correction';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend } from '@rezics/ui/shadcn/field';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { Input } from '@rezics/ui/shadcn/input';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import type { CoverRatio } from '@rezics/ui/cover';
@@ -1155,6 +1155,23 @@ function ProgressIndexPageContent({
       </article>
     );
   const ratio = rowRatio(sessions.map((session) => session.subject));
+  const discoveryFilterOptions = [
+    { value: 'none', label: m.library_progress_discovery_any_filter() },
+    { value: 'state', label: m.library_progress_discovery_state_filter() },
+    { value: 'mode', label: m.library_progress_discovery_mode_filter() },
+    { value: 'profile', label: m.library_progress_discovery_profile_filter() },
+  ];
+  const discoveryStateOptions = [
+    { value: null, label: m.library_progress_discovery_any_filter() },
+    { value: 'active', label: m.library_progress_state_active() },
+    { value: 'completed', label: m.library_progress_state_completed() },
+    { value: 'abandoned', label: m.library_progress_state_abandoned() },
+  ];
+  const discoveryModeOptions = [
+    { value: null, label: m.library_progress_discovery_any_filter() },
+    ...modeChoices.map((choice) => ({ value: choice.value, label: choice.label() })),
+  ];
+  const progressUnitOptions = units.map((choice) => ({ value: choice.id, label: choice.label }));
   return (
     <article className="max-w-4xl space-y-10 text-foreground" onClickCapture={protectNavigation}>
       <PageHeading>{m.library_progress_heading()}</PageHeading>
@@ -1211,61 +1228,87 @@ function ProgressIndexPageContent({
               </Button>
             ) : null}
             <div className="min-w-48 flex-1">
-              <ChoiceSelect
-                id={filterKindId}
-                label={m.library_progress_discovery_filter_by()}
-                fieldClassName="min-w-48 flex-1 gap-1"
-                labelClassName="text-sm font-medium"
-                triggerClassName="min-h-11"
-                value={filterKind}
-                onValueChange={(value) => {
-                  if (value === 'none' || value === 'state' || value === 'mode' || value === 'profile') {
-                    setFilterKind(value);
-                    setFilterValue('');
-                  }
-                }}
-                options={[
-                  { value: 'none', label: m.library_progress_discovery_any_filter() },
-                  { value: 'state', label: m.library_progress_discovery_state_filter() },
-                  { value: 'mode', label: m.library_progress_discovery_mode_filter() },
-                  { value: 'profile', label: m.library_progress_discovery_profile_filter() },
-                ]}
-              />
+              <Field className="min-w-48 flex-1 gap-1">
+                <FieldLabel id={`${filterKindId}-label`} htmlFor={filterKindId} className="text-sm font-medium">
+                  {m.library_progress_discovery_filter_by()}
+                </FieldLabel>
+                <Select<string, false>
+                  items={discoveryFilterOptions}
+                  value={filterKind}
+                  onValueChange={(value) => {
+                    if (value === 'none' || value === 'state' || value === 'mode' || value === 'profile') {
+                      setFilterKind(value);
+                      setFilterValue('');
+                    }
+                  }}
+                >
+                  <SelectTrigger id={filterKindId} aria-labelledby={`${filterKindId}-label`} className="min-h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent alignItemWithTrigger={false}>
+                    <SelectGroup>
+                      {discoveryFilterOptions.map(({ value, label, ...itemProps }) => (
+                        <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
             </div>
             {filterKind === 'state' ? (
               <div className="min-w-48 flex-1">
-                <ChoiceSelect
-                  id={filterValueId}
-                  label={m.library_progress_discovery_filter_value()}
-                  fieldClassName="min-w-48 flex-1 gap-1"
-                  labelClassName="text-sm font-medium"
-                  triggerClassName="min-h-11"
-                  value={filterValue || null}
-                  onValueChange={(value) => setFilterValue(value ?? '')}
-                  options={[
-                    { value: null, label: m.library_progress_discovery_any_filter() },
-                    { value: 'active', label: m.library_progress_state_active() },
-                    { value: 'completed', label: m.library_progress_state_completed() },
-                    { value: 'abandoned', label: m.library_progress_state_abandoned() },
-                  ]}
-                />
+                <Field className="min-w-48 flex-1 gap-1">
+                  <FieldLabel id={`${filterValueId}-label`} htmlFor={filterValueId} className="text-sm font-medium">
+                    {m.library_progress_discovery_filter_value()}
+                  </FieldLabel>
+                  <Select<string, false>
+                    items={discoveryStateOptions}
+                    value={filterValue || null}
+                    onValueChange={(value) => setFilterValue(value ?? '')}
+                  >
+                    <SelectTrigger id={filterValueId} aria-labelledby={`${filterValueId}-label`} className="min-h-11">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent alignItemWithTrigger={false}>
+                      <SelectGroup>
+                        {discoveryStateOptions.map(({ value, label, ...itemProps }) => (
+                          <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
               </div>
             ) : null}
             {filterKind === 'mode' ? (
               <div className="min-w-48 flex-1">
-                <ChoiceSelect
-                  id={filterValueId}
-                  label={m.library_progress_discovery_filter_value()}
-                  fieldClassName="min-w-48 flex-1 gap-1"
-                  labelClassName="text-sm font-medium"
-                  triggerClassName="min-h-11"
-                  value={filterValue || null}
-                  onValueChange={(value) => setFilterValue(value ?? '')}
-                  options={[
-                    { value: null, label: m.library_progress_discovery_any_filter() },
-                    ...modeChoices.map((choice) => ({ value: choice.value, label: choice.label() })),
-                  ]}
-                />
+                <Field className="min-w-48 flex-1 gap-1">
+                  <FieldLabel id={`${filterValueId}-label`} htmlFor={filterValueId} className="text-sm font-medium">
+                    {m.library_progress_discovery_filter_value()}
+                  </FieldLabel>
+                  <Select<string, false>
+                    items={discoveryModeOptions}
+                    value={filterValue || null}
+                    onValueChange={(value) => setFilterValue(value ?? '')}
+                  >
+                    <SelectTrigger id={filterValueId} aria-labelledby={`${filterValueId}-label`} className="min-h-11">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent alignItemWithTrigger={false}>
+                      <SelectGroup>
+                        {discoveryModeOptions.map(({ value, label, ...itemProps }) => (
+                          <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
               </div>
             ) : null}
             {filterKind === 'profile' ? (
@@ -1508,18 +1551,32 @@ function ProgressIndexPageContent({
                     <FieldLabel id="progress-unit-label" htmlFor="progress-unit">
                       {m.library_progress_unit()}
                     </FieldLabel>
-                    <ChoiceSelect
-                      id="progress-unit"
-                      ariaLabelledBy="progress-unit-label"
+                    <Select<string, false>
+                      items={progressUnitOptions}
                       name="unit"
                       disabled={draftLocked}
                       value={unit}
-                      triggerClassName="min-h-11 w-full"
                       onValueChange={(value) => {
                         if (value !== null) changeDraft(() => setUnit(value));
                       }}
-                      options={units.map((choice) => ({ value: choice.id, label: choice.label }))}
-                    />
+                    >
+                      <SelectTrigger
+                        id="progress-unit"
+                        aria-labelledby="progress-unit-label"
+                        className="min-h-11 w-full"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          {progressUnitOptions.map(({ value, label, ...itemProps }) => (
+                            <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
                   </Field>
                   {acceptsTotal ? (
                     <Field>

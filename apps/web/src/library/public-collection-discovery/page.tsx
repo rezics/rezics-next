@@ -1,7 +1,9 @@
+import { useId } from 'react';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { publicCollectionDirectoryHref } from '../../search/contracts/collection-directory';
 import type { FormEvent, MouseEvent, Ref, ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
-import { ChoiceSelect } from '@rezics/ui/choice-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { PageHeading } from '../../shell/page-heading';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
@@ -49,6 +51,7 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
     move: (event: MouseEvent<HTMLAnchorElement>, movement: Movement, coordinate: Coordinate) => void;
   };
 }) {
+  const orderSelectId = useId();
   const options = messageOptions(locale);
   const controlClass =
     'inline-flex min-h-11 min-w-11 max-w-full items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-center text-sm font-medium text-primary underline-offset-4 hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring whitespace-normal';
@@ -77,6 +80,10 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
       {label}
     </a>
   );
+  const orderOptions = [
+    { value: 'recent', label: m.collection_discovery_order_recent({}, options) },
+    { value: 'popular', label: m.collection_discovery_order_popular({}, options) },
+  ];
   return (
     <main className="mx-auto w-full min-w-0 max-w-6xl space-y-6 [overflow-wrap:anywhere]">
       <PageHeading ref={headingRef} tabIndex={-1}>
@@ -120,18 +127,29 @@ export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
             className="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
           />
         </label>
-        <ChoiceSelect
-          label={m.collection_discovery_order_label({}, options)}
-          fieldClassName="grid min-w-0 gap-1 text-sm font-medium"
-          labelClassName="font-medium"
-          triggerClassName="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
-          name="order"
-          defaultValue={selection.order ?? 'recent'}
-          options={[
-            { value: 'recent', label: m.collection_discovery_order_recent({}, options) },
-            { value: 'popular', label: m.collection_discovery_order_popular({}, options) },
-          ]}
-        />
+        <Field className="grid min-w-0 gap-1 text-sm font-medium">
+          <FieldLabel id={`${orderSelectId}-label`} htmlFor={orderSelectId} className="font-medium">
+            {m.collection_discovery_order_label({}, options)}
+          </FieldLabel>
+          <Select<string, false> items={orderOptions} name="order" defaultValue={selection.order ?? 'recent'}>
+            <SelectTrigger
+              id={orderSelectId}
+              aria-labelledby={`${orderSelectId}-label`}
+              className="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                {orderOptions.map(({ value, label, ...itemProps }) => (
+                  <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
         <div className="flex items-end">
           <Button type="submit" className="min-h-11 w-full">
             {m.collection_discovery_apply({}, options)}
