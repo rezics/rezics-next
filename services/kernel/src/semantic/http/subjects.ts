@@ -2734,7 +2734,7 @@ function subjectRoutes(
       async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
-        const active = await effectiveRelease(pool, query.context ?? GLOBAL_CONTEXT);
+        const active = await effectiveRelease(pool, query.context ?? GLOBAL_CONTEXT, false, job.deadline);
         if (!active) throw new ProblemError('semantic_not_ready');
         if (query.property !== undefined && !Object.hasOwn(active.release.properties, query.property))
           throw new ProblemError('invalid_request');
@@ -2779,6 +2779,7 @@ function subjectRoutes(
                 languages: languageRanges(request.headers.get('accept-language'), query.language),
                 release: active.release,
                 releasePin: active.digest,
+                deadline: job.deadline,
                 includeLabels: true,
                 authorizeSummary: summaryAuthorization(async (id, batch) => {
                   const route = routeOf(id)!;
@@ -2866,7 +2867,7 @@ function subjectRoutes(
       async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
-        const active = await effectiveRelease(pool, query.context ?? GLOBAL_CONTEXT);
+        const active = await effectiveRelease(pool, query.context ?? GLOBAL_CONTEXT, false, job.deadline);
         if (!active) throw new ProblemError('semantic_not_ready');
         if (
           !Object.hasOwn(active.release.properties, query.property) ||
@@ -2900,6 +2901,7 @@ function subjectRoutes(
                 ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
                 release: active.release,
                 releasePin: active.digest,
+                deadline: job.deadline,
                 authorizeSummary: summaryAuthorization(async (id, batch) => {
                   const route = routeOf(id)!;
                   return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });

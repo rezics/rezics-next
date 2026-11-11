@@ -6,6 +6,7 @@ import type { Capture, Population } from '../support/growth.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
 import { growRelationHistory, readRelationGrowthCardinalities } from '../support/growth-baseline.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { KERNEL_POOL_MAX } from '../../src/database/pool.ts';
 import { encodeCursor } from '../../src/tokens/cursor.ts';
 import { createSubject, readSubject } from '../../src/semantic/subject.ts';
 import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -561,6 +562,19 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (db) await db.close();
+});
+
+test('a queued link freshness probe expires inside its half-budget and leaves time for the page read', async () => {
+  const held = await Promise.all(Array.from({ length: KERNEL_POOL_MAX }, () => db.pool.connect()));
+  const started = Date.now();
+  try {
+    expect(await waitForSubjectLinks(db.pool, [], anchor, started + 400)).toBe(false);
+    expect(Date.now() - started).toBeLessThan(400);
+  } finally {
+    held.forEach((client) => client.release());
+    const drain = await db.pool.connect();
+    drain.release();
+  }
 });
 
 test('A subject read examines the same rows whatever the number of relations it holds under series with derived logarithmic blocks indexProbes and production-shaped initial access', async () => {

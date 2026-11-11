@@ -900,19 +900,22 @@ async function currentRelationStatements(
   for (const [home, group] of homes) {
     requireAccessDeadline(deadline);
     rows.push(
-      ...((await withReadTransaction(pool, async (client) =>
-        currentRelations.run(client, {
-          partition_no: home,
-          context_id: context,
-          defaults,
-          entries: group.map((entry) => ({
-            route: routeOf(entry.subject)!,
-            id: entry.subject,
-            property: entry.property,
-            candidate: entry.statement,
-          })),
-          ...(await statementAudience(client)),
-        }),
+      ...((await withReadTransaction(
+        pool,
+        async (client) =>
+          currentRelations.run(client, {
+            partition_no: home,
+            context_id: context,
+            defaults,
+            entries: group.map((entry) => ({
+              route: routeOf(entry.subject)!,
+              id: entry.subject,
+              property: entry.property,
+              candidate: entry.statement,
+            })),
+            ...(await statementAudience(client)),
+          }),
+        deadline,
       )) as typeof rows),
     );
   }
@@ -933,7 +936,7 @@ async function currentRelationStatements(
   for (const [home, group] of tupleHomes)
     for (let offset = 0; offset < group.length; offset += 100) {
       requireAccessDeadline(deadline);
-      for (const fence of await readAnchoredFences(pool, home, group.slice(offset, offset + 100)))
+      for (const fence of await readAnchoredFences(pool, home, group.slice(offset, offset + 100), deadline))
         if (fence.takenDown) gone.add(fenceKey(fence));
     }
   const releases = new Map<string, Release>();
@@ -942,7 +945,7 @@ async function currentRelationStatements(
     if (row.source && 'field_group' in row.source && gone.has(fenceKey(sourceTuple(routeKey, row.source)))) continue;
     let release = releases.get(row.release);
     if (!release) {
-      release = (await readRelease(pool, row.release)) ?? undefined;
+      release = (await withReadTransaction(pool, (client) => readRelease(client, row.release), deadline)) ?? undefined;
       if (!release) continue;
       releases.set(row.release, release);
     }
@@ -1106,6 +1109,7 @@ export async function listSubjectLinks(
   if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
     throw new RangeError('Invalid links page limit');
   if (options.qualifier && options.limit > 20) throw new RangeError('Qualified link pages accept at most 20 rows');
+  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   const context = options.context ?? GLOBAL_CONTEXT;
   const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
   if (context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
@@ -1126,7 +1130,9 @@ export async function listSubjectLinks(
     },
   };
   const release =
-    options.type || options.filter ? (options.release ?? (await activeRelease(pool))?.release) : undefined;
+    options.type || options.filter
+      ? (options.release ?? (await withReadTransaction(pool, (client) => activeRelease(client), deadline))?.release)
+      : undefined;
   const matches = (type: string) => !options.type || (!!release && matchesTarget(release, type, [options.type]));
   let cursor: { epoch: number; after: CursorKey[] } | null = null;
   if (options.cursor !== undefined) {
@@ -1135,7 +1141,6 @@ export async function listSubjectLinks(
     if (!validAfter(decoded.after, options.property)) throw new PageCursorError('invalid');
     cursor = decoded;
   }
-  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   let caughtUp = options.caughtUp ?? (await waitForSubjectLinks(pool, options.seen, options.subject, deadline));
   const readPage = async (refreshAuthorization = true) => {
     if (refreshAuthorization) await refreshStatementReaderAuthorization();
@@ -1144,189 +1149,196 @@ export async function listSubjectLinks(
     return withReadTransaction<{
       page: SubjectLinksPage;
       scannedMembers: string[];
-    }>(pool, async (client) => {
-      const partition = await readPartition(client, partitionOf(route));
-      const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
-        visibility: string;
-      } | null;
-      if (!partition || state?.visibility !== 'visible' || !(await authorize(client))) throw new SubjectNotFoundError();
-      const redirect = await redirectOf(client, options.subject);
-      if (redirect) throw new SubjectRedirectError(options.subject, redirect);
-      if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
-      const afterSource = typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID;
-      const afterStatement = typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID;
-      let scanCapped = false;
-      let scanAfter: CursorKey[] | undefined;
-      let rows: { subject: string; property: string; statement: string; type: string; order_key?: string }[];
-      if (options.property === null) {
-        rows = (await listInboundLinks.run(client, {
-          context_id: context,
-          route,
-          subject_id: options.subject,
-          after_property: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
-          after_source: afterSource,
-          after_statement: afterStatement,
-          page_limit: options.limit + 1,
-        })) as typeof rows;
-      } else {
-        const projected = (await listInboundLinksByProperty.run(client, {
-          context_id: context,
-          route,
-          subject_id: options.subject,
-          property: options.property,
-          filter_value: options.filter ?? NIL_UUID,
-          after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
-          after_source: afterSource,
-          after_statement: afterStatement,
-          // A qualified Character lookup may need to pass stale projection entries while filling its
-          // selected page. Its reader page is capped at 20, with one metadata row returned separately.
-          page_limit: options.qualifier ? 21 : (options.type ? 4 * options.limit : options.limit) + 1,
-          scan_limit: options.qualifier ? 20 : 0,
-        })) as {
-          subject: string | null;
-          property: string | null;
-          statement: string | null;
-          type: string | null;
-          order_key: string | null;
-          scan_capped: boolean;
-          scan_after_order: string | null;
-          scan_after_source: string | null;
-          scan_after_statement: string | null;
-          metadata_only: boolean;
-        }[];
-        const metadata = projected.find((row) => row.metadata_only)!;
-        scanCapped = metadata.scan_capped;
-        if (scanCapped)
-          scanAfter = [metadata.scan_after_order!, metadata.scan_after_source!, metadata.scan_after_statement!];
-        rows = projected.flatMap((row) =>
-          row.metadata_only
-            ? []
-            : [
-                {
-                  subject: row.subject!,
-                  property: row.property!,
-                  statement: row.statement!,
-                  type: row.type!,
-                  order_key: row.order_key!,
-                },
-              ],
+    }>(
+      pool,
+      async (client) => {
+        const partition = await readPartition(client, partitionOf(route));
+        const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+          visibility: string;
+        } | null;
+        if (!partition || state?.visibility !== 'visible' || !(await authorize(client)))
+          throw new SubjectNotFoundError();
+        const redirect = await redirectOf(client, options.subject);
+        if (redirect) throw new SubjectRedirectError(options.subject, redirect);
+        if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
+        const afterSource = typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID;
+        const afterStatement = typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID;
+        let scanCapped = false;
+        let scanAfter: CursorKey[] | undefined;
+        let rows: { subject: string; property: string; statement: string; type: string; order_key?: string }[];
+        if (options.property === null) {
+          rows = (await listInboundLinks.run(client, {
+            context_id: context,
+            route,
+            subject_id: options.subject,
+            after_property: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+            after_source: afterSource,
+            after_statement: afterStatement,
+            page_limit: options.limit + 1,
+          })) as typeof rows;
+        } else {
+          const projected = (await listInboundLinksByProperty.run(client, {
+            context_id: context,
+            route,
+            subject_id: options.subject,
+            property: options.property,
+            filter_value: options.filter ?? NIL_UUID,
+            after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+            after_source: afterSource,
+            after_statement: afterStatement,
+            // A qualified Character lookup may need to pass stale projection entries while filling its
+            // selected page. Its reader page is capped at 20, with one metadata row returned separately.
+            page_limit: options.qualifier ? 21 : (options.type ? 4 * options.limit : options.limit) + 1,
+            scan_limit: options.qualifier ? 20 : 0,
+          })) as {
+            subject: string | null;
+            property: string | null;
+            statement: string | null;
+            type: string | null;
+            order_key: string | null;
+            scan_capped: boolean;
+            scan_after_order: string | null;
+            scan_after_source: string | null;
+            scan_after_statement: string | null;
+            metadata_only: boolean;
+          }[];
+          const metadata = projected.find((row) => row.metadata_only)!;
+          scanCapped = metadata.scan_capped;
+          if (scanCapped)
+            scanAfter = [metadata.scan_after_order!, metadata.scan_after_source!, metadata.scan_after_statement!];
+          rows = projected.flatMap((row) =>
+            row.metadata_only
+              ? []
+              : [
+                  {
+                    subject: row.subject!,
+                    property: row.property!,
+                    statement: row.statement!,
+                    type: row.type!,
+                    order_key: row.order_key!,
+                  },
+                ],
+          );
+        }
+        const privateRows = options.qualifier
+          ? []
+          : (
+              await privateLinks(client, {
+                subject: options.subject,
+                inbound: true,
+                property: options.property,
+                crossProperty: options.property === null,
+                after: cursor?.after,
+                limit: (options.type ? 4 * options.limit : options.limit) + 1,
+              })
+            ).entries.map((row) => ({
+              subject: row.subject_id,
+              property: row.property,
+              statement: row.candidate_id,
+              type: row.source_type,
+              order_key: row.order_key,
+            }));
+        rows = [...rows, ...privateRows]
+          .sort((a, b) => {
+            const left = options.property === null ? a.property : 'order_key' in a ? String(a.order_key) : '';
+            const right = options.property === null ? b.property : 'order_key' in b ? String(b.order_key) : '';
+            return left < right
+              ? -1
+              : left > right
+                ? 1
+                : a.subject < b.subject
+                  ? -1
+                  : a.subject > b.subject
+                    ? 1
+                    : a.statement.localeCompare(b.statement);
+          })
+          .slice(0, options.qualifier ? 20 : (options.type ? 4 * options.limit : options.limit) + 1);
+        const scanLimit = options.qualifier ? 20 : options.type ? 4 * options.limit : options.limit;
+        const scanned = rows.slice(0, scanLimit);
+        const scannedMembers = [...new Set(scanned.map((row) => row.subject))];
+        const links: Omit<SubjectLink, 'label'>[] = [];
+        let examined = 0;
+        for (const row of rows.slice(0, scanLimit)) {
+          examined++;
+          if (matches(row.type))
+            links.push({ subject: row.subject, property: row.property, statement: row.statement, type: row.type });
+          if (!options.qualifier && links.length === options.limit) break;
+        }
+        const current = await currentRelationFacts(
+          client,
+          options.routeKey,
+          links.map((link) => {
+            const relationFilter = release?.properties[link.property]?.relation?.filter;
+            return {
+              subject: link.subject,
+              property: link.property,
+              candidate: link.statement,
+              target: options.qualifier ? null : options.subject,
+              value: 'value' as const,
+              ...(options.qualifier ? { anyResolvedTarget: true } : {}),
+              context,
+              defaults,
+              ...(options.filter === undefined ? {} : { filter: options.qualifier?.value ?? options.filter }),
+              ...(options.qualifier
+                ? { filterProperties: [options.qualifier.property] }
+                : relationFilter === undefined
+                  ? {}
+                  : { filterProperties: Array.isArray(relationFilter) ? relationFilter : [relationFilter] }),
+              requireRelation: true,
+            };
+          }),
         );
-      }
-      const privateRows = options.qualifier
-        ? []
-        : (
-            await privateLinks(client, {
-              subject: options.subject,
-              inbound: true,
-              property: options.property,
-              crossProperty: options.property === null,
-              after: cursor?.after,
-              limit: (options.type ? 4 * options.limit : options.limit) + 1,
-            })
-          ).entries.map((row) => ({
-            subject: row.subject_id,
-            property: row.property,
-            statement: row.candidate_id,
-            type: row.source_type,
-            order_key: row.order_key,
-          }));
-      rows = [...rows, ...privateRows]
-        .sort((a, b) => {
-          const left = options.property === null ? a.property : 'order_key' in a ? String(a.order_key) : '';
-          const right = options.property === null ? b.property : 'order_key' in b ? String(b.order_key) : '';
-          return left < right
-            ? -1
-            : left > right
-              ? 1
-              : a.subject < b.subject
-                ? -1
-                : a.subject > b.subject
-                  ? 1
-                  : a.statement.localeCompare(b.statement);
-        })
-        .slice(0, options.qualifier ? 20 : (options.type ? 4 * options.limit : options.limit) + 1);
-      const scanLimit = options.qualifier ? 20 : options.type ? 4 * options.limit : options.limit;
-      const scanned = rows.slice(0, scanLimit);
-      const scannedMembers = [...new Set(scanned.map((row) => row.subject))];
-      const links: Omit<SubjectLink, 'label'>[] = [];
-      let examined = 0;
-      for (const row of rows.slice(0, scanLimit)) {
-        examined++;
-        if (matches(row.type))
-          links.push({ subject: row.subject, property: row.property, statement: row.statement, type: row.type });
-        if (!options.qualifier && links.length === options.limit) break;
-      }
-      const current = await currentRelationFacts(
-        client,
-        options.routeKey,
-        links.map((link) => {
-          const relationFilter = release?.properties[link.property]?.relation?.filter;
-          return {
-            subject: link.subject,
-            property: link.property,
-            candidate: link.statement,
-            target: options.qualifier ? null : options.subject,
-            value: 'value' as const,
-            ...(options.qualifier ? { anyResolvedTarget: true } : {}),
-            context,
-            defaults,
-            ...(options.filter === undefined ? {} : { filter: options.qualifier?.value ?? options.filter }),
-            ...(options.qualifier
-              ? { filterProperties: [options.qualifier.property] }
-              : relationFilter === undefined
-                ? {}
-                : { filterProperties: Array.isArray(relationFilter) ? relationFilter : [relationFilter] }),
-            requireRelation: true,
-          };
-        }),
-      );
-      const currentLinks = links.filter((link) =>
-        current.has(currentRelationKey({ subject: link.subject, property: link.property, candidate: link.statement })),
-      );
-      const hasCurrentOverflow = !!options.qualifier && currentLinks.length > options.limit;
-      const selectedLinks = options.qualifier ? currentLinks.slice(0, options.limit) : currentLinks;
-      const last = hasCurrentOverflow
-        ? rows.find(
-            (row) =>
-              row.subject === selectedLinks[options.limit - 1]?.subject &&
-              row.statement === selectedLinks[options.limit - 1]?.statement,
-          )
-        : rows[examined - 1];
-      return {
-        page: {
-          links: selectedLinks,
-          freshness: {
-            consistency: 'eventual',
-            target_seconds: FRESHNESS_TARGET_SECONDS,
-            caught_up: caughtUp,
+        const currentLinks = links.filter((link) =>
+          current.has(
+            currentRelationKey({ subject: link.subject, property: link.property, candidate: link.statement }),
+          ),
+        );
+        const hasCurrentOverflow = !!options.qualifier && currentLinks.length > options.limit;
+        const selectedLinks = options.qualifier ? currentLinks.slice(0, options.limit) : currentLinks;
+        const last = hasCurrentOverflow
+          ? rows.find(
+              (row) =>
+                row.subject === selectedLinks[options.limit - 1]?.subject &&
+                row.statement === selectedLinks[options.limit - 1]?.statement,
+            )
+          : rows[examined - 1];
+        return {
+          page: {
+            links: selectedLinks,
+            freshness: {
+              consistency: 'eventual',
+              target_seconds: FRESHNESS_TARGET_SECONDS,
+              caught_up: caughtUp,
+            },
+            ...(scanCapped && !hasCurrentOverflow ? { partial: true } : {}),
+            next:
+              hasCurrentOverflow && last
+                ? encodeCursor(ring, binding, {
+                    epoch: partition.epoch,
+                    after: [last.order_key!, last.subject, last.statement],
+                  })
+                : scanCapped && scanAfter
+                  ? encodeCursor(ring, binding, { epoch: partition.epoch, after: scanAfter })
+                  : rows.length > examined && last
+                    ? encodeCursor(ring, binding, {
+                        epoch: partition.epoch,
+                        after: [
+                          options.property === null ? last.property : 'order_key' in last ? String(last.order_key) : '',
+                          last.subject,
+                          last.statement,
+                        ],
+                      })
+                    : null,
+            component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
           },
-          ...(scanCapped && !hasCurrentOverflow ? { partial: true } : {}),
-          next:
-            hasCurrentOverflow && last
-              ? encodeCursor(ring, binding, {
-                  epoch: partition.epoch,
-                  after: [last.order_key!, last.subject, last.statement],
-                })
-              : scanCapped && scanAfter
-                ? encodeCursor(ring, binding, { epoch: partition.epoch, after: scanAfter })
-                : rows.length > examined && last
-                  ? encodeCursor(ring, binding, {
-                      epoch: partition.epoch,
-                      after: [
-                        options.property === null ? last.property : 'order_key' in last ? String(last.order_key) : '',
-                        last.subject,
-                        last.statement,
-                      ],
-                    })
-                  : null,
-          component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-        },
-        scannedMembers,
-      };
-    });
+          scannedMembers,
+        };
+      },
+      deadline,
+    );
   };
   let snapshot = await readPage(options.caughtUp === undefined);
-  let pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers);
+  let pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers, deadline);
   while (pendingMembers.length) {
     if (Date.now() >= deadline) {
       caughtUp = false;
@@ -1341,14 +1353,14 @@ export async function listSubjectLinks(
       snapshot.page.freshness.caught_up = false;
       break;
     }
-    pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers);
+    pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers, deadline);
   }
   const page = snapshot.page;
   const statements = await currentRelationStatements(pool, page.links, context, options.routeKey, deadline);
   const includeLabels = options.includeLabels ?? options.property !== null;
   const summaryRelease =
     includeLabels || options.type || options.authorizeSummary
-      ? (options.release ?? (await activeRelease(pool))?.release)
+      ? (options.release ?? (await withReadTransaction(pool, (client) => activeRelease(client), deadline))?.release)
       : undefined;
   const relatedIds = [
     ...new Set([...page.links.map((link) => link.subject), ...[...statements.values()].flatMap(statementItems)]),
@@ -1517,6 +1529,7 @@ export async function listSubjectRelations(
   if (route === null) throw new SubjectNotFoundError();
   if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
     throw new RangeError('Invalid relation page limit');
+  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   const context = options.context ?? GLOBAL_CONTEXT;
   const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
   if (context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
@@ -1541,152 +1554,155 @@ export async function listSubjectRelations(
     if (!validRelationAfter(decoded.after)) throw new PageCursorError('invalid');
     cursor = decoded;
   }
-  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   const caughtUp = options.caughtUp ?? (await waitForSubjectLinks(pool, options.seen, options.subject, deadline));
   if (options.caughtUp === undefined) await refreshStatementReaderAuthorization();
   const authorize =
     options.caughtUp === undefined && options.prepareAuthorization
       ? await options.prepareAuthorization()
       : options.authorize;
-  const page = await withReadTransaction<SubjectRelationsPage>(pool, async (client) => {
-    const partition = await readPartition(client, partitionOf(route));
-    const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
-      visibility: string;
-    } | null;
-    if (!partition || state?.visibility !== 'visible' || !(await authorize(client))) throw new SubjectNotFoundError();
-    const redirect = await redirectOf(client, options.subject);
-    if (redirect) throw new SubjectRedirectError(options.subject, redirect);
-    if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
-    const scanLimit = options.type ? 4 * options.limit : options.limit;
-    let rows = (await listOutboundLinksByProperty.run(client, {
-      context_id: context,
-      route,
-      subject_id: options.subject,
-      property: options.property,
-      filter_value: options.filter ?? NIL_UUID,
-      after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
-      after_target: typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID,
-      after_statement: typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID,
-      page_limit: scanLimit + 1,
-    })) as {
-      statement: string;
-      slot: string;
-      target: string | null;
-      type: string;
-      external: string | null;
-      value: 'value' | 'somevalue' | 'novalue';
-      order_key: string;
-    }[];
-    const privatePage = await privateLinks(client, {
-      subject: options.subject,
-      property: options.property,
-      after: cursor?.after,
-      limit: scanLimit + 1,
-    });
-    const privateRows = privatePage.entries.map((row) => ({
-      statement: row.candidate_id,
-      slot: row.slot_id,
-      target: row.target_id,
-      type: row.target_type,
-      external: null,
-      value: 'value' as const,
-      order_key: row.order_key,
-    }));
-    rows = [...rows, ...privateRows]
-      .sort((a, b) =>
-        a.order_key < b.order_key
-          ? -1
-          : a.order_key > b.order_key
-            ? 1
-            : (a.target ?? NIL_UUID) < (b.target ?? NIL_UUID)
-              ? -1
-              : (a.target ?? NIL_UUID) > (b.target ?? NIL_UUID)
-                ? 1
-                : a.statement.localeCompare(b.statement),
-      )
-      .slice(0, scanLimit + 1);
-    const visibleRows = rows.slice(0, scanLimit);
-    const selected: typeof visibleRows = [];
-    let examined = 0;
-    for (const row of visibleRows) {
-      examined++;
-      if (!options.type || (row.type !== '' && matchesTarget(options.release, row.type, [options.type])))
-        selected.push(row);
-      if (selected.length === options.limit) break;
-    }
-    const filterProperties = options.release.properties[options.property]?.relation?.filter;
-    const current = await currentRelationFacts(
-      client,
-      options.routeKey,
-      selected.map((row) => ({
+  const page = await withReadTransaction<SubjectRelationsPage>(
+    pool,
+    async (client) => {
+      const partition = await readPartition(client, partitionOf(route));
+      const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+        visibility: string;
+      } | null;
+      if (!partition || state?.visibility !== 'visible' || !(await authorize(client))) throw new SubjectNotFoundError();
+      const redirect = await redirectOf(client, options.subject);
+      if (redirect) throw new SubjectRedirectError(options.subject, redirect);
+      if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
+      const scanLimit = options.type ? 4 * options.limit : options.limit;
+      let rows = (await listOutboundLinksByProperty.run(client, {
+        context_id: context,
+        route,
+        subject_id: options.subject,
+        property: options.property,
+        filter_value: options.filter ?? NIL_UUID,
+        after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+        after_target: typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID,
+        after_statement: typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID,
+        page_limit: scanLimit + 1,
+      })) as {
+        statement: string;
+        slot: string;
+        target: string | null;
+        type: string;
+        external: string | null;
+        value: 'value' | 'somevalue' | 'novalue';
+        order_key: string;
+      }[];
+      const privatePage = await privateLinks(client, {
         subject: options.subject,
         property: options.property,
-        candidate: row.statement,
-        target: row.target,
-        external: row.external,
-        value: row.value,
-        context,
-        defaults,
-        slot: row.slot,
-        ...(options.filter === undefined ? {} : { filter: options.filter }),
-        ...(filterProperties === undefined
-          ? {}
-          : { filterProperties: Array.isArray(filterProperties) ? filterProperties : [filterProperties] }),
-        requireRelation: true,
-      })),
-    );
-    const holder = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
-      type?: string;
-    } | null;
-    const relations: SubjectRelation[] = [];
-    const releases = new Map<string, Release>();
-    for (const row of selected) {
-      const fact = current.get(
-        currentRelationKey({
+        after: cursor?.after,
+        limit: scanLimit + 1,
+      });
+      const privateRows = privatePage.entries.map((row) => ({
+        statement: row.candidate_id,
+        slot: row.slot_id,
+        target: row.target_id,
+        type: row.target_type,
+        external: null,
+        value: 'value' as const,
+        order_key: row.order_key,
+      }));
+      rows = [...rows, ...privateRows]
+        .sort((a, b) =>
+          a.order_key < b.order_key
+            ? -1
+            : a.order_key > b.order_key
+              ? 1
+              : (a.target ?? NIL_UUID) < (b.target ?? NIL_UUID)
+                ? -1
+                : (a.target ?? NIL_UUID) > (b.target ?? NIL_UUID)
+                  ? 1
+                  : a.statement.localeCompare(b.statement),
+        )
+        .slice(0, scanLimit + 1);
+      const visibleRows = rows.slice(0, scanLimit);
+      const selected: typeof visibleRows = [];
+      let examined = 0;
+      for (const row of visibleRows) {
+        examined++;
+        if (!options.type || (row.type !== '' && matchesTarget(options.release, row.type, [options.type])))
+          selected.push(row);
+        if (selected.length === options.limit) break;
+      }
+      const filterProperties = options.release.properties[options.property]?.relation?.filter;
+      const current = await currentRelationFacts(
+        client,
+        options.routeKey,
+        selected.map((row) => ({
           subject: options.subject,
           property: options.property,
           candidate: row.statement,
-        }),
+          target: row.target,
+          external: row.external,
+          value: row.value,
+          context,
+          defaults,
+          slot: row.slot,
+          ...(options.filter === undefined ? {} : { filter: options.filter }),
+          ...(filterProperties === undefined
+            ? {}
+            : { filterProperties: Array.isArray(filterProperties) ? filterProperties : [filterProperties] }),
+          requireRelation: true,
+        })),
       );
-      if (!fact) continue;
-      const digest = fact.fact_release ?? '';
-      let release = releases.get(digest);
-      if (!release) {
-        release = digest ? ((await readRelease(client, digest)) ?? undefined) : options.release;
-        if (!release) continue;
-        releases.set(digest, release);
+      const holder = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+        type?: string;
+      } | null;
+      const relations: SubjectRelation[] = [];
+      const releases = new Map<string, Release>();
+      for (const row of selected) {
+        const fact = current.get(
+          currentRelationKey({
+            subject: options.subject,
+            property: options.property,
+            candidate: row.statement,
+          }),
+        );
+        if (!fact) continue;
+        const digest = fact.fact_release ?? '';
+        let release = releases.get(digest);
+        if (!release) {
+          release = digest ? ((await readRelease(client, digest)) ?? undefined) : options.release;
+          if (!release) continue;
+          releases.set(digest, release);
+        }
+        const statement = resolveItem(options.subject, [fact], holder?.type ?? '', factDataTypes(release, [fact]), {
+          revision: fact.fact_revision ?? 1,
+          release: digest,
+          context,
+        }).statements[options.property]?.[0];
+        if (!statement) continue;
+        relations.push({
+          statement,
+          target: row.target,
+          external: row.external,
+          ...(row.target === null ? {} : { type: row.type }),
+        });
       }
-      const statement = resolveItem(options.subject, [fact], holder?.type ?? '', factDataTypes(release, [fact]), {
-        revision: fact.fact_revision ?? 1,
-        release: digest,
-        context,
-      }).statements[options.property]?.[0];
-      if (!statement) continue;
-      relations.push({
-        statement,
-        target: row.target,
-        external: row.external,
-        ...(row.target === null ? {} : { type: row.type }),
-      });
-    }
-    const last = visibleRows[examined - 1];
-    return {
-      relations,
-      freshness: {
-        consistency: 'eventual',
-        target_seconds: FRESHNESS_TARGET_SECONDS,
-        caught_up: caughtUp,
-      },
-      next:
-        rows.length > examined && last
-          ? encodeCursor(ring, binding, {
-              epoch: partition.epoch,
-              after: [last.order_key, last.target ?? NIL_UUID, last.statement],
-            })
-          : null,
-      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-    };
-  });
+      const last = visibleRows[examined - 1];
+      return {
+        relations,
+        freshness: {
+          consistency: 'eventual',
+          target_seconds: FRESHNESS_TARGET_SECONDS,
+          caught_up: caughtUp,
+        },
+        next:
+          rows.length > examined && last
+            ? encodeCursor(ring, binding, {
+                epoch: partition.epoch,
+                after: [last.order_key, last.target ?? NIL_UUID, last.statement],
+              })
+            : null,
+        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+      };
+    },
+    deadline,
+  );
   const statements = await currentRelationStatements(
     pool,
     page.relations.map((entry) => ({

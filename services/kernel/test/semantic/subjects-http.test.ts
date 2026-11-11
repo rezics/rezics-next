@@ -166,6 +166,32 @@ test('a read returns the subject, its session token and the labels of its proper
   expect(hidden.response.status).toBe(200);
 
   await catchUpLinks(id);
+  const page = { language: 'en', limit: '12', context: GLOBAL_CONTEXT };
+  const relations = await call(
+    'GET',
+    `/v1/subjects/${id}/relations?${new URLSearchParams({ ...page, property: 'schema:author' })}`,
+  );
+  expect(relations.response.status).toBe(200);
+  expect(relations.body.relations.map((relation: any) => relation.target)).toEqual([soseki]);
+  const inbound = await call(
+    'GET',
+    `/v1/subjects/${soseki}/links?${new URLSearchParams({ ...page, property: 'schema:author' })}`,
+  );
+  expect(inbound.response.status).toBe(200);
+  expect(inbound.body.links.map((link: any) => [link.subject, link.property])).toEqual([[id, 'schema:author']]);
+  const emptyRelations = await call(
+    'GET',
+    `/v1/subjects/${id}/relations?${new URLSearchParams({ ...page, property: 'schema:exampleOfWork' })}`,
+  );
+  expect(emptyRelations.response.status).toBe(200);
+  expect(emptyRelations.body.relations).toEqual([]);
+  const emptyInbound = await call(
+    'GET',
+    `/v1/subjects/${soseki}/links?${new URLSearchParams({ ...page, property: 'rezics:alternativeVersion' })}`,
+  );
+  expect(emptyInbound.response.status).toBe(200);
+  expect(emptyInbound.body.links).toEqual([]);
+
   const read = await call('GET', `/v1/subjects/${id}`, { session: created.response.headers.get(SESSION_HEADER)! });
   expect(read.response.status).toBe(200);
   expect(read.response.headers.get('etag')).toBe('"1"');

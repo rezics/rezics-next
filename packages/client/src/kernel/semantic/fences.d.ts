@@ -38,7 +38,7 @@ export declare function prepareFencePlan(routeKey: Uint8Array, commands: readonl
     plan: SourceFencePlan;
     outside: Map<number, SourceFenceTuple[]>;
 };
-export declare function readAnchoredFences(pool: Pool, partition: number, tuples: readonly SourceFenceTuple[]): Promise<readonly SourceFence[]>;
+export declare function readAnchoredFences(pool: Pool, partition: number, tuples: readonly SourceFenceTuple[], deadline?: number): Promise<readonly SourceFence[]>;
 export declare function rememberFences(plan: SourceFencePlan, fences: readonly SourceFence[]): void;
 /** Read this command's tuple before the receipt. Same-partition batches share one statement.
  * A command never waits inside its transaction for another partition: the caller retries once

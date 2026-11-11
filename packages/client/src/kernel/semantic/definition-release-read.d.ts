@@ -42,7 +42,7 @@ export declare function layeredRelease(db: Db, base: Layer, context: string, per
  * The active release with the terms `context` sees; Global's view is the default. A write passes `persist`, so the
  * composed digest it stores is registered; a read never writes.
  */
-export declare function effectiveRelease(pool: Pool, context?: string, persist?: boolean): Promise<{
+export declare function effectiveRelease(pool: Pool, context?: string, persist?: boolean, deadline?: number): Promise<{
     digest: string;
     head: number;
     release: Release;
