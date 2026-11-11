@@ -56,8 +56,8 @@ import {
   readSubjectCreditMappingFormatForIndex,
   readSubjectIndexUuid,
   markSubjectCalendarReady,
-  readSubjectSortFormat,
-  SUBJECT_SORT_FORMAT,
+  readSubjectProjectionFormat,
+  SUBJECT_VALUE_PROJECTION_FORMAT,
   subjectAlias,
   subjectGenerations,
   subjectIndexName,
@@ -248,16 +248,16 @@ export async function rebuildSubjects(options: {
     // Advanced checkpoints cannot replay documents through a different physical writer codec.
     const resumable =
       highest > (previous ?? 0) &&
-      (await readSubjectSortFormat(options.search, options.prefix, highest)) === SUBJECT_SORT_FORMAT &&
+      (await readSubjectProjectionFormat(options.search, options.prefix, highest)) === SUBJECT_VALUE_PROJECTION_FORMAT &&
       (await readSubjectCalendarMappingFormat(options.search, options.prefix, highest)) === calendarFormat &&
       (await readSubjectCreditMappingFormat(options.search, options.prefix, highest)) === 1;
     const generation = resumable ? highest : highest + 1;
     if (generation > highest && state.generations.length >= MAX_SUBJECT_GENERATIONS)
       throw new RebuildError('limit', generation);
     await createSubjectIndex(options.search, options.prefix, generation, calendarFormat ?? undefined);
-    const format = await readSubjectSortFormat(options.search, options.prefix, generation);
-    if (format !== SUBJECT_SORT_FORMAT)
-      throw new SearchUnavailableError('Search rebuild requires a new bounded-format generation');
+    const format = await readSubjectProjectionFormat(options.search, options.prefix, generation);
+    if (format !== SUBJECT_VALUE_PROJECTION_FORMAT)
+      throw new SearchUnavailableError('Search rebuild requires a new value-projection generation');
     if ((await readSubjectCalendarMappingFormat(options.search, options.prefix, generation)) !== calendarFormat)
       throw new SearchUnavailableError('Search rebuild requires the requested calendar projection');
     if ((await readSubjectCreditMappingFormat(options.search, options.prefix, generation)) !== 1)

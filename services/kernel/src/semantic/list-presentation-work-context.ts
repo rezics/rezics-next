@@ -4,7 +4,7 @@ import {
   type Release,
   type ReleasedRelationDirectionResolver,
 } from '@rezics/definitions';
-import { readNativeCalendarDate } from '@rezics/filter';
+import { isPointSearchQuantity, projectSearchCalendarDate } from './search-value-projection.ts';
 import type {
   CopyWorkSearchEvidencePort,
   CopyWorkWorkContext,
@@ -118,7 +118,7 @@ function valueOf(raw: unknown, property: string, release: Release, evidence: Cop
     case 'wikibase-item':
       return typeof content === 'string' ? { state: 'value', kind: 'item', id: content } : { state: 'unsupported' };
     case 'time': {
-      const date = readNativeCalendarDate(content);
+      const date = projectSearchCalendarDate(content);
       return date ? { state: 'value', kind: 'time', calendar: 'gregorian', ...date } : { state: 'unsupported' };
     }
     case 'string':
@@ -127,8 +127,7 @@ function valueOf(raw: unknown, property: string, release: Release, evidence: Cop
         ? { state: 'value', kind: 'text', text: content }
         : { state: 'unsupported' };
     case 'quantity':
-      return record(content) &&
-        typeof content.amount === 'string' &&
+      return isPointSearchQuantity(content) &&
         typeof content.unit === 'string' &&
         /^[+-](?:0|[1-9]\d*)(?:\.\d+)?$/.test(content.amount) &&
         content.amount.length <= 256 &&

@@ -47,8 +47,8 @@ import { admitProperties, projectFacts, projectHit, validateHitOptions } from '.
 import {
   discoveryIndexUuid,
   readSubjectCalendarFormat,
-  readSubjectSortFormat,
-  SUBJECT_SORT_FORMAT,
+  readSubjectProjectionFormat,
+  SUBJECT_VALUE_PROJECTION_FORMAT,
   subjectGenerations,
   subjectIndexName,
 } from './indices.ts';
@@ -393,8 +393,8 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
 
   async function discoveryGeneration(): Promise<number> {
     const generation = await indexRequest(aliasGeneration);
-    const format = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
-    if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
+    const format = await indexRequest(() => readSubjectProjectionFormat(client, prefix, generation));
+    if (format !== SUBJECT_VALUE_PROJECTION_FORMAT) throw indexNotReady();
     return generation;
   }
 
@@ -517,8 +517,8 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     if (!source.canonicalNames) throw indexNotReady();
 
     const generation = await indexRequest(aliasGeneration);
-    const sortFormat = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
-    if (sortFormat !== SUBJECT_SORT_FORMAT) throw indexNotReady();
+    const projectionFormat = await indexRequest(() => readSubjectProjectionFormat(client, prefix, generation));
+    if (projectionFormat !== SUBJECT_VALUE_PROJECTION_FORMAT) throw indexNotReady();
     const precise = containsCalendarRange(admitted);
     const calendarFormat = precise
       ? await indexRequest(() => readSubjectCalendarFormat(client, prefix, generation))
@@ -871,8 +871,8 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           );
           scopeWork.native(preparedRealm.work);
           const generation = await indexRequest(aliasGeneration);
-          const format = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
-          if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
+          const format = await indexRequest(() => readSubjectProjectionFormat(client, prefix, generation));
+          if (format !== SUBJECT_VALUE_PROJECTION_FORMAT) throw indexNotReady();
           const index = subjectIndexName(prefix, generation);
           const indexUuid = await indexRequest(() => discoveryIndexUuid(client, index));
           const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
@@ -1082,8 +1082,8 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           retained.queried.consumer.meaningDigest !== native?.digest)
       )
         throw new ProblemError('search_restart_required');
-      const format = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
-      if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
+      const format = await indexRequest(() => readSubjectProjectionFormat(client, prefix, generation));
+      if (format !== SUBJECT_VALUE_PROJECTION_FORMAT) throw indexNotReady();
       const calendarFormat =
         admitted && containsCalendarRange(admitted)
           ? await indexRequest(() => readSubjectCalendarFormat(client, prefix, generation))

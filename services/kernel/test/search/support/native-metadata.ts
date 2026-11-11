@@ -308,7 +308,7 @@ export function mappingControls(index: string): MetadataControl[] {
     });
   for (const value of [null, '1', -1, 1.5, Number.MAX_SAFE_INTEGER + 1])
     change(`mapping format ${JSON.stringify(value)}`, (body) => {
-      body[index]!.mappings._meta = { name_sort_format: value };
+      body[index]!.mappings._meta = { name_sort_format: value, value_projection_format: 2 };
     });
   return controls;
 }

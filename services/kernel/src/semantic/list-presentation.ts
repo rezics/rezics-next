@@ -35,6 +35,7 @@ import type { IdentityMapping } from './identity-epoch-contract.ts';
 import { readIdentityMappings } from './identity-adapters/identity-epoch-read.ts';
 import { isRelationProperty, type FactRow } from './item.ts';
 import { indexedStatement } from './search-source.ts';
+import { exactSearchQuantityAmount, projectSearchCalendarDate } from './search-value-projection.ts';
 import { effectiveGlobalSlotFacts } from './slots.ts';
 import { withPublicStatementReader } from './statement-disclosure.ts';
 import { readLabels } from './subject.ts';
@@ -367,7 +368,7 @@ function tupleFor(deps: Dependencies, source: Source | null): SourceFenceTuple |
   }
 }
 
-/** Reject a lossy numeric projection before using the existing Search Fact formatter. */
+/** Reject a lossy value projection before using the existing Search Fact formatter. */
 function representable(fact: FactRow, release: Release): CopyWorkIndexedStatement | null {
   const body = fact.body as { rank?: string; value?: { type: string; content?: unknown } };
   if (!['normal', 'preferred'].includes(body.rank ?? '') || body.value?.type !== 'value') return null;
@@ -375,24 +376,11 @@ function representable(fact: FactRow, release: Release): CopyWorkIndexedStatemen
   if (release.properties[property]?.datatype === 'quantity') {
     const content = body.value.content as { amount?: unknown; unit?: unknown } | null;
     if (!content || typeof content.amount !== 'string' || typeof content.unit !== 'string') return null;
-    const amount = Number(content.amount);
-    if (!Number.isFinite(amount) || (Number.isInteger(amount) && !Number.isSafeInteger(amount))) return null;
-    // Decimal round-trip: accepting +1.00 is exact; accepting a rounded 16-digit fraction is not.
-    const normalize = (input: string) => {
-      const match = /^([+-]?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(input);
-      if (!match) return null;
-      let digits = (match[2]! + (match[3] ?? '')).replace(/^0+/, '');
-      if (!digits) return '0';
-      let exponent = Number(match[4] ?? 0) - (match[3]?.length ?? 0);
-      while (digits.endsWith('0')) {
-        digits = digits.slice(0, -1);
-        exponent++;
-      }
-      return `${match[1] === '-' ? '-' : ''}${digits}e${exponent}`;
-    };
-    if (normalize(content.amount) === null || normalize(content.amount) !== normalize(String(amount))) return null;
+    if (exactSearchQuantityAmount(content) === null) return null;
+  } else if (release.properties[property]?.datatype === 'time') {
+    if (!projectSearchCalendarDate(body.value.content)) return null;
   }
-  return indexedStatement(
+  const statement = indexedStatement(
     {
       subject_id: '',
       property,
@@ -403,6 +391,8 @@ function representable(fact: FactRow, release: Release): CopyWorkIndexedStatemen
     },
     release,
   );
+  if (statement?.facet?.kind === 'unsupported') return null;
+  return statement as CopyWorkIndexedStatement | null;
 }
 
 /** One current original-keyed public batch. No Source snapshot, index document or permission verdict is authority. */

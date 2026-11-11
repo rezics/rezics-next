@@ -118,6 +118,10 @@ function statementFact(statement: IndexedStatement, calendarFormat?: 1): Subject
       return { property, year: facet.year, qualifiers };
     case 'quantity':
       return { property, amount: facet.amount, unit: facet.unit, qualifiers };
+    case 'unsupported':
+      // The raw statement remains available to current evidence, but unsupported comparisons
+      // never enter a numeric/calendar candidate field.
+      return undefined;
   }
 }
 
@@ -422,9 +426,13 @@ export function validateIndexObservation(
       if (facet === undefined) continue;
       if (
         !record(facet) ||
-        !['item', 'code', 'time', 'quantity'].includes(facet.kind) ||
+        !['item', 'code', 'time', 'quantity', 'unsupported'].includes(facet.kind) ||
         (facet.kind === 'time' && !isCalendarDate(facet)) ||
-        (facet.kind === 'quantity' && (!Number.isFinite(facet.amount) || typeof facet.unit !== 'string'))
+        (facet.kind === 'quantity' && (!Number.isFinite(facet.amount) || typeof facet.unit !== 'string')) ||
+        (facet.kind === 'unsupported' &&
+          (facet.datatype === 'time'
+            ? Object.keys(facet).length !== 2
+            : facet.datatype !== 'quantity' || typeof facet.unit !== 'string' || Object.keys(facet).length !== 3))
       )
         throw new TypeError('Source snapshot contains invalid facet state');
     }

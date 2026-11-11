@@ -44,7 +44,12 @@ export type FacetValue =
   | { kind: 'item' }
   | { kind: 'code' }
   | ({ kind: 'time' } & CalendarDate)
-  | { kind: 'quantity'; amount: number; unit: string };
+  | { kind: 'quantity'; amount: number; unit: string }
+  | { kind: 'unsupported'; datatype: 'time' }
+  | { kind: 'unsupported'; datatype: 'quantity'; unit: string };
+export type QuantityFacetValue =
+  | Extract<FacetValue, { kind: 'quantity' }>
+  | Extract<FacetValue, { kind: 'unsupported'; datatype: 'quantity' }>;
 
 /** One adopted statement value. The semantic source fills `facet` and `qualifiers`. */
 export type IndexedStatement = {
@@ -57,7 +62,7 @@ export type IndexedStatement = {
   facet?: FacetValue;
   /** Concrete adopted item, string, quantity or canonical spoiler-level qualifiers on this statement.
    * Unknown snaks are omitted; absence here is not complete negative evidence. */
-  qualifiers?: { property: string; value: string; facet?: Extract<FacetValue, { kind: 'quantity' }> }[];
+  qualifiers?: { property: string; value: string; facet?: QuantityFacetValue }[];
 };
 
 export type IndexedSubject = {

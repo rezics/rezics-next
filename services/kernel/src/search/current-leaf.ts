@@ -21,22 +21,29 @@ export function holdsCurrentStatements(
   let uncertain = false;
   for (const statement of statements) {
     if (statement.property !== clause.property) continue;
+    let statementUncertain = false;
     if ('values' in clause) {
       if (!clause.values.includes(statement.value)) continue;
     } else if (clause.range.type === 'time') {
-      if (statement.facet?.kind !== 'time' || !calendarRangeMatches(statement.facet, clause.range)) continue;
+      const facet = statement.facet;
+      if (facet?.kind === 'time') {
+        if (!calendarRangeMatches(facet, clause.range)) continue;
+      } else if (facet?.kind === 'unsupported' && facet.datatype === 'time') statementUncertain = true;
+      else continue;
     } else {
       const { gte, lte, unit } = clause.range;
       const facet = statement.facet;
-      let value: number;
-      if (unit === undefined) {
-        if (facet?.kind !== 'time') continue;
-        value = facet.year;
+      if (unit === undefined && facet?.kind === 'time') {
+        if ((gte !== undefined && facet.year < gte) || (lte !== undefined && facet.year > lte)) continue;
+      } else if (unit !== undefined && facet?.kind === 'quantity' && facet.unit === unit) {
+        if ((gte !== undefined && facet.amount < gte) || (lte !== undefined && facet.amount > lte)) continue;
+      } else if (unit === undefined && facet?.kind === 'unsupported' && facet.datatype === 'time') {
+        statementUncertain = true;
+      } else if (unit !== undefined && facet?.kind === 'unsupported' && facet.datatype === 'quantity' && facet.unit === unit) {
+        statementUncertain = true;
       } else {
-        if (facet?.kind !== 'quantity' || facet.unit !== unit) continue;
-        value = facet.amount;
+        continue;
       }
-      if (!Number.isFinite(value) || (gte !== undefined && value < gte) || (lte !== undefined && value > lte)) continue;
     }
     let matches = true;
     for (const qualifier of clause.qualifiers ?? []) {
@@ -44,18 +51,26 @@ export function holdsCurrentStatements(
       if ('range' in qualifier) {
         const { gte, lte, unit } = qualifier.range;
         if (
-          !evidence.some(
+          evidence.some(
             ({ facet }) =>
-              facet !== undefined &&
+              facet?.kind === 'quantity' &&
               facet.unit === unit &&
               (gte === undefined || facet.amount >= gte) &&
               (lte === undefined || facet.amount <= lte),
           )
+        )
+          continue;
+        if (
+          evidence.some(
+            ({ facet }) =>
+              facet?.kind === 'unsupported' && facet.datatype === 'quantity' && facet.unit === unit,
+          )
         ) {
-          matches = false;
-          break;
+          statementUncertain = true;
+          continue;
         }
-        continue;
+        matches = false;
+        break;
       }
       if (qualifier.property === 'rezics:spoilerLevel') {
         const levels = new Set(evidence.map((value) => value.value));
@@ -74,7 +89,10 @@ export function holdsCurrentStatements(
         break;
       }
     }
-    if (matches) return true;
+    if (matches) {
+      if (statementUncertain) uncertain = true;
+      else return true;
+    }
   }
   return uncertain ? 'not_proven' : false;
 }

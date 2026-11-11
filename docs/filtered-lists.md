@@ -19,6 +19,16 @@ require request-time reconstruction of every raw selected fact. The Search pure 
 reference, not mandatory request-time raw-fact replay. Typed, parameterized range and qualifier SQL is permitted
 where admitted with the same meaning. This does not admit arbitrary SQL or enlarge the grammar.
 
+Decision: Search emits a numeric facet only when its decimal round-trips exactly through the indexed number and
+any admitted quantity bounds denote that same point. It emits a time facet only when the admitted Gregorian
+calendar date is representable without nonzero timezone or before/after uncertainty. Other admitted time or
+quantity values retain their original statement bytes and carry an unsupported facet; range comparisons of that
+facet are `not_proven` for both positive and negated leaves. Supported calendar ranges retain the filter package's
+possible-overlap predicate. Wikibase historical negative years are converted at this source boundary to the
+astronomical year used by Search queries, while the statement value remains byte-for-byte unchanged. Subject value
+projection format 2 is populated and activated through the existing generation rebuild; older Subject generations
+are unready for the new projection.
+
 Semantic supplies complete selected-public-facet projections and their disclosure dependencies, covering compact
 and expanded storage, rank, adoption, suppression, retraction, consent and foreign dependencies. A relation sample,
 possible-witness hint or overflow marker alone is not complete coverage for exact membership or negatives. Use a

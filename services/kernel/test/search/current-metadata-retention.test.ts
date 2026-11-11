@@ -146,7 +146,10 @@ function catalogueEngine(prefix: string) {
           status: 200,
           body: {
             [index]: {
-              mappings: { properties: { type: { type: 'keyword' } }, _meta: { name_sort_format: SUBJECT_SORT_FORMAT } },
+              mappings: {
+                properties: { type: { type: 'keyword' } },
+                _meta: { name_sort_format: SUBJECT_SORT_FORMAT, value_projection_format: 2 },
+              },
             },
           },
         };

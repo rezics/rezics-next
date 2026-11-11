@@ -6,6 +6,8 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createRealAccess } from './real-access.ts';
 import { subjectPartition } from '../../src/search/source.ts';
+import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
+import { compileCurrentFilter } from '../../src/search/current-filter-plan.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
@@ -101,8 +103,38 @@ test('the source marks descriptive facets and excludes relation statements', asy
     labels: { en: 'Unpatterned string' },
     statements: { 'schema:episodeNumber': [statement('schema:episodeNumber', 'Special episode')] },
   });
+  const heightUnit = 'http://www.wikidata.org/entity/Q174728';
+  const exactHeight = await create({
+    type: 'wd:Q95074',
+    labels: { en: 'Exact height' },
+    statements: { 'schema:height': [statement('schema:height', { amount: '+1', unit: heightUnit })] },
+  });
+  const roundedHeight = await create({
+    type: 'wd:Q95074',
+    labels: { en: 'Unrepresentable height' },
+    statements: {
+      'schema:height': [statement('schema:height', { amount: '1.0000000000000001', unit: heightUnit })],
+    },
+  });
+  const date = (before?: number, after?: number) => ({
+    time: '+2024-06-15T00:00:00Z',
+    precision: 11,
+    calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+    ...(before === undefined ? {} : { before }),
+    ...(after === undefined ? {} : { after }),
+  });
+  const exactDate = await create({
+    type: 'schema:Recipe',
+    labels: { en: 'Exact date' },
+    statements: { 'schema:datePublished': [statement('schema:datePublished', date())] },
+  });
+  const uncertainDate = await create({
+    type: 'schema:Recipe',
+    labels: { en: 'Uncertain date' },
+    statements: { 'schema:datePublished': [statement('schema:datePublished', date(1, 1))] },
+  });
 
-  const subjects = [book, recipe, episode];
+  const subjects = [book, recipe, episode, exactHeight, roundedHeight, exactDate, uncertainDate];
   const groups = new Map<number, string[]>();
   for (const subject of subjects) {
     const partition = subjectPartition(subject.id);
@@ -125,7 +157,7 @@ test('the source marks descriptive facets and excludes relation statements', asy
   expect(indexed.get(recipe.id)!.statements.find(({ property }) => property === 'schema:datePublished')).toEqual({
     property: 'schema:datePublished',
     value: '-0500-00-00T00:00:00Z',
-    facet: { kind: 'time', year: -500 },
+    facet: { kind: 'time', year: -499 },
   });
   expect(indexed.get(recipe.id)!.statements.find(({ property }) => property === 'schema:recipeYield')).toEqual({
     property: 'schema:recipeYield',
@@ -134,4 +166,31 @@ test('the source marks descriptive facets and excludes relation statements', asy
   });
   const unpatterned = indexed.get(episode.id)!.statements.find(({ property }) => property === 'schema:episodeNumber');
   expect(unpatterned).toEqual({ property: 'schema:episodeNumber', value: 'Special episode' });
+
+  const heightRange = {
+    facet: 'statement' as const,
+    property: 'schema:height',
+    range: { lte: 1, unit: heightUnit },
+  };
+  const exactHeightEvidence = indexed.get(exactHeight.id)!.statements;
+  const roundedHeightEvidence = indexed.get(roundedHeight.id)!.statements;
+  expect(holdsCurrentStatements(exactHeightEvidence, heightRange)).toBe(true);
+  expect(holdsCurrentStatements(roundedHeightEvidence, heightRange)).toBe('not_proven');
+  expect(
+    holdsCurrentStatements(exactHeightEvidence, { ...heightRange, range: { lte: 0.5, unit: heightUnit } }),
+  ).toBe(false);
+  const positive = compileCurrentFilter({ statement: { property: 'schema:height', range: { lte: 1, unit: heightUnit } } });
+  const negative = compileCurrentFilter({
+    not: { statement: { property: 'schema:height', range: { lte: 1, unit: heightUnit } } },
+  });
+  expect(positive.evaluate(['not_proven'])).toBe('not_proven');
+  expect(negative.evaluate(['not_proven'])).toBe('not_proven');
+
+  const dateRange = {
+    facet: 'statement' as const,
+    property: 'schema:datePublished',
+    range: { type: 'time' as const, gte: '2024-06-15', lte: '2024-06-15' },
+  };
+  expect(holdsCurrentStatements(indexed.get(exactDate.id)!.statements, dateRange)).toBe(true);
+  expect(holdsCurrentStatements(indexed.get(uncertainDate.id)!.statements, dateRange)).toBe('not_proven');
 });

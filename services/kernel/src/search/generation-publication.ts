@@ -52,8 +52,9 @@ import {
   subjectAlias,
   subjectIndexName,
   subjectGenerations,
-  readSubjectSortFormat,
+  readSubjectProjectionFormat,
   SUBJECT_SORT_FORMAT,
+  SUBJECT_VALUE_PROJECTION_FORMAT,
 } from './indices.ts';
 import { discoveryGenerations } from './generations.ts';
 import { OpenSearchError, type OpenSearch } from './opensearch.ts';
@@ -365,7 +366,8 @@ export function createSearchGenerationPublication(
       const generations = await subjectGenerations(search, target.prefix);
       if (
         !generations.generations.includes(target.generation) ||
-        (await readSubjectSortFormat(search, target.prefix, target.generation)) !== SUBJECT_SORT_FORMAT
+        (await readSubjectProjectionFormat(search, target.prefix, target.generation)) !==
+          SUBJECT_VALUE_PROJECTION_FORMAT
       )
         throw new Pending('registration_missing');
     }

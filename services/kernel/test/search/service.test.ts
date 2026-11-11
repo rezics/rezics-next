@@ -481,7 +481,11 @@ test('listing readiness requires the actual supported format for all sorts befor
   };
   const { prefix, service } = await deployment([kokoro], { client: observing });
   expect(ids(await service.search('anonymous', { text: 'kokoro' }))).toEqual([kokoro.id]);
-  for (const meta of [{}, { name_sort_format: 0 }, { name_sort_format: 2 }]) {
+  for (const meta of [
+    { value_projection_format: 2 },
+    { name_sort_format: 0, value_projection_format: 2 },
+    { name_sort_format: 2, value_projection_format: 2 },
+  ]) {
     await client.request('PUT', `/${subjectIndexName(prefix, 1)}/_mapping`, { _meta: meta });
     targets.length = 0;
     for (const sort of ['name', 'collections', 'id', 'relevance'] as const) {

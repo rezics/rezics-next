@@ -1,7 +1,7 @@
 import { statementBytes } from '../database/statement-bytes.ts';
 /** Private Source selection and bounded native IO; not a matcher or permission resolver. */
 import type { IndexedStatement } from '../search/source.ts';
-import { readNativeCalendarDate, readNativeSpoilerLevel } from '@rezics/filter';
+import { readNativeSpoilerLevel } from '@rezics/filter';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { ACCESS_WORK_AXES, AccessWorkAccounting, EMPTY_ACCESS_WORK, type AccessWork } from '../access/work.ts';
@@ -33,6 +33,7 @@ import kindTypeLock from './scope-leaf-selection-kind-type-lock.sql';
 import type { NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import { isDeepStrictEqual } from 'node:util';
+import { exactSearchQuantityAmount, projectSearchCalendarDate } from './search-value-projection.ts';
 
 export const sourceObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -513,13 +514,17 @@ export function normalizeSourceStatement(
   if (definition?.datatype === 'wikibase-item') statement.facet = { kind: 'item' };
   else if (definition?.datatype === 'time') {
     const content = sourceObject(body.value) && sourceObject(body.value.content) ? body.value.content : undefined;
-    const date = readNativeCalendarDate(content);
-    if (date) statement.facet = { kind: 'time', ...date };
+    const date = projectSearchCalendarDate(content);
+    statement.facet = date ? { kind: 'time', ...date } : { kind: 'unsupported', datatype: 'time' };
   } else if (definition?.datatype === 'quantity') {
     const content = sourceObject(body.value) && sourceObject(body.value.content) ? body.value.content : undefined;
-    const amount = content && typeof content.amount === 'string' ? Number(content.amount) : NaN;
-    if (Number.isFinite(amount) && content && typeof content.unit === 'string')
-      statement.facet = { kind: 'quantity', amount, unit: content.unit };
+    if (content && typeof content.amount === 'string' && typeof content.unit === 'string') {
+      const amount = exactSearchQuantityAmount(content);
+      statement.facet =
+        amount === null
+          ? { kind: 'unsupported', datatype: 'quantity', unit: content.unit }
+          : { kind: 'quantity', amount, unit: content.unit };
+    }
   } else if (
     definition?.datatype === 'string' &&
     sourceObject(definition.value) &&
@@ -556,11 +561,17 @@ export function normalizeSourceStatement(
         typeof content.unit === 'string' &&
         qualifierDefinition.units?.includes(content.unit)
       ) {
-        const amount = Number(content.amount);
-        if (Number.isFinite(amount))
-          return [
-            { property: raw.property, value: content.amount, facet: { kind: 'quantity', amount, unit: content.unit } },
-          ];
+        const amount = exactSearchQuantityAmount(content);
+        return [
+          {
+            property: raw.property,
+            value: content.amount,
+            facet:
+              amount === null
+                ? { kind: 'unsupported', datatype: 'quantity', unit: content.unit }
+                : { kind: 'quantity', amount, unit: content.unit },
+          },
+        ];
       }
       return (qualifierDefinition?.datatype === 'wikibase-item' || qualifierDefinition?.datatype === 'string') &&
         typeof content === 'string'

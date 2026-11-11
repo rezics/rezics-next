@@ -870,7 +870,8 @@ describe('native discovery generation custody', () => {
             name: `unsupported ${format}`,
             corrupt(receipt) {
               const body = receipt.body as Record<string, { mappings: { _meta?: unknown } }>;
-              body[index]!.mappings._meta = format === undefined ? {} : { name_sort_format: format };
+              body[index]!.mappings._meta =
+                format === undefined ? { value_projection_format: 2 } : { name_sort_format: format, value_projection_format: 2 };
             },
           });
           const probe = observed({ client: capture.client });

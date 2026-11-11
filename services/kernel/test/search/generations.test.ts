@@ -5,7 +5,9 @@ import { RebuildError, rebuildSubjects } from '../../src/search/generations.ts';
 import {
   createSubjectIndex,
   MAX_SUBJECT_GENERATIONS,
+  readSubjectProjectionFormat,
   readSubjectSortFormat,
+  SUBJECT_VALUE_PROJECTION_FORMAT,
   subjectAlias,
   subjectIndexDefinition,
   subjectGenerations,
@@ -439,6 +441,15 @@ test('native mapping receipts bind exactly one generation and malformed receipts
     await search.request('PUT', `/${index}/_mapping`, { _meta: meta });
     expect(await readSubjectSortFormat(search, prefix, 2)).toBeNull();
   }
+  await search.request('PUT', `/${index}/_mapping`, {
+    _meta: { name_sort_format: 1, value_projection_format: SUBJECT_VALUE_PROJECTION_FORMAT - 1 },
+  });
+  expect(await readSubjectSortFormat(search, prefix, 2)).toBe(1);
+  expect(await readSubjectProjectionFormat(search, prefix, 2)).toBeNull();
+  await search.request('PUT', `/${index}/_mapping`, {
+    _meta: { name_sort_format: 1, value_projection_format: SUBJECT_VALUE_PROJECTION_FORMAT },
+  });
+  expect(await readSubjectProjectionFormat(search, prefix, 2)).toBe(SUBJECT_VALUE_PROJECTION_FORMAT);
   const legacy = structuredClone(subjectIndexDefinition()) as { mappings: { _meta?: unknown } };
   delete legacy.mappings._meta;
   await search.request('PUT', `/${subjectIndexName(prefix, 3)}`, legacy);

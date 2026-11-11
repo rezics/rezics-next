@@ -318,7 +318,7 @@ test('current normalized range unit and same-statement qualifier evidence uses t
   const timeLeaf: FactClause = {
     facet: 'statement',
     property: 'schema:datePublished',
-    range: { gte: -500, lte: -500 },
+    range: { gte: -499, lte: -499 },
   };
   const quantityLeaf: FactClause = {
     facet: 'statement',
@@ -328,14 +328,14 @@ test('current normalized range unit and same-statement qualifier evidence uses t
   };
   const time = current(await read(db.pool, f.request(recipe, timeLeaf), f.options()));
   const quantity = current(await read(db.pool, f.request(recipe, quantityLeaf), f.options()));
-  expect(time.facts[0]!.statement.facet).toEqual({ kind: 'time', year: -500 });
+  expect(time.facts[0]!.statement.facet).toEqual({ kind: 'time', year: -499 });
   expect(quantity.facts[0]!.statement).toEqual({
     property: 'schema:recipeYield',
     value: '+4',
     facet: { kind: 'quantity', amount: 4, unit: '1' },
     qualifiers: [{ property: 'ex:key', value: key }],
   });
-  const timeFilter = { statement: { property: 'schema:datePublished', range: { gte: -500, lte: -500 } } };
+  const timeFilter = { statement: { property: 'schema:datePublished', range: { gte: -499, lte: -499 } } };
   const quantityFilter = {
     statement: {
       property: 'schema:recipeYield',

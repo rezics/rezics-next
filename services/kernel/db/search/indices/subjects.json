@@ -47,7 +47,8 @@
   },
   "mappings": {
     "_meta": {
-      "name_sort_format": 1
+      "name_sort_format": 1,
+      "value_projection_format": 2
     },
     "dynamic": "strict",
     "properties": {

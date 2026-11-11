@@ -14,6 +14,8 @@ const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const definitionUrl = new URL('../../db/search/indices/subjects.json', import.meta.url);
 
 export const SUBJECT_SORT_FORMAT = 1;
+/** Successor Subject projection; old physical generations keep their original value semantics. */
+export const SUBJECT_VALUE_PROJECTION_FORMAT = 2;
 export const DISCOVERY_INDEX_FORMAT = 1;
 export { MAX_SUBJECT_GENERATIONS };
 
@@ -217,6 +219,7 @@ export async function readSubjectSortFormat(
 type SubjectMappingObservation = {
   metadata: Record<string, unknown>;
   sortFormat: number | null;
+  valueProjectionFormat: 2 | null;
   calendarFormat: 1 | null;
   creditFormat: 1 | null;
   activatedAt: string | null;
@@ -262,6 +265,13 @@ async function readSubjectMapping(
     if (format === SUBJECT_SORT_FORMAT) sortFormat = SUBJECT_SORT_FORMAT;
   }
 
+  let valueProjectionFormat: 2 | null = null;
+  if (Object.hasOwn(metadata, 'value_projection_format')) {
+    const format = metadata.value_projection_format;
+    if (typeof format !== 'number' || !Number.isSafeInteger(format) || format < 0) throw unavailable();
+    if (format === SUBJECT_VALUE_PROJECTION_FORMAT) valueProjectionFormat = SUBJECT_VALUE_PROJECTION_FORMAT;
+  }
+
   let activatedAt: string | null = null;
   if (Object.hasOwn(metadata, 'activated_at')) {
     const value = metadata.activated_at;
@@ -275,12 +285,26 @@ async function readSubjectMapping(
   return {
     metadata,
     sortFormat,
+    valueProjectionFormat,
     calendarFormat,
     creditFormat,
     activatedAt,
     ratingCompatible:
       compatible(properties.rating_score, 'double') && compatible(properties.rating_prior_epoch, 'long'),
   };
+}
+
+/** A Subject generation is usable only when both its order and value projections are current. */
+export async function readSubjectProjectionFormat(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<typeof SUBJECT_VALUE_PROJECTION_FORMAT | null> {
+  const observed = await readSubjectMapping(search, prefix, generation);
+  return observed.sortFormat === SUBJECT_SORT_FORMAT &&
+    observed.valueProjectionFormat === SUBJECT_VALUE_PROJECTION_FORMAT
+    ? SUBJECT_VALUE_PROJECTION_FORMAT
+    : null;
 }
 
 /** Calendar writes follow the actual target mapping, including while it is still being populated. */

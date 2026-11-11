@@ -134,6 +134,7 @@ export function pendingFacts(
   for (const { property, value, facet } of subject.statements) {
     const entry = facet && kept.get(property);
     if (!facet || !entry || entry.values.length === FACTS_PER_PROPERTY) continue;
+    if (facet.kind === 'unsupported') continue;
     const fact: Pending =
       facet.kind === 'item'
         ? { kind: 'item', id: value }
