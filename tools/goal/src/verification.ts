@@ -263,6 +263,8 @@ export type ProofAuthorization = {
   sourceTree: string;
   integrationBranch: string;
   originals: { taskId: string; commit: string; argv: string[] }[];
+  /** Durable identity of an unchanged queued proposal admitted against a later captured head. */
+  backlogProposal?: { proposalSha256: string; sourceCommit: string; sourceTasks: string[] };
 };
 export type ProofReservation = {
   binding: ProofBinding;
@@ -326,12 +328,42 @@ function fileCommand(argv: string[]): { prefix: string[]; files: string[] } | un
   if (!files.some((word) => /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(word))) return;
   return { prefix: argv.slice(0, index), files };
 }
+type ProofFileCommand = { prefix: string[]; files: string[]; cwd: string };
+function fileCommandCwd(prefix: string[]): string {
+  const cwdIndex = prefix.indexOf('--cwd');
+  if (cwdIndex >= 0) return `${prefix[cwdIndex + 1]}/`;
+  const inline = prefix.find((word) => word.startsWith('--cwd='));
+  return inline ? `${inline.slice(6)}/` : '';
+}
+/** The retained membership original is two explicit service checks, with no other shell grammar admitted. */
+function membershipFileCommands(argv: string[]): ProofFileCommand[] | undefined {
+  if (argv.length !== 3 || argv[0] !== 'sh' || argv[1] !== '-c') return;
+  const segments = argv[2]!.split('&&');
+  if (segments.length !== 2 || segments.some((segment) => /[;&|<>`$()\\\n\r'"#]/.test(segment))) return;
+  const parsed = segments.map((segment) => fileCommand(segment.trim().split(/\s+/)));
+  if (parsed.some((command) => !command)) return;
+  const commands = parsed as { prefix: string[]; files: string[] }[];
+  if (!same(commands.map((command) => fileCommandCwd(command.prefix)), ['services/auth/', 'services/kernel/']))
+    return;
+  return commands.map((command) => ({ ...command, cwd: fileCommandCwd(command.prefix) }));
+}
+function explicitFileCommands(argv: string[]): ProofFileCommand[] | undefined {
+  const direct = fileCommand(argv);
+  if (direct) return [{ ...direct, cwd: fileCommandCwd(direct.prefix) }];
+  return membershipFileCommands(argv);
+}
 /** The 50a producer treats this argv as a child command and would mint a nested, second logical check. */
 export function proofExecutionUnavailable(argv: string[]): string | undefined {
   if (argv.some((word) => /(?:^|\/)worker-check\.[cm]?[jt]s$/.test(word)))
     return 'Native producer port required: startControllerWorkerCheck must bind the exact original bun scripts/worker-check.ts --local -- bun test argv to ONE logical invocation without stripping its wrapper or starting a second check';
 }
 export class ProofUnavailableError extends Error {}
+export class ProofCaptureMovedError extends Error {
+  constructor(readonly expectedHead: string, readonly observedHead: string) {
+    super(`integration head moved during proof registration (${expectedHead} -> ${observedHead})`);
+    this.name = 'ProofCaptureMovedError';
+  }
+}
 export function originalCommandMatches(command: string[], originals: string[][]): boolean {
   if (!originals.length) return false;
   if (originals.every((argv) => same(argv, command))) return true;
@@ -364,6 +396,10 @@ export function authorizeProof(
   actor: AuthenticatedManager | null | undefined,
   operations: string | undefined,
   integrationBranch: string,
+  registration?: {
+    expectedIntegrationHead?: string;
+    backlogProposal?: { proposalSha256: string; sourceCommit: string; sourceTasks: string[] };
+  },
 ): ProofAuthorization {
   const policy = store.policy.proof;
   if (brief.kind !== 'verification' || !brief.proof || brief.criticalPath)
@@ -372,8 +408,13 @@ export function authorizeProof(
   const proof = parseProofMetadata(brief.proof);
   if (!originalCommandHasInputs(brief.acceptance.command))
     throw new Error('proof cannot register a broad root or gate campaign');
-  if (proofGit(root, ['rev-parse', `refs/heads/${integrationBranch}`], policy) !== proof.sourceCommit)
+  const integrationHead = proofGit(root, ['rev-parse', `refs/heads/${integrationBranch}`], policy);
+  if (registration?.expectedIntegrationHead && integrationHead !== registration.expectedIntegrationHead)
+    throw new ProofCaptureMovedError(registration.expectedIntegrationHead, integrationHead);
+  if (integrationHead !== proof.sourceCommit) {
+    if (registration?.expectedIntegrationHead) throw new ProofCaptureMovedError(proof.sourceCommit, integrationHead);
     throw new Error('proof source must be the captured integration head');
+  }
   if (proofGit(root, ['rev-parse', `${proof.sourceCommit}^{commit}`], policy) !== proof.sourceCommit)
     throw new Error('proof source is not a captured commit');
   const originals = proof.sourceTasks.map((id) => {
@@ -398,6 +439,10 @@ export function authorizeProof(
     )
   )
     throw new Error('proof command must retain every whole original argv or its exact deduplicated file union');
+  const missing = preflightProof(root, brief, policy);
+  if (missing.length) throw new Error(`proof command inputs are missing at the captured source: ${missing.join(', ')}`);
+  const finalHead = proofGit(root, ['rev-parse', `refs/heads/${integrationBranch}`], policy);
+  if (finalHead !== integrationHead) throw new ProofCaptureMovedError(integrationHead, finalHead);
   return {
     integrationBranch,
     fingerprint: proofFingerprint(brief),
@@ -405,19 +450,32 @@ export function authorizeProof(
     sessionId: actor.sessionId,
     sourceTree: proofGit(root, ['rev-parse', `${proof.sourceCommit}^{tree}`], policy),
     originals,
+    ...(registration?.backlogProposal
+      ? {
+          backlogProposal: {
+            ...registration.backlogProposal,
+            sourceTasks: [...registration.backlogProposal.sourceTasks],
+          },
+        }
+      : {}),
   };
 }
 /** Read captured Git objects only. Explicit command files, including shell-contained originals, must exist. */
 export function preflightProof(root: string, brief: Brief, policy = defaultPolicy.proof): string[] {
   if (!brief.proof) return ['proof metadata unavailable'];
-  const tokens = brief.acceptance.command.flatMap(
-    (word) => word.match(/[A-Za-z0-9_./-]+\.(?:[cm]?[jt]sx?|sh|json|sql)\b/g) ?? [],
-  );
+  const commands = explicitFileCommands(brief.acceptance.command);
+  const tokens = commands
+    ? commands.flatMap((command) => command.files.map((file) => `${command.cwd}${file}`))
+    : brief.acceptance.command.flatMap(
+        (word) => word.match(/[A-Za-z0-9_./-]+\.(?:[cm]?[jt]sx?|sh|json|sql)\b/g) ?? [],
+      );
   let cwd = '';
   const argv = brief.acceptance.command;
-  const cwdIndex = argv.indexOf('--cwd');
-  if (cwdIndex >= 0) cwd = `${argv[cwdIndex + 1]}/`;
-  else cwd = (argv.find((word) => word.startsWith('--cwd='))?.slice(6) ?? '') + '/';
+  if (!commands) {
+    const cwdIndex = argv.indexOf('--cwd');
+    if (cwdIndex >= 0) cwd = `${argv[cwdIndex + 1]}/`;
+    else cwd = (argv.find((word) => word.startsWith('--cwd='))?.slice(6) ?? '') + '/';
+  }
   if (cwd === '/') cwd = '';
   return [...new Set(tokens)].filter((file) => {
     if (file.startsWith('-') || file.includes('..') || file.startsWith('/')) return true;
@@ -1163,5 +1221,5 @@ export function bootSmokeEnvironment(parent: NodeJS.ProcessEnv = process.env): N
 function originalCommandHasInputs(argv: string[]): boolean {
   if (/(?:^|[\s/])(?:gate(?:857)?|root-check|remote-check)(?:\.[cm]?[jt]s)?(?:\s|$)/i.test(argv.join(' ')))
     return false;
-  return wholeWorkspaceCommand(argv) || fileCommand(argv) !== undefined;
+  return wholeWorkspaceCommand(argv) || explicitFileCommands(argv) !== undefined;
 }

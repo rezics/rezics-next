@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
+import { createHash } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -351,6 +352,52 @@ test('an interrupted claim whose dispatch already committed archives onto the ex
   });
   expect((await sweepBacklog(f.runtime)).dispatched).toEqual([]);
   expect(f.dispatched).toEqual([]);
+});
+
+test('an interrupted proof claim archives once by durable proposal identity after capture changes', async () => {
+  const f = fixture();
+  const originalSource = '1'.repeat(40);
+  const capturedSource = '2'.repeat(40);
+  const proposal = `---\ngoal: accounts\nmanager: content\nkind: verification\nproof:\n  journey: Membership\n  sourceTasks: [membership-original]\n  sourceCommit: ${originalSource}\nacceptance:\n  command: [bun, test, membership.test.ts]\n---\nObserve membership.\n`;
+  const accepted = proposal.replace(originalSource, capturedSource);
+  const taskId = 'registered-proof';
+  task(
+    f.db,
+    taskId,
+    'ready',
+    {
+      goal: 'accounts',
+      manager: 'content',
+      kind: 'verification',
+      markdown: accepted,
+      proof: { journey: 'Membership', sourceTasks: ['membership-original'], sourceCommit: capturedSource },
+      lintWarnings: [],
+    },
+    1,
+  );
+  const row = f.db.query('SELECT body FROM worker_tasks WHERE id=?').get(taskId) as { body: string };
+  const registered = JSON.parse(row.body) as Record<string, unknown>;
+  registered.proofAuthorization = {
+    fingerprint: 'accepted-capture-fingerprint',
+    backlogProposal: {
+      proposalSha256: createHash('sha256').update(proposal).digest('hex'),
+      sourceCommit: originalSource,
+      sourceTasks: ['membership-original'],
+    },
+  };
+  f.db.query('UPDATE worker_tasks SET body=? WHERE id=?').run(JSON.stringify(registered), taskId);
+  const claimDirectory = join(f.state, 'backlog', 'accounts', '.dispatching');
+  mkdirSync(claimDirectory, { recursive: true });
+  const claim = join(claimDirectory, 'membership.md');
+  writeFileSync(claim, proposal);
+  utimesSync(claim, (NOW - 60_000) / 1000, (NOW - 60_000) / 1000);
+
+  const sweep = await sweepBacklog(f.runtime);
+  const archived = join(f.state, 'backlog', 'accounts', 'dispatched', `${taskId}-membership.md`);
+  expect(sweep.dispatched).toEqual([{ goal: 'accounts', taskId, brief: 'membership.md' }]);
+  expect(readFileSync(archived, 'utf8')).toBe(proposal);
+  expect((await sweepBacklog(f.runtime)).dispatched).toEqual([]);
+  expect(existsSync(claim)).toBe(false);
 });
 
 test('an interrupted claim that matches several unarchived tasks is refused with those ids', async () => {

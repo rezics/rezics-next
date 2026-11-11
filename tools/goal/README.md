@@ -3560,8 +3560,16 @@ with identical raw prefixes, including cwd/env arguments. Service file lists inc
 after tests, starting at the first input. Exact whole original Auth/Kernel workspace checks require their same-Goal
 integrated original provenance; they need no invented explicit test list. Mixed bare and `env -u` groups stay separate.
 Shortened selections, changed flags and broad root/gate campaigns are refused. Explicit command files must exist in
-the captured Git tree before execution can be granted. Registration captures current integration. A queued proof keeps
-its authorized source while that commit remains in integration history, even when other work lands before it starts.
+the captured Git tree before execution can be granted. Direct registration requires the submitted source to equal
+the current integration head. A declared Goal backlog claim is still only a proposal: its first authenticated
+registration captures the current head under the integration train lease, then binds ancestry, per-command-file
+preflight, authorization and the task worktree to that same commit. The accepted task brief records that capture;
+the original claim remains unchanged in the dispatch archive, and authorization retains its digest, original source
+commit and sourceTasks so interrupted archive recovery can find it once. A registered proof keeps its authorized
+source while that commit remains in integration history, even when other work lands before it starts. The retained
+membership Auth/Kernel original may use exactly two finite explicit service file checks, Auth then Kernel, joined
+with `&&`; each service's files are preflighted from its own working directory. Other shell operators and expansion
+remain outside the accepted command grammar.
 Once proof preparation records `proof-command-ready`, launch and same-session resume check the registered fingerprint
 and exact clean captured HEAD/tree. A result on an earlier snapshot cannot verify the new integration head.
 

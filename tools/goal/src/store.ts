@@ -2153,6 +2153,7 @@ export class WorkerStore implements AttemptFence {
     paths: { briefPath: string; worktree: string; branch: string; base: string },
     taskClass: Task['taskClass'],
     id: string = crypto.randomUUID(),
+    proofAuthorization?: Task['proofAuthorization'],
   ): Task {
     const task = this.db
       .transaction(() => {
@@ -2177,6 +2178,7 @@ export class WorkerStore implements AttemptFence {
           state,
           currentAttempt: 0,
           createdAt: new Date().toISOString(),
+          ...(proofAuthorization ? { proofAuthorization } : {}),
         };
         this.db.query('INSERT INTO worker_tasks VALUES (?,?,?,?)').run(id, sequence, 0, JSON.stringify(task));
         recordFlow(this.db, { taskId: id, attempt: 0, stage: 'dispatch', action: 'dispatched', at: task.createdAt });

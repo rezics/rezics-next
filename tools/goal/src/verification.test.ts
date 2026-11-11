@@ -38,6 +38,7 @@ test('proof metadata requires explicit originals and a captured commit instead o
 });
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { harness, brief } from './test-support.ts';
 import { git } from './tasks.ts';
@@ -47,6 +48,7 @@ import {
   authorizeProof,
   newProofBinding,
   observeProof,
+  ordinaryProofCommand,
   originalCommandMatches,
   preflightProof,
   unavailableProofProducer,
@@ -99,7 +101,8 @@ export function readWorkerCheckRecord(id, cwd) { return JSON.parse(readFileSync(
 export function readWorkerCheckHistory(id, physical, cwd) { return JSON.parse(readFileSync(join(cwd,'.temp/goal/checks/history',id,physical+'.json'),'utf8')); }
 `,
   );
-  git(h.root, ['add', 'scripts/worker-check.ts', 'package.json']);
+  writeFileSync(join(h.root, 'fixture.test.ts'), 'export {}\n');
+  git(h.root, ['add', 'scripts/worker-check.ts', 'fixture.test.ts', 'package.json']);
   git(h.root, ['commit', '-m', 'Fixture managed check reader']);
   const commit = git(h.root, ['rev-parse', 'HEAD']);
   git(h.root, ['branch', 'dev', commit]);
@@ -889,6 +892,7 @@ test('backlog verification registers only for its confirmed Goal owner and retai
       writeFileSync(join(directory, name), readFileSync(path, 'utf8'));
     };
     const exact = submittedProof(h).path;
+    const exactMarkdown = readFileSync(exact, 'utf8');
     ready(h.proofBrief.goal, 'exact.md', exact);
     ready('other', 'wrong-directory.md', exact);
     ready(
@@ -905,8 +909,8 @@ test('backlog verification registers only for its confirmed Goal owner and retai
       workerCap: 16,
       perSweep: 3,
       now: () => Date.now() + 60_000,
-      async dispatch(path, actor) {
-        return h.tasks.dispatch(path, actor ?? null).id;
+      async dispatch(path, actor, proposal) {
+        return h.tasks.dispatch(path, actor ?? null, false, undefined, proposal).id;
       },
       async continueTask() {},
       async cancel() {},
@@ -917,6 +921,18 @@ test('backlog verification registers only for its confirmed Goal owner and retai
     ).toEqual(['exact.md']);
     const registered = h.store.task(sweep.dispatched[0]!.taskId);
     expect(registered.proofAuthorization).toMatchObject({ manager: h.actor.id, sessionId: h.actor.sessionId });
+    expect(registered.brief.proof?.sourceCommit).toBe(h.proofBrief.proof?.sourceCommit);
+    expect(registered.proofAuthorization?.backlogProposal).toEqual({
+      proposalSha256: createHash('sha256').update(exactMarkdown).digest('hex'),
+      sourceCommit: h.proofBrief.proof?.sourceCommit,
+      sourceTasks: h.proofBrief.proof?.sourceTasks,
+    });
+    expect(
+      readFileSync(
+        join(root, h.proofBrief.goal, 'dispatched', `${registered.id}-exact.md`),
+        'utf8',
+      ),
+    ).toBe(exactMarkdown);
     expect(registered.currentAttempt).toBe(0);
     expect(sweep.refused).toEqual(
       expect.arrayContaining([
@@ -924,6 +940,68 @@ test('backlog verification registers only for its confirmed Goal owner and retai
         expect.objectContaining({ goal: h.proofBrief.goal, reason: expect.stringContaining('whole original argv') }),
       ]),
     );
+  } finally {
+    h.dispose();
+  }
+});
+
+test('an admitted queued proof captures one Dev advance and archives the unchanged proposal', async () => {
+  const h = registeredFixture(true);
+  try {
+    h.store.db.query('UPDATE manager_sessions SET state=? WHERE id=?').run(
+      JSON.stringify({
+        kind: 'managed',
+        engine: 'claude',
+        status: 'running',
+        threadId: h.actor.sessionId,
+        goals: [h.proofBrief.goal],
+      }),
+      h.actor.id,
+    );
+    const original = submittedProof(h);
+    const originalMarkdown = readFileSync(original.path, 'utf8');
+    const directory = join(backlogDirectory(h.settings.stateDirectory), h.proofBrief.goal);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'queued.md'), originalMarkdown);
+    const originalHead = h.proofBrief.proof!.sourceCommit;
+    writeFileSync(join(h.root, 'advance-before-registration.txt'), 'Dev advanced while this proposal waited.\n');
+    git(h.root, ['add', 'advance-before-registration.txt']);
+    git(h.root, ['commit', '-m', 'Advance Dev before proof registration']);
+    const capturedHead = git(h.root, ['rev-parse', 'HEAD']);
+    git(h.root, ['update-ref', 'refs/heads/dev', capturedHead]);
+
+    const sweep = await sweepBacklog({
+      db: h.store.db,
+      stateDirectory: h.settings.stateDirectory,
+      inbox: new SqliteManagerInbox(h.store.db, h.settings.stateDirectory),
+      workerCap: 16,
+      perSweep: 1,
+      now: () => Date.now() + 60_000,
+      async dispatch(path, actor, proposal) {
+        return h.tasks.dispatch(path, actor ?? null, false, undefined, proposal).id;
+      },
+      async continueTask() {},
+      async cancel() {},
+    });
+
+    expect(sweep.refused).toEqual([]);
+    const task = h.store.task(sweep.dispatched[0]!.taskId);
+    expect(task.base).toBe(capturedHead);
+    expect(task.brief.proof).toEqual({
+      ...h.proofBrief.proof,
+      sourceCommit: capturedHead,
+    });
+    expect(task.proofAuthorization).toMatchObject({
+      sourceTree: git(h.root, ['rev-parse', `${capturedHead}^{tree}`]),
+      backlogProposal: {
+        proposalSha256: createHash('sha256').update(originalMarkdown).digest('hex'),
+        sourceCommit: originalHead,
+        sourceTasks: h.proofBrief.proof!.sourceTasks,
+      },
+    });
+    expect(
+      readFileSync(join(directory, 'dispatched', `${task.id}-queued.md`), 'utf8'),
+    ).toBe(originalMarkdown);
   } finally {
     h.dispose();
   }
@@ -1076,6 +1154,88 @@ test('Exact whole original Auth workspace check and complete homogeneous helper-
     ).toEqual([a, b]);
     expect(originalCommandMatches(['bun', 'test', 'fixture.test.ts', 'other.test.ts'], [a, b])).toBe(false);
     expect(proofExecutionUnavailable(union)).toContain('ONE logical invocation');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('the exact finite membership Auth-then-Kernel original preflights per service and refuses shell expansion', () => {
+  const h = registeredFixture();
+  try {
+    const authFiles = ['test/membership-workflows.test.ts'];
+    const kernelFiles = [
+      'test/access/realm-membership-transition.test.ts',
+      'test/access/growth-realm-membership-transition.test.ts',
+      'test/access/membership-work.test.ts',
+      'test/community/membership.test.ts',
+    ];
+    for (const [service, files] of [
+      ['auth', authFiles],
+      ['kernel', kernelFiles],
+    ] as const) {
+      for (const file of files) {
+        const path = join(h.root, `services/${service}`, file);
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, 'export {}\n');
+      }
+    }
+    git(h.root, ['add', 'services/auth', 'services/kernel']);
+    git(h.root, ['commit', '-m', 'Fixture original membership checks']);
+    const sourceCommit = git(h.root, ['rev-parse', 'HEAD']);
+    git(h.root, ['update-ref', 'refs/heads/dev', sourceCommit]);
+    const authCommand = ['bun', 'run', '--cwd', 'services/auth', 'check', ...authFiles];
+    const kernelCommand = ['bun', 'run', '--cwd', 'services/kernel', 'check', ...kernelFiles];
+    const membershipCommand = ['sh', '-c', `${authCommand.join(' ')} && ${kernelCommand.join(' ')}`];
+    h.store.updateTask({ taskId: h.source.id, attempt: 0 }, (task) => {
+      task.brief.acceptance = { ...task.brief.acceptance, command: membershipCommand };
+      task.integratedCommit = sourceCommit;
+    });
+    const proof = {
+      ...h.proofBrief,
+      proof: { ...h.proofBrief.proof!, sourceCommit },
+      acceptance: { ...h.proofBrief.acceptance, command: membershipCommand },
+    };
+
+    expect(authorizeProof(h.store, h.root, proof, h.actor, 'operations', 'dev').originals).toEqual([
+      { taskId: h.source.id, commit: sourceCommit, argv: membershipCommand },
+    ]);
+    expect(preflightProof(h.root, proof)).toEqual([]);
+    expect(ordinaryProofCommand(membershipCommand).recordedArgv).toEqual(membershipCommand);
+    for (const script of [
+      `${authCommand.join(' ')} && ${kernelCommand.join(' ')}; bun test fixture.test.ts`,
+      `${authCommand.join(' ')} && ${kernelCommand.join(' ')} || bun test fixture.test.ts`,
+      `${authCommand.join(' ')} && ${kernelCommand.join(' ')} && bun test fixture.test.ts`,
+      `${authCommand.join(' ')} && ${kernelCommand.join(' ')} $(touch injected.test.ts)`,
+    ])
+      expect(() =>
+        authorizeProof(
+          h.store,
+          h.root,
+          { ...proof, acceptance: { ...proof.acceptance, command: ['sh', '-c', script] } },
+          h.actor,
+          'operations',
+          'dev',
+        ),
+      ).toThrow('broad root or gate campaign');
+
+    const missingCommand = [
+      'sh',
+      '-c',
+      `${authCommand.slice(0, -1).join(' ')} test/missing-membership.test.ts && ${kernelCommand.join(' ')}`,
+    ];
+    h.store.updateTask({ taskId: h.source.id, attempt: 0 }, (task) => {
+      task.brief.acceptance = { ...task.brief.acceptance, command: missingCommand };
+    });
+    expect(() =>
+      authorizeProof(
+        h.store,
+        h.root,
+        { ...proof, acceptance: { ...proof.acceptance, command: missingCommand } },
+        h.actor,
+        'operations',
+        'dev',
+      ),
+    ).toThrow('services/auth/test/missing-membership.test.ts');
   } finally {
     h.dispose();
   }
