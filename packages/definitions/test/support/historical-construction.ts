@@ -39,8 +39,8 @@ export function historicalConstructionSources(publication = false) {
 }
 
 /** Reuse the same verified old dependency graph for pure and instrumented comparisons. */
-export function materializeHistoricalConstruction(directory: string) {
-  const pinned = historicalConstructionSources();
+export function materializeHistoricalConstruction(directory: string, publication = false) {
+  const pinned = historicalConstructionSources(publication);
   const targets = new Map(
     [...pinned.keys()].map((origin, index) => [
       origin,
@@ -92,43 +92,61 @@ export async function originalValidator() {
   }
 }
 
-/** Install before importing any kernel/core module, in the historical child
- * only. Keeping original module paths preserves relative imports and Reylo's SQL
- * loader. The delivered child never registers these hooks or shares its caches.
+/** Materialize the pinned publisher as a separate graph before importing the
+ * current kernel. Only the historical definition route points into that graph;
+ * current imports keep their live identities and module cache.
  */
 export function mountHistoricalConstruction() {
-  const pinned = historicalConstructionSources(true);
+  const temporary = resolve(root, '.temp/publication-construction');
+  mkdirSync(temporary, { recursive: true });
+  const directory = mkdtempSync(join(temporary, 'historical-'));
+  let targets: Map<string, string>;
+  try {
+    targets = materializeHistoricalConstruction(directory, true);
+  } catch (error) {
+    rmSync(directory, { recursive: true, force: true });
+    throw error;
+  }
   const loaded: string[] = [];
+  const traced = [definitionsPath, filterPath, publicationPath].map((relative) => {
+    const origin = resolve(root, relative);
+    const target = targets.get(origin);
+    if (!target) throw new Error(`Missing historical module target: ${relative}`);
+    return [resolve(target), relative] as const;
+  });
+  const tracedOrigins = new Map(traced);
+  const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const tracedFilter = new RegExp(`^(?:${traced.map(([target]) => escapeRegExp(target)).join('|')})$`);
+  const routePath = resolve(root, 'services/kernel/src/semantic/http/definitions.ts');
+  const routeFilter = new RegExp(`^${escapeRegExp(routePath)}$`);
+  const publisherPath = targets.get(resolve(root, publicationPath))!;
+  const originalDefinitionsPath = targets.get(resolve(root, definitionsPath))!;
   Bun.plugin({
     name: 'pinned-historical-construction',
     setup(build) {
-      // Retained dependencies stay separate from the three core module identities.
-      build.onLoad(
-        {
-          filter:
-            /\/(?:packages\/definitions\/(?:src\/library-profile\.ts|schema\/release\.json)|services\/kernel\/src\/semantic\/extensions\.ts)$/,
-        },
-        ({ path }) => {
-          const contents = pinned.get(path);
-          if (contents === undefined) throw new Error(`Unexpected historical dependency: ${path}`);
-          if (path.endsWith('.json'))
-            return { contents: `export default ${JSON.stringify(JSON.parse(contents))};`, loader: 'ts' };
-          return { contents, loader: 'ts' };
-        },
-      );
-      build.onLoad(
-        {
-          filter:
-            /\/(?:packages\/(?:definitions\/src\/index|filter\/src\/filter)|services\/kernel\/src\/semantic\/definitions)\.ts$/,
-        },
-        ({ path }) => {
-          const contents = pinned.get(path);
-          if (contents === undefined) throw new Error(`Unexpected historical module: ${path}`);
-          loaded.push(path.slice(root.length + 1));
-          return { contents, loader: 'ts' };
-        },
-      );
+      build.onLoad({ filter: tracedFilter }, ({ path }) => {
+        const origin = tracedOrigins.get(resolve(path));
+        if (!origin) throw new Error(`Unexpected historical module: ${path}`);
+        loaded.push(origin);
+        return { contents: readFileSync(path, 'utf8'), loader: 'ts' };
+      });
+      build.onLoad({ filter: routeFilter }, ({ path }) => {
+        const contents = readFileSync(path, 'utf8');
+        const importPath = "from '../definitions.ts'";
+        if (contents.split(importPath).length !== 2)
+          throw new Error(`Expected one definition publisher import in ${path}`);
+        return {
+          contents: contents.replace(importPath, `from ${JSON.stringify(publisherPath)}`),
+          loader: 'ts',
+        };
+      });
     },
   });
-  return { revision: manifest.revision, loaded, expected: [definitionsPath, filterPath, publicationPath].sort() };
+  return {
+    revision: manifest.revision,
+    loaded,
+    expected: [definitionsPath, filterPath, publicationPath].sort(),
+    originalDefinitionsPath,
+    close: () => rmSync(directory, { recursive: true, force: true }),
+  };
 }

@@ -83,7 +83,7 @@ type ValueState =
   | { phase: 'idle'; binding: string; labels: Record<string, Record<string, Record<string, string>>> }
   | { phase: 'loading'; binding: string; labels: Record<string, Record<string, Record<string, string>>> }
   | {
-      phase: 'ready' | 'unavailable' | 'preparing' | 'refused' | 'restart' | 'no-scope';
+      phase: 'ready' | 'empty' | 'unavailable' | 'preparing' | 'refused' | 'restart' | 'no-scope';
       binding: string;
       labels: Record<string, Record<string, Record<string, string>>>;
       partial?: boolean;
@@ -199,6 +199,7 @@ export function SavedFilterReviewPanel({
     }
 
     let succeeded = 0;
+    let valuesReturned = 0;
     let failure: 'unavailable' | 'preparing' | 'refused' | 'restart' | undefined;
     try {
       for (const batch of batches) {
@@ -219,12 +220,15 @@ export function SavedFilterReviewPanel({
           continue;
         }
         succeeded += 1;
-        for (const facet of result.page.facets)
+        for (const facet of result.page.facets) {
+          valuesReturned += facet.values.length;
           for (const value of facet.values)
             labels[facet.property] = { ...labels[facet.property], [value.value]: value.labels };
+        }
       }
       if (!isCurrent(sequence, 'values', binding)) return;
       if (failure) setValues({ phase: failure, binding, labels, ...(succeeded ? { partial: true } : {}) });
+      else if (valuesReturned === 0) setValues({ phase: 'empty', binding, labels });
       else setValues({ phase: 'ready', binding, labels });
     } catch {
       if (isCurrent(sequence, 'values', binding))
@@ -528,6 +532,7 @@ function CurrentFieldStatus({ state }: { state: CurrentFieldState }) {
 function ValueStatus({ values }: { values: ValueState }) {
   if (values.phase === 'loading' || values.phase === 'idle') return null;
   if (values.phase === 'ready') return <p role="status">{m.saved_filter_review_value_labels_ready()}</p>;
+  if (values.phase === 'empty') return <p role="status">{m.refinement_no_values()}</p>;
   if (values.phase === 'no-scope') return <p role="status">{m.saved_filter_review_value_labels_no_scope()}</p>;
   if (values.phase === 'refused') return <p role="alert">{m.saved_filter_review_value_labels_refused()}</p>;
   if (values.phase === 'preparing') return <p role="status">{m.saved_filter_review_value_labels_preparing()}</p>;

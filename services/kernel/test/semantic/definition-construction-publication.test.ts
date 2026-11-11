@@ -5,7 +5,7 @@ import { resolve, join } from 'node:path';
 import { publicationLimits, releaseDigest, validateRelease } from '@rezics/definitions';
 import { constructionFixture } from '../../../../packages/definitions/test/support/publication-construction.ts';
 import { createSemanticDriver, type SemanticOutcomeDriver } from './outcome-driver.ts';
-import { effectsSnapshot } from './support/definition-publication-work.ts';
+import { effectsSnapshot, historicalCatalogueImportWitness } from './support/definition-publication-work.ts';
 import historicalIdentity from '../../../../packages/definitions/test/fixtures/definition-historical-construction.json';
 
 let driver: SemanticOutcomeDriver;
@@ -21,31 +21,35 @@ beforeAll(async () => {
   directory = mkdtempSync(join(temporary, 'http-'));
   script = join(directory, 'cold.ts');
   // Both historical creation and current cold reads use the mounted kernel with
-  // real Auth/Access and this driver's actual pool. Only the historical creator
-  // loads the unchanged old code; current verification runs the delivered core.
+  // real Auth/Access and this driver's actual pool. The historical route alone
+  // points at the unchanged pinned publisher; all other imports stay current.
   writeFileSync(
     script,
     `
 const input = await Bun.stdin.json();
 let historical;
-if (input.original) {
-  const { mountHistoricalConstruction } = await import('${root}/packages/definitions/test/support/historical-construction.ts');
-  historical = mountHistoricalConstruction();
-}
-const { createPool } = await import('${root}/services/kernel/src/database/pool.ts');
-const { createKernel } = await import('${root}/services/kernel/src/http/kernel.ts');
-const { createKernelRuntimeDefaults } = await import('${root}/services/kernel/src/server.ts');
-const { validateRelease, releaseDigest } = await import('${root}/packages/definitions/src/index.ts');
-const runtime = input.runtime;
-const pool = createPool(runtime.databaseUrl);
-let points = 0;
-const query = pool.query.bind(pool);
-pool.query = function(...args) {
-  const text = typeof args[0] === 'string' ? args[0] : args[0]?.text ?? '';
-  if (/SELECT digest\\s+FROM semantic.definition_release\\s+WHERE route/.test(text)) points++;
-  return query(...args);
-};
+let pool;
 try {
+  let validateRelease, releaseDigest;
+  if (input.original) {
+    const { mountHistoricalConstruction } = await import('${root}/packages/definitions/test/support/historical-construction.ts');
+    historical = mountHistoricalConstruction();
+    ({ validateRelease, releaseDigest } = await import(historical.originalDefinitionsPath));
+  } else {
+    ({ validateRelease, releaseDigest } = await import('${root}/packages/definitions/src/index.ts'));
+  }
+  const { createPool } = await import('${root}/services/kernel/src/database/pool.ts');
+  const { createKernel } = await import('${root}/services/kernel/src/http/kernel.ts');
+  const { createKernelRuntimeDefaults } = await import('${root}/services/kernel/src/server.ts');
+  const runtime = input.runtime;
+  pool = createPool(runtime.databaseUrl);
+  let points = 0;
+  const query = pool.query.bind(pool);
+  pool.query = function(...args) {
+    const text = typeof args[0] === 'string' ? args[0] : args[0]?.text ?? '';
+    if (/SELECT digest\\s+FROM semantic.definition_release\\s+WHERE route/.test(text)) points++;
+    return query(...args);
+  };
   const defaults = createKernelRuntimeDefaults({ env: {
     ...process.env, KERNEL_SESSION_KEYS: runtime.sessionKeys,
     KERNEL_WRITE_RATE_SECRET: 'construction-cold-http-secret-with-at-least-32-bytes',
@@ -63,7 +67,10 @@ try {
   console.log(JSON.stringify({ status: response.status, body: await response.json(),
     etag: response.headers.get('etag'), session: response.headers.get('rezics-session-token'),
     validation, digest, points, historical }));
-} finally { await pool.end(); }
+} finally {
+  if (pool) await pool.end();
+  historical?.close();
+}
 `,
   );
 }, 180_000);
@@ -109,6 +116,12 @@ async function cold(options: {
     historical?: { revision: string; loaded: string[]; expected: string[] };
   };
 }
+
+test('historical setup leaves current Definitions catalogue imports on current modules', async () => {
+  const witness = await historicalCatalogueImportWitness(root);
+  expect(witness.exit, witness.stderr + witness.stdout).toBe(0);
+  expect(witness.stdout).toContain('current catalogue import succeeded');
+});
 
 // Parent integration obligation: there is still no production callable HTTP work
 // producer for the exact same-pattern reached-defect 400 before excess 422 tie.
