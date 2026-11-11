@@ -360,9 +360,22 @@ async function continueRecovery(
   if (!row) return false;
   // The original producer derives its exact operation key from Auth's source.
   // All checkouts end before the foreign read, even with a single-slot pool.
-  const original = await createNativeLifecycleResults({ database: pool, access: runtime.access }).readRecoveryResult(
-    reference,
-  );
+  const results = createNativeLifecycleResults({ database: pool, access: runtime.access });
+  let original = await results.readRecoveryResult(reference);
+  if (!original) {
+    // Only a still-live fenced source can use the existing completion authority.
+    // A deleted account or a completed (unfenced) source cannot replace a missing
+    // original result. The live port retains its establishment and expiry checks.
+    const current = await runtime.access.readAccount(row.account_id);
+    if (!current || current.accountId !== row.account_id || current.state !== 'active' || !current.fenced)
+      return false;
+    if (!runtime.completeRecovery) return false;
+    await runtime.completeRecovery(reference);
+    // A successful effect reply is not this consumer's terminal proof. Read the
+    // genuine committed result and consume it under the same locks below. If its
+    // original witnesses are unavailable, leave the establishment pending.
+    original = await results.readRecoveryResult(reference);
+  }
   if (original) {
     if (
       original.kind !== 'recovery' ||
@@ -409,15 +422,7 @@ async function continueRecovery(
       ).rowCount;
     });
   }
-  // Only a still-live fenced source can use the existing completion authority.
-  // A deleted account or a completed (unfenced) source cannot replace a missing
-  // original result. Unknown/expired sources remain pending in that authority.
-  const current = await runtime.access.readAccount(row.account_id);
-  if (!current || current.accountId !== row.account_id || current.state !== 'active' || !current.fenced) return false;
-  if (!runtime.completeRecovery) return false;
-  await runtime.completeRecovery(reference);
-  await recordRecoveryCompletion(pool, reference);
-  return true;
+  return false;
 }
 
 export async function recoveryTerminal(connection: PoolClient, reference: string): Promise<boolean> {

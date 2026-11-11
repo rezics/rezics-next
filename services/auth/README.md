@@ -3153,6 +3153,10 @@ remains refused; this path never restores its former authority.
   retains the establishment and `native-release` pending state even after account
   deletion. Only a still-active fenced source may use the ordinary live completion
   port, which keeps its existing authenticated establishment and expiry checks.
+  After that live completion returns, the native continuation rereads the private
+  original result and uses the same locked binding, floor and receipt comparison.
+  It records no result-less terminal marker on the strength of the effect reply;
+  an unavailable or mismatched original keeps the establishment pending.
   No source lifetime or user/session disclosure authority is renewed. This supplies
   no retention exception for creation descriptors, request JSON, handles or
   approval business payload.
