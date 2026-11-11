@@ -188,10 +188,7 @@ export function MemberReadingItem({
       title={title}
       {...(titleLang ? { titleLang } : {})}
       titleDataSlot="member-list-row-title"
-      className={cn(
-        'max-w-4xl [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-        !evidence && 'sm:max-h-48',
-      )}
+      className="max-w-4xl [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:max-h-48 sm:overflow-y-auto"
       visual={
         cover ? (
           <div

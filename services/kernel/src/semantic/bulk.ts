@@ -12,6 +12,7 @@ import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import {
+  CommandUnavailableError,
   noEffect,
   principalCommandIdentity,
   runCommand,
@@ -68,6 +69,22 @@ export function statementDigest(statement: Extract<BatchCommand, { op: 'propose'
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+class SourceClaimRaceError extends Error {
+  constructor() {
+    super('Imported source claim changed during subject creation');
+    this.name = 'SourceClaimRaceError';
+  }
+}
+
+function isSourceClaimRace(error: unknown): boolean {
+  if (!record(error) || typeof error.code !== 'string') return false;
+  return (
+    error.code === '55P03' ||
+    error.code === '40P01' ||
+    (error.code === '23505' && error.constraint === 'external_claim_pkey')
+  );
+}
 
 type DocumentNode = { attrs?: { id?: unknown }; content?: DocumentNode[] };
 
@@ -207,13 +224,18 @@ export async function batchCommand(
           ...(options.routeKey ? { routeKey: options.routeKey } : {}),
           source,
         });
-        await insertClaim.run(tx, {
-          route,
-          source: source.source,
-          external_id: source.external_id,
-          subject_id: target.id,
-          transaction_id: transactionId,
-        });
+        try {
+          await insertClaim.run(tx, {
+            route,
+            source: source.source,
+            external_id: source.external_id,
+            subject_id: target.id,
+            transaction_id: transactionId,
+          });
+        } catch (error) {
+          if (isSourceClaimRace(error)) throw new SourceClaimRaceError();
+          throw error;
+        }
         await declareCommandHistory(tx, kind, {
           response: { artifactType: 'command-receipt/v1', accounts: [] },
           events: written.events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
@@ -428,15 +450,29 @@ export async function batchCommand(
       });
       return { value: { status: 200, value: { revision } }, events };
     } catch (error) {
+      if (error instanceof SourceClaimRaceError) throw error;
       throw asUniqueContention(error, BULK_UNIQUE_CONTENTION_CONSTRAINTS);
     }
   };
   // Create admits identity-terminal capture inside writeSubject. Propose and retract
   // keep Core contention retry until the original deadline, actor, capabilities and key.
-  const outcome =
-    command.op === 'create'
-      ? await runIdentityTerminalCommand<Value>(pool, commandOptions, body)
-      : await runCommand<Value>(pool, commandOptions, body);
+  const create = async () => {
+    try {
+      return await runIdentityTerminalCommand<Value>(pool, commandOptions, body);
+    } catch (error) {
+      if (!(error instanceof SourceClaimRaceError)) throw error;
+      try {
+        // The failed transaction rolled back the new birth. Re-enter the full
+        // terminal command so current authorization and the original receipt
+        // are checked before resolving the now-claimed source tuple.
+        return await runIdentityTerminalCommand<Value>(pool, commandOptions, body);
+      } catch (retryError) {
+        if (retryError instanceof SourceClaimRaceError) throw new CommandUnavailableError('contention', partition);
+        throw retryError;
+      }
+    }
+  };
+  const outcome = command.op === 'create' ? await create() : await runCommand<Value>(pool, commandOptions, body);
   return {
     ...outcome.value,
     component: { partition: outcome.partition, epoch: outcome.epoch, position: outcome.position },
