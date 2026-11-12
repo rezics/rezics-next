@@ -352,6 +352,10 @@ Test compositions that construct declarations from scope names use the exported 
 the operator bindings so restoring an opening uses the same resource-role catalogue. Explicit caller declarations
 remain subject to the production conflict check; fixture merging must not conceal a conflicting declaration.
 
+Decision: native Access journeys bind one dedicated receipt ring to each command pool before delegation or lifecycle
+commands, reuse the same ring across composed pools, and run standing-fixture setup/reset through its lifecycle seam
+so cleanup owns the resources started by a failed hook.
+
 Registration grants no authority. Ordinary grants, account and principal evidence still apply, and a session's
 consented client scopes must include the checked action. This catalogue neither registers clients nor widens their
 scopes. Auth's trusted `registerClient` and `registerWebsiteClient` inputs own registered scopes; website registration

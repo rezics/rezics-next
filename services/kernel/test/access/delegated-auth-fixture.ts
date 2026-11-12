@@ -5,8 +5,10 @@ import { createAuthDatabase } from '../support/auth-database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createDelegationCommands, type AssignmentInput } from '../../src/access/delegation-commands.ts';
+import type { KeyRing } from '../../src/tokens/seal.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
   const name = `assignment_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
@@ -28,7 +30,8 @@ async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void
 }
 
 /** Positive verifier fixtures need the same principal command provenance as production. */
-export async function delegatedAssignmentFixture(pool: Pool) {
+export async function delegatedAssignmentFixture(pool: Pool, receiptKeys: KeyRing = testReceiptKeys()) {
+  configureTestReceiptKeys(pool, receiptKeys);
   const fixture = await cloneAuthDatabase();
   const database = new Pool({ connectionString: fixture.url });
   const issuer = 'https://assignment-fixture.auth.test';

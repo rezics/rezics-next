@@ -10,11 +10,13 @@ import { accessCheck, actorOf, AuthenticationError, type ActionCatalogue } from 
 import { PROBLEMS, ProblemError } from '../../src/http/problem.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const timeout = 60_000;
 const pool = new Pool({ connectionString: url, max: 1 });
+configureTestReceiptKeys(pool, testReceiptKeys());
 const authDatabase = `access_auth_${process.pid}`;
 const authUrl = new URL(url);
 authUrl.pathname = `/${authDatabase}`;
@@ -319,7 +321,24 @@ test('forged expired revoked and wrong-audience sessions fail closed', async () 
   );
   const suspendedBearer = await signed({ sub: suspendedId });
   await suspendAccount(pool, suspendedId);
-  const suspendedError = await access.authenticate(suspendedBearer, context()).then(
+  await invalid(access.authenticate(suspendedBearer, context()));
+
+  const unfencedSuspendedId = '00000000-0000-7000-8000-123400000098';
+  await pool.query(
+    "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
+    [routeOf(unfencedSuspendedId), unfencedSuspendedId],
+  );
+  const unfencedSuspendedBearer = await signed({ sub: unfencedSuspendedId });
+  await pool.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
+    routeOf(unfencedSuspendedId),
+    unfencedSuspendedId,
+  ]);
+  const unfenced = await pool.query<{ state: string; minimum_authn_epoch: string; authn_fenced: boolean }>(
+    'SELECT state, minimum_authn_epoch::text AS minimum_authn_epoch, authn_fenced FROM access.account WHERE route=$1 AND account_id=$2',
+    [routeOf(unfencedSuspendedId), unfencedSuspendedId],
+  );
+  expect(unfenced.rows[0]).toEqual({ state: 'suspended', minimum_authn_epoch: '1', authn_fenced: false });
+  const suspendedError = await access.authenticate(unfencedSuspendedBearer, context()).then(
     () => null,
     (error: unknown) => error,
   );

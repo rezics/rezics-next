@@ -6,17 +6,22 @@ import { accessCommandAuthorization, AuthenticationError, type AccountActor } fr
 import { runCommand } from '../../src/command/command.ts';
 import { actionCatalogue, requestDigest } from '../../src/http/request.ts';
 import { createLifecycleCommands, LifecycleDeniedError } from '../../src/access/lifecycle.ts';
+import { INTERNAL_ACTIONS } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { delegatedAssignmentFixture } from './delegated-auth-fixture.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
 const admin = createPool(url);
+const receiptKeys = testReceiptKeys();
+configureTestReceiptKeys(pool, receiptKeys);
+configureTestReceiptKeys(admin, receiptKeys);
 let assignments: Awaited<ReturnType<typeof delegatedAssignmentFixture>>;
 beforeAll(async () => {
-  assignments = await delegatedAssignmentFixture(admin);
+  assignments = await delegatedAssignmentFixture(admin, receiptKeys);
 }, 60_000);
 afterAll(async () => {
   await assignments?.close();
@@ -35,11 +40,13 @@ const declarations = ['account:leave', 'account:delete', 'account:read', 'accoun
       'x-action': action,
       operationId: action.replace(':', '.'),
       security: [{ bearerAuth: [] }],
-      ...(action === 'account:leave' ? { 'x-replay-authorization': 'self-account-read' } : {}),
+      ...(['account:leave', 'account:delete'].includes(action)
+        ? { 'x-replay-authorization': 'self-account-read' }
+        : {}),
     },
   },
 }));
-const catalogue = actionCatalogue({ routes: declarations });
+const catalogue = actionCatalogue({ routes: declarations }, INTERNAL_ACTIONS);
 const access = createAccess({
   actions: catalogue,
   auth: {
@@ -168,7 +175,7 @@ async function fixture(action = 'account:leave', delegated = false) {
 
 test('only an explicit catalogue declaration derives the self-account-read metadata', () => {
   expect(catalogue.get('account:leave')).toEqual({ anonymous: false, replay: 'self-account-read' });
-  expect(catalogue.get('account:delete')).toEqual({ anonymous: false });
+  expect(catalogue.get('account:delete')).toEqual({ anonymous: false, replay: 'self-account-read' });
   expect(() =>
     actionCatalogue({
       routes: [
@@ -187,6 +194,26 @@ test('only an explicit catalogue declaration derives the self-account-read metad
       ],
     }),
   ).toThrow('unsupported x-replay-authorization');
+  expect(() =>
+    actionCatalogue(
+      {
+        routes: [
+          {
+            method: 'POST',
+            path: '/delete',
+            hooks: {
+              detail: {
+                'x-action': 'account:delete',
+                operationId: 'account.delete',
+                security: [{ bearerAuth: [] }],
+              },
+            },
+          },
+        ],
+      },
+      INTERNAL_ACTIONS,
+    ),
+  ).toThrow('different replay authorization');
   expect(() =>
     actionCatalogue({
       routes: [
@@ -222,8 +249,19 @@ test('declared self-revocation retrieves only its existing receipt through the o
   expect(await f.snapshot()).toEqual(before);
 });
 
-test('a suggestive undeclared action name never gets alternate replay authority', async () => {
+test('the internal account-delete declaration retains its exact self-read replay', async () => {
   const f = await fixture('account:delete');
+  const first = await f.run(await f.authenticate());
+  const before = await f.snapshot();
+  trace = [];
+  expect(await f.run(await f.authenticate())).toEqual({ ...first, replayed: true });
+  expect(trace).toEqual(['authorize', 'authorize', 'receipt']);
+  expect(f.bodies()).toBe(1);
+  expect(await f.snapshot()).toEqual(before);
+});
+
+test('a suggestive unknown action name never gets alternate replay authority', async () => {
+  const f = await fixture('account:remove');
   await f.run(await f.authenticate());
   const before = await f.snapshot();
   trace = [];

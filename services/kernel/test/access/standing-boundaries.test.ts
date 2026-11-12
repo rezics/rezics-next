@@ -12,23 +12,35 @@ import { accessCheck, accessCommandAuthorization, type Resource } from '../../sr
 import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { runCommand, authoritativeTimeValue, type CommandAuthorization } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { standingFixture } from './standing-fixture.ts';
+import { standingFixture, type StandingFixtureLifecycle } from './standing-fixture.ts';
 let f: Awaited<ReturnType<typeof standingFixture>>;
+let fixtureLifecycle: StandingFixtureLifecycle | undefined;
 beforeAll(async () => {
-  f = await standingFixture(['reaction:set']);
+  f = await standingFixture(['reaction:set'], undefined, (lifecycle) => {
+    fixtureLifecycle = lifecycle;
+  });
+  fixtureLifecycle!.ready();
 }, 30000);
 beforeEach(async () => {
-  await f.reset();
-  await f.grant(f.actor, 'subject:create');
-  await commands().create(await f.context(), {
-    resource: f.resource,
-    subject: ACTIVE_ACCOUNTS,
-    actions: ['subject:create'],
-    valid: '(,)',
-    key: Bun.randomUUIDv7(),
+  await fixtureLifecycle!.run('reset standing fixture rows', () => f.reset());
+  await fixtureLifecycle!.run('grant fixture creator', () => f.grant(f.actor, 'subject:create'));
+  await fixtureLifecycle!.run('install fixture standing grant', async () => {
+    await commands().create(await f.context(), {
+      resource: f.resource,
+      subject: ACTIVE_ACCOUNTS,
+      actions: ['subject:create'],
+      valid: '(,)',
+      key: Bun.randomUUIDv7(),
+    });
   });
+  fixtureLifecycle!.ready();
 });
-afterAll(() => f?.close());
+afterAll(async () => {
+  const pendingOperation = fixtureLifecycle?.pendingOperation;
+  await fixtureLifecycle?.close();
+  if (pendingOperation && pendingOperation !== 'ready')
+    throw new Error(`Standing fixture startup did not complete; pending operation: ${pendingOperation}`);
+});
 function commands() {
   return createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' });
 }

@@ -14,6 +14,7 @@ import { runCommand, IdempotencyConflictError } from '../../src/command/command.
 import { accessCheck, accessCommandAuthorization, AuthenticationError } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
   const name = `delegated_auth_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
@@ -38,6 +39,7 @@ const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
 pool.options.max = 1;
+configureTestReceiptKeys(pool, testReceiptKeys());
 const reader = new Pool({ connectionString: url, max: 1 });
 const issuer = 'https://delegation.auth.test';
 const audience = 'https://api.rezics.test';
