@@ -26,8 +26,17 @@ parent children. Duplicate IDs, cycles, missing parents and noncontiguous siblin
 
 Revise replaces the complete tree and retains immutable history. Occurrence identity permanently fixes the kind
 and target Post, even after removal; moves, titles, sibling order and exact revision selections may change. Target
-attachment reads use native Post disclosure. A failed command rolls back its own changes and never erases the
-independently saved target Post. No manuscript bodies are retained together during attachment processing.
+attachment validation uses exact native `readPostMetadata`, followed by its retained original source observation
+and prepared ancestry/current Access check. Create, revise and publish compare thread, Post, revision, stored
+SHA-256, author and licence without loading revision bodies, even when selecting an old revision. Each distinct
+thread/Post/revision/digest is completed sequentially; identical duplicate placements share that check. Erasure,
+concealment, a changed observation or any identity mismatch returns the existing not-found error. A failed command
+rolls back its own changes and never erases the independently saved target Post. Metadata admits attachment
+identity; it does not prove reader bytes. Exact body resolution retains full-document fetch and digest verification.
+
+Native acceptance is deferred to the dev verifier: unchanged create/revise/publish success and denials with zero
+revision body loads, including old-version and wrong-thread selections, and retained-observation changes. Existing
+exact reader body and digest assertions remain unchanged.
 
 Publication selects an ancestor-closed subset of the expected current structure. It stores a separate immutable
 manifest, with dense positions and preorder preserving the selected relative order, and advances the publication
@@ -188,7 +197,8 @@ the controller.
 ## Cost and integration boundaries
 
 Mutations validate at most 512 placements and read each distinct exact selected target through the existing native
-reader. They write one snapshot and bounded placement/identity inserts under the catalogue home transaction.
+metadata reader, including a final retained check, with zero revision body loads. They write one snapshot and bounded
+placement/identity inserts under the catalogue home transaction.
 Publication reads the bounded source structure and processes only its selected attachments. Reads perform exact
 catalogue and revision probes, at most one parent/origin probe and one indexed page query of at most 21 rows.
 Subject discovery seeks at most 21 indexed `subject_thread` and same-route catalogue-post candidates, then

@@ -1,16 +1,33 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
+import * as reads from '../../src/content/reads.ts';
+import readChain from '../../src/content/read-chain.sql';
+import { observeSql } from './support/sql-observer.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 
 setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
+let observer: ReturnType<typeof observeSql>;
 beforeAll(async () => {
   f = await hostedChaptersFixture();
+  observer = observeSql(f.native.pool);
 });
 afterAll(async () => {
+  await observer?.close();
   await f?.close();
 });
+
+// Every authoring success/denial below must use metadata probes only. Reader
+// assertions still fetch and verify the exact canonical body independently.
+async function write(...args: Parameters<typeof f.native.call>) {
+  const start = observer.records.length;
+  const result = await f.native.call(...args);
+  const probes = observer.records.slice(start).filter((row) => row.statement === readChain.sql);
+  expect(probes.length).toBeGreaterThan(0);
+  for (const probe of probes) expect(probe.parameters[readChain.params.indexOf('include_body')]).toBe(false);
+  return result;
+}
 
 test('publishes an ordered frozen catalogue while preserving Post disclosure and stable occurrence links', async () => {
   const path = `/v1/hostedCatalogues/${f.catalogueId}`;
@@ -57,9 +74,9 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
   ] as const;
   const createBody = { postId: f.catalogueId, threadId: f.threadId, placements };
   const createKey = crypto.randomUUID();
-  const created = await f.native.call('POST', '/v1/hostedCatalogues', createBody, { key: createKey });
+  const created = await write('POST', '/v1/hostedCatalogues', createBody, { key: createKey });
   expect(created.status, JSON.stringify(created.value)).toBe(201);
-  const createReplay = await f.native.call('POST', '/v1/hostedCatalogues', createBody, { key: createKey });
+  const createReplay = await write('POST', '/v1/hostedCatalogues', createBody, { key: createKey });
   expect(createReplay.value).toEqual(created.value);
 
   const privatePage = await f.native.call('GET', `${path}/children?kind=structure`);
@@ -87,9 +104,9 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
     occurrenceIds: selected,
   };
   const publishKey = crypto.randomUUID();
-  const published = await f.native.call('POST', `${path}:publish`, publishBody, { key: publishKey });
+  const published = await write('POST', `${path}:publish`, publishBody, { key: publishKey });
   expect(published.status, JSON.stringify(published.value)).toBe(200);
-  const publishReplay = await f.native.call('POST', `${path}:publish`, publishBody, { key: publishKey });
+  const publishReplay = await write('POST', `${path}:publish`, publishBody, { key: publishKey });
   expect(publishReplay.value).toEqual(published.value);
 
   expect((await f.native.call('GET', `/v1/posts/${draft.postId}`, undefined, { anonymous: true })).status).toBe(404);
@@ -201,7 +218,7 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
   ] as const;
   const moveBody = { expectedRevisionId: created.value.revisionId, placements: movedPlacements };
   const moveKey = crypto.randomUUID();
-  const moved = await f.native.call('POST', `${path}:revise`, moveBody, { key: moveKey });
+  const moved = await write('POST', `${path}:revise`, moveBody, { key: moveKey });
   expect(moved.status).toBe(200);
   const laterBody = {
     expectedRevisionId: moved.value.revisionId,
@@ -209,11 +226,11 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
       item.occurrenceId === secondId ? { ...item, title: 'Chapter Two, revised label' } : item,
     ),
   };
-  const later = await f.native.call('POST', `${path}:revise`, laterBody, { key: crypto.randomUUID() });
+  const later = await write('POST', `${path}:revise`, laterBody, { key: crypto.randomUUID() });
   expect(later.status).toBe(200);
-  const moveReplay = await f.native.call('POST', `${path}:revise`, moveBody, { key: moveKey });
+  const moveReplay = await write('POST', `${path}:revise`, moveBody, { key: moveKey });
   expect(moveReplay.value).toEqual(moved.value);
-  const stale = await f.native.call('POST', `${path}:revise`, moveBody, { key: crypto.randomUUID() });
+  const stale = await write('POST', `${path}:revise`, moveBody, { key: crypto.randomUUID() });
   expect(stale.status).toBe(412);
   const movedPage = await f.native.call('GET', `${path}/children?kind=structure&parentId=${partId}`);
   expect(movedPage.value.items).toMatchObject([{ occurrenceId: duplicateId, position: 0 }]);
@@ -235,7 +252,7 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
     ),
   }));
   const concurrent = await Promise.all(
-    concurrentBodies.map((body) => f.native.call('POST', `${path}:revise`, body, { key: crypto.randomUUID() })),
+    concurrentBodies.map((body) => write('POST', `${path}:revise`, body, { key: crypto.randomUUID() })),
   );
   expect(concurrent.filter((result) => result.status === 200)).toHaveLength(1);
   expect(concurrent.filter((result) => result.status === 412)).toHaveLength(1);
@@ -244,7 +261,7 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
   const badAttachment = movedPlacements.map((item: (typeof movedPlacements)[number]) =>
     item.occurrenceId === firstId ? { ...item, target: { ...first, sha256: '0'.repeat(64) } } : item,
   );
-  const rejected = await f.native.call(
+  const rejected = await write(
     'POST',
     `${path}:revise`,
     {
@@ -268,4 +285,78 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
     occurrence: { occurrenceId: secondId, availability: 'unavailable' },
     document: null,
   });
+});
+
+test('attachment identity mismatches and a changed retained source fail closed without loading bodies', async () => {
+  const catalogue = await f.native.thread();
+  const chapter = await f.native.thread();
+  const target = f.target(chapter);
+  const placement = {
+    occurrenceId: f.newOccurrenceId(),
+    parentId: null,
+    position: 0,
+    title: 'Chapter',
+    kind: 'chapter',
+    target,
+  };
+  const create = (placements: unknown[]) =>
+    write('POST', '/v1/hostedCatalogues', {
+      postId: catalogue.firstPost.id,
+      threadId: catalogue.id,
+      placements,
+    });
+  for (const mismatch of [
+    { ...target, threadId: catalogue.id },
+    { ...target, revisionId: catalogue.firstPost.revisionId },
+    { ...target, sha256: '0'.repeat(64) },
+  ]) {
+    // The valid duplicate must not shadow the invalid thread/revision/digest.
+    expect(
+      (
+        await create([
+          { ...placement, target: mismatch },
+          { ...placement, occurrenceId: f.newOccurrenceId(), position: 1 },
+        ])
+      ).status,
+    ).toBe(404);
+  }
+  const nativeRead = reads.readPostMetadata;
+  let changed = false;
+  const retained = spyOn(reads, 'readPostMetadata').mockImplementation(async (...args) => {
+    const result = await nativeRead(...args);
+    if (args[2] === target.postId && !changed) {
+      changed = true;
+      expect((await f.native.revise(chapter.firstPost, {})).status).toBe(200);
+    }
+    return result;
+  });
+  try {
+    // The exact old revision still exists, but its original Post observation changed.
+    // The concurrent revision's own body work is outside attachment observation.
+    expect(
+      (
+        await f.native.call('POST', '/v1/hostedCatalogues', {
+          postId: catalogue.firstPost.id,
+          threadId: catalogue.id,
+          placements: [placement],
+        })
+      ).status,
+    ).toBe(404);
+    expect(changed).toBe(true);
+  } finally {
+    retained.mockRestore();
+  }
+  // A fresh observation can attach the exact old version without reading the head body.
+  expect((await create([placement])).status).toBe(201);
+  await f.native.command(`/v1/posts/${target.postId}:erase`, { reason: 'Erase attachment' }, 200);
+  const otherCatalogue = await f.native.thread();
+  expect(
+    (
+      await write('POST', '/v1/hostedCatalogues', {
+        postId: otherCatalogue.firstPost.id,
+        threadId: otherCatalogue.id,
+        placements: [placement],
+      })
+    ).status,
+  ).toBe(404);
 });

@@ -14,7 +14,7 @@ import {
   type ContentCommandDependencies,
 } from './commands.ts';
 import { snapshot } from './reads.ts';
-import { prepareHostedTarget } from './hosted-chapters-disclosure.ts';
+import { validateHostedChapterAttachments } from './hosted-chapters-attachments.ts';
 import { orderHostedPlacements, selectHostedRelease } from './hosted-chapters-tree.ts';
 import { hostedCatalogue, hostedRevision, hostedPlacements, insertHostedPlacements } from './hosted-chapters-store.ts';
 import {
@@ -59,31 +59,6 @@ export function publishHostedCatalogue(
   context: HostedCommandContext,
 ) {
   return mutate(deps, actor, catalogueId, { kind: 'publish', input }, context);
-}
-
-async function attachments(
-  deps: HostedDependencies,
-  placements: readonly OrderedHostedPlacement[],
-  actor: Actor,
-  deadline: number,
-): Promise<void> {
-  const targets = new Map(
-    placements.flatMap((placement) =>
-      placement.kind === 'chapter'
-        ? [
-            [
-              `${placement.target.postId}/${placement.target.revisionId}/${placement.target.sha256}`,
-              placement.target,
-            ] as const,
-          ]
-        : [],
-    ),
-  );
-  // Never retain the bodies of a whole manuscript. Each native read releases its connection.
-  for (const target of targets.values()) {
-    const guard = await prepareHostedTarget(deps, target, { actor, deadline });
-    if (!guard || !(await guard.final())) throw new ContentNotFoundError();
-  }
 }
 
 async function mutate(
@@ -135,7 +110,7 @@ async function mutate(
     async prepare(attempt) {
       // The executor repeats native admission before receipt lookup, including exact retries.
       const evidence = await base.prepare!(attempt);
-      await attachments(deps, placements, actor, context.deadline);
+      await validateHostedChapterAttachments(deps, placements, { actor, deadline: context.deadline });
       return evidence;
     },
   };
