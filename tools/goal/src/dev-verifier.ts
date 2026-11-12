@@ -183,7 +183,12 @@ function isAncestor(cwd: string, base: string, target: string): boolean {
 
 const CHANGED_DEV_CHECK_INTERVAL_MS = 10 * 60_000;
 
-function shouldRunRound(previous: DevVerifierRun | undefined, target: string, now: number, intervalMs: number): boolean {
+function shouldRunRound(
+  previous: DevVerifierRun | undefined,
+  target: string,
+  now: number,
+  intervalMs: number,
+): boolean {
   if (!previous?.round) return true;
   const { completedAt, headCommit, pendingChecks, unknown } = previous.round;
   const changed = headCommit !== target;
@@ -786,7 +791,11 @@ function saveRoundRecord(options: DevVerifierOptions, summary: DevVerifierRoundS
   saveRun(options.store, record, options.settings.policy?.verifier);
 }
 
-async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | undefined, captured: string): Promise<void> {
+async function runRound(
+  options: DevVerifierOptions,
+  previous: DevVerifierRun | undefined,
+  captured: string,
+): Promise<void> {
   const { settings } = options;
   const checkout = settings.mainCheckout;
   const roundId = randomUUID();
@@ -846,7 +855,14 @@ async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | 
   let skippedCommandCount = skippedCommandRunIds.length;
   let commandRunIds = [...skippedCommandRunIds];
   let treeAdded = false;
-  let counts = { testsRun: 0, passed: 0, failed: 0, unknown: 0, skipped: skippedCommandCount, repairs: [] as TestFailure[] };
+  let counts = {
+    testsRun: 0,
+    passed: 0,
+    failed: 0,
+    unknown: 0,
+    skipped: skippedCommandCount,
+    repairs: [] as TestFailure[],
+  };
   let pendingChecks: Check[] = checks;
   try {
     git(checkout, 'worktree', 'add', '--detach', tree, captured);

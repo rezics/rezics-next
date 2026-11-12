@@ -56,10 +56,7 @@ function databaseRun(store: DevVerifierStorage, key: string): DevVerifierRun | u
 }
 
 /** Claim the stable identity for one command attempt before its process starts. */
-export function beginCommandRun(
-  store: DevVerifierStorage,
-  run: DevVerifierRun,
-): CommandRunStart {
+export function beginCommandRun(store: DevVerifierStorage, run: DevVerifierRun): CommandRunStart {
   if (!store.db) {
     const existing = store.devVerifierRun?.(run.key);
     if (existing) return { run: existing, claimed: false };
@@ -72,8 +69,8 @@ export function beginCommandRun(
     .transaction(() => {
       const existing = databaseRun(store, run.key);
       if (existing) return { run: existing, claimed: false };
-      const inserted = store.db!
-        .query('INSERT OR IGNORE INTO dev_verifier_runs VALUES (?,?,?)')
+      const inserted = store
+        .db!.query('INSERT OR IGNORE INTO dev_verifier_runs VALUES (?,?,?)')
         .run(run.key, run.createdAt, JSON.stringify(run));
       return { run: databaseRun(store, run.key) ?? run, claimed: inserted.changes === 1 };
     })
@@ -101,12 +98,12 @@ export function completeCommandRun(
       const existing = databaseRun(store, run.key);
       if (existing?.execution?.status === 'terminal') return existing;
       const completed = existing ? { ...run, createdAt: existing.createdAt } : run;
-      store.db!
-        .query('INSERT OR REPLACE INTO dev_verifier_runs VALUES (?,?,?)')
+      store
+        .db!.query('INSERT OR REPLACE INTO dev_verifier_runs VALUES (?,?,?)')
         .run(completed.key, completed.createdAt, JSON.stringify(completed));
       recordFlowInTransaction(store.db!, event);
-      store.db!
-        .query(
+      store
+        .db!.query(
           'DELETE FROM dev_verifier_runs WHERE cache_key IN (SELECT cache_key FROM dev_verifier_runs ORDER BY rowid DESC LIMIT -1 OFFSET ?)',
         )
         .run(policy.runRows);
@@ -120,10 +117,7 @@ export function commandRunById(store: DevVerifierStorage, id: string): DevVerifi
 }
 
 /** Find the newest durable receipt for this exact cache identity; older bare cache rows remain unreceipted. */
-export function latestCommandRun(
-  store: DevVerifierStorage,
-  cacheKey: string,
-): DevVerifierRun | undefined {
+export function latestCommandRun(store: DevVerifierStorage, cacheKey: string): DevVerifierRun | undefined {
   const fromStore = store.devVerifierCommandRun?.(cacheKey);
   if (fromStore?.execution?.status === 'terminal') return fromStore;
   if (!store.db) {

@@ -256,8 +256,7 @@ export function reusableCheckResult(
     );
   }
   const cached = cachedRun(execution, runKey);
-  if (cached)
-    return forCheckAtCommit({ ...cached, passed: false, result: 'unknown' }, commit, check);
+  if (cached) return forCheckAtCommit({ ...cached, passed: false, result: 'unknown' }, commit, check);
   const failed = inputKey ? cachedRun(execution, inputKey) : undefined;
   return failed && classifyRun(failed, policy) === 'fail'
     ? forCheckAtCommit({ ...failed, passed: false, result: 'unknown' }, commit, check)
@@ -349,7 +348,8 @@ export async function executeCheck(
       if (started.run.execution?.status === 'terminal') {
         latest = started.run;
         attemptOutputs.push(started.run.evidence.output);
-        if (!started.run.evidence.passed && infraFailure(started.run.evidence.output, started.run.evidence.timedOut)) continue;
+        if (!started.run.evidence.passed && infraFailure(started.run.evidence.output, started.run.evidence.timedOut))
+          continue;
       }
       break;
     }
@@ -385,7 +385,8 @@ export async function executeCheck(
     latest = completeCommandRun(execution.store, completed, execution.settings.policy?.verifier);
     commandRunIds.push(latest.key);
     attemptOutputs.push(latest.evidence.output);
-    if (latest.evidence.passed || signal?.aborted || !infraFailure(latest.evidence.output, latest.evidence.timedOut)) break;
+    if (latest.evidence.passed || signal?.aborted || !infraFailure(latest.evidence.output, latest.evidence.timedOut))
+      break;
   }
 
   if (!latest) {
@@ -456,5 +457,7 @@ export function recordSkippedCommand(
 }
 
 function commandExecutionId(roundId: string, cacheKey: string, attempt: number): string {
-  return createHash('sha256').update(JSON.stringify([roundId, cacheKey, attempt])).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify([roundId, cacheKey, attempt]))
+    .digest('hex');
 }

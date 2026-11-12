@@ -133,7 +133,9 @@ function setup(root: string, tasks: Task[] = []) {
     },
     devVerifierRun: (key: string) => runs.get(key),
     devVerifierCommandRun: (cacheKey: string) =>
-      [...runs.values()].reverse().find((run) => run.execution?.cacheKey === cacheKey && run.execution.status === 'terminal'),
+      [...runs.values()]
+        .reverse()
+        .find((run) => run.execution?.cacheKey === cacheKey && run.execution.status === 'terminal'),
     devVerifierCommandRuns: () => [...runs.values()].filter((run) => run.execution),
     devVerifierLatestRound: () => [...runs.values()].reverse().find((run) => run.round),
     saveDevVerifierRun: (run: DevVerifierRun) => runs.set(run.key, run),
@@ -175,17 +177,23 @@ function verifierReceiptStore() {
     tasks: () => [],
     devVerifierRun: read,
     devVerifierCommandRuns: () =>
-      (db.query("SELECT body FROM dev_verifier_runs WHERE cache_key LIKE 'dev-verifier-command:%'").all() as {
-        body: string;
-      }[]).map(({ body }) => JSON.parse(body) as DevVerifierRun),
+      (
+        db.query("SELECT body FROM dev_verifier_runs WHERE cache_key LIKE 'dev-verifier-command:%'").all() as {
+          body: string;
+        }[]
+      ).map(({ body }) => JSON.parse(body) as DevVerifierRun),
     devVerifierLatestRound: () => {
       const row = db
-        .query("SELECT body FROM dev_verifier_runs WHERE cache_key LIKE 'dev-verifier-round:%' ORDER BY rowid DESC LIMIT 1")
+        .query(
+          "SELECT body FROM dev_verifier_runs WHERE cache_key LIKE 'dev-verifier-round:%' ORDER BY rowid DESC LIMIT 1",
+        )
         .get() as { body: string } | undefined;
       return row ? (JSON.parse(row.body) as DevVerifierRun) : undefined;
     },
     saveDevVerifierRun: (run: DevVerifierRun) =>
-      db.query('INSERT OR REPLACE INTO dev_verifier_runs VALUES (?,?,?)').run(run.key, run.createdAt, JSON.stringify(run)),
+      db
+        .query('INSERT OR REPLACE INTO dev_verifier_runs VALUES (?,?,?)')
+        .run(run.key, run.createdAt, JSON.stringify(run)),
   };
 }
 
@@ -1206,7 +1214,17 @@ test('a replay preserves the first terminal result while a genuine retry gets a 
       ? { passed: false, output: 'remote-check: no check host answered', timedOut: false }
       : { passed: true, output: '', timedOut: false };
   };
-  const first = await executeCheck(execution, runner, check, head, root, 'retry-cache-key', undefined, undefined, 'round-first');
+  const first = await executeCheck(
+    execution,
+    runner,
+    check,
+    head,
+    root,
+    'retry-cache-key',
+    undefined,
+    undefined,
+    'round-first',
+  );
   const firstId = first.commandRunIds![0]!;
   const original = store.devVerifierRun(firstId)!;
   const conflict = {
@@ -1220,13 +1238,33 @@ test('a replay preserves the first terminal result while a genuine retry gets a 
     },
   };
   expect(completeCommandRun(store, conflict).execution?.outcome).toBe('infrastructure');
-  const replay = await executeCheck(execution, runner, check, head, root, 'retry-cache-key', undefined, undefined, 'round-first');
+  const replay = await executeCheck(
+    execution,
+    runner,
+    check,
+    head,
+    root,
+    'retry-cache-key',
+    undefined,
+    undefined,
+    'round-first',
+  );
   expect(replay.commandRunIds).toEqual([firstId]);
   expect(replay.result).toBe('infrastructure');
   expect(calls).toBe(1);
   expect(readFlow(store.db)).toHaveLength(1);
 
-  const retry = await executeCheck(execution, runner, check, head, root, 'retry-cache-key', undefined, undefined, 'round-second');
+  const retry = await executeCheck(
+    execution,
+    runner,
+    check,
+    head,
+    root,
+    'retry-cache-key',
+    undefined,
+    undefined,
+    'round-second',
+  );
   expect(retry.result).toBe('pass');
   expect(retry.commandRunIds).toHaveLength(1);
   expect(retry.commandRunIds![0]).not.toBe(firstId);
