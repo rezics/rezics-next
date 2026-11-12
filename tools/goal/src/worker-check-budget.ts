@@ -570,6 +570,54 @@ export function workerCheckHostBudgetRefusalReport(result: string | null | undef
   );
 }
 
+/** A withdrawn Web retry requires each listed result to agree with the terminal custody that settles it. */
+function withdrawnRetryChecksHaveBoundTerminalResults(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  checkIds: readonly string[],
+  currentCheck?: { id: string; physicalRunId: string },
+): boolean {
+  const root = join(worktree, '.temp', 'goal', 'checks');
+  const resultDirectory = join(root, 'results');
+  let files: string[];
+  try {
+    files = readdirSync(resultDirectory).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return checkIds.length === 0;
+    throw error;
+  }
+
+  const found = new Set<string>();
+  for (const file of files) {
+    const record = readCheckEvidence(join(resultDirectory, file));
+    if (!record) return false;
+    if (record.ownership?.taskId !== taskId || record.ownership.attempt !== attempt) continue;
+    if (typeof record.id !== 'string' || typeof record.physicalRunId !== 'string') return false;
+    found.add(record.id);
+    if (
+      file !== `${record.id}.json` ||
+      record.cwd !== worktree ||
+      existsSync(join(root, 'cancellations', `${record.id}.json`))
+    )
+      return false;
+    if (
+      record.status === 'running' &&
+      currentCheck?.id === record.id &&
+      currentCheck.physicalRunId === record.physicalRunId
+    )
+      continue;
+    if (
+      record.status !== 'finished' ||
+      !Number.isInteger(record.exitCode) ||
+      (!terminalPhysicalHistory(worktree, record.id, record.physicalRunId, record.exitCode) &&
+        !retainedNativeExitReceiptTerminal(worktree, taskId, attempt, record))
+    )
+      return false;
+  }
+  return checkIds.every((id) => found.has(id));
+}
+
 /**
  * A completed, clean Web source attempt whose environment retry was withdrawn by an explicit post-exit stop.
  * Every recorded check must be physically terminal; the optional current check is only accepted as an idempotent
@@ -637,13 +685,12 @@ export function workerCheckHostWithdrawnRetryIsRecoverable(input: {
   } catch {
     return false;
   }
-  return workerCheckHostAttemptChecksTerminal(
+  return withdrawnRetryChecksHaveBoundTerminalResults(
     task.worktree,
     task.id,
     attempt.attempt,
     attempt.checks ?? [],
     input.currentCheck,
-    true,
   );
 }
 
