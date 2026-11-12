@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
-import { nativeFixture, nativeFixtureResources, ownNativePool } from './support/erasure-native.ts';
+import {
+  NativeFixtureLifecycleError,
+  nativeFixture,
+  nativeFixtureResources,
+  ownNativePool,
+} from './support/erasure-native.ts';
 import { createAuthRestoreHost } from '../src/host.ts';
 import { startNativeErasure } from '../src/erasure-native.ts';
 import { importRestoredAuthProgress, requireRestoredAuthAdmission } from '../src/restore-admission.ts';
@@ -172,3 +177,31 @@ test('isolated restore lifecycle keeps missing native owners closed and shuts do
   }
   expect(ownedDatabase?.ended).toBe(true);
 });
+
+test('Auth startup stop settles its owned generation before the next native host starts', async () => {
+  let failure: unknown;
+  try {
+    await nativeFixture({
+      async startHost(host) {
+        const starting = host.start();
+        await host.stop();
+        await expect(starting).rejects.toThrow('Auth host is stopped');
+        throw new Error('startup stopped for lifecycle handoff');
+      },
+    });
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(NativeFixtureLifecycleError);
+  expect(failure).toMatchObject({ phase: 'Auth host startup' });
+  expect((failure as NativeFixtureLifecycleError).cause).toMatchObject({
+    message: 'startup stopped for lifecycle handoff',
+  });
+
+  const successor = await nativeFixture();
+  try {
+    expect(successor.host).toBeDefined();
+  } finally {
+    await successor.close();
+  }
+}, 120_000);

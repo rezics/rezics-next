@@ -305,19 +305,26 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
   const interrupt = () => {
     void stop();
   };
+  const assertNotStopping = () => {
+    if (stopping) throw new Error('Auth host is stopped');
+  };
   const stop = () =>
     (stopping ??= (async () => {
       privateConsentAccepting = false;
       process.off('SIGINT', interrupt);
       process.off('SIGTERM', interrupt);
-      await starting?.catch(() => {});
-      privateConsentAccepting = false;
-      process.off('SIGINT', interrupt);
-      process.off('SIGTERM', interrupt);
-      // Native recovery/scheduling shuts down before any product or injected SDK pool.
+      // Close admission now. Workflow close marks this generation stopped
+      // synchronously, then joins any launch already in its lifecycle queue.
+      const closingWorkflows = workflows.close();
       try {
-        await workflows.close();
+        // Startup may still be using the owned pools. Keep them alive until it
+        // has observed the stop and settled, then finish workflow shutdown.
+        await starting?.catch(() => {});
+        await closingWorkflows;
       } finally {
+        privateConsentAccepting = false;
+        process.off('SIGINT', interrupt);
+        process.off('SIGTERM', interrupt);
         await endPools();
       }
     })());
@@ -418,15 +425,20 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
               scopes: [...new Set(Object.values(AUTH_PAGE_OPERATION_SCOPES).flat())],
               mode: 'create-or-match',
             });
+            assertNotStopping();
             await auth.internal.registerClient(authManagementClient);
+            assertNotStopping();
           } catch (error) {
             if (error instanceof Error && 'status' in error && (error.status === 400 || error.status === 401))
               throw new AuthHostConfigurationError('operation-client');
             throw error;
           }
           await registerLoginClient();
+          assertNotStopping();
           await workflows.start();
+          assertNotStopping();
           await maintenance!.start(schedule);
+          assertNotStopping();
           privateConsentAccepting = true;
           process.once('SIGINT', interrupt);
           process.once('SIGTERM', interrupt);

@@ -82,6 +82,9 @@ Fixture lifecycle decision: register each environment restoration, database, poo
 acquired, unwind in reverse while attempting every release, and preserve first phase/cause evidence without changing
 global DBOS ownership.
 
+Host shutdown decision: close workflow admission before joining startup; retain owned pools until startup settles and
+workflow shutdown completes, then release them.
+
 ### Current receiving closure provenance
 
 The private `auth.receiving-closure/v1` factory accepts an exact obligation key and rereads its original accepted
