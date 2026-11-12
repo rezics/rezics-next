@@ -24,7 +24,7 @@ import {
 import { KERNEL_CLIENT_OUTPUT, outputTreeDigest, restoreOutputTree } from '../../../scripts/check-output-tree.ts';
 import {
   CHECK_CUSTODY_RECORD_MAX_CHARACTERS,
-  CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
+  CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS,
   custodyJsonCharacters,
 } from '../../../scripts/check-custody.ts';
 
@@ -198,7 +198,7 @@ test.each(['local', 'remote-return'] as const)(
       updatedAt: '2026-11-12T00:00:00.000Z',
     };
     expect(custodyJsonCharacters(custody)).toBeLessThanOrEqual(
-      CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS - 4096,
+      CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS - 4096,
     );
     // The exact old entrypoint succeeds without producing the artifact demanded by the wrapper.
     expect(Bun.spawnSync(workspaceCommand, { cwd: root, env: { ...process.env, ...request } }).exitCode).toBe(0);

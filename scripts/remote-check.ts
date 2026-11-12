@@ -8220,7 +8220,7 @@ export function remoteCheckCustodyCallbacks(
   if (!admitted || admitted.physicalRunId !== physicalRunId || admitted.binding?.checkId !== checkId) {
     throw new Error('remote-check: per-physical custody was not admitted before host reservation');
   }
-  const updateLimitCharacters = remoteRunCustodyUpdateLimit(admitted);
+  const updateLimitCharacters = remoteRunCustodyUpdateLimit();
   const update = (
     operation: (current: CheckRemoteRunCustody, attempts: CheckRemoteAttempt[]) => CheckRemoteAttempt[],
   ): void => {
