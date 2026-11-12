@@ -15581,6 +15581,114 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
     v1: {
         posts: {
             ":id": {
+                "revision-headers": {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            cursor?: string;
+                            limit?: string | number;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                revisions: {
+                                    postId: string;
+                                    threadId: string;
+                                    revisionId: string;
+                                    sha256: string;
+                                    recordedAt: string;
+                                    authorId: string;
+                                    licence: string;
+                                    kind: "discussion" | "review";
+                                    documentKind: "opening" | "reply";
+                                    subjectIds: string[];
+                                }[];
+                                next: string | null;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        posts: {
+            ":id": {
                 revisions: {
                     ":revisionId": {
                         get: {

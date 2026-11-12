@@ -930,6 +930,34 @@ export declare function RevisionPageResponseSchema(): import("typebox").TObject<
         }>]>;
     }>;
 }>;
+/** A distinct closed projection: a header can never masquerade as an ItemView. */
+export declare function PostRevisionHeaderSchema(): import("typebox").TObject<{
+    postId: import("typebox").TString;
+    threadId: import("typebox").TString;
+    revisionId: import("typebox").TString;
+    sha256: import("typebox").TString;
+    recordedAt: import("typebox").TString;
+    authorId: import("typebox").TString;
+    licence: import("typebox").TString;
+    kind: import("typebox").TUnion<[import("typebox").TLiteral<"discussion">, import("typebox").TLiteral<"review">]>;
+    documentKind: import("typebox").TUnion<[import("typebox").TLiteral<"opening">, import("typebox").TLiteral<"reply">]>;
+    subjectIds: import("typebox").TArray<import("typebox").TString>;
+}>;
+export declare function PostRevisionHeadersResponseSchema(): import("typebox").TObject<{
+    revisions: import("typebox").TArray<import("typebox").TObject<{
+        postId: import("typebox").TString;
+        threadId: import("typebox").TString;
+        revisionId: import("typebox").TString;
+        sha256: import("typebox").TString;
+        recordedAt: import("typebox").TString;
+        authorId: import("typebox").TString;
+        licence: import("typebox").TString;
+        kind: import("typebox").TUnion<[import("typebox").TLiteral<"discussion">, import("typebox").TLiteral<"review">]>;
+        documentKind: import("typebox").TUnion<[import("typebox").TLiteral<"opening">, import("typebox").TLiteral<"reply">]>;
+        subjectIds: import("typebox").TArray<import("typebox").TString>;
+    }>>;
+    next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+}>;
 export declare function MediaImportInputSchema(): {
     '~standard': {
         version: 1;

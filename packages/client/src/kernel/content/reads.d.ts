@@ -112,6 +112,9 @@ export type NativePostMetadata = Readonly<{
     licence: string;
     sha256: string;
     visibility: Visibility;
+    kind: 'discussion' | 'review';
+    documentKind: 'opening' | 'reply';
+    subjectIds: readonly string[];
 }>;
 export type { Actor };
 type Kind = 'board' | 'thread' | 'post' | 'revision';
