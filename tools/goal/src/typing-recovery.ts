@@ -145,7 +145,7 @@ export async function recoverWorkerTyping(
       const pendingResult = typing.ok
         ? 'Compiler evidence for the retained Web source is missing; only the installed Web typecheck is authorized.'
         : typing.result;
-      const original = typing.command ?? attempt.typingEvidencePending?.command ?? [];
+      const original = (!typing.ok ? typing.command : undefined) ?? attempt.typingEvidencePending?.command ?? [];
       const expanded = expandCheckCommands(original);
       const resolvedWebCompiler = resolveTypingCompilerCommand(task.worktree, webCompiler);
       if (withdrawnRetry && !resolvedWebCompiler)

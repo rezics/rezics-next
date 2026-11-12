@@ -501,6 +501,7 @@ export async function settle(
       });
       if (recovery?.withdrawnBudgetRecovery) {
         const { previousResult, command } = recovery.withdrawnBudgetRecovery;
+        const retry = store.retryIntent(ref);
         const directory = workerCheckBudgetDirectory(tasks.settings.stateDirectory, ref.taskId, ref.attempt);
         const progressEvent = store
           .events(ref.taskId, ref.attempt)
@@ -532,7 +533,7 @@ export async function settle(
           !workerCheckHostWithdrawnRetryIsRecoverable({
             task,
             attempt: current,
-            retry: store.retryIntent(ref),
+            ...(retry ? { retry } : {}),
             ...(progress ? { progress } : {}),
           })
         )

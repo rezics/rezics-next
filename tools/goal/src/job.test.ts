@@ -37,7 +37,11 @@ async function waitFor(predicate: () => boolean): Promise<void> {
   throw new Error('timed out waiting for capacity ticket');
 }
 
-function poolReading(pool: ReturnType<typeof harness>['settings']['pools'][number], used: number, resetsAt: number) {
+function poolReading(
+  pool: ReturnType<typeof harness>['settings']['pools'][number],
+  used: number,
+  resetsAt: number,
+) {
   const value = reading(pool, used);
   value.at = value.observedAt = new Date().toISOString();
   value.windows[0]!.minutes = 10080;
@@ -136,7 +140,7 @@ test('a queued check wake rechecks its original pool and resumes the same sessio
   let recovery: Promise<void> | undefined;
   try {
     const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8')) as {
-      pools: Array<{ policy: Record<string, unknown> }>;
+      pools: typeof h.settings.pools;
     };
     local.pools[0]!.policy = { ...local.pools[0]!.policy, allowUnknown: false, maxBurnPerHour: 0.6, maxConcurrent: 1 };
     writeFileSync(h.settings.localFile, JSON.stringify(local));

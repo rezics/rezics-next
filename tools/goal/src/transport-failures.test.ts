@@ -135,9 +135,10 @@ test('check-host transport retries wait only while every eligible placement is i
     let starts = 0;
     h.tasks.retry = async () => {
       starts += 1;
-      return undefined;
+      return { attempt: h.store.attempt(attempt), exited: Promise.resolve({ code: 0, signal: null }) };
     };
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    job.follow = async () => {};
     outages(['a', 'b', 'c']);
     job.resumePendingRetries();
     await job.drain();

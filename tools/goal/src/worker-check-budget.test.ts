@@ -49,6 +49,11 @@ import {
 
 const product = { brief: { goal: 'web', kind: 'implementation' as const } };
 
+function recoveryProof(result: Awaited<ReturnType<typeof recoverWorkerTyping>>) {
+  if (!('proof' in result)) throw new Error('Expected typing recovery to issue a compiler proof');
+  return result.proof;
+}
+
 test('a worker attempt may start one check-host run and one rerun; a third request is refused before any host is reserved', () => {
   const directory = temporaryDirectory();
   try {
@@ -1146,11 +1151,13 @@ test('misordered compiler recovery uses its owner and replaces only a proven pre
     );
     const actor = { id: 'operations', sessionId: 'operations-session' };
     const recover = () => recoverWorkerTyping(h.tasks, { enqueue: () => {} }, retained.ref, actor);
+    const recoverProof = async () => recoveryProof(await recover());
     const issued = await recover();
     expect(issued.status).toBe('pending');
-    expect(issued.proof.commands[0]?.slice(-compiler.length)).toEqual(compiler);
+    const issuedProof = recoveryProof(issued);
+    expect(issuedProof.commands[0]?.slice(-compiler.length)).toEqual(compiler);
     const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, retained.task.id, 1);
-    const env = issued.proof.env as NodeJS.ProcessEnv;
+    const env = issuedProof.env as NodeJS.ProcessEnv;
     const admitted = refuseExcessWorkerCheckHostRun({ ...env }, true, retained.task.worktree, compiler);
     if (!admitted?.ok || !('recovery' in admitted) || !admitted.recovery) throw new Error('recovery was not admitted');
     const original = admitted.recovery;
@@ -1191,11 +1198,11 @@ test('misordered compiler recovery uses its owner and replaces only a proven pre
     };
 
     writeEvidence('running', null, false);
-    expect((await recover()).proof.env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
+    expect((await recoverProof()).env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
     writeEvidence('finished', null, false);
-    expect((await recover()).proof.env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
+    expect((await recoverProof()).env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
     writeEvidence('finished', 50, true);
-    expect((await recover()).proof.env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
+    expect((await recoverProof()).env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
     writeEvidence('finished', null, true);
     const competingId = 'd4d4d4d4-4444-4444-8444-444444444444';
     writeFileSync(
@@ -1206,21 +1213,22 @@ test('misordered compiler recovery uses its owner and replaces only a proven pre
         status: 'running',
       }),
     );
-    expect((await recover()).proof.env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
+    expect((await recoverProof()).env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
     unlinkSync(join(results, `${competingId}.json`));
     mkdirSync(join(retained.task.worktree, '.temp/goal/checks/cancellations'), { recursive: true });
     const cancellation = join(retained.task.worktree, '.temp/goal/checks/cancellations', `${original.checkId}.json`);
     writeFileSync(cancellation, '{}');
-    expect((await recover()).proof.env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
+    expect((await recoverProof()).env[TYPING_RECOVERY_ENV]).toBe(env[TYPING_RECOVERY_ENV]);
     unlinkSync(cancellation);
 
     const replacement = await recover();
     expect(replacement.status).toBe('pending');
-    expect(replacement.proof.env[TYPING_RECOVERY_ENV]).not.toBe(env[TYPING_RECOVERY_ENV]);
-    expect(replacement.proof.commands[0]?.slice(-compiler.length)).toEqual(compiler);
+    const replacementProof = recoveryProof(replacement);
+    expect(replacementProof.env[TYPING_RECOVERY_ENV]).not.toBe(env[TYPING_RECOVERY_ENV]);
+    expect(replacementProof.commands[0]?.slice(-compiler.length)).toEqual(compiler);
     expect(readFileSync(join(budget, '2'), 'utf8')).toBe(originalStamp);
     expect(workerCheckHostRunsUsed(budget)).toBe(2);
-    expect((await recover()).proof.env[TYPING_RECOVERY_ENV]).toBe(replacement.proof.env[TYPING_RECOVERY_ENV]);
+    expect((await recoverProof()).env[TYPING_RECOVERY_ENV]).toBe(replacementProof.env[TYPING_RECOVERY_ENV]);
     h.store.updateTask(retained.ref, (current) => {
       current.state = 'cancelled';
     });
@@ -1392,9 +1400,10 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
 
     const issued = await recover();
     expect(issued.status).toBe('pending');
-    expect(issued.proof.commands).toHaveLength(1);
-    expect(issued.proof.commands[0]?.slice(-compiler.length)).toEqual(compiler);
-    expect(issued.proof.env[TYPING_RECOVERY_ENV]).toMatch(/^[0-9a-f-]{36}$/);
+    const issuedProof = recoveryProof(issued);
+    expect(issuedProof.commands).toHaveLength(1);
+    expect(issuedProof.commands[0]?.slice(-compiler.length)).toEqual(compiler);
+    expect(issuedProof.env[TYPING_RECOVERY_ENV]).toMatch(/^[0-9a-f-]{36}$/);
     expect(h.store.attempt(retained.ref).typingEvidencePending?.command).toEqual(compiler);
     expect(JSON.stringify(h.store.attempt(retained.ref).terminationIntent)).toBe(beforeStop);
     expect(JSON.stringify(h.store.retryIntent(retained.ref))).toBe(beforeRetry);
@@ -1404,7 +1413,7 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     let checkId = '';
     let launchEnvironment: NodeJS.ProcessEnv | undefined;
     try {
-      Object.assign(process.env, issued.proof.env);
+      Object.assign(process.env, issuedProof.env);
       checkId = startWorkerCheck(compiler, worktree, (record, childEnv) => {
         physicalRunId = record.physicalRunId!;
         launchEnvironment = { ...childEnv };
