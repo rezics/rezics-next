@@ -1139,11 +1139,20 @@ export function dispatchDailyStepAudit(
   now = new Date(),
   reportFailure: (summary: string) => void = (summary) => console.error(summary),
 ): Task | null {
-  ensureFlow(db);
+  // Host ticks call this repeatedly. Avoid taking SQLite's writer lock just to recheck an unchanged schema.
+  const latest = flowMigrations[flowMigrations.length - 1]!.version;
+  const current = db.query('SELECT MAX(version) AS version FROM schema_migrations WHERE module = ?').get('flow') as {
+    version: number | null;
+  };
+  if ((current.version ?? 0) < latest) ensureFlow(db);
   const day = now.toISOString().slice(0, 10);
   // A synchronous outbox delivery and its acknowledgement share the inbox's SQLite transaction.
   const report = () => {
     try {
+      const pending = db
+        .query('SELECT day, cause FROM flow_audit_failures WHERE reported_at IS NULL ORDER BY day')
+        .all() as { day: string; cause: string }[];
+      if (!pending.length) return;
       db.transaction(() => {
         const failures = db
           .query('SELECT day, cause FROM flow_audit_failures WHERE reported_at IS NULL ORDER BY day')

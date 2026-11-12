@@ -3008,6 +3008,9 @@ Auth provisioning/consent, bearer transport and observation of actual Access cal
 Decision: fixture setup provisions independent ordinary Auth actors in bounded groups, growth target creation reuses
 existing ordinary accounts, and construction failure settles every owned host, executor, client, pool and database
 before another fixture can acquire Auth workflow ownership.
+Decision: the Follow child executor keeps its canonical HTTPS issuer, audience and same-origin JWKS URL; its
+fixture-only fetch wrapper routes that exact document to the live Auth fixture server and delegates every other
+request to the original transport.
 
 These restored inputs do not establish native completion. The current world lacks an Auth account-operation host
 for operated-account creation and terminal deletion. Whole Library page observations must include raw examined
