@@ -234,7 +234,38 @@ function typingStampEvidence(
 
 function typingFailureResult(source: WorkerCheckHostStampRecord, reason?: string): string {
   const log = source.log ? boundedLog(source.log) : '(check log unavailable)';
-  return `${TYPING_SETTLEMENT_FAILED} Settlement records a typing failure with that run's log, so this attempt is retried instead of landing.\n${reason ?? ''}\n${log}`;
+  const summary =
+    `${TYPING_SETTLEMENT_FAILED} Settlement records a typing failure with that run's log, ` +
+    'so this attempt is retried instead of landing.';
+  return `${summary}\n${reason ?? ''}\n${log}`;
+}
+
+/** A failure receipt is current only when its stable compiler inputs still match the retained source. */
+function typingFailureInputsMatch(
+  worktree: string,
+  receipt: TypingInputReceipt,
+  localPrepared: readonly TypingInput[] = [],
+): boolean {
+  if (!receipt.sourceStable) return false;
+  const current = captureTypingInputs(worktree, receipt.compilerCommand);
+  if (
+    current.runtime !== receipt.completed.runtime ||
+    current.profile !== receipt.completed.profile ||
+    JSON.stringify(current.excludedDocuments) !== JSON.stringify(receipt.completed.excludedDocuments) ||
+    JSON.stringify(current.source) !== JSON.stringify(receipt.completed.source)
+  )
+    return false;
+  const baseline = new Map(localPrepared.map((entry) => [entry.path, entry.digest]));
+  const compiled = new Map(receipt.completed.prepared.map((entry) => [entry.path, entry.digest]));
+  if (
+    current.prepared.some(
+      (entry) => compiled.get(entry.path) !== entry.digest && baseline.get(entry.path) !== entry.digest,
+    )
+  )
+    return false;
+  return localPrepared.every(
+    (entry) => current.prepared.some((currentEntry) => currentEntry.path === entry.path) || entry.digest === 'missing',
+  );
 }
 
 export const TYPING_RECOVERY_ENV = 'GOAL_WORKER_CHECK_TYPING_RECOVERY';
@@ -1403,7 +1434,7 @@ export function workerCheckHostStaleTypingFailureSelection(input: {
     const evidence = typingStampEvidence(input.worktree, source);
     const receipt = evidence.receipt;
     if (!receipt || evidence.rejected || !source.typingRequest || !source.log) return;
-    if (qualifyTypingInputs(input.worktree, receipt, source.typingRequest.localPrepared) !== 'changed') return;
+    if (typingFailureInputsMatch(input.worktree, receipt, source.typingRequest.localPrepared)) return;
     const log = boundedLog(source.log);
     if (log.startsWith('(check log unavailable')) return;
     if (typingFailureResult(source, evidence.reason) !== input.result) return;
@@ -1460,10 +1491,9 @@ export function workerCheckHostTypingSettlement(input: {
       const failed = source.typecheckFailed === true || (receipt !== undefined && receipt.exitCode !== 0);
       const fullTreeMatches =
         source.content !== undefined && workerCheckHostContentTree(input.worktree) === source.content;
-      const qualification = receipt
-        ? qualifyTypingInputs(input.worktree, receipt, source.typingRequest?.localPrepared)
-        : undefined;
-      const failureInputsMatch = receipt ? qualification === 'matched' : !source.typingRequest && fullTreeMatches;
+      const failureInputsMatch = receipt
+        ? typingFailureInputsMatch(input.worktree, receipt, source.typingRequest?.localPrepared)
+        : !source.typingRequest && fullTreeMatches;
       if (failed && failureInputsMatch) {
         return {
           ok: false,
@@ -1473,8 +1503,8 @@ export function workerCheckHostTypingSettlement(input: {
         };
       }
       if (failed) {
-        if (receipt && qualification !== 'matched')
-          sourceReason ??= `Retained compiler evidence does not match current inputs (${qualification}); typing-only proof is required.`;
+        if (receipt)
+          sourceReason ??= 'Retained compiler input identity differs from current inputs; typing-only proof is required.';
         else if (!receipt && source.typingRequest)
           sourceReason ??= 'Compiler input closure was not returned by the owning compiler.';
         else if (!fullTreeMatches)
@@ -1488,6 +1518,10 @@ export function workerCheckHostTypingSettlement(input: {
         receipt !== undefined &&
         isDirectKernelTypingCompiler(input.worktree, receipt.compilerCommand);
       if (index !== newestIndex && !retainedKernelPass) continue;
+
+      const qualification = receipt
+        ? qualifyTypingInputs(input.worktree, receipt, source.typingRequest?.localPrepared)
+        : undefined;
 
       const legacyCompatible =
         !rejected &&

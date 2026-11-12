@@ -631,10 +631,13 @@ function prepareWebCompiler(worktree: string): void {
 
 function writeDirectKernelStamp(budget: string, worktree: string, stamp: string, exitCode: number, log: string): void {
   const physicalRunId = randomUUID();
-  const env = {
+  const env: NodeJS.ProcessEnv = {
+    GOAL_WORKER_CHECK_BUDGET_DIR: budget,
+    GOAL_WORKER_CHECK_BUDGET_STAMP: stamp,
     REZICS_TYPING_INPUTS_PHYSICAL: physicalRunId,
     REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(directKernelCompiler)).toString('base64'),
   };
+  recordWorkerCheckTypingInputs(env, worktree, physicalRunId, directKernelCompiler);
   const complete = beginTypingInputReceipt(worktree, env, directKernelCompiler);
   if (!complete) throw new Error('direct Kernel owner did not capture compiler inputs');
   complete(exitCode);
@@ -863,12 +866,14 @@ test('a failed Web receipt for old inputs stays history when newer source has a 
     const command = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
     const budget = workerCheckBudgetDirectory(controller.path, 'web-stale-failure', 1);
     const recordRun = (stamp: string, exitCode: number, logText: string) => {
+      const physicalRunId = randomUUID();
       const env: NodeJS.ProcessEnv = {
         GOAL_WORKER_CHECK_BUDGET: '2',
         GOAL_WORKER_CHECK_BUDGET_DIR: budget,
         GOAL_WORKER_CHECK_BUDGET_STAMP: stamp,
+        REZICS_TYPING_INPUTS_PHYSICAL: physicalRunId,
+        REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(command)).toString('base64'),
       };
-      const physicalRunId = randomUUID();
       recordWorkerCheckTypingInputs(env, worktree.path, physicalRunId, command);
       const complete = beginTypingInputReceipt(worktree.path, env, command);
       if (!complete) throw new Error('Web compiler fixture did not capture its inputs');
@@ -1609,6 +1614,8 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     const staleCompilerLog = 'apps/web/src/reader.ts(1,1): error TS2322: mounted reader input failed\n';
     writeFileSync(priorLog, staleCompilerLog);
     const priorPhysicalRunId = selectedFailurePhysicalRunId;
+    priorEnv.REZICS_TYPING_INPUTS_PHYSICAL = priorPhysicalRunId;
+    priorEnv.REZICS_TYPING_INPUTS_COMMAND = Buffer.from(JSON.stringify(compiler)).toString('base64');
     recordWorkerCheckTypingInputs(priorEnv, worktree, priorPhysicalRunId, compiler);
     const completePriorReceipt = beginTypingInputReceipt(worktree, priorEnv, compiler);
     if (!completePriorReceipt) throw new Error('prior Web compiler fixture did not capture its inputs');
