@@ -20263,6 +20263,31 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                         revisionId: string;
                                         title: string;
                                         language: string | null;
+                                        references: {
+                                            id: string;
+                                            role: "about" | "cites" | "explains" | "inspired-by" | "uses";
+                                            sourceBlockId?: string;
+                                            target: {
+                                                kind: "subject";
+                                                subjectId: string;
+                                            } | {
+                                                kind: "document";
+                                                documentId: string;
+                                            } | {
+                                                kind: "revision";
+                                                documentId: string;
+                                                revisionId: string;
+                                                sha256: string;
+                                                blockId?: string;
+                                            } | null;
+                                        }[];
+                                        provenance: {
+                                            documentId: string;
+                                            revisionId: string;
+                                            representation: "authoring" | "public";
+                                            sha256: string;
+                                            publicationId?: string;
+                                        } | null;
                                         canonicalBytes: string;
                                         sha256: string;
                                         licence: string;
@@ -20417,7 +20442,9 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                                 notebookId: string;
                                                 documentId: string;
                                             };
-                                            query: object;
+                                            query: {
+                                                revisionId?: string;
+                                            };
                                             headers: unknown;
                                             response: {
                                                 200: {
@@ -20426,6 +20453,31 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                                         revisionId: string;
                                                         title: string;
                                                         language: string | null;
+                                                        references: {
+                                                            id: string;
+                                                            role: "about" | "cites" | "explains" | "inspired-by" | "uses";
+                                                            sourceBlockId?: string;
+                                                            target: {
+                                                                kind: "subject";
+                                                                subjectId: string;
+                                                            } | {
+                                                                kind: "document";
+                                                                documentId: string;
+                                                            } | {
+                                                                kind: "revision";
+                                                                documentId: string;
+                                                                revisionId: string;
+                                                                sha256: string;
+                                                                blockId?: string;
+                                                            } | null;
+                                                        }[];
+                                                        provenance: {
+                                                            documentId: string;
+                                                            revisionId: string;
+                                                            representation: "authoring" | "public";
+                                                            sha256: string;
+                                                            publicationId?: string;
+                                                        } | null;
                                                         canonicalBytes: string;
                                                         sha256: string;
                                                         licence: string;
@@ -20559,6 +20611,566 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                             error: never;
                                         };
                                     };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        v1: {
+            knowledge: {
+                documents: {
+                    ":id": {
+                        export: {
+                            get: {
+                                body: unknown;
+                                params: {
+                                    id: string;
+                                };
+                                query: {
+                                    revisionId?: string;
+                                };
+                                headers: unknown;
+                                response: {
+                                    200: {
+                                        version: "knowledge-document-export-v1";
+                                        representation: "authoring" | "public";
+                                        selection: {
+                                            documentId: string;
+                                            revisionId: string;
+                                            representation: "authoring" | "public";
+                                            sha256: string;
+                                            publicationId?: string;
+                                        };
+                                        title: string;
+                                        language: string | null;
+                                        licence: string;
+                                        subjectIds: string[];
+                                        snapshot: unknown;
+                                        references: {
+                                            id: string;
+                                            role: "about" | "cites" | "explains" | "inspired-by" | "uses";
+                                            sourceBlockId?: string;
+                                            target: {
+                                                kind: "subject";
+                                                subjectId: string;
+                                            } | {
+                                                kind: "document";
+                                                documentId: string;
+                                            } | {
+                                                kind: "revision";
+                                                documentId: string;
+                                                revisionId: string;
+                                                sha256: string;
+                                                blockId?: string;
+                                            } | null;
+                                        }[];
+                                        provenance: {
+                                            documentId: string;
+                                            revisionId: string;
+                                            representation: "authoring" | "public";
+                                            sha256: string;
+                                            publicationId?: string;
+                                        } | null;
+                                        sha256: string;
+                                    };
+                                    400: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    403: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    409: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    412: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    413: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    429: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    500: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        v1: {
+            accounts: {
+                ":accountId": {
+                    knowledge: {
+                        notebooks: {
+                            ":notebookId": {
+                                documents: {
+                                    ":documentId": {
+                                        export: {
+                                            get: {
+                                                body: unknown;
+                                                params: {
+                                                    accountId: string;
+                                                    notebookId: string;
+                                                    documentId: string;
+                                                };
+                                                query: {
+                                                    revisionId: string;
+                                                };
+                                                headers: unknown;
+                                                response: {
+                                                    200: {
+                                                        version: "knowledge-document-export-v1";
+                                                        representation: "authoring" | "public";
+                                                        selection: {
+                                                            documentId: string;
+                                                            revisionId: string;
+                                                            representation: "authoring" | "public";
+                                                            sha256: string;
+                                                            publicationId?: string;
+                                                        };
+                                                        title: string;
+                                                        language: string | null;
+                                                        licence: string;
+                                                        subjectIds: string[];
+                                                        snapshot: unknown;
+                                                        references: {
+                                                            id: string;
+                                                            role: "about" | "cites" | "explains" | "inspired-by" | "uses";
+                                                            sourceBlockId?: string;
+                                                            target: {
+                                                                kind: "subject";
+                                                                subjectId: string;
+                                                            } | {
+                                                                kind: "document";
+                                                                documentId: string;
+                                                            } | {
+                                                                kind: "revision";
+                                                                documentId: string;
+                                                                revisionId: string;
+                                                                sha256: string;
+                                                                blockId?: string;
+                                                            } | null;
+                                                        }[];
+                                                        provenance: {
+                                                            documentId: string;
+                                                            revisionId: string;
+                                                            representation: "authoring" | "public";
+                                                            sha256: string;
+                                                            publicationId?: string;
+                                                        } | null;
+                                                        sha256: string;
+                                                    };
+                                                    400: Response | {
+                                                        type: unknown;
+                                                        title: unknown;
+                                                        status: number;
+                                                        code: unknown;
+                                                        retryable: unknown;
+                                                        effect_status: "not_applicable" | "not_applied";
+                                                        request_id: string;
+                                                        detail: unknown;
+                                                        errors: unknown;
+                                                    };
+                                                    401: Response | {
+                                                        type: unknown;
+                                                        title: unknown;
+                                                        status: number;
+                                                        code: unknown;
+                                                        retryable: unknown;
+                                                        effect_status: "not_applicable" | "not_applied";
+                                                        request_id: string;
+                                                        detail: unknown;
+                                                        errors: unknown;
+                                                    };
+                                                    403: Response | {
+                                                        type: unknown;
+                                                        title: unknown;
+                                                        status: number;
+                                                        code: unknown;
+                                                        retryable: unknown;
+                                                        effect_status: "not_applicable" | "not_applied";
+                                                        request_id: string;
+                                                        detail: unknown;
+                                                        errors: unknown;
+                                                    };
+                                                    404: Response | {
+                                                        type: unknown;
+                                                        title: unknown;
+                                                        status: number;
+                                                        code: unknown;
+                                                        retryable: unknown;
+                                                        effect_status: "not_applicable" | "not_applied";
+                                                        request_id: string;
+                                                        detail: unknown;
+                                                        errors: unknown;
+                                                    };
+                                                    409: Response | {
+                                                        type: unknown;
+                                                        title: unknown;
+                                                        status: number;
+                                                        code: unknown;
+                                                        retryable: unknown;
+                                                        effect_status: "not_applicable" | "not_applied";
+                                                        request_id: string;
+                                                        detail: unknown;
+                                                        errors: unknown;
+                                                    };
+                                                    412: Response | {
+                                                        type: unknown;
+                                                        title: unknown;
+                                                        status: number;
+                                                        code: unknown;
+                                                        retryable: unknown;
+                                                        effect_status: "not_applicable" | "not_applied";
+                                                        request_id: string;
+                                                        detail: unknown;
+                                                        errors: unknown;
+                                                    };
+                                                    413: Response | {
+                                                        type: unknown;
+                                                        title: unknown;
+                                                        status: number;
+                                                        code: unknown;
+                                                        retryable: unknown;
+                                                        effect_status: "not_applicable" | "not_applied";
+                                                        request_id: string;
+                                                        detail: unknown;
+                                                        errors: unknown;
+                                                    };
+                                                    422: Response | {
+                                                        type: unknown;
+                                                        title: unknown;
+                                                        status: number;
+                                                        code: unknown;
+                                                        retryable: unknown;
+                                                        effect_status: "not_applicable" | "not_applied";
+                                                        request_id: string;
+                                                        detail: unknown;
+                                                        errors: unknown;
+                                                    };
+                                                    429: Response | {
+                                                        type: unknown;
+                                                        title: unknown;
+                                                        status: number;
+                                                        code: unknown;
+                                                        retryable: unknown;
+                                                        effect_status: "not_applicable" | "not_applied";
+                                                        request_id: string;
+                                                        detail: unknown;
+                                                        errors: unknown;
+                                                    };
+                                                    500: Response | {
+                                                        type: unknown;
+                                                        title: unknown;
+                                                        status: number;
+                                                        code: unknown;
+                                                        retryable: unknown;
+                                                        effect_status: "not_applicable" | "not_applied";
+                                                        request_id: string;
+                                                        detail: unknown;
+                                                        errors: unknown;
+                                                    };
+                                                    503: Response | {
+                                                        type: unknown;
+                                                        title: unknown;
+                                                        status: number;
+                                                        code: unknown;
+                                                        retryable: unknown;
+                                                        effect_status: "not_applicable" | "not_applied";
+                                                        request_id: string;
+                                                        detail: unknown;
+                                                        errors: unknown;
+                                                    };
+                                                };
+                                                error: never;
+                                            };
+                                        };
+                                    };
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    } & {
+        v1: {
+            knowledge: {
+                notebooks: {
+                    ":id": {
+                        documents: {
+                            $copy: {
+                                post: {
+                                    body: {
+                                        source: {
+                                            representation: "public";
+                                            documentId: string;
+                                            revisionId: string;
+                                        } | {
+                                            representation: "authoring";
+                                            accountId: string;
+                                            notebookId: string;
+                                            documentId: string;
+                                            revisionId: string;
+                                        };
+                                        expectedStructureRevisionId: string;
+                                        parentPlacementId: string | null;
+                                    };
+                                    params: {
+                                        id: string;
+                                    };
+                                    query: unknown;
+                                    headers: {
+                                        "idempotency-key": string;
+                                    };
+                                    response: {
+                                        200: {
+                                            notebookId: string;
+                                            documentId: string;
+                                            placementId: string;
+                                            revisionId: string;
+                                            structureRevisionId: string;
+                                        };
+                                        201: {
+                                            notebookId?: string;
+                                            documentId?: string;
+                                            placementId?: string;
+                                            structureRevisionId?: string;
+                                            revisionId?: string;
+                                            publicationId?: string | null;
+                                        };
+                                        400: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        401: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        403: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        404: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        409: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        412: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        413: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        422: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        429: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        500: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        503: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                    };
+                                    error: never;
                                 };
                             };
                         };
@@ -20731,6 +21343,24 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                     title: string;
                                     language?: string | null;
                                     body: unknown;
+                                    references?: {
+                                        id: string;
+                                        role: "about" | "cites" | "explains" | "inspired-by" | "uses";
+                                        sourceBlockId?: string;
+                                        target: {
+                                            kind: "subject";
+                                            subjectId: string;
+                                        } | {
+                                            kind: "document";
+                                            documentId: string;
+                                        } | {
+                                            kind: "revision";
+                                            documentId: string;
+                                            revisionId: string;
+                                            sha256: string;
+                                            blockId?: string;
+                                        } | null;
+                                    }[];
                                     licence: string;
                                     subjectIds: string[];
                                     expectedStructureRevisionId: string;
@@ -20900,6 +21530,24 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                         title: string;
                                         language?: string | null;
                                         body: unknown;
+                                        references?: {
+                                            id: string;
+                                            role: "about" | "cites" | "explains" | "inspired-by" | "uses";
+                                            sourceBlockId?: string;
+                                            target: {
+                                                kind: "subject";
+                                                subjectId: string;
+                                            } | {
+                                                kind: "document";
+                                                documentId: string;
+                                            } | {
+                                                kind: "revision";
+                                                documentId: string;
+                                                revisionId: string;
+                                                sha256: string;
+                                                blockId?: string;
+                                            } | null;
+                                        }[];
                                         licence: string;
                                         subjectIds: string[];
                                         expectedHeadRevisionId: string;

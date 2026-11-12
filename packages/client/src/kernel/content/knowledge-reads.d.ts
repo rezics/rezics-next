@@ -11,10 +11,35 @@ export declare function readKnowledgePublicDocument(deps: KnowledgeDependencies,
             revisionId: string;
             title: string;
             language: string | null;
-            canonicalBytes: string;
-            sha256: string;
             licence: string;
             subjectIds: string[];
+            canonicalBytes: string;
+            sha256: string;
+            references: Readonly<{
+                id: string;
+                role: "about" | "cites" | "explains" | "inspired-by" | "uses";
+                sourceBlockId?: string;
+                target: {
+                    kind: "subject";
+                    subjectId: string;
+                } | {
+                    kind: "document";
+                    documentId: string;
+                } | {
+                    kind: "revision";
+                    documentId: string;
+                    revisionId: string;
+                    sha256: string;
+                    blockId?: string;
+                } | null;
+            }>[];
+            provenance: Readonly<{
+                documentId: string;
+                revisionId: string;
+                representation: "authoring" | "public";
+                sha256: string;
+                publicationId?: string;
+            }> | null;
             publicationId: string;
             subjectId: string;
             publishedAt: string;
@@ -29,7 +54,7 @@ export declare function readKnowledgePublicDocument(deps: KnowledgeDependencies,
 }>;
 /** The private route is same-home only. Full ancestry and account authority are rechecked in the
  * notebook partition snapshot before exact current-head bytes are disclosed. */
-export declare function readKnowledgePrivateDocument(deps: KnowledgeDependencies, accountId: string, notebookId: string, documentId: string, context: ReadContext): Promise<{
+export declare function readKnowledgePrivateDocument(deps: KnowledgeDependencies, accountId: string, notebookId: string, documentId: string, context: ReadContext, revisionId?: string): Promise<{
     value: {
         document: {
             documentId: string;
@@ -40,6 +65,31 @@ export declare function readKnowledgePrivateDocument(deps: KnowledgeDependencies
             sha256: string;
             licence: string;
             subjectIds: string[];
+            references: Readonly<{
+                id: string;
+                role: "about" | "cites" | "explains" | "inspired-by" | "uses";
+                sourceBlockId?: string;
+                target: {
+                    kind: "subject";
+                    subjectId: string;
+                } | {
+                    kind: "document";
+                    documentId: string;
+                } | {
+                    kind: "revision";
+                    documentId: string;
+                    revisionId: string;
+                    sha256: string;
+                    blockId?: string;
+                } | null;
+            }>[];
+            provenance: Readonly<{
+                documentId: string;
+                revisionId: string;
+                representation: "authoring" | "public";
+                sha256: string;
+                publicationId?: string;
+            }> | null;
             notebookId: string;
             publicationId: string | null;
         };

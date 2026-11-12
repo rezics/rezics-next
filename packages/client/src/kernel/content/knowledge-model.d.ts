@@ -1,3 +1,4 @@
+import type { KnowledgeReference } from './knowledge-portable.ts';
 import type { ContentCommandDependencies } from './commands.ts';
 import type { ContentReadDependencies } from './reads.ts';
 export declare const KNOWLEDGE_ANCESTOR_LIMIT = 31;
@@ -27,6 +28,7 @@ export type KnowledgeDocumentInput = Readonly<{
     body: unknown;
     licence: string;
     subjectIds: readonly string[];
+    references?: readonly KnowledgeReference[];
 }>;
 export type KnowledgeCreateNotebookInput = Readonly<{
     subjectId: string;
