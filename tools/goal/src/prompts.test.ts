@@ -238,7 +238,7 @@ test('manager and worker roles apply operating discipline within their prompt bu
   expect(standard.roleBytes).toBeLessThanOrEqual(defaultPolicy.prompt.managerRoleBytes);
   const workerPrompt = renderWorkerPrompt({ task: worker(contract()), mainCheckout: MAIN }).prompt;
   expect(standard.prompt).toMatch(
-    /efficiency.md#operating-discipline[\s\S]*one concrete user outcome[\s\S]*worker-owned write boundary[\s\S]*smallest required check[\s\S]*choose repair order[\s\S]*next independent writable slice ready/,
+    /one concrete user outcome[\s\S]*worker-owned write boundary[\s\S]*smallest required check[\s\S]*efficiency.md#operating-discipline[\s\S]*choose repair order[\s\S]*next independent writable slice ready/,
   );
   expect(workerPrompt).toMatch(
     /source-writing attempts[\s\S]*efficiency.md#operating-discipline[\s\S]*Checkpoint coherent source[\s\S]*next evidenced fix within your owned paths[\s\S]*park that part and hand off any remainder once/,

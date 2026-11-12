@@ -387,7 +387,9 @@ function promptView(input: WorkerPromptInput, deferOrdinaryTests = false): Promp
     localRun,
     minimalOwned: owned
       ? 'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome; they run after landing in the dev verifier. A missing acceptance command is not a pass. Broader acceptance remains deferred under this policy. '
-      : '',
+      : brief.goal === 'control-plane' && command?.length
+        ? `${localRun} `
+        : '',
     proofSourceCommit: proofSource,
     proofCheckId,
     proofObservation,
