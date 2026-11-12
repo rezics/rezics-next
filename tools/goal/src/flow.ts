@@ -1077,6 +1077,17 @@ export type FlowThresholds = {
 };
 export const DEFAULT_FLOW_THRESHOLDS: FlowThresholds = defaults.flow;
 
+function flowAlarmRecovered(
+  threshold: string,
+  activeThresholds: ReadonlySet<string>,
+  retrySample: ReturnType<typeof flowReport>['attemptsPerIntegratedSample'],
+  retryThreshold: number,
+): boolean {
+  return threshold === 'attempts-per-integrated'
+    ? retrySample.attemptsPerIntegrated !== null && retrySample.attemptsPerIntegrated <= retryThreshold
+    : !activeThresholds.has(threshold);
+}
+
 function waitingQueueFingerprint(queues: ReturnType<typeof flowReport>['queues']): string {
   const hash = createHash('sha256');
   const add = (value: string) => hash.update(`${value.length}:`).update(value).update('\0');
@@ -1129,7 +1140,7 @@ export function checkFlowAlarms(
     threshold: string;
   }[];
   for (const row of previouslyActive)
-    if (!activeThresholds.has(row.threshold))
+    if (flowAlarmRecovered(row.threshold, activeThresholds, retrySample, thresholds.attemptsPerIntegrated))
       db.query('UPDATE flow_alarm_sends SET active=0 WHERE threshold=?').run(row.threshold);
   const queueFingerprint = waitingQueueFingerprint(report.queues);
   const hasWaitingTasks = report.queues.some((queue) => queue.length > 0 || queue.tasks.length > 0);
@@ -1146,6 +1157,7 @@ export function checkFlowAlarms(
     const measurementFingerprint = flowAlarmMeasurementFingerprint(key, fingerprintMeasurement);
     const retryCohort = key === 'attempts-per-integrated';
     const fingerprint = `${measurementFingerprint}:${retryCohort ? retrySample.window : queueFingerprint}`;
+    if (retryCohort && old?.active === 1) continue;
     const isRecent = old !== null && now.getTime() - Date.parse(old.sent_at) < policy.flow.alertEveryMs;
     const legacyCooldown = isRecent && (old?.fingerprint === null || old?.fingerprint?.startsWith('v1:'));
     const globalMetric = !key.startsWith('queue-');
@@ -1153,11 +1165,11 @@ export function checkFlowAlarms(
     const recovered = old?.active === 0;
     const unchangedGlobal =
       globalMetric &&
-      (retryCohort || !hasWaitingTasks) &&
+      !hasWaitingTasks &&
       old?.active === 1 &&
       old.fingerprint?.startsWith(`${measurementFingerprint}:`);
     if (unchangedGlobal) {
-      // Remember a drained queue for live metrics; the retry cohort ignores queue churn.
+      // Remember a drained queue for live metrics.
       if (old.fingerprint !== fingerprint)
         db.query('UPDATE flow_alarm_sends SET fingerprint=? WHERE threshold=?').run(fingerprint, key);
       continue;

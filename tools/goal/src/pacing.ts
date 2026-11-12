@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { effectiveReserve } from './allowance.ts';
+import { allowanceResetPressure, effectiveReserve, isFreshPoolReading } from './allowance.ts';
 import type { Pool, PoolReading } from './types.ts';
 
 // Allowances run out on calendars: Claude's week resets on a fixed time and its five-hour window caps how fast it can
@@ -16,7 +16,6 @@ export type CodexSchedule = { scheduledAt: string | null; latestResetAt: string 
 
 const SCHEDULE_FILE = 'codex-schedule.json';
 const READINGS_FILE = 'pool-readings.json';
-const HOUR_MS = 3_600_000; // Unit conversion for provider reset timestamps.
 const MINUTE_MS = 60_000;
 
 function asRetainedReading(value: unknown): PoolReading | undefined {
@@ -212,14 +211,16 @@ export function pace(
   policy = defaultPolicy.pacing,
 ): Pace | undefined {
   const window = longestWindow(reading);
-  if (!window || window.resetsAt === null || !reading.observedAt) return undefined;
+  if (!window || window.resetsAt === null || !isFreshPoolReading(pool, reading, now)) return undefined;
   let resetAt = window.resetsAt;
   const announced =
     agentAdapter(pool.cli).announcedReset && schedule?.scheduledAt ? Date.parse(schedule.scheduledAt) : NaN;
   if (Number.isFinite(announced) && announced > now && announced < resetAt) resetAt = announced;
-  const hoursToReset = Math.max(resetAt - now, policy.minimumResetMs) / HOUR_MS;
-  const unusedPercent = Math.max(0, 100 - effectiveReserve(pool, window, now) - window.usedPercent);
-  return { allowanceKey: pool.allowanceKey, unusedPercent, hoursToReset, urgency: unusedPercent / hoursToReset };
+  const pressure = allowanceResetPressure(reading, pool, now, {
+    resetAt,
+    minimumResetMs: policy.minimumResetMs,
+  });
+  return pressure ? { allowanceKey: pool.allowanceKey, ...pressure } : undefined;
 }
 
 /** Tell the supermanager which allowances will expire unused, on the configured alert cadence. */
@@ -249,11 +250,15 @@ export function alertUnspentAllowances(
     observed.set(pool, reading);
     return reading;
   };
-  // Pools sharing an allowance can keep different reserves; the one that keeps the most is the one work is limited by.
-  for (const pool of [...pools].sort(
-    (a, b) =>
-      effectiveReserve(b, longestOrEmpty(readingFor(b)), now) - effectiveReserve(a, longestOrEmpty(readingFor(a)), now),
-  )) {
+  // Only fresh readings can support an expiry alert; a stale account remains unknown to routing.
+  // Pools sharing an allowance can keep different reserves; use the fresh pool with the strongest reserve.
+  for (const pool of pools
+    .filter((candidate) => isFreshPoolReading(candidate, readingFor(candidate), now))
+    .sort(
+      (a, b) =>
+        effectiveReserve(b, longestOrEmpty(readingFor(b)), now) -
+        effectiveReserve(a, longestOrEmpty(readingFor(a)), now),
+    )) {
     if (seen.has(pool.allowanceKey)) continue;
     seen.add(pool.allowanceKey);
     const current = pace(readingFor(pool), pool, now, schedule, policy);
@@ -264,9 +269,9 @@ export function alertUnspentAllowances(
     const last = sent[pool.allowanceKey] ? Date.parse(sent[pool.allowanceKey]!) : 0;
     if (!atRisk || now - last < policy.alertEveryMs) continue;
     deliver(
-      `Allowance pacing: ${pool.allowanceKey} has ${current.unusedPercent.toFixed(0)}% unused above its reserve and resets in ` +
+      `Allowance pacing: based on a fresh observation, ${pool.allowanceKey} has ${current.unusedPercent.toFixed(0)}% unused above its reserve and resets in ` +
         `${current.hoursToReset.toFixed(1)} h, so it needs ${current.urgency.toFixed(1)}% an hour to be used. Route more work to it ` +
-        `(routing already prefers the allowance that expires first) and have managers dispatch ready work now.`,
+        `(ordinary worker routing ranks eligible same-profile pools by this pressure when all have fresh reset data; missing or stale reset data falls back to the existing (100 - usedPercent) * weight score, ties use that score then pool name, and same-attempt pool affinity stays first). Have managers dispatch ready work now.`,
     );
     sent[pool.allowanceKey] = new Date(now).toISOString();
     count++;

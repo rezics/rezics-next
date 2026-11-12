@@ -189,3 +189,76 @@ test('A window reset between readings is not counted as burn', () => {
     }).name,
   ).toBe(pool.name);
 });
+
+test('fresh same-profile pools rank by reset pressure, while a same-attempt pool preference stays first', () => {
+  const base = fixturePool();
+  const expiring = {
+    ...base,
+    name: 'codex-1',
+    allowanceKey: 'codex-1',
+    policy: { ...base.policy, weight: 1, allowUnknown: false },
+  };
+  const weighted = {
+    ...base,
+    name: 'codex',
+    allowanceKey: 'codex',
+    policy: { ...base.policy, weight: 2.5, allowUnknown: false },
+  };
+  const readings = [observed(expiring, 13, now, now + 43.5 * hour), observed(weighted, 7, now, now + 137 * hour)];
+
+  expect(choosePool(profile, [expiring, weighted], readings, { now }).name).toBe('codex-1');
+  expect(
+    choosePoolWithFallback(profile, [], [expiring, weighted], readings, { now, preferred: 'codex' }).pool.name,
+  ).toBe('codex');
+
+  const alpha = { ...expiring, name: 'alpha', allowanceKey: 'alpha' };
+  const beta = {
+    ...weighted,
+    name: 'beta',
+    allowanceKey: 'beta',
+    policy: { ...weighted.policy, weight: 1 },
+  };
+  const tied = [observed(alpha, 13, now, now + 43.5 * hour), observed(beta, 13, now, now + 43.5 * hour)];
+  expect(choosePool(profile, [beta, alpha], tied, { now }).name).toBe('alpha');
+
+  const managerProfile = { ...profile, poolClass: 'manager' };
+  const managerPools = [
+    { ...expiring, classes: ['manager'] },
+    { ...weighted, classes: ['manager'] },
+  ];
+  expect(choosePool(managerProfile, managerPools, readings, { now }).name).toBe('codex');
+});
+
+test('missing or stale reset evidence falls back to weighted allowance, and caps or exhaustion still exclude a pool', () => {
+  const base = fixturePool();
+  const expiring = {
+    ...base,
+    name: 'codex-1',
+    allowanceKey: 'codex-1',
+    policy: { ...base.policy, weight: 1, allowUnknown: true, maxAgeMs: 60 * 60_000 },
+  };
+  const weighted = {
+    ...base,
+    name: 'codex',
+    allowanceKey: 'codex',
+    policy: { ...base.policy, weight: 2.5, allowUnknown: false, maxAgeMs: 60 * 60_000 },
+  };
+  const noReset = [observed(expiring, 13, now, now + 43.5 * hour), observed(weighted, 7, now, now + 137 * hour)];
+  noReset[0]!.windows[0]!.resetsAt = null;
+  expect(choosePool(profile, [expiring, weighted], noReset, { now }).name).toBe('codex');
+
+  const stale = [
+    observed(expiring, 13, now - 2 * hour, now + 43.5 * hour),
+    observed(weighted, 7, now, now + 137 * hour),
+  ];
+  expect(choosePool(profile, [expiring, weighted], stale, { now }).name).toBe('codex');
+
+  const capped = {
+    ...expiring,
+    policy: { ...expiring.policy, allowUnknown: false, maxConcurrent: 1 },
+  };
+  const fresh = [observed(capped, 13, now, now + 43.5 * hour), noReset[1]!];
+  expect(choosePool(profile, [capped, weighted], fresh, { now, running: { 'codex-1': 1 } }).name).toBe('codex');
+  fresh[0]!.exhausted = true;
+  expect(choosePool(profile, [capped, weighted], fresh, { now }).name).toBe('codex');
+});
