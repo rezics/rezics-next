@@ -64,44 +64,50 @@ import { permissionCheckStatements } from '../access/permission.ts';
 type Cost = readonly [rows: number, points: number, statements: number, bytes: number, emptySeeks: number];
 
 /** Exact Semantic Source SQL reached while a fixed Search participant proves original custody. */
-const sourceStatementCosts = [
-  [sourceSupportControl.sql, [1, 1, 1, 512, 1]],
-  [sourceMappingStep.sql, [1, 1, 1, 4096, 1]],
-  [sourceSupportInputs.sql, [2, 2, 1, 1024, 1]],
-  [sourceSupportOriginals.sql, [1, 1, 1, 512, 1]],
-  [sourceSupportGroups.sql, [1, 1, 1, 512, 1]],
-  [sourceOwners.sql, [1, 1, 1, 512, 1]],
-  [sourceMappings.sql, [1, 1, 1, 4096, 1]],
-  [sourcePending.sql, [1, 1, 1, 1024, 1]],
-  [sourceCurrent.sql, [1, 1, 1, 4096, 1]],
-  [sourceBindingRegister.sql, [1, 1, 1, 1024, 1]],
-  [sourceBindingDefine.sql, [1, 1, 1, 32768, 1]],
-  [sourceDefinitionRead.sql, [1, 1, 1, 32768, 1]],
-  [releaseExists.sql, [1, 1, 1, 512, 1]],
-  [releaseRead.sql, [1, 1, 1, 65536, 1]],
-  [composedReleaseRead.sql, [1, 1, 1, 1024, 1]],
-  [contextOwnerRead.sql, [1, 1, 1, 512, 1]],
-  [contextCommunityRead.sql, [1, 1, 1, 512, 1]],
-  [extensionHeadRead.sql, [1, 1, 1, 512, 1]],
-  [extensionRead.sql, [1, 1, 1, 65536, 1]],
-  [eligibilityRead.sql, [1, 1, 1, 1024, 1]],
-  [sourceVisibilityRead.sql, [1, 1, 1, 512, 1]],
-  [projectionSubjectsRead.sql, [8, 8, 1, 16384, 1]],
-  [projectionReleasesRead.sql, [1, 1, 1, 65536, 1]],
-  [projectionPrivacyRead.sql, [1, 1, 1, 512, 1]],
-  [projectionBuildRead.sql, [1, 1, 1, 2048, 1]],
-  [projectionBuildRetire.sql, [1, 1, 1, 512, 0]],
-  [projectionBuildStart.sql, [1, 1, 1, 2048, 0]],
-  [projectionPageRead.sql, [1, 1, 1, 131072, 1]],
-  [projectionHeadsWrite.sql, [8, 8, 1, 2048, 0]],
-  [sourceFencesRead.sql, [100, 100, 1, 131072, 1]],
-  [permissionCheckStatements.time, [1, 1, 1, 512, 1]],
-  [permissionCheckStatements.formula, [16, 16, 1, 32768, 1]],
-  [
-    "SELECT 1 FROM semantic.context_extension e WHERE e.route=$1 AND e.context_id=$2 AND e.digest=$3 AND (\n        EXISTS (SELECT 1 FROM semantic.context_extension_head(e.route,e.context_id) h WHERE h.digest=e.digest)\n        OR EXISTS (SELECT 1 FROM editorial.write_basis b JOIN access.account a\n          ON a.route=((get_byte(uuid_send(b.principal_id),10)*256)+get_byte(uuid_send(b.principal_id),11))\n          AND a.account_id=b.principal_id AND a.state='active' AND NOT a.authn_fenced\n          WHERE b.partition_no=e.route/16 AND b.transaction_id=e.recorded_transaction_id AND b.principal_kind='account'))",
-    [1, 1, 1, 2048, 1],
-  ],
-] satisfies readonly (readonly [string, Cost])[];
+function sourceStatementCosts(): readonly (readonly [string, Cost])[] {
+  return memoizedValue(
+    sourceStatementCosts,
+    () =>
+      [
+        [sourceSupportControl.sql, [1, 1, 1, 512, 1]],
+        [sourceMappingStep.sql, [1, 1, 1, 4096, 1]],
+        [sourceSupportInputs.sql, [2, 2, 1, 1024, 1]],
+        [sourceSupportOriginals.sql, [1, 1, 1, 512, 1]],
+        [sourceSupportGroups.sql, [1, 1, 1, 512, 1]],
+        [sourceOwners.sql, [1, 1, 1, 512, 1]],
+        [sourceMappings.sql, [1, 1, 1, 4096, 1]],
+        [sourcePending.sql, [1, 1, 1, 1024, 1]],
+        [sourceCurrent.sql, [1, 1, 1, 4096, 1]],
+        [sourceBindingRegister.sql, [1, 1, 1, 1024, 1]],
+        [sourceBindingDefine.sql, [1, 1, 1, 32768, 1]],
+        [sourceDefinitionRead.sql, [1, 1, 1, 32768, 1]],
+        [releaseExists.sql, [1, 1, 1, 512, 1]],
+        [releaseRead.sql, [1, 1, 1, 65536, 1]],
+        [composedReleaseRead.sql, [1, 1, 1, 1024, 1]],
+        [contextOwnerRead.sql, [1, 1, 1, 512, 1]],
+        [contextCommunityRead.sql, [1, 1, 1, 512, 1]],
+        [extensionHeadRead.sql, [1, 1, 1, 512, 1]],
+        [extensionRead.sql, [1, 1, 1, 65536, 1]],
+        [eligibilityRead.sql, [1, 1, 1, 1024, 1]],
+        [sourceVisibilityRead.sql, [1, 1, 1, 512, 1]],
+        [projectionSubjectsRead.sql, [8, 8, 1, 16384, 1]],
+        [projectionReleasesRead.sql, [1, 1, 1, 65536, 1]],
+        [projectionPrivacyRead.sql, [1, 1, 1, 512, 1]],
+        [projectionBuildRead.sql, [1, 1, 1, 2048, 1]],
+        [projectionBuildRetire.sql, [1, 1, 1, 512, 0]],
+        [projectionBuildStart.sql, [1, 1, 1, 2048, 0]],
+        [projectionPageRead.sql, [1, 1, 1, 131072, 1]],
+        [projectionHeadsWrite.sql, [8, 8, 1, 2048, 0]],
+        [sourceFencesRead.sql, [100, 100, 1, 131072, 1]],
+        [permissionCheckStatements.time, [1, 1, 1, 512, 1]],
+        [permissionCheckStatements.formula, [16, 16, 1, 32768, 1]],
+        [
+          "SELECT 1 FROM semantic.context_extension e WHERE e.route=$1 AND e.context_id=$2 AND e.digest=$3 AND (\n        EXISTS (SELECT 1 FROM semantic.context_extension_head(e.route,e.context_id) h WHERE h.digest=e.digest)\n        OR EXISTS (SELECT 1 FROM editorial.write_basis b JOIN access.account a\n          ON a.route=((get_byte(uuid_send(b.principal_id),10)*256)+get_byte(uuid_send(b.principal_id),11))\n          AND a.account_id=b.principal_id AND a.state='active' AND NOT a.authn_fenced\n          WHERE b.partition_no=e.route/16 AND b.transaction_id=e.recorded_transaction_id AND b.principal_kind='account'))",
+          [1, 1, 1, 2048, 1],
+        ],
+      ] satisfies readonly (readonly [string, Cost])[],
+  );
+}
 
 /** Literal inventory used by production calls, including the private pre-COMMIT capture planner. */
 export const receivingStatements = Object.freeze({
@@ -207,7 +213,7 @@ export function commonSearchReceivingStatements(): readonly string[] {
           participantJob.sql,
           participantAck.sql,
           nativeDefinition.sql,
-          ...sourceStatementCosts.map(([sql]) => sql),
+          ...sourceStatementCosts().map(([sql]) => sql),
           'BEGIN ISOLATION LEVEL SERIALIZABLE',
           'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
           'BEGIN ISOLATION LEVEL REPEATABLE READ',
@@ -324,7 +330,7 @@ export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDecl
     [nativeDefinition.sql, [3, 3, 1, 2048, 1]],
   ] satisfies readonly (readonly [string, Cost])[])
     add(sql, cost);
-  for (const [sql, cost] of sourceStatementCosts) add(sql, cost);
+  for (const [sql, cost] of sourceStatementCosts()) add(sql, cost);
   for (const sql of [
     'BEGIN ISOLATION LEVEL SERIALIZABLE',
     'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',

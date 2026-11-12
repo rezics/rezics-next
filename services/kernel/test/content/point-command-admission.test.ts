@@ -24,6 +24,8 @@ const statements: { text: string; values?: unknown[] }[] = [];
 const actorRead = (text: string) => text.includes('minimum_authn_epoch::text AS "minimumAuthnEpoch"');
 const modes = ['takedown', 'post', 'media', 'author'] as const;
 type Mode = (typeof modes)[number];
+const normalAttempts: Readonly<Record<Mode, number>> = { takedown: 2, post: 2, media: 1, author: 1 };
+const retryAttempts: Readonly<Record<Mode, number>> = { takedown: 3, post: 3, media: 2, author: 2 };
 const route = 0x6931;
 const actorRoute = 0x7931;
 const actions = ['moderation:takedown', 'post:erase', 'media:erase'];
@@ -188,11 +190,17 @@ async function fixture() {
   const token = await sign(accountId, scopes);
   const context = { pool: db.pool, deadline: Date.now() + 180_000 };
   const actor = await access.authenticate(token, context);
+  let commandTime = Date.now();
+  const commandTimes: Date[] = [];
   const deps = {
     pool: db.pool,
     access,
     routeKey: Buffer.alloc(32),
-    clock: () => new Date(),
+    clock: () => {
+      const time = new Date(++commandTime);
+      commandTimes.push(time);
+      return time;
+    },
     workflows: {
       async enqueue() {
         throw new Error('Outbox only');
@@ -210,18 +218,47 @@ async function fixture() {
     if (mode === 'post') return erasePost(deps, identity, { postId: point.postId, reason: 'fixture' }, ctx);
     return eraseStandaloneMedia(deps, identity, { mediaId: point.mediaId, reason: 'fixture' }, ctx);
   }
-  return { accountId, threadId, postId, upperPostId, mediaId, actor, token, context, execute };
+  return { accountId, threadId, postId, upperPostId, mediaId, actor, token, context, commandTimes, execute };
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
-function oneRead(f: Fixture, count = 1) {
-  const reads = statements.filter(({ text }) => actorRead(text));
-  expect(reads).toHaveLength(count);
-  for (const read of reads) expect(read.values).toEqual([actorRoute, f.accountId]);
-  const firstTarget = statements.findIndex(
-    ({ text }) => text.includes('FROM content.') || text.includes('BEGIN ISOLATION LEVEL SERIALIZABLE'),
+function assertAttemptAdmission(f: Fixture, expected: number, clockOffset = 0) {
+  const readIndexes = statements.flatMap(({ text }, index) => (actorRead(text) ? [index] : []));
+  const beginIndexes = statements.flatMap(({ text }, index) =>
+    text.includes('BEGIN ISOLATION LEVEL SERIALIZABLE') ? [index] : [],
   );
-  expect(statements.findIndex(({ text }) => actorRead(text))).toBeLessThan(firstTarget);
+  const endIndexes = statements.flatMap(({ text }, index) => (text === 'COMMIT' || text === 'ROLLBACK' ? [index] : []));
+  expect(readIndexes).toHaveLength(expected);
+  expect(beginIndexes).toHaveLength(expected);
+  expect(endIndexes).toHaveLength(expected);
+  const commandTimes = f.commandTimes.slice(clockOffset);
+  expect(commandTimes).toHaveLength(expected);
+  expect(new Set(commandTimes.map((time) => time.getTime())).size).toBe(expected);
+  for (let attempt = 0; attempt < expected; attempt++) {
+    const readIndex = readIndexes[attempt]!;
+    const beginIndex = beginIndexes[attempt]!;
+    const endIndex = endIndexes[attempt]!;
+    expect(statements[readIndex]!.values).toEqual([actorRoute, f.accountId]);
+    if (attempt > 0) expect(endIndexes[attempt - 1]!).toBeLessThan(readIndex);
+    expect(readIndex).toBeLessThan(beginIndex);
+    const targetOrReceipt = statements.findIndex(
+      ({ text }, index) =>
+        index > beginIndex && index < endIndex && (text.includes('content.') || text.includes('core.receipt')),
+    );
+    expect(targetOrReceipt).toBeGreaterThan(readIndex);
+  }
+  return { count: beginIndexes.length, begins: beginIndexes, ends: endIndexes };
+}
+
+function assertNoEffectDiscoveryPreparation(firstAttempt: { begins: number[]; ends: number[] }) {
+  const sourceRead = statements.findIndex(({ text }) => text.includes('content.realm_discovery_contribution'));
+  expect(sourceRead).toBeGreaterThan(firstAttempt.begins[0]!);
+  expect(sourceRead).toBeLessThan(firstAttempt.ends[0]!);
+  expect(
+    statements.some(({ text }) =>
+      /(?:INSERT INTO|UPDATE|DELETE FROM)\s+content\.realm_discovery_operation/i.test(text),
+    ),
+  ).toBe(false);
 }
 async function effects(f: Fixture) {
   return (
@@ -251,6 +288,7 @@ for (const mode of modes) {
       const initial = await f.execute(mode, key);
       expect(initial.replayed).toBe(false);
       expect(await f.execute(mode, key)).toEqual({ ...initial, replayed: true });
+      expect(assertAttemptAdmission(f, normalAttempts[mode] * 2).count).toBe(normalAttempts[mode] * 2);
       const before = await effects(f);
       const jwksReads = fetches;
       if (mutation === "state='suspended'") await suspendAccount(db.admin, f.accountId);
@@ -284,6 +322,10 @@ for (const mode of modes) {
   }
   test(`${mode}: native serialization retry obtains a fresh shared account observation`, async () => {
     const f = await fixture();
+    const originalActor = f.actor;
+    const originalToken = f.token;
+    const jwksReads = fetches;
+    const clockOffset = f.commandTimes.length;
     statements.length = 0;
     retry = true;
     try {
@@ -291,18 +333,25 @@ for (const mode of modes) {
     } finally {
       retry = false;
     }
-    oneRead(f, 2);
+    const attempts = assertAttemptAdmission(f, retryAttempts[mode]);
+    if (mode === 'takedown' || mode === 'post') assertNoEffectDiscoveryPreparation(attempts);
     const proofs = statements.filter(({ text }) => text.includes('AS evidence_valid') || text.includes('AS allowed'));
     const times = proofs.flatMap(({ values = [] }) =>
-      values.filter((value) => typeof value === 'string' && /^\d{4}-\d\d-\d\d .*\+00$/.test(value)),
+      values.filter((value): value is string => typeof value === 'string' && /^\d{4}-\d\d-\d\d .*\+00$/.test(value)),
     );
-    expect(new Set(times).size).toBeGreaterThanOrEqual(2);
+    const proofTimeMs = new Set(times.map((time) => Date.parse(time)));
+    expect(proofTimeMs.size).toBeGreaterThanOrEqual(attempts.count);
+    for (const time of f.commandTimes.slice(clockOffset)) expect(proofTimeMs.has(time.getTime())).toBe(true);
+    expect(f.actor).toBe(originalActor);
+    expect(f.token).toBe(originalToken);
+    expect(fetches).toBe(jwksReads);
   });
 }
 
 test('shared admission and native point/author commands stay bounded at three population scales', async () => {
-  // Every warm-up and sample owns a fresh post, media and author/thread scope.
-  // Takedown and erasure see the same transitions at every scale.
+  // Every warm-up and sample owns fresh targets. The complete measured call
+  // includes discovery preparation: two admitted commands for takedown/post,
+  // one for media and one for initial author erasure.
   const targets: Fixture[] = [];
   for (let run = 0; run < 12; run++) targets.push(await fixture());
   const f = targets[0]!;
@@ -450,11 +499,15 @@ test('shared admission and native point/author commands stay bounded at three po
     },
     async operation(_database, _scale, repetition) {
       const f = targets[repetition]!;
+      let observedAttempts = 0;
       for (const mode of modes) {
         statements.length = 0;
+        const clockOffset = f.commandTimes.length;
         const result = await f.execute(mode, crypto.randomUUID());
         expect(result.replayed).toBe(false);
-        oneRead(f);
+        const attempts = assertAttemptAdmission(f, normalAttempts[mode], clockOffset);
+        observedAttempts += attempts.count;
+        if (mode === 'takedown' || mode === 'post') assertNoEffectDiscoveryPreparation(attempts);
         expect(statements.some(({ text }) => text.includes('FROM content.revision'))).toBe(false);
         if ('operationId' in result.value) {
           expect(
@@ -467,6 +520,7 @@ test('shared admission and native point/author commands stay bounded at three po
           ).toBe(f.upperPostId);
         }
       }
+      expect(observedAttempts).toBe(6);
       expect(fetches).toBe(jwksReads);
     },
   });

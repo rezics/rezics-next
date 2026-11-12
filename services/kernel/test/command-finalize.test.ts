@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createPool } from '../src/database/pool.ts';
+import { configureTestReceiptKeys } from './support/receipt-keys.ts';
 import {
   runCommand,
   currentCommand,
@@ -13,6 +14,7 @@ import {
 } from '../src/command/command.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
+configureTestReceiptKeys(pool);
 const admin = new Pool({ connectionString: process.env.DATABASE_URL! });
 const actor = '019a1b2c-3d4e-7f00-8a00-123400000001';
 beforeAll(async () => {

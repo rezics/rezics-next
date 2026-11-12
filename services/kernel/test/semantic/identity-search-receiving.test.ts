@@ -814,7 +814,30 @@ import projectionPage from '../../src/semantic/public-filter-projection-page.sql
 import { permissionCheckStatements } from '../../src/access/permission.ts';
 
 test('the installed receiving declaration covers Semantic Source support and projection SQL', () => {
+  const common = new Set(commonSearchReceivingStatements());
   const declared = new Map(searchReceivingProductionDeclaration().statements.map(({ sql, work }) => [sql, work]));
+  for (const sql of common) expect(declared.has(sql)).toBe(true);
+
+  const expectedCost = (nativeRows: number, nativePoints: number, bytes: number): WorkDimensions => ({
+    ...zero(),
+    nativeRows,
+    nativePoints,
+    statements: 1,
+    bytes,
+    emptySeeks: 1,
+  });
+  for (const [sql, work] of [
+    [sourceControl.sql, expectedCost(1, 1, 512)],
+    [sourceMappingStep.sql, expectedCost(1, 1, 4096)],
+    [sourceDefinitionRead.sql, expectedCost(1, 1, 32768)],
+    [projectionPage.sql, expectedCost(1, 1, 131072)],
+    [permissionCheckStatements.time, expectedCost(1, 1, 512)],
+    [permissionCheckStatements.formula, expectedCost(16, 16, 32768)],
+  ] as const) {
+    expect(common.has(sql)).toBe(true);
+    expect(declared.get(sql)).toEqual(work);
+  }
+
   for (const sql of [
     sourceControl.sql,
     sourceMappingStep.sql,

@@ -29,6 +29,8 @@ const seedEventType = 'com.rezics.growth.permission-seed.v1';
 const seedClientId = 'growth-permission-seed';
 const seedCommandKind = 'growth-permission-seed';
 const anchorEventType = 'com.rezics.growth.permission-anchor.v1';
+const parentEventType = 'com.rezics.growth.parent-created.v1';
+const parentCommandKind = 'growth-permission-parent';
 const receiptDigest = Buffer.alloc(32, 7);
 
 let db: GrowthDatabase | undefined;
@@ -47,6 +49,22 @@ const seededOrganizationIds: string[] = [];
 const seededResourceIds: string[] = [];
 const seededTestResourceIds: string[] = [];
 const assignmentGrowthPrincipalIds: string[] = [];
+let seedPositionBase = 0n;
+let seedPositionRangeFrom = 0;
+
+const permissionSeededRelations = [
+  'access.account',
+  'access.resource_grant',
+  'access.organization_member',
+  'access.resource_role_grant',
+  'access.resource_denial',
+  resources,
+  'core.outbox',
+  'core.receipt',
+  'editorial.write_basis',
+] as const;
+
+const assignmentSeededRelations = ['access.account', 'access.principal_assignment', 'access.resource_grant'] as const;
 
 function expectIndex(plans: readonly unknown[], expected: string): void {
   let found = false;
@@ -75,7 +93,7 @@ const population: Population = {
     const seededOrganizationId = newId(route);
     const resourceId = newId(route);
     const rowTransactionId = newId(route);
-    const position = ordinal * 100 + 100;
+    const position = seedPositionBase + BigInt(ordinal - seedPositionRangeFrom + 1);
     seededAccountIds.push(accountId);
     seededAccountIds.push(seededOrganizationId);
     seededOrganizationIds.push(seededOrganizationId);
@@ -192,13 +210,13 @@ const population: Population = {
       ],
     };
   },
-  finish: async (admin, range) => {
+  finish: async (admin) => {
     await admin.query(
       `UPDATE core.partition p SET position = GREATEST(p.position, v.position)
        FROM (SELECT partition_no, max(position)::bigint AS position FROM core.outbox
-             WHERE position >= $1 * 100 + 100 AND position < $2 * 100 + 100 GROUP BY partition_no) v
-       WHERE p.partition_no = v.partition_no`,
-      [range.from, range.to],
+             WHERE type = $1 AND partition_no = $2 GROUP BY partition_no) v
+       WHERE p.partition_no = v.partition_no AND p.partition_no = $2`,
+      [seedEventType, anchorPartition],
     );
   },
 };
@@ -273,6 +291,7 @@ beforeAll(async () => {
     requestedBy: `urn:rezics:request:${principalId}:${assignmentRequestId}`,
   };
 
+  await db.admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
   await db.admin.query(`CREATE SCHEMA ${schema}`);
   await db.admin.query(`CREATE TABLE ${resources} (
     route integer NOT NULL,
@@ -338,6 +357,19 @@ afterAll(async () => {
   if (!db) return;
   try {
     await resetSeededRows();
+    if (actorId)
+      await db.admin.query(
+        `DELETE FROM core.receipt
+         WHERE principal_kind = 'account' AND principal_id = $1 AND command_kind = $2`,
+        [actorId, parentCommandKind],
+      );
+    await db.admin.query(
+      `DELETE FROM editorial.write_basis w USING core.outbox o
+       WHERE o.type IN ($1, $2)
+         AND w.partition_no = o.partition_no AND w.position = o.position`,
+      [anchorEventType, parentEventType],
+    );
+    await db.admin.query('DELETE FROM core.outbox WHERE type IN ($1, $2)', [anchorEventType, parentEventType]);
     if (target?.id)
       await db.admin.query('DELETE FROM access.resource_grant WHERE route = $1 AND resource_id = $2', [
         target.route,
@@ -374,11 +406,19 @@ function growth(name: string, operation: GrowthCheck['operation']): GrowthCheck 
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 3,
     warmups: 1,
+    seededRelations: permissionSeededRelations,
     grow: async (growthDb, scale, previous) => {
-      await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
+      const range = {
         from: previous * ordinalsPerScaleUnit,
         to: scale * ordinalsPerScaleUnit,
-      });
+      };
+      const tail = await growthDb.admin.query<{ position: string }>(
+        'SELECT position::text AS position FROM core.partition WHERE partition_no = $1',
+        [anchorPartition],
+      );
+      seedPositionBase = BigInt(tail.rows[0]!.position);
+      seedPositionRangeFrom = range.from;
+      await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, range);
     },
     operation,
   };
@@ -420,12 +460,6 @@ async function resetSeededRows(): Promise<void> {
   await database.admin.query('DELETE FROM core.receipt WHERE command_kind = $1', [seedCommandKind]);
   await database.admin.query('DELETE FROM editorial.write_basis WHERE client_id = $1', [seedClientId]);
   await database.admin.query('DELETE FROM core.outbox WHERE type = $1', [seedEventType]);
-  await database.admin.query(
-    `UPDATE core.partition p SET position = COALESCE((
-       SELECT max(o.position) FROM core.outbox o WHERE o.partition_no = p.partition_no
-     ), 0) WHERE p.partition_no = $1`,
-    [anchorPartition],
-  );
   seededResourceIds.length = 0;
   seededAccountIds.length = 0;
   seededOrganizationIds.length = 0;
@@ -489,10 +523,11 @@ test('Assignment permission check stays within its bound as assignments and gran
     name: 'Assignment permission check stays within its bound as assignments and grants grow',
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    seededRelations: assignmentSeededRelations,
     grow: async (growthDb, scale, previous) => {
       await seed({ pool: growthDb.pool, admin: growthDb.admin }, assignmentGrowthPopulation, {
-        from: previous * ordinalsPerScaleUnit,
-        to: scale * ordinalsPerScaleUnit,
+        from: previous,
+        to: scale,
       });
     },
     operation: async (growthDb) => {
@@ -522,6 +557,13 @@ test('Assignment permission check stays within its bound as assignments and gran
 }, 300_000);
 
 test('the final delegated formula retains a full-key assignment probe', async () => {
+  await resetSeededRows();
+  await seed(
+    { pool: db!.pool, admin: db!.admin },
+    assignmentGrowthPopulation,
+    { from: 0, to: 4096 },
+    { maintenance: { analyze: true, relations: assignmentSeededRelations } },
+  );
   const measured = await capture(db!, async () => {
     const evidence = await prepare(db!.admin, target, assignmentActor);
     const client = await db!.pool.connect();
@@ -596,7 +638,7 @@ test('Parent creation authorization stays within its bound as G grows', async ()
         basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
         receipt: {
           actorAccountId: actor.accountId,
-          kind: 'growth-permission-parent',
+          kind: parentCommandKind,
           key: `parent-${scale}-${repetition}`,
           digest: receiptDigest,
         },
@@ -606,7 +648,7 @@ test('Parent creation authorization stays within its bound as G grows', async ()
         await tx.query(`INSERT INTO ${resources} (route, id) VALUES ($1, $2)`, [child.route, child.id]);
         const capability = await creationCapability(tx, child, actor.accountId);
         capability.complete();
-        return { value: child, events: [{ type: 'com.rezics.growth.parent-created.v1', data: child }] };
+        return { value: child, events: [{ type: parentEventType, data: child }] };
       },
     );
   };

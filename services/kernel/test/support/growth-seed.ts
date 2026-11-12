@@ -2,7 +2,12 @@ import { createHash } from 'node:crypto';
 import { relative } from 'node:path';
 import pg from 'pg';
 import type { Pool } from 'pg';
-import { GrowthSettleInfrastructureError, settleAdmin, vacuumFollows } from './growth-capture.ts';
+import {
+  GrowthSettleInfrastructureError,
+  settleAdmin,
+  vacuumFollows,
+  type MaintenanceTarget,
+} from './growth-capture.ts';
 import { seedBulkRows, type SeedRow } from './growth-seed-batches.ts';
 
 export type SeedTarget = { readonly pool: Pool; readonly admin: pg.Pool };
@@ -14,6 +19,15 @@ export type Placement = {
   readonly hot: boolean;
 };
 export type SeedRange = { readonly from: number; readonly to: number };
+export type SeedOptions = {
+  /** Maintenance after an unmeasured seed. Growth checks settle after grow returns; false leaves it to the caller. */
+  readonly maintenance?:
+    | {
+        readonly analyze?: boolean;
+        readonly relations?: readonly MaintenanceTarget[];
+      }
+    | false;
+};
 export type Population = {
   readonly name: string;
   readonly hotPartition: number;
@@ -108,7 +122,12 @@ async function writeRange(target: SeedTarget, population: AdmittedPopulation, ra
   if (failed) throw failure;
 }
 
-export async function seed(target: SeedTarget, population: Population, range: SeedRange): Promise<void> {
+export async function seed(
+  target: SeedTarget,
+  population: Population,
+  range: SeedRange,
+  options: SeedOptions = {},
+): Promise<void> {
   const admittedPopulation = snapshotPopulation(population);
   const admittedRange = { from: range.from, to: range.to };
   assertPopulation(admittedPopulation);
@@ -133,9 +152,10 @@ export async function seed(target: SeedTarget, population: Population, range: Se
     await writeRange(target, admittedPopulation, admittedRange);
   }
   if (admittedPopulation.finish) await admittedPopulation.finish(target.admin, admittedRange);
-  if (!vacuumFollows(target.admin)) {
+  const maintenance = options.maintenance === undefined ? { analyze: true } : options.maintenance;
+  if (!vacuumFollows(target.admin) && maintenance !== false) {
     try {
-      await settleAdmin(target.admin, { analyze: true });
+      await settleAdmin(target.admin, maintenance);
     } catch (error) {
       if (!(error instanceof GrowthSettleInfrastructureError)) throw error;
       process.stderr.write(

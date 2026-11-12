@@ -16,6 +16,7 @@ import {
   type ContentEditionBuyerFact,
   type ContentEditionBuyerFactReader,
 } from './authenticated-benefit.ts';
+import { memoizedValue } from '../memoized.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
@@ -94,12 +95,25 @@ import { ACCOUNT_ROLE_BITS as HISTORY_ROLE } from '../history/contract/index.ts'
 // foreign callbacks. Ordinary preparation retains its installed owner protocol.
 const kindOriginalInvocation = new AsyncLocalStorage<boolean>();
 
+function permissionCheckTimeStatement(): string {
+  return memoizedValue(permissionCheckTimeStatement, () => timeRead.sql);
+}
+
+function permissionCheckFormulaStatement(): string {
+  return memoizedValue(permissionCheckFormulaStatement, () => permissionRead.sql);
+}
+
 /** Exact literals for callers that include Access checks in an outer SQL work envelope.
+ * Lazy properties retain the public object seam without evaluating SQL imports during module loading.
  * This exposes no prepared evidence, evaluator or authorization result.
  */
 export const permissionCheckStatements = Object.freeze({
-  time: timeRead.sql,
-  formula: permissionRead.sql,
+  get time() {
+    return permissionCheckTimeStatement();
+  },
+  get formula() {
+    return permissionCheckFormulaStatement();
+  },
 });
 
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.

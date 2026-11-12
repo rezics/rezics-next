@@ -1,17 +1,18 @@
 import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { createAccess } from '../../src/access/index.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import { type Access } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { revisionResource } from '../../src/semantic/authorship.ts';
 import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { installIdentityGrants } from '../support/trusted-grants.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const issuer = 'https://auth.progress.test';
 const audience = 'https://kernel.progress.test';
@@ -63,12 +64,54 @@ async function request(
 }
 
 async function createSubject(as: 'owner' | 'other' | 'suspended' = 'owner'): Promise<string> {
+  const label = `Progress subject ${serial}`;
   const created = await request(as, 'POST', '/v1/subjects', {
     type: 'schema:Book',
-    labels: { en: `Progress subject ${serial}` },
+    labels: { en: label },
   });
   expect(created.response.status).toBe(201);
-  return created.body.subject.id as string;
+  const subject = created.body.subject as Record<string, any>;
+  expect(subject).toMatchObject({
+    id: expect.any(String),
+    type: 'schema:Book',
+    revision: 1,
+    context: GLOBAL_CONTEXT,
+    labels: { en: label },
+    descriptions: {},
+    aliases: {},
+    statements: {},
+  });
+  const subjectId = subject.id as string;
+  const firstRevision = revisionResource(subjectId, 1);
+  const creator = as === 'other' ? other : as === 'suspended' ? suspended : owner;
+  const initialized = await db.admin.query<{
+    resource_id: string;
+    resource_type: string;
+    creator_id: string;
+    initialized: boolean;
+  }>(
+    `SELECT resource_id::text, resource_type, creator_id::text,
+            initialized_at IS NOT NULL AS initialized
+     FROM access.resource_initialization
+     WHERE route=$1 AND resource_id=ANY($2::uuid[])
+     ORDER BY resource_type`,
+    [routeOf(subjectId), [firstRevision.id, subjectId]],
+  );
+  expect(initialized.rows).toEqual([
+    {
+      resource_id: firstRevision.id,
+      resource_type: 'semantic.revision',
+      creator_id: creator,
+      initialized: true,
+    },
+    {
+      resource_id: subjectId,
+      resource_type: 'semantic.subject',
+      creator_id: creator,
+      initialized: true,
+    },
+  ]);
+  return subjectId;
 }
 
 async function start(
@@ -127,20 +170,13 @@ beforeAll(async () => {
 
   const signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'progress-http', alg: 'ES256' };
-  const native = createAccess({
-    actions: new Map(scopes.map((action) => [action, { anonymous: false }])),
-    auth: { issuer, audience, jwksUrl: `${issuer}/jwks`, fetch: async () => Response.json({ keys: [jwk] }) },
-  });
-  const access: Access = deriveAccess(native, {
-    async authorize(_client, actor, action) {
-      return actor.kind === 'account' && actor.scopes.includes(action);
-    },
-  });
+  const auth = { issuer, audience, jwksUrl: `${issuer}/jwks`, fetch: async () => Response.json({ keys: [jwk] }) };
   app = createKernel({
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(23),
     tokens,
-    access,
+    receiptKeys: testReceiptKeys(),
+    access: (config) => createAccess({ ...config, auth }),
     writeRate: {
       async spend() {
         return { allowed: true as const };
@@ -159,6 +195,8 @@ beforeAll(async () => {
       [routeOf(accountId), accountId, state],
     );
   }
+  await installIdentityGrants(db.admin, GLOBAL_CONTEXT, owner, ['subject:create']);
+  await installIdentityGrants(db.admin, GLOBAL_CONTEXT, other, ['subject:create']);
   for (const accountId of [owner, other, suspended]) {
     credentials.set(
       accountId,

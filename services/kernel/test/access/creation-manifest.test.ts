@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
-import { standingFixture } from './standing-fixture.ts';
+import { standingFixture, type StandingFixtureLifecycle } from './standing-fixture.ts';
 import {
   createResourceCreationManifest,
   type ResourceCreationEntry,
@@ -18,6 +18,7 @@ import {
 import { newId, partitionOf } from '../../src/route/route.ts';
 
 let f: Awaited<ReturnType<typeof standingFixture>>;
+let fixtureLifecycle: StandingFixtureLifecycle | undefined;
 let parentChecks = 0;
 let parentFormulas = 0;
 let validations = 0;
@@ -25,26 +26,36 @@ let bodies = 0;
 const provenance = new WeakMap<CommandTransaction, string>();
 beforeAll(async () => {
   // reaction:set is a mounted standing action; without it the thread and post templates drop.
-  f = await standingFixture(['reaction:set']);
+  f = await standingFixture(['reaction:set'], undefined, (lifecycle) => {
+    fixtureLifecycle = lifecycle;
+  });
   const authorize = f.access.authorize.bind(f.access);
   f.access.authorize = async (...args) => {
     parentFormulas++;
     return authorize(...args);
   };
-  await f.reader.query(`CREATE TABLE public.manifest_resource (
+  await fixtureLifecycle!.run('create manifest resource table', () =>
+    f.reader.query(`CREATE TABLE public.manifest_resource (
     route integer NOT NULL, id uuid NOT NULL, command_id uuid NOT NULL, created_at timestamptz NOT NULL,
     creation_xid xid8 NOT NULL DEFAULT pg_current_xact_id(), PRIMARY KEY(route,id));
     CREATE FUNCTION public.freeze_manifest_provenance() RETURNS trigger LANGUAGE plpgsql AS $$
     BEGIN RAISE EXCEPTION 'immutable creation provenance'; END $$;
     CREATE TRIGGER immutable_provenance BEFORE UPDATE ON public.manifest_resource
-    FOR EACH ROW EXECUTE FUNCTION public.freeze_manifest_provenance()`);
+    FOR EACH ROW EXECUTE FUNCTION public.freeze_manifest_provenance()`),
+  );
+  fixtureLifecycle!.ready();
 }, 30000);
 beforeEach(async () => {
   await f.reset();
   await f.grant(f.actor, 'subject:create');
   parentChecks = parentFormulas = validations = bodies = 0;
 });
-afterAll(() => f?.close());
+afterAll(async () => {
+  const pendingOperation = fixtureLifecycle?.pendingOperation;
+  await fixtureLifecycle?.close();
+  if (pendingOperation && pendingOperation !== 'ready')
+    throw new Error(`Standing fixture startup did not complete; pending operation: ${pendingOperation}`);
+});
 function entries(count = 2): ResourceCreationEntry[] {
   return Array.from({ length: count }, (_, i) => ({
     resource: { route: f.otherResource.route + (i % 2), id: newId(f.otherResource.route + (i % 2)) },

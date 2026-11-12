@@ -10,7 +10,7 @@ import {
 } from '../../src/access/preferences.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
-import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const notifications = Object.fromEntries(
   NOTIFICATION_KINDS.filter(({ optional }) => optional).map((entry) => [entry.kind, !entry.default]),
@@ -24,7 +24,8 @@ const route = 0x4567;
 const accountId = newId(route);
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
+let db: GrowthDatabase;
+
 const maximalShelf = (): Shelf =>
   ({
     layouts: Object.fromEntries(
@@ -54,6 +55,96 @@ const maximalShelf = (): Shelf =>
       'last_activity',
     ],
   }) as Shelf;
+
+/** Bulk-seeds route-valid IDs without sending a scale-sized UUID array through the driver. */
+async function seedPreferencePopulation(
+  database: GrowthDatabase,
+  route: number,
+  count: number,
+  options: {
+    readonly shelf?: Shelf;
+    readonly spoilerLevel?: 0 | 1 | 2;
+    readonly grant?: boolean;
+    readonly receipt?: boolean;
+  } = {},
+): Promise<void> {
+  const client = await database.admin.connect();
+  let transactionOpen = false;
+  let primary: unknown;
+  try {
+    await client.query('BEGIN');
+    transactionOpen = true;
+    await client.query(
+      `CREATE TEMP TABLE growth_preference_seed_ids ON COMMIT DROP AS
+       WITH uuid_values AS MATERIALIZED (
+         SELECT gen_random_uuid()::text AS value
+         FROM generate_series(1, $2::integer)
+       )
+       SELECT (
+         substr(value, 1, 14) || '7' || substr(value, 16, 9) ||
+         lpad(to_hex($1::integer), 4, '0') || right(value, 8)
+       )::uuid AS account_id
+       FROM uuid_values`,
+      [route, count],
+    );
+    await client.query(
+      `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
+       SELECT $1, account_id, 'actor', 'active', account_id FROM growth_preference_seed_ids`,
+      [route],
+    );
+    if (options.shelf !== undefined) {
+      await client.query(
+        `INSERT INTO access.account_preferences
+           (route, account_id, spoiler_level, suitability, shelf, notifications, version)
+         SELECT $1, account_id, $2, 'blur', $3::jsonb, $4::jsonb, 1
+         FROM growth_preference_seed_ids`,
+        [route, options.spoilerLevel ?? 2, JSON.stringify(options.shelf), JSON.stringify(notifications)],
+      );
+    } else {
+      await client.query(
+        `INSERT INTO access.account_preferences
+           (route, account_id, spoiler_level, suitability, notifications, version)
+         SELECT $1, account_id, $2, 'blur', $3::jsonb, 1
+         FROM growth_preference_seed_ids`,
+        [route, options.spoilerLevel ?? 0, JSON.stringify(notifications)],
+      );
+    }
+    if (options.grant)
+      await client.query(
+        `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+         SELECT $1, account_id, account_id, 'account:update', '(,)', account_id
+         FROM growth_preference_seed_ids`,
+        [route],
+      );
+    if (options.receipt)
+      await client.query(
+        `INSERT INTO core.receipt
+           (partition_no, principal_kind, principal_id, command_kind, idempotency_key, request_digest,
+            epoch, position, transaction_id, response)
+         SELECT $1, 'account', account_id, 'access.account.preferences', account_id::text,
+                decode(repeat('0', 64), 'hex'), 1, 1, account_id, '{}'
+         FROM growth_preference_seed_ids`,
+        [partitionOf(route)],
+      );
+    await client.query('COMMIT');
+    transactionOpen = false;
+  } catch (error) {
+    primary = error;
+    if (transactionOpen) {
+      try {
+        await client.query('ROLLBACK');
+        transactionOpen = false;
+      } catch (cleanup) {
+        primary = cleanup;
+        throw new AggregateError([error, cleanup], 'Could not roll back preference growth seed', { cause: error });
+      }
+    }
+    throw error;
+  } finally {
+    client.release(primary instanceof Error ? primary : undefined);
+  }
+}
+
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
 });
@@ -86,17 +177,10 @@ test('preferences read stays constant as accounts with stored preferences grow',
         );
       }
       // Keep the smallest sample beyond the planner's tiny-table scan threshold.
-      const ids = Array.from({ length: (scale - previous) * 16 }, () => newId(route));
-      await database.admin.query(
-        `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
-        SELECT $1,id,'actor','active',id FROM unnest($2::uuid[]) id`,
-        [route, ids],
-      );
-      await database.admin.query(
-        `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,notifications,version)
-        SELECT $1,id,2,'blur',$3::jsonb,$4::jsonb,1 FROM unnest($2::uuid[]) id`,
-        [route, ids, JSON.stringify(maximalShelf()), JSON.stringify(notifications)],
-      );
+      await seedPreferencePopulation(database, route, (scale - previous) * 16, {
+        shelf: maximalShelf(),
+        spoilerLevel: 2,
+      });
     },
     async operation() {
       const values = await readAccountPreferences(db.pool, accountId);
@@ -138,21 +222,15 @@ test('setting a maximal shelf stays constant as accounts with stored preferences
      SELECT $1, id, id, 'account:update', '(,)', id FROM unnest($2::uuid[]) id`,
     [setRoute, accounts],
   );
-  const contexts: Array<{
-    pool: typeof db.pool;
-    deadline: number;
-    actor: Awaited<ReturnType<typeof authenticateAccount>>;
-  }> = [];
+  const actors: Array<Awaited<ReturnType<typeof authenticateAccount>>> = [];
   for (const id of accounts)
-    contexts.push({
-      pool: db.pool,
-      deadline: Date.now() + 60_000,
-      actor: await authenticateAccount(
+    actors.push(
+      await authenticateAccount(
         access,
         { pool: db.pool, deadline: Date.now() + 10_000 },
         { accountId: id, clientId: 'growth-preferences', scopes: ['account:update'] },
       ),
-    });
+    );
   let next = 0;
   const report = await checkGrowth(db, {
     name: 'account preferences set',
@@ -160,41 +238,25 @@ test('setting a maximal shelf stays constant as accounts with stored preferences
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     seededRelations: commandSeededRelations,
     async grow(database, scale, previous) {
-      const ids = Array.from({ length: (scale - previous) * 16 }, () => newId(setRoute));
-      await database.admin.query(
-        `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
-        SELECT $1,id,'actor','active',id FROM unnest($2::uuid[]) id`,
-        [setRoute, ids],
-      );
-      await database.admin.query(
-        `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,notifications,version)
-        SELECT $1,id,2,'blur',$3::jsonb,$4::jsonb,1 FROM unnest($2::uuid[]) id`,
-        [setRoute, ids, JSON.stringify(maximalShelf()), JSON.stringify(notifications)],
-      );
-      // The command reads its authorization grant and its receipt key: seed both past the planner's tiny-table scans.
-      await database.admin.query(
-        `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
-        SELECT $1, id, id, 'account:update', '(,)', id FROM unnest($2::uuid[]) id`,
-        [setRoute, ids],
-      );
-      await database.admin.query(
-        `INSERT INTO core.receipt
-          (partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
-        SELECT $1,'account',id,'access.account.preferences',id::text,decode(repeat('0',64),'hex'),1,1,id,'{}'
-        FROM unnest($2::uuid[]) id`,
-        [partitionOf(setRoute), ids],
-      );
+      await seedPreferencePopulation(database, setRoute, (scale - previous) * 16, {
+        shelf: maximalShelf(),
+        spoilerLevel: 2,
+        grant: true,
+        receipt: true,
+      });
     },
     async operation() {
-      const context = contexts[next++];
-      if (!context) throw new Error('Growth check exhausted its accounts');
-      const result = await commands.setPreferences(context, {
-        accountId: context.actor.accountId,
+      const actor = actors[next++];
+      if (!actor) throw new Error('Growth check exhausted its accounts');
+      const context = { pool: db.pool, deadline: Date.now() + 60_000, actor };
+      const input = {
+        accountId: actor.accountId,
         key: Bun.randomUUIDv7(),
         expectedVersion: 0,
         shelf: maximalShelf(),
         notifications,
-      });
+      };
+      const result = await commands.setPreferences(context, input);
       expect(result.value.shelf).toEqual(maximalShelf());
       expect(result.value.notifications).toEqual(notifications);
       expect(result.value.version).toBe(1);
@@ -227,24 +289,11 @@ test('preference page projection stays constant as unrelated preference rows and
           [pageRoute, selected, JSON.stringify(maximalShelf()), JSON.stringify(notifications)],
         );
       }
-      const ids = Array.from({ length: (scale - previous) * 16 }, () => newId(pageRoute));
-      await database.admin.query(
-        `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
-        SELECT $1,id,'actor','active',id FROM unnest($2::uuid[]) id`,
-        [pageRoute, ids],
-      );
-      await database.admin.query(
-        `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,notifications,version)
-        SELECT $1,id,2,'blur',$3::jsonb,$4::jsonb,1 FROM unnest($2::uuid[]) id`,
-        [pageRoute, ids, JSON.stringify(maximalShelf()), JSON.stringify(notifications)],
-      );
-      await database.admin.query(
-        `INSERT INTO core.receipt
-          (partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
-        SELECT $1,'account',id,'access.account.preferences',id::text,decode(repeat('0',64),'hex'),1,1,id,'{}'
-        FROM unnest($2::uuid[]) id`,
-        [partitionOf(pageRoute), ids],
-      );
+      await seedPreferencePopulation(database, pageRoute, (scale - previous) * 16, {
+        shelf: maximalShelf(),
+        spoilerLevel: 2,
+        receipt: true,
+      });
     },
     async operation() {
       const values = await readAccountPreferences(db.pool, selected);
@@ -271,18 +320,21 @@ test('notificationAllowed stays constant as accounts grow', async () => {
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     seededRelations: preferenceSeededRelations,
     async grow(database, scale, previous) {
-      const ids = Array.from({ length: (scale - previous) * 16 }, () => newId(permissionRoute));
-      if (previous === 0) ids.push(recipient);
-      await database.admin.query(
-        `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
-         SELECT $1,id,'actor','active',id FROM unnest($2::uuid[]) id`,
-        [permissionRoute, ids],
-      );
-      await database.admin.query(
-        `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,notifications,version)
-         SELECT $1,id,0,'blur',$3::jsonb,1 FROM unnest($2::uuid[]) id`,
-        [permissionRoute, ids, JSON.stringify(notifications)],
-      );
+      if (previous === 0) {
+        await database.admin.query(
+          `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+           VALUES ($1,$2,'actor','active',$2)`,
+          [permissionRoute, recipient],
+        );
+        await database.admin.query(
+          `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,notifications,version)
+           VALUES ($1,$2,0,'blur',$3::jsonb,1)`,
+          [permissionRoute, recipient, JSON.stringify(notifications)],
+        );
+      }
+      await seedPreferencePopulation(database, permissionRoute, (scale - previous) * 16, {
+        spoilerLevel: 0,
+      });
     },
     async operation() {
       expect(await notificationAllowed(db.pool, { recipient, kind: 'reply' })).toBe(false);

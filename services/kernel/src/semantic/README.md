@@ -446,6 +446,9 @@ costs; each projection call advances one selected key through the sealed support
 appends a deterministic segment for the same native job after terminal SDK failure, preserving its source cursor and
 receipts.
 
+Decision: Source and Access receiving statement costs are materialized through memoized first-use getters, preserving
+the common inventory and production declaration without evaluating imported SQL values during module loading.
+
 FAA's admitted-support declarations and visibly provisional unavailable binding factory are in
 `public-filter-source-binding.ts`, alongside the existing `PublicFilterNativeSource` handoff. The existing
 `subject-source-key-pages.ts` port is preserved unchanged; the bridge does not consume its rebuild interface.

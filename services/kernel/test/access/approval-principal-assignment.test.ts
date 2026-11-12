@@ -17,21 +17,15 @@ import { createNativeAccountBindings } from '../../src/access/native-account-bin
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createWorkflowApprovals, workflowApprovalBinding } from '../../src/access/workflow-approvals.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { registerTestClient, testKernel, testRouteKey, testTokens } from '../support/test-kernel.ts';
 
 /** Real Auth host, native registration and Auth-issued tokens verified via JWKS.
  * The host can be rebuilt over the same databases, which is a process restart. */
-async function fixture() {
-  const db = await openGrowthDatabase();
-  db.pool.options.max = 1;
+function fixture() {
   const suffix = randomUUID().replaceAll('-', '');
   const authName = `assignment_auth_${suffix}`;
-  const authUrl = new URL(db.url);
-  authUrl.pathname = `/${authName}`;
-  await db.admin.query(`CREATE DATABASE "${authName}"`);
-  migrate(authUrl.href, fileURLToPath(new URL('../../../auth/db/migrations', import.meta.url)));
-  const proofsPool = new Pool({ connectionString: authUrl.href });
   const issuer = `https://assignment-${suffix}.auth.test`;
   const audience = 'https://assignment.api.test';
   const password = 'principal assignment native password';
@@ -43,70 +37,194 @@ async function fixture() {
   const scopes = [...actions.keys()];
   const secret = randomBytes(48).toString('base64url');
   const stagingKey = randomBytes(32);
-  const signingKey = {
-    ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
-    kid: 'assignment-host',
-  };
-  let service: AuthService;
-  let host: Awaited<ReturnType<typeof createAuthHost>>;
+  let signingKey: (Awaited<ReturnType<typeof exportJWK>> & { kid: string }) | undefined;
+  let db: Awaited<ReturnType<typeof openGrowthDatabase>> | undefined;
+  let authUrl: URL | undefined;
+  let proofsPool: Pool | undefined;
+  let service: AuthService | undefined;
+  let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
+  let bindings: ReturnType<typeof createNativeAccountBindings> | undefined;
+  let approvals: ReturnType<typeof createWorkflowApprovals> | undefined;
+  let authDatabaseOwned = false;
+  let startup: Promise<void> | undefined;
+  let closing: Promise<void> | undefined;
+  let releasing: Promise<void> | undefined;
+  let currentPhase = 'fixture initialization';
   const referenceKeys = testTokens();
-  const kernel = testKernel({
-    pool: db.pool,
-    actions,
-    tokens: referenceKeys,
-    auth: {
-      issuer,
-      audience,
-      jwksUrl: `${issuer}/.well-known/jwks.json`,
-      fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
-    },
-  });
-  const access = kernel.testAccess;
-  const proofs = createNativeWorkflowProofPorts({ database: proofsPool });
-  const bindings = createNativeAccountBindings({
-    pool: db.pool,
-    access,
-    actions,
-    routeKey: testRouteKey(),
-    referenceKeys,
-    auth: () => service,
-    proofs: {
-      workflow: proofs,
-      provisioning: createProvisioningEvidenceVerifier({ database: proofsPool }),
-      barriers: createBarrierProofVerifier({ database: proofsPool }),
-    },
-  });
-  const approvals = createWorkflowApprovals({
-    pool: db.pool,
-    access,
-    actions,
-    referenceKeys,
-    creationBinding: proofs.creationBinding,
-  });
-  async function build() {
-    const authPool = new Pool({ connectionString: authUrl.href });
-    host = await createAuthHost({
-      database: authPool,
-      systemDatabasePool: authPool,
-      issuer,
-      audience,
-      secret,
-      signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-      siteActions: actions,
-      trustedAccess: bindings.trustedAccess,
-      access: bindings.workflowPorts,
-      stagingKey,
-      maintenanceSchedule: '0 0 1 1 *',
-      executorId: `assignment-${suffix}`,
-    });
-    service = host.service;
-    await host.start();
+
+  async function phase<T>(name: string, operation: () => T | Promise<T>): Promise<T> {
+    currentPhase = name;
+    try {
+      return await operation();
+    } catch (cause) {
+      throw new Error(`Approval principal assignment fixture failed during ${name}`, { cause });
+    }
   }
-  await build();
-  await registerTestClient(service!, { clientId: 'assignment-test', firstParty: true, actions, scopes });
-  const context = () => ({ pool: db.pool, deadline: Date.now() + 10000 });
+
+  async function stopHost() {
+    const active = host;
+    if (!active) return;
+    await active.stop();
+    if (host === active) {
+      host = undefined;
+      service = undefined;
+    }
+  }
+
+  async function buildHost() {
+    const databaseUrl = authUrl!;
+    const nativeBindings = bindings!;
+    const authPool = await phase('Auth host pool acquisition', () => new Pool({ connectionString: databaseUrl.href }));
+    const next = await phase('Auth host construction', () =>
+      createAuthHost({
+        database: authPool,
+        systemDatabasePool: authPool,
+        issuer,
+        audience,
+        secret,
+        signing: { activeKid: signingKey!.kid, privateKeys: [signingKey!] },
+        siteActions: actions,
+        trustedAccess: nativeBindings.trustedAccess,
+        access: nativeBindings.workflowPorts,
+        stagingKey,
+        maintenanceSchedule: '0 0 1 1 *',
+        executorId: `assignment-${suffix}`,
+      }),
+    );
+    host = next;
+    service = next.service;
+    await phase('Auth host start', () => next.start());
+  }
+
+  async function releaseResources() {
+    if (releasing) return releasing;
+    releasing = (async () => {
+      const failures: Error[] = [];
+      const attempt = async (name: string, release: () => void | Promise<void>) => {
+        try {
+          await release();
+        } catch (cause) {
+          failures.push(new Error(`Approval principal assignment fixture could not release ${name}`, { cause }));
+        }
+      };
+
+      const active = host;
+      host = undefined;
+      service = undefined;
+      await attempt('Auth host', async () => active?.stop());
+
+      const proofs = proofsPool;
+      proofsPool = undefined;
+      await attempt('Auth proof pool', async () => proofs?.end());
+
+      const database = db;
+      if (database && authDatabaseOwned) {
+        authDatabaseOwned = false;
+        await attempt('Auth database', () => dropTestDatabase(database.admin, authName));
+      }
+      db = undefined;
+      await attempt('growth database pools', async () => database?.close());
+
+      if (failures.length)
+        throw new AggregateError(
+          failures,
+          `Approval principal assignment fixture cleanup failed: ${failures.map((failure) => failure.message).join('; ')}`,
+        );
+    })();
+    return releasing;
+  }
+
+  async function startOnce() {
+    try {
+      db = await phase('growth database setup', openGrowthDatabase);
+      db.pool.options.max = 1;
+      authUrl = new URL(db.url);
+      authUrl.pathname = `/${authName}`;
+      signingKey = {
+        ...(await phase('signing key generation', async () =>
+          exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey),
+        )),
+        kid: 'assignment-host',
+      };
+      // The name is unique to this fixture. Mark it before CREATE so cleanup also
+      // handles a connection failure after PostgreSQL has committed the creation.
+      authDatabaseOwned = true;
+      await phase('Auth database creation', () => db!.admin.query(`CREATE DATABASE "${authName}"`));
+      await phase('Auth migration', () =>
+        migrate(authUrl!.href, fileURLToPath(new URL('../../../auth/db/migrations', import.meta.url))),
+      );
+      proofsPool = await phase('Auth proof pool acquisition', () => new Pool({ connectionString: authUrl!.href }));
+      await phase('native Auth and Kernel composition', () => {
+        const database = db!;
+        const proofDatabase = proofsPool!;
+        const kernel = testKernel({
+          pool: database.pool,
+          actions,
+          tokens: referenceKeys,
+          auth: {
+            issuer,
+            audience,
+            jwksUrl: `${issuer}/.well-known/jwks.json`,
+            fetch: async () => service!.handler(new Request(`${issuer}/.well-known/jwks.json`)),
+          },
+        });
+        const access = kernel.testAccess;
+        const proofs = createNativeWorkflowProofPorts({ database: proofDatabase });
+        bindings = createNativeAccountBindings({
+          pool: database.pool,
+          access,
+          actions,
+          routeKey: testRouteKey(),
+          referenceKeys,
+          auth: () => service!,
+          proofs: {
+            workflow: proofs,
+            provisioning: createProvisioningEvidenceVerifier({ database: proofDatabase }),
+            barriers: createBarrierProofVerifier({ database: proofDatabase }),
+          },
+        });
+        approvals = createWorkflowApprovals({
+          pool: database.pool,
+          access,
+          actions,
+          referenceKeys,
+          creationBinding: proofs.creationBinding,
+        });
+      });
+      await buildHost();
+      await phase('test client registration', () =>
+        registerTestClient(service!, {
+          clientId: 'assignment-test',
+          firstParty: true,
+          actions,
+          scopes,
+        }),
+      );
+    } catch (cause) {
+      const primary = cause instanceof Error ? cause : new Error(String(cause));
+      try {
+        await releaseResources();
+      } catch (cleanup) {
+        throw new AggregateError(
+          [primary, cleanup],
+          `Fixture startup failed during ${currentPhase} and cleanup was incomplete`,
+          {
+            cause: primary,
+          },
+        );
+      }
+      throw primary;
+    }
+  }
+
+  function start() {
+    if (closing) return Promise.reject(new Error('Approval principal assignment fixture is closed'));
+    return (startup ??= startOnce());
+  }
+
+  const context = () => ({ pool: db!.pool, deadline: Date.now() + 10000 });
   const post = (path: string, body: unknown, cookie?: string) =>
-    host.handler(
+    host!.handler(
       new Request(`${issuer}${path}`, {
         method: 'POST',
         headers: { origin: issuer, 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
@@ -115,13 +233,17 @@ async function fixture() {
     );
   /** Auth issues the token from a real session; a delegated one names the assignment. */
   async function bearer(email: string, requestedBy?: string) {
-    const signin = await post('/signin', { email, password, client_id: 'assignment-test', scope: scopes });
+    const signin = await phase('human sign-in', () =>
+      post('/signin', { email, password, client_id: 'assignment-test', scope: scopes }),
+    );
     if (!signin.ok) throw new Error(`Native sign-in: ${signin.status}`);
     const cookie = signin.headers
       .getSetCookie()
       .map((c) => c.split(';')[0])
       .join('; ');
-    const token = await post('/token', requestedBy === undefined ? {} : { requested_by: requestedBy }, cookie);
+    const token = await phase('Auth token issuance', () =>
+      post('/token', requestedBy === undefined ? {} : { requested_by: requestedBy }, cookie),
+    );
     if (!token.ok) throw new Error(`Native token: ${token.status}`);
     return ((await token.json()) as { access_token: string }).access_token;
   }
@@ -129,18 +251,22 @@ async function fixture() {
     const key = randomUUID();
     const email = `${key}@assignment.test`;
     const handle = `human_${key.replaceAll('-', '')}`;
-    const { accountId } = await host.workflows.register({ key, handle, email, password });
+    const { accountId } = await phase('human registration', () =>
+      host!.workflows.register({ key, handle, email, password }),
+    );
     return { accountId, email, handle, token: await bearer(email) };
   }
   async function governance(accountId: string) {
-    const child = Bun.spawn(['bun', 'services/kernel/scripts/bootstrap-governance.ts', '--account', accountId], {
-      cwd: fileURLToPath(new URL('../../../../', import.meta.url)),
-      env: { ...process.env, DATABASE_URL: db.url },
-      stdout: 'pipe',
-      stderr: 'pipe',
+    await phase('governance bootstrap', async () => {
+      const child = Bun.spawn(['bun', 'services/kernel/scripts/bootstrap-governance.ts', '--account', accountId], {
+        cwd: fileURLToPath(new URL('../../../../', import.meta.url)),
+        env: { ...process.env, DATABASE_URL: db!.url },
+        stdout: 'ignore',
+        stderr: 'pipe',
+      });
+      const stderr = await new Response(child.stderr).text();
+      expect({ code: await child.exited, stderr }).toEqual({ code: 0, stderr: '' });
     });
-    const stderr = await new Response(child.stderr).text();
-    expect({ code: await child.exited, stderr }).toEqual({ code: 0, stderr: '' });
   }
   const operation = (handle = `org_${randomUUID().replaceAll('-', '')}`): AccountOperation => ({
     kind: 'organization',
@@ -148,23 +274,28 @@ async function fixture() {
     authorization: 'input',
   });
   async function approve(token: string, input: AccountOperation = operation(), operationKey = randomUUID()) {
-    const approval = await approvals.approve(token, { operationKey, operation: input }, context());
-    const request = await approvals.resolve(approval.reference, input, context());
+    const approval = await approvals!.approve(token, { operationKey, operation: input }, context());
+    const request = await approvals!.resolve(approval.reference, input, context());
     const prefix = workflowApprovalBinding(request)!.commandKeyPrefix;
     return {
       approval,
       input,
       operationKey,
-      accountId: bindings.internalLifecycle.registrationTarget(`${prefix}:organization-id`),
+      accountId: bindings!.internalLifecycle.registrationTarget(`${prefix}:organization-id`),
     };
   }
   async function create(f: Awaited<ReturnType<typeof approve>>, key: string = randomUUID()) {
     if (f.input.kind !== 'organization') throw new Error('Expected organization');
-    return host.workflows.createOrganization({ key, handle: f.input.handle, authorization: f.approval.reference });
+    return host!.workflows.createOrganization({ key, handle: f.input.handle, authorization: f.approval.reference });
   }
   return {
-    db,
-    approvals,
+    start,
+    get db() {
+      return db!;
+    },
+    get approvals() {
+      return approvals!;
+    },
     context,
     password,
     bearer,
@@ -173,28 +304,34 @@ async function fixture() {
     approve,
     create,
     get host() {
-      return host;
+      return host!;
     },
     /** A process restart: the Auth host stops and starts again over the same databases. */
     async restart() {
-      await host.stop();
-      await build();
+      if (closing) throw new Error('Approval principal assignment fixture is closed');
+      await startup;
+      await phase('stop Auth host before restart', stopHost);
+      await buildHost();
     },
     async close() {
-      await host.stop();
-      await proofsPool.end();
-      await db.admin.query(`DROP DATABASE "${authName}"`);
-      await db.close();
+      if (closing) return closing;
+      closing = (async () => {
+        await startup?.catch(() => undefined);
+        await releaseResources();
+      })();
+      return closing;
     },
   };
 }
 
 /** A person acting for a principal through a principal assignment, against real
  * Access approvals and the Auth workflow host. */
-let h: Awaited<ReturnType<typeof fixture>>;
-let governor: Awaited<ReturnType<typeof h.human>>;
+type Fixture = ReturnType<typeof fixture>;
+let h: Fixture;
+let governor: Awaited<ReturnType<Fixture['human']>>;
 beforeAll(async () => {
-  h = await fixture();
+  h = fixture();
+  await h.start();
   governor = await h.human();
   await h.governance(governor.accountId);
 }, 60000);
