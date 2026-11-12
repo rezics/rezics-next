@@ -1,5 +1,6 @@
 /** Compiler evidence is narrower than budget/source custody. Unknown runners retain the complete source tree. */
 import { createHash } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import {
@@ -467,11 +468,10 @@ function stableSource(started: TypingInputs, completed: TypingInputs, outputs: r
 
 /** Capture every admitted physical command, including workspace runners predating compiler receipt support. */
 export function typingInputCommand(command: readonly string[]): string[] {
-  // Carry the current standalone capture implementation through argv: old frozen worktrees need no source rewrite.
-  // Keep each transferred argument under remote custody's 4096-character bound.
-  const payload = Buffer.from(
+  // Carry the standalone capture implementation through argv for old frozen worktrees, compressed to fit custody.
+  const payload = deflateSync(
     JSON.stringify({
-      captureModule: readFileSync(import.meta.path).toString('base64'),
+      captureModule: readFileSync(import.meta.path).toString(),
       command,
     }),
   ).toString('base64');
@@ -480,12 +480,14 @@ export function typingInputCommand(command: readonly string[]): string[] {
     'bun',
     '-e',
     `
+import { inflateSync } from 'node:zlib';
 const payload = process.argv.slice(1).join('');
-const { captureModule, command } = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
+const { captureModule, command } = JSON.parse(inflateSync(Buffer.from(payload, 'base64')).toString('utf8'));
 let complete;
 let readReceipt;
 try {
-  const inputs = await import('data:text/typescript;base64,' + captureModule);
+  const source = Buffer.from(captureModule, 'utf8').toString('base64');
+  const inputs = await import('data:text/typescript;base64,' + source);
   readReceipt = inputs.readTypingInputReceipt;
   complete = inputs.beginTypingInputReceipt(process.cwd(), process.env, command);
 } catch (error) { console.error('typing inputs unavailable before compilation: ' + error); }

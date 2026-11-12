@@ -117,8 +117,8 @@ test('remote custody bounds round-trip generated, escaped and transitioned recor
     argv = ['bun', 'scripts/typecheck.ts', '--root'];
   const remoteArgv = typingInputCommand(argv),
     binding = { checkId, ownership, argv, remoteArgv };
-  expect(remoteArgv).toHaveLength(21);
-  expect(Math.max(...remoteArgv.map((argument) => argument.length))).toBe(3000);
+  expect(remoteArgv.length).toBeLessThan(21);
+  expect(Math.max(...remoteArgv.map((argument) => Buffer.byteLength(argument)))).toBeLessThanOrEqual(3000);
   const file = remoteRunCustodyPath(root, physicalRunId);
   initializeRemoteRunCustody(root, physicalRunId, binding);
   expect(readJsonFile<CheckRemoteRunCustody>(file)?.binding?.remoteArgv).toEqual(remoteArgv);
