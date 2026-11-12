@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { gzipSync } from 'node:zlib';
 import {
   existsSync,
   lstatSync,
@@ -468,12 +469,14 @@ function stableSource(started: TypingInputs, completed: TypingInputs, outputs: r
 /** Capture every admitted physical command, including workspace runners predating compiler receipt support. */
 export function typingInputCommand(command: readonly string[]): string[] {
   // Carry the current standalone capture implementation through argv: old frozen worktrees need no source rewrite.
-  // Keep each transferred argument under remote custody's 4096-character bound.
-  const payload = Buffer.from(
-    JSON.stringify({
-      captureModule: readFileSync(import.meta.path).toString('base64'),
-      command,
-    }),
+  // Compress it so the complete command stays inside remote custody's transition-reserved record bound.
+  const payload = gzipSync(
+    Buffer.from(
+      JSON.stringify({
+        captureModule: readFileSync(import.meta.path).toString('base64'),
+        command,
+      }),
+    ),
   ).toString('base64');
   const payloadChunks = payload.match(/.{1,3000}/g) ?? [];
   return [
@@ -481,7 +484,8 @@ export function typingInputCommand(command: readonly string[]): string[] {
     '-e',
     `
 const payload = process.argv.slice(1).join('');
-const { captureModule, command } = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
+const { gunzipSync } = await import('node:zlib');
+const { captureModule, command } = JSON.parse(gunzipSync(Buffer.from(payload, 'base64')).toString('utf8'));
 let complete;
 let readReceipt;
 try {
