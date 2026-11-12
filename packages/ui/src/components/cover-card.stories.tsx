@@ -220,7 +220,7 @@ const statusCards = () => (
       href="/other"
       title="Long localized status"
       cover={{ subject: subjects[2]!, cover: null, src: () => '' }}
-      status={{ label: '非常に長い翻訳済みのライブラリ状態ラベルを一行で省略します' }}
+      status={{ label: '非常に長い翻訳済みのライブラリ状態ラベルも全文を折り返して表示します' }}
       progress={{ value: null, label: 'Ep 3/12' }}
     />
     <CoverCard
@@ -257,8 +257,14 @@ export const Status: Story = {
     const longStatus = cards[2]!.querySelector<HTMLElement>('[data-slot="cover-card-status"]')!;
     const longCard = cards[2]!;
     longCard.parentElement!.style.width = '390px';
-    await expect(longStatus.scrollWidth).toBeGreaterThan(longStatus.clientWidth);
-    await expect(longStatus.clientWidth).toBeLessThan(longCard.clientWidth);
+    await expect(getComputedStyle(longStatus).whiteSpace).toBe('normal');
+    await expect(longStatus).toHaveAttribute('aria-label', longStatus.textContent!);
+    await expect(longStatus.scrollWidth).toBeLessThanOrEqual(longStatus.clientWidth + 1);
+    await expect(longStatus.scrollHeight).toBeLessThanOrEqual(longStatus.clientHeight + 1);
+    await expect(longStatus.getBoundingClientRect().height).toBeGreaterThan(
+      Number.parseFloat(getComputedStyle(longStatus).lineHeight),
+    );
+    await expect(longStatus.clientWidth).toBeLessThanOrEqual(longCard.clientWidth);
     longCard.parentElement!.style.width = '';
     titleLink.focus();
     await userEvent.tab();
@@ -458,8 +464,12 @@ export const ComposedCompatibility: Story = {
   render: () => <ComposedCompatibilityExample />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const linkedArticle = canvas.getByRole('heading', { name: 'A translated work' }).closest('article')!;
-    const titleLink = within(linkedArticle).getByRole('link', { name: 'Continue A translated work' });
+    const titleLink = canvas.getByRole('link', { name: 'Continue A translated work' });
+    const linkedArticle = titleLink.closest('article')!;
+    await expect(within(linkedArticle).getByRole('heading', { name: 'Continue A translated work' })).toHaveTextContent(
+      'A translated work',
+    );
+    await expect(titleLink).toHaveAttribute('lang', 'ja');
     const statusLink = within(linkedArticle).getByRole('link', { name: 'Reading' });
     await expect(titleLink).toHaveAttribute('href', '/works/book');
     await expect(titleLink.tagName).toBe('A');

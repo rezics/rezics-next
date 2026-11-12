@@ -24,7 +24,9 @@ test('card renders a title link and separate actions, with wrapping text and a f
   expect(html.match(/<article\b[^>]*>/u)?.[0]).not.toMatch(/max-block-size|overflow-hidden/u);
   expect(html).toContain('wrap-anywhere');
   expect(html).toContain('whitespace-normal');
-  expect(html).not.toContain('line-clamp-');
+  const metadata = html.slice(html.indexOf('data-slot="cover-card-text"'));
+  expect(metadata).toContain('data-slot="cover-card-secondary"');
+  expect(metadata).not.toContain('line-clamp-');
   expect(html.match(/<a\b/g)?.length).toBe(1);
   expect(html.indexOf('</a>')).toBeLessThan(html.indexOf('<button'));
 });
