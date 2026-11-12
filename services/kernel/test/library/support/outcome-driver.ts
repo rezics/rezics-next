@@ -78,6 +78,20 @@ type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 type ConnectCallback = (error: Error | undefined, client: PoolClient, release: (error?: Error) => void) => void;
 type ConnectPrototype = { connect: (...args: unknown[]) => unknown };
 
+/** Keep the worker's public issuer URL while using the already-running fixture Auth server for JWKS. */
+export function createFollowFixtureFetch(
+  configuredJwksUrl: string,
+  authHandlerJwksUrl: string,
+  transport: typeof fetch,
+): typeof fetch {
+  return (input, init) => {
+    const href = typeof input === 'string' ? input : input instanceof Request ? input.url : input.href;
+    if (href !== configuredJwksUrl) return transport(input, init);
+    const request = new Request(input, init);
+    return transport(new Request(authHandlerJwksUrl, request));
+  };
+}
+
 function queryText(query: unknown): string | undefined {
   if (typeof query === 'string') return query;
   if (typeof query !== 'object' || query === null || !('text' in query)) return undefined;
@@ -648,7 +662,8 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
             KERNEL_EXECUTOR_ID: 'library-outcomes',
             AUTH_ISSUER: issuer,
             AUTH_AUDIENCE: audience,
-            AUTH_JWKS_URL: `http://127.0.0.1:${authServer!.port}/.well-known/jwks.json`,
+            AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
+            REZICS_FOLLOW_FIXTURE_JWKS_HANDLER_URL: `http://127.0.0.1:${authServer!.port}/.well-known/jwks.json`,
             OPENSEARCH_URL: '',
             [SHELF_TYPE_DIGEST_ENV]: options.workerShelfTypeDigest,
           }),
@@ -1497,6 +1512,11 @@ if (import.meta.main) {
     KERNEL_WORKER_POOL_SIZE: '10',
     KERNEL_EXECUTOR_ID: 'library-outcomes',
   });
+  globalThis.fetch = createFollowFixtureFetch(
+    workerEnv.AUTH_JWKS_URL!,
+    workerEnv.REZICS_FOLLOW_FIXTURE_JWKS_HANDLER_URL!,
+    globalThis.fetch.bind(globalThis),
+  );
   let repairLatch: ReturnType<typeof installStateReferenceRepairLatch> | undefined;
   process.on('message', (message) => repairLatch?.receive(message));
   process.on('disconnect', () => repairLatch?.close());
