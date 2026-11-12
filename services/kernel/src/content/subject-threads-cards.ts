@@ -2,7 +2,7 @@ import { projectPublicConversationActivity } from './community-projection/index.
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { ConversationActivitySelection } from './conversation-activity.ts';
-import type { FeedAuthor } from './feed-contract.ts';
+import type { FeedAuthor, FeedReactionCounts } from './feed-contract.ts';
 import { prepareFeedContentContext } from './feed-context.ts';
 import { feedCapabilities } from './adapters/feed-bind.ts';
 import type { AnchoredPosition, FeedParentContext, FeedReviewContext, ReadContext } from './model.ts';
@@ -15,8 +15,7 @@ import {
   type SelectedReadingCardReference,
 } from './reading-page.ts';
 import { readSubjectThreads } from './reads.ts';
-import type { ReactionCountFreshness, ThreadView } from './reads.ts';
-import type { SubjectThreadWithReactions } from './subject-threads-reactions.ts';
+import type { ReactionCountFreshness, ThreadView, ViewerReactionKind } from './reads.ts';
 import {
   staleSubjectThreadActivity,
   type SubjectThreadConversationActivity,
@@ -76,9 +75,13 @@ export type SubjectThreadCard = Readonly<{
   }>;
 }>;
 
-export type SubjectThreadCardEntry = Omit<SubjectThreadWithReactions, 'reactions' | 'viewerReaction'> &
-  Partial<Pick<SubjectThreadWithReactions, 'reactions' | 'viewerReaction'>> &
-  Readonly<{ card: SubjectThreadCard; reviewContext?: FeedReviewContext }>;
+export type SubjectThreadCardEntry = ThreadView &
+  Readonly<{
+    reactions?: FeedReactionCounts;
+    viewerReaction?: ViewerReactionKind | null;
+    card: SubjectThreadCard;
+    reviewContext?: FeedReviewContext;
+  }>;
 
 export type SubjectThreadCardProjection = Readonly<{
   entries: readonly SubjectThreadCardEntry[];
@@ -109,11 +112,11 @@ function presentationOf(body: unknown): Readonly<{ language: string | null; spoi
   return { language, spoiler };
 }
 
-function revisionId(thread: SubjectThreadWithReactions): string | null {
+function revisionId(thread: ThreadView): string | null {
   return 'revisionId' in thread.firstPost ? thread.firstPost.revisionId : null;
 }
 
-function cardReference(thread: SubjectThreadWithReactions, subjectId: string): SelectedReadingCardReference {
+function cardReference(thread: ThreadView, subjectId: string): SelectedReadingCardReference {
   return {
     type: 'content.thread',
     id: thread.id,
@@ -123,32 +126,14 @@ function cardReference(thread: SubjectThreadWithReactions, subjectId: string): S
   };
 }
 
-function contentReference(thread: SubjectThreadWithReactions) {
-  const { reactions: _reactions, viewerReaction: _viewerReaction, ...initialThread } = thread;
+function contentReference(thread: ThreadView) {
   return {
     key: thread.id,
     threadId: thread.id,
     postId: thread.firstPost.id,
-    initialThread,
+    initialThread: thread,
     initialPost: thread.firstPost,
   } as const;
-}
-
-function reactionRecord(value: Readonly<Partial<Record<string, number>>> | undefined) {
-  return Object.fromEntries(
-    Object.entries(value ?? {}).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
-  );
-}
-
-function assertReactionCurrent(
-  thread: SubjectThreadWithReactions,
-  reaction: SelectedReadingCardBatchResult['reactions']['items'][number] | undefined,
-): boolean {
-  if (!reaction || reaction.state !== 'current') return false;
-  if (JSON.stringify(reactionRecord(thread.reactions)) !== JSON.stringify(reactionRecord(reaction.counts)))
-    throw new ProblemError('dependency_unavailable');
-  if (thread.viewerReaction !== reaction.viewerSelection) throw new ProblemError('dependency_unavailable');
-  return true;
 }
 
 function author(
@@ -170,7 +155,7 @@ function author(
 function comments(
   selection: ConversationActivitySelection | undefined,
   selectedState: CurrentCardSelection['state'],
-  postAvailability: SubjectThreadWithReactions['firstPost']['availability'],
+  postAvailability: ThreadView['firstPost']['availability'],
 ): CardComments {
   if (selectedState === 'erased' || postAvailability !== 'available') return { state: 'withheld' };
   if (!selection) throw new ProblemError('dependency_unavailable');
@@ -186,7 +171,7 @@ function comments(
 }
 
 function mediaFor(
-  post: SubjectThreadWithReactions['firstPost'],
+  post: ThreadView['firstPost'],
   selectedState: CurrentCardSelection['state'],
   images: ReadonlyMap<string, DocumentImagePresentation>,
 ): CardMedia {
@@ -201,7 +186,7 @@ function mediaFor(
 async function readMedia(
   dependencies: SubjectThreadCardDependencies,
   context: ReadContext,
-  posts: readonly SubjectThreadWithReactions['firstPost'][],
+  posts: readonly ThreadView['firstPost'][],
 ): Promise<ReadonlyMap<string, DocumentImagePresentation>> {
   requireAccessDeadline(context.deadline);
   const ids: string[] = [];
@@ -246,10 +231,9 @@ function watch(
   return { state: 'unavailable', retryable: true };
 }
 
-function equalNativeThread(selected: SubjectThreadWithReactions, current: ThreadView | null): boolean {
+function equalNativeThread(selected: ThreadView, current: ThreadView | null): boolean {
   if (!current) return false;
-  const { reactions: _reactions, viewerReaction: _viewerReaction, ...source } = selected;
-  return JSON.stringify(source) === JSON.stringify(current);
+  return JSON.stringify(selected) === JSON.stringify(current);
 }
 
 /** Adds bounded card fields around Subject's selected native threads and retains every final source check. */
@@ -257,10 +241,9 @@ export async function projectSubjectThreadCards(
   dependencies: SubjectThreadCardDependencies,
   subjectId: string,
   placeId: string,
-  selected: readonly SubjectThreadWithReactions[],
+  selected: readonly ThreadView[],
   context: ReadContext,
   activitySnapshot: SubjectThreadConversationActivity,
-  reactionsAsOf: SubjectThreadCardProjection['reactionsAsOf'],
   finalDisclosure: () => Promise<void>,
 ): Promise<SubjectThreadCardProjection> {
   if (selected.length > 20) throw new RangeError('At most 20 Subject thread cards');
@@ -293,10 +276,10 @@ export async function projectSubjectThreadCards(
   const cardResult = await cards.finish();
   const contentResult = await content.finish();
   const cardById = new Map(cardResult.selected.map((item) => [item.reference.id, item]));
-  const mediaPosts: SubjectThreadWithReactions['firstPost'][] = [];
+  const mediaPosts: ThreadView['firstPost'][] = [];
   type FeedContextValue = NonNullable<ReturnType<typeof contentResult.contexts.get>>;
   const ready: {
-    thread: SubjectThreadWithReactions;
+    thread: ThreadView;
     selected: CurrentCardSelection;
     post: NonNullable<FeedContextValue['post']>;
     context: FeedContextValue;
@@ -336,7 +319,7 @@ export async function projectSubjectThreadCards(
     const reactionCurrent =
       item.selected.state === 'current' &&
       cardResult.currentness.reactions === 'current' &&
-      assertReactionCurrent(item.thread, reactions);
+      reactions?.state === 'current';
     if (reactionCurrent) hasCurrentReaction = true;
     const threadAuthorId = item.thread.authorId;
     const openingAuthorId =
@@ -405,10 +388,17 @@ export async function projectSubjectThreadCards(
               : 'unavailable',
       },
     };
-    const { reactions: _counts, viewerReaction: _viewerReaction, ...withoutReactions } = item.thread;
     const exposeReactions = reactionCurrent;
     entries.push({
-      ...(exposeReactions ? item.thread : withoutReactions),
+      ...item.thread,
+      ...(exposeReactions
+        ? {
+            reactions: (reactions?.counts ?? {}) as FeedReactionCounts,
+            ...(reactions?.viewerSelection !== undefined
+              ? { viewerReaction: reactions.viewerSelection as ViewerReactionKind | null }
+              : {}),
+          }
+        : {}),
       ...(item.selected.state === 'current' && item.context.reviewContext
         ? { reviewContext: item.context.reviewContext }
         : {}),
@@ -422,5 +412,9 @@ export async function projectSubjectThreadCards(
     ...initialActivity.flatMap((item) => (item.status === 'current' ? [item.witness.source] : [])),
     ...finalActivity.flatMap((item) => (item.status === 'current' ? [item.witness.source] : [])),
   ];
-  return { entries, anchors, reactionsAsOf: hasCurrentReaction ? reactionsAsOf : null };
+  return {
+    entries,
+    anchors,
+    reactionsAsOf: hasCurrentReaction ? cardResult.reactions.reactionsAsOf : null,
+  };
 }

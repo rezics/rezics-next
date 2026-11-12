@@ -11,7 +11,6 @@ import type { AnchoredPosition, ReadContext } from './model.ts';
 import { ContentNotFoundError, readSubjectThreads, type ThreadView } from './reads.ts';
 import page from './page-subject-threads.sql';
 import { prepareSubjectThreadContext, type SubjectThreadContext } from './subject-threads-context.ts';
-import { projectSubjectThreadReactions, type SubjectThreadWithReactions } from './subject-threads-reactions.ts';
 import {
   projectSubjectThreadCards,
   type SubjectThreadCardDependencies,
@@ -219,17 +218,15 @@ export async function listSubjectThreads(
     entries.map((entry) => entry.id),
     context.deadline,
   );
-  const projected = await projectSubjectThreadReactions(dependencies, subjectId, input.place, entries, context);
   let finalContext: SubjectThreadContext | undefined;
   let finalEntry: SubjectThreadEntry | undefined;
   const composed = await projectSubjectThreadCards(
     dependencies,
     subjectId,
     input.place,
-    projected.entries,
+    entries,
     context,
     conversationActivity,
-    projected.reactionsAsOf,
     async () => {
       const entry = await entryPage.finish();
       finalEntry = entry.entry;
@@ -237,7 +234,7 @@ export async function listSubjectThreads(
       finalContext = await pageContext.finish();
     },
   );
-  anchors.push(...projected.anchors, ...composed.anchors);
+  anchors.push(...composed.anchors);
   return {
     context: finalContext!,
     entry: finalEntry!,
