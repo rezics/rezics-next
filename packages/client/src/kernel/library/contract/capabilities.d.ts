@@ -227,6 +227,8 @@ export interface SourceCaptureCapability {
         deadline: number;
         at: unknown;
         allowance: WorkAllowance;
+        /** The exact Source instance whose prepared handle the caller will use for continuation. */
+        source?: Pick<CollectionSource, 'prepare'>;
         logical?: boolean;
         ordinaryPage?: boolean;
     }): Promise<{

@@ -4,7 +4,7 @@ import type { LibraryActor } from './actors.ts';
 import type { LibraryCapabilities } from './capabilities.ts';
 import type { ProgressOperationApplication } from './progress-operations.ts';
 import type { MembershipPage, NestedAdmissionAccount, OccurrenceDraft } from './membership.ts';
-import type { CollectionSourceObservation, PreparedCollectionSource } from './source.ts';
+import type { CollectionSource, CollectionSourceObservation, PreparedCollectionSource } from './source.ts';
 import type { WorkAllowance, WorkReceipt } from './work-dimensions.ts';
 import type { OwnerQueryInput, OwnerQueryOpen } from './owner-query.ts';
 export type SourceCaptureResult = Readonly<{
@@ -54,6 +54,7 @@ export type LibraryDomain = LibraryCapabilities & Readonly<{
             deadline: number;
             at: unknown;
             allowance: WorkAllowance;
+            source?: Pick<CollectionSource, 'prepare'>;
             logical?: boolean;
             ordinaryPage?: boolean;
         }): Promise<SourceCaptureResult>;
