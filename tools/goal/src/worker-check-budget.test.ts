@@ -1751,9 +1751,6 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
           status: 'finished',
           remoteExpected: true,
           exitCode: previous.exitCode,
-          ...(previous.id === selectedFailureCheckId
-            ? {}
-            : { terminalProof: { local: true, resultKnown: true, remote: true } }),
         }),
       );
       writeFileSync(
