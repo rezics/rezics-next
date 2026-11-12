@@ -340,7 +340,10 @@ test('admission pressure yields only the page-data seed and resumes its journal 
           if (cycle === 1) {
             firstSeed.resolve();
             await new Promise<void>((resolve, reject) => {
-              const timeout = setTimeout(() => reject(new Error('admission pressure did not reach page-data seed')), 2000);
+              const timeout = setTimeout(
+                () => reject(new Error('admission pressure did not reach page-data seed')),
+                2000,
+              );
               signal.addEventListener(
                 'abort',
                 () => {
@@ -390,8 +393,9 @@ test('admission pressure yields only the page-data seed and resumes its journal 
       sections: [{ page: 'home', persona: 'anonymous', section: 'feed', class: 'DATA' }],
     });
     expect(journal).toBe('retained-tag-parent-checkpoint');
-    expect(formatPageDataFlowRuns(flowReport(readFlow(db), [], Date.parse(deferred.at)).pageDataRuns).join('\n'))
-      .toContain('seed=admission-deferred');
+    expect(
+      formatPageDataFlowRuns(flowReport(readFlow(db), [], Date.parse(deferred.at)).pageDataRuns).join('\n'),
+    ).toContain('seed=admission-deferred');
 
     now = new Date(Date.parse(deferred.at) + interval);
     writeFileSync(pressureFile, JSON.stringify({ paused: false }));

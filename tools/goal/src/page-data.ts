@@ -117,9 +117,7 @@ export type PageDataRun = {
 };
 export type PageDataSeedPublicationStatus = { status: 'publication-incomplete'; omissions: number };
 export type PageDataSeedStatus = PageDataSeedPublicationStatus | { status: 'admission-deferred' };
-export type PageDataSeedExecution<T> =
-  | { status: 'completed'; value: T }
-  | { status: 'admission-deferred' };
+export type PageDataSeedExecution<T> = { status: 'completed'; value: T } | { status: 'admission-deferred' };
 export type PageDataSeedAdmission = {
   isPaused: () => boolean;
   watch: (onChange: () => void) => () => void;
