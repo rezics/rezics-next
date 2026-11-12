@@ -2014,6 +2014,27 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     expect(JSON.stringify(h.store.attempt(retained.ref).terminationIntent)).toBe(beforeStop);
     expect(JSON.stringify(h.store.retryIntent(retained.ref))).toBe(beforeRetry);
 
+    const authorizationBody = JSON.parse(authorization!.body) as Record<string, unknown>;
+    const mismatchedOrigin = {
+      ...authorizationBody,
+      withdrawnBudgetOrigin: {
+        ...(authorizationBody.withdrawnBudgetOrigin as Record<string, unknown>),
+        failureSha256: '0'.repeat(64),
+      },
+    };
+    h.store.db
+      .query('UPDATE worker_events SET body=? WHERE sequence=?')
+      .run(JSON.stringify(mismatchedOrigin), authorization!.sequence);
+    const originCheckEnvironment = { ...process.env };
+    try {
+      Object.assign(process.env, issuedProof.env);
+      expect(() => startWorkerCheck(compiler, worktree, () => {})).toThrow();
+    } finally {
+      h.store.db.query('UPDATE worker_events SET body=? WHERE sequence=?').run(authorization!.body, authorization!.sequence);
+      for (const key of Object.keys(process.env)) if (!(key in originCheckEnvironment)) delete process.env[key];
+      Object.assign(process.env, originCheckEnvironment);
+    }
+
     const savedEnvironment = { ...process.env };
     let physicalRunId = '';
     let checkId = '';

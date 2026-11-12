@@ -27,6 +27,7 @@ import {
 } from '../../../scripts/check-custody.ts';
 import { parseRemotePhysicalRunReceipt } from '../../../scripts/remote-check.ts';
 import type { AuthenticatedManager } from './priority-authority.ts';
+import { readMeasurement } from './records.ts';
 import type { Task, Attempt, RetryIntent } from './types.ts';
 import {
   captureTypingInputs,
@@ -568,6 +569,118 @@ export function workerCheckHostBudgetRefusalReport(result: string | null | undef
     Array.isArray(report.checks) &&
     report.checks.length === 0
   );
+}
+
+/** Recover the original report only from the native authorization event that retained its validated origin. */
+function retainedWithdrawnBudgetOriginReport(input: {
+  db: Database;
+  grant: TypingRecoveryGrant;
+  task: Task;
+  attempt: Attempt;
+  progress?: { endHead?: unknown };
+  directory: string;
+}): string | undefined {
+  const { db, grant, task, attempt, progress, directory } = input;
+  const sourceHead = progress?.endHead;
+  if (
+    grant.recoveryKind !== 'withdrawn-budget-stop' ||
+    JSON.stringify(grant.command) !== JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) ||
+    attempt.state !== 'stopped' ||
+    JSON.stringify(attempt.typingEvidencePending?.command) !== JSON.stringify(grant.command) ||
+    typeof attempt.result !== 'string' ||
+    typeof sourceHead !== 'string'
+  )
+    return;
+
+  const row = db
+    .query(
+      "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized' ORDER BY sequence DESC LIMIT 1",
+    )
+    .get(grant.taskId, grant.attempt) as { body: string } | null;
+  if (!row) return;
+  let body: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(row.body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+    body = parsed as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  if (
+    Object.keys(body).sort().join(',') !==
+      'actor,checkId,command,identity,recoveryKind,token,withdrawnBudgetOrigin' ||
+    body.recoveryKind !== grant.recoveryKind ||
+    body.token !== grant.token ||
+    body.identity !== grant.identity ||
+    body.checkId !== grant.checkId ||
+    JSON.stringify(body.command) !== JSON.stringify(grant.command)
+  )
+    return;
+  const actor = body.actor as { id?: unknown; sessionId?: unknown } | null;
+  if (
+    !actor ||
+    typeof actor.id !== 'string' ||
+    typeof actor.sessionId !== 'string' ||
+    actor.id !== grant.actor.id ||
+    actor.sessionId !== grant.actor.sessionId
+  )
+    return;
+  const origin = body.withdrawnBudgetOrigin as
+    | {
+        version?: unknown;
+        sourceCommit?: unknown;
+        reportSha256?: unknown;
+        failureSha256?: unknown;
+        failureStamp?: unknown;
+      }
+    | undefined;
+  if (
+    !origin ||
+    origin.version !== 1 ||
+    typeof origin.sourceCommit !== 'string' ||
+    !/^[0-9a-f]{40}$/.test(origin.sourceCommit) ||
+    origin.sourceCommit !== sourceHead ||
+    typeof origin.reportSha256 !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(origin.reportSha256) ||
+    typeof origin.failureSha256 !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(origin.failureSha256) ||
+    origin.failureSha256 !== createHash('sha256').update(attempt.result).digest('hex') ||
+    typeof origin.failureStamp !== 'string' ||
+    !STAMP_NAME.test(origin.failureStamp)
+  )
+    return;
+  const sourceCommit = origin.sourceCommit;
+
+  const report = readMeasurement(attempt).result;
+  if (
+    !workerCheckHostBudgetRefusalReport(report) ||
+    createHash('sha256').update(report).digest('hex') !== origin.reportSha256 ||
+    !(report.match(/[0-9a-f]{10,40}/gi) ?? []).some((reference) =>
+      sourceCommit.startsWith(reference.toLowerCase()),
+    )
+  )
+    return;
+
+  const selection = workerCheckHostStaleTypingFailureSelection({
+    directory,
+    worktree: task.worktree,
+    result: attempt.result,
+    stamp: origin.failureStamp,
+  });
+  if (
+    !selection ||
+    JSON.stringify(selection.command) !== JSON.stringify(grant.command) ||
+    !workerCheckHostWithdrawnLegacyTypingCheckMatchesAttempt(
+      task.worktree,
+      task.id,
+      attempt.attempt,
+      selection.physicalRunId,
+      selection.command,
+      selection.exitCode,
+    )
+  )
+    return;
+  return report;
 }
 
 /** A withdrawn Web retry requires each listed result to agree with the terminal custody that settles it. */
@@ -1169,14 +1282,19 @@ function admitTypingRecovery(input: WorkerCheckHostAdmit, directory: string): Wo
       } catch {
         progress = undefined;
       }
+      const retainedReport =
+        task && attempt
+          ? retainedWithdrawnBudgetOriginReport({ db, grant, task, attempt, progress, directory })
+          : undefined;
+      const eligibilityAttempt = retainedReport && attempt ? { ...attempt, result: retainedReport } : attempt;
       const withdrawnRetry =
         grant.recoveryKind === 'withdrawn-budget-stop' &&
         task !== null &&
-        attempt !== null &&
+        eligibilityAttempt !== null &&
         JSON.stringify(grant.command) === JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) &&
         workerCheckHostWithdrawnRetryIsRecoverable({
           task,
-          attempt,
+          attempt: eligibilityAttempt,
           ...(retry ? { retry } : {}),
           ...(progress ? { progress } : {}),
           currentCheck: { id: grant.checkId, physicalRunId: grant.physicalRunId },
