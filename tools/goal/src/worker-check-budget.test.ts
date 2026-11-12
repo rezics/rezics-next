@@ -1778,6 +1778,13 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     };
 
     await rejectChangedEvidence(() => updateEvidence(secondResult!, (value) => (value.exitCode = 0)));
+    await rejectChangedEvidence(() => writeFileSync(secondRemote!, '{'));
+    await rejectChangedEvidence(() => updateEvidence(secondRemote!, (value) => (value.status = 'running')));
+    await rejectChangedEvidence(() =>
+      updateEvidence(secondRemote!, (value) => {
+        (value.binding as Record<string, unknown>).checkId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+      }),
+    );
     await rejectChangedEvidence(() =>
       updateEvidence(secondRemote!, (value) => {
         const attempts = value.attempts as Record<string, unknown>[];
@@ -1840,15 +1847,34 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     const beforeStop = JSON.stringify(h.store.attempt(retained.ref).terminationIntent);
     const beforeRetry = JSON.stringify(h.store.retryIntent(retained.ref));
 
+    const retainedSecondResult = readFileSync(secondResult!, 'utf8');
+    for (const previous of previousChecks) {
+      unlinkSync(join(remoteCustody, `${previous.physicalRunId}.json`));
+      updateEvidence(join(history, `${previous.id}.${previous.physicalRunId}.json`), (value) => {
+        delete value.remoteArgv;
+        delete value.physicalRun;
+      });
+    }
+    updateEvidence(secondResult!, (value) => {
+      delete value.runnerPid;
+      delete value.runnerIdentity;
+    });
+    await expect(recover()).rejects.toThrow();
+    writeFileSync(secondResult!, retainedSecondResult);
+
     const issued = await recover();
     expect(issued.status).toBe('pending');
     for (const previous of previousChecks) {
-      expect(
-        JSON.parse(readFileSync(join(history, `${previous.id}.${previous.physicalRunId}.json`), 'utf8')).terminalProof,
-      ).toBeUndefined();
+      const legacyHistory = JSON.parse(
+        readFileSync(join(history, `${previous.id}.${previous.physicalRunId}.json`), 'utf8'),
+      );
+      expect(legacyHistory.remoteArgv).toBeUndefined();
+      expect(legacyHistory.physicalRun).toBeUndefined();
+      expect(legacyHistory.terminalProof).toBeUndefined();
       expect(existsSync(join(checkRoot, 'custody/receipts', `${previous.id}.${previous.physicalRunId}.json`))).toBe(
         false,
       );
+      expect(existsSync(join(remoteCustody, `${previous.physicalRunId}.json`))).toBe(false);
     }
     const issuedProof = recoveryProof(issued);
     expect(issuedProof.commands).toHaveLength(1);

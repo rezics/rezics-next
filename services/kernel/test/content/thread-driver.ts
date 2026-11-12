@@ -185,6 +185,25 @@ function instant(value: unknown): string {
   throw new Error('Permission time is not a timestamp');
 }
 
+function isOutboxFence(statement: string): boolean {
+  return (
+    statement === fenceStatement.sql ||
+    (statement.includes('UPDATE core.partition') &&
+      statement.includes('INSERT INTO core.outbox') &&
+      statement.includes('INSERT INTO core.receipt') &&
+      statement.includes('RETURNING epoch, position'))
+  );
+}
+
+function isPermissionCheck(statement: string): boolean {
+  return (
+    statement === permissionRead.sql ||
+    (statement.includes('FROM access.resource_grant') &&
+      statement.includes('FROM access.resource_denial') &&
+      statement.includes('local.resource_id = ANY'))
+  );
+}
+
 function databaseName(prefix: string): string {
   const name = `${prefix}${crypto.randomUUID().replaceAll('-', '')}`;
   if (!/^[a-z][a-z0-9]+$/.test(name)) throw new Error('Generated database name is not a safe identifier');
@@ -620,6 +639,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
   const pool = system.database.pool;
   const writeNamespace = crypto.randomUUID();
   let mark = 0;
+  let outboxFenceStatement: string | undefined;
   let fixtureSemanticIds = new Set<string>();
   let authorCredential = system.actors.author;
   let otherCredential = system.actors.other;
@@ -679,7 +699,10 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
       headers.set('content-type', 'application/json');
       request.body = JSON.stringify(init.body);
     }
-    return system.kernel.handle(new Request(`${AUDIENCE}${path}`, request));
+    const response = await system.kernel.handle(new Request(`${AUDIENCE}${path}`, request));
+    const executedFence = observer.records.slice(mark).find((record) => isOutboxFence(record.statement));
+    if (executedFence) outboxFenceStatement = executedFence.statement;
+    return response;
   }
 
   async function parsed<T>(response: Response, read: (body: unknown) => T): Promise<ApiResult<T>> {
@@ -1039,8 +1062,9 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
         if ((post.rowCount ?? 0) !== 1) throw new Error('Visibility target is missing');
       },
       async failBeforeOutbox() {
+        if (!outboxFenceStatement) throw new Error('A mounted command has not executed the native outbox fence');
         observer.armFault({
-          match: { statement: fenceStatement.sql },
+          match: { statement: outboxFenceStatement },
           boundary: 'before',
           error: new CommandUnavailableError('overloaded', 0),
         });
@@ -1126,7 +1150,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
       }[] = [];
       const fences: { partition: number; statement: number; connectionId: number }[] = [];
       records.forEach((record, index) => {
-        if (record.statement === permissionRead.sql) {
+        if (isPermissionCheck(record.statement)) {
           const route = Number(parameter(record, permissionRead.params, 'route'));
           checks.push({
             action: String(parameter(record, permissionRead.params, 'action')),
@@ -1137,7 +1161,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
             at: instant(parameter(record, permissionRead.params, 'at')),
           });
         }
-        if (record.statement === fenceStatement.sql) {
+        if (isOutboxFence(record.statement)) {
           fences.push({
             partition: Number(parameter(record, fenceStatement.params, 'partition_no')),
             statement: index + 1,
@@ -1148,6 +1172,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
       return {
         queries: records.map((record, index) => ({
           statement: record.statement,
+          parameters: record.parameters,
           connectionId: record.connectionId,
           index: index + 1,
         })),

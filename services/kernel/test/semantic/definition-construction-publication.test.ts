@@ -11,6 +11,7 @@ import historicalIdentity from '../../../../packages/definitions/test/fixtures/d
 let driver: SemanticOutcomeDriver;
 let directory: string;
 let script: string;
+let coldSequence = 0;
 const root = resolve(import.meta.dir, '../../../..');
 const key = () => ({ 'Idempotency-Key': JSON.stringify(randomUUID()) });
 beforeAll(async () => {
@@ -30,6 +31,7 @@ const input = await Bun.stdin.json();
 let historical;
 let pool;
 let kernel;
+const phase = (name) => process.stderr.write('cold-phase:' + name + '\\n');
 try {
   let validateRelease, releaseDigest;
   if (input.original) {
@@ -57,30 +59,43 @@ try {
     KERNEL_WRITE_RATE_SECRET: 'construction-cold-http-secret-with-at-least-32-bytes',
   }, auth: { issuer: runtime.authIssuer, audience: runtime.authAudience, jwksUrl: runtime.authJwksUrl } });
   kernel = createKernel({ ...defaults, pool, routeKey: Buffer.from(runtime.routeKey, 'base64url') });
+  phase('runtime:ready');
   const headers = new Headers(input.headers);
   if (input.bearer) headers.set('authorization', 'Bearer ' + input.bearer);
   if (input.body !== undefined) headers.set('content-type', 'application/json');
   const validation = input.original ? validateRelease(input.body.release) : undefined;
   const digest = input.original ? releaseDigest(input.body.release) : undefined;
+  phase('handler:start');
   const response = await kernel.handle(new Request('http://kernel.test' + input.path, {
     method: input.method, headers,
     ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
   }));
-  console.log(JSON.stringify({ status: response.status, body: await response.json(),
+  phase('handler:complete:' + response.status);
+  phase('response-body:start');
+  const responseBody = await response.json();
+  phase('response-body:complete');
+  console.log(JSON.stringify({ status: response.status, body: responseBody,
     etag: response.headers.get('etag'), session: response.headers.get('rezics-session-token'),
     validation, digest, points, historical }));
 } finally {
   try {
     // The child owns the compiled HTTP host as well as its database pool.
+    phase('kernel.stop:start');
     await kernel?.stop(true);
+    phase('kernel.stop:complete');
   } finally {
     try {
+      phase('pool.end:start');
       if (pool) await pool.end();
+      phase('pool.end:complete');
     } finally {
+      phase('historical.close:start');
       historical?.close();
+      phase('historical.close:complete');
     }
   }
 }
+phase('resources:closed');
 `,
   );
 }, 180_000);
@@ -97,6 +112,7 @@ async function cold(options: {
   body?: unknown;
   original?: boolean;
 }) {
+  const coldId = ++coldSequence;
   const child = Bun.spawn(
     [process.execPath, '--preload', Bun.resolveSync('reylo/register', resolve(root, 'services/kernel')), script],
     {
@@ -108,11 +124,31 @@ async function cold(options: {
   );
   child.stdin.write(JSON.stringify({ runtime: driver.fixtures.runtime, ...options }));
   child.stdin.end();
-  const [stdout, stderr, exit] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
+  const decoder = new TextDecoder();
+  let stderrText = '';
+  let remainder = '';
+  const stderrRead = (async () => {
+    const reader = child.stderr.getReader();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const text = decoder.decode(value, { stream: true });
+      stderrText += text;
+      const lines = `${remainder}${text}`.split('\n');
+      remainder = lines.pop() ?? '';
+      for (const line of lines) if (line.startsWith('cold-phase:')) process.stderr.write(`[cold ${coldId}] ${line}\n`);
+    }
+    const tail = decoder.decode();
+    stderrText += tail;
+    remainder += tail;
+    if (remainder.startsWith('cold-phase:')) process.stderr.write(`[cold ${coldId}] ${remainder}\n`);
+    return stderrText;
+  })();
+  const exited = child.exited.then((code) => {
+    process.stderr.write(`[cold ${coldId}] child:exit:${code}\n`);
+    return code;
+  });
+  const [stdout, stderr, exit] = await Promise.all([new Response(child.stdout).text(), stderrRead, exited]);
   expect(exit, stderr + stdout).toBe(0);
   const lines = stdout.trim().split('\n');
   return JSON.parse(lines.at(-1)!) as {
