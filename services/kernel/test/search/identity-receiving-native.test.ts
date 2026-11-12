@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { systemClock } from '../../src/clock.ts';
 import { composeSemanticAdapters } from '../../src/composition/semantic.ts';
 import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
@@ -10,7 +11,14 @@ import {
   type IdentitySourceSupportReaderFactory,
 } from '../../src/semantic/index.ts';
 import { createSearchSourceBindingAdapter } from '../../src/search/source-binding-adapter.ts';
+import { discoveryConsumer } from '../../src/search/consumer-name.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
+import { createDiscoveryProjection, nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
+import { allocateDiscovery, advanceDiscovery, discoveryGenerations } from '../../src/search/generations.ts';
+import { discoveryDocumentId } from '../../src/search/discovery-documents.ts';
+import { discoveryIndexName } from '../../src/search/indices.ts';
+import { readAccountDiscoveryBindings } from '../../src/search/native-bindings.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';
 import { stepIdentityEpochMapping } from '../../src/semantic/identity-epoch-mapping.ts';
 import type { IdentityJobRef, IdentityStepProgress } from '../../src/semantic/identity-epoch-contract.ts';
@@ -36,6 +44,8 @@ const search = createOpenSearch(url);
 const prefix = `receiving-${randomUUID().slice(0, 8)}-`;
 const index = subjectIndexName(prefix, 1);
 const routeKey = crypto.getRandomValues(new Uint8Array(32));
+let projectionPrefix: string | undefined;
+let projectionGeneration: number | undefined;
 let f: EpochFixture;
 let created = false;
 
@@ -47,6 +57,19 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   try {
+    if (projectionPrefix) {
+      if (projectionGeneration !== undefined)
+        await search
+          .request('DELETE', `/${discoveryIndexName(projectionPrefix, projectionGeneration)}`)
+          .catch(() => undefined);
+      await f?.admin.query('DELETE FROM search.discovery_copy WHERE prefix=$1', [projectionPrefix]);
+      await f?.admin.query('DELETE FROM search.discovery_population WHERE prefix=$1', [projectionPrefix]);
+      await f?.admin.query('DELETE FROM search.discovery_generation WHERE prefix=$1', [projectionPrefix]);
+      if (projectionGeneration !== undefined)
+        await f?.admin.query('DELETE FROM core.consumer_checkpoint WHERE consumer=$1', [
+          discoveryConsumer(projectionPrefix, projectionGeneration),
+        ]);
+    }
     if (created) await search.request('DELETE', `/${index}`);
   } finally {
     await f?.close();
@@ -181,6 +204,82 @@ async function records(job: IdentityJobRef) {
       [job.jobId, job.epoch.toString()],
     )
   ).rows;
+}
+
+async function projectClaimedAccount() {
+  projectionPrefix = `${prefix}account-`;
+  projectionGeneration = 1;
+  const proofs = new Map<
+    object,
+    { accountId: string; registrationId: string; authIdentityId: string; authnEpoch: number }
+  >();
+  const lifecycle = createLifecycleInternals({
+    pool: f.pool,
+    routeKey,
+    provisioningEvidence: async (proof) =>
+      typeof proof === 'object' && proof !== null ? (proofs.get(proof) ?? null) : null,
+    recoveryEvidence: async () => null,
+  });
+  const registration = randomUUID();
+  const accountId = lifecycle.registrationTarget(registration);
+  const handle = `native_${randomUUID().replaceAll('-', '')}`;
+  const reservation = (await lifecycle.reserveHandle({ accountId, handle, key: registration })).value;
+  await lifecycle.createPending({ accountId, handle, reservationId: reservation.reservationId, key: randomUUID() });
+  const evidence = {};
+  proofs.set(evidence, {
+    accountId,
+    registrationId: reservation.reservationId,
+    authIdentityId: accountId,
+    authnEpoch: 1,
+  });
+  await lifecycle.claimHandle({
+    accountId,
+    handle,
+    reservationId: reservation.reservationId,
+    evidence,
+    key: randomUUID(),
+  });
+  await lifecycle.activate({ accountId, evidence, key: randomUUID() });
+
+  const source = subjectSource(f.pool, routeKey);
+  const registry = await nativeDiscoveryRegistry(f.pool, routeKey, source);
+  const options = { pool: f.pool, search, prefix: projectionPrefix, registry, listing: subjectListingSource(f.pool) };
+  const route = routeOf(accountId);
+  if (route === null) throw new Error('Native Account registration has no route');
+  const partition = partitionOf(route);
+  await allocateDiscovery(f.pool, projectionPrefix, registry);
+  const before = (await readAccountDiscoveryBindings(f.pool, partition, [accountId])).get(accountId);
+  if (!before?.claim) throw new Error('Native Account registration has no claim binding');
+  expect(before.consumedClaimRevision).toBeLessThan(before.claim.revision);
+  await advanceDiscovery(options);
+  const target = (await discoveryGenerations(f.pool, projectionPrefix))[0];
+  if (!target?.uuid) throw new Error('Native Account projection generation was not allocated');
+  projectionGeneration = target.generation;
+  const projection = createDiscoveryProjection({ ...options, target });
+  await projection.project(partition, [{ owner: 'accounts', kind: 'account', route, id: accountId }]);
+
+  const after = (await readAccountDiscoveryBindings(f.pool, partition, [accountId])).get(accountId);
+  expect(after?.consumedClaimRevision).toBe(before.claim.revision);
+  const accountEntry = registry.get('account');
+  if (accountEntry.owner !== 'accounts') throw new Error('Native Account source is unavailable');
+  const current = await accountEntry.source.read(partition, [accountId]);
+  const account = current.accounts[0];
+  if (!account) throw new Error('Current claimed Account disappeared before projection verification');
+  const id = discoveryDocumentId(registry, { owner: 'accounts', kind: 'account', route, id: accountId });
+  const indexed = await search.request<{ found: boolean; _source: Record<string, unknown> }>(
+    'GET',
+    `/${discoveryIndexName(projectionPrefix, target.generation)}/_doc/${encodeURIComponent(id)}`,
+  );
+  expect(indexed.status).toBe(200);
+  expect(indexed.body).toMatchObject({
+    found: true,
+    _source: {
+      id: accountId,
+      handle,
+      revision: account.revision.toString(),
+      source_position: current.position.toString(),
+    },
+  });
 }
 
 test('the fixed Search participant uses genuine native original receiving custody and same-transaction acceptance applied recording and release while uncertain copies prevent completion', async () => {
@@ -362,6 +461,7 @@ test('fixed Search progresses past released scopes through OLD and NEW without l
   await guard.write(subjectPartition(original), [original], 0n);
   await guard.write(subjectPartition(terminal), [terminal], 0n);
   const job = await admitted(original, terminal);
+  await projectClaimedAccount();
   const done = await complete(job);
   const saved = await records(job);
   expect(new Set(saved.map((row) => row.binding.source.disposition))).toEqual(new Set(['OLD', 'NEW']));

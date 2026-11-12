@@ -1,8 +1,8 @@
 /** Compiler evidence is narrower than budget/source custody. Unknown runners retain the complete source tree. */
 import { createHash } from 'node:crypto';
-import { deflateSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { deflateSync } from 'node:zlib';
 import {
   existsSync,
   lstatSync,
@@ -469,6 +469,7 @@ function stableSource(started: TypingInputs, completed: TypingInputs, outputs: r
 /** Capture every admitted physical command, including workspace runners predating compiler receipt support. */
 export function typingInputCommand(command: readonly string[]): string[] {
   // Carry the standalone capture implementation through argv for old frozen worktrees, compressed to fit custody.
+  // Keep each transferred argument under remote custody's 4096-character bound.
   const payload = deflateSync(
     JSON.stringify({
       captureModuleSource: readFileSync(import.meta.path, 'utf8'),
@@ -480,7 +481,7 @@ export function typingInputCommand(command: readonly string[]): string[] {
     'bun',
     '-e',
     `
-import { inflateSync } from 'node:zlib';
+const { inflateSync } = await import('node:zlib');
 const payload = process.argv.slice(1).join('');
 const { captureModuleSource, command } = JSON.parse(inflateSync(Buffer.from(payload, 'base64')).toString('utf8'));
 let complete;
