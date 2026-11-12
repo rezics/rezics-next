@@ -46,6 +46,8 @@ Decision: Collection directory/list/order authorization consumes Library `Author
 
 Decision: Progress HTTP fixtures build Access through Kernel's post-catalogue factory, preserving mounted Subject resource declarations and native composition ports; Subject creation requires both bearer scope and an ordinary identity grant on Global Context.
 
+Decision: Progress HTTP mode coverage compiles a separate `ex:ProgressHttpSubject` with `fixture.progress-http` admitting scalar `minute`, `chapter` and `volume` with optional totals, cursor `page`, and completed units `volume`, `chapter` and `episode`; mounted Subject creation verifies native initialization, stored session pins identify that release/profile/type, and `schema:Book` remains page-only.
+
 Decision: native Collection preparation consumes Library's `PreparationWorkCapability` and `ScopeWorkCapability`.
 `adapters/preparation-work.ts` specializes them to the original native transaction, locator and ledger. Default
 `composition/library.ts` binds Search's `adapters/library-preparation.ts`: it borrows the already registered worker
@@ -273,6 +275,13 @@ the FULL HTTP growth capture showed that the tuple fence alone Seq Scanned `libr
 the key equalities keep the complete primary key visible to the planner. Active-session `LIMIT 1` stays
 after its fence and still names `progress_session_active`. Set, unassign, restore and rename select each named operand once in the one-row request
 and read those columns in the mutation WHERE.
+
+Decision: active-session point probes repeat route, account and subject scalar equalities beside their row bounds,
+keeping the complete partial-index key visible to generic plans. Entry-tile growth associates each captured sort with
+its declared statement and applies the request-key-only relation assertion only to a sort directly fed by the request
+key `generate_series`; every sort retains its bounded row/loop check and every statement remains costed. Active-shelf
+growth analyzes only `library.progress_session`; the 1/48 page requests, owner separation, three history populations
+and 64/512/4096 scales remain unchanged.
 
 Decision: Source capture, member preparation, owner-query preparation, publication, presentation, Entry/progress and funded Progress-operation planning/admission use
 one fake-capability application suite; ordinary composition binds the real Access, Semantic, Search and Content
@@ -1340,6 +1349,11 @@ Default-worker acceptance composes native Access and Library through the ordinar
 the full `libraryWorkModule`. It passes the same Pool, supplied domain clock and matching base64url
 `KERNEL_ROUTE_KEY`; crash children preserve their executor and clock-file identity, remove their SIGTERM listener, and
 settle the work runtime, client and Pool on startup failure or graceful shutdown.
+
+Decision: profile worker fixtures use `workerTestEnv` with deterministic workflow-reference keys and the Kernel's
+dedicated receipt ring, overriding ambient route/reference/receipt credentials while preserving `DATABASE_URL`;
+fixture actors are authenticated after provisioning and home catch-up so their five-minute identity is current at
+first native admission, and plain Bun children install `installNativeHistoryPreload()` before Kernel/work composition.
 
 For replacement-safe fresh writes, expose opaque `incarnationId` in entry reads and write results. A revisioned PUT
 body and DELETE query carry `incarnationId` alongside `revision`; the spelling is consistent across both requests.

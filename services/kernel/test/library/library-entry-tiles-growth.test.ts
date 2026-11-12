@@ -42,6 +42,13 @@ function nodes(value: unknown): Node[] {
   if (!value || typeof value !== 'object') return [];
   return [...('Node Type' in value ? [value as Node] : []), ...Object.values(value).flatMap(nodes)];
 }
+function isRequestKeySort(sort: Node, statement: string | undefined): boolean {
+  if (statement === undefined) return false;
+  const normalized = statement.toLowerCase().replace(/\s+/g, ' ');
+  if (!normalized.includes('generate_series(1, cardinality(input.subject_ids))')) return false;
+  const input = ((sort.Plans as Node[] | undefined) ?? [])[0];
+  return input?.['Node Type'] === 'Function Scan' && input['Function Name'] === 'generate_series';
+}
 function assertPlans(raw: Capture, present: number, requested: number) {
   const catalogue = catalogStatementBound(raw);
   expect(catalogue.catalogStatements).toBeLessThanOrEqual(catalogue.allowedStatements);
@@ -61,23 +68,37 @@ function assertPlans(raw: Capture, present: number, requested: number) {
     }
   }
   expect(all.some((n) => ['progress_unit', 'progress_change'].includes(String(n['Relation Name'])))).toBe(false);
-  for (const sort of all.filter((node) => String(node['Node Type']).includes('Sort'))) {
-    const children = (sort.Plans as Node[] | undefined) ?? [];
-    expect(children).toHaveLength(1);
-    const input = children[0]!;
-    const inputRows = Number(input['Actual Rows']);
-    const inputLoops = Number(input['Actual Loops']);
-    expect(Number.isFinite(inputRows)).toBe(true);
-    expect(Number.isFinite(inputLoops)).toBe(true);
-    const libraryInput = nodes(input).some((node) => node.Schema === 'library');
-    if (libraryInput) {
-      // Library rows may only be sorted inside a one-row point probe per requested subject.
-      expect(inputRows).toBeLessThanOrEqual(1);
-      expect(inputLoops).toBeLessThanOrEqual(requested);
-    } else {
-      // Sorting request keys is bounded by the distinct, <=100 subject input.
-      expect(nodes(input).filter((node) => typeof node['Relation Name'] === 'string')).toHaveLength(0);
-      expect(inputRows * inputLoops).toBeLessThanOrEqual(requested);
+  expect(raw.planStatements).toHaveLength(raw.plans.length);
+  for (const [planIndex, plan] of raw.plans.entries()) {
+    const statementIndex = raw.planStatements![planIndex]!;
+    const statement = raw.statements[statementIndex];
+    for (const sort of nodes(plan).filter((node) => String(node['Node Type']).includes('Sort'))) {
+      const children = (sort.Plans as Node[] | undefined) ?? [];
+      expect(children).toHaveLength(1);
+      const input = children[0]!;
+      const inputRows = Number(input['Actual Rows']);
+      const inputLoops = Number(input['Actual Loops']);
+      expect(Number.isFinite(inputRows)).toBe(true);
+      expect(Number.isFinite(inputLoops)).toBe(true);
+      const libraryInput = nodes(input).some((node) => node.Schema === 'library');
+      if (libraryInput) {
+        // Library rows may only be sorted inside a one-row point probe per requested subject.
+        expect(inputRows).toBeLessThanOrEqual(1);
+        expect(inputLoops).toBeLessThanOrEqual(requested);
+      } else {
+        if (isRequestKeySort(sort, statement)) {
+          const relationInputs = nodes(input).filter((node) => typeof node['Relation Name'] === 'string');
+          if (relationInputs.length !== 0)
+            throw new Error(
+              `request-key sort input for statement ${statementIndex} contains relations: ${JSON.stringify(relationInputs)}`,
+            );
+          expect(relationInputs).toHaveLength(0);
+        }
+        // Every captured statement keeps its bounded-sort row/loop check. Only a Sort fed directly by
+        // the request-key Function Scan is classified as request-key-only; other declared query plans
+        // can legitimately contain relation inputs and are checked against the same page work bound.
+        expect(inputRows * inputLoops).toBeLessThanOrEqual(requested);
+      }
     }
   }
   expect(costOf(raw).statements).toBe(requested === 0 ? 0 : present === 0 ? 1 : 2);

@@ -44,10 +44,10 @@ afterEach(() => {
 
 function fixture(options: { workerCap?: number; perSweep?: number; refuse?: RegExp } = {}) {
   const temporary = temporaryDirectory();
-  const db = openDb(join(temporary.path, 'goal.sqlite'));
+  let db = openDb(join(temporary.path, 'goal.sqlite'));
   new WorkerStore(db);
-  const inbox = new SqliteManagerInbox(db, temporary.path, () => clock.now);
   const clock = { now: NOW };
+  let inbox = new SqliteManagerInbox(db, temporary.path, () => clock.now);
   const dispatched: { file: string; text: string }[] = [];
   const continued: { goal: string; taskId: string; attempt: number; file: string }[] = [];
   const cancelled: string[] = [];
@@ -80,7 +80,70 @@ function fixture(options: { workerCap?: number; perSweep?: number; refuse?: RegE
     db.close();
     temporary.close();
   });
-  return { db, inbox, runtime, clock, dispatched, continued, cancelled, state: temporary.path };
+  return {
+    get db() {
+      return db;
+    },
+    get inbox() {
+      return inbox;
+    },
+    runtime,
+    clock,
+    dispatched,
+    continued,
+    cancelled,
+    state: temporary.path,
+    restart() {
+      db.close();
+      db = openDb(join(temporary.path, 'goal.sqlite'));
+      new WorkerStore(db);
+      inbox = new SqliteManagerInbox(db, temporary.path, () => clock.now);
+      runtime.db = db;
+      runtime.inbox = inbox;
+    },
+  };
+}
+
+async function backlogDisposition(
+  f: ReturnType<typeof fixture>,
+  goal: string,
+  action: 'no-work' | 'clear',
+  managerId: string,
+  sessionId: string,
+): Promise<string> {
+  const previousManager = process.env.GOAL_MANAGER;
+  const previousThread = process.env.CODEX_THREAD_ID;
+  const previousClaudeSession = process.env.CLAUDE_CODE_SESSION_ID;
+  const previousTask = process.env.GOAL_TASK_ID;
+  const previousAttempt = process.env.GOAL_ATTEMPT;
+  const previousLog = console.log;
+  const lines: string[] = [];
+  process.env.GOAL_MANAGER = managerId;
+  process.env.CODEX_THREAD_ID = sessionId;
+  delete process.env.CLAUDE_CODE_SESSION_ID;
+  delete process.env.GOAL_TASK_ID;
+  delete process.env.GOAL_ATTEMPT;
+  console.log = (line?: unknown) => lines.push(String(line));
+  try {
+    await runIntegration(['backlog', 'disposition', goal, action], {
+      db: f.db,
+      stateDirectory: f.state,
+      managerServices: { policy: undefined },
+    } as unknown as Parameters<typeof runIntegration>[1]);
+    return lines[0]!;
+  } finally {
+    console.log = previousLog;
+    if (previousManager === undefined) delete process.env.GOAL_MANAGER;
+    else process.env.GOAL_MANAGER = previousManager;
+    if (previousThread === undefined) delete process.env.CODEX_THREAD_ID;
+    else process.env.CODEX_THREAD_ID = previousThread;
+    if (previousClaudeSession === undefined) delete process.env.CLAUDE_CODE_SESSION_ID;
+    else process.env.CLAUDE_CODE_SESSION_ID = previousClaudeSession;
+    if (previousTask === undefined) delete process.env.GOAL_TASK_ID;
+    else process.env.GOAL_TASK_ID = previousTask;
+    if (previousAttempt === undefined) delete process.env.GOAL_ATTEMPT;
+    else process.env.GOAL_ATTEMPT = previousAttempt;
+  }
 }
 
 function existingTask(
@@ -618,6 +681,97 @@ test('a running manager below eight ready briefs is woken at most once an hour',
   f.clock.now += BACKLOG_WAKE_INTERVAL_MS - 1;
   expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
   f.clock.now += 1;
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+});
+
+test('an authenticated no-work disposition survives time and restart, while foreign and unrelated evidence do not control it', async () => {
+  const f = fixture({ workerCap: 0 });
+  manager(f.db, 'web', {
+    kind: 'managed',
+    status: 'running',
+    engine: 'codex',
+    threadId: 'web-session',
+    goal: 'web',
+    goals: ['web'],
+    goalState: { status: 'active' },
+  });
+  manager(f.db, 'foreign', {
+    kind: 'managed',
+    status: 'running',
+    engine: 'codex',
+    threadId: 'foreign-session',
+    goal: 'foreign',
+    goals: [],
+    goalState: { status: 'active' },
+  });
+
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  await expect(backlogDisposition(f, 'web', 'no-work', 'foreign', 'foreign-session')).rejects.toThrow(
+    'authenticated unique running owner',
+  );
+  f.db
+    .query(
+      `UPDATE backlog_goals
+       SET low_work_manager = ?, low_work_session = ?, low_work_scope = ? WHERE goal = ?`,
+    )
+    .run('foreign', 'foreign-session', 'foreign-scope', 'web');
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  const recorded = JSON.parse(await backlogDisposition(f, 'web', 'no-work', 'web', 'web-session'));
+  expect(recorded).toMatchObject({ goal: 'web', manager: 'web' });
+  expect(recorded.scope).toMatch(/^[a-f0-9]{64}$/);
+
+  f.inbox.deliver({ managerId: 'web', goalId: 'other', kind: 'info', summary: 'Other Goal received new evidence' });
+  task(f.db, 'global-dev-task', 'running', { goal: 'dev', manager: 'dev' }, 1);
+  f.clock.now += BACKLOG_WAKE_INTERVAL_MS * 3;
+  expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
+
+  f.restart();
+  expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
+  const saved = f.db
+    .query('SELECT low_work_manager, low_work_session, low_work_scope FROM backlog_goals WHERE goal = ?')
+    .get('web');
+  expect(saved).toMatchObject({ low_work_manager: 'web', low_work_session: 'web-session' });
+  expect((saved as { low_work_scope: string }).low_work_scope).toBe(recorded.scope);
+});
+
+test('low-backlog no-work dispositions rearm on a brief, scoped source, receiving evidence, owner change, or clear', async () => {
+  const f = fixture({ workerCap: 0 });
+  const owner = (sessionId: string) => ({
+    id: 'web',
+    kind: 'managed',
+    status: 'running',
+    engine: 'codex',
+    threadId: sessionId,
+    goal: 'web',
+    goals: ['web'],
+    goalState: { status: 'active' },
+  });
+  manager(f.db, 'web', owner('web-session'));
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  await backlogDisposition(f, 'web', 'no-work', 'web', 'web-session');
+
+  brief(f.state, 'web', 'new-outcome.md', 60_000);
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  await backlogDisposition(f, 'web', 'no-work', 'web', 'web-session');
+
+  task(f.db, 'web-source-task', 'ready', { goal: 'web', manager: 'web' }, 1);
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  await backlogDisposition(f, 'web', 'no-work', 'web', 'web-session');
+
+  f.inbox.deliver({ managerId: 'web', goalId: 'web', kind: 'info', summary: 'New scoped receiving evidence' });
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  await backlogDisposition(f, 'web', 'no-work', 'web', 'web-session');
+
+  f.db
+    .query('UPDATE manager_sessions SET state = ? WHERE id = ?')
+    .run(JSON.stringify(owner('web-session-renewed')), 'web');
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  await backlogDisposition(f, 'web', 'no-work', 'web', 'web-session-renewed');
+  expect(JSON.parse(await backlogDisposition(f, 'web', 'clear', 'web', 'web-session-renewed'))).toMatchObject({
+    goal: 'web',
+    manager: 'web',
+    cleared: true,
+  });
   expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
 });
 

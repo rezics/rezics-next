@@ -172,7 +172,7 @@ async function stopProcessGroup(child: Bun.Subprocess<'inherit', 'pipe', 'pipe'>
 
 /** Routes before preparation or spawn; the physical remote worker retains its independent fixture cleanup. */
 export async function runFocusedCommand(command: string[], options: FocusedRunnerOptions = {}): Promise<number> {
-  if (command.length === 0) throw new Error('Usage: bun scripts/focused.ts [--private-network] -- <command...>');
+  if (command.length === 0) throw new Error(focusedUsage);
   if (options.privateNetwork && process.platform !== 'linux')
     throw new Error('--private-network requires Linux user and network namespaces');
 
@@ -325,15 +325,26 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
   }
 }
 
-function parseArguments(args: string[]): {
+const focusedUsage = 'Usage: bun scripts/focused.ts [--private-network] [--] <command...>';
+
+export type FocusedArguments = {
   command: string[];
   privateNetwork: boolean;
   selectionContext?: WebTestSelectionContext;
-} {
+};
+
+/**
+ * Bun consumes the first `--` after a script path. Treat an ordinary first
+ * argument as the command, while still accepting a delimiter Bun retained.
+ */
+export function parseFocusedArguments(
+  args: readonly string[],
+  environment: NodeJS.ProcessEnv = process.env,
+): FocusedArguments {
   if (args.at(-1) === '--routed-selection') {
     const flags = args.slice(0, -1);
     if (flags.some((flag) => flag !== '--private-network')) throw new Error(`Unknown option: ${flags.join(' ')}`);
-    const context = readWebTestSelectionContext();
+    const context = readWebTestSelectionContext(environment);
     if (!context) throw new Error('--routed-selection requires the placed Web test selection context');
     return {
       command: context.normalizedArgv.slice(),
@@ -341,18 +352,36 @@ function parseArguments(args: string[]): {
       selectionContext: context,
     };
   }
-  const separator = args.indexOf('--');
-  if (separator < 0) throw new Error('Usage: bun scripts/focused.ts [--private-network] -- <command...>');
-  const flags = args.slice(0, separator);
+
+  const first = args[0];
+  if (first === undefined) throw new Error(focusedUsage);
+
+  let flags: readonly string[];
+  let command: string[];
+  if (first === '--') {
+    flags = [];
+    command = args.slice(1);
+  } else if (first === '--private-network') {
+    flags = [first];
+    command = args[1] === '--' ? args.slice(2) : args.slice(1);
+  } else if (!first.startsWith('-')) {
+    flags = [];
+    command = args.slice();
+  } else {
+    const separator = args.indexOf('--');
+    if (separator < 0) throw new Error(`Unknown option: ${first}`);
+    flags = args.slice(0, separator);
+    command = args.slice(separator + 1);
+  }
+
   if (flags.some((flag) => flag !== '--private-network')) throw new Error(`Unknown option: ${flags.join(' ')}`);
-  const command = args.slice(separator + 1);
-  if (command.length === 0) throw new Error('Usage: bun scripts/focused.ts [--private-network] -- <command...>');
+  if (command.length === 0) throw new Error(focusedUsage);
   return { command, privateNetwork: flags.includes('--private-network') };
 }
 
 if (import.meta.main) {
   try {
-    const { command, privateNetwork, selectionContext } = parseArguments(process.argv.slice(2));
+    const { command, privateNetwork, selectionContext } = parseFocusedArguments(process.argv.slice(2));
     process.exitCode = await runFocusedCommand(command, {
       privateNetwork,
       ...(selectionContext === undefined ? {} : { selectionContext }),

@@ -5,7 +5,13 @@ import { ENTRY_RETENTION_SCHEDULE, ENTRY_RETENTION_SWEEP_WORKFLOW } from '../../
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { routeOf } from '../../src/route/route.ts';
-import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
+import { testReceiptKeys, testReceiptKeysEnv } from '../support/receipt-keys.ts';
+import {
+  createProfileEntryFixture,
+  entryKey,
+  profileEntryWorkerEnvironment,
+  type NativeProfileFixture,
+} from './support/profile-entry-fixture.ts';
 let f: NativeProfileFixture, work: Awaited<ReturnType<typeof composeWork>> | undefined;
 let client: Awaited<ReturnType<typeof createWorkClient>>;
 let time: number | undefined;
@@ -15,15 +21,47 @@ const reader = new pg.Pool({
   max: 1,
   options: '-c default_transaction_read_only=on',
 });
+test('profile workers use explicit fixture keys and preserve the database URL', () => {
+  const routeKey = Buffer.alloc(32, 19);
+  const receipts = testReceiptKeys();
+  const env = profileEntryWorkerEnvironment(
+    routeKey,
+    {
+      DATABASE_URL: 'postgresql://fixture.test/native',
+      KERNEL_ROUTE_KEY: 'ambient-route-key',
+      KERNEL_SESSION_KEYS: 'ambient-session-key',
+      KERNEL_WORKFLOW_REFERENCE_KEYS: 'ambient-reference-keys',
+      KERNEL_RECEIPT_KEYS: 'ambient-receipt-keys',
+    },
+    receipts,
+  );
+  expect(env.DATABASE_URL).toBe('postgresql://fixture.test/native');
+  expect(env.KERNEL_ROUTE_KEY).toBe(routeKey.toString('base64url'));
+  expect(env.KERNEL_WORKFLOW_REFERENCE_KEYS).toBe(
+    JSON.stringify({ current: 1, keys: { 1: Buffer.alloc(32, 44).toString('base64url') } }),
+  );
+  expect(env.KERNEL_SESSION_KEYS).toBe(`1:${Buffer.alloc(32, 42).toString('base64url')}`);
+  expect(env.KERNEL_RECEIPT_KEYS).toBe(testReceiptKeysEnv(receipts).KERNEL_RECEIPT_KEYS);
+});
 beforeAll(async () => {
   f = await createProfileEntryFixture({ clock });
   client = await createWorkClient(process.env.DATABASE_URL!);
 }, 120000);
 afterAll(async () => {
-  await work?.shutdown();
-  await client?.close();
-  await f?.close();
-  await reader.end();
+  const failures: unknown[] = [];
+  for (const release of [
+    async () => work?.shutdown(),
+    async () => client?.close(),
+    async () => f?.close(),
+    async () => reader.end(),
+  ]) {
+    try {
+      await release();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length) throw new AggregateError(failures, 'Retention worker fixture failed to settle');
 });
 async function retained(subjectId: string) {
   return (

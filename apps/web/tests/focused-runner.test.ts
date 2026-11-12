@@ -3,11 +3,19 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { admitExplicitHostTestCommand, admitSerialBunTestCommand, runFocusedCommand } from '../scripts/focused.ts';
+import {
+  admitExplicitHostTestCommand,
+  admitSerialBunTestCommand,
+  parseFocusedArguments,
+  runFocusedCommand,
+} from '../scripts/focused.ts';
 import { webTestPrivateNetworkEnvName } from '../scripts/with-dev-server.ts';
+import { resolveWebTestSelection, writeWebTestSelectionContext } from '../scripts/selection.ts';
 
-const temporary = mkdtempSync(join(tmpdir(), 'rezics-web-focused-test-'));
 const workspace = resolve(import.meta.dir, '../..');
+const temporaryRoot = join(workspace, '.temp');
+mkdirSync(temporaryRoot, { recursive: true });
+const temporary = mkdtempSync(join(temporaryRoot, 'web-focused-test-'));
 
 afterAll(() => rmSync(temporary, { recursive: true, force: true }));
 
@@ -22,6 +30,18 @@ async function runFocused(appDirectory: string, command: string[]): Promise<{ st
     },
   });
   return { status, output };
+}
+
+function runPublicFocusedCli(args: string[], env: NodeJS.ProcessEnv): { status: number; output: string } {
+  const runner = resolve(import.meta.dir, '../scripts/focused.ts');
+  const result = Bun.spawnSync([process.execPath, runner, ...args], {
+    cwd: workspace,
+    env,
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  return { status: result.exitCode, output: `${result.stdout.toString()}${result.stderr.toString()}` };
 }
 
 function command(source: string, args: string[] = []): string[] {
@@ -92,6 +112,81 @@ test('named host files use the host-runner path-ignore override', () => {
       'tests/pages-workers.host.test.ts',
     ]),
   ).toEqual(['bun', 'test', '--path-ignore-patterns=custom/**', 'tests/pages-workers.host.test.ts']);
+});
+
+test('the focused argv boundary normalizes Bun separators and retains command bindings', () => {
+  const command = [
+    'bun',
+    'test',
+    '--test-name-pattern',
+    'option-value.test.ts',
+    '--timeout',
+    '15000',
+    'apps/web/tests/focused-runner.test.ts',
+    'apps/web/scripts/focused.test.ts',
+    '--',
+    'opaque test argument',
+  ];
+  for (const [args, privateNetwork] of [
+    [command, false],
+    [['--', ...command], false],
+    [['--private-network', ...command], true],
+    [['--private-network', '--', ...command], true],
+  ] as const)
+    expect(parseFocusedArguments(args)).toEqual({ command, privateNetwork });
+
+  const selection = resolveWebTestSelection(command, {
+    rootDirectory: workspace,
+    appDirectory: resolve(workspace, 'apps/web'),
+    invocationDirectory: workspace,
+    source: 'apps/web/scripts/focused.ts',
+  });
+  expect(selection.originalArgv).toEqual(command);
+  expect(selection.normalizedArgv).toEqual([
+    'bun',
+    'test',
+    '--test-name-pattern',
+    'option-value.test.ts',
+    '--timeout',
+    '15000',
+    'tests/focused-runner.test.ts',
+    'scripts/focused.test.ts',
+    '--',
+    'opaque test argument',
+  ]);
+  const routedEnvironment = writeWebTestSelectionContext(selection, {});
+  for (const [args, privateNetwork] of [
+    [['--routed-selection'], false],
+    [['--private-network', '--routed-selection'], true],
+  ] as const)
+    expect(parseFocusedArguments(args, routedEnvironment)).toEqual({
+      command: selection.normalizedArgv,
+      privateNetwork,
+      selectionContext: selection,
+    });
+});
+
+test('public Bun CLI reaches the focused execution path with consumed and retained separators', () => {
+  const fixtureSource = [
+    "const fs = require('node:fs');",
+    "fs.appendFileSync(process.env.FOCUSED_BOUNDARY_MARKER, JSON.stringify(process.argv.slice(2)) + '\\n');",
+    "console.log('FOCUSED_BOUNDARY_FIXTURE_EXECUTED');",
+  ].join('\n');
+  const opaque = ['value with spaces', '--opaque-argument'];
+  const fixtureCommand = ['bun', '-e', fixtureSource, ...opaque];
+
+  for (const [name, args] of [
+    ['consumed', ['--', ...fixtureCommand]],
+    ['retained', ['--', '--', ...fixtureCommand]],
+  ] as const) {
+    const marker = join(temporary, `public-cli-${name}.txt`);
+    rmSync(marker, { force: true });
+    const result = runPublicFocusedCli(args, { ...process.env, FOCUSED_BOUNDARY_MARKER: marker });
+
+    expect(result.status, result.output).toBe(0);
+    expect(result.output.match(/FOCUSED_BOUNDARY_FIXTURE_EXECUTED/g)).toHaveLength(1);
+    expect(readFileSync(marker, 'utf8')).toBe(`${JSON.stringify(opaque)}\n`);
+  }
 });
 
 test('an explicit nested host file executes when bunfig excludes host discovery', async () => {

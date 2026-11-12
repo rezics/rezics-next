@@ -2,6 +2,7 @@ import { isActionableStop, stoppedActionHint, type StoppedActionHint } from './s
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import { Buffer } from 'node:buffer';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { AttemptRef, ManagerEvent, ManagerInbox } from './contracts.ts';
@@ -58,13 +59,14 @@ import {
 import { fail, recordGoalDispatch, recoverClaims } from './backlog-claims.ts';
 import { deliverResearchCompletions, dispatchResearchClaim, recoverResearchClaims } from './backlog-research.ts';
 import { ownedGoals, resolveGoalManager } from './manager-ownership.ts';
+import { currentGoalManagerAuthority } from './managers.ts';
 import { confirmedBacklogOwner, requireUrgentDispatch, type AuthenticatedManager } from './priority-authority.ts';
 
 export { backlogDirectory };
 
 /** A manager is woken when its Goal has fewer ready briefs than this. */
 export const BACKLOG_LOW_WATER = defaultPolicy.backlog.lowWater;
-/** At most one low-backlog wake per Goal in this interval. */
+/** Ordinary low-backlog repeats wait this long unless scoped evidence changes or the owner clears its disposition. */
 export const BACKLOG_WAKE_INTERVAL_MS = defaultPolicy.backlog.wakeIntervalMs;
 /** Ordinary product stops expire after this interval; compiler-only stops first reconcile their same attempt. */
 export const STOPPED_TASK_LIMIT_MS = defaultPolicy.backlog.stoppedTaskLimitMs;
@@ -97,6 +99,13 @@ export const backlogMigrations = [
       dispatch_failures TEXT NOT NULL DEFAULT '{}',
       notified_at INTEGER
     );`,
+  },
+  {
+    module: 'backlog',
+    version: 3,
+    sql: `ALTER TABLE backlog_goals ADD COLUMN low_work_manager TEXT;
+ALTER TABLE backlog_goals ADD COLUMN low_work_session TEXT;
+ALTER TABLE backlog_goals ADD COLUMN low_work_scope TEXT;`,
   },
 ] as const;
 
@@ -1242,9 +1251,135 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
   return expired;
 }
 
-type ManagerRow = { id: string; state: string };
+/** A fixed-size fingerprint of the current owner, ready source briefs, Goal tasks, and typed receiving evidence. */
+function backlogNoWorkScope(
+  db: Database,
+  stateDirectory: string,
+  goal: string,
+  authority: NonNullable<ReturnType<typeof currentGoalManagerAuthority>>,
+): string {
+  const ready = briefs(backlogDirectory(stateDirectory, goal))
+    .map((path) => {
+      try {
+        return {
+          name: basename(path),
+          digest: createHash('sha256').update(readFileSync(path)).digest('hex'),
+          modified: statSync(path).mtimeMs,
+        };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+        throw error;
+      }
+    })
+    .filter((entry): entry is { name: string; digest: string; modified: number } => entry !== undefined)
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const hasTasks = tableExists(db, 'worker_tasks');
+  const tasks = hasTasks
+    ? db
+        .query(
+          `SELECT COUNT(*) AS count, COALESCE(MAX(sequence), 0) AS latestSequence,
+                  COALESCE(SUM(current_attempt), 0) AS attempts, COALESCE(MAX(current_attempt), 0) AS latestAttempt
+           FROM worker_tasks WHERE json_extract(body, '$.brief.goal') = ?`,
+        )
+        .get(goal)
+    : { count: 0, latestSequence: 0, attempts: 0, latestAttempt: 0 };
+  let inbox = { count: 0, latestId: 0 };
+  if (tableExists(db, 'manager_inbox')) {
+    const predicate = hasTasks
+      ? `goal_id = ? OR task_id IN (
+           SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal') = ?
+         )`
+      : 'goal_id = ?';
+    const values = hasTasks ? [goal, goal] : [goal];
+    inbox = db
+      .query(
+        `SELECT COUNT(*) AS count, COALESCE(MAX(id), 0) AS latestId
+         FROM manager_inbox WHERE ${predicate}`,
+      )
+      .get(...values) as typeof inbox;
+  }
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        goal,
+        authority: {
+          id: authority.id,
+          sessionId: authority.sessionId,
+          kind: authority.kind,
+          engine: authority.engine,
+          explicitGoalOwnership: authority.goals.includes(goal),
+          supermanager: authority.supermanager,
+          goalStatus: authority.goalStatus,
+        },
+        ready,
+        tasks,
+        inbox,
+      }),
+    )
+    .digest('hex');
+}
 
-/** Wake each running Goal manager below the low-water mark, at most once an hour. */
+function requireBacklogNoWorkOwner(
+  db: Database,
+  goal: string,
+  actor: AuthenticatedManager,
+): NonNullable<ReturnType<typeof currentGoalManagerAuthority>> {
+  const authority = currentGoalManagerAuthority(db, goal);
+  if (!authority || authority.id !== actor.id || authority.sessionId !== actor.sessionId)
+    throw new Error(`Backlog disposition requires the authenticated unique running owner of Goal ${goal}`);
+  if (['paused', 'budgetLimited', 'complete'].includes(authority.goalStatus ?? ''))
+    throw new Error(`Goal ${goal} is not active`);
+  return authority;
+}
+
+/** Record the owner's bounded no-additional-work disposition for the exact scoped evidence now visible. */
+export function recordBacklogNoWorkDisposition(
+  db: Database,
+  stateDirectory: string,
+  goal: string,
+  actor: AuthenticatedManager,
+): { goal: string; manager: string; scope: string } {
+  migrate(db, backlogMigrations);
+  const authority = requireBacklogNoWorkOwner(db, goal, actor);
+  const scope = backlogNoWorkScope(db, stateDirectory, goal, authority);
+  db.query(
+    `INSERT INTO backlog_goals(goal, low_work_manager, low_work_session, low_work_scope)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(goal) DO UPDATE SET
+       low_work_manager = excluded.low_work_manager,
+       low_work_session = excluded.low_work_session,
+       low_work_scope = excluded.low_work_scope`,
+  ).run(goal, actor.id, actor.sessionId, scope);
+  return { goal, manager: actor.id, scope };
+}
+
+/** Clear the current owner's disposition and reset the hourly gate so the next sweep can wake immediately. */
+export function clearBacklogNoWorkDisposition(
+  db: Database,
+  goal: string,
+  actor: AuthenticatedManager,
+): { goal: string; manager: string; cleared: boolean } {
+  migrate(db, backlogMigrations);
+  requireBacklogNoWorkOwner(db, goal, actor);
+  const result = db
+    .query(
+      `UPDATE backlog_goals
+       SET low_work_manager = NULL, low_work_session = NULL, low_work_scope = NULL, low_wake_at = NULL
+       WHERE goal = ? AND low_work_scope IS NOT NULL`,
+    )
+    .run(goal);
+  return { goal, manager: actor.id, cleared: result.changes > 0 };
+}
+
+type ManagerRow = { id: string; state: string };
+type LowWorkDispositionRow = {
+  low_wake_at: number | null;
+  low_work_manager: string | null;
+  low_work_session: string | null;
+  low_work_scope: string | null;
+};
+
+/** Wake each running Goal manager below the low-water mark, at most once an hour unless its scope changed. */
 function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
   const { db } = runtime;
   if (!tableExists(db, 'manager_sessions')) return [];
@@ -1265,8 +1400,44 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
       const directory = backlogDirectory(runtime.stateDirectory, goal);
       const ready = briefs(directory).length;
       if (ready >= (runtime.policy ?? defaultPolicy).backlog.lowWater) continue;
+      const previous = db
+        .query(
+          `SELECT low_wake_at, low_work_manager, low_work_session, low_work_scope
+           FROM backlog_goals WHERE goal = ?`,
+        )
+        .get(goal) as LowWorkDispositionRow | null;
+      if (previous?.low_work_scope) {
+        const authority = currentGoalManagerAuthority(db, goal);
+        const scope = authority ? backlogNoWorkScope(db, runtime.stateDirectory, goal, authority) : undefined;
+        if (
+          authority &&
+          authority.id === row.id &&
+          previous.low_work_manager === authority.id &&
+          previous.low_work_session === authority.sessionId &&
+          previous.low_work_scope === scope
+        )
+          continue;
+      }
       const woke = db
         .transaction(() => {
+          const current = db
+            .query(
+              `SELECT low_wake_at, low_work_manager, low_work_session, low_work_scope
+               FROM backlog_goals WHERE goal = ?`,
+            )
+            .get(goal) as LowWorkDispositionRow | null;
+          if (current?.low_work_scope) {
+            const sameObservedDisposition =
+              previous?.low_work_manager === current.low_work_manager &&
+              previous.low_work_session === current.low_work_session &&
+              previous.low_work_scope === current.low_work_scope;
+            if (!sameObservedDisposition) return false;
+            db.query(
+              `UPDATE backlog_goals
+               SET low_work_manager = NULL, low_work_session = NULL, low_work_scope = NULL, low_wake_at = NULL
+               WHERE goal = ? AND low_work_scope = ?`,
+            ).run(goal, current.low_work_scope);
+          }
           const last = db.query('SELECT low_wake_at FROM backlog_goals WHERE goal=?').get(goal) as {
             low_wake_at: number | null;
           } | null;

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import { ENTRY_RETENTION_SCHEDULE } from '../../src/library/entry-due-work.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -24,12 +25,23 @@ beforeAll(async () => {
   client = await createWorkClient(process.env.DATABASE_URL!);
 }, 120000);
 afterAll(async () => {
+  const failures: unknown[] = [];
   for (const child of children) {
-    if (child.process.exitCode === null) child.process.kill('SIGKILL');
-    await child.process.exited;
+    try {
+      if (child.process.exitCode === null) child.process.kill('SIGKILL');
+      await child.process.exited;
+    } catch (error) {
+      failures.push(error);
+    }
   }
-  await client?.close();
-  await f?.close();
+  for (const release of [async () => client?.close(), async () => f?.close()]) {
+    try {
+      await release();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length) throw new AggregateError(failures, 'Retention crash fixture failed to settle');
 });
 
 function runtime(mode: string): Runtime {
@@ -92,8 +104,12 @@ test('native commit before DBOS page checkpoint recovers on the same executor an
   await first.until('native-committed');
   expect(await count(k.deletionId)).toBe(0);
   const before = await f.pool.query(
-    'SELECT response FROM core.receipt WHERE principal_id=$1 AND command_kind=$2 AND idempotency_key=$3',
-    [k.accountId, 'library.entry.retention.purge', k.deletionId],
+    'SELECT response FROM core.receipt WHERE principal_id=$1 AND command_kind=$2 AND idempotency_key=ANY($3::text[])',
+    [
+      k.accountId,
+      'library.entry.retention.purge',
+      nativeReceiptKeyCandidates(f.pool, 'library.entry.retention.purge', k.accountId, k.deletionId),
+    ],
   );
   expect(before.rows).toEqual([{ response: { purged: true } }]);
   const checkpoints = await client.listWorkflowSteps(triggered.workflowID);

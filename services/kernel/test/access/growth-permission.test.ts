@@ -56,6 +56,8 @@ const permissionSeededRelations = [
   'access.account',
   'access.resource_grant',
   'access.organization_member',
+  'access.membership_inverse',
+  'access.principal_assignment',
   'access.resource_role_grant',
   'access.resource_denial',
   resources,
@@ -64,7 +66,16 @@ const permissionSeededRelations = [
   'editorial.write_basis',
 ] as const;
 
-const assignmentSeededRelations = ['access.account', 'access.principal_assignment', 'access.resource_grant'] as const;
+// Preparation also observes these fixed relations, even when the population
+// adds no rows to them. Analyze them after setup so pg_class retains real sizes.
+const assignmentSeededRelations = [
+  'access.account',
+  'access.principal_assignment',
+  'access.resource_grant',
+  'access.membership_inverse',
+  'access.resource_role_grant',
+  'access.resource_denial',
+] as const;
 
 function expectIndex(plans: readonly unknown[], expected: string): void {
   let found = false;

@@ -78,6 +78,10 @@ network and process-group cleanup remain. Ordinary and mixed selections retain s
 log is not execution evidence. Pin current-reader recovery in the existing Subject community, CollectionList, Copies
 session and Person Location tests; Auth metadata uses the existing protocol cases plus a consumed-body fallback.
 
+Decision: the focused CLI treats Bun's consumed `--` as the command boundary and also accepts a retained delimiter.
+`--private-network` and routed selection keep their existing bindings, and command arguments pass through unchanged
+to selection normalization.
+
 Decision: test dependency admission uses the consuming workspace's declared packages and the syntax parser owned by
 root tooling, including type-only imports. Web fixtures import their DOM tools directly, preserve the full public
 exports of mocked modules, and explicitly restore module replacements; `mock.restore()` alone does not retire those

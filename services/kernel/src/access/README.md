@@ -2097,6 +2097,11 @@ Bearer scope claims are bounded once at authenticator creation to 129 characters
 
 ### Command attempt admission
 
+Native admission measurements pair all transaction starts and endings on the same connection. Bounded read scopes
+must settle separately from serializable commands; every command has its own settled clock read and exact current
+actor observation before target or receipt work. Permission growth setup analyzes observed relations, including
+fixed or empty inverse/assignment relations, after committed setup; unknown planner statistics remain raw evidence.
+
 - Touches: `command-admission.ts`: each authenticated command attempt’s prepare adds exactly one independently anchored acting-account point read via `account_pkey(route,account_id)`, before resource connection checkout. The opaque observation is shared across all same-attempt action checks. Changed state, authentication fence, minimum authentication floor or operator identity denies, even when a changed floor remains below the token epoch; missing/mismatched identity also denies. Anonymous attempts add no actor read.
 - Bound: Exactly 1 extra statement and 0–1 account rows per attempt, blocks `L(A)`; equivalently `O(log(N+U*t+M))` in total subjects/history, activity and media. Retries and receipt replays each pay the fresh read. Native 1/8/64 measurements assert one actor seek for generic and multi-action commands, with constant rows/statements and logarithmic blocks at fixed K=2, rather than one seek per action.
 - Growth check: `test/access/growth-command-admission.test.ts`: exact `checkGrowth` names `generic command admission` and `multi-action command admission`; test titles `generic command admission adds one account seek per attempt at all three growth scales` and `multi-action command admission adds one account seek per attempt at all three growth scales`.

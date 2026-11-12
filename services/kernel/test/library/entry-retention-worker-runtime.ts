@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { Pool, PoolClient, QueryResult } from 'pg';
+import { installNativeHistoryPreload } from '../../src/composition/preload.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { libraryWorkModule } from '../../src/library/work-module.ts';
 import { createWorkClient } from '../../src/work/client.ts';
@@ -86,6 +87,7 @@ if (import.meta.main) {
   const [mode, executorId, timePath] = process.argv.slice(2);
   if (!executorId || !timePath) throw new Error('Runtime requires executor identity and native clock file');
   const databaseUrl = process.env.DATABASE_URL!;
+  installNativeHistoryPreload();
   const pool = createPool(databaseUrl);
   let client: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   let work: Awaited<ReturnType<typeof composeWork>> | undefined;
@@ -173,7 +175,6 @@ export async function growRetentionPopulation(
   scale: number,
 ) {
   for (let n = previous; n < scale; n++) {
-    if (n % 16 === 0) await renewRetentionIdentities(f);
     const owner = await f.identity(
       ['subject:read', 'library_entry:update', 'library_entry:delete'],
       n % 2 === 0 ? partition : (partition + 1) % 4096,
