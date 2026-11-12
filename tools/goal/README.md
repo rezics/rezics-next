@@ -3099,6 +3099,9 @@ Decision: each verifier command execution has one durable identity tied to its c
 actual start. Commit its terminal result, error class, end time and matching flow event in one SQLite transaction.
 Replay of that execution emits no duplicate receipt; a real retry gets a new identity. Round summaries reference
 command runs. Keep product failure, infrastructure, skipped and unknown distinct; missing timing remains unknown.
+Decision: retain the existing head/check cache key separately from round-scoped attempt keys, write one `check`
+completion event per command identity, and represent a missing boot-smoke file or a tree without `package.json` as
+skipped with no start time.
 
 Measure the first two full UTC days after deployment against the
 [delivery-step audit](reports/daily-step-audit-2026-11-11.md#one-structural-change-and-its-measure): all terminal command

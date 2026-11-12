@@ -104,6 +104,7 @@ export function classifyRun(
     Partial<Pick<DevVerifierEvidence, 'result' | 'command' | 'cwd'>>,
   policy = defaultPolicy.verifier,
 ): DevVerifierResult {
+  if (result.result === 'skipped' || result.result === 'unknown') return result.result;
   if (result.passed || result.result === 'pass') return 'pass';
 
   // A real compiler diagnostic is paid stage evidence even when later resource cleanup failed.

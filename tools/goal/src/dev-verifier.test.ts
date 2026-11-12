@@ -2,9 +2,18 @@ import { afterEach, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { openDb } from './db.ts';
+import { readFlow } from './flow.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { readControlPolicy } from './policy.ts';
-import { checkSignature, runCacheKey, selectionIdentity } from './dev-verifier-comparison.ts';
+import { checkSignature, runCacheKey, runChecksAtHead, selectionIdentity } from './dev-verifier-comparison.ts';
+import {
+  executeCheck,
+  recordSkippedCommand,
+  reusableCheckResult,
+  type DevVerifierExecution,
+} from './dev-verifier-execution.ts';
+import { completeCommandRun, verifierCommandRunKey } from './dev-verifier-storage.ts';
 import {
   testFailureRepairBrief,
   classifyRun,
@@ -17,8 +26,10 @@ import { placeBootSmokeCheck, placeInWorkspaceChecks, trackedFilesAt } from './d
 import type { DevVerifierRun, Settings, Task } from './types.ts';
 
 const roots: string[] = [];
+const databases: ReturnType<typeof openDb>[] = [];
 
 afterEach(() => {
+  for (const db of databases.splice(0)) db.close();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -121,6 +132,9 @@ function setup(root: string, tasks: Task[] = []) {
       return task;
     },
     devVerifierRun: (key: string) => runs.get(key),
+    devVerifierCommandRun: (cacheKey: string) =>
+      [...runs.values()].reverse().find((run) => run.execution?.cacheKey === cacheKey && run.execution.status === 'terminal'),
+    devVerifierCommandRuns: () => [...runs.values()].filter((run) => run.execution),
     devVerifierLatestRound: () => [...runs.values()].reverse().find((run) => run.round),
     saveDevVerifierRun: (run: DevVerifierRun) => runs.set(run.key, run),
     devVerifierFindings: () => [...findings.values()],
@@ -143,6 +157,35 @@ function setup(root: string, tasks: Task[] = []) {
       settings,
       store,
     },
+  };
+}
+
+function verifierReceiptStore() {
+  const db = openDb(':memory:');
+  databases.push(db);
+  db.exec('CREATE TABLE dev_verifier_runs (cache_key TEXT PRIMARY KEY, created_at TEXT NOT NULL, body TEXT NOT NULL)');
+  const read = (key: string): DevVerifierRun | undefined => {
+    const row = db.query('SELECT body FROM dev_verifier_runs WHERE cache_key=?').get(key) as
+      | { body: string }
+      | undefined;
+    return row ? (JSON.parse(row.body) as DevVerifierRun) : undefined;
+  };
+  return {
+    db,
+    tasks: () => [],
+    devVerifierRun: read,
+    devVerifierCommandRuns: () =>
+      (db.query("SELECT body FROM dev_verifier_runs WHERE cache_key LIKE 'dev-verifier-command:%'").all() as {
+        body: string;
+      }[]).map(({ body }) => JSON.parse(body) as DevVerifierRun),
+    devVerifierLatestRound: () => {
+      const row = db
+        .query("SELECT body FROM dev_verifier_runs WHERE cache_key LIKE 'dev-verifier-round:%' ORDER BY rowid DESC LIMIT 1")
+        .get() as { body: string } | undefined;
+      return row ? (JSON.parse(row.body) as DevVerifierRun) : undefined;
+    },
+    saveDevVerifierRun: (run: DevVerifierRun) =>
+      db.query('INSERT OR REPLACE INTO dev_verifier_runs VALUES (?,?,?)').run(run.key, run.createdAt, JSON.stringify(run)),
   };
 }
 
@@ -1063,4 +1106,223 @@ test('command repair diagnostics preserve argv and never call an env assignment 
     paths: ['apps/web'],
   });
   expect(file).toContain('- Test file: `apps/web/tests/regression.test.ts`');
+});
+
+test('concurrent verifier commands keep separate timed receipts and operation-keyed check flow completions', async () => {
+  const root = repo();
+  const ctx = setup(root);
+  const store = verifierReceiptStore();
+  ctx.settings.policy = readControlPolicy({ verifier: { concurrency: 3, checkAttempts: 1 } });
+  const gateStarted = Promise.withResolvers<void>();
+  let started = 0;
+  let active = 0;
+  let peak = 0;
+  const checks = Array.from({ length: 3 }, (_, index) => ({
+    command: ['concurrent-check-' + index],
+    closure: ['services/kernel/**'],
+  }));
+  const result = await runChecksAtHead(
+    {
+      settings: ctx.settings,
+      store,
+      runGate: async () => {
+        active++;
+        peak = Math.max(peak, active);
+        started++;
+        if (started === 3) gateStarted.resolve();
+        await gateStarted.promise;
+        active--;
+        return { passed: true, output: '', timedOut: false };
+      },
+    } as never,
+    checks,
+    git(root, 'rev-parse', 'dev'),
+    root,
+    Date.now() + 10_000,
+    new AbortController().signal,
+    0,
+    'round-concurrent',
+  );
+
+  const ids = result.results.flatMap(({ evidence }) => evidence.commandRunIds ?? []);
+  const runs = ids.map((id) => store.devVerifierRun(id)!);
+  const events = readFlow(store.db);
+  expect(peak).toBe(3);
+  expect(ids).toHaveLength(3);
+  expect(new Set(ids).size).toBe(3);
+  expect(runs.map((run) => run.execution?.outcome)).toEqual(['pass', 'pass', 'pass']);
+  expect(events.map((event) => event.operationId).sort()).toEqual(runs.map((run) => run.execution!.id).sort());
+  expect(events.every((event) => event.stage === 'check' && event.action === 'command-completed')).toBe(true);
+  for (const run of runs) {
+    const execution = run.execution!;
+    expect(execution.roundId).toBe('round-concurrent');
+    expect(typeof execution.startedAt).toBe('string');
+    expect(typeof execution.completedAt).toBe('string');
+    expect(execution.durationMs).toBe(Date.parse(execution.completedAt!) - Date.parse(execution.startedAt!));
+  }
+});
+
+test('round summaries reference their command receipts and missing boot smoke stays skipped without a start', async () => {
+  const root = repo();
+  const ctx = setup(root);
+  const store = verifierReceiptStore();
+  ctx.settings.verifierChecks = [{ paths: ['services/kernel/**'], command: ['round-check'] }];
+  ctx.settings.bootSmoke = { tests: ['services/kernel/not-yet.test.ts'] };
+  ctx.settings.policy = readControlPolicy({ verifier: { checkAttempts: 1, roundDeadlineMs: 30_000 } });
+  await verifyDev({
+    ...ctx.options,
+    store,
+    runGate: async () => ({ passed: true, output: '', timedOut: false }),
+  });
+
+  const round = store.devVerifierLatestRound()!.round!;
+  const runs = (round.commandRunIds ?? []).map((id) => store.devVerifierRun(id)!);
+  const skipped = runs.find((run) => run.execution?.outcome === 'skipped');
+  const events = readFlow(store.db);
+  expect(round).toMatchObject({ testsRun: 2, passed: 2, failed: 0, unknown: 0, skipped: 1 });
+  expect(runs).toHaveLength(4);
+  expect(runs.every((run) => run.execution?.roundId === round.roundId)).toBe(true);
+  expect(events.map((event) => event.operationId).sort()).toEqual(runs.map((run) => run.execution!.id).sort());
+  expect(skipped?.execution).toMatchObject({ status: 'terminal', outcome: 'skipped', durationMs: null });
+  expect(skipped?.execution?.startedAt).toBeUndefined();
+  expect(skipped?.evidence.passed).toBe(false);
+});
+
+test('a replay preserves the first terminal result while a genuine retry gets a new command identity', async () => {
+  const root = repo();
+  const ctx = setup(root);
+  const store = verifierReceiptStore();
+  ctx.settings.policy = readControlPolicy({ verifier: { checkAttempts: 1 } });
+  const execution: DevVerifierExecution = {
+    settings: ctx.settings,
+    store,
+  };
+  const check = { command: ['retry-check'] };
+  const head = git(root, 'rev-parse', 'dev');
+  let calls = 0;
+  const runner = async () => {
+    calls++;
+    return calls === 1
+      ? { passed: false, output: 'remote-check: no check host answered', timedOut: false }
+      : { passed: true, output: '', timedOut: false };
+  };
+  const first = await executeCheck(execution, runner, check, head, root, 'retry-cache-key', undefined, undefined, 'round-first');
+  const firstId = first.commandRunIds![0]!;
+  const original = store.devVerifierRun(firstId)!;
+  const conflict = {
+    ...original,
+    evidence: { ...original.evidence, passed: true, result: 'pass' as const },
+    execution: {
+      ...original.execution!,
+      outcome: 'pass' as const,
+      completedAt: '2026-11-12T10:00:00.000Z',
+      durationMs: 0,
+    },
+  };
+  expect(completeCommandRun(store, conflict).execution?.outcome).toBe('infrastructure');
+  const replay = await executeCheck(execution, runner, check, head, root, 'retry-cache-key', undefined, undefined, 'round-first');
+  expect(replay.commandRunIds).toEqual([firstId]);
+  expect(replay.result).toBe('infrastructure');
+  expect(calls).toBe(1);
+  expect(readFlow(store.db)).toHaveLength(1);
+
+  const retry = await executeCheck(execution, runner, check, head, root, 'retry-cache-key', undefined, undefined, 'round-second');
+  expect(retry.result).toBe('pass');
+  expect(retry.commandRunIds).toHaveLength(1);
+  expect(retry.commandRunIds![0]).not.toBe(firstId);
+  expect(calls).toBe(2);
+  expect(readFlow(store.db).map((event) => event.operationId)).toHaveLength(2);
+});
+
+test('terminal result and UTC-midnight flow completion roll back together when the companion write fails', () => {
+  const root = repo();
+  const ctx = setup(root);
+  const store = verifierReceiptStore();
+  const startedAt = '2026-11-11T23:59:58.990Z';
+  const completedAt = '2026-11-12T00:00:01.010Z';
+  const id = 'midnight-run';
+  const started: DevVerifierRun = {
+    key: verifierCommandRunKey(id),
+    createdAt: startedAt,
+    evidence: {
+      commit: 'captured-head',
+      command: ['midnight-check'],
+      passed: false,
+      timedOut: false,
+      output: '',
+      logPath: '',
+      result: 'unknown',
+    },
+    execution: {
+      id,
+      roundId: 'midnight-round',
+      cacheKey: 'midnight-cache-key',
+      status: 'running',
+      outcome: 'unknown',
+      startedAt,
+      durationMs: null,
+    },
+  };
+  const terminal: DevVerifierRun = {
+    ...started,
+    evidence: { ...started.evidence, output: 'FAIL: assertion', result: 'fail' },
+    execution: {
+      ...started.execution!,
+      status: 'terminal',
+      outcome: 'fail',
+      completedAt,
+      durationMs: 2020,
+    },
+  };
+  store.saveDevVerifierRun(started);
+  store.db.exec(`CREATE TRIGGER fail_verifier_receipt BEFORE INSERT ON flow_events
+    WHEN NEW.action='command-completed' BEGIN SELECT RAISE(ABORT, 'companion write failed'); END`);
+  expect(() => completeCommandRun(store, terminal)).toThrow('companion write failed');
+  expect(store.devVerifierRun(started.key)?.execution?.status).toBe('running');
+  expect(readFlow(store.db)).toHaveLength(0);
+
+  store.db.exec('DROP TRIGGER fail_verifier_receipt');
+  const completed = completeCommandRun(store, terminal);
+  expect(completed.execution).toMatchObject({ outcome: 'fail', startedAt, completedAt, durationMs: 2020 });
+  expect(readFlow(store.db, '2026-11-11T00:00:00.000Z', '2026-11-12T00:00:00.000Z')).toHaveLength(0);
+  const nextDay = readFlow(store.db, '2026-11-12T00:00:00.000Z', '2026-11-13T00:00:00.000Z');
+  expect(nextDay).toHaveLength(1);
+  expect(nextDay[0]?.operationId).toBe(id);
+  expect(JSON.parse(nextDay[0]!.detail!)).toMatchObject({ startedAt, completedAt, durationMs: 2020, result: 'fail' });
+
+  const execution: DevVerifierExecution = {
+    settings: ctx.settings,
+    store,
+  };
+  const skippedKey = recordSkippedCommand(
+    execution,
+    'captured-head',
+    'skip-round',
+    { command: ['bun', 'test', 'missing.test.ts'] },
+    'missing-boot-smoke',
+    'The configured boot-smoke file is absent at the captured head.',
+  );
+  const skipped = store.devVerifierRun(skippedKey)!;
+  expect(skipped.execution).toMatchObject({ status: 'terminal', outcome: 'skipped', durationMs: null });
+  expect(skipped.execution?.startedAt).toBeUndefined();
+  expect(skipped.evidence.passed).toBe(false);
+  expect(classifyRun({ ...skipped.evidence, result: 'skipped' })).toBe('skipped');
+
+  const old: DevVerifierRun = {
+    key: 'legacy-unreceipted-cache',
+    createdAt: startedAt,
+    evidence: {
+      commit: 'captured-head',
+      command: ['legacy-check'],
+      passed: true,
+      timedOut: false,
+      output: '',
+      logPath: '',
+      result: 'pass',
+    },
+  };
+  store.saveDevVerifierRun(old);
+  const legacy = reusableCheckResult(execution, 'captured-head', { command: ['legacy-check'] }, old.key);
+  expect(legacy).toMatchObject({ passed: false, result: 'unknown' });
+  expect(classifyRun(legacy!)).toBe('unknown');
 });
