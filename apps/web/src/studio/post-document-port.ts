@@ -1,8 +1,12 @@
 import { checkDocument, hasDocumentContent, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import { editionDocumentDigest } from '../content-editions/edition-model';
-import { revisePost, type EditFailure } from '../threads/actions';
-import { draftFetch } from '../threads/composer';
-import { readExactRevision } from '../threads/exact-revision-read';
+import {
+  draftFetch,
+  readExactRevision,
+  readPostHistory,
+  revisePost,
+  type EditFailure,
+} from '../threads/studio-document';
 import {
   createHistoricalReadBinding,
   historicalActualMatches,
@@ -13,7 +17,6 @@ import {
   type HistoricalReadEnvelope,
   type HistoricalReaderSource,
 } from '../threads/historical-reader-provenance';
-import { readPostHistory } from '../threads/reads';
 import {
   sameExact,
   type ExactDocument,

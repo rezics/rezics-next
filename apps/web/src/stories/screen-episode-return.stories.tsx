@@ -110,17 +110,15 @@ function ReaderStory({
     ...(directReturn ? { directReturn } : {}),
   });
   return (
-    <ScreenReadingBoundary>
-      <ScreenProfileReader
-        locale="en"
-        public={subject(id, type, label)}
-        {...(read ? { episodeRead: read } : {})}
-        episodeOrigin={origin}
-        episodeVisit={visit}
-        episodeVisitKey={address}
-        link={PlainLink}
-      />
-    </ScreenReadingBoundary>
+    <ScreenProfileReader
+      locale="en"
+      public={subject(id, type, label)}
+      {...(read ? { episodeRead: read } : {})}
+      episodeOrigin={origin}
+      episodeVisit={visit}
+      episodeVisitKey={address}
+      link={PlainLink}
+    />
   );
 }
 
@@ -168,6 +166,13 @@ const meta = {
   id: 'pages-screen-episode-return',
   component: ReaderStory,
   args: { id: seriesId, type: 'schema:TVSeries', label: 'The Observatory', origin: seriesOrigin },
+  decorators: [
+    (Story) => (
+      <ScreenReadingBoundary>
+        <Story />
+      </ScreenReadingBoundary>
+    ),
+  ],
 } satisfies Meta<typeof ReaderStory>;
 
 export default meta;

@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'bun:test';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Release } from '@rezics/definitions';
 import definitions from '../src/kernel/recorded/definitions-release.json';
 
@@ -33,6 +34,22 @@ test('series context ignores unrelated route text and only TVSeries may open epi
     positionAdmitted: false,
     seriesAdmitted: true,
   });
+});
+
+test('installed membership definitions admit position while the historical recording does not', () => {
+  expect(episodeMembershipAdmission(release, 'schema:TVSeries').positionAdmitted).toBe(false);
+  expect(episodeMembershipAdmission(bundledRelease, 'schema:TVSeries')).toEqual({
+    property: 'schema:isPartOf',
+    admitted: true,
+    positionAdmitted: true,
+    seriesAdmitted: true,
+  });
+  expect(membershipCreateStatement(release, 'schema:TVSeries', { target: series, position: '2' })?.qualifiers).toEqual(
+    [],
+  );
+  expect(
+    membershipCreateStatement(bundledRelease, 'schema:TVSeries', { target: series, position: '2' })?.qualifiers,
+  ).toEqual([{ property: { id: 'schema:position' }, value: { type: 'value', content: '2' } }]);
 });
 
 test('confirmed admitted membership may enter create; omitted membership and unread stay unlinked', () => {

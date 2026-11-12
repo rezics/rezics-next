@@ -2,6 +2,8 @@
 
 Decision: Screen profile and episode continuation construct through the Semantic-owned reading application (`screen-reading-application.tsx`). Navigation descriptors in `screen-episode-reader/navigation.ts` are dependency-free values. Search installs the page-value, spoiler, href and visit-return port at `OverviewRoot` and `ScreenReadingBoundary`.
 
+Decision: episode ordering uses only an admitted `schema:isPartOf` `schema:position` qualifier; source episode number, work kind and completion stay separate, and the historical recording remains unchanged with position unadmitted.
+
 Music context, catalogue file and Concept creation use `creation-host/use-creation-host.tsx`
 for the mounted metadata reading, last good release, retained term/fact types, archived choices,
 refresh exclusion and review revision. Profiles retain native preparation, commands, field admission

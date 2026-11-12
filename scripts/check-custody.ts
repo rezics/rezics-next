@@ -673,7 +673,7 @@ export function initializeRemoteRunCustody(
     !Array.isArray(binding.remoteArgv) ||
     binding.remoteArgv.length === 0 ||
     binding.remoteArgv.some(
-      (argument) => typeof argument !== 'string' || argument.length > 4096 || argument.includes('\0'),
+      (argument) => typeof argument !== 'string' || argument.length > 64 * 1024 || argument.includes('\0'),
     )
   )
     throw new Error('worker-check: invalid remote custody binding');

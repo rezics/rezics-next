@@ -25,4 +25,6 @@ session retirement, producer recordings and the mounted native/browser acceptanc
 responsibilities. `studio-native-drafts.stories.tsx` labels its supplied outcomes as illustrations, not native proof.
 
 Decision: Studio owns one account-draft inventory and private creation flow, composes the existing exact-resume and
-revision lifecycle, and keeps local acknowledged-revision publication separate from hosted Book publication.
+revision lifecycle, and keeps local acknowledged-revision publication separate from hosted Book publication. Studio
+exact document operations use a focused Content public entry that exposes only those operations and required types;
+implementation stays in Content and Studio remains the receiving owner.
