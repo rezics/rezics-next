@@ -22,7 +22,10 @@ test('verify and promote help and invalid arguments never call runtime hooks', a
         expect(printed.pop()).toBe(usage);
         expect(calls).toEqual([]);
       }
-      for (const args of [[command, 'unexpected'], [command, '--help', 'unexpected']]) {
+      for (const args of [
+        [command, 'unexpected'],
+        [command, '--help', 'unexpected'],
+      ]) {
         await expect(runIntegration(args, runtime)).rejects.toThrow(usage);
         expect(calls).toEqual([]);
       }
