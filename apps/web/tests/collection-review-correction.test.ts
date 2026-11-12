@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { createElement } from 'react';
+import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   buildCollectionSaveReviewPlan,
@@ -344,4 +344,97 @@ test('selected removal and transfer each send one native request with exact IDs,
   }
   for (const memberIds of [[], ['one', 'one'], Array.from({ length: 101 }, (_, index) => String(index))])
     expect(() => collectionSelection({ ...selection, memberIds })).toThrow();
+});
+
+test('flat presentation comparisons keep correction focus, Escape and native Save handoff without a write', async () => {
+  const { Window } = await import('happy-dom');
+  const { CollectionPresentationFields } = await import('../src/library/collection-editor');
+  const { m } = await import('../src/paraglide/messages.js');
+  const window = new Window({ url: 'https://site.test/en/collections/example', width: 320 });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  let writes = 0;
+  const longLabel = 'Books with annotations · 注釈付きの本と多言語の版情報 · Livres avec annotations';
+  const click = (selector: string) => act(async () => host.querySelector<HTMLButtonElement>(selector)!.click());
+  const recordWrite = () => {
+    writes++;
+  };
+  host.addEventListener('submit', (event) => {
+    event.preventDefault();
+    recordWrite();
+  });
+  try {
+    await act(async () =>
+      root.render(
+        createElement(
+          'div',
+          null,
+          createElement(
+            'form',
+            { id: 'collection-edit-form' },
+            createElement(CollectionPresentationFields, {
+              types: [{ id: 'schema:Book', label: longLabel }],
+              savedKind: null,
+              kind: 'schema:Book',
+              onKindChange: recordWrite,
+              coverMediaId: null,
+              onCoverChange: recordWrite,
+            }),
+          ),
+          createElement('button', { type: 'submit', form: 'collection-edit-form' }, 'Save'),
+        ),
+      ),
+    );
+    const trigger = host.querySelector<HTMLButtonElement>('[data-presentation-review-trigger]')!;
+    for (const field of ['type', 'cover']) {
+      await click('[data-presentation-review-trigger]');
+      expect(window.document.activeElement?.id).toContain('-review-heading');
+      const comparison = host.querySelector(`[data-${field}-comparison]`)!;
+      const correction = comparison.querySelector<HTMLButtonElement>('[data-correct-presentation]')!;
+      expect(correction.parentElement?.querySelector('h4')).not.toBeNull();
+      expect(comparison.textContent).toContain(field === 'type' ? longLabel : m.collection_choice_saved_native());
+      const readings = [...comparison.querySelectorAll(`[data-${field}-reading]`)];
+      expect(readings.map((node) => node.getAttribute(`data-${field}-reading`))).toEqual(['saved', 'draft']);
+      expect(readings.every((node) => !node.classList.contains('border') && !node.className.includes('rounded'))).toBe(
+        true,
+      );
+      await act(async () => correction.click());
+      expect(host.querySelector('[data-presentation-review]')).toBeNull();
+      expect(window.document.activeElement?.id).toContain(`-${field}`);
+    }
+    await click('[data-presentation-review-trigger]');
+    await act(async () =>
+      host
+        .querySelector('[data-presentation-review]')!
+        .dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })),
+    );
+    expect(window.document.activeElement).toBe(trigger);
+    expect(host.querySelector('[data-presentation-review]')).toBeNull();
+    await click('[data-presentation-review-trigger]');
+    await click('[data-review-return-save]');
+    expect(window.document.activeElement).toBe(host.querySelector('button[type="submit"]'));
+    expect(host.querySelector('[data-presentation-review]')).toBeNull();
+    expect(writes).toBe(0);
+  } finally {
+    await act(async () => root.unmount());
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    await window.happyDOM.close();
+  }
 });
