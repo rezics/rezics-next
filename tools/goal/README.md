@@ -2095,6 +2095,7 @@ After rebasing a single or batched landing, a composed candidate that preserves 
 Decision: Publish every nonempty composed candidate through the existing checks and expected-head transaction; reconcile a false integrated outcome from its original delivered landing provenance, preserving the old outcome as evidence before replaying the same attempt.
 
 `bun tools/goal/src/cli.ts recover false-integration <task> <attempt>` reopens only that current task's delivered single-landing result when its saved candidate is a nonempty descendant of the reported commit and the accepted source branch still matches. It preserves the prior request and outcome, clears only resolver replay state, and leaves the same queue entry for the ordinary train.
+Decision: false-integration recovery keeps the completed landing operation immutable, reopens the same queue row with a fresh operation ID, records one enqueue in the reconciliation transaction, and creates no extra operation on replay.
 
 Specification conflicts, tool failures and exhausted quota are attempt facts, parsed from a structured worker exit or
 native CLI failure, and stored on the attempt. A usage-limit refusal with a fresh reading that shows allowance left

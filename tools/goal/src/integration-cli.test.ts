@@ -158,6 +158,11 @@ test('false integration recovery preserves provenance, reopens the same queue en
     h.job.onGateOutcome(falseOutcome);
     h.queue.acknowledge(entry.id);
 
+    const completedOperationId = h.queue.entry(ref)!.operationId!;
+    const completedOperation = h.store.db
+      .query('SELECT * FROM landing_operations WHERE operation_id=?')
+      .get(completedOperationId);
+
     const original = h.store.task(task.id);
     const originalSession = h.store.attempt(ref).session;
     const runtime = {
@@ -179,6 +184,8 @@ test('false integration recovery preserves provenance, reopens the same queue en
     } as unknown as IntegrationRuntime;
     const args = ['recover', 'false-integration', task.id, '1'];
     expect(await runIntegration(args, runtime)).toBe(0);
+    const reopenedOperationId = h.queue.entry(ref)?.operationId!;
+    expect(reopenedOperationId).not.toBe(completedOperationId);
     expect(h.store.task(task.id)).toMatchObject({
       state: 'landing',
       currentAttempt: 1,
@@ -187,9 +194,15 @@ test('false integration recovery preserves provenance, reopens the same queue en
     });
     expect(h.store.attempt(ref).session).toBe(originalSession);
     expect(h.queue.entry(ref)).toMatchObject({ delivered: 0, outcome: null, candidate: null });
+    expect(h.queue.entry(ref)?.id).toBe(entry.id);
     expect(h.queue.entry(ref)?.request.devResolution).toBeUndefined();
     expect(h.store.events(task.id, 1).filter((event) => event.kind === 'false-integration-reconciled')).toHaveLength(1);
     expect(await runIntegration(args, runtime)).toBe(0);
+    expect(h.queue.entry(ref)?.operationId).toBe(reopenedOperationId);
+    const recoveryEnqueues = h.store.db
+      .query("SELECT 1 FROM flow_events WHERE operation_id=? AND action='enqueued'")
+      .all(reopenedOperationId);
+    expect(recoveryEnqueues).toHaveLength(1);
 
     await h.train();
 
@@ -210,8 +223,18 @@ test('false integration recovery preserves provenance, reopens the same queue en
     expect(JSON.parse(reconciliation.body)).toMatchObject({
       publishedCommit,
       candidate,
-      outcome: { passed: true, mergedCommit: publishedCommit },
+      previousOperationId: completedOperationId,
+      operationId: reopenedOperationId,
+      request: resolvedRequest,
+      outcome: falseOutcome,
     });
+    expect(h.store.db.query('SELECT * FROM landing_operations WHERE operation_id=?').get(completedOperationId)).toEqual(
+      completedOperation,
+    );
+    const reopenedOperation = h.store.db
+      .query('SELECT terminal_action, terminal_outcome FROM landing_operations WHERE operation_id=?')
+      .get(reopenedOperationId);
+    expect(reopenedOperation).toEqual({ terminal_action: 'finished', terminal_outcome: JSON.stringify(actual) });
   } finally {
     if (previousTaskId === undefined) delete process.env.GOAL_TASK_ID;
     else process.env.GOAL_TASK_ID = previousTaskId;

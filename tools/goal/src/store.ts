@@ -1,6 +1,6 @@
 import { nativeCheckId, proofFingerprint, ProofCapacityQueuedError } from './verification.ts';
 import type { Database } from 'bun:sqlite';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { defaultPolicy } from './policy.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { briefProposalHash, sameBriefProposalText } from './durable-follow-up.ts';
@@ -35,7 +35,7 @@ import type {
   StrayWorktreeCandidate,
   WorktreeScanDirectory,
 } from './types.ts';
-import { recordFlow, ensureFlow, closePendingFlow } from './flow.ts';
+import { recordFlow, ensureFlow, closePendingFlow, recordLandingOperationEnqueued } from './flow.ts';
 import type {
   ProofBinding,
   ProofReservation,
@@ -1620,7 +1620,9 @@ export class WorkerStore implements AttemptFence {
       )
         throw new Error('Task is not the expected current dev integration');
       const row = this.db
-        .query('SELECT id, request, outcome, delivered, candidate, batch FROM landing_queue WHERE task=? AND attempt=?')
+        .query(
+          'SELECT id, request, outcome, delivered, candidate, batch, operation_id FROM landing_queue WHERE task=? AND attempt=?',
+        )
         .get(ref.taskId, ref.attempt) as {
         id: number;
         request: string;
@@ -1628,6 +1630,7 @@ export class WorkerStore implements AttemptFence {
         delivered: number;
         candidate: string | null;
         batch: string | null;
+        operation_id: string | null;
       } | null;
       if (!row || !row.outcome || row.delivered !== 1 || row.batch !== null)
         throw new Error('False integration has no delivered single-landing outcome');
@@ -1653,14 +1656,22 @@ export class WorkerStore implements AttemptFence {
 
       const replay = { ...request };
       delete replay.devResolution;
+      const at = new Date().toISOString();
+      const operationId = randomUUID();
       const updated = this.db
         .query(
-          'UPDATE landing_queue SET request=?, outcome=NULL, delivered=0, candidate=NULL, batch=NULL, resolving=0 WHERE id=? AND outcome=? AND delivered=1 AND candidate=? AND batch IS NULL',
+          'UPDATE landing_queue SET request=?, outcome=NULL, delivered=0, candidate=NULL, batch=NULL, resolving=0, operation_id=? WHERE id=? AND outcome=? AND delivered=1 AND candidate=? AND batch IS NULL',
         )
-        .run(JSON.stringify(replay), row.id, row.outcome, evidence.candidate);
+        .run(JSON.stringify(replay), operationId, row.id, row.outcome, evidence.candidate);
       if (updated.changes !== 1) throw new Error('False integration landing changed before reconciliation');
+      recordLandingOperationEnqueued(this.db, {
+        operationId,
+        queueId: row.id,
+        taskId: ref.taskId,
+        attempt: ref.attempt,
+        at,
+      });
 
-      const at = new Date().toISOString();
       this.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)').run(
         ref.taskId,
         ref.attempt,
@@ -1669,6 +1680,8 @@ export class WorkerStore implements AttemptFence {
         JSON.stringify({
           publishedCommit: evidence.publishedCommit,
           candidate: evidence.candidate,
+          previousOperationId: row.operation_id,
+          operationId,
           request,
           outcome,
           taskIntegration: {
@@ -1691,7 +1704,12 @@ export class WorkerStore implements AttemptFence {
         stage: 'landing',
         action: 'false-integration-reconciled',
         at,
-        detail: JSON.stringify({ publishedCommit: evidence.publishedCommit, candidate: evidence.candidate }),
+        detail: JSON.stringify({
+          publishedCommit: evidence.publishedCommit,
+          candidate: evidence.candidate,
+          previousOperationId: row.operation_id,
+          operationId,
+        }),
       });
       return true;
     });
