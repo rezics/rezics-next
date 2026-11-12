@@ -51,3 +51,48 @@ test('close is repeatable, drains every pool after a failure, and rejects new ac
   expect(closed.sort()).toEqual(['admin', 'library']);
   expect(acquiredAfterClose).toBe(false);
 });
+
+test('close drains admitted checks in order before releasing pools', async () => {
+  const lifecycle = createGrowthDatabaseLifecycle();
+  const events: string[] = [];
+  let poolClosed = false;
+  lifecycle.acquire('admin pool', () => ({ end: async () => void (poolClosed = true) }));
+
+  let startFirst!: () => void;
+  const firstStarted = new Promise<void>((resolve) => (startFirst = resolve));
+  let releaseFirst!: () => void;
+  const firstBlock = new Promise<void>((resolve) => (releaseFirst = resolve));
+  const first = lifecycle.runExclusiveCheck(async () => {
+    events.push('first:start');
+    startFirst();
+    await firstBlock;
+    events.push('first:end');
+  });
+  await firstStarted;
+
+  let startSecond!: () => void;
+  const secondStarted = new Promise<void>((resolve) => (startSecond = resolve));
+  let releaseSecond!: () => void;
+  const secondBlock = new Promise<void>((resolve) => (releaseSecond = resolve));
+  const second = lifecycle.runExclusiveCheck(async () => {
+    events.push('second:start');
+    startSecond();
+    await secondBlock;
+    events.push('second:end');
+  });
+  const closing = lifecycle.close();
+
+  expect(events).toEqual(['first:start']);
+  expect(() => lifecycle.runExclusiveCheck(async () => {})).toThrow('Growth database is closed');
+  expect(poolClosed).toBe(false);
+
+  releaseFirst();
+  await secondStarted;
+  expect(events).toEqual(['first:start', 'first:end', 'second:start']);
+  expect(poolClosed).toBe(false);
+
+  releaseSecond();
+  await Promise.all([first, second, closing]);
+  expect(events).toEqual(['first:start', 'first:end', 'second:start', 'second:end']);
+  expect(poolClosed).toBe(true);
+});
