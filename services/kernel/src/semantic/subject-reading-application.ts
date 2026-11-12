@@ -119,6 +119,7 @@ export type SubjectReadOptions = {
   selectedSynopsis?: { input: SelectedSynopsisInput; admit: () => Promise<boolean> };
   languages?: readonly string[];
   authorize?: SummaryDependencies['authorize'];
+  prepareSummaryBatch?: () => Promise<SubjectSummaryBatchAuthorizer>;
   seen?: readonly SubjectComponent[];
   deadline?: number;
   prepareAuthorization?: () => Promise<AccessCheck>;
@@ -144,7 +145,9 @@ export type SubjectReadingPageRequest = {
   subject: string;
   context: string;
   languages: readonly string[];
-  authorization: SubjectReadingAuthorizationPort<AccessCheck>;
+  authorization: SubjectReadingAuthorizationPort<AccessCheck> & {
+    prepareSummaryBatch: () => Promise<SubjectSummaryBatchAuthorizer>;
+  };
   runNative: <T>(
     read: (yieldAdmission?: <Value>(wait: () => Promise<Value>) => Promise<Value>) => Promise<T>,
   ) => Promise<T>;
@@ -231,6 +234,10 @@ export type SummaryReaderDependencies = {
 };
 type SummaryAuthorize = SummaryDependencies['authorize'];
 type Batches = readonly (readonly string[])[];
+export type SubjectSummaryBatchAuthorizer = (
+  client: AccessClient,
+  ids: readonly string[],
+) => Promise<ReadonlyMap<string, boolean>>;
 type SummarySources = readonly Readonly<{ partition: number; epoch: number; position: bigint }>[];
 export type SummaryCoverState = 'available' | 'absent' | 'concealed';
 type ObserveSummaries = (
@@ -259,10 +266,27 @@ const preparations = new WeakMap<SummaryAuthorize, (batches: Batches) => Promise
  */
 export function summaryAuthorization(
   prepare: (id: string, batch: readonly string[]) => Promise<AccessCheck>,
+  prepareBatch?: () => Promise<SubjectSummaryBatchAuthorizer>,
 ): SummaryAuthorize {
   const authorize: SummaryAuthorize = async (client, id, batch) =>
     routeOf(id) === null ? false : (await prepare(id, batch))(client);
   preparations.set(authorize, async (batches) => {
+    if (prepareBatch) {
+      const ids = [...new Set(batches.flat().filter((id) => routeOf(id) !== null))];
+      if (!ids.length) return async () => false;
+      const decide = await prepareBatch();
+      let decidedClient: AccessClient | undefined;
+      let pending: Promise<ReadonlyMap<string, boolean>> | undefined;
+      const admitted = new Set(ids);
+      return async (client, id) => {
+        if (!admitted.has(id)) return false;
+        if (decidedClient !== client) {
+          decidedClient = client;
+          pending = decide(client, ids);
+        }
+        return (await pending!).get(id) === true;
+      };
+    }
     const checks = new Map<string, AccessCheck>();
     for (const batch of batches) {
       for (const id of new Set(batch)) {
@@ -794,6 +818,8 @@ async function disclosedTargets(
   release: Release,
   supported: SupportedFact[],
   authorize: SummaryDependencies['authorize'] | undefined,
+  prepareSummaryBatch: (() => Promise<SubjectSummaryBatchAuthorizer>) | undefined,
+  deadline: number,
 ): Promise<SupportedFact[]> {
   const types = factDataTypes(
     release,
@@ -821,6 +847,44 @@ async function disclosedTargets(
   // that boundary before preparing Access evidence at any of their homes.
   if (pending.length > BATCH_LIMIT) throw new TypeError('A related read accepts at most 256 ids');
   if (!pending.length) return supported;
+  if (prepareSummaryBatch) {
+    const decide = await prepareSummaryBatch();
+    return withReadTransaction(
+      pool,
+      async (client) => {
+        const states = await loadRelated(client, pending);
+        const visible = pending.filter((id) => states.get(id)?.visibility === 'visible');
+        const redirectIds = [
+          ...new Set(
+            visible.flatMap((id) => {
+              const target = states.get(id)?.redirect;
+              return target ? [target] : [];
+            }),
+          ),
+        ];
+        const redirectStates = redirectIds.length ? await loadRelated(client, redirectIds) : new Map();
+        const authorized = [
+          ...new Set([
+            ...visible,
+            ...redirectIds.filter((id) => routeOf(id) !== null && redirectStates.get(id)?.visibility === 'visible'),
+          ]),
+        ];
+        const decisions = authorized.length ? await decide(client, authorized) : new Map<string, boolean>();
+        const allowed = new Map<string, boolean>();
+        for (const id of pending) {
+          const state = states.get(id);
+          const redirect = state?.redirect;
+          let readable = state?.visibility === 'visible' && decisions.get(id) === true;
+          if (readable && redirect) {
+            readable = redirectStates.get(redirect)?.visibility === 'visible' && decisions.get(redirect) === true;
+          }
+          allowed.set(id, readable);
+        }
+        return supported.filter((row) => targets(row.fact).every((id) => allowed.get(id) === true));
+      },
+      deadline,
+    );
+  }
   // No owner is checked out while Access prepares evidence, including on a max-one pool.
   const client = { query: pool.query.bind(pool) };
   const allowed = new Map<string, boolean>();
@@ -1076,7 +1140,14 @@ async function readSubjectNative(
   const snapshot = await readSnapshot(id);
   if (!snapshot) return null;
   const { rows, component, release, layerDigest, resolution, relationCounts } = snapshot;
-  const supported = await disclosedTargets(pool, release, snapshot.supported, summaries.authorize);
+  const supported = await disclosedTargets(
+    pool,
+    release,
+    snapshot.supported,
+    summaries.authorize,
+    summaries.prepareSummaryBatch,
+    deadline,
+  );
   // Membership is current identity state, never revision/candidate history. Each admitted original
   // contributes only live displayed terms and selected slots, with fresh original Access and fences.
   const termKeys = new Map<string, unknown>();
@@ -1112,7 +1183,17 @@ async function readSubjectNative(
   for (const member of snapshot.members) {
     const original = await readSnapshot(member, id);
     if (!original) continue;
-    add(await disclosedTargets(pool, original.release, original.supported, summaries.authorize), true);
+    add(
+      await disclosedTargets(
+        pool,
+        original.release,
+        original.supported,
+        summaries.authorize,
+        summaries.prepareSummaryBatch,
+        deadline,
+      ),
+      true,
+    );
   }
   const dataTypes = factDataTypes(release, displayed);
   const subject = resolveItem(id, displayed, rows[0]!.type, dataTypes, {
@@ -1209,7 +1290,14 @@ async function readSubjectNative(
           deadline,
         );
         if (final) {
-          const current = await disclosedTargets(pool, release, final, summaries.authorize);
+          const current = await disclosedTargets(
+            pool,
+            release,
+            final,
+            summaries.authorize,
+            summaries.prepareSummaryBatch,
+            deadline,
+          );
           const admitted = resolveItem(
             id,
             current.map((entry) => entry.fact),
@@ -1351,7 +1439,7 @@ async function readSubjectPage(
   const authorizeSummary = summaryAuthorization(async (id, batch) => {
     if (routeOf(id) === null) return async () => false;
     return input.authorization.prepareSummary(id, batch);
-  });
+  }, input.authorization.prepareSummaryBatch);
   const synopsisAnchors: SubjectComponent[] = [];
   const result = await input
     .runNative((yieldAdmission) =>
@@ -1387,6 +1475,7 @@ async function readSubjectPage(
         seen: input.seen,
         ...(yieldAdmission ? { yieldAdmission } : {}),
         deadline,
+        prepareSummaryBatch: input.authorization.prepareSummaryBatch,
         prepareAuthorize: input.authorization.prepareDetail,
         readAs: input.readAs,
       }),
@@ -1408,24 +1497,20 @@ async function readSubjectPage(
   }
   const relatedList = [...subjectIds];
   if (relatedList.length > 256) throw new TypeError('A related read accepts at most 256 ids');
-  const checks = await Promise.all(
-    relatedList.map(async (id) => {
-      const route = routeOf(id);
-      if (route === null) return null;
-      return input.authorization.prepareSummary(id, relatedList);
-    }),
-  );
+  const readableIds = relatedList.filter((id) => routeOf(id) !== null);
+  const decideRelated = readableIds.length ? await input.authorization.prepareSummaryBatch() : undefined;
   const references = await input.runNative(() =>
-    withConnection(pool, async (client) => {
-      const allowed: string[] = [];
-      for (let index = 0; index < relatedList.length; index++) {
-        const check = checks[index];
-        const id = relatedList[index];
-        if (!check || id === undefined || !(await check(client))) continue;
-        allowed.push(id);
-      }
-      return application.readRelated(client, allowed);
-    }),
+    withReadTransaction(
+      pool,
+      async (client) => {
+        const decisions = decideRelated ? await decideRelated(client, readableIds) : new Map<string, boolean>();
+        return application.readRelated(
+          client,
+          readableIds.filter((id) => decisions.get(id) === true),
+        );
+      },
+      deadline,
+    ),
   );
 
   const active = await ports.readActiveRelease(pool);

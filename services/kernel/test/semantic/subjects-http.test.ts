@@ -218,6 +218,49 @@ test('a read returns the subject, its session token and the labels of its proper
   expect(
     realAccess.readChecks.filter(({ action }) => action === 'subject:read').map(({ resource }) => resource.id),
   ).not.toContain(secret);
+
+  const platform = (await create({ type: 'skos:Concept', labels: { en: 'Test platform' } })).body.subject.id as string;
+  const gamePlatform = {
+    property: { id: 'schema:gamePlatform' },
+    value: { type: 'value', content: platform },
+    qualifiers: [{ property: { id: 'schema:inLanguage' }, value: { type: 'value', content: 'ja' } }],
+    references: [
+      {
+        parts: [
+          { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/vn-platform' } },
+        ],
+      },
+    ],
+  };
+  const game = await create({
+    type: 'schema:VideoGame',
+    labels: { en: 'VN game work' },
+    statements: { 'schema:gamePlatform': [gamePlatform] },
+  });
+  const gameId = game.body.subject.id as string;
+  await catchUpLinks(gameId);
+  const reader = await call(
+    'GET',
+    `/v1/subjects/${gameId}?${new URLSearchParams({
+      context: GLOBAL_CONTEXT,
+      language: 'en',
+      includeViewerActions: 'true',
+    })}`,
+  );
+  expect(reader.response.status).toBe(200);
+  expect(reader.body.subject).toMatchObject({ id: gameId, type: 'schema:VideoGame' });
+  expect(reader.body.subject.release).toBe(game.body.subject.release);
+  expect(reader.body.subject.statements).toEqual(game.body.subject.statements);
+  expect(reader.body.related[platform]).toMatchObject({
+    labels: { en: 'Test platform' },
+    type: 'skos:Concept',
+    types: expect.arrayContaining(['skos:Concept']),
+    cover: null,
+  });
+  expect(reader.body.viewerActions).toEqual({ state: 'available', actions: [] });
+  expect(
+    realAccess.readChecks.filter(({ action }) => action === 'subject:read').map(({ resource }) => resource.id),
+  ).toEqual(expect.arrayContaining([gameId, platform]));
 });
 
 test('anonymous inverse relation pages keep current summaries and continuation across source homes', async () => {

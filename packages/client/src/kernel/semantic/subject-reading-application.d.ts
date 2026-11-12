@@ -63,6 +63,7 @@ export type SubjectReadOptions = {
     };
     languages?: readonly string[];
     authorize?: SummaryDependencies['authorize'];
+    prepareSummaryBatch?: () => Promise<SubjectSummaryBatchAuthorizer>;
     seen?: readonly SubjectComponent[];
     deadline?: number;
     prepareAuthorization?: () => Promise<AccessCheck>;
@@ -88,7 +89,9 @@ export type SubjectReadingPageRequest = {
     subject: string;
     context: string;
     languages: readonly string[];
-    authorization: SubjectReadingAuthorizationPort<AccessCheck>;
+    authorization: SubjectReadingAuthorizationPort<AccessCheck> & {
+        prepareSummaryBatch: () => Promise<SubjectSummaryBatchAuthorizer>;
+    };
     runNative: <T>(read: (yieldAdmission?: <Value>(wait: () => Promise<Value>) => Promise<Value>) => Promise<T>) => Promise<T>;
     readAs: <T>(read: () => Promise<T>) => Promise<T>;
     seen: readonly SubjectComponent[];
@@ -193,6 +196,7 @@ export type SummaryReaderDependencies = {
     maySeeCover?: SummaryDependencies['maySeeCover'];
 };
 type SummaryAuthorize = SummaryDependencies['authorize'];
+export type SubjectSummaryBatchAuthorizer = (client: AccessClient, ids: readonly string[]) => Promise<ReadonlyMap<string, boolean>>;
 type SummarySources = readonly Readonly<{
     partition: number;
     epoch: number;
@@ -212,7 +216,7 @@ export type SubjectSummaryObservation = Readonly<{
  * Preparation never runs while the final snapshot is checked out. Only the returned
  * native checks execute on that snapshot; no allow decision is retained.
  */
-export declare function summaryAuthorization(prepare: (id: string, batch: readonly string[]) => Promise<AccessCheck>): SummaryAuthorize;
+export declare function summaryAuthorization(prepare: (id: string, batch: readonly string[]) => Promise<AccessCheck>, prepareBatch?: () => Promise<SubjectSummaryBatchAuthorizer>): SummaryAuthorize;
 export type SubjectCorrectionActions = {
     state: 'available';
     actions: {

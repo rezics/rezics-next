@@ -1,6 +1,7 @@
 import type { AccessClient, Actor } from '../request/access.ts';
 import {
   authoritativeTimeValue,
+  noEffect,
   principalCommandIdentity,
   runCommand,
   type CommandAuthorization,
@@ -33,6 +34,9 @@ import {
 } from './knowledge-store.ts';
 
 const PUBLICATION_EVENT = 'com.rezics.content.knowledge.publication.changed.v1';
+const NOTEBOOK_CREATED_EVENT = 'com.rezics.content.knowledge.notebook.created.v1';
+const DOCUMENT_CREATED_EVENT = 'com.rezics.content.knowledge.document.created.v1';
+const DOCUMENT_REVISED_EVENT = 'com.rezics.content.knowledge.document.revised.v1';
 
 function accountId(actor: Actor): string {
   if (actor.kind !== 'account') throw new KnowledgeNotFoundError();
@@ -186,7 +190,16 @@ export async function createKnowledgeNotebook(
          VALUES ($1,$2,$3,$4,$5)`,
         [route, notebookId, structureRevisionId, transactionId, authoritativeTimeValue(time)],
       );
-      return { value: { notebookId, structureRevisionId }, events: [] };
+      return {
+        value: { notebookId, structureRevisionId },
+        events: [
+          {
+            type: NOTEBOOK_CREATED_EVENT,
+            subject: notebookId,
+            data: { notebookId, subjectId: input.subjectId, structureRevisionId },
+          },
+        ],
+      };
     },
   );
 }
@@ -276,7 +289,16 @@ export async function createKnowledgeDocument(
          WHERE route=$1 AND notebook_id=$2`,
         [route, notebookId, structureRevisionId],
       );
-      return { value: { notebookId, documentId, placementId, revisionId, structureRevisionId }, events: [] };
+      return {
+        value: { notebookId, documentId, placementId, revisionId, structureRevisionId },
+        events: [
+          {
+            type: DOCUMENT_CREATED_EVENT,
+            subject: documentId,
+            data: { notebookId, documentId, placementId, revisionId, structureRevisionId },
+          },
+        ],
+      };
     },
   );
 }
@@ -330,7 +352,16 @@ export async function reviseKnowledgeDocument(
         documentId,
         revisionId,
       ]);
-      return { value: { documentId, revisionId }, events: [] };
+      return {
+        value: { documentId, revisionId },
+        events: [
+          {
+            type: DOCUMENT_REVISED_EVENT,
+            subject: documentId,
+            data: { documentId, previousRevisionId: row.head_revision_id, revisionId },
+          },
+        ],
+      };
     },
   );
 }
@@ -391,7 +422,7 @@ export async function setKnowledgePublication(
         previous = existing.rows[0] ?? null;
       }
       if (input.revisionId === null) {
-        if (!previous) return { value: { documentId, publicationId: null }, events: [] };
+        if (!previous) return noEffect({ documentId, publicationId: null });
         await tx.query(
           `UPDATE content.knowledge_document SET current_publication_id=NULL
            WHERE route=$1 AND document_id=$2`,

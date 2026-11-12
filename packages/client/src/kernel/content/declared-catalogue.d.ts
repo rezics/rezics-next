@@ -213,6 +213,23 @@ export declare function contentDeclaredEvents(): Readonly<{
         revisionId: import("typebox").TString;
         subjectId: import("typebox").TString;
     }>;
+    'com.rezics.content.knowledge.notebook.created.v1': import("typebox").TObject<{
+        notebookId: import("typebox").TString;
+        subjectId: import("typebox").TString;
+        structureRevisionId: import("typebox").TString;
+    }>;
+    'com.rezics.content.knowledge.document.created.v1': import("typebox").TObject<{
+        notebookId: import("typebox").TString;
+        documentId: import("typebox").TString;
+        placementId: import("typebox").TString;
+        revisionId: import("typebox").TString;
+        structureRevisionId: import("typebox").TString;
+    }>;
+    'com.rezics.content.knowledge.document.revised.v1': import("typebox").TObject<{
+        documentId: import("typebox").TString;
+        previousRevisionId: import("typebox").TString;
+        revisionId: import("typebox").TString;
+    }>;
     'com.rezics.content.thread.created.v1': import("typebox").TObject<{
         placeId: import("typebox").TString;
         kind: import("typebox").TUnion<[import("typebox").TLiteral<"discussion">, import("typebox").TLiteral<"review">]>;

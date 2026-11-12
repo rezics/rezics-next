@@ -15,7 +15,7 @@ import {
   StatementDisclosureDeniedError,
   StatementDisclosureNotFoundError,
 } from '../statement-disclosure.ts';
-import type { SubjectReadingApplication } from '../subject-reading-application.ts';
+import type { SubjectReadingApplication, SubjectSummaryBatchAuthorizer } from '../subject-reading-application.ts';
 import { nativeSubjectReadingApplication } from '../adapters/subject-reading.ts';
 import { summaryAuthorization } from '../summaries.ts';
 import { languageRanges } from '../language.ts';
@@ -50,13 +50,13 @@ import { effectiveRelease } from '../definition-release-read.ts';
 import { termContext } from '@rezics/definitions/extension';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import type { Access, AccessCheck, AccountActor, Resource } from '../../request/access.ts';
-import { accessCheck, AuthenticationError } from '../../request/access.ts';
+import { accessCheck, AuthenticationError, prepareReadDecisions } from '../../request/access.ts';
 import { readRevisionDetail } from '../revision-detail.ts';
 import { createApp } from '../../http/app.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
-import { relatedReadEligibility, subjectReadEligibility } from '../eligibility.ts';
+import { relatedReadDecisionEligibility, relatedReadEligibility, subjectReadEligibility } from '../eligibility.ts';
 import { listSubjectLinks, listSubjectRelations, waitForSubjectLinks } from '../links.ts';
 import { listSubjectGraph } from '../graph.ts';
 import { readSubjectRelationCounts, type SubjectRelationCountResponse } from '../counts.ts';
@@ -1275,10 +1275,12 @@ function subjectRoutes(
             bindings = undefined;
           }
         }
+        const requestAccess = access();
+        let preparedSummaryBatch: Promise<SubjectSummaryBatchAuthorizer> | undefined;
         const result = await subjectReading.readPage({
           runtime: {
             pool,
-            access: access(),
+            access: requestAccess,
             actor,
             routeKey,
             deadline: job.deadline,
@@ -1297,6 +1299,32 @@ function subjectRoutes(
               const route = routeOf(id)!;
               const resource = { route, id };
               return authorize({ ...resource, eligibility: relatedReadEligibility(resource, related) });
+            },
+            prepareSummaryBatch: () => {
+              preparedSummaryBatch ??= (async () => {
+                const decisions = await prepareReadDecisions(requestAccess, {
+                  actor,
+                  actions: new Set(['subject:read']),
+                  context: { pool, deadline: job.deadline },
+                });
+                return async (client, ids) => {
+                  const allowed = new Map<string, boolean>();
+                  const routable = [...new Set(ids)].filter((id) => routeOf(id) !== null);
+                  const eligibility = relatedReadDecisionEligibility();
+                  for (let offset = 0; offset < routable.length; offset += 200) {
+                    const batch = routable.slice(offset, offset + 200);
+                    const read = await decisions.decide(client, {
+                      action: 'subject:read',
+                      resourceType: 'semantic.subject',
+                      ids: batch,
+                      eligibility,
+                    });
+                    for (const id of batch) allowed.set(id, read[id]?.allowed === true);
+                  }
+                  return allowed;
+                };
+              })();
+              return preparedSummaryBatch;
             },
           },
           runNative: (read) => admission.run('normal', job, read),
