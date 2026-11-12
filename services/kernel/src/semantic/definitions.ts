@@ -1,7 +1,13 @@
 import { jsonParameter } from '../database/json.ts';
 import { publicationLimits, releaseAdmission, releaseDigest, validateRelease, type Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
-import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import {
+  preflightCommandReceipt,
+  runCommand,
+  type CommandAuthorization,
+  type CommandOutcome,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { systemClock } from '../clock.ts';
 import type { AccessCheck, AccountActor } from '../request/access.ts';
 import activate from './definitions-activate.sql';
@@ -84,12 +90,40 @@ export function commandOptions(
   };
 }
 
+type PublicationValue = { digest: string; created: boolean };
+
+function publicationOutcome(command: CommandOutcome<PublicationValue>) {
+  return {
+    ...command.value,
+    component: {
+      partition: command.partition,
+      epoch: command.epoch,
+      position: command.position,
+    },
+    replayed: command.replayed,
+  };
+}
+
 export async function publishRelease(pool: Pool, options: WriteOptions & { release: unknown }) {
-  // A historical exemption is established by one indexed point on this same
-  // pool, never a caller flag. JSON admission precedes digest work. Authorization
-  // and receipt/key conflict ordering remain inside runCommand at fresh T.
+  // Replayed/conflicting intent is decided by the command owner before expensive
+  // validation. New over-cap publications still require an exact same-pool pin.
   const admission = releaseAdmission(options.release);
   if (admission.length) throw new DefinitionInputError(admission);
+
+  const preflight = await preflightCommandReceipt<PublicationValue>(
+    pool,
+    commandOptions(options, 'definitions.publish', 'definitions:publish'),
+  );
+  if (preflight) {
+    const caps = publicationLimits(options.release);
+    if (caps.length) {
+      const pinned = structuredClone(options.release);
+      const digest = releaseDigest(pinned as Release);
+      if (!(await exists.run(pool, { route: resource.route, digest }))) throw new DefinitionInputError(caps);
+    }
+    return publicationOutcome(preflight);
+  }
+
   const caps = publicationLimits(options.release);
   let publishedDigest: string | undefined;
   let submitted = options.release;
@@ -129,15 +163,7 @@ export async function publishRelease(pool: Pool, options: WriteOptions & { relea
       };
     },
   );
-  return {
-    ...command.value,
-    component: {
-      partition: command.partition,
-      epoch: command.epoch,
-      position: command.position,
-    },
-    replayed: command.replayed,
-  };
+  return publicationOutcome(command);
 }
 
 export async function activateRelease(

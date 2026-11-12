@@ -61,12 +61,19 @@ substitute for linear algorithms: native growth experiments run the shared histo
 64/512/4096 scales, including mappings above the NEW-publication cap.
 
 `readRelease` still verifies actual stored bodies through that same core, checks the exact canonical digest,
-and deep-freezes them. It does not apply new shape caps to trusted historical rows. For a cap-exceeding submitted
-body, publication first admits JSON/bytes, owns a copy, computes its canonical digest and makes exactly one indexed
-published-existence point on the **same pool**. Only actual published existence admits historical replay/new-key
-processing. There is no caller exemption, alternate digest, composed-release authority or cross-pool cache test.
-Current command authorization at fresh T precedes receipt disclosure. Existing exact replay, existing-digest/new-key,
-key conflict and command effects remain unchanged. A missing digest receives the new-cap refusal without writes.
+and deep-freezes them. It does not apply new shape caps to trusted historical rows. For a cap-exceeding request,
+bounded JSON admission is followed by the command-owned authorized receipt preflight before full validation. The
+preflight uses fresh current authorization and the existing receipt ring: exact matching replay returns its stored
+result, changed-body reuse remains a key conflict even when those changed bytes have no historical pin, and an
+absent key commits without a receipt or other effect. A matching over-cap replay still owns a copy, computes the
+exact canonical digest and makes one indexed existence point on the **same pool** before returning. With an absent
+key, publication owns a copy and makes the same exact point before validation; only actual published existence
+admits historical new-key processing. There is no caller exemption, alternate digest, composed-release authority
+or cross-pool cache test. The later write command authorizes again and rechecks the receipt to handle races. A
+missing digest receives the new-cap refusal without writes.
+
+Decision: Definitions settles authorized receipt replay/conflict before expensive validation; matching over-cap
+replay confirms its same-pool historical pin, and an absent receipt checks the pin before validation and publication.
 
 The native mounted HTTP test exercises a historically valid cap-exceeding pin by executing the unchanged original
 Definitions/Filter validator and pre-cap publication caller in one isolated module graph against the mounted

@@ -25,6 +25,7 @@ export function createNativeSourceCaptureAdapter(dependencies: {
         deadline: input.deadline,
         at: at as AuthoritativeTime,
         allowance: input.allowance,
+        ...(input.logical !== undefined ? { logical: input.logical } : {}),
       });
     },
   };

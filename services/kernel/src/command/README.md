@@ -63,6 +63,23 @@ and envelope. SQL retries do not authorize reuse of stale external evidence. `no
 wrote no domain data; it cannot hide coordination writes or registered work. Authorization finalizers are not
 a place to conceal domain mutation. Existing replay, receipt, authorization and `noEffect` semantics stay unchanged.
 
+### Read-only receipt preflight
+
+`preflightCommandReceipt(pool, options)` uses the same normalized principal, command kind, native key codec,
+configured receipt-key ring, request deadline and per-partition serialization gate as `runCommand`. It requires
+the command's current authorization binding. Each attempt mints authoritative native time, prepares evidence
+without holding the resource transaction when configured, then runs final authorization before reading a receipt.
+A matching receipt returns its ordinary committed `CommandOutcome`; a changed digest raises the existing
+`IdempotencyConflictError`; minimized results keep their existing erased-result error. If the key is absent and
+authorization permits execution, the executor commits the read-only transaction and returns `undefined` without
+calling a body, writing a receipt, event, partition fence or domain row. Receipt-only authorization still denies
+an absent key.
+
+Use this capability only to settle replay/conflict before expensive, deterministic application validation. After
+an absent result, validate outside the command transaction and call `runCommand` for the write; it authorizes again
+and checks the receipt again for races. Never use this read as write authority or hold its transaction across
+application validation.
+
 ### Receipt storage keys
 
 HTTP and worker startup require `KERNEL_RECEIPT_KEYS`: one to four comma-separated

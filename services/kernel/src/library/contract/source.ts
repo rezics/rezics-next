@@ -190,6 +190,8 @@ export type CollectionSourceContext = Readonly<{ deadline: number }> &
 export type PrepareCollectionSource = CollectionSourceContext & {
   readonly collectionId: string;
   readonly allowance: WorkAllowance;
+  /** Resolve the owner’s logical built-in binding without requiring a stored Collection row. */
+  readonly logical?: boolean;
 };
 
 export type CollectionSourceCall = CollectionSourceContext & {
