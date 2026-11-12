@@ -6,6 +6,8 @@ import { viewerExposureLifetime, viewerExposureQuery, type ExposureReadState } f
 
 /** The site's gated operations. Controls name an operation; OpenAPI owns its group. */
 export const operationGroups = {
+  'knowledge_notebook.owned_list': 'knowledge_notebook.owned_list',
+  'knowledge_notebook.outline': 'knowledge_notebook.outline',
   'knowledge_document.private_read': 'knowledge_document.private_read',
   'knowledge_notebook.create': 'knowledge_notebook.create',
   'knowledge_document.create': 'knowledge_document.create',

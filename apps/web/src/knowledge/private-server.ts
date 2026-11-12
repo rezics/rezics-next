@@ -22,6 +22,11 @@ import {
 } from './private-knowledge';
 
 import { selectKnowledgePublication } from './publication';
+import {
+  parseKnowledgeNavigationRequest,
+  readKnowledgeNavigation,
+  type KnowledgeNavigationResult,
+} from './navigation-read';
 
 const domain = 'rezics:knowledge-private-visit:v1';
 const tokenPattern = /^[A-Za-z0-9_-]{1,8192}$/;
@@ -404,5 +409,29 @@ export const selectKnowledgePublicationRequest = createServerFn({ method: 'POST'
       return await selectKnowledgePublication(kernelClient(), { ...data, authorization: identity.authorization });
     } catch (error) {
       return isPlatformClosedError(error) ? { state: 'unavailable', status: 503 } : { state: 'uncertain' };
+    }
+  });
+
+/** Private navigation shares the editor's prepared session and exact CSRF/viewer admission. */
+export const readKnowledgeNavigationVisit = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value)) throw new Error('Invalid Knowledge navigation read');
+    const request = parseKnowledgeNavigationRequest(value.request);
+    if (!request) throw new Error('Invalid Knowledge navigation address');
+    return { request, expected: expectedSession(value.expected) };
+  })
+  .handler(async ({ data }): Promise<KnowledgeNavigationResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = currentFor(data.expected, await currentIdentity());
+    if ('state' in identity) return { state: identity.state };
+    try {
+      return await readKnowledgeNavigation(kernelClient(), {
+        request: data.request,
+        accountId: identity.viewer,
+        authorization: identity.authorization,
+      });
+    } catch (error) {
+      if (isPlatformClosedError(error)) return { state: 'unavailable' };
+      throw error;
     }
   });
