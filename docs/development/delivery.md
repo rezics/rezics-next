@@ -23,6 +23,28 @@ in how the client consumes a working API, and name the shared repair where appli
 work in parallel against stable contracts. Report release qualification separately, with an estimate based on
 the current critical path. Archived scope and historical task counts do not measure current completion.
 
+## Source batches
+
+Keep enough independent, ready source work for available workers. A brief names one coherent outcome,
+the installed interfaces, the write boundary, and what the worker can complete if one seam is blocked.
+Use the [sizing target](efficiency.md#output-and-flow) to avoid both fragments and oversized assignments.
+The worker checkpoints its code as it goes. During a code-first window, run the smallest authorized
+lint and workspace typing at the end of the block and record deferred acceptance.
+
+Around ten minutes after launch, use the existing task and worktree evidence to look for a coherent source
+diff, a new commit or a concrete design decision that unlocks writing. Count new product code separately
+from imported commits, generated output, tests and uncommitted changes. A blank observation is a prompt to
+identify the first blocker, not a line quota or an automatic stop. Repair the brief or admission, continue
+independent work, or park the blocked part with its exact next action. Use existing observations and events;
+do not wake a manager or worker just to report the same state.
+
+A worker can ask for one narrowly scoped Luna Max helper through the native Goal owner when an independent
+question or slice will remove a demonstrated bottleneck. Give the helper only the necessary files and a
+concrete deliverable. Use a read-only consultation for advice, or a native task with distinct write paths
+for source work. Select the actual helper profile explicitly when required; the existing consultation
+uses its configured profile. The original worker owns integration and keeps working on independent parts.
+Do not start an unmanaged agent, duplicate a writer or bypass capacity or allowance.
+
 ## Brief preflight
 
 The worker of product work on dev verifies every concrete premise of its brief against its base before it designs

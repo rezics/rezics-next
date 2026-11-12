@@ -22,10 +22,10 @@ Target 20,000 landed product lines per hour, aiming for 40,000, alongside accept
 additions under `apps/`, `services/` and `packages/` excluding tests, stories, fixtures, recordings, JSON, snapshots
 and generated files, including emitted declarations. Never pad output or subtract deletions.
 
-Size a complete journey, including backend and interface, to finish in about an hour (usually 2,000–3,000 lines).
-The controller returns product briefs under 1,200 estimated lines or over 4,000 body characters. Split only at a
-real dependency; complete independent parts now and hold only the receiving seam. Continue the remainder after
-most of the brief is built. Report reverts, review findings and repeated failures beside throughput.
+Size one coherent outcome for one worker, typically 1,000–2,000 product lines in about an hour. This is an
+estimate, not a quota. Split only at a real dependency; complete independent parts and hold only their receiving
+seam. Follow [source batches](delivery.md#source-batches) for progress and help. Report reverts, findings and
+repeated failures beside throughput.
 
 Measure flow with `goal report --flow`. The manager host must alarm hourly against these absolute targets:
 
@@ -136,9 +136,8 @@ outcome, tracked per Goal, task class and model profile. It improves in three wa
 Fold repairs into the journey they serve. An estimate predicts landed source; it is not a task label. Price each
 new refusal, bound or guard as required by [agent conduct](agent-conduct.md#briefs).
 
-For an explicitly authorized code-only window, use isolated worktrees outside controller-owned task custody.
-Checkpoint coherent source and record the exact deferred acceptance. Count saved source, integrated code and
-accepted journeys separately. Compare the whole delivery cost before changing routine models or worker width.
+During an authorized code-first window, use native Goal branches and record deferred acceptance. Count saved
+source, integrated code and accepted journeys separately. Compare delivery cost before changing models or width.
 
 The brief writer picks the model by the task's difficulty. A simple, well-specified brief pins `model: gpt-6-luna` and
 `effort: max` in its front matter. Examples: exact edits the brief names, fixture, data or translation work, and wiring
