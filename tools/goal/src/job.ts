@@ -351,12 +351,7 @@ export class WorkerJob implements GateOutcomeSink {
           if (!reconcileStoppedTypingFailureRetry(this.tasks, ref)) {
             // Keep the unresolved same-generation retry visible to the existing watchdog without waking a second owner.
             if (completed.state === 'stopped') {
-              if (
-                task.state === 'ready' &&
-                task.brief.kind !== 'verification' &&
-                !store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'typing-retry-unreconciled')
-              )
-                store.event(ref, 'typing-retry-unreconciled', { action: 'typing-recover' });
+              store.recordUnreconciledTypingRetry(ref);
               return;
             }
             await recoverWorkerTyping(this.tasks, this.landing, ref, undefined, this.afterSettle);
