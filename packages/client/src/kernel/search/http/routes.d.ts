@@ -3,10 +3,12 @@ export { FactSchema } from './catalogue.ts';
 import type { DiscoverySearch } from '../discovery-service.ts';
 import type { AccessCheck } from '../../request/access.ts';
 import type { Pool } from 'pg';
+import type { createApp } from '../../http/app.ts';
 import type { Access, AccessFactory } from '../../request/access.ts';
 import { createSearchService } from '../service.ts';
 import { type KernelClock } from '../../clock.ts';
 type SearchServiceImplementation = ReturnType<typeof createSearchService>;
+export type SearchRouteTransport = ReturnType<typeof createApp>;
 export type SearchService = Omit<SearchServiceImplementation, 'releaseGroups'> & {
     releaseGroups?: SearchServiceImplementation['releaseGroups'];
 };

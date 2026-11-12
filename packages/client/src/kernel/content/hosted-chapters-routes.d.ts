@@ -19729,6 +19729,182 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
             };
         };
     };
+} & {
+    v1: {
+        hostedCatalogues: {
+            ":id": {
+                occurrences: {
+                    ":occurrenceId": {
+                        navigation: {
+                            get: {
+                                body: unknown;
+                                params: {
+                                    id: string;
+                                    occurrenceId: string;
+                                };
+                                query: {
+                                    revisionId?: string;
+                                    kind?: "publication" | "structure";
+                                    cursor?: string;
+                                    limit?: string;
+                                    direction: "next" | "previous";
+                                };
+                                headers: unknown;
+                                response: {
+                                    200: {
+                                        catalogueId: string;
+                                        revisionId: string;
+                                        kind: "publication" | "structure";
+                                        sourceRevisionId: string | null;
+                                        items: ({
+                                            occurrenceId: string;
+                                            parentId: string | null;
+                                            position: number;
+                                            kind: "chapter" | "part";
+                                            availability: "unavailable";
+                                        } | {
+                                            occurrenceId: string;
+                                            parentId: string | null;
+                                            position: number;
+                                            kind: "part";
+                                            availability: "available";
+                                            title: string;
+                                            target: null;
+                                        } | {
+                                            occurrenceId: string;
+                                            parentId: string | null;
+                                            position: number;
+                                            kind: "chapter";
+                                            availability: "available";
+                                            title: string;
+                                            target: {
+                                                threadId: string;
+                                                postId: string;
+                                                revisionId: string;
+                                                sha256: string;
+                                            };
+                                        })[];
+                                        nextCursor: string | null;
+                                    };
+                                    400: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    403: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    412: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    413: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    429: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    500: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("../http/admission.ts").Admission;
@@ -19750,10 +19926,9 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
     schemas: {};
     response: {};
     error: [];
-}, "get", "/v1/hostedCatalogues/:id/occurrences/:occurrenceId/navigation", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "get", "/v1/subjects/:id/hostedCatalogues", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
         id: import("typebox").TString;
-        occurrenceId: import("typebox").TString;
     }>;
     query: {
         '~standard': {
@@ -19761,27 +19936,18 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
             vendor: string;
             types: {
                 input: {
-                    revisionId?: string;
-                    kind?: "publication" | "structure";
                     cursor?: string;
                     limit?: string;
-                    direction: "next" | "previous";
                 };
                 output: {
-                    revisionId?: string;
-                    kind?: "publication" | "structure";
                     cursor?: string;
                     limit?: string;
-                    direction: "next" | "previous";
                 };
             } | undefined;
             validate(value: unknown): {
                 value: {
-                    revisionId?: string;
-                    kind?: "publication" | "structure";
                     cursor?: string;
                     limit?: string;
-                    direction: "next" | "previous";
                 };
                 issues?: never;
             } | {
@@ -19792,18 +19958,12 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
             };
             jsonSchema: {
                 input: () => import("typebox").TObject<{
-                    revisionId: import("typebox").TOptional<import("typebox").TString>;
-                    kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>>;
                     cursor: import("typebox").TOptional<import("typebox").TString>;
                     limit: import("typebox").TOptional<import("typebox").TString>;
-                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"previous">, import("typebox").TLiteral<"next">]>;
                 }>;
                 output: () => import("typebox").TObject<{
-                    revisionId: import("typebox").TOptional<import("typebox").TString>;
-                    kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>>;
                     cursor: import("typebox").TOptional<import("typebox").TString>;
                     limit: import("typebox").TOptional<import("typebox").TString>;
-                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"previous">, import("typebox").TLiteral<"next">]>;
                 }>;
             };
         };
@@ -19955,110 +20115,38 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                 vendor: string;
                 types: {
                     input: {
-                        catalogueId: string;
-                        revisionId: string;
-                        kind: "publication" | "structure";
-                        sourceRevisionId: string | null;
-                        items: ({
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "chapter" | "part";
-                            availability: "unavailable";
-                        } | {
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "part";
-                            availability: "available";
-                            title: string;
-                            target: null;
-                        } | {
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "chapter";
-                            availability: "available";
-                            title: string;
-                            target: {
-                                threadId: string;
-                                postId: string;
-                                revisionId: string;
-                                sha256: string;
-                            };
-                        })[];
+                        subjectId: string;
+                        items: {
+                            catalogueId: string;
+                            revisionId: string;
+                            kind: "publication";
+                            sourceRevisionId: string | null;
+                            threadId: string;
+                        }[];
                         nextCursor: string | null;
                     };
                     output: {
-                        catalogueId: string;
-                        revisionId: string;
-                        kind: "publication" | "structure";
-                        sourceRevisionId: string | null;
-                        items: ({
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "chapter" | "part";
-                            availability: "unavailable";
-                        } | {
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "part";
-                            availability: "available";
-                            title: string;
-                            target: null;
-                        } | {
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "chapter";
-                            availability: "available";
-                            title: string;
-                            target: {
-                                threadId: string;
-                                postId: string;
-                                revisionId: string;
-                                sha256: string;
-                            };
-                        })[];
+                        subjectId: string;
+                        items: {
+                            catalogueId: string;
+                            revisionId: string;
+                            kind: "publication";
+                            sourceRevisionId: string | null;
+                            threadId: string;
+                        }[];
                         nextCursor: string | null;
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
-                        catalogueId: string;
-                        revisionId: string;
-                        kind: "publication" | "structure";
-                        sourceRevisionId: string | null;
-                        items: ({
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "chapter" | "part";
-                            availability: "unavailable";
-                        } | {
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "part";
-                            availability: "available";
-                            title: string;
-                            target: null;
-                        } | {
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "chapter";
-                            availability: "available";
-                            title: string;
-                            target: {
-                                threadId: string;
-                                postId: string;
-                                revisionId: string;
-                                sha256: string;
-                            };
-                        })[];
+                        subjectId: string;
+                        items: {
+                            catalogueId: string;
+                            revisionId: string;
+                            kind: "publication";
+                            sourceRevisionId: string | null;
+                            threadId: string;
+                        }[];
                         nextCursor: string | null;
                     };
                     issues?: never;
@@ -20070,73 +20158,25 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                 };
                 jsonSchema: {
                     input: () => import("typebox").TObject<{
-                        catalogueId: import("typebox").TString;
-                        revisionId: import("typebox").TString;
-                        kind: import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>;
-                        sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
-                            occurrenceId: import("typebox").TString;
-                            parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TInteger;
-                            kind: import("typebox").TUnion<[import("typebox").TLiteral<"part">, import("typebox").TLiteral<"chapter">]>;
-                            availability: import("typebox").TLiteral<"unavailable">;
-                        }>, import("typebox").TObject<{
-                            occurrenceId: import("typebox").TString;
-                            parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TInteger;
-                            kind: import("typebox").TLiteral<"part">;
-                            availability: import("typebox").TLiteral<"available">;
-                            title: import("typebox").TString;
-                            target: import("typebox").TNull;
-                        }>, import("typebox").TObject<{
-                            occurrenceId: import("typebox").TString;
-                            parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TInteger;
-                            kind: import("typebox").TLiteral<"chapter">;
-                            availability: import("typebox").TLiteral<"available">;
-                            title: import("typebox").TString;
-                            target: import("typebox").TObject<{
-                                threadId: import("typebox").TString;
-                                postId: import("typebox").TString;
-                                revisionId: import("typebox").TString;
-                                sha256: import("typebox").TString;
-                            }>;
-                        }>]>>;
+                        subjectId: import("typebox").TString;
+                        items: import("typebox").TArray<import("typebox").TObject<{
+                            catalogueId: import("typebox").TString;
+                            revisionId: import("typebox").TString;
+                            kind: import("typebox").TLiteral<"publication">;
+                            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            threadId: import("typebox").TString;
+                        }>>;
                         nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>;
                     output: () => import("typebox").TObject<{
-                        catalogueId: import("typebox").TString;
-                        revisionId: import("typebox").TString;
-                        kind: import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>;
-                        sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
-                            occurrenceId: import("typebox").TString;
-                            parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TInteger;
-                            kind: import("typebox").TUnion<[import("typebox").TLiteral<"part">, import("typebox").TLiteral<"chapter">]>;
-                            availability: import("typebox").TLiteral<"unavailable">;
-                        }>, import("typebox").TObject<{
-                            occurrenceId: import("typebox").TString;
-                            parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TInteger;
-                            kind: import("typebox").TLiteral<"part">;
-                            availability: import("typebox").TLiteral<"available">;
-                            title: import("typebox").TString;
-                            target: import("typebox").TNull;
-                        }>, import("typebox").TObject<{
-                            occurrenceId: import("typebox").TString;
-                            parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TInteger;
-                            kind: import("typebox").TLiteral<"chapter">;
-                            availability: import("typebox").TLiteral<"available">;
-                            title: import("typebox").TString;
-                            target: import("typebox").TObject<{
-                                threadId: import("typebox").TString;
-                                postId: import("typebox").TString;
-                                revisionId: import("typebox").TString;
-                                sha256: import("typebox").TString;
-                            }>;
-                        }>]>>;
+                        subjectId: import("typebox").TString;
+                        items: import("typebox").TArray<import("typebox").TObject<{
+                            catalogueId: import("typebox").TString;
+                            revisionId: import("typebox").TString;
+                            kind: import("typebox").TLiteral<"publication">;
+                            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            threadId: import("typebox").TString;
+                        }>>;
                         nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>;
                 };
@@ -20155,7 +20195,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
         security: Record<string, string[]>[];
         operationId: string;
     };
-}, {}, "/v1/hostedCatalogues/:id/occurrences/:occurrenceId/navigation">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params: { id, occurrenceId }, query, admission, job, session, set }: {
+}, {}, "/v1/subjects/:id/hostedCatalogues">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params: { id }, query, admission, job, session, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -20276,38 +20316,14 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
             errors: unknown;
         };
         200: {
-            catalogueId: string;
-            revisionId: string;
-            kind: "publication" | "structure";
-            sourceRevisionId: string | null;
-            items: ({
-                occurrenceId: string;
-                parentId: string | null;
-                position: number;
-                kind: "chapter" | "part";
-                availability: "unavailable";
-            } | {
-                occurrenceId: string;
-                parentId: string | null;
-                position: number;
-                kind: "part";
-                availability: "available";
-                title: string;
-                target: null;
-            } | {
-                occurrenceId: string;
-                parentId: string | null;
-                position: number;
-                kind: "chapter";
-                availability: "available";
-                title: string;
-                target: {
-                    threadId: string;
-                    postId: string;
-                    revisionId: string;
-                    sha256: string;
-                };
-            })[];
+            subjectId: string;
+            items: {
+                catalogueId: string;
+                revisionId: string;
+                kind: "publication";
+                sourceRevisionId: string | null;
+                threadId: string;
+            }[];
             nextCursor: string | null;
         };
     }>;
@@ -20423,45 +20439,20 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
             errors: unknown;
         };
         200: {
-            catalogueId: string;
-            revisionId: string;
-            kind: "publication" | "structure";
-            sourceRevisionId: string | null;
-            items: ({
-                occurrenceId: string;
-                parentId: string | null;
-                position: number;
-                kind: "chapter" | "part";
-                availability: "unavailable";
-            } | {
-                occurrenceId: string;
-                parentId: string | null;
-                position: number;
-                kind: "part";
-                availability: "available";
-                title: string;
-                target: null;
-            } | {
-                occurrenceId: string;
-                parentId: string | null;
-                position: number;
-                kind: "chapter";
-                availability: "available";
-                title: string;
-                target: {
-                    threadId: string;
-                    postId: string;
-                    revisionId: string;
-                    sha256: string;
-                };
-            })[];
+            subjectId: string;
+            items: {
+                catalogueId: string;
+                revisionId: string;
+                kind: "publication";
+                sourceRevisionId: string | null;
+                threadId: string;
+            }[];
             nextCursor: string | null;
         };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
             id: import("typebox").TString;
-            occurrenceId: import("typebox").TString;
         }>;
         query: {
             '~standard': {
@@ -20469,27 +20460,18 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                 vendor: string;
                 types: {
                     input: {
-                        revisionId?: string;
-                        kind?: "publication" | "structure";
                         cursor?: string;
                         limit?: string;
-                        direction: "next" | "previous";
                     };
                     output: {
-                        revisionId?: string;
-                        kind?: "publication" | "structure";
                         cursor?: string;
                         limit?: string;
-                        direction: "next" | "previous";
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
-                        revisionId?: string;
-                        kind?: "publication" | "structure";
                         cursor?: string;
                         limit?: string;
-                        direction: "next" | "previous";
                     };
                     issues?: never;
                 } | {
@@ -20500,18 +20482,12 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                 };
                 jsonSchema: {
                     input: () => import("typebox").TObject<{
-                        revisionId: import("typebox").TOptional<import("typebox").TString>;
-                        kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>>;
                         cursor: import("typebox").TOptional<import("typebox").TString>;
                         limit: import("typebox").TOptional<import("typebox").TString>;
-                        direction: import("typebox").TUnion<[import("typebox").TLiteral<"previous">, import("typebox").TLiteral<"next">]>;
                     }>;
                     output: () => import("typebox").TObject<{
-                        revisionId: import("typebox").TOptional<import("typebox").TString>;
-                        kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>>;
                         cursor: import("typebox").TOptional<import("typebox").TString>;
                         limit: import("typebox").TOptional<import("typebox").TString>;
-                        direction: import("typebox").TUnion<[import("typebox").TLiteral<"previous">, import("typebox").TLiteral<"next">]>;
                     }>;
                 };
             };
@@ -20663,110 +20639,38 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                     vendor: string;
                     types: {
                         input: {
-                            catalogueId: string;
-                            revisionId: string;
-                            kind: "publication" | "structure";
-                            sourceRevisionId: string | null;
-                            items: ({
-                                occurrenceId: string;
-                                parentId: string | null;
-                                position: number;
-                                kind: "chapter" | "part";
-                                availability: "unavailable";
-                            } | {
-                                occurrenceId: string;
-                                parentId: string | null;
-                                position: number;
-                                kind: "part";
-                                availability: "available";
-                                title: string;
-                                target: null;
-                            } | {
-                                occurrenceId: string;
-                                parentId: string | null;
-                                position: number;
-                                kind: "chapter";
-                                availability: "available";
-                                title: string;
-                                target: {
-                                    threadId: string;
-                                    postId: string;
-                                    revisionId: string;
-                                    sha256: string;
-                                };
-                            })[];
+                            subjectId: string;
+                            items: {
+                                catalogueId: string;
+                                revisionId: string;
+                                kind: "publication";
+                                sourceRevisionId: string | null;
+                                threadId: string;
+                            }[];
                             nextCursor: string | null;
                         };
                         output: {
-                            catalogueId: string;
-                            revisionId: string;
-                            kind: "publication" | "structure";
-                            sourceRevisionId: string | null;
-                            items: ({
-                                occurrenceId: string;
-                                parentId: string | null;
-                                position: number;
-                                kind: "chapter" | "part";
-                                availability: "unavailable";
-                            } | {
-                                occurrenceId: string;
-                                parentId: string | null;
-                                position: number;
-                                kind: "part";
-                                availability: "available";
-                                title: string;
-                                target: null;
-                            } | {
-                                occurrenceId: string;
-                                parentId: string | null;
-                                position: number;
-                                kind: "chapter";
-                                availability: "available";
-                                title: string;
-                                target: {
-                                    threadId: string;
-                                    postId: string;
-                                    revisionId: string;
-                                    sha256: string;
-                                };
-                            })[];
+                            subjectId: string;
+                            items: {
+                                catalogueId: string;
+                                revisionId: string;
+                                kind: "publication";
+                                sourceRevisionId: string | null;
+                                threadId: string;
+                            }[];
                             nextCursor: string | null;
                         };
                     } | undefined;
                     validate(value: unknown): {
                         value: {
-                            catalogueId: string;
-                            revisionId: string;
-                            kind: "publication" | "structure";
-                            sourceRevisionId: string | null;
-                            items: ({
-                                occurrenceId: string;
-                                parentId: string | null;
-                                position: number;
-                                kind: "chapter" | "part";
-                                availability: "unavailable";
-                            } | {
-                                occurrenceId: string;
-                                parentId: string | null;
-                                position: number;
-                                kind: "part";
-                                availability: "available";
-                                title: string;
-                                target: null;
-                            } | {
-                                occurrenceId: string;
-                                parentId: string | null;
-                                position: number;
-                                kind: "chapter";
-                                availability: "available";
-                                title: string;
-                                target: {
-                                    threadId: string;
-                                    postId: string;
-                                    revisionId: string;
-                                    sha256: string;
-                                };
-                            })[];
+                            subjectId: string;
+                            items: {
+                                catalogueId: string;
+                                revisionId: string;
+                                kind: "publication";
+                                sourceRevisionId: string | null;
+                                threadId: string;
+                            }[];
                             nextCursor: string | null;
                         };
                         issues?: never;
@@ -20778,73 +20682,25 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                     };
                     jsonSchema: {
                         input: () => import("typebox").TObject<{
-                            catalogueId: import("typebox").TString;
-                            revisionId: import("typebox").TString;
-                            kind: import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>;
-                            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
-                                occurrenceId: import("typebox").TString;
-                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                                position: import("typebox").TInteger;
-                                kind: import("typebox").TUnion<[import("typebox").TLiteral<"part">, import("typebox").TLiteral<"chapter">]>;
-                                availability: import("typebox").TLiteral<"unavailable">;
-                            }>, import("typebox").TObject<{
-                                occurrenceId: import("typebox").TString;
-                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                                position: import("typebox").TInteger;
-                                kind: import("typebox").TLiteral<"part">;
-                                availability: import("typebox").TLiteral<"available">;
-                                title: import("typebox").TString;
-                                target: import("typebox").TNull;
-                            }>, import("typebox").TObject<{
-                                occurrenceId: import("typebox").TString;
-                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                                position: import("typebox").TInteger;
-                                kind: import("typebox").TLiteral<"chapter">;
-                                availability: import("typebox").TLiteral<"available">;
-                                title: import("typebox").TString;
-                                target: import("typebox").TObject<{
-                                    threadId: import("typebox").TString;
-                                    postId: import("typebox").TString;
-                                    revisionId: import("typebox").TString;
-                                    sha256: import("typebox").TString;
-                                }>;
-                            }>]>>;
+                            subjectId: import("typebox").TString;
+                            items: import("typebox").TArray<import("typebox").TObject<{
+                                catalogueId: import("typebox").TString;
+                                revisionId: import("typebox").TString;
+                                kind: import("typebox").TLiteral<"publication">;
+                                sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                threadId: import("typebox").TString;
+                            }>>;
                             nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                         }>;
                         output: () => import("typebox").TObject<{
-                            catalogueId: import("typebox").TString;
-                            revisionId: import("typebox").TString;
-                            kind: import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>;
-                            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
-                                occurrenceId: import("typebox").TString;
-                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                                position: import("typebox").TInteger;
-                                kind: import("typebox").TUnion<[import("typebox").TLiteral<"part">, import("typebox").TLiteral<"chapter">]>;
-                                availability: import("typebox").TLiteral<"unavailable">;
-                            }>, import("typebox").TObject<{
-                                occurrenceId: import("typebox").TString;
-                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                                position: import("typebox").TInteger;
-                                kind: import("typebox").TLiteral<"part">;
-                                availability: import("typebox").TLiteral<"available">;
-                                title: import("typebox").TString;
-                                target: import("typebox").TNull;
-                            }>, import("typebox").TObject<{
-                                occurrenceId: import("typebox").TString;
-                                parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                                position: import("typebox").TInteger;
-                                kind: import("typebox").TLiteral<"chapter">;
-                                availability: import("typebox").TLiteral<"available">;
-                                title: import("typebox").TString;
-                                target: import("typebox").TObject<{
-                                    threadId: import("typebox").TString;
-                                    postId: import("typebox").TString;
-                                    revisionId: import("typebox").TString;
-                                    sha256: import("typebox").TString;
-                                }>;
-                            }>]>>;
+                            subjectId: import("typebox").TString;
+                            items: import("typebox").TArray<import("typebox").TObject<{
+                                catalogueId: import("typebox").TString;
+                                revisionId: import("typebox").TString;
+                                kind: import("typebox").TLiteral<"publication">;
+                                sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                threadId: import("typebox").TString;
+                            }>>;
                             nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                         }>;
                     };
@@ -20863,7 +20719,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
             security: Record<string, string[]>[];
             operationId: string;
         };
-    }, {}, "/v1/hostedCatalogues/:id/occurrences/:occurrenceId/navigation">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/subjects/:id/hostedCatalogues">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../http/admission.ts").Admission;
             readonly job: {
@@ -20888,15 +20744,11 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
     store: {};
     body: unknown;
     query: {
-        revisionId?: string;
-        kind?: "publication" | "structure";
         cursor?: string;
         limit?: string;
-        direction: "next" | "previous";
     };
     params: {
         id: string;
-        occurrenceId: string;
     };
     headers: Record<string, string | undefined>;
     cookie: Record<string, import("elysia").Cookie<unknown>>;
@@ -20915,16 +20767,18 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    catalogueId: string;
-    revisionId: string;
-    kind: 'structure' | 'publication';
-    sourceRevisionId: string | null;
+    subjectId: string;
     nextCursor: string | null;
-    items: import("./hosted-chapters-model.ts").HostedOccurrenceView[];
+    items: Readonly<{
+        catalogueId: string;
+        revisionId: string;
+        kind: 'publication';
+        sourceRevisionId: string | null;
+        threadId: string;
+    }>[];
 }>, {
     params: import("typebox").TObject<{
         id: import("typebox").TString;
-        occurrenceId: import("typebox").TString;
     }>;
     query: {
         '~standard': {
@@ -20932,27 +20786,18 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
             vendor: string;
             types: {
                 input: {
-                    revisionId?: string;
-                    kind?: "publication" | "structure";
                     cursor?: string;
                     limit?: string;
-                    direction: "next" | "previous";
                 };
                 output: {
-                    revisionId?: string;
-                    kind?: "publication" | "structure";
                     cursor?: string;
                     limit?: string;
-                    direction: "next" | "previous";
                 };
             } | undefined;
             validate(value: unknown): {
                 value: {
-                    revisionId?: string;
-                    kind?: "publication" | "structure";
                     cursor?: string;
                     limit?: string;
-                    direction: "next" | "previous";
                 };
                 issues?: never;
             } | {
@@ -20963,18 +20808,12 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
             };
             jsonSchema: {
                 input: () => import("typebox").TObject<{
-                    revisionId: import("typebox").TOptional<import("typebox").TString>;
-                    kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>>;
                     cursor: import("typebox").TOptional<import("typebox").TString>;
                     limit: import("typebox").TOptional<import("typebox").TString>;
-                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"previous">, import("typebox").TLiteral<"next">]>;
                 }>;
                 output: () => import("typebox").TObject<{
-                    revisionId: import("typebox").TOptional<import("typebox").TString>;
-                    kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>>;
                     cursor: import("typebox").TOptional<import("typebox").TString>;
                     limit: import("typebox").TOptional<import("typebox").TString>;
-                    direction: import("typebox").TUnion<[import("typebox").TLiteral<"previous">, import("typebox").TLiteral<"next">]>;
                 }>;
             };
         };
@@ -21126,110 +20965,38 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                 vendor: string;
                 types: {
                     input: {
-                        catalogueId: string;
-                        revisionId: string;
-                        kind: "publication" | "structure";
-                        sourceRevisionId: string | null;
-                        items: ({
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "chapter" | "part";
-                            availability: "unavailable";
-                        } | {
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "part";
-                            availability: "available";
-                            title: string;
-                            target: null;
-                        } | {
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "chapter";
-                            availability: "available";
-                            title: string;
-                            target: {
-                                threadId: string;
-                                postId: string;
-                                revisionId: string;
-                                sha256: string;
-                            };
-                        })[];
+                        subjectId: string;
+                        items: {
+                            catalogueId: string;
+                            revisionId: string;
+                            kind: "publication";
+                            sourceRevisionId: string | null;
+                            threadId: string;
+                        }[];
                         nextCursor: string | null;
                     };
                     output: {
-                        catalogueId: string;
-                        revisionId: string;
-                        kind: "publication" | "structure";
-                        sourceRevisionId: string | null;
-                        items: ({
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "chapter" | "part";
-                            availability: "unavailable";
-                        } | {
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "part";
-                            availability: "available";
-                            title: string;
-                            target: null;
-                        } | {
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "chapter";
-                            availability: "available";
-                            title: string;
-                            target: {
-                                threadId: string;
-                                postId: string;
-                                revisionId: string;
-                                sha256: string;
-                            };
-                        })[];
+                        subjectId: string;
+                        items: {
+                            catalogueId: string;
+                            revisionId: string;
+                            kind: "publication";
+                            sourceRevisionId: string | null;
+                            threadId: string;
+                        }[];
                         nextCursor: string | null;
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
-                        catalogueId: string;
-                        revisionId: string;
-                        kind: "publication" | "structure";
-                        sourceRevisionId: string | null;
-                        items: ({
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "chapter" | "part";
-                            availability: "unavailable";
-                        } | {
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "part";
-                            availability: "available";
-                            title: string;
-                            target: null;
-                        } | {
-                            occurrenceId: string;
-                            parentId: string | null;
-                            position: number;
-                            kind: "chapter";
-                            availability: "available";
-                            title: string;
-                            target: {
-                                threadId: string;
-                                postId: string;
-                                revisionId: string;
-                                sha256: string;
-                            };
-                        })[];
+                        subjectId: string;
+                        items: {
+                            catalogueId: string;
+                            revisionId: string;
+                            kind: "publication";
+                            sourceRevisionId: string | null;
+                            threadId: string;
+                        }[];
                         nextCursor: string | null;
                     };
                     issues?: never;
@@ -21241,73 +21008,25 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                 };
                 jsonSchema: {
                     input: () => import("typebox").TObject<{
-                        catalogueId: import("typebox").TString;
-                        revisionId: import("typebox").TString;
-                        kind: import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>;
-                        sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
-                            occurrenceId: import("typebox").TString;
-                            parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TInteger;
-                            kind: import("typebox").TUnion<[import("typebox").TLiteral<"part">, import("typebox").TLiteral<"chapter">]>;
-                            availability: import("typebox").TLiteral<"unavailable">;
-                        }>, import("typebox").TObject<{
-                            occurrenceId: import("typebox").TString;
-                            parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TInteger;
-                            kind: import("typebox").TLiteral<"part">;
-                            availability: import("typebox").TLiteral<"available">;
-                            title: import("typebox").TString;
-                            target: import("typebox").TNull;
-                        }>, import("typebox").TObject<{
-                            occurrenceId: import("typebox").TString;
-                            parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TInteger;
-                            kind: import("typebox").TLiteral<"chapter">;
-                            availability: import("typebox").TLiteral<"available">;
-                            title: import("typebox").TString;
-                            target: import("typebox").TObject<{
-                                threadId: import("typebox").TString;
-                                postId: import("typebox").TString;
-                                revisionId: import("typebox").TString;
-                                sha256: import("typebox").TString;
-                            }>;
-                        }>]>>;
+                        subjectId: import("typebox").TString;
+                        items: import("typebox").TArray<import("typebox").TObject<{
+                            catalogueId: import("typebox").TString;
+                            revisionId: import("typebox").TString;
+                            kind: import("typebox").TLiteral<"publication">;
+                            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            threadId: import("typebox").TString;
+                        }>>;
                         nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>;
                     output: () => import("typebox").TObject<{
-                        catalogueId: import("typebox").TString;
-                        revisionId: import("typebox").TString;
-                        kind: import("typebox").TUnion<[import("typebox").TLiteral<"structure">, import("typebox").TLiteral<"publication">]>;
-                        sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
-                            occurrenceId: import("typebox").TString;
-                            parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TInteger;
-                            kind: import("typebox").TUnion<[import("typebox").TLiteral<"part">, import("typebox").TLiteral<"chapter">]>;
-                            availability: import("typebox").TLiteral<"unavailable">;
-                        }>, import("typebox").TObject<{
-                            occurrenceId: import("typebox").TString;
-                            parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TInteger;
-                            kind: import("typebox").TLiteral<"part">;
-                            availability: import("typebox").TLiteral<"available">;
-                            title: import("typebox").TString;
-                            target: import("typebox").TNull;
-                        }>, import("typebox").TObject<{
-                            occurrenceId: import("typebox").TString;
-                            parentId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TInteger;
-                            kind: import("typebox").TLiteral<"chapter">;
-                            availability: import("typebox").TLiteral<"available">;
-                            title: import("typebox").TString;
-                            target: import("typebox").TObject<{
-                                threadId: import("typebox").TString;
-                                postId: import("typebox").TString;
-                                revisionId: import("typebox").TString;
-                                sha256: import("typebox").TString;
-                            }>;
-                        }>]>>;
+                        subjectId: import("typebox").TString;
+                        items: import("typebox").TArray<import("typebox").TObject<{
+                            catalogueId: import("typebox").TString;
+                            revisionId: import("typebox").TString;
+                            kind: import("typebox").TLiteral<"publication">;
+                            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            threadId: import("typebox").TString;
+                        }>>;
                         nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>;
                 };

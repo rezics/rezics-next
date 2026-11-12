@@ -12,7 +12,9 @@ export { createHostedCatalogue, reviseHostedCatalogue, publishHostedCatalogue } 
 export type { HostedCommandDependencies } from './hosted-chapters-commands.ts';
 export { readHostedCatalogue, listHostedChildren, navigateHostedChapters, resolveHostedOccurrence, } from './hosted-chapters-reads.ts';
 export { listOwnHostedCatalogues, readOwnHostedCatalogue } from './hosted-chapters-owner.ts';
-export type { HostedCreateInput, HostedReviseInput, HostedPublishInput, HostedPlacement, HostedChapterTarget, HostedReadSelection, HostedChildrenInput, HostedNavigationInput, HostedCommandContext, HostedCommandValue, HostedRevisionView, HostedOccurrenceView, HostedPageView, HostedResolutionView, HostedOwnerInventoryScope, HostedOwnerInventoryInput, HostedOwnerInventoryEntry, HostedOwnerInventoryView, } from './hosted-chapters-model.ts';
+export { listHostedCataloguesForSubject } from './hosted-catalogue-subject.ts';
+export type { HostedSubjectCatalogueItem, HostedSubjectCataloguePage, HostedSubjectCatalogueQuery, } from './hosted-catalogue-subject-model.ts';
+export type { HostedDependencies, HostedCreateInput, HostedReviseInput, HostedPublishInput, HostedPlacement, HostedChapterTarget, HostedReadSelection, HostedChildrenInput, HostedNavigationInput, HostedCommandContext, HostedCommandValue, HostedRevisionView, HostedOccurrenceView, HostedPageView, HostedResolutionView, HostedOwnerInventoryScope, HostedOwnerInventoryInput, HostedOwnerInventoryEntry, HostedOwnerInventoryView, } from './hosted-chapters-model.ts';
 /** Native notebook commands and current-source reads. Search owns any candidate ordering or usefulness page. */
 export { createKnowledgeNotebook, createKnowledgeDocument, reviseKnowledgeDocument, moveKnowledgePlacement, setKnowledgePublication, } from './knowledge-commands.ts';
 export { readKnowledgePrivateDocument, readKnowledgePublicDocument, readKnowledgeHistoricalOutline, readKnowledgeStructureHistory, readKnowledgeDocumentHistory, readKnowledgeDocumentCompare, } from './knowledge-reads.ts';

@@ -1308,6 +1308,10 @@ export declare function EVENT_TYPES(): Readonly<{
         year: Type.TInteger;
         revision: Type.TString;
     }>;
+    readonly 'com.rezics.library.hosted-reading.changed.v1': Type.TObject<{
+        subjectId: Type.TString;
+        revision: Type.TString;
+    }>;
     readonly 'com.rezics.library.account-graph.purged.v1': Type.TObject<{
         accountId: Type.TString;
         kind: Type.TString;
