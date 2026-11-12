@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { beginTypingInputReceipt } from './worker-check-typing-inputs.ts';
 import type { LandingRequest } from './contracts.ts';
 import { newestWorktreeMtime, WorkerJob } from './job.ts';
-import type { ProcessIdentity } from './process.ts';
+import { processIdentity, type ProcessIdentity } from './process.ts';
 import { harness, reading, tempDirectory } from './test-support.ts';
 import {
   admitWorkerCheckHostRun,
@@ -56,7 +56,7 @@ function poolReading(pool: ReturnType<typeof harness>['settings']['pools'][numbe
 
 function stoppedTypingRetryFixture(
   h: ReturnType<typeof harness>,
-  options: { unknownCustody?: boolean; misclassified?: boolean } = {},
+  options: { unknownCustody?: boolean; misclassified?: boolean; auxiliaryProcesses?: ProcessIdentity[] } = {},
 ) {
   const task = h.tasks.dispatch(h.briefFile);
   h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
@@ -83,7 +83,7 @@ function stoppedTypingRetryFixture(
     driver: null,
     logPath: join(h.settings.stateDirectory, 'runs', task.id, '1.jsonl'),
     evidencePath: join(h.settings.stateDirectory, 'evidence', task.id, '1'),
-    auxiliaryProcesses: [],
+    auxiliaryProcesses: options.auxiliaryProcesses ?? [],
     session: 'reader-session',
     fixRound: 0,
     consulted: false,
@@ -174,7 +174,7 @@ function stoppedTypingRetryFixture(
       state: 'complete',
       processIdentity: 'known',
       process,
-      auxiliaryProcesses: [],
+      auxiliaryProcesses: options.auxiliaryProcesses ?? [],
       settledAt: stopSettledAt,
     };
   });
@@ -217,6 +217,9 @@ test('an explicit stopped-to-ready retry supersedes current terminal compiler fa
   try {
     const parked = stoppedTypingRetryFixture(h, { unknownCustody: true });
     const recoverable = stoppedTypingRetryFixture(h, { misclassified: true });
+    const liveAuxiliaryIdentity = processIdentity();
+    if (!liveAuxiliaryIdentity) throw new Error('Could not identify the test process');
+    const liveAuxiliary = stoppedTypingRetryFixture(h, { auxiliaryProcesses: [liveAuxiliaryIdentity] });
     const landings: LandingRequest[] = [];
     const job = new WorkerJob(h.tasks, { enqueue: (request) => landings.push(request) }, { deliver() {} });
 
@@ -237,6 +240,9 @@ test('an explicit stopped-to-ready retry supersedes current terminal compiler fa
     expect(h.store.attempt(recoverable.ref).state).toBe('superseded');
     expect(h.store.attempt({ taskId: recoverable.task.id, attempt: 2 }).state).toBe('exited');
     expect(h.store.attempt({ taskId: recoverable.task.id, attempt: 2 }).typingEvidencePending).toBeUndefined();
+    expect(h.store.task(liveAuxiliary.task.id).currentAttempt).toBe(1);
+    expect(h.store.retryIntent(liveAuxiliary.ref)?.status).toBe('pending');
+    expect(h.store.attempt(liveAuxiliary.ref).state).toBe('stopped');
     expect(landings).toHaveLength(1);
   } finally {
     await h.disposeAsync();

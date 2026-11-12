@@ -1573,7 +1573,8 @@ export function settleWorkerCheckHostBudget(
 
 export type WorkerCheckHostTypingSettlement =
   | { ok: true }
-  | { ok: false; kind: 'typing-failure' | 'evidence-unavailable'; result: string; command?: string[] };
+  | { ok: false; kind: 'typing-failure'; result: string; command?: string[] }
+  | { ok: false; kind: 'evidence-unavailable'; result: string; command?: string[] };
 
 /** A source retry may supersede pending compiler evidence only after the exact current failure and every check settle. */
 export function workerCheckHostTerminalTypingFailure(input: {

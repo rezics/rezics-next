@@ -85,7 +85,7 @@ export function reconcileStoppedTypingFailureRetry(tasks: WorkerTasks, ref: Atte
       retryQueuedAt <= stopSettledAt ||
       sameProcess(stop.process) ||
       (attempt.driver !== null && sameProcess(attempt.driver)) ||
-      [...(attempt.auxiliaryProcesses ?? []), ...stop.auxiliaryProcesses].some(sameProcess)
+      [...(attempt.auxiliaryProcesses ?? []), ...stop.auxiliaryProcesses].some((identity) => sameProcess(identity))
     )
       return false;
 
