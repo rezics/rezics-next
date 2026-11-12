@@ -27,14 +27,14 @@ plugin-hook entry/exit, and the actual listener event. It omits environment valu
 installed before message preparation so its owned compiler can settle; each Vite or preparation child uses the
 existing process-tree owner, forwarding interruption, escalating ignored termination and awaiting descendants.
 
-Decision: interactive Web enables TanStack route code splitting for loaders and page components. Keep reusable page
-components outside route modules: an extra component export makes the generated route tree load that whole route graph
-eagerly. Subject semantic rendering binds from Subject page composition. The root shell imports Inbox and Settings
-adapters from leaf modules because their feature barrels also re-export routed views. Walk-mode client optimization
-uses `noDiscovery` and an explicit include list so a cold route-tree scan cannot replace dependency hashes mid-load;
-add transitive CommonJS packages with a resolvable `parent > child` include and include this input in the shared cache
-identity. The cold `/en` regression observes React hydration, the Home mount marker and a working navigation control
-without requiring native health.
+Decision: interactive Web uses the installed TanStack Start route splitter with `codeSplittingOptions` for loaders and
+page components; route-safe Subject data helpers stay outside React view modules, and the Semantic renderer installs
+only from the lazy Subject component. The root shell imports Inbox and Settings adapters from their view-free leaves.
+Ordinary serve disables optimizer discovery and prebundles the pinned shell graph. The client resolves Base UI's
+CommonJS `use-sync-external-store/shim` to React's `useSyncExternalStore` export, and that alias is part of the shared
+cache identity.
+The authored cold `/en` gate asserts hydration, Home mount and shell interaction; browser acceptance remains unverified
+until the deferred owner run.
 
 Causal record: retained boot `1794067367118-boot.log` reached Vite SSR dependency re-optimization and logged
 `bundling dependencies...` without completion. Later boot `1794074596302-boot.log` recorded the second message-readiness
@@ -267,8 +267,6 @@ live ESM TypeBox stubs, so workerd never resolves `typebox/type` as `elysia/dist
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.
 Subject page reads and public collections work without JavaScript; Library writes use JavaScript and stay disabled until the page hydrates.
-
-Decision: keep the root shell and route references free of page render bindings. Route-safe Subject read, frame and summary helpers live outside their React view modules, and loader capabilities install without importing the catalogue's React components. Vite serves the cold client with dependency discovery disabled and a pinned shell include list; the Base UI media-query shim is an explicit parent-to-child include. The one cold `/en` browser regression checks hydration, Home mount and an interactive shell control, while native health stays an independent observation.
 
 The settings page at `/settings` presents one category at a time using the existing hashes: `reading`, `display`,
 `notifications`, `privacy`, `verification`, `profile`, `public-activity` and `account`. Reading is the default, including

@@ -213,6 +213,11 @@ export const webViteClientOptimizeDeps = {
   exclude: [...webViteCalendarOptimizeDeps],
 } as const;
 
+/** Vite serves React 19's native useSyncExternalStore export as browser ESM. */
+export const webViteClientShimAliases = [
+  { find: /^use-sync-external-store\/shim(?:\/index\.js)?$/, replacement: 'react' },
+] as const;
+
 /**
  * Interactive servers keep dependency optimization explicit. Vite's cold scan follows the generated route tree's
  * dynamic imports, walking every reader and re-optimizing the browser while the first route is loading. These are
@@ -225,7 +230,6 @@ export const webViteWalkClientOptimizeDeps = {
   include: [
     '@base-ui/react/*',
     '@inlang/paraglide-js/urlpattern-polyfill',
-    '@base-ui/react/unstable-use-media-query > use-sync-external-store/shim',
     '@tanstack/react-query',
     '@tanstack/react-router > @tanstack/react-store',
     '@tanstack/react-router-ssr-query',
@@ -321,6 +325,10 @@ export const webViteWorkerSsrEnvironment = {
 export const webViteOptimizerIdentity = {
   client: webViteClientOptimizeDeps,
   walkClient: webViteWalkClientOptimizeDeps,
+  clientResolveAliases: webViteClientShimAliases.map(({ find, replacement }) => ({
+    find: find.source,
+    replacement,
+  })),
   ssr: {
     noDiscovery: webViteWorkerSsrOptimizeDeps.noDiscovery,
     holdUntilCrawlEnd: webViteWorkerSsrOptimizeDeps.holdUntilCrawlEnd,

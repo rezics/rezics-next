@@ -19,6 +19,7 @@ import {
   alignViteLockfileHashes,
   bindViteDepCacheAlign,
   elysiaTypeboxLiveModuleCode,
+  webViteClientShimAliases,
   webViteClientOptimizeDepsFor,
   webViteTypeboxWorkerGraph,
   webViteWarmSsrEnvName,
@@ -562,7 +563,9 @@ export default defineConfig((context) => {
           };
         },
         configEnvironment(name: string) {
-          if (name === 'client') return;
+          if (name === 'client') {
+            return { resolve: { alias: [...workerResolveAliases, ...webViteClientShimAliases] } };
+          }
           return {
             resolve: { alias: [...workerResolveAliases] },
             optimizeDeps: { ...workerSsrOptimizeDeps, entries: [] },

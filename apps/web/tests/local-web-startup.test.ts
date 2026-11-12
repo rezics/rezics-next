@@ -68,4 +68,4 @@ test('ordinary Web starts the real listener with an empty Vite cache and settles
     expect(owner.settled).toBe(true);
     await rm(directory, { recursive: true, force: true });
   }
-}, 320_000);
+}, 210_000);

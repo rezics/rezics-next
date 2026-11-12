@@ -14,7 +14,7 @@ test('installed serve composition bounds client dependency optimization without 
         import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
         import { resolve } from 'node:path';
         import { createServer, resolveConfig } from 'vite';
-        import { tanstackRouter } from '@tanstack/router-plugin/vite';
+        import { tanStackRouterCodeSplitter, tanstackRouterGenerator } from '@tanstack/router-plugin/vite';
         import { messageImports } from './scripts/message-imports.ts';
         import { generatedMessageSourceMaps } from './scripts/generated-message-source-maps.ts';
         delete process.env.REZICS_TEST_RUNTIME;
@@ -32,12 +32,17 @@ test('installed serve composition bounds client dependency optimization without 
           assert.equal(options.holdUntilCrawlEnd, false, name + ': on-demand discovery');
           assert.equal(options.noDiscovery, true, name + ': dependency discovery stays bounded');
           assert.ok(options.include.includes('@base-ui/react/*'), name + ': shell primitives are prebundled');
-          assert.ok(
-            options.include.includes('@base-ui/react/unstable-use-media-query > use-sync-external-store/shim'),
-            name + ': Base UI’s CommonJS external-store shim is prebundled',
-          );
           assert.ok(options.include.includes('lucide-react'), name + ': navigation icons are prebundled');
         }
+        const clientShim = config.environments.client.resolve.alias.find(
+          (alias) => alias.find instanceof RegExp && alias.find.test('use-sync-external-store/shim'),
+        );
+        assert.equal(clientShim?.replacement, 'react', 'Base UI shim resolves through React’s hook export');
+        assert.equal(
+          clientShim?.find instanceof RegExp && clientShim.find.test('use-sync-external-store/shim/index.js'),
+          true,
+          'the explicit package file path is covered by the same alias',
+        );
         const worker = config.environments.ssr.optimizeDeps;
         assert.deepEqual(worker.entries, []);
         assert.equal(worker.noDiscovery, true);
@@ -45,12 +50,27 @@ test('installed serve composition bounds client dependency optimization without 
         assert.ok(worker.include.includes('typebox/type'));
         assert.ok(worker.include.includes('lucide-react'));
         assert.ok(worker.include.includes('@base-ui/react/*'));
+        const routeSplitOptions = {
+          routesDirectory: 'src/routes',
+          generatedRouteTree: 'src/routeTree.gen.ts',
+          target: 'react',
+          codeSplittingOptions: {
+            defaultBehavior: [
+              ['loader'],
+              ['component'],
+              ['pendingComponent'],
+              ['errorComponent'],
+              ['notFoundComponent'],
+            ],
+          },
+        };
         const routes = await createServer({
           configFile: false, logLevel: 'silent',
-          plugins: [messageImports(process.cwd()), tanstackRouter({
-            autoCodeSplitting: true,
-            codeSplittingOptions: { defaultBehavior: [['loader'], ['component'], ['pendingComponent'], ['errorComponent'], ['notFoundComponent']] },
-          })],
+          plugins: [
+            messageImports(process.cwd()),
+            tanstackRouterGenerator(routeSplitOptions),
+            tanStackRouterCodeSplitter(routeSplitOptions),
+          ],
           server: { middlewareMode: true, watch: null, hmr: false },
           optimizeDeps: { noDiscovery: true, include: [] },
         });

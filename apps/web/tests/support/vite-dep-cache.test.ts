@@ -77,22 +77,17 @@ test('the installed Elysia graph fails first on typebox/type and resolves it thr
   );
 });
 
-test('walk client optimization inputs are explicit and part of the shared cache identity', () => {
+test('walk optimizer inputs and the browser shim mapping are part of the shared cache identity', () => {
   expect(webViteOptimizerIdentity.walkClient.noDiscovery).toBe(true);
-  expect(webViteOptimizerIdentity.walkClient.include).toContain(
-    '@base-ui/react/unstable-use-media-query > use-sync-external-store/shim',
-  );
-  const withoutExternalStore = {
+  expect(webViteOptimizerIdentity.walkClient.include).toContain('@base-ui/react/*');
+  expect(webViteOptimizerIdentity.clientResolveAliases).toHaveLength(1);
+  expect(webViteOptimizerIdentity.clientResolveAliases[0]?.replacement).toBe('react');
+  const withoutShimAlias = {
     ...webViteOptimizerIdentity,
-    walkClient: {
-      ...webViteOptimizerIdentity.walkClient,
-      include: webViteOptimizerIdentity.walkClient.include.filter(
-        (specifier) => specifier !== '@base-ui/react/unstable-use-media-query > use-sync-external-store/shim',
-      ),
-    },
+    clientResolveAliases: [],
   };
   expect(hashViteDepCacheIdentity({ lockBytes: 'lock', optimizer: webViteOptimizerIdentity })).not.toBe(
-    hashViteDepCacheIdentity({ lockBytes: 'lock', optimizer: withoutExternalStore }),
+    hashViteDepCacheIdentity({ lockBytes: 'lock', optimizer: withoutShimAlias }),
   );
 });
 
