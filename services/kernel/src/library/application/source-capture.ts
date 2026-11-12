@@ -8,6 +8,7 @@ import type {
   WorkAllowance,
 } from '../contract/index.ts';
 import { classifySourceOutput } from '../core/index.ts';
+import { ProblemError } from '../../http/problem-error.ts';
 
 /** Ordered Source continuation. Search holds this object through nested calls; it is not a process singleton. */
 export function createOrderedCollectionSourceApplication(source: CollectionSource): CollectionSource {
@@ -32,6 +33,10 @@ export function createSourceCaptureApplication(capabilities: { sourceCapture: So
       logical?: boolean;
       ordinaryPage?: boolean;
     }): Promise<SourceCaptureResult> {
+      if (input.logical && !input.source)
+        throw new ProblemError('dependency_unavailable', {
+          detail: 'Logical built-ins require the caller’s registered Collection Source.',
+        });
       const prepared = await capabilities.sourceCapture.prepare({
         actor: input.actor,
         collectionId: input.collectionId,
@@ -42,9 +47,19 @@ export function createSourceCaptureApplication(capabilities: { sourceCapture: So
         ...(input.logical !== undefined ? { logical: input.logical } : {}),
         ...(input.ordinaryPage !== undefined ? { ordinaryPage: input.ordinaryPage } : {}),
       });
-      const output = classifySourceOutput(prepared.source.observation);
-      if (input.logical && output !== 'private_working')
-        throw new TypeError('The native Collection Source has no current logical built-in binding.');
+      const observation = prepared.source.observation;
+      const output = classifySourceOutput(observation);
+      if (
+        input.logical &&
+        (output !== 'private_working' ||
+          observation.collectionId !== input.collectionId ||
+          observation.authority.kind !== 'private_builtin' ||
+          input.actor.kind !== 'account' ||
+          observation.authority.curatorAccountId !== input.actor.accountId)
+      )
+        throw new ProblemError('dependency_unavailable', {
+          detail: 'The caller’s Collection Source has no current owner-bound logical built-in observation.',
+        });
       return {
         source: prepared.source,
         work: prepared.work,

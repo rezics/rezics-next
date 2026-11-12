@@ -104,7 +104,7 @@ type Header = Ref & {
   revision: number;
   createdAt: string;
   sourceGeneration: string;
-  builtinKind: 'everything' | 'state' | null;
+  builtinKind: 'everything' | 'state' | 'liked' | null;
   releaseDigest: string | null;
   profileId: string | null;
   stateSetId: string | null;

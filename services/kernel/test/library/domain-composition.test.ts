@@ -409,7 +409,25 @@ test('Library applications run with fake capabilities through Source, members, p
       allowance,
       logical: true,
     }),
-  ).rejects.toBeInstanceOf(TypeError);
+  ).rejects.toMatchObject({ code: 'dependency_unavailable' });
+
+  const curatedDomain = createLibraryApplications(fakeCapabilities({ sourceAuthority: { kind: 'curated' } }));
+  const curatedCaller: Pick<CollectionSource, 'prepare'> = {
+    async prepare(input) {
+      return { source: source({ kind: 'curated' }), work: receipt(input.allowance.reservationId) };
+    },
+  };
+  await expect(
+    curatedDomain.sourceCapture.capture({
+      actor,
+      collectionId,
+      deadline: Date.now() + 1_000,
+      at: { epoch: 1 },
+      allowance,
+      logical: true,
+      source: curatedCaller,
+    }),
+  ).rejects.toMatchObject({ code: 'dependency_unavailable' });
 
   const occurrences = orderedOccurrences([
     { occurrenceId: 'b', subjectId, ordinal: 2 },

@@ -21,6 +21,7 @@ import {
 } from './collection-source-work-native.ts';
 
 import { peekLibraryDomain } from './domain-binding.ts';
+import { builtinCollectionId, type BuiltinCollectionKey } from './builtin-identity.ts';
 import { librarySemanticObservations } from './semantic-observation.ts';
 import type { LibrarySemanticObservationCapability } from './contract/semantic-observation.ts';
 import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
@@ -129,6 +130,37 @@ type Prepared = {
   /** Mechanical handles cannot be reused through a different episode or the ordinary reader branch. */
   workBinding?: Readonly<{ kind: string; locator: unknown }>;
 };
+function isCurrentLogicalBuiltin(metadata: NativeCollectionMetadata, actor: Actor): boolean {
+  if (
+    actor.kind !== 'account' ||
+    metadata.authority !== 'private_builtin' ||
+    metadata.membershipKind !== 'dynamic' ||
+    metadata.visibility !== 'private' ||
+    metadata.curatorAccountId !== actor.accountId
+  )
+    return false;
+  let key: BuiltinCollectionKey;
+  switch (metadata.builtinKind) {
+    case 'everything':
+      key = { kind: 'everything' };
+      break;
+    case 'liked':
+      key = { kind: 'liked' };
+      break;
+    case 'state':
+      if (!metadata.profileId || !metadata.stateSetId || !metadata.stateId) return false;
+      key = {
+        kind: 'state',
+        profileId: metadata.profileId,
+        stateSetId: metadata.stateSetId,
+        stateId: metadata.stateId,
+      };
+      break;
+    default:
+      return false;
+  }
+  return builtinCollectionId(actor.accountId, key) === metadata.collectionId;
+}
 function canonicalAllowance(
   a: WorkAllowance,
   rawLimit = CANONICAL_SOURCE_RAW_KEY_LIMIT,
@@ -250,6 +282,10 @@ function createCollectionSourceRuntime(
     if (!allowed.authorized) throw new ProblemError('not_found');
   }
   async function ready(input: CollectionSourceContext, metadata: NativeCollectionMetadata, l: CollectionSourceLedger) {
+    // Liked has a separate Content source/version contract. Treating it as the Everything fact union would
+    // produce an incorrect empty page, so keep it unavailable until that source is bound here.
+    if (metadata.authority === 'private_builtin' && metadata.builtinKind === 'liked')
+      throw new ProblemError('dependency_unavailable');
     // The private canonical producer below cannot certify a public/frozen output capture.
     if (metadata.authority !== 'curated' && metadata.authority !== 'private_builtin')
       throw new ProblemError('dependency_unavailable');
@@ -505,6 +541,13 @@ function createCollectionSourceRuntime(
           ));
         if (!metadata || metadata.state !== 'active') throw new ProblemError('not_found');
         if (!input.work) await authorize(input, metadata, l);
+        if (
+          input.logical &&
+          (input.work || !('actor' in input) || !isCurrentLogicalBuiltin(metadata, input.actor))
+        )
+          throw new ProblemError('dependency_unavailable', {
+            detail: 'The current native Collection Source does not bind this owner logical identity.',
+          });
         const state = current ?? (await ready(input, metadata, l));
         const source: PreparedCollectionSource = {
           [preparedSource]: true,

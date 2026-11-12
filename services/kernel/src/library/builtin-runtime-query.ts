@@ -154,22 +154,29 @@ export async function openOwnerQuery(
     let prepared;
     try {
       const domain = peekLibraryDomain();
-      prepared = domain
-        ? await domain.sourceCapture.capture({
-            actor: libraryActorOf(input.actor),
-            collectionId: input.collectionId,
-            deadline: input.deadline,
-            at,
-            allowance: sourceAllowance(),
-            source: native,
-            ...(input.logical !== undefined ? { logical: input.logical } : {}),
-            ordinaryPage: Boolean(planned),
-          })
-        : await native.prepare({
-            ...context,
-            collectionId: input.collectionId,
-            allowance: sourceAllowance(),
+      if (domain) {
+        prepared = await domain.sourceCapture.capture({
+          actor: libraryActorOf(input.actor),
+          collectionId: input.collectionId,
+          deadline: input.deadline,
+          at,
+          allowance: sourceAllowance(),
+          source: native,
+          ...(input.logical !== undefined ? { logical: input.logical } : {}),
+          ordinaryPage: Boolean(planned),
+        });
+      } else {
+        if (input.logical)
+          throw new ProblemError('dependency_unavailable', {
+            detail: 'Logical built-ins require the registered Library Source Capture.',
           });
+        prepared = await native.prepare({
+          ...context,
+          collectionId: input.collectionId,
+          allowance: sourceAllowance(),
+          ...(input.logical !== undefined ? { logical: input.logical } : {}),
+        });
+      }
     } catch (error) {
       if (input.logical && error instanceof ProblemError && error.code === 'not_found')
         throw new ProblemError('dependency_unavailable', {

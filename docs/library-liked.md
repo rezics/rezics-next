@@ -13,6 +13,10 @@ Implementation decision: registered native capture receives the exact caller Col
 missing binding evidence remains unavailable. Never synthesize Collection metadata or a private-working observation,
 and keep GET materialization-free.
 
+Decision: logical capture requires the exact caller Source to return a current private-built-in observation for the
+same Collection ID and owner. A missing caller Source, mismatched identity, or unsupported binding returns
+`dependency_unavailable`; there is no descriptor-based fallback.
+
 ## Identity and common wire
 
 Every account has exactly one stable logical Liked Collection, including an account with no reactions or
