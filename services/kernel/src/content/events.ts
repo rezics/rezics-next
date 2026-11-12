@@ -68,6 +68,15 @@ export function CONTENT_EVENTS() {
         'com.rezics.content.edition.created.v1': editionEvent,
         'com.rezics.content.edition.published.v1': editionEvent,
         'com.rezics.content.edition.unpublished.v1': editionEvent,
+        'com.rezics.content.knowledge.lifecycle.changed.v1': Type.Object(
+          {
+            documentId: UUID,
+            notebookId: UUID,
+            generation: Type.String({ pattern: '^[1-9][0-9]*$' }),
+            action: Type.Union([Type.Literal('trash'), Type.Literal('restore')]),
+          },
+          { additionalProperties: false },
+        ),
         'com.rezics.content.knowledge.publication.changed.v1': Type.Object(
           {
             action: Type.Union([Type.Literal('selected'), Type.Literal('withdrawn')]),

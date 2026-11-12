@@ -4699,34 +4699,32 @@ workspace declaration publication covers compiler-only query annotations without
 
 ## Native Knowledge first loop
 
-`knowledgeRoutes` mounts the first native notebook path on the ordinary Content HTTP application. An account can
-create an account-home notebook, attach stable private document resources, save immutable canonical revisions,
-select one exact revision for public use, and withdraw the current selection. Writes use native command receipts,
-account `account:update` authority and compare-and-swap against the structure, document head and current publication.
-Private document reads use the owner's `account:read` authority and admit the complete stable placement chain.
-An optional exact revision selector reads a retained own revision through that same admitted placement.
+`knowledgeRoutes` mounts native account-home notebooks, private documents and immutable canonical revisions.
+Writes use `account:update`, native receipts and structure/head/publication CAS; owner reads use `account:read`.
+Public reads select the current publication, check anonymous Subject authority and recheck the pointer/digest.
+They omit notebook/account identity and depend on current Content selection, including while Search is paused.
+Knowledge permits 32 primary placements per ancestor chain and 64 revision Subject references plus the notebook
+Subject. Notebook size is uncapped; canonical bytes use the existing 2 MiB validator.
 
-`GET /v1/knowledge/documents/{id}?revisionId=...` reads bytes from the current publication pointer. It checks
-anonymous Subject read authority for the notebook Subject and selected revision references before re-reading that
-pointer and its immutable digest. An unselected revision, private sibling or withdrawn document has no public row.
-The response omits notebook and account identity. Public reads are source-current and do not require Search to have
-processed the publication event; withdrawing while Search is paused removes Content's direct read immediately.
+### Single-document lifecycle
 
-The first slice admits at most 32 placement rows on one path (including the selected document) and at most 64
-revision Subject references, plus the notebook Subject in the bounded currentness pass. Notebook document count is
-not capped, and hosted-book placement limits do
-not apply. Primary structure versions and per-parent positions allow single-node attachment without loading all
-siblings. Canonical bytes are capped by the existing 2 MiB Content document validator.
+[Access and lifecycle](../../../../docs/knowledge-workspaces.md#access-and-lifecycle) owns the product contract.
+Native `documents/{id}:trash` and `:restore` require expected structure revision and lifecycle generation. They lock
+the notebook then the keyed document, authorize current ownership/retention before receipts, and admit a leaf using
+one indexed child existence probe. A non-leaf returns `complete: false, reason: subtree_work_required` with no effect.
+The owner document `/lifecycle` address is metadata-only recovery. Each transition advances generation and clears
+publication; selectors require both current eligibility and matching publication generation. Restore keeps identity
+and private revision history, respects the strict 30-day deadline and purge fence, and never republishes. Legal hold
+is preserved; it suspends future automatic purge, not the restore deadline. Future purge writers use the same locks.
 
-The public selection route records `com.rezics.content.knowledge.publication.changed.v1` with selection and
-withdrawal only; indexing remains a Search-owned consumer. Search's current Content source port does not yet expose
-a Knowledge candidate page or retained useful-page preparation API. The direct public read is complete; Subject
-contribution discovery remains a Search-owned handoff, not a local Content adapter or editor DTO.
-
-Native acceptance coverage is in `test/content/knowledge-first-loop.test.ts`: two private siblings, exact older
-revision selection, anonymous exact bytes, private-owner isolation, same-key replay, stale compare-and-swap,
-immediate withdrawal without Search processing, and the 32-ancestor/64-reference bounds. The controller runs this
-suite after landing. The implementation worker does not run native suites.
+Cost: one notebook/document pair, at most 32 keyed ancestors, one child probe, one document update, and at most two
+registered events (lifecycle and publication withdrawal). No reference traversal, sibling walk, body rewrite or new
+trash store. Existing writers take the notebook fence before receipt lookup; source selection, history, outlines,
+export/copy and discovery share current lifecycle eligibility. Historical outline cursors advance over hidden rows.
+Native receiving coverage in `test/content/knowledge-lifecycle.test.ts` pins replay/denial, stale structure/generation,
+competing trash commands, retained history, disclosure and lagged-index refusal, legal holds, expiry/purge guards and
+truthful subtree incompleteness. Native, browser and growth checks run after landing; subtree traversal/purge remains
+separate work. Existing first-loop, transfer and history assertions remain unchanged.
 
 ### Single-document export and copy
 
@@ -4759,8 +4757,7 @@ managed document/revision target uses two exact publication metadata reads and a
 currentness round; no target body, target manifest or outgoing reference is loaded. The shared destination write
 reads only its notebook, parent path and indexed sibling maximum. `test/content/knowledge-portable.test.ts` pins
 artifact validation and local remapping; `test/content/knowledge-transfer.test.ts` pins native owner/public selection,
-private copy, CAS, replay, target withdrawal and disclosure. Native acceptance and lifecycle integration remain
-controller-deferred under the implementation sprint policy.
+private copy, CAS, replay, target withdrawal and disclosure. Native acceptance remains controller-deferred.
 
 ### Notebook reorganization and revision recovery
 

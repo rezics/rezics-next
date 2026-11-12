@@ -353,24 +353,27 @@ indexed populations even when one API composes their results. Avoid traversing e
 subject visit. Canonical identity aggregation consumes Semantic's admitted mapping/source capability; an unavailable
 mapping cannot be approximated by scanning all originals.
 
-Trash, restoration, erasure, legal holds, moderation and account termination follow [Deletion](deletion.md). The
-explicit Trash subtree action hides owned documents beneath that primary placement through a bounded ancestor-chain
-check; it does not synchronously rewrite every descendant. It never follows references into other documents.
-Deleting a later reference placement removes that occurrence only. Unrelated notebook branches stay available.
+Trash, restoration, erasure, legal holds, moderation and account termination follow [Deletion](deletion.md).
+Decision: native synchronous lifecycle admits one leaf document; a primary child returns
+`complete: false, reason: subtree_work_required` without mutation. Subtree restore/purge needs durable work and is
+not implemented by that command. References and unrelated branches are never traversed.
 
-Restoration never republishes the subtree. Keep its root hidden while bounded retained work advances publication
-generations for the selected root and every owned primary descendant, closing both current and historical public
-selections. Atomically reactivate the selected root only after consuming complete durable traversal under the same
-structure/restore fence. Independently trashed nested roots remain trashed. The retained restoration
-fence prevents edits, insertions and moves into/out of that subtree while preserving unrelated work. Its cursor
-therefore covers a stable finite structure. A failed or cancelled restore leaves the root hidden and resumes safely;
-the UI shows progress and the existing restore deadline. Purge/expiry and restore race through the same root fence.
-Single-document restore completes in one bounded command when it fits. Re-publication is always explicit.
+`POST /v1/knowledge/documents/{id}:trash` and `:restore` require current owner `account:update`,
+`expectedStructureRevisionId` and exact decimal `expectedGeneration`. Both use native receipts. Notebook structure
+locking orders moves, insertions and lifecycle changes; current ownership, retained data and ancestor eligibility
+are checked before receipt replay. The owner-only document address ending in `/lifecycle` returns IDs, current
+structure/generation, state and restore deadline, never titles or bytes. Restore is available strictly within
+30 days of trash, before purge starts. Legal holds preserve data; they neither extend that deadline nor republish.
+Each transition advances generation and clears public selection. Stable document/placement identity and private
+revisions survive; selecting a revision publicly again is always explicit and creates a fresh publication.
 
-Publication withdrawal of one document changes only that document's public state. Physical subtree cleanup pages
-through its retained structure with a durable frontier. Moving a document out of trash requires completing restore
-first; moving a placement cannot bypass a hidden ancestor or revive an old public selection. Native lifecycle checks
-inspect the bounded ancestor chain as boolean eligibility, without disclosing private ancestor metadata.
+Shared current eligibility checks at most 32 primary placements, rejecting hidden or purging ancestors, missing
+parents and incomplete chains. It fences private/history/compare, current and historical outlines, public selection,
+discovery including lagged indexes, copy/export and native writers. A move cannot bypass trash. Historical outline
+pages advance over hidden candidates without exposing their titles or locators. Future subtree work must keep its
+root hidden, freeze its structure, retire every descendant's public generation through durable traversal, and only
+then reactivate the root. Independently trashed nested roots remain hidden. Purge/expiry must share the notebook and
+exact document fence, preserve legal holds, and use the existing erasure disposition below.
 
 For account erasure, private drafts and never-published revisions are erased. Eligible published contributions may
 remain under the existing de-identified public-contribution policy. The retained publication must be independent of

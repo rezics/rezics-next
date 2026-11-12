@@ -1,3 +1,4 @@
+import { changeKnowledgeLifecycle, readKnowledgeLifecycle } from './knowledge-lifecycle.ts';
 import { copyKnowledgeDocument, exportKnowledgeDocument, serializeKnowledgeExport } from './knowledge-transfer.ts';
 import { KnowledgeExportSchema } from './knowledge-portable.ts';
 import { withHeaders } from '@elysia/openapi';
@@ -43,6 +44,9 @@ import {
 } from './knowledge-reads.ts';
 import {
   KnowledgeCommandResponseSchema,
+  KnowledgeLifecycleCommandSchema,
+  KnowledgeLifecycleResultSchema,
+  KnowledgeLifecycleSchema,
   KnowledgeCopySchema,
   KnowledgeOwnerExportQuerySchema,
   KnowledgeDocumentCompareQuerySchema,
@@ -178,6 +182,80 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
   });
 
   return app
+    .get(
+      '/v1/accounts/:accountId/knowledge/notebooks/:notebookId/documents/:documentId/lifecycle',
+      {
+        params: privateParams(),
+        response: {
+          200: withHeaders(strictContentSchema(KnowledgeLifecycleSchema), responseHeaders),
+          ...failures(),
+        },
+        detail: {
+          operationId: 'knowledge_document.lifecycle',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { accountId, notebookId, documentId }, actor, admission, job, session, set }) => {
+        const result = await operation(() => admission.run('normal', job, () =>
+          readKnowledgeLifecycle(deps, accountId, notebookId, documentId, { actor, deadline: job.deadline }),
+        ));
+        for (const anchor of result.anchors) session.record(sessionComponent(anchor));
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/knowledge/documents/:id', 'trash'),
+      {
+        params: idParams(), headers,
+        body: strictContentSchema(KnowledgeLifecycleCommandSchema),
+        response: {
+          200: withHeaders(strictContentSchema(KnowledgeLifecycleResultSchema), responseHeaders),
+          ...failures(),
+        },
+        detail: {
+          operationId: 'knowledge_document.trash',
+          'x-exposure': 'public', 'x-action': 'account:update',
+          'x-rate-limit': writeRate(), security: writeSecurity,
+        },
+      },
+      async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
+        requireAccount(actor);
+        const result = await operation(() => admission.run('normal', job, () =>
+          changeKnowledgeLifecycle(deps, actor, id, 'trash', body, commandContext(request, job.deadline)),
+        ));
+        session.record(result);
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/knowledge/documents/:id', 'restore'),
+      {
+        params: idParams(), headers,
+        body: strictContentSchema(KnowledgeLifecycleCommandSchema),
+        response: {
+          200: withHeaders(strictContentSchema(KnowledgeLifecycleResultSchema), responseHeaders),
+          ...failures(),
+        },
+        detail: {
+          operationId: 'knowledge_document.restore',
+          'x-exposure': 'public', 'x-action': 'account:update',
+          'x-rate-limit': writeRate(), security: writeSecurity,
+        },
+      },
+      async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
+        requireAccount(actor);
+        const result = await operation(() => admission.run('normal', job, () =>
+          changeKnowledgeLifecycle(deps, actor, id, 'restore', body, commandContext(request, job.deadline)),
+        ));
+        session.record(result);
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
     .get(
       '/v1/accounts/:accountId/knowledge/notebooks',
       {

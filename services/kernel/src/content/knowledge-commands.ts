@@ -1,3 +1,4 @@
+import { fenceKnowledgeAuthorization } from './knowledge-eligibility.ts';
 import {
   validateKnowledgeReferences,
   type KnowledgeReference,
@@ -488,7 +489,9 @@ export async function writeKnowledgeDocument(
   const owner = await knowledgeNotebookOwner(deps.pool, notebookId);
   if (!owner || owner.route !== route) throw new KnowledgeNotFoundError();
   const ownerId = owner.owner_account_id;
-  const authorization = await accountUpdateAuthorization(deps, actor, ownerId, context);
+  const authorization = fenceKnowledgeAuthorization(
+    await accountUpdateAuthorization(deps, actor, ownerId, context), route, notebookId, ownerId, undefined, placement.parentPlacementId === null ? [] : [placement.parentPlacementId],
+  );
   let document: StoredBody;
   let provenance: KnowledgeProvenance | null;
   authorization.prepare = async () => {
@@ -652,7 +655,11 @@ export async function moveKnowledgePlacement(
 
   const notebookOwner = await knowledgeNotebookOwner(deps.pool, notebookId);
   if (!notebookOwner || notebookOwner.route !== route) throw new KnowledgeNotFoundError();
-  const authorization = await accountUpdateAuthorization(deps, actor, notebookOwner.owner_account_id, context);
+  const authorization = fenceKnowledgeAuthorization(
+    await accountUpdateAuthorization(deps, actor, notebookOwner.owner_account_id, context),
+    route, notebookId, notebookOwner.owner_account_id, undefined,
+    [placementId, input.destinationParentPlacementId, input.beforePlacementId].filter((id): id is string => id !== null),
+  );
   const verifySubject = await preparePublicSubjects(deps, notebookOwner.subject_id, [], context.deadline);
   authorization.prepare = async () => {
     if (!(await verifySubject())) throw new KnowledgeNotFoundError();
@@ -885,7 +892,10 @@ export async function reviseKnowledgeDocument(
 ) {
   const owner = await knowledgeOwner(deps.pool, documentId);
   if (!owner) throw new KnowledgeNotFoundError();
-  const authorization = await accountUpdateAuthorization(deps, actor, owner.owner_account_id, context);
+  const authorization = fenceKnowledgeAuthorization(
+    await accountUpdateAuthorization(deps, actor, owner.owner_account_id, context),
+    owner.route, owner.notebook_id, owner.owner_account_id, documentId,
+  );
   const document = storedBody(input);
   const revisionId = newId(owner.route);
   const kind = 'content.knowledge.document.revise';
@@ -951,7 +961,10 @@ export async function setKnowledgePublication(
 ) {
   const owner = await knowledgeOwner(deps.pool, documentId);
   if (!owner) throw new KnowledgeNotFoundError();
-  const authorization = await accountUpdateAuthorization(deps, actor, owner.owner_account_id, context);
+  const authorization = fenceKnowledgeAuthorization(
+    await accountUpdateAuthorization(deps, actor, owner.owner_account_id, context),
+    owner.route, owner.notebook_id, owner.owner_account_id, documentId,
+  );
   const kind = 'content.knowledge.document.publication';
   const verifySubject =
     input.revisionId === null
@@ -1040,8 +1053,9 @@ export async function setKnowledgePublication(
       if (!subjectId) throw new KnowledgeNotFoundError();
       await tx.query(
         `INSERT INTO content.knowledge_publication
-          (route,document_id,publication_id,revision_id,subject_id,body_sha256,recorded_transaction_id,published_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          (route,document_id,publication_id,revision_id,subject_id,body_sha256,recorded_transaction_id,published_at,lifecycle_generation)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
+           (SELECT lifecycle_generation FROM content.knowledge_document WHERE route=$1 AND document_id=$2))`,
         [
           owner.route,
           documentId,

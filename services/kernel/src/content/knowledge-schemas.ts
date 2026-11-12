@@ -272,3 +272,22 @@ export const KnowledgeDocumentCompareSchema = t.Object(
   },
   { additionalProperties: false },
 );
+
+const knowledgeGeneration = t.String({ pattern: '^(?:0|[1-9][0-9]{0,18})$' });
+export const KnowledgeLifecycleCommandSchema = t.Object(
+  { expectedStructureRevisionId: UUID, expectedGeneration: knowledgeGeneration },
+  { additionalProperties: false },
+);
+const lifecycleFields = {
+  documentId: UUID,
+  notebookId: UUID,
+  structureRevisionId: UUID,
+  generation: knowledgeGeneration,
+  state: t.Union([t.Literal('active'), t.Literal('trashed')]),
+  restoreUntil: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+};
+export const KnowledgeLifecycleSchema = t.Object(lifecycleFields, { additionalProperties: false });
+export const KnowledgeLifecycleResultSchema = t.Object(
+  { ...lifecycleFields, complete: t.Boolean(), reason: t.Union([t.Literal('subtree_work_required'), t.Null()]) },
+  { additionalProperties: false },
+);

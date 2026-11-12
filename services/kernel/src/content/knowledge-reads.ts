@@ -484,6 +484,12 @@ export async function readKnowledgeHistoricalOutline(
     const structure = selected.rows[0];
     if (!structure?.history_complete) return null;
 
+    if (parentId !== null) {
+      const path = await knowledgeAncestorPath(client, sourceRoute, notebookId, parentId);
+      if (path[0]?.placement_id !== parentId || !admitsKnowledgeAncestorPath(
+        path.map(({ placement_id, parent_id }) => ({ placementId: placement_id, parentId: parent_id })),
+      )) return null;
+    }
     const root = await client.query<{ root_page_id: string | null }>(
       `SELECT root_page_id FROM content.knowledge_structure_parent_root
        WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3 AND revision_number <= $4
@@ -508,7 +514,8 @@ export async function readKnowledgeHistoricalOutline(
              JOIN content.knowledge_revision revision
                ON revision.route=document.route AND revision.document_id=document.document_id
               AND revision.revision_id=document.head_revision_id
-             WHERE document.route=$1 AND document.notebook_id=$2 AND document.document_id=ANY($3::uuid[])`,
+             WHERE document.route=$1 AND document.notebook_id=$2 AND document.document_id=ANY($3::uuid[])
+               AND content.knowledge_document_eligible(document.route,document.document_id)`,
             [sourceRoute, notebookId, candidates.map(({ documentId }) => documentId)],
           );
     const titleByDocument = new Map(titles.rows.map(({ document_id, title }) => [document_id, title]));
@@ -517,7 +524,7 @@ export async function readKnowledgeHistoricalOutline(
       rootPageId: root.rows[0]!.root_page_id,
       placements: candidates.map((placement) => ({
         ...placement,
-        title: titleByDocument.get(placement.documentId)!,
+        title: titleByDocument.get(placement.documentId),
       })),
     };
   });
@@ -541,7 +548,7 @@ export async function readKnowledgeHistoricalOutline(
       structureRevisionId: revisionId,
       revisionNumber: result.value.revisionNumber,
       parentPlacementId: parentId,
-      placements: page.map((row) => ({
+      placements: page.filter((row) => row.title !== undefined).map((row) => ({
         placementId: row.placementId,
         documentId: row.documentId,
         parentPlacementId: row.parentId,
@@ -755,7 +762,8 @@ async function exactPrivateRevisions(
          ON placement.route=document.route AND placement.notebook_id=document.notebook_id
         AND placement.document_id=document.document_id
        WHERE document.route=$1 AND document.notebook_id=$2 AND document.document_id=$3
-         AND notebook.owner_account_id=$4`,
+         AND notebook.owner_account_id=$4
+         AND content.knowledge_document_eligible(document.route,document.document_id)`,
       [sourceRoute, notebookId, documentId, accountId],
     );
     const selected = identity.rows[0];
