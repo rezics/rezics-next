@@ -121,7 +121,7 @@ async function progressHttpRelease() {
   expect(release.libraryProfiles?.['book.reading']).toEqual(bundledRelease.libraryProfiles?.['book.reading']);
   expect(release.types[PROGRESS_TEST_TYPE]?.library).toEqual({ profileId: PROGRESS_TEST_PROFILE });
   expect(
-    release.libraryProfiles?.[PROGRESS_TEST_PROFILE]?.progress.allowed.map(({ mode, units }) => ({
+    release.libraryProfiles?.[PROGRESS_TEST_PROFILE]?.progress?.allowed.map(({ mode, units }) => ({
       mode,
       units: units.map(({ id, totalPolicy }) => ({ id, totalPolicy })),
     })),
