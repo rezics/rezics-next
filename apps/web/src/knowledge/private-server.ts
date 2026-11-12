@@ -46,6 +46,12 @@ import {
 
 import { selectKnowledgePublication } from './publication';
 import {
+  changeKnowledgeLifecycle,
+  readKnowledgeLifecycle,
+  isKnowledgeLifecycleGeneration,
+  type KnowledgeLifecycleRead,
+} from './lifecycle';
+import {
   parseKnowledgeNavigationRequest,
   readKnowledgeNavigation,
   type KnowledgeNavigationResult,
@@ -323,6 +329,67 @@ function commandBinding(value: Record<string, unknown>): CommandBinding {
     idempotencyKey: commandKey(value.idempotencyKey),
   };
 }
+
+export const readKnowledgeLifecycleVisit = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value)) throw new Error('Invalid Knowledge lifecycle read');
+    return { address: address(value.address), expected: expectedSession(value.expected) };
+  })
+  .handler(async ({ data }): Promise<KnowledgeLifecycleRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = currentFor(data.expected, await currentIdentity());
+    if ('state' in identity) return identity.state === 'unavailable' ? { state: 'unavailable', status: 503 } : identity;
+    try {
+      const result = await readKnowledgeLifecycle(kernelClient(), {
+        ...data.address,
+        accountId: identity.viewer,
+        authorization: identity.authorization,
+      });
+      if (result.state !== 'ready') return result;
+      return {
+        ...result,
+        binding: {
+          viewer: identity.viewer,
+          csrfToken: identity.csrfToken,
+          credential: await captureCredential(getRequest(), identity),
+        },
+      };
+    } catch (error) {
+      if (isPlatformClosedError(error)) return { state: 'unavailable', status: 503 };
+      throw error;
+    }
+  });
+
+export const changeKnowledgeLifecycleRequest = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (
+      !record(value) ||
+      !(value.action === 'trash' || value.action === 'restore') ||
+      !isKnowledgeLifecycleGeneration(value.expectedGeneration)
+    )
+      throw new Error('Invalid Knowledge lifecycle command');
+    return {
+      address: address(value.address),
+      action: value.action as 'trash' | 'restore',
+      expectedStructureRevisionId: boundedId(value.expectedStructureRevisionId, 'structure revision'),
+      expectedGeneration: value.expectedGeneration,
+      binding: commandBinding(value),
+    };
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = await commandIdentity(data.binding);
+    if ('state' in identity) return identity;
+    try {
+      return await changeKnowledgeLifecycle(kernelClient(), {
+        ...data,
+        idempotencyKey: data.binding.idempotencyKey,
+        authorization: identity.authorization,
+      });
+    } catch (error) {
+      return isPlatformClosedError(error) ? { state: 'unavailable', status: 503 } : { state: 'uncertain' as const };
+    }
+  });
 
 export const createKnowledgePrivateNotebookRequest = createServerFn({ method: 'POST' })
   .validator((value: unknown) => {
