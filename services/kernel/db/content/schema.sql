@@ -1567,9 +1567,9 @@ CREATE TABLE content.knowledge_notebook (
     subject_id uuid NOT NULL,
     title text NOT NULL,
     structure_revision_id uuid NOT NULL,
-    structure_revision_number bigint DEFAULT 1 NOT NULL,
     created_transaction_id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
+    structure_revision_number bigint DEFAULT 1 NOT NULL,
     CONSTRAINT knowledge_notebook_check CHECK ((route = ((get_byte(uuid_send(notebook_id), 10) * 256) + get_byte(uuid_send(notebook_id), 11)))),
     CONSTRAINT knowledge_notebook_check1 CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11)))),
     CONSTRAINT knowledge_notebook_created_at_check CHECK (isfinite(created_at)),
@@ -1592,9 +1592,9 @@ CREATE TABLE content.knowledge_placement (
     "position" numeric(38,0) NOT NULL,
     subtree_height smallint DEFAULT 0 NOT NULL,
     CONSTRAINT knowledge_placement_check CHECK ((route = ((get_byte(uuid_send(placement_id), 10) * 256) + get_byte(uuid_send(placement_id), 11)))),
-    CONSTRAINT knowledge_placement_position_check CHECK (("position" >= 0)),
-    CONSTRAINT knowledge_placement_subtree_height_check CHECK (((subtree_height >= 0) AND (subtree_height <= 31))),
-    CONSTRAINT knowledge_placement_route_check CHECK (((route >= 0) AND (route <= 65535)))
+    CONSTRAINT knowledge_placement_position_check CHECK (("position" >= (0)::numeric)),
+    CONSTRAINT knowledge_placement_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT knowledge_placement_subtree_height_check CHECK (((subtree_height >= 0) AND (subtree_height <= 31)))
 );
 
 
@@ -1653,24 +1653,23 @@ CREATE TABLE content.knowledge_revision (
 
 
 --
--- Name: knowledge_structure_revision; Type: TABLE; Schema: content; Owner: -
+-- Name: knowledge_structure_change; Type: TABLE; Schema: content; Owner: -
 --
 
-CREATE TABLE content.knowledge_structure_revision (
+CREATE TABLE content.knowledge_structure_change (
     route integer NOT NULL,
     notebook_id uuid NOT NULL,
-    revision_id uuid NOT NULL,
     revision_number bigint NOT NULL,
-    history_complete boolean NOT NULL,
-    change_kind text NOT NULL,
-    recorded_transaction_id uuid NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT knowledge_structure_revision_check CHECK ((route = ((get_byte(uuid_send(notebook_id), 10) * 256) + get_byte(uuid_send(notebook_id), 11)))),
-    CONSTRAINT knowledge_structure_revision_check1 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
-    CONSTRAINT knowledge_structure_revision_change_kind_check CHECK ((change_kind = ANY (ARRAY['legacy'::text, 'baseline'::text, 'notebook_created'::text, 'placement_added'::text, 'placement_moved'::text, 'placement_reordered'::text]))),
-    CONSTRAINT knowledge_structure_revision_created_at_check CHECK (isfinite(created_at)),
-    CONSTRAINT knowledge_structure_revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT knowledge_structure_revision_revision_number_check CHECK ((revision_number > 0))
+    placement_id uuid NOT NULL,
+    action text NOT NULL,
+    previous_parent_id uuid,
+    previous_position numeric(38,0),
+    parent_id uuid,
+    "position" numeric(38,0) NOT NULL,
+    CONSTRAINT knowledge_structure_change_action_check CHECK ((action = ANY (ARRAY['placement_added'::text, 'placement_moved'::text, 'placement_reordered'::text, 'order_rebalanced'::text]))),
+    CONSTRAINT knowledge_structure_change_check CHECK (((action = 'placement_added'::text) = (previous_position IS NULL))),
+    CONSTRAINT knowledge_structure_change_check1 CHECK ((route = ((get_byte(uuid_send(placement_id), 10) * 256) + get_byte(uuid_send(placement_id), 11)))),
+    CONSTRAINT knowledge_structure_change_position_check CHECK (("position" >= (0)::numeric))
 );
 
 
@@ -1692,7 +1691,8 @@ CREATE TABLE content.knowledge_structure_page (
     CONSTRAINT knowledge_structure_page_check CHECK ((route = ((get_byte(uuid_send(page_id), 10) * 256) + get_byte(uuid_send(page_id), 11)))),
     CONSTRAINT knowledge_structure_page_check1 CHECK ((route = ((get_byte(uuid_send(placement_id), 10) * 256) + get_byte(uuid_send(placement_id), 11)))),
     CONSTRAINT knowledge_structure_page_check2 CHECK ((route = ((get_byte(uuid_send(document_id), 10) * 256) + get_byte(uuid_send(document_id), 11)))),
-    CONSTRAINT knowledge_structure_page_position_check CHECK (("position" >= 0)),
+    CONSTRAINT knowledge_structure_page_position_check CHECK (("position" >= (0)::numeric)),
+    CONSTRAINT knowledge_structure_page_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT knowledge_structure_page_tree_height_check CHECK (((tree_height >= 1) AND (tree_height <= 63)))
 );
 
@@ -1711,23 +1711,24 @@ CREATE TABLE content.knowledge_structure_parent_root (
 
 
 --
--- Name: knowledge_structure_change; Type: TABLE; Schema: content; Owner: -
+-- Name: knowledge_structure_revision; Type: TABLE; Schema: content; Owner: -
 --
 
-CREATE TABLE content.knowledge_structure_change (
+CREATE TABLE content.knowledge_structure_revision (
     route integer NOT NULL,
     notebook_id uuid NOT NULL,
-    revision_number bigint NOT NULL,
-    placement_id uuid NOT NULL,
-    action text NOT NULL,
-    previous_parent_id uuid,
-    previous_position numeric(38,0),
-    parent_id uuid,
-    "position" numeric(38,0) NOT NULL,
-    CONSTRAINT knowledge_structure_change_action_check CHECK ((action = ANY (ARRAY['placement_added'::text, 'placement_moved'::text, 'placement_reordered'::text, 'order_rebalanced'::text]))),
-    CONSTRAINT knowledge_structure_change_check CHECK ((route = ((get_byte(uuid_send(placement_id), 10) * 256) + get_byte(uuid_send(placement_id), 11)))),
-    CONSTRAINT knowledge_structure_change_position_check CHECK (("position" >= 0)),
-    CONSTRAINT knowledge_structure_change_added_position_check CHECK (((action = 'placement_added'::text) = (previous_position IS NULL)))
+    revision_id uuid NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    revision_number bigint DEFAULT 1 NOT NULL,
+    history_complete boolean DEFAULT false NOT NULL,
+    change_kind text DEFAULT 'legacy'::text NOT NULL,
+    CONSTRAINT knowledge_structure_revision_change_kind_check CHECK ((change_kind = ANY (ARRAY['legacy'::text, 'baseline'::text, 'notebook_created'::text, 'placement_added'::text, 'placement_moved'::text, 'placement_reordered'::text]))),
+    CONSTRAINT knowledge_structure_revision_check CHECK ((route = ((get_byte(uuid_send(notebook_id), 10) * 256) + get_byte(uuid_send(notebook_id), 11)))),
+    CONSTRAINT knowledge_structure_revision_check1 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
+    CONSTRAINT knowledge_structure_revision_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT knowledge_structure_revision_revision_number_check CHECK ((revision_number > 0)),
+    CONSTRAINT knowledge_structure_revision_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -3320,19 +3321,11 @@ ALTER TABLE ONLY content.knowledge_revision
 
 
 --
--- Name: knowledge_structure_revision knowledge_structure_revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+-- Name: knowledge_structure_change knowledge_structure_change_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
-ALTER TABLE ONLY content.knowledge_structure_revision
-    ADD CONSTRAINT knowledge_structure_revision_pkey PRIMARY KEY (route, notebook_id, revision_id);
-
-
---
--- Name: knowledge_structure_revision knowledge_structure_revision_number_key; Type: CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.knowledge_structure_revision
-    ADD CONSTRAINT knowledge_structure_revision_number_key UNIQUE (route, notebook_id, revision_number);
+ALTER TABLE ONLY content.knowledge_structure_change
+    ADD CONSTRAINT knowledge_structure_change_pkey PRIMARY KEY (route, notebook_id, revision_number, placement_id);
 
 
 --
@@ -3344,19 +3337,27 @@ ALTER TABLE ONLY content.knowledge_structure_page
 
 
 --
--- Name: knowledge_structure_parent_root knowledge_structure_parent_root_key; Type: CONSTRAINT; Schema: content; Owner: -
+-- Name: knowledge_structure_parent_root knowledge_structure_parent_ro_route_notebook_id_parent_id_r_key; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
 ALTER TABLE ONLY content.knowledge_structure_parent_root
-    ADD CONSTRAINT knowledge_structure_parent_root_key UNIQUE NULLS NOT DISTINCT (route, notebook_id, parent_id, revision_number);
+    ADD CONSTRAINT knowledge_structure_parent_ro_route_notebook_id_parent_id_r_key UNIQUE NULLS NOT DISTINCT (route, notebook_id, parent_id, revision_number);
 
 
 --
--- Name: knowledge_structure_change knowledge_structure_change_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+-- Name: knowledge_structure_revision knowledge_structure_revision_number_key; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
-ALTER TABLE ONLY content.knowledge_structure_change
-    ADD CONSTRAINT knowledge_structure_change_pkey PRIMARY KEY (route, notebook_id, revision_number, placement_id);
+ALTER TABLE ONLY content.knowledge_structure_revision
+    ADD CONSTRAINT knowledge_structure_revision_number_key UNIQUE (route, notebook_id, revision_number);
+
+
+--
+-- Name: knowledge_structure_revision knowledge_structure_revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_revision
+    ADD CONSTRAINT knowledge_structure_revision_pkey PRIMARY KEY (route, notebook_id, revision_id);
 
 
 --
@@ -4162,6 +4163,13 @@ CREATE INDEX knowledge_notebook_owner_page ON content.knowledge_notebook USING b
 
 
 --
+-- Name: knowledge_placement_child_height; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX knowledge_placement_child_height ON content.knowledge_placement USING btree (route, notebook_id, parent_id, subtree_height DESC, placement_id);
+
+
+--
 -- Name: knowledge_placement_children; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -4169,10 +4177,10 @@ CREATE INDEX knowledge_placement_children ON content.knowledge_placement USING b
 
 
 --
--- Name: knowledge_placement_child_height; Type: INDEX; Schema: content; Owner: -
+-- Name: knowledge_publication_subject_page; Type: INDEX; Schema: content; Owner: -
 --
 
-CREATE INDEX knowledge_placement_child_height ON content.knowledge_placement USING btree (route, notebook_id, parent_id, subtree_height DESC, placement_id);
+CREATE INDEX knowledge_publication_subject_page ON content.knowledge_publication USING btree (route, subject_id, published_at DESC, document_id, publication_id);
 
 
 --
@@ -4194,13 +4202,6 @@ CREATE INDEX knowledge_structure_change_history ON content.knowledge_structure_c
 --
 
 CREATE INDEX knowledge_structure_parent_root_at ON content.knowledge_structure_parent_root USING btree (route, notebook_id, parent_id, revision_number DESC);
-
-
---
--- Name: knowledge_publication_subject_page; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE INDEX knowledge_publication_subject_page ON content.knowledge_publication USING btree (route, subject_id, published_at DESC, document_id, publication_id);
 
 
 --
@@ -4590,10 +4591,10 @@ CREATE TRIGGER knowledge_revision_immutable BEFORE DELETE OR UPDATE ON content.k
 
 
 --
--- Name: knowledge_structure_revision knowledge_structure_revision_immutable; Type: TRIGGER; Schema: content; Owner: -
+-- Name: knowledge_structure_change knowledge_structure_change_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
-CREATE TRIGGER knowledge_structure_revision_immutable BEFORE DELETE OR UPDATE ON content.knowledge_structure_revision FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_snapshot();
+CREATE TRIGGER knowledge_structure_change_immutable BEFORE DELETE OR UPDATE ON content.knowledge_structure_change FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_structure();
 
 
 --
@@ -4604,17 +4605,17 @@ CREATE TRIGGER knowledge_structure_page_immutable BEFORE DELETE OR UPDATE ON con
 
 
 --
+-- Name: knowledge_structure_revision knowledge_structure_revision_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER knowledge_structure_revision_immutable BEFORE DELETE OR UPDATE ON content.knowledge_structure_revision FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_snapshot();
+
+
+--
 -- Name: knowledge_structure_parent_root knowledge_structure_root_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
 CREATE TRIGGER knowledge_structure_root_immutable BEFORE DELETE OR UPDATE ON content.knowledge_structure_parent_root FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_structure();
-
-
---
--- Name: knowledge_structure_change knowledge_structure_change_immutable; Type: TRIGGER; Schema: content; Owner: -
---
-
-CREATE TRIGGER knowledge_structure_change_immutable BEFORE DELETE OR UPDATE ON content.knowledge_structure_change FOR EACH ROW EXECUTE FUNCTION content.guard_knowledge_structure();
 
 
 --
@@ -4988,107 +4989,107 @@ ALTER TABLE ONLY content.knowledge_revision
 
 
 --
+-- Name: knowledge_structure_change knowledge_structure_change_route_notebook_id_parent_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_change
+    ADD CONSTRAINT knowledge_structure_change_route_notebook_id_parent_id_fkey FOREIGN KEY (route, notebook_id, parent_id) REFERENCES content.knowledge_placement(route, notebook_id, placement_id);
+
+
+--
+-- Name: knowledge_structure_change knowledge_structure_change_route_notebook_id_placement_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_change
+    ADD CONSTRAINT knowledge_structure_change_route_notebook_id_placement_id_fkey FOREIGN KEY (route, notebook_id, placement_id) REFERENCES content.knowledge_placement(route, notebook_id, placement_id);
+
+
+--
+-- Name: knowledge_structure_change knowledge_structure_change_route_notebook_id_previous_pare_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_change
+    ADD CONSTRAINT knowledge_structure_change_route_notebook_id_previous_pare_fkey FOREIGN KEY (route, notebook_id, previous_parent_id) REFERENCES content.knowledge_placement(route, notebook_id, placement_id);
+
+
+--
+-- Name: knowledge_structure_change knowledge_structure_change_route_notebook_id_revision_numb_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_change
+    ADD CONSTRAINT knowledge_structure_change_route_notebook_id_revision_numb_fkey FOREIGN KEY (route, notebook_id, revision_number) REFERENCES content.knowledge_structure_revision(route, notebook_id, revision_number);
+
+
+--
+-- Name: knowledge_structure_page knowledge_structure_page_route_notebook_id_document_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_page
+    ADD CONSTRAINT knowledge_structure_page_route_notebook_id_document_id_fkey FOREIGN KEY (route, notebook_id, document_id) REFERENCES content.knowledge_document(route, notebook_id, document_id);
+
+
+--
+-- Name: knowledge_structure_page knowledge_structure_page_route_notebook_id_left_page_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_page
+    ADD CONSTRAINT knowledge_structure_page_route_notebook_id_left_page_id_fkey FOREIGN KEY (route, notebook_id, left_page_id) REFERENCES content.knowledge_structure_page(route, notebook_id, page_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: knowledge_structure_page knowledge_structure_page_route_notebook_id_parent_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_page
+    ADD CONSTRAINT knowledge_structure_page_route_notebook_id_parent_id_fkey FOREIGN KEY (route, notebook_id, parent_id) REFERENCES content.knowledge_placement(route, notebook_id, placement_id);
+
+
+--
+-- Name: knowledge_structure_page knowledge_structure_page_route_notebook_id_placement_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_page
+    ADD CONSTRAINT knowledge_structure_page_route_notebook_id_placement_id_fkey FOREIGN KEY (route, notebook_id, placement_id) REFERENCES content.knowledge_placement(route, notebook_id, placement_id);
+
+
+--
+-- Name: knowledge_structure_page knowledge_structure_page_route_notebook_id_right_page_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_page
+    ADD CONSTRAINT knowledge_structure_page_route_notebook_id_right_page_id_fkey FOREIGN KEY (route, notebook_id, right_page_id) REFERENCES content.knowledge_structure_page(route, notebook_id, page_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: knowledge_structure_parent_root knowledge_structure_parent_ro_route_notebook_id_revision_n_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_parent_root
+    ADD CONSTRAINT knowledge_structure_parent_ro_route_notebook_id_revision_n_fkey FOREIGN KEY (route, notebook_id, revision_number) REFERENCES content.knowledge_structure_revision(route, notebook_id, revision_number);
+
+
+--
+-- Name: knowledge_structure_parent_root knowledge_structure_parent_ro_route_notebook_id_root_page__fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_parent_root
+    ADD CONSTRAINT knowledge_structure_parent_ro_route_notebook_id_root_page__fkey FOREIGN KEY (route, notebook_id, root_page_id) REFERENCES content.knowledge_structure_page(route, notebook_id, page_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: knowledge_structure_parent_root knowledge_structure_parent_roo_route_notebook_id_parent_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.knowledge_structure_parent_root
+    ADD CONSTRAINT knowledge_structure_parent_roo_route_notebook_id_parent_id_fkey FOREIGN KEY (route, notebook_id, parent_id) REFERENCES content.knowledge_placement(route, notebook_id, placement_id);
+
+
+--
 -- Name: knowledge_structure_revision knowledge_structure_revision_notebook_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
 --
 
 ALTER TABLE ONLY content.knowledge_structure_revision
     ADD CONSTRAINT knowledge_structure_revision_notebook_fk FOREIGN KEY (route, notebook_id) REFERENCES content.knowledge_notebook(route, notebook_id) DEFERRABLE INITIALLY DEFERRED;
-
-
---
--- Name: knowledge_structure_page knowledge_structure_page_placement_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.knowledge_structure_page
-    ADD CONSTRAINT knowledge_structure_page_placement_fk FOREIGN KEY (route, notebook_id, placement_id) REFERENCES content.knowledge_placement(route, notebook_id, placement_id);
-
-
---
--- Name: knowledge_structure_page knowledge_structure_page_document_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.knowledge_structure_page
-    ADD CONSTRAINT knowledge_structure_page_document_fk FOREIGN KEY (route, notebook_id, document_id) REFERENCES content.knowledge_document(route, notebook_id, document_id);
-
-
---
--- Name: knowledge_structure_page knowledge_structure_page_parent_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.knowledge_structure_page
-    ADD CONSTRAINT knowledge_structure_page_parent_fk FOREIGN KEY (route, notebook_id, parent_id) REFERENCES content.knowledge_placement(route, notebook_id, placement_id);
-
-
---
--- Name: knowledge_structure_page knowledge_structure_page_left_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.knowledge_structure_page
-    ADD CONSTRAINT knowledge_structure_page_left_fk FOREIGN KEY (route, notebook_id, left_page_id) REFERENCES content.knowledge_structure_page(route, notebook_id, page_id) DEFERRABLE INITIALLY DEFERRED;
-
-
---
--- Name: knowledge_structure_page knowledge_structure_page_right_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.knowledge_structure_page
-    ADD CONSTRAINT knowledge_structure_page_right_fk FOREIGN KEY (route, notebook_id, right_page_id) REFERENCES content.knowledge_structure_page(route, notebook_id, page_id) DEFERRABLE INITIALLY DEFERRED;
-
-
---
--- Name: knowledge_structure_parent_root knowledge_structure_parent_root_parent_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.knowledge_structure_parent_root
-    ADD CONSTRAINT knowledge_structure_parent_root_parent_fk FOREIGN KEY (route, notebook_id, parent_id) REFERENCES content.knowledge_placement(route, notebook_id, placement_id);
-
-
---
--- Name: knowledge_structure_parent_root knowledge_structure_parent_root_revision_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.knowledge_structure_parent_root
-    ADD CONSTRAINT knowledge_structure_parent_root_revision_fk FOREIGN KEY (route, notebook_id, revision_number) REFERENCES content.knowledge_structure_revision(route, notebook_id, revision_number);
-
-
---
--- Name: knowledge_structure_parent_root knowledge_structure_parent_root_page_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.knowledge_structure_parent_root
-    ADD CONSTRAINT knowledge_structure_parent_root_page_fk FOREIGN KEY (route, notebook_id, root_page_id) REFERENCES content.knowledge_structure_page(route, notebook_id, page_id) DEFERRABLE INITIALLY DEFERRED;
-
-
---
--- Name: knowledge_structure_change knowledge_structure_change_revision_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.knowledge_structure_change
-    ADD CONSTRAINT knowledge_structure_change_revision_fk FOREIGN KEY (route, notebook_id, revision_number) REFERENCES content.knowledge_structure_revision(route, notebook_id, revision_number);
-
-
---
--- Name: knowledge_structure_change knowledge_structure_change_placement_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.knowledge_structure_change
-    ADD CONSTRAINT knowledge_structure_change_placement_fk FOREIGN KEY (route, notebook_id, placement_id) REFERENCES content.knowledge_placement(route, notebook_id, placement_id);
-
-
---
--- Name: knowledge_structure_change knowledge_structure_change_previous_parent_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.knowledge_structure_change
-    ADD CONSTRAINT knowledge_structure_change_previous_parent_fk FOREIGN KEY (route, notebook_id, previous_parent_id) REFERENCES content.knowledge_placement(route, notebook_id, placement_id);
-
-
---
--- Name: knowledge_structure_change knowledge_structure_change_parent_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.knowledge_structure_change
-    ADD CONSTRAINT knowledge_structure_change_parent_fk FOREIGN KEY (route, notebook_id, parent_id) REFERENCES content.knowledge_placement(route, notebook_id, placement_id);
 
 
 --
