@@ -4,7 +4,6 @@ import { createShelfActiveReader } from '../../src/library/shelf-active.ts';
 import type { ShelfSession } from '../../src/library/shelf-contract.ts';
 import { readSession } from '../../src/library/progress-store.ts';
 import { newId } from '../../src/route/route.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
 import { capture, checkGrowth, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 let db: GrowthDatabase;
@@ -173,25 +172,102 @@ test('active probes stay bounded behind private session history', async () => {
   const subjects = Array.from({ length: page }, () => newId(0x7b20));
   const winners = new Map<string, string>();
   for (const subject of subjects) winners.set(subject, await insert(db.admin, route, owner, subject));
-  async function read(limit: number) {
-    return withReadTransaction(db.pool, (client) => reader.sessions(client, route, owner, subjects.slice(0, limit)));
+  function phase(event: string, detail: Readonly<Record<string, unknown>>): void {
+    console.info(`shelf-active-growth ${JSON.stringify({ event, ...detail })}`);
   }
-  const operation = async () => {
-    const first = await read(1);
+  async function read(limit: number, scale: number, repetition: number, stage: string) {
+    phase('read.acquire.begin', { scale, repetition, stage, page: limit });
+    const client = await db.pool.connect();
+    const backend = client.processID;
+    const started = performance.now();
+    phase('read.connection', { scale, repetition, stage, page: limit, backend });
+    let transactionOpen = false;
+    let releaseError: Error | undefined;
+    try {
+      phase('read.begin.begin', { scale, repetition, stage, page: limit, backend });
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      transactionOpen = true;
+      phase('read.begin.end', { scale, repetition, stage, page: limit, backend });
+      phase('read.timeout.begin', { scale, repetition, stage, page: limit, backend });
+      await client.query("SET LOCAL statement_timeout = '30000ms'");
+      phase('read.timeout.end', { scale, repetition, stage, page: limit, backend });
+      phase('read.query.begin', { scale, repetition, stage, page: limit, backend });
+      const orderedSubjects = subjects.slice(0, limit);
+      const result = await reader.sessions(client, route, owner, [...orderedSubjects, orderedSubjects[0]!]);
+      phase('read.query.end', { scale, repetition, stage, page: limit, backend, returned: result.size });
+      await client.query('COMMIT');
+      transactionOpen = false;
+      phase('read.commit.end', {
+        scale,
+        repetition,
+        stage,
+        page: limit,
+        backend,
+        elapsedMs: Number((performance.now() - started).toFixed(1)),
+      });
+      return result;
+    } catch (error) {
+      phase('read.failed', { scale, repetition, stage, page: limit, backend, error: String(error).slice(0, 300) });
+      if (transactionOpen) {
+        phase('read.rollback.begin', { scale, repetition, stage, page: limit, backend });
+        try {
+          await client.query('ROLLBACK');
+          transactionOpen = false;
+          phase('read.rollback.end', { scale, repetition, stage, page: limit, backend });
+        } catch (rollbackError) {
+          releaseError = rollbackError as Error;
+          throw rollbackError;
+        }
+      }
+      throw error;
+    } finally {
+      client.release(releaseError);
+    }
+  }
+  const operation = async (scale: number, repetition: number, stage: string) => {
+    phase('operation.begin', { scale, repetition, stage });
+    const first = await read(1, scale, repetition, `${stage}:first`);
     expect([...first].map(([subject, session]) => [subject, session.id])).toEqual([...winners].slice(0, 1));
-    const full = await read(page);
+    const full = await read(page, scale, repetition, `${stage}:page`);
     expect([...full].map(([subject, session]) => [subject, session.id])).toEqual([...winners]);
+    phase('operation.end', { scale, repetition, stage });
   };
   const report = await checkGrowth(db, {
     name: `active probes, 1 and ${page} subjects`,
     scales: [64, 512, 4096],
     warmups: 1,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    seededRelations: [{ kind: 'relation', schema: 'library', name: 'progress_session' }],
-    grow: async (_db, scale, previous) => {
+    // Growth is append-only. The fixture analyzes this one source relation after each seed without
+    // vacuuming every index on its 589k-row history population.
+    seededRelations: [],
+    grow: async (database, scale, previous) => {
       // Each subject has both terminal histories plus another owner's active history. All are newer than the winner.
-      await db.admin.query(
-        `INSERT INTO library.progress_session
+      const expectedRows = (scale - previous) * subjects.length * 3;
+      phase('seed.acquire.begin', { scale, previous, expectedRows });
+      const client = await database.admin.connect();
+      const backend = client.processID;
+      const started = performance.now();
+      let transactionOpen = false;
+      let releaseError: Error | undefined;
+      phase('seed.connection', { scale, previous, expectedRows, backend });
+      try {
+        phase('seed.begin.begin', { scale, previous, backend });
+        await client.query('BEGIN');
+        transactionOpen = true;
+        phase('seed.begin.end', { scale, previous, backend });
+        if (previous === 0) {
+          phase('autovacuum.disable.begin', { scale, backend });
+          await client.query('ALTER TABLE library.progress_session SET (autovacuum_enabled = false)');
+          phase('autovacuum.disable.end', { scale, backend });
+        }
+        // The read-only fixture keeps constraints and indexes active without replaying each synthetic row into
+        // unrelated progress counters, discovery generations, and read-model tables.
+        phase('seed.triggers.disable.begin', { scale, backend });
+        await client.query('ALTER TABLE library.progress_session DISABLE TRIGGER USER');
+        phase('seed.triggers.disable.end', { scale, backend });
+        phase('seed.insert.begin', { scale, previous, expectedRows, backend });
+        const inserted = await client.query(
+          `INSERT INTO library.progress_session
            (route, session_id, account_id, subject_id, mode, unit, completed_unit_count, state,
             revision, started_at, completed_at, transaction_id, last_changed_at)
          SELECT $1, ('10000000-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') ||
@@ -203,16 +279,57 @@ test('active probes stay bounded behind private session history', async () => {
          FROM unnest($4::uuid[]) WITH ORDINALITY AS subjects(subject_id, subject_no)
          CROSS JOIN generate_series($5::int + 1, $6::int) AS history(n)
          CROSS JOIN unnest(ARRAY['completed','abandoned','active']) WITH ORDINALITY AS kinds(kind, kind_no)`,
-        [route, owner, other, subjects, previous, scale],
-      );
+          [route, owner, other, subjects, previous, scale],
+        );
+        phase('seed.insert.end', { scale, previous, rows: inserted.rowCount, backend });
+        phase('seed.triggers.enable.begin', { scale, backend });
+        await client.query('ALTER TABLE library.progress_session ENABLE TRIGGER USER');
+        phase('seed.triggers.enable.end', { scale, backend });
+        phase('seed.commit.begin', { scale, backend });
+        await client.query('COMMIT');
+        transactionOpen = false;
+        expect(inserted.rowCount).toBe(expectedRows);
+        phase('seed.commit.end', {
+          scale,
+          previous,
+          rows: inserted.rowCount,
+          backend,
+          elapsedMs: Number((performance.now() - started).toFixed(1)),
+        });
+        const analyzeStarted = performance.now();
+        phase('analyze.begin', { scale, backend });
+        await client.query('ANALYZE library.progress_session');
+        phase('analyze.end', {
+          scale,
+          backend,
+          elapsedMs: Number((performance.now() - analyzeStarted).toFixed(1)),
+        });
+      } catch (error) {
+        phase('seed.failed', { scale, previous, backend, error: String(error).slice(0, 300) });
+        if (transactionOpen) {
+          try {
+            await client.query('ROLLBACK');
+            transactionOpen = false;
+          } catch (rollbackError) {
+            releaseError = rollbackError as Error;
+            throw rollbackError;
+          }
+        }
+        throw error;
+      } finally {
+        client.release(releaseError);
+      }
     },
-    warmup: async () => {
-      const measured = await capture(db, operation);
+    warmup: async (_database, scale, repetition) => {
+      phase('warmup.begin', { scale, repetition });
+      for (let index = 0; index < 6; index++) await operation(scale, repetition, `warmup-${index}`);
+      const measured = await capture(db, () => operation(scale, repetition, 'plan-capture'));
       expect(costOf(measured.capture).statements).toBe(2);
       expectPointProbes(measured.capture.plans.slice(0, 1), 1);
       expectPointProbes(measured.capture.plans.slice(1), page);
+      phase('warmup.end', { scale, repetition });
     },
-    operation,
+    operation: async (_database, scale, repetition) => operation(scale, repetition, 'measured'),
   });
   for (const sample of report.samples) {
     for (const cost of sample.repetitions) {

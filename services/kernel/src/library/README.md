@@ -286,12 +286,15 @@ the key equalities keep the complete primary key visible to the planner. Active-
 after its fence and still names `progress_session_active`. Set, unassign, restore and rename select each named operand once in the one-row request
 and read those columns in the mutation WHERE.
 
-Decision: active-session point probes repeat route, account and subject scalar equalities beside their row bounds,
-keeping the complete partial-index key visible to generic plans. Entry-tile growth associates each captured sort with
-its declared statement and applies the request-key-only relation assertion only to a sort directly fed by the request
-key `generate_series`; every sort retains its bounded row/loop check and every statement remains costed. Active-shelf
-growth analyzes only `library.progress_session`; the 1/48 page requests, owner separation, three history populations
-and 64/512/4096 scales remain unchanged.
+Decision: Entry-tile and active-session Maps preserve first-seen request order after matching point-probe rows. Entry
+growth binds each sort to its captured statement and relation subtree: request-key sorts use requested subjects,
+Library entry/session point sorts use requested/present subjects, catalog-only sorts use their declared catalog
+statement classification under the catalog statement-count allowance, and other non-catalog sorts retain their
+page-work bound. Every statement remains costed. Active-shelf growth owns its seed and analysis connections, records
+bounded phase/backend evidence, bulk-loads valid synthetic rows with user triggers disabled while constraints and
+indexes remain active, and runs `ANALYZE` only on
+`library.progress_session`. The 1/48 page requests, owner separation, three history populations and 64/512/4096
+scales remain unchanged.
 
 Decision: Source capture, member preparation, owner-query preparation, publication, presentation, Entry/progress and funded Progress-operation planning/admission use
 one fake-capability application suite; ordinary composition binds the real Access, Semantic, Search and Content
