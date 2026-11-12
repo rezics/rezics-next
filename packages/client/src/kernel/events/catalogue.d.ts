@@ -1158,6 +1158,13 @@ export declare function EVENT_TYPES(): Readonly<{
         previousRevisionId: Type.TString;
         revisionId: Type.TString;
     }>;
+    readonly 'com.rezics.content.knowledge.structure.changed.v1': Type.TObject<{
+        notebookId: Type.TString;
+        structureRevisionId: Type.TString;
+        revisionNumber: Type.TString;
+        action: Type.TUnion<[Type.TLiteral<"notebook_created">, Type.TLiteral<"placement_added">, Type.TLiteral<"placement_moved">, Type.TLiteral<"placement_reordered">]>;
+        placementId: Type.TUnion<[Type.TString, Type.TNull]>;
+    }>;
     readonly 'com.rezics.content.thread.created.v1': Type.TObject<{
         placeId: Type.TString;
         kind: Type.TUnion<[Type.TLiteral<"discussion">, Type.TLiteral<"review">]>;

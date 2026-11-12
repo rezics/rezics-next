@@ -230,6 +230,13 @@ export declare function contentDeclaredEvents(): Readonly<{
         previousRevisionId: import("typebox").TString;
         revisionId: import("typebox").TString;
     }>;
+    'com.rezics.content.knowledge.structure.changed.v1': import("typebox").TObject<{
+        notebookId: import("typebox").TString;
+        structureRevisionId: import("typebox").TString;
+        revisionNumber: import("typebox").TString;
+        action: import("typebox").TUnion<[import("typebox").TLiteral<"notebook_created">, import("typebox").TLiteral<"placement_added">, import("typebox").TLiteral<"placement_moved">, import("typebox").TLiteral<"placement_reordered">]>;
+        placementId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    }>;
     'com.rezics.content.thread.created.v1': import("typebox").TObject<{
         placeId: import("typebox").TString;
         kind: import("typebox").TUnion<[import("typebox").TLiteral<"discussion">, import("typebox").TLiteral<"review">]>;

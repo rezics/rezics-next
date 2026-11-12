@@ -5,6 +5,11 @@ export declare const KNOWLEDGE_ANCESTOR_LIMIT = 31;
 export declare const KNOWLEDGE_REFERENCE_LIMIT = 64;
 export declare const KNOWLEDGE_PAGE_LIMIT = 50;
 export declare const KNOWLEDGE_OUTLINE_SCAN_LIMIT = 128;
+export declare const KNOWLEDGE_ORDER_GAP = 1000000n;
+export declare const KNOWLEDGE_REBALANCE_SIDE_LIMIT = 64;
+export declare const KNOWLEDGE_REBALANCE_CHANGE_LIMIT: number;
+export type KnowledgeStructureChangeKind = 'legacy' | 'baseline' | 'notebook_created' | 'placement_added' | 'placement_moved' | 'placement_reordered';
+export type KnowledgeStructureChangeAction = 'placement_added' | 'placement_moved' | 'placement_reordered' | 'order_rebalanced';
 export type KnowledgeDependencies = ContentCommandDependencies & ContentReadDependencies;
 export type KnowledgeCommandContext = Readonly<{
     idempotencyKey: string;
@@ -21,6 +26,13 @@ export type KnowledgePageInput = Readonly<{
 }>;
 export type KnowledgeOutlinePageInput = KnowledgePageInput & Readonly<{
     parentPlacementId?: string;
+    revisionId?: string;
+}>;
+export type KnowledgeStructureHistoryInput = KnowledgePageInput;
+export type KnowledgeMovePlacementInput = Readonly<{
+    expectedStructureRevisionId: string;
+    destinationParentPlacementId: string | null;
+    beforePlacementId: string | null;
 }>;
 export type KnowledgeDocumentInput = Readonly<{
     title: string;
