@@ -115,7 +115,7 @@ type CompilerGraph = { workspaces: Set<string>; executables: Set<string> };
 function directKernelOwnerCommand(argv: readonly string[]): boolean {
   return (
     argv.length === 2 &&
-    (argv[0] === 'bun' || argv[0]?.endsWith('/bun')) &&
+    (argv[0] === 'bun' || argv[0]?.endsWith('/bun') === true) &&
     argv[1] === 'services/kernel/scripts/typecheck.ts'
   );
 }
@@ -218,7 +218,7 @@ export function isDirectKernelTypingCompiler(root: string, command: readonly str
 function misorderedWorkspaceTypecheckIntent(command: readonly string[]): boolean {
   return (
     command.length === 5 &&
-    (command[0] === 'bun' || command[0]?.endsWith('/bun')) &&
+    (command[0] === 'bun' || command[0]?.endsWith('/bun') === true) &&
     command[1] === '--cwd' &&
     command[3] === 'run' &&
     command[4] === 'typecheck'
