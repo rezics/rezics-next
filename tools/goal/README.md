@@ -3173,11 +3173,17 @@ does not establish a delivery or allowance saving. This uses the existing verifi
 
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to replace
 `.temp/goal/<manager>/CONTINUATION.md` with at most 8,000 characters (live task IDs, decisions in force as links to
-owner documents, and next actions), without appending to the old file, then message its supermanager with
-`continuation written`. A confirmation or a `budgetLimited` Goal
-automatically pauses and renews the manager with a fresh thread. If the continuation file exists, the new thread's first
-prompt names it; the supermanager receives one environment event with the old token count and new thread. A manual
-`manager renew` also accepts Codex Goals in `budgetLimited` or `blocked` status without a separate stop.
+owner documents, and next actions), without appending to the old file. Include one concrete progress bullet:
+`- Decision: ...`, `- Next action: ...`, or `- Result: ...`, then message its supermanager with `continuation written`.
+Automatic renewal requires that handshake from the current thread, a changed continuation file within the character
+limit, and one of those concrete progress bullets. If the Goal reaches `budgetLimited` without that evidence, the host
+pauses the same thread and sends the supermanager one actionable blocker with the explicit renew command. After a
+valid handshake, the new thread's first prompt names the continuation file; the supermanager receives one environment
+event with the old token count and new thread. A manual `manager renew` also accepts Codex Goals in `budgetLimited` or
+`blocked` status without a separate stop.
+
+Decision: Automatic renewal requires a fresh, bounded continuation from the current manager thread with concrete progress; unchanged exhaustion parks that thread and requires explicit operator renewal.
+
 When an automatic renewal fails, the host delivers a `blocker` to the supermanager with the manager id and the error's
 first line, keeps that manager in `renewal-failed` (distinct from a pause), records each attempt on the manager, and
 retries every `policy.manager.renewalRetryMs` (ten minutes by default) until the renewal succeeds. A manual

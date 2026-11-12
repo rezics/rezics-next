@@ -102,7 +102,7 @@ function continuationPath(root: string, manager: string): string {
 async function writeContinuation(s: Awaited<ReturnType<typeof setup>>) {
   const path = continuationPath(s.path, s.spec.id);
   mkdirSync(join(path, '..'), { recursive: true });
-  writeFileSync(path, 'Live task state and decisions');
+  writeFileSync(path, '- Next action: implement the manager stop-loss rule in tools/goal/src/managers.ts.\n');
   return path;
 }
 
@@ -172,26 +172,21 @@ test('a Codex manager below the threshold is not asked or renewed', async () => 
   }
 });
 
-test('a budget-limited Codex manager renews with its continuation and tells the supermanager once', async () => {
+test('a budget-limited Codex manager without a fresh continuation parks and notifies the supermanager once', async () => {
   const s = await setup();
   try {
     const started = await s.managers.start(s.spec);
     await report(s, started.threadId!, 'active', 900);
-    const path = await writeContinuation(s);
+    await s.managers.outgoingMessage(started.id, 'supervisor', 'continuation written');
+    await report(s, started.threadId!, 'budgetLimited', 1000);
     await report(s, started.threadId!, 'budgetLimited', 1000);
 
-    const renewed = s.managers.get(started.id);
-    expect(renewed).toMatchObject({
-      status: 'running',
-      threadId: 'thread-2',
-      continuationAsked: false,
-      continuationRenewed: false,
-    });
-    expect(renewed.history?.[0]).toMatchObject({
+    const parked = s.managers.get(started.id);
+    expect(parked).toMatchObject({
+      status: 'paused',
       threadId: started.threadId,
       continuationAsked: true,
-      continuationRenewed: true,
-      continuationTokensUsed: 1000,
+      continuationRenewed: false,
     });
     expect(
       s
@@ -203,18 +198,11 @@ test('a budget-limited Codex manager renews with its continuation and tells the 
             request.params.status === 'paused',
         ),
     ).toBe(true);
-    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(2);
-    const opening = s
-      .requests()
-      .find((request) => request.method === 'turn/start' && request.params.threadId === renewed.threadId)?.params
-      .input[0]?.text;
-    expect(opening).toContain(path);
-    expect(opening).toContain(`Read your brief and the continuation ${path} once per session`);
-    const notices = s.inbox.pending('supervisor').filter((entry) => entry.event.kind === 'environment');
+    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(1);
+    const notices = s.inbox.pending('supervisor').filter((entry) => entry.event.kind === 'blocker');
     expect(notices).toHaveLength(1);
-    expect(notices[0]!.event.summary).toContain('Manager manager');
-    expect(notices[0]!.event.summary).toContain('1000 tokens');
-    expect(notices[0]!.event.summary).toContain(renewed.threadId!);
+    expect(notices[0]!.event.summary).toContain('without a fresh, bounded continuation');
+    expect(notices[0]!.event.summary).toContain('bun tools/goal/src/cli.ts manager renew manager');
   } finally {
     await s.close();
   }
@@ -226,6 +214,14 @@ test('a continuation confirmation to the configured supermanager renews a Codex 
     const started = await s.managers.start(s.spec);
     await report(s, started.threadId!, 'active', 900);
     await writeContinuation(s);
+    await s.client.request('thread/goal/set', {
+      threadId: started.threadId,
+      status: 'active',
+      tokensUsed: 900,
+      timeUsedSeconds: 120,
+      tokenBudget: s.spec.budget,
+    });
+    await s.managers.flush();
 
     await s.managers.outgoingMessage(started.id, 'supervisor', 'continuation written');
     const renewed = s.managers.get(started.id);
@@ -360,7 +356,7 @@ test('manager override changes prompt guidance, sleep alarms and the continuatio
   try {
     const state = await s.managers.start(s.spec);
     const opening = s.requests().find((request) => request.method === 'turn/start').params.input[0].text;
-    for (const text of ['Keep about 3', 'within 1000 ms', 'at most 25 words', 'under 1,200 characters'])
+    for (const text of ['Keep about 3', '1000 ms', 'at most 25 words', 'under 1,200 characters'])
       expect(opening).toContain(text);
     await report(s, state.threadId!, 'active', 499);
     expect(s.inbox.pending(state.id)).toHaveLength(0);

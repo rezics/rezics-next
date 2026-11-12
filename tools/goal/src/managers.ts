@@ -1,6 +1,6 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { join } from 'node:path';
@@ -73,6 +73,10 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   usage: unknown;
   promptManifest?: PromptBudgetManifest;
   continuationAsked?: boolean;
+  /** The identity and bounded file state captured when this thread receives its continuation request. */
+  continuationThreadId?: string;
+  continuationBaselineHash?: string | null;
+  continuationBaselineProgressHashes?: string[];
   continuationRenewed?: boolean;
   continuationTokensUsed?: number;
   pendingRenewal?: { tokensUsed: number; oldThreadId: string | null; ready: boolean };
@@ -93,6 +97,28 @@ export type ResidentSupermanagerState = Pick<ManagerSessionSnapshot, 'id' | 'sta
   registeredAt: string;
 } & { [Key in ResidentManagedFields]?: never } & { history?: never };
 export type ManagerState = ManagedManagerState | ResidentSupermanagerState;
+
+function continuationHash(markdown: string): string {
+  const normalized = markdown
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n');
+  return createHash('sha256').update(normalized).digest('hex');
+}
+
+function continuationProgressEntries(markdown: string): string[] {
+  return markdown.split(/\r?\n/).flatMap((line) => {
+    const match = /^[-*]\s+(?:decision|next action|result):\s+(.+)$/i.exec(line);
+    const entry = match?.[1]?.trim().replace(/\s+/g, ' ').toLowerCase();
+    return entry && entry.length >= 16 ? [entry] : [];
+  });
+}
+
+function continuationProgressHashes(markdown: string): string[] {
+  return continuationProgressEntries(markdown).map(continuationHash);
+}
 
 /** Observational projection shared by public status; native Goal state remains independent of lifecycle status. */
 export function readManagerOperationalStatus(db: Database) {
@@ -807,6 +833,9 @@ export class ManagerSessions {
       usage: _usage,
       history: _history,
       continuationAsked: _continuationAsked,
+      continuationThreadId: _continuationThreadId,
+      continuationBaselineHash: _continuationBaselineHash,
+      continuationBaselineProgressHashes: _continuationBaselineProgressHashes,
       continuationRenewed: _continuationRenewed,
       continuationTokensUsed: _continuationTokensUsed,
       pendingRenewal: _pendingRenewal,
@@ -841,27 +870,74 @@ export class ManagerSessions {
         )
           return;
         current.continuationAsked = true;
+        const previousContinuation = this.readContinuation(current);
+        current.continuationThreadId = current.threadId ?? undefined;
+        current.continuationBaselineHash =
+          previousContinuation === null ? null : continuationHash(previousContinuation);
+        current.continuationBaselineProgressHashes =
+          previousContinuation === null ? [] : continuationProgressHashes(previousContinuation);
         this.save(current);
         this.inbox.deliver({
           managerId: current.id,
           kind: 'instruction',
-          summary: `This Goal has used at least ${this.policy.manager.continuationBudgetPercent}% of its token budget. Replace .temp/goal/${current.id}/CONTINUATION.md with at most ${this.policy.manager.continuationCharacters.toLocaleString('en-US')} characters: live task IDs, decisions in force as links to owner documents, and next actions. Do not append to the old file. Then send ${current.supermanager} a message containing “continuation written”.`,
+          summary: `This Goal has used at least ${this.policy.manager.continuationBudgetPercent}% of its token budget. Replace .temp/goal/${current.id}/CONTINUATION.md with at most ${this.policy.manager.continuationCharacters.toLocaleString('en-US')} characters: live task IDs, decisions in force as links to owner documents, and next actions. Include one concrete progress bullet: “- Decision: …”, “- Next action: …”, or “- Result: …”. Do not append to the old file. Then send ${current.supermanager} a message containing “continuation written”.`,
         });
       })
       .immediate();
   }
   private async handleGoalUpdate(state: ManagedManagerState): Promise<boolean> {
     if (state.engine !== 'codex') return false;
-    await this.askForContinuation(state);
-    const current = this.get(state.id);
-    assertManagedManager(current);
-    if (current.status !== 'running' || current.goalState?.status !== 'budgetLimited') return false;
-    try {
-      await this.renewForContinuation(current.id, current.goalState.tokensUsed);
-    } catch (error) {
-      await this.failRenewal(current.id, error);
+    if (state.goalState?.status === 'budgetLimited') {
+      const current = this.get(state.id);
+      assertManagedManager(current);
+      if (current.status !== 'running') return false;
+      this.db
+        .transaction(() => {
+          const latest = this.get(current.id);
+          assertManagedManager(latest);
+          if (latest.status !== 'running' || latest.goalState?.status !== 'budgetLimited') return;
+          latest.status = 'paused';
+          latest.waitingForInbox = false;
+          this.save(latest);
+          this.inbox.deliver({
+            managerId: latest.supermanager,
+            kind: 'blocker',
+            summary: `Manager ${latest.id} reached its token budget on thread ${latest.threadId} without a fresh, bounded continuation decision or result. The thread is paused. Review .temp/goal/${latest.id}/CONTINUATION.md and renew explicitly with “bun tools/goal/src/cli.ts manager renew ${latest.id}” after confirming a checkpoint.`,
+          });
+        })
+        .immediate();
+      await this.stopInternal(current.id);
+      return true;
     }
-    return true;
+    await this.askForContinuation(state);
+    return false;
+  }
+  private readContinuation(state: ManagedManagerState): string | null {
+    const path = join(state.cwd, '.temp', 'goal', state.id, 'CONTINUATION.md');
+    if (!existsSync(path)) return null;
+    const maxCharacters = this.policy.manager.continuationCharacters;
+    const stat = statSync(path);
+    if (!stat.isFile() || stat.size > maxCharacters * 4) return null;
+    const markdown = readFileSync(path, 'utf8');
+    return markdown.length <= maxCharacters ? markdown : null;
+  }
+  private hasFreshContinuation(state: ManagedManagerState): boolean {
+    const baselineProgressHashes = state.continuationBaselineProgressHashes;
+    if (
+      !state.continuationAsked ||
+      !state.threadId ||
+      state.continuationThreadId !== state.threadId ||
+      typeof state.continuationBaselineHash === 'undefined' ||
+      !Array.isArray(baselineProgressHashes)
+    )
+      return false;
+    const markdown = this.readContinuation(state);
+    const progressHashes = markdown === null ? [] : continuationProgressHashes(markdown);
+    return (
+      markdown !== null &&
+      continuationHash(markdown) !== state.continuationBaselineHash &&
+      progressHashes.some((hash) => !baselineProgressHashes.includes(hash))
+    );
   }
   private async deliverRenewalNotice(id: string): Promise<void> {
     this.db
@@ -901,7 +977,13 @@ export class ManagerSessions {
   async outgoingMessage(id: string, recipient: string, summary: string): Promise<void> {
     return this.serial(id, async () => {
       const state = this.get(id);
-      if (!isPendingContinuationHandshake(summary, recipient, state)) return;
+      assertManagedManager(state);
+      if (
+        !isPendingContinuationHandshake(summary, recipient, state) ||
+        state.status !== 'running' ||
+        !this.hasFreshContinuation(state)
+      )
+        return;
       await this.renewForContinuation(id, state.goalState?.tokensUsed ?? 0);
     });
   }
