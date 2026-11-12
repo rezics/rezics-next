@@ -691,35 +691,44 @@ export function workerCheckHostAttemptChecksTerminal(
   return checkIds.every((id) => found.has(id));
 }
 
-/** Bind a selected compiler receipt back to one of this exact attempt's finished native checks. */
-export function workerCheckHostTypingCheckMatchesAttempt(
+/** Match a withdrawn-Web failure by its retained physical run when legacy custody omitted it from attempt.checks. */
+export function workerCheckHostWithdrawnLegacyTypingCheckMatchesAttempt(
   worktree: string,
   taskId: string,
   attempt: number,
-  checkIds: readonly string[],
   physicalRunId: string,
   command: readonly string[],
   exitCode: number,
 ): boolean {
   if (!isPhysicalRunId(physicalRunId) || !Number.isInteger(exitCode)) return false;
   const results = join(worktree, '.temp', 'goal', 'checks', 'results');
-  for (const id of checkIds) {
-    if (!isCheckId(id)) return false;
-    const record = readCheckEvidence(join(results, `${id}.json`));
-    if (
-      record?.id === id &&
-      record.cwd === worktree &&
-      record.ownership?.taskId === taskId &&
-      record.ownership.attempt === attempt &&
-      record.physicalRunId === physicalRunId &&
-      JSON.stringify(record.argv) === JSON.stringify(command) &&
-      record.status === 'finished' &&
-      record.exitCode === exitCode &&
-      terminalPhysicalHistory(worktree, id, physicalRunId, exitCode)
-    )
-      return true;
+  let files: string[];
+  try {
+    files = readdirSync(results).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
   }
-  return false;
+  let matched = false;
+  for (const file of files) {
+    const record = readCheckEvidence(join(results, file));
+    if (!record) return false;
+    if (record.physicalRunId !== physicalRunId) continue;
+    if (matched || record.ownership?.taskId !== taskId || record.ownership.attempt !== attempt) return false;
+    matched = true;
+    if (
+      typeof record.id !== 'string' ||
+      !isCheckId(record.id) ||
+      file !== `${record.id}.json` ||
+      record.cwd !== worktree ||
+      JSON.stringify(record.argv) !== JSON.stringify(command) ||
+      record.status !== 'finished' ||
+      record.exitCode !== exitCode ||
+      !retainedNativeExitReceiptTerminal(worktree, taskId, attempt, record)
+    )
+      return false;
+  }
+  return matched;
 }
 
 function terminalCancelledPhysicalCheck(

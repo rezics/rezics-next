@@ -44,6 +44,7 @@ import {
   workerCheckHostContentTree,
   workerCheckHostRunsUsed,
   workerCheckHostTypecheckFailed,
+  workerCheckHostStaleTypingFailureSelection,
   workerCheckHostTypingSettlement,
   WORKER_CHECK_HOST_BUDGET_REFUSAL,
   WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT,
@@ -1602,15 +1603,14 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     git(worktree, ['commit', '-m', 'Prepare Web compiler fixture']);
 
     const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, task.id, 1);
-    const second = admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree });
-    expect(second).toMatchObject({ ok: true, used: 2, stamp: '2' });
     const priorEnv: NodeJS.ProcessEnv = {
       GOAL_WORKER_CHECK_BUDGET: '2',
       GOAL_WORKER_CHECK_BUDGET_DIR: budget,
-      GOAL_WORKER_CHECK_BUDGET_STAMP: '2',
+      GOAL_WORKER_CHECK_BUDGET_STAMP: '1',
     };
     const priorLog = join(h.settings.stateDirectory, 'prior-web-typecheck.log');
-    const selectedFailurePhysicalRunId = 'd0d0d0d0-0000-4000-8000-000000000000';
+    const selectedFailureCheckId = 'ae459dea-1111-4111-8111-111111111111';
+    const selectedFailurePhysicalRunId = '9327ef82-0000-4000-8000-000000000000';
     const staleCompilerLog = 'apps/web/src/reader.ts(1,1): error TS2322: mounted reader input failed\n';
     writeFileSync(priorLog, staleCompilerLog);
     const priorPhysicalRunId = selectedFailurePhysicalRunId;
@@ -1625,6 +1625,28 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
       log: priorLog,
       worktree,
       physicalRunId: priorPhysicalRunId,
+    });
+    const second = admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree });
+    expect(second).toMatchObject({ ok: true, used: 2, stamp: '2' });
+    const laterPhysicalRunId = 'b8b8b8b8-8888-4888-8888-888888888888';
+    const laterLog = join(h.settings.stateDirectory, 'later-web-typecheck.log');
+    writeFileSync(laterLog, '');
+    const laterEnv: NodeJS.ProcessEnv = {
+      GOAL_WORKER_CHECK_BUDGET: '2',
+      GOAL_WORKER_CHECK_BUDGET_DIR: budget,
+      GOAL_WORKER_CHECK_BUDGET_STAMP: '2',
+      REZICS_TYPING_INPUTS_PHYSICAL: laterPhysicalRunId,
+      REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(compiler)).toString('base64'),
+    };
+    recordWorkerCheckTypingInputs(laterEnv, worktree, laterPhysicalRunId, compiler);
+    const completeLaterReceipt = beginTypingInputReceipt(worktree, laterEnv, compiler);
+    if (!completeLaterReceipt) throw new Error('later Web compiler fixture did not capture its inputs');
+    completeLaterReceipt(0);
+    settleWorkerCheckHostBudget(laterEnv, 0, true, {
+      argv: compiler,
+      log: laterLog,
+      worktree,
+      physicalRunId: laterPhysicalRunId,
     });
     const priorStamps = ['1', '2'].map((stamp) => readFileSync(join(budget, stamp), 'utf8'));
 
@@ -1648,16 +1670,16 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     });
     const previousChecks = [
       {
-        id: 'a7a7a7a7-7777-4777-8777-777777777777',
-        physicalRunId: 'b8b8b8b8-8888-4888-8888-888888888888',
-        remoteRunId: 'retained-web-pass',
-        exitCode: 0,
-      },
-      {
-        id: 'c9c9c9c9-9999-4999-8999-999999999999',
+        id: selectedFailureCheckId,
         physicalRunId: selectedFailurePhysicalRunId,
         remoteRunId: 'retained-web-failure',
         exitCode: 1,
+      },
+      {
+        id: '7442e488-2222-4222-8222-222222222222',
+        physicalRunId: laterPhysicalRunId,
+        remoteRunId: 'retained-web-pass',
+        exitCode: 0,
       },
     ];
     const checkRoot = join(worktree, '.temp/goal/checks');
@@ -1729,7 +1751,9 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
           status: 'finished',
           remoteExpected: true,
           exitCode: previous.exitCode,
-          terminalProof: { local: true, resultKnown: true, remote: true },
+          ...(previous.id === selectedFailureCheckId
+            ? {}
+            : { terminalProof: { local: true, resultKnown: true, remote: true } }),
         }),
       );
       writeFileSync(
@@ -1807,7 +1831,7 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
       current.exitCode = 0;
       current.failureKind = 'tool';
       current.result = refusal;
-      current.checks = previousChecks.map((previous) => previous.id);
+      current.checks = [previousChecks[1]!.id];
       current.process = stoppedProcess;
       current.terminationIntent = {
         operation: 'stop',
@@ -1822,14 +1846,21 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     const overwrittenFailure =
       "Last check-host run failed its typecheck. Settlement records a typing failure with that run's log, so this attempt is retried instead of landing.\n\n" +
       staleCompilerLog;
-    h.store.updateAttempt(retained.ref, (current) => {
-      current.result = overwrittenFailure;
-      current.failureKind = 'tool';
-    });
-    h.store.event(retained.ref, 'typing-evidence-failed', {
+    h.store.recordWithdrawnTypingRecoveryFailure(retained.ref, refusal, overwrittenFailure, {
       actor,
       recoveryKind: 'withdrawn-budget-stop',
     });
+    expect(h.store.attempt(retained.ref).checks).toEqual([previousChecks[1]!.id]);
+    expect(
+      workerCheckHostStaleTypingFailureSelection({ directory: budget, worktree, result: overwrittenFailure }),
+    ).toMatchObject({ stamp: '1', physicalRunId: selectedFailurePhysicalRunId });
+    expect(
+      workerCheckHostStaleTypingFailureSelection({
+        directory: budget,
+        worktree,
+        result: `${overwrittenFailure} altered selection`,
+      }),
+    ).toBeUndefined();
 
     const evidencePaths = previousChecks.map((previous) => [
       join(results, `${previous.id}.json`),
@@ -1840,14 +1871,6 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     writeFileSync(attempt.logPath, originalAttemptLog.replace(head, '0'.repeat(40)));
     await expect(recover()).rejects.toThrow();
     writeFileSync(attempt.logPath, originalAttemptLog);
-    const originalFailure = h.store.attempt(retained.ref).result;
-    h.store.updateAttempt(retained.ref, (current) => {
-      current.result = `${originalFailure} altered selection`;
-    });
-    await expect(recover()).rejects.toThrow();
-    h.store.updateAttempt(retained.ref, (current) => {
-      current.result = originalFailure;
-    });
     const failureEvent = h.store
       .events(retained.ref.taskId, retained.ref.attempt)
       .findLast((event) => event.kind === 'typing-evidence-failed');
@@ -1877,7 +1900,9 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
       restoreEvidence();
     };
 
-    await rejectChangedEvidence(() => updateEvidence(secondResult!, (value) => (value.exitCode = 0)));
+    const selectedFailureResult = evidencePaths[0]![0];
+    await rejectChangedEvidence(() => updateEvidence(selectedFailureResult!, (value) => (value.exitCode = 0)));
+    await rejectChangedEvidence(() => updateEvidence(secondResult!, (value) => (value.exitCode = 1)));
     await rejectChangedEvidence(() => writeFileSync(secondRemote!, '{'));
     await rejectChangedEvidence(() => updateEvidence(secondRemote!, (value) => (value.status = 'running')));
     await rejectChangedEvidence(() =>
@@ -1970,7 +1995,7 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     expect(JSON.parse(authorization!.body).withdrawnBudgetOrigin).toMatchObject({
       version: 1,
       sourceCommit: head,
-      failureStamp: '2',
+      failureStamp: '1',
     });
     for (const previous of previousChecks) {
       const legacyHistory = JSON.parse(

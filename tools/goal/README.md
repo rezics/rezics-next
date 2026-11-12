@@ -2891,8 +2891,9 @@ receipt for the current inputs may land that same attempt.
 
 Decision: withdrawn Web recovery settles compiler failures only for matched retained inputs; the specific overwritten
 refusal may regain eligibility only from its original trusted report, exact stale failure selection and event, clean
-final commit, and intact stop, abandoned retry and terminal custody. The first native compiler grant retains that
-validated origin for replay.
+final commit, and intact stop, abandoned retry and terminal custody. When the omitted selected check is legacy-owned,
+bind it by physical run ID with the existing legacy terminal predicate; keep ordinary and Kernel matching unchanged.
+The first native compiler grant retains that validated origin for replay.
 
 For this stopped Web-source case, use the same `typing-recover <task> --expected-attempt <n>` command. It returns only
 `bun run --cwd apps/web typecheck` through the authorized wrapper when a matching successful receipt is absent. Run the

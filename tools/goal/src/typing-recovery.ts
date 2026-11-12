@@ -25,7 +25,7 @@ import {
   workerCheckHostTypingReceiptMatches,
   workerCheckHostStaleTypingFailureSelection,
   workerCheckHostBudgetRefusalReport,
-  workerCheckHostTypingCheckMatchesAttempt,
+  workerCheckHostWithdrawnLegacyTypingCheckMatchesAttempt,
   workerCheckHostWithdrawnRetryIsRecoverable,
 } from './worker-check-budget.ts';
 
@@ -126,11 +126,10 @@ function validateStoredOverwrittenOrigin(input: {
   if (
     !selection ||
     JSON.stringify(selection.command) !== JSON.stringify(WITHDRAWN_WEB_COMPILER) ||
-    !workerCheckHostTypingCheckMatchesAttempt(
+    !workerCheckHostWithdrawnLegacyTypingCheckMatchesAttempt(
       input.task.worktree,
       input.task.id,
       input.attempt.attempt,
-      input.attempt.checks ?? [],
       selection.physicalRunId,
       selection.command,
       selection.exitCode,
@@ -172,11 +171,10 @@ function reconstructOverwrittenOrigin(input: {
   if (
     !selection ||
     JSON.stringify(selection.command) !== JSON.stringify(WITHDRAWN_WEB_COMPILER) ||
-    !workerCheckHostTypingCheckMatchesAttempt(
+    !workerCheckHostWithdrawnLegacyTypingCheckMatchesAttempt(
       input.task.worktree,
       input.task.id,
       input.attempt.attempt,
-      input.attempt.checks ?? [],
       selection.physicalRunId,
       selection.command,
       selection.exitCode,
