@@ -166,3 +166,6 @@ export function KnowledgeDocumentCaller({
 
   return <KnowledgeDocumentPage request={request} page={page} onRetry={retry} />;
 }
+
+export { KnowledgeNavigationRoute } from './navigation-route';
+export { knowledgeNavigation } from './navigation';

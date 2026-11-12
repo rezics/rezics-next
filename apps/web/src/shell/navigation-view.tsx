@@ -2,6 +2,7 @@ import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNod
 import { FileText, Folders, House, Inbox, Library, ReceiptText, Search, ShieldCheck } from 'lucide-react';
 import { useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
+import { knowledgeNavigation } from '../knowledge/route';
 import { bookCatalogueNavigation } from '../books/catalogue/navigation';
 import {
   createNavigation,
@@ -14,6 +15,7 @@ import {
 
 export const defaultNavigation = createNavigation([
   bookCatalogueNavigation,
+  knowledgeNavigation,
   {
     id: 'shell.home',
     kind: 'navigation',
