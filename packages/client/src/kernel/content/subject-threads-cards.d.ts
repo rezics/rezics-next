@@ -1,10 +1,9 @@
-import type { FeedAuthor } from './feed-contract.ts';
+import type { FeedAuthor, FeedReactionCounts } from './feed-contract.ts';
 import type { AnchoredPosition, FeedParentContext, FeedReviewContext, ReadContext } from './model.ts';
 import { type DocumentImagePresentation } from './media-presentation.ts';
 import type { MediaDependencies } from './media.ts';
 import { type ReadingPageDependencies, type SelectedReadingCardBatchResult } from './reading-page.ts';
-import type { ReactionCountFreshness } from './reads.ts';
-import type { SubjectThreadWithReactions } from './subject-threads-reactions.ts';
+import type { ReactionCountFreshness, ThreadView, ViewerReactionKind } from './reads.ts';
 import { type SubjectThreadConversationActivity } from './subject-threads-conversation-activity.ts';
 export type SubjectThreadCardDependencies = ReadingPageDependencies & MediaDependencies;
 type CardAuthor = Readonly<{
@@ -80,7 +79,9 @@ export type SubjectThreadCard = Readonly<{
         comments: 'current' | 'unavailable' | 'not_applicable';
     }>;
 }>;
-export type SubjectThreadCardEntry = Omit<SubjectThreadWithReactions, 'reactions' | 'viewerReaction'> & Partial<Pick<SubjectThreadWithReactions, 'reactions' | 'viewerReaction'>> & Readonly<{
+export type SubjectThreadCardEntry = ThreadView & Readonly<{
+    reactions?: FeedReactionCounts;
+    viewerReaction?: ViewerReactionKind | null;
     card: SubjectThreadCard;
     reviewContext?: FeedReviewContext;
 }>;
@@ -90,5 +91,5 @@ export type SubjectThreadCardProjection = Readonly<{
     reactionsAsOf: ReactionCountFreshness | null;
 }>;
 /** Adds bounded card fields around Subject's selected native threads and retains every final source check. */
-export declare function projectSubjectThreadCards(dependencies: SubjectThreadCardDependencies, subjectId: string, placeId: string, selected: readonly SubjectThreadWithReactions[], context: ReadContext, activitySnapshot: SubjectThreadConversationActivity, reactionsAsOf: SubjectThreadCardProjection['reactionsAsOf'], finalDisclosure: () => Promise<void>): Promise<SubjectThreadCardProjection>;
+export declare function projectSubjectThreadCards(dependencies: SubjectThreadCardDependencies, subjectId: string, placeId: string, selected: readonly ThreadView[], context: ReadContext, activitySnapshot: SubjectThreadConversationActivity, finalDisclosure: () => Promise<void>): Promise<SubjectThreadCardProjection>;
 export {};
