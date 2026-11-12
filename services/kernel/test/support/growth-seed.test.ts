@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { newId } from '../../src/route/route.ts';
 import { openGrowthDatabase, type GrowthDatabase } from './growth.ts';
 import { placement, seed, type Population } from './growth-seed.ts';
+import { SEED_BATCH_BYTE_LIMIT, SEED_BATCH_ROW_LIMIT } from './growth-seed-batches.ts';
 
 let database: GrowthDatabase;
 let pool: GrowthDatabase['pool'];
@@ -26,6 +28,9 @@ beforeAll(async () => {
       FOREIGN KEY (route, parent_id) REFERENCES ${schema}.parent (route, id)
     )`);
   }
+  await database.admin.query(`CREATE TABLE growth_seed_test.padding (
+    route integer NOT NULL, id integer NOT NULL, payload text NOT NULL, PRIMARY KEY (route, id)
+  )`);
 });
 
 afterAll(async () => {
@@ -41,6 +46,33 @@ function rows(schema: string, name = schema): Population {
       [`${schema}.parent`]: [{ route, id: ordinal }],
       [`${schema}.child`]: [{ route, id: ordinal, parent_id: ordinal }],
     }),
+  };
+}
+
+function spaceRevisionFamily(route: number, spaceId: string, revisionId: string, authorId: string) {
+  return {
+    'community.space': [
+      {
+        route,
+        space_id: spaceId,
+        state: 'active',
+        head_revision_id: revisionId,
+        created_at: '2026-11-12T00:00:00.000Z',
+        creator: authorId,
+      },
+    ],
+    'community.space_revision': [
+      {
+        route,
+        space_id: spaceId,
+        revision_id: revisionId,
+        predecessor: null,
+        title: 'Growth seed host',
+        summary: '',
+        created_at: '2026-11-12T00:00:00.000Z',
+        author: authorId,
+      },
+    ],
   };
 }
 
@@ -63,6 +95,66 @@ test('inserts the rows of each ordinal range once, in table order, and refreshes
     `SELECT reltuples FROM pg_class WHERE oid = 'growth_seed_test.parent'::regclass`,
   );
   expect(stats.rows[0]!.reltuples).toBe(20);
+});
+
+test('keeps a deferred Space head and revision in one transaction across row and byte splits', async () => {
+  for (const split of ['rows', 'bytes'] as const) {
+    const populationIdentity: Population = {
+      name: `deferred-space-${split}`,
+      hotPartition: 23,
+      hotShare: 1,
+      rows: () => ({}),
+    };
+    const paddingRoute = placement(populationIdentity, 0).route;
+    const spaceRoute = placement(populationIdentity, 1).route;
+    const spaceId = newId(spaceRoute);
+    const revisionId = newId(spaceRoute);
+    const authorId = newId(spaceRoute);
+    const family = spaceRevisionFamily(spaceRoute, spaceId, revisionId, authorId);
+    const emptyPadding = { route: paddingRoute, id: split === 'rows' ? 0 : 10_000, payload: '' };
+    const paddingRows =
+      split === 'rows'
+        ? Array.from({ length: SEED_BATCH_ROW_LIMIT - 1 }, (_, id) => ({ ...emptyPadding, id }))
+        : [
+            {
+              ...emptyPadding,
+              payload: 'x'.repeat(
+                SEED_BATCH_BYTE_LIMIT -
+                  Buffer.byteLength(JSON.stringify(emptyPadding)) -
+                  Buffer.byteLength(JSON.stringify(family['community.space'][0]!)) -
+                  4,
+              ),
+            },
+          ];
+    const population: Population = {
+      ...populationIdentity,
+      rows: ({ ordinal, route }) =>
+        ordinal === 0
+          ? { 'growth_seed_test.padding': paddingRows }
+          : ordinal === 1
+            ? spaceRevisionFamily(route, spaceId, revisionId, authorId)
+            : {},
+    };
+
+    await seed({ pool, admin: database.admin }, population, { from: 0, to: 2 });
+
+    const persisted = await pool.query<{ head_revision_id: string; revision_id: string }>(
+      `SELECT s.head_revision_id::text, r.revision_id::text
+       FROM community.space s
+       JOIN community.space_revision r
+         ON r.route = s.route AND r.space_id = s.space_id AND r.revision_id = s.head_revision_id
+       WHERE s.route = $1 AND s.space_id = $2`,
+      [spaceRoute, spaceId],
+    );
+    expect(persisted.rows).toEqual([{ head_revision_id: revisionId, revision_id: revisionId }]);
+
+    await pool.query('DELETE FROM community.space_revision WHERE route = $1 AND space_id = $2', [spaceRoute, spaceId]);
+    await pool.query('DELETE FROM community.space WHERE route = $1 AND space_id = $2', [spaceRoute, spaceId]);
+    await pool.query('DELETE FROM growth_seed_test.padding WHERE route = $1 AND id = ANY($2::integer[])', [
+      paddingRoute,
+      paddingRows.map(({ id }) => id),
+    ]);
+  }
 });
 
 test('grows cumulatively: seeding 0..8n after 0..n equals seeding 0..8n at once', async () => {

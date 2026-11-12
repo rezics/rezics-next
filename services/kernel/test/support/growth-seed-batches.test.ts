@@ -52,15 +52,15 @@ test('splits by total rows and preserves placement, table order, and supported e
     }),
   );
 
-  expect(database.transactions).toHaveLength(2);
-  expect(database.transactions[0]!.map(({ table, rows }) => [table, rows.length])).toEqual([['growth.parent', 500]]);
-  expect(database.transactions[0]![0]!.rows[0]).toEqual({ route: 12, id: 4 * 501 });
-  expect(database.transactions[1]!.map(({ table, rows }) => [table, rows.length])).toEqual([
+  expect(database.transactions).toHaveLength(1);
+  expect(database.transactions[0]!.map(({ table, rows }) => [table, rows.length])).toEqual([
+    ['growth.parent', 500],
     ['growth.parent', 1],
     ['growth.child', 1],
   ]);
-  expect(database.transactions[1]![0]!.rows[0]).toEqual({ route: 12, id: 4 * 501 + 500 });
-  expect(database.transactions[1]![1]!.rows[0]).toEqual({
+  expect(database.transactions[0]![0]!.rows[0]).toEqual({ route: 12, id: 4 * 501 });
+  expect(database.transactions[0]![1]!.rows[0]).toEqual({ route: 12, id: 4 * 501 + 500 });
+  expect(database.transactions[0]![2]!.rows[0]).toEqual({
     route: 12,
     id: '904',
     created: '2025-04-03T02:01:00.000Z',
@@ -88,13 +88,12 @@ test('preserves declared table order when row and byte caps split batches across
             'growth.padding': [{ id: ordinal }],
           },
   );
-  expect(rows.transactions.map((batch) => batch.map(({ table, rows: inserted }) => [table, inserted.length]))).toEqual([
-    [['growth.parent', SEED_BATCH_ROW_LIMIT]],
-    [
-      ['growth.parent', 1],
-      ['growth.child', 2],
-      ['growth.padding', 1],
-    ],
+  expect(rows.transactions).toHaveLength(1);
+  expect(rows.transactions[0]!.map(({ table, rows: inserted }) => [table, inserted.length])).toEqual([
+    ['growth.parent', SEED_BATCH_ROW_LIMIT],
+    ['growth.parent', 1],
+    ['growth.child', 2],
+    ['growth.padding', 1],
   ]);
 
   const bytes = recordingPool();
@@ -115,16 +114,13 @@ test('preserves declared table order when row and byte caps split batches across
             'growth.padding': [{ id: ordinal }],
           },
   );
-  expect(bytes.transactions.map((batch) => batch.map(({ table, rows: inserted }) => [table, inserted.length]))).toEqual(
-    [
-      [['growth.parent', 1]],
-      [
-        ['growth.parent', 1],
-        ['growth.child', 2],
-        ['growth.padding', 1],
-      ],
-    ],
-  );
+  expect(bytes.transactions).toHaveLength(1);
+  expect(bytes.transactions[0]!.map(({ table, rows: inserted }) => [table, inserted.length])).toEqual([
+    ['growth.parent', 1],
+    ['growth.parent', 1],
+    ['growth.child', 2],
+    ['growth.padding', 1],
+  ]);
 });
 
 test('rejects seed targets PostgreSQL would truncate or cannot represent before connecting', async () => {
@@ -187,9 +183,10 @@ test('preserves exact 63-byte identifiers and row admission at the PostgreSQL bo
   );
 
   expect(Buffer.byteLength(column, 'utf8')).toBe(63);
-  expect(database.transactions.map((batch) => batch.map(({ table: target, rows }) => [target, rows.length]))).toEqual([
-    [[`${schema}.${table}`, SEED_BATCH_ROW_LIMIT]],
-    [[`${schema}.${table}`, 1]],
+  expect(database.transactions).toHaveLength(1);
+  expect(database.transactions[0]!.map(({ table: target, rows }) => [target, rows.length])).toEqual([
+    [`${schema}.${table}`, SEED_BATCH_ROW_LIMIT],
+    [`${schema}.${table}`, 1],
   ]);
   expect(database.transactions[0]![0]!.rows[0]).toEqual({ [column]: 0 });
   expect(database.calls.filter((sql) => sql.startsWith('INSERT INTO'))).toEqual([
@@ -241,15 +238,11 @@ test('keeps total encoded payload bytes within each batch below the row limit', 
     () => ({ 'growth.payload': [0, 1, 2].map((id) => ({ id, value: largeValue })) }),
   );
 
-  expect(database.transactions).toHaveLength(2);
-  for (const transaction of database.transactions) {
-    const payloadBytes = transaction.reduce(
-      (total, insert) => total + Buffer.byteLength(JSON.stringify(insert.rows)),
-      0,
-    );
-    expect(payloadBytes).toBeLessThanOrEqual(SEED_BATCH_BYTE_LIMIT);
-  }
-  expect(database.transactions.map((transaction) => transaction[0]!.rows.length)).toEqual([2, 1]);
+  expect(database.transactions).toHaveLength(1);
+  const inserts = database.transactions[0]!;
+  expect(inserts.map((insert) => insert.rows.length)).toEqual([2, 1]);
+  for (const insert of inserts)
+    expect(Buffer.byteLength(JSON.stringify(insert.rows))).toBeLessThanOrEqual(SEED_BATCH_BYTE_LIMIT);
 });
 
 test('rejects one oversized row before acquiring a connection', async () => {

@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { seedTableTarget, validateSeedColumnIdentifier } from './growth-seed-identifiers.ts';
 import { createSeedValueEncoder, encodeSeedRow, SEED_BATCH_BYTE_LIMIT } from './growth-seed-values.ts';
 
@@ -10,6 +10,7 @@ type TableRows = {
   readonly columns: string[];
   readonly rows: SeedRow[];
 };
+type SeedBatch = { readonly tables: TableRows[]; readonly commit: boolean };
 
 export const SEED_BATCH_ROW_LIMIT = 500;
 export { SEED_BATCH_BYTE_LIMIT };
@@ -153,7 +154,7 @@ function* collectBatches<TPlacement>(
   rowsFor: (placement: TPlacement) => Readonly<Record<string, readonly SeedRow[]>>,
   tableOrder: string[],
   declaredTables: Set<string>,
-): Generator<TableRows[]> {
+): Generator<SeedBatch> {
   const columnsByTable = new Map<string, string[]>();
   const rowNumbers = new Map<string, number>();
   const validatedColumns = new Set<string>();
@@ -161,6 +162,7 @@ function* collectBatches<TPlacement>(
   let tables = new Map<string, TableRows>();
   let rowCount = 0;
   let byteCount = 0;
+  let lastOrdinal: number | undefined;
 
   for (let ordinal = from; ordinal < to; ordinal++) {
     const records = rowsFor(place(ordinal));
@@ -195,10 +197,11 @@ function* collectBatches<TPlacement>(
         let target = tables.get(name);
         let addedBytes = encodedBytes + (target ? 1 : 2);
         if (rowCount >= SEED_BATCH_ROW_LIMIT || addedBytes > SEED_BATCH_BYTE_LIMIT - byteCount) {
-          const completed = orderedTables(tables, tableOrder);
+          const completed = { tables: orderedTables(tables, tableOrder), commit: lastOrdinal !== ordinal };
           tables = new Map();
           rowCount = 0;
           byteCount = 0;
+          lastOrdinal = undefined;
           encoder = createSeedValueEncoder();
           yield completed;
           target = undefined;
@@ -211,42 +214,55 @@ function* collectBatches<TPlacement>(
         target.rows.push(snapshot);
         rowCount++;
         byteCount += addedBytes;
+        lastOrdinal = ordinal;
       }
     }
   }
-  if (rowCount > 0) yield orderedTables(tables, tableOrder);
+  if (rowCount > 0) yield { tables: orderedTables(tables, tableOrder), commit: true };
 }
 
-async function insertBatch(admin: Pool, tables: TableRows[]): Promise<void> {
-  const client = await admin.connect();
+async function insertBatches(admin: Pool, batches: Iterable<SeedBatch>): Promise<void> {
+  let client: PoolClient | undefined;
   let failed = false;
   let failure: unknown;
   let discard: Error | undefined;
   try {
-    await client.query('BEGIN');
-    for (const target of tables) {
-      const qualified = `${pg.escapeIdentifier(target.schema)}.${pg.escapeIdentifier(target.table)}`;
-      const columns = target.columns.map((column) => pg.escapeIdentifier(column)).join(', ');
-      const values = JSON.stringify(target.rows);
-      await client.query(
-        `INSERT INTO ${qualified} (${columns}) SELECT ${columns} FROM jsonb_populate_recordset(NULL::${qualified}, $1::jsonb)`,
-        [values],
-      );
+    for (const batch of batches) {
+      if (!client) {
+        client = await admin.connect();
+        await client.query('BEGIN');
+      }
+      for (const target of batch.tables) {
+        const qualified = `${pg.escapeIdentifier(target.schema)}.${pg.escapeIdentifier(target.table)}`;
+        const columns = target.columns.map((column) => pg.escapeIdentifier(column)).join(', ');
+        const values = JSON.stringify(target.rows);
+        await client.query(
+          `INSERT INTO ${qualified} (${columns}) SELECT ${columns} FROM jsonb_populate_recordset(NULL::${qualified}, $1::jsonb)`,
+          [values],
+        );
+      }
+      if (batch.commit) {
+        await client.query('COMMIT');
+        const completed = client;
+        client = undefined;
+        completed.release();
+      }
     }
-    await client.query('COMMIT');
   } catch (error) {
     failed = true;
     failure = error;
-    try {
-      await client.query('ROLLBACK');
-    } catch (rollbackError) {
-      discard = rollbackError instanceof Error ? rollbackError : new Error('Failed to roll back growth seed batch');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        discard = rollbackError instanceof Error ? rollbackError : new Error('Failed to roll back growth seed batch');
+      }
+      try {
+        client.release(discard);
+      } catch {
+        // Preserve the insert or transaction failure.
+      }
     }
-  }
-  try {
-    client.release(discard);
-  } catch (releaseError) {
-    if (!failed) throw releaseError;
   }
   if (failed) throw failure;
 }
@@ -262,7 +278,6 @@ export async function seedBulkRows<TPlacement>(
   const declaredTables = new Set<string>();
   for (let batchFrom = from; batchFrom < to; batchFrom += ORDINAL_BATCH_SIZE) {
     const batchTo = Math.min(batchFrom + ORDINAL_BATCH_SIZE, to);
-    for (const batch of collectBatches(batchFrom, batchTo, place, rowsFor, tableOrder, declaredTables))
-      await insertBatch(admin, batch);
+    await insertBatches(admin, collectBatches(batchFrom, batchTo, place, rowsFor, tableOrder, declaredTables));
   }
 }
