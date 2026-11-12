@@ -45,6 +45,7 @@ import {
 } from './membership-access-work.ts';
 import {
   authoritativeTimeValue,
+  currentCommandReceipt,
   mintReadTime,
   noEffect,
   principalCommandIdentity,
@@ -804,7 +805,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
             publication_transaction_id: command.transactionId,
             principal_id: identity.principal.id,
             command_kind: MEMBERSHIP_KIND,
-            command_key: key,
+            command_key: currentCommandReceipt(tx).storageKey,
             at,
           });
         // Every positive Realm operation records its fresh generation proof.

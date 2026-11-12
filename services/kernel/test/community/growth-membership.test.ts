@@ -1,12 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createRealmMembership } from '../../src/community/membership.ts';
-import { readAccount } from '../../src/access/account-data.ts';
-import type { LifecycleRequest } from '../../src/access/lifecycle.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
-import { createProductionAccess, type ProductionAccess } from './membership-fixture.ts';
+import { createProductionAccess, createRealmMembershipWorkPorts, type ProductionAccess } from './membership-fixture.ts';
 
 const actions = ['realm:join', 'realm:manage', 'realm:participate', 'realm:read', 'realm:publish', 'access:grant'];
 const scopes = [...actions];
@@ -18,7 +16,7 @@ const scales = [256, 1024, 4096] as [number, number, number];
 let db: GrowthDatabase;
 let membership: ReturnType<typeof createRealmMembership>;
 let production: ProductionAccess;
-let requests: LifecycleRequest[] = [];
+let workPorts: ReturnType<typeof createRealmMembershipWorkPorts>;
 let managerId: string;
 let probe: {
   realmId: string;
@@ -30,18 +28,7 @@ let probe: {
   terminalReservationId: string;
   terminalTransactionId: string;
 };
-let candidates: { accountId: string; reservationId: string }[];
-
-/** One request per publish, authenticated by Access just before it runs. */
-async function authenticatedRequest(): Promise<LifecycleRequest> {
-  const account = await withConnection(db.pool, (client) => readAccount(client, probeRoute, managerId));
-  if (!account) throw new Error('Missing manager');
-  return {
-    actor: await production.authenticate(db.pool, managerId, scopes),
-    account,
-    deadline: Date.now() + 60_000,
-  };
-}
+let candidates: { accountId: string }[];
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
@@ -128,6 +115,7 @@ beforeAll(async () => {
     access: production.access,
   });
   roleReader = membership.roleReader;
+  workPorts = createRealmMembershipWorkPorts(db.pool, Buffer.alloc(32, 59), membership);
   probe = {
     realmId,
     route,
@@ -145,7 +133,7 @@ beforeAll(async () => {
       "INSERT INTO access.account (route, account_id, kind, state, transaction_id) VALUES ($1,$2,'actor','active',$2)",
       [routeOf(accountId), accountId],
     );
-    candidates.push({ accountId, reservationId: newId(0x2160) });
+    candidates.push({ accountId });
   }
 }, 120_000);
 
@@ -347,31 +335,55 @@ test('publish, terminal reads and role proofs stay within their bound as Realms 
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(_database, scale, previous) {
       await seed(db, population, { from: previous, to: scale });
-      requests = await Promise.all(candidates.map(() => authenticatedRequest()));
     },
     async operation(_database, _scale, repetition) {
       const candidate = candidates[repetition];
       if (!candidate) throw new Error(`Missing candidate ${repetition}`);
-      const published = await membership.publish(
-        { ...requests[repetition]!, deadline: Date.now() + 60_000 },
-        {
-          kind: 'membership',
+      const input = {
+        kind: 'membership' as const,
+        principal,
+        memberAccountId: candidate.accountId,
+        role: 'member' as const,
+        authorization: await production.mint(managerId, scopes),
+      };
+      const reserveAuthorization = await workPorts.authorize(input.authorization, input);
+      expect(reserveAuthorization.actor.accountId).toBe(managerId);
+      const reservationKey = `growth-reserve-${repetition}`;
+      const reservation = (
+        await workPorts.reserve({
+          accountId: candidate.accountId,
           principal,
-          memberAccountId: candidate.accountId,
-          role: 'member',
-          authorization: `authenticated-fixture.${candidate.accountId}`,
-        },
-        { accountId: candidate.accountId, principal, reservationId: candidate.reservationId },
+          key: reservationKey,
+        })
+      ).value;
+      expect(reservation.transition?.operationId).toBe(reservationKey);
+      expect(await workPorts.recover!(reservation, `growth-recover-${repetition}`)).toBe(false);
+      const publicationAuthorization = await workPorts.authorize(input.authorization, input);
+      const published = (await workPorts.publish(
+        publicationAuthorization,
+        input,
+        reservation,
         `growth-publish-${repetition}`,
-      );
+      )) as Awaited<ReturnType<typeof membership.publish>>;
       expect(published.replayed).toBe(false);
       expect(published.value).toMatchObject({
         realmId: probe.realmId,
         accountId: candidate.accountId,
-        reservationId: candidate.reservationId,
+        reservationId: reservation.reservationId,
         role: 'member',
       });
-      const [terminal, change, proofs] = await withConnection(db.pool, async (client) => {
+      const finalized = (await workPorts.finalize!(reservation, `growth-finalize-${repetition}`)) as {
+        replayed: boolean;
+        value: { accountId: string; reservationId: string; transition: { generationId: string }; outcome: string };
+      };
+      expect(finalized.replayed).toBe(false);
+      expect(finalized.value).toMatchObject({
+        accountId: candidate.accountId,
+        reservationId: reservation.reservationId,
+        transition: { generationId: reservation.transition?.generationId },
+        outcome: 'published',
+      });
+      const [terminal, change, proofs, transition] = await withConnection(db.pool, async (client) => {
         const terminalRow = await membership.authority.readTerminal(client, {
           accountId: probe.terminalAccountId,
           principal,
@@ -388,7 +400,11 @@ test('publish, terminal reads and role proofs stay within their bound as Realms 
           accountId: probe.memberId,
           at,
         });
-        return [terminalRow, changeRow, proofRows] as const;
+        const transitionProof = await membership.authority.readTransition!(client, {
+          ...reservation,
+          transition: reservation.transition!,
+        });
+        return [terminalRow, changeRow, proofRows, transitionProof] as const;
       });
       expect(terminal).toEqual({
         accountId: probe.terminalAccountId,
@@ -406,6 +422,13 @@ test('publish, terminal reads and role proofs stay within their bound as Realms 
       expect(proofs?.map((proof) => proof.role)).toEqual(['owner', 'member']);
       expect(proofs?.find((proof) => proof.role === 'member')?.member).toBe(true);
       expect(proofs?.find((proof) => proof.role === 'owner')?.member).toBe(false);
+      expect(transition).toMatchObject({
+        accountId: candidate.accountId,
+        reservationId: reservation.reservationId,
+        transition: { generationId: reservation.transition?.generationId, operationId: reservationKey },
+        outcome: 'published',
+        publicationTransactionId: expect.any(String),
+      });
       return published;
     },
   });

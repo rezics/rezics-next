@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { Pool } from 'pg';
 import { createAccess } from '../../src/access/index.ts';
+import { createMembershipWorkPorts, type RealmMembershipCommands } from '../../src/access/membership-work.ts';
 import type { Access, AccessConfig, AccountActor } from '../../src/request/access.ts';
 import { productionActions } from '../support/production-actions.ts';
 
@@ -71,6 +72,14 @@ export type ConsentServer = {
   env: Record<string, string>;
   close(): Promise<void>;
 };
+
+/** The production Accounts ports used by Realm admission, publication and proof consumption. */
+export function createRealmMembershipWorkPorts(pool: Pool, routeKey: Uint8Array, realm: RealmMembershipCommands) {
+  return createMembershipWorkPorts(
+    { pool, env: { KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url') } },
+    { realm },
+  );
+}
 
 /** Auth's current-consent read endpoint, served from this process over HTTPS with a generated
  * certificate. The worker trusts that certificate through NODE_EXTRA_CA_CERTS, so its real

@@ -1167,6 +1167,10 @@ binding per publication/cancellation; constant rows/statements/output with logar
 64/512/4096 growth series in `test/access/growth-realm-membership-transition.test.ts` includes the shared workflow,
 Access consumers, source proofs, transaction controls and DBOS work.
 
+Decision: the measured Community growth fixture runs Accounts' existing reserve, recovery, publication and exact
+finalization ports with the returned current transition. Publication proofs bind the command executor's selected
+receipt storage key, so source acknowledgement reads the receipt under the same dedicated ring.
+
 ## Participation on the Space home
 
 Accounts owns Realm-home membership, roles and bans: leave removes access first and ban is immediate explicit deny.
