@@ -51,6 +51,9 @@ export type DiscoveryTarget = {
     incarnation: string;
 };
 export type DiscoveryProjection = ReturnType<typeof createDiscoveryProjection>;
+export declare class DiscoveryPhysicalTargetChangedError extends Error {
+    constructor();
+}
 /** Native mixed identity is its allocation incarnation AND engine UUID, never a Subject writer alias. */
 export declare function readDiscoveryWriterPhysicalTarget(pool: Pick<Pool, 'query'>, search: OpenSearch, index: string): Promise<{
     incarnation: string;
