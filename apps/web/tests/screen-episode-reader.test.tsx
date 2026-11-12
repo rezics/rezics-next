@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'bun:test';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import type { KernelClient } from '@rezics/client';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -152,6 +153,7 @@ test('screen episode windows retain ordered original memberships, disclosures, c
     next: 'next-window',
   });
   if (!read.ok) throw new Error('Expected a disclosed episode window');
+  expect(read.entries.map((entry) => entry.position)).toEqual([undefined, undefined]);
 
   const list = subjectHref({ id: profile.public.subject.id, label: 'The Observatory' }, 'en').href;
   const origin = {
@@ -183,6 +185,33 @@ test('screen episode windows retain ordered original memberships, disclosures, c
   expect(returned.searchParams.get('realm')).toBe(realmId);
   expect(returned.hash).toBe(`#screen-episode-entry-${episodeMembership}`);
   expect(screenEpisodeContinuationHref(origin, 'next-window')).not.toContain(`screenSelection=${seasonMembership}`);
+});
+
+test('installed release reads membership position without deriving it from the episode', async () => {
+  const fixture = screenProfileFixture('ready', 'en', true, 'schema:TVSeries');
+  const profile = await fixture.transport.load();
+  if (!profile.ok || !profile.public) throw new Error('Expected a current Screen profile');
+  const position = statement(episodeMembership, profile.public.subject.id, '2');
+  const read = await readScreenEpisodePage(
+    clientFor(linkPage([link(episodeId, episodeMembership, 'The Special', 'schema:Episode', position)])),
+    bundledRelease,
+    profile.public,
+    'en',
+    realmId,
+  );
+  expect(read).toMatchObject({
+    ok: true,
+    state: 'ready',
+    entries: [
+      {
+        membershipId: episodeMembership,
+        holderId: episodeId,
+        id: episodeId,
+        type: 'schema:Episode',
+        position: '2',
+      },
+    ],
+  });
 });
 
 test('spoiler membership titles stay out of the tree and unsupported membership does not use a fallback stream', async () => {

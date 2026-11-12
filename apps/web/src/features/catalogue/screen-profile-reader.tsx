@@ -616,12 +616,22 @@ export function ScreenProfileOverview({
   );
   const returnInspection = returnMatches ? returnVisit?.occurrence : undefined;
   const returnNotice = returnSearch.kind === 'invalid' || (returnSearch.kind === 'current' && !returnMatches);
+  // A new read object is admission settlement, not replacement of the returned reader.
   const returnFocusKey = JSON.stringify([
-    profileSourceKey,
-    returnSearch,
-    observationGeneration.current,
+    publicRead.subject.id,
+    publicRead.subject.type,
+    publicRead.subject.context,
+    publicRead.subject.release,
+    context ?? '',
+    selectedRealm,
+    viewerKey ?? '',
+    locale,
+    readerSpoilerLevel,
+    fullAddress,
     observation.state,
-    observation.state === 'signed-in' ? observation.observation.id : '',
+    observation.state === 'signed-in'
+      ? [observation.observation.subject, observation.observation.id]
+      : observation.state,
   ]);
   const returnFocusCancelled = useRef(false);
   const returnFocusBinding = useRef<string | undefined>(undefined);

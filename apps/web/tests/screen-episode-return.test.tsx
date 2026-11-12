@@ -145,31 +145,27 @@ function Journey({ initial }: { initial: string }) {
     directReturn: screenEpisodeReturn(origin.searchStr, 'en', subjectVisitReturn),
   });
   return h(
-    ScreenReadingBoundary,
-    null,
+    NavigateContext.Provider,
+    { value: (next: string) => setHref(next) },
     h(
-      NavigateContext.Provider,
-      { value: (next: string) => setHref(next) },
-      h(
-        'button',
-        { type: 'button', onClick: () => setHref('/en/subjects/00000000-0000-4000-8000-000000000905/elsewhere') },
-        'Leave reading',
-      ),
-      h(ScreenProfileReader, {
-        locale: 'en',
-        public: subject(id, type),
-        ...(read ? { episodeRead: read } : {}),
-        episodeLoading: holdSeasonRead && id === seasonId,
-        onEpisodeRetry: () => {
-          retryCursors.push(cursor ?? 'first');
-          setRetryCount((count) => count + 1);
-        },
-        episodeOrigin: origin,
-        episodeVisitKey: pageKey,
-        episodeVisit: visit,
-        link: TestLink as PageLink,
-      }),
+      'button',
+      { type: 'button', onClick: () => setHref('/en/subjects/00000000-0000-4000-8000-000000000905/elsewhere') },
+      'Leave reading',
     ),
+    h(ScreenProfileReader, {
+      locale: 'en',
+      public: subject(id, type),
+      ...(read ? { episodeRead: read } : {}),
+      episodeLoading: holdSeasonRead && id === seasonId,
+      onEpisodeRetry: () => {
+        retryCursors.push(cursor ?? 'first');
+        setRetryCount((count) => count + 1);
+      },
+      episodeOrigin: origin,
+      episodeVisitKey: pageKey,
+      episodeVisit: visit,
+      link: TestLink as PageLink,
+    }),
   );
 }
 
@@ -216,7 +212,7 @@ async function mountedJourney(startHref = initialHref) {
   retryCursors = [];
   changeRoute = () => {};
   setLocale('en', { reload: false });
-  await act(async () => root.render(h(Journey, { initial: startHref })));
+  await act(async () => root.render(h(ScreenReadingBoundary, null, h(Journey, { initial: startHref }))));
   return {
     host,
     m,
