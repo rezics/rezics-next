@@ -2879,8 +2879,8 @@ qualifies only when every current source input and prepared dependency identity 
 unconsumed documents and operational files the configured owner already excludes. Reuse an earlier Kernel pass across
 later stamps only after every same-attempt check has terminal physical custody. A cancellation tombstone must bind the
 exact result bytes and referenced Root authorization bytes/row, and its physical history must prove terminality;
-unknown or living custody keeps the existing grant fenced and authorizes no replacement. A newer real compiler failure
-remains authoritative. Web recovery is unchanged.
+unknown or living custody keeps the existing grant fenced and authorizes no replacement. A newer compiler failure
+for matching current inputs remains authoritative. Withdrawn Web recovery uses the same exact-input failure rule.
 
 Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
 environment retry was withdrawn by stop, but only with authenticated authority, unchanged final source, a completed
@@ -2889,11 +2889,17 @@ replacement grant only when the original recovery check has proven terminal befo
 grant tombstones and physical custody. Keep the withdrawn retry and stop tombstones intact; only a terminal Web
 receipt for the current inputs may land that same attempt.
 
+Decision: withdrawn Web recovery settles compiler failures only for matched retained inputs; the specific overwritten
+refusal may regain eligibility only from its original trusted report, exact stale failure selection and event, clean
+final commit, and intact stop, abandoned retry and terminal custody. The first native compiler grant retains that
+validated origin for replay.
+
 For this stopped Web-source case, use the same `typing-recover <task> --expected-attempt <n>` command. It returns only
 `bun run --cwd apps/web typecheck` through the authorized wrapper when a matching successful receipt is absent. Run the
 returned wrapper once and repeat `typing-recover` after its physical result is terminal. An exact current-source Web
 receipt lands without another run. Unknown process or check custody, source drift, explicit cancellation, a live check,
-or a compiler diagnostic keeps the attempt fenced; recovery never restores the withdrawn source retry.
+or a compiler diagnostic for matching current inputs keeps the attempt fenced; recovery never restores the withdrawn
+source retry.
 
 After this recovery path is live, settle a retained numeric task with
 `bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <attempt>`, run only the returned exact wrapper

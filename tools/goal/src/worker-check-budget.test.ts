@@ -318,9 +318,9 @@ function gitWorktree(path: string): void {
   git(path, ['commit', '-m', 'init']);
 }
 
-function countedFailure(env: NodeJS.ProcessEnv, logPath: string, log: string, exitCode = 1): void {
+function countedFailure(env: NodeJS.ProcessEnv, logPath: string, log: string, exitCode = 1, worktree?: string): void {
   writeFileSync(logPath, log);
-  settleWorkerCheckHostBudget(env, exitCode, true, { log: logPath, argv: combinedArgv });
+  settleWorkerCheckHostBudget(env, exitCode, true, { log: logPath, argv: combinedArgv, ...(worktree ? { worktree } : {}) });
 }
 
 test('after two failed runs, one final verification run is admitted when the worktree changed; a second final or unchanged content is refused as today', () => {
@@ -388,7 +388,7 @@ test('a final verification typecheck failure keeps its stamp and the next refusa
     for (const stamp of ['1', '2'] as const) {
       expect(admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: worktree.path }).ok).toBe(true);
       env.GOAL_WORKER_CHECK_BUDGET_STAMP = stamp;
-      countedFailure(env, join(controller.path, `${stamp}.log`), typecheckLog);
+      countedFailure(env, join(controller.path, `${stamp}.log`), typecheckLog, 1, worktree.path);
     }
     writeFileSync(join(worktree.path, 'src.ts'), 'export const fixed = 1;\n');
     expect(admitWorkerCheckHostRun({ directory: budget, limit: 2, worktree: worktree.path })).toEqual({
@@ -397,7 +397,7 @@ test('a final verification typecheck failure keeps its stamp and the next refusa
       stamp: '3',
     });
     env.GOAL_WORKER_CHECK_BUDGET_STAMP = '3';
-    countedFailure(env, join(controller.path, '3.log'), typecheckLog);
+    countedFailure(env, join(controller.path, '3.log'), typecheckLog, 1, worktree.path);
     expect(workerCheckHostRunsUsed(budget)).toBe(3);
     expect(readWorkerCheckHostStamp(budget, '3')).toMatchObject({
       final: true,
@@ -435,7 +435,7 @@ test('settlement distinguishes compiler failures from stale evidence; failing te
       stamp: '1',
     });
     env.GOAL_WORKER_CHECK_BUDGET_STAMP = '1';
-    countedFailure(env, join(controller.path, 'failed.log'), typecheckLog);
+    countedFailure(env, join(controller.path, 'failed.log'), typecheckLog, 1, worktree.path);
     const failed = workerCheckHostTypingSettlement({
       directory: budget,
       worktree: worktree.path,
@@ -592,7 +592,7 @@ async function settleSuccessWithHostCheck(
     stamp: '1',
   });
   env.GOAL_WORKER_CHECK_BUDGET_STAMP = '1';
-  countedFailure(env, join(h.settings.stateDirectory, `${task.id}.log`), log);
+  countedFailure(env, join(h.settings.stateDirectory, `${task.id}.log`), log, 1, task.worktree);
   beforeSettle?.(budget, task.worktree);
   const landings: unknown[] = [];
   await settle(
@@ -615,6 +615,18 @@ function prepareDirectKernelCompiler(worktree: string): void {
   writeFileSync(join(worktree, 'services/kernel/tsconfig.json'), '{"include":["src/**/*.ts"]}');
   writeFileSync(join(worktree, 'services/kernel/scripts/typecheck.ts'), 'export {};');
   writeFileSync(join(worktree, 'services/kernel/src/index.ts'), 'export const ready = true;');
+}
+
+function prepareWebCompiler(worktree: string): void {
+  mkdirSync(join(worktree, 'apps/web/scripts'), { recursive: true });
+  mkdirSync(join(worktree, 'apps/web/src'), { recursive: true });
+  writeFileSync(
+    join(worktree, 'apps/web/package.json'),
+    JSON.stringify({ name: '@rezics/web', scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
+  );
+  writeFileSync(join(worktree, 'apps/web/tsconfig.json'), '{"include":["src/**/*.ts"]}');
+  writeFileSync(join(worktree, 'apps/web/scripts/typecheck.ts'), 'export {};\n');
+  writeFileSync(join(worktree, 'apps/web/src/reader.ts'), 'export const mounted = false;\n');
 }
 
 function writeDirectKernelStamp(budget: string, worktree: string, stamp: string, exitCode: number, log: string): void {
@@ -836,6 +848,47 @@ test('a newer genuine direct Kernel compiler failure supersedes an older retaine
     if (result.ok) throw new Error('a newer compiler failure must remain authoritative');
     expect(result.result).toContain('error TS2322: real compiler failure');
     expect(workerCheckHostRunsUsed(budget)).toBe(2);
+  } finally {
+    controller.close();
+    worktree.close();
+  }
+});
+
+test('a failed Web receipt for old inputs stays history when newer source has a clean compiler receipt', () => {
+  const controller = temporaryDirectory();
+  const worktree = temporaryDirectory();
+  try {
+    gitWorktree(worktree.path);
+    prepareWebCompiler(worktree.path);
+    const command = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+    const budget = workerCheckBudgetDirectory(controller.path, 'web-stale-failure', 1);
+    const recordRun = (stamp: string, exitCode: number, logText: string) => {
+      const env: NodeJS.ProcessEnv = {
+        GOAL_WORKER_CHECK_BUDGET: '2',
+        GOAL_WORKER_CHECK_BUDGET_DIR: budget,
+        GOAL_WORKER_CHECK_BUDGET_STAMP: stamp,
+      };
+      const physicalRunId = randomUUID();
+      recordWorkerCheckTypingInputs(env, worktree.path, physicalRunId, command);
+      const complete = beginTypingInputReceipt(worktree.path, env, command);
+      if (!complete) throw new Error('Web compiler fixture did not capture its inputs');
+      complete(exitCode);
+      const log = join(controller.path, `${stamp}.log`);
+      writeFileSync(log, logText);
+      settleWorkerCheckHostBudget(env, exitCode, true, { argv: command, log, worktree: worktree.path, physicalRunId });
+    };
+
+    expect(admitWorkerCheckHostRun({ directory: budget, worktree: worktree.path, limit: 2 }).ok).toBe(true);
+    recordRun('1', 1, 'apps/web/src/reader.ts(1,1): error TS2322: old reader input failed\n');
+    writeFileSync(join(worktree.path, 'apps/web/src/reader.ts'), 'export const mounted = true;\n');
+    const stale = workerCheckHostTypingSettlement({ directory: budget, worktree: worktree.path, limit: 2 });
+    expect(stale).toMatchObject({ ok: false, kind: 'evidence-unavailable' });
+
+    expect(admitWorkerCheckHostRun({ directory: budget, worktree: worktree.path, limit: 2 }).ok).toBe(true);
+    recordRun('2', 0, '');
+    expect(workerCheckHostTypingSettlement({ directory: budget, worktree: worktree.path, limit: 2 })).toEqual({
+      ok: true,
+    });
   } finally {
     controller.close();
     worktree.close();
@@ -1538,14 +1591,7 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
 
     const worktree = task.worktree;
     const compiler = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
-    mkdirSync(join(worktree, 'apps/web/scripts'), { recursive: true });
-    mkdirSync(join(worktree, 'apps/web/src'), { recursive: true });
-    writeFileSync(
-      join(worktree, 'apps/web/package.json'),
-      JSON.stringify({ scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
-    );
-    writeFileSync(join(worktree, 'apps/web/tsconfig.json'), '{"include":["src/**/*.ts"]}');
-    writeFileSync(join(worktree, 'apps/web/scripts/typecheck.ts'), 'export {};\n');
+    prepareWebCompiler(worktree);
     writeFileSync(join(worktree, 'apps/web/src/baseline.ts'), 'export const baseline = true;\n');
     git(worktree, ['add', 'apps/web']);
     git(worktree, ['commit', '-m', 'Prepare Web compiler fixture']);
@@ -1559,8 +1605,20 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
       GOAL_WORKER_CHECK_BUDGET_STAMP: '2',
     };
     const priorLog = join(h.settings.stateDirectory, 'prior-web-typecheck.log');
-    writeFileSync(priorLog, '');
-    settleWorkerCheckHostBudget(priorEnv, 0, true, { argv: compiler, log: priorLog, worktree });
+    const selectedFailurePhysicalRunId = 'd0d0d0d0-0000-4000-8000-000000000000';
+    const staleCompilerLog = 'apps/web/src/reader.ts(1,1): error TS2322: mounted reader input failed\n';
+    writeFileSync(priorLog, staleCompilerLog);
+    const priorPhysicalRunId = selectedFailurePhysicalRunId;
+    recordWorkerCheckTypingInputs(priorEnv, worktree, priorPhysicalRunId, compiler);
+    const completePriorReceipt = beginTypingInputReceipt(worktree, priorEnv, compiler);
+    if (!completePriorReceipt) throw new Error('prior Web compiler fixture did not capture its inputs');
+    completePriorReceipt(1);
+    settleWorkerCheckHostBudget(priorEnv, 1, true, {
+      argv: compiler,
+      log: priorLog,
+      worktree,
+      physicalRunId: priorPhysicalRunId,
+    });
     const priorStamps = ['1', '2'].map((stamp) => readFileSync(join(budget, stamp), 'utf8'));
 
     writeFileSync(join(worktree, 'apps/web/src/reader.ts'), 'export const mountedReader = true;\n');
@@ -1573,7 +1631,7 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     const settledAt = new Date(Date.parse(requestedAt) + 5).toISOString();
     const refusal = JSON.stringify({
       status: 'blocked',
-      summary: 'Completed Web source; the final compiler could not start.',
+      summary: `Completed Web source at ${head}; the final compiler could not start.`,
       blocker: {
         kind: 'tool',
         detail: `${WORKER_CHECK_HOST_BUDGET_REFUSAL}\nRepeated on two retries; the final Web typecheck could not start.`,
@@ -1590,7 +1648,7 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
       },
       {
         id: 'c9c9c9c9-9999-4999-8999-999999999999',
-        physicalRunId: 'd0d0d0d0-0000-4000-8000-000000000000',
+        physicalRunId: selectedFailurePhysicalRunId,
         remoteRunId: 'retained-web-failure',
         exitCode: 1,
       },
@@ -1664,6 +1722,7 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
           status: 'finished',
           remoteExpected: true,
           exitCode: previous.exitCode,
+          terminalProof: { local: true, resultKnown: true, remote: true },
         }),
       );
       writeFileSync(
@@ -1753,12 +1812,46 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
         settledAt,
       };
     });
+    const overwrittenFailure =
+      "Last check-host run failed its typecheck. Settlement records a typing failure with that run's log, so this attempt is retried instead of landing.\n\n" +
+      staleCompilerLog;
+    h.store.updateAttempt(retained.ref, (current) => {
+      current.result = overwrittenFailure;
+      current.failureKind = 'tool';
+    });
+    h.store.event(retained.ref, 'typing-evidence-failed', {
+      actor,
+      recoveryKind: 'withdrawn-budget-stop',
+    });
 
     const evidencePaths = previousChecks.map((previous) => [
       join(results, `${previous.id}.json`),
       join(history, `${previous.id}.${previous.physicalRunId}.json`),
       join(remoteCustody, `${previous.physicalRunId}.json`),
     ]);
+    const originalAttemptLog = readFileSync(attempt.logPath, 'utf8');
+    writeFileSync(attempt.logPath, originalAttemptLog.replace(head, '0'.repeat(40)));
+    await expect(recover()).rejects.toThrow();
+    writeFileSync(attempt.logPath, originalAttemptLog);
+    const originalFailure = h.store.attempt(retained.ref).result;
+    h.store.updateAttempt(retained.ref, (current) => {
+      current.result = `${originalFailure} altered selection`;
+    });
+    await expect(recover()).rejects.toThrow();
+    h.store.updateAttempt(retained.ref, (current) => {
+      current.result = originalFailure;
+    });
+    const failureEvent = h.store
+      .events(retained.ref.taskId, retained.ref.attempt)
+      .findLast((event) => event.kind === 'typing-evidence-failed');
+    if (!failureEvent) throw new Error('the overwritten state requires its original typing failure event');
+    h.store.db
+      .query('UPDATE worker_events SET body=? WHERE sequence=?')
+      .run(JSON.stringify({ actor, recoveryKind: 'other' }), failureEvent.sequence);
+    await expect(recover()).rejects.toThrow();
+    h.store.db
+      .query('UPDATE worker_events SET body=? WHERE sequence=?')
+      .run(failureEvent.body, failureEvent.sequence);
     const savedEvidence = evidencePaths.map((paths) => paths.map((path) => readFileSync(path, 'utf8')));
     const restoreEvidence = () =>
       evidencePaths.forEach((paths, row) =>
@@ -1864,6 +1957,14 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
 
     const issued = await recover();
     expect(issued.status).toBe('pending');
+    const authorization = h.store
+      .events(retained.ref.taskId, retained.ref.attempt)
+      .findLast((event) => event.kind === 'typing-recovery-authorized');
+    expect(JSON.parse(authorization!.body).withdrawnBudgetOrigin).toMatchObject({
+      version: 1,
+      sourceCommit: head,
+      failureStamp: '2',
+    });
     for (const previous of previousChecks) {
       const legacyHistory = JSON.parse(
         readFileSync(join(history, `${previous.id}.${previous.physicalRunId}.json`), 'utf8'),

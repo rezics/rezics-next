@@ -198,6 +198,45 @@ function boundedLog(path: string | undefined): string {
   }
 }
 
+type TypingStampEvidence = {
+  receipt?: TypingInputReceipt;
+  rejected: boolean;
+  reason?: string;
+};
+
+function typingStampEvidence(
+  worktree: string,
+  source: WorkerCheckHostStampRecord,
+): TypingStampEvidence {
+  let receipt = source.typingInputs;
+  let rejected = false;
+  let reason = source.typingInputsUnavailable;
+  if (!receipt && source.typingRequest) {
+    try {
+      receipt = readTypingInputReceipt(worktree, source.typingRequest.physicalRunId, source.typingRequest.command);
+    } catch (error) {
+      reason = String(error);
+      rejected = true;
+    }
+  }
+  if (
+    receipt &&
+    (!source.typingRequest ||
+      receipt.physicalRunId !== source.typingRequest.physicalRunId ||
+      JSON.stringify(receipt.command) !== JSON.stringify(source.typingRequest.command))
+  ) {
+    receipt = undefined;
+    rejected = true;
+    reason ??= 'Retained compiler receipt does not match the exact physical invocation identity.';
+  }
+  return { ...(receipt ? { receipt } : {}), rejected, ...(reason ? { reason } : {}) };
+}
+
+function typingFailureResult(source: WorkerCheckHostStampRecord, reason?: string): string {
+  const log = source.log ? boundedLog(source.log) : '(check log unavailable)';
+  return `${TYPING_SETTLEMENT_FAILED} Settlement records a typing failure with that run's log, so this attempt is retried instead of landing.\n${reason ?? ''}\n${log}`;
+}
+
 export const TYPING_RECOVERY_ENV = 'GOAL_WORKER_CHECK_TYPING_RECOVERY';
 type TypingRecoveryGrant = {
   version: 1;
@@ -619,6 +658,37 @@ export function workerCheckHostAttemptChecksTerminal(
       return false;
   }
   return checkIds.every((id) => found.has(id));
+}
+
+/** Bind a selected compiler receipt back to one of this exact attempt's finished native checks. */
+export function workerCheckHostTypingCheckMatchesAttempt(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  checkIds: readonly string[],
+  physicalRunId: string,
+  command: readonly string[],
+  exitCode: number,
+): boolean {
+  if (!isPhysicalRunId(physicalRunId) || !Number.isInteger(exitCode)) return false;
+  const results = join(worktree, '.temp', 'goal', 'checks', 'results');
+  for (const id of checkIds) {
+    if (!isCheckId(id)) return false;
+    const record = readCheckEvidence(join(results, `${id}.json`));
+    if (
+      record?.id === id &&
+      record.cwd === worktree &&
+      record.ownership?.taskId === taskId &&
+      record.ownership.attempt === attempt &&
+      record.physicalRunId === physicalRunId &&
+      JSON.stringify(record.argv) === JSON.stringify(command) &&
+      record.status === 'finished' &&
+      record.exitCode === exitCode &&
+      terminalPhysicalHistory(worktree, id, physicalRunId, exitCode)
+    )
+      return true;
+  }
+  return false;
 }
 
 function terminalCancelledPhysicalCheck(
@@ -1303,6 +1373,57 @@ export function isTypingEvidenceUnavailableResult(result: string | null | undefi
   return Boolean(result?.startsWith(TYPING_SETTLEMENT_UNAVAILABLE) || result?.startsWith(TYPING_SETTLEMENT_CHANGED));
 }
 
+/** Return the exact old failed stamp only when its retained Web inputs are proven different from current source. */
+export function workerCheckHostStaleTypingFailureSelection(input: {
+  directory: string;
+  worktree: string;
+  result: string;
+  stamp?: string;
+}): { stamp: string; command: string[]; physicalRunId: string; exitCode: number } | undefined {
+  let names: string[];
+  try {
+    names = stampNames(input.directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  const typechecks = names.filter((name) => {
+    const stamp = readWorkerCheckHostStamp(input.directory, name);
+    return stamp.includedTypecheck || stamp.typingRequest;
+  });
+  const selectedIndex = input.stamp === undefined ? -1 : typechecks.indexOf(input.stamp);
+  if (input.stamp !== undefined && selectedIndex < 0) return;
+  const candidates = input.stamp === undefined ? typechecks.slice().reverse() : [input.stamp];
+  for (const name of candidates) {
+    const source = readWorkerCheckHostStamp(input.directory, name);
+    const failed =
+      source.typecheckFailed === true ||
+      (source.typingInputs !== undefined && source.typingInputs.exitCode !== 0);
+    if (!failed) continue;
+    const evidence = typingStampEvidence(input.worktree, source);
+    const receipt = evidence.receipt;
+    if (!receipt || evidence.rejected || !source.typingRequest || !source.log) return;
+    if (qualifyTypingInputs(input.worktree, receipt, source.typingRequest.localPrepared) !== 'changed') return;
+    const log = boundedLog(source.log);
+    if (log.startsWith('(check log unavailable')) return;
+    if (typingFailureResult(source, evidence.reason) !== input.result) return;
+    if (
+      input.stamp !== undefined &&
+      typechecks.slice(selectedIndex + 1).some((later) => {
+        const stamp = readWorkerCheckHostStamp(input.directory, later);
+        return stamp.typecheckFailed === true || (stamp.typingInputs !== undefined && stamp.typingInputs.exitCode !== 0);
+      })
+    )
+      return;
+    return {
+      stamp: name,
+      command: [...source.typingRequest.command],
+      physicalRunId: source.typingRequest.physicalRunId,
+      exitCode: receipt.exitCode,
+    };
+  }
+}
+
 /**
  * A recorded compiler failure requires source repair. Missing or drifted compiler evidence retains the completed
  * source pending typing-only proof, without authorizing landing or a source-writing retry.
@@ -1332,39 +1453,34 @@ export function workerCheckHostTypingSettlement(input: {
     const newest = typechecks[newestIndex]!;
     for (let index = newestIndex; index >= 0; index -= 1) {
       const source = typechecks[index]!;
-      let receipt = source.typingInputs;
-      let rejected = false;
-      let sourceReason = source.typingInputsUnavailable;
-      if (!receipt && source.typingRequest) {
-        try {
-          receipt = readTypingInputReceipt(
-            input.worktree,
-            source.typingRequest.physicalRunId,
-            source.typingRequest.command,
-          );
-        } catch (error) {
-          sourceReason = String(error);
-          rejected = true;
-        }
-      }
-      if (
-        receipt &&
-        (!source.typingRequest ||
-          receipt.physicalRunId !== source.typingRequest.physicalRunId ||
-          JSON.stringify(receipt.command) !== JSON.stringify(source.typingRequest.command))
-      ) {
-        receipt = undefined;
-        rejected = true;
-        sourceReason ??= 'Retained compiler receipt does not match the exact physical invocation identity.';
-      }
+      const evidence = typingStampEvidence(input.worktree, source);
+      const receipt = evidence.receipt;
+      let sourceReason = evidence.reason;
+      const rejected = evidence.rejected;
       const failed = source.typecheckFailed === true || (receipt !== undefined && receipt.exitCode !== 0);
-      if (failed) {
+      const fullTreeMatches =
+        source.content !== undefined && workerCheckHostContentTree(input.worktree) === source.content;
+      const qualification = receipt
+        ? qualifyTypingInputs(input.worktree, receipt, source.typingRequest?.localPrepared)
+        : undefined;
+      const failureInputsMatch = receipt ? qualification === 'matched' : !source.typingRequest && fullTreeMatches;
+      if (failed && failureInputsMatch) {
         return {
           ok: false,
           kind: 'typing-failure',
           ...(source.typingRequest ? { command: source.typingRequest.command } : {}),
-          result: `${TYPING_SETTLEMENT_FAILED} Settlement records a typing failure with that run's log, so this attempt is retried instead of landing.\n${sourceReason ?? ''}\n${source.log ? boundedLog(source.log) : '(check log unavailable)'}`,
+          result: typingFailureResult(source, sourceReason),
         };
+      }
+      if (failed) {
+        if (receipt && qualification !== 'matched')
+          sourceReason ??= `Retained compiler evidence does not match current inputs (${qualification}); typing-only proof is required.`;
+        else if (!receipt && source.typingRequest)
+          sourceReason ??= 'Compiler input closure was not returned by the owning compiler.';
+        else if (!fullTreeMatches)
+          sourceReason ??= 'Legacy evidence has no retained compiler-input closure; its original full content identity is required.';
+        unavailableReason ??= sourceReason;
+        continue;
       }
 
       const retainedKernelPass =
@@ -1373,8 +1489,6 @@ export function workerCheckHostTypingSettlement(input: {
         isDirectKernelTypingCompiler(input.worktree, receipt.compilerCommand);
       if (index !== newestIndex && !retainedKernelPass) continue;
 
-      const fullTreeMatches =
-        source.content !== undefined && workerCheckHostContentTree(input.worktree) === source.content;
       const legacyCompatible =
         !rejected &&
         !source.typingRequest?.capture &&
@@ -1383,9 +1497,6 @@ export function workerCheckHostTypingSettlement(input: {
         (!source.typingRequest ||
           JSON.stringify(captureTypingInputs(input.worktree, ['bun', 'scripts/typecheck.ts']).prepared) ===
             JSON.stringify(source.typingRequest.localPrepared));
-      const qualification = receipt
-        ? qualifyTypingInputs(input.worktree, receipt, source.typingRequest?.localPrepared)
-        : undefined;
       const unavailable =
         rejected ||
         qualification === 'evidence-unavailable' ||

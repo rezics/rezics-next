@@ -1,5 +1,6 @@
 import { nativeCheckId, proofFingerprint, ProofCapacityQueuedError } from './verification.ts';
 import type { Database } from 'bun:sqlite';
+import { createHash } from 'node:crypto';
 import { defaultPolicy } from './policy.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { briefProposalHash, sameBriefProposalText } from './durable-follow-up.ts';
@@ -50,6 +51,14 @@ export const workerRecordEndedAtMigration = {
   version: 12,
   sql: `CREATE INDEX worker_records_ended_at ON worker_records (${workerRecordEndedAtExpression});`,
 } as const;
+
+export type WithdrawnTypingRecoveryOrigin = {
+  version: 1;
+  sourceCommit: string;
+  reportSha256: string;
+  failureSha256: string;
+  failureStamp: string;
+};
 
 export const workerMigrations = [
   {
@@ -2430,7 +2439,24 @@ export class WorkerStore implements AttemptFence {
     expectedResult: string,
     pending: NonNullable<Attempt['typingEvidencePending']>,
     eventBody: unknown,
+    origin?: WithdrawnTypingRecoveryOrigin,
   ): void {
+    if (!eventBody || typeof eventBody !== 'object' || Array.isArray(eventBody) || 'withdrawnBudgetOrigin' in eventBody)
+      throw new Error('stopped attempt recovery authorization requires native event data');
+    if (
+      origin &&
+      (origin.version !== 1 ||
+        !/^[0-9a-f]{40}$/.test(origin.sourceCommit) ||
+        !/^[0-9a-f]{64}$/.test(origin.reportSha256) ||
+        !/^[0-9a-f]{64}$/.test(origin.failureSha256) ||
+        origin.failureSha256 !== createHash('sha256').update(expectedResult).digest('hex') ||
+        !/^[1-9]\d*$/.test(origin.failureStamp))
+    )
+      throw new Error('stopped attempt recovery authorization has invalid retained origin evidence');
+    const persistedEvent = {
+      ...(eventBody as Record<string, unknown>),
+      ...(origin ? { withdrawnBudgetOrigin: origin } : {}),
+    };
     this.db
       .transaction(() => {
         const { attempt } = this.withdrawnTypingRecoveryRows(ref, expectedResult);
@@ -2448,7 +2474,7 @@ export class WorkerStore implements AttemptFence {
             ref.attempt,
             'typing-recovery-authorized',
             new Date().toISOString(),
-            JSON.stringify(eventBody),
+            JSON.stringify(persistedEvent),
           );
       })
       .immediate();
