@@ -66,11 +66,10 @@ outcome decides after one exchange), record the decision and its reasons in the 
 proceed. If a choice truly cannot be made without the supermanager or the maintainer, park that item and keep working
 on everything else; the supermanager reviews recorded decisions when it returns.
 
-A product worker on dev decides ambiguities itself, including a product choice the brief does not make: it takes the
-reversible option most consistent with the owner documents, records it in its summary and the owning document, tells
-its manager with an `info` message and continues. A blocker is only a contradiction between existing specs or tests,
-or missing access. When its outcome does not fit one attempt, the worker lands a coherent part and writes the rest as
-a continuation brief for its Goal's backlog.
+On dev, workers resolve ambiguity reversibly, record lasting decisions in the owner document and tell their
+manager. Only conflicting requirements or missing access block work. Land a coherent increment and brief the rest.
+Workers may draft independent repairs with observed failures, owned paths and minimal proof; managers admit, merge
+or retire proposals through existing authority and duplicate checks.
 
 Use the controller's retry process. A landing failure or a tool blocker of product work on dev resumes the same worker
 session with the error and needs no manager turn while the attempts make progress; the same failure twice, or two

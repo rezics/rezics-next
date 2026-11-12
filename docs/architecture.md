@@ -23,8 +23,9 @@ them with growth checks. Do not build runtime price protocols between owners: no
 no-refill ledgers or per-profile dispatch allowances. When a contract needs a producer's cost, use the producer's
 documented static bound as a constant.
 
-Large jobs make bounded, resumable progress. Their total work may follow their finite input; individual steps may
-not discover work through unrestricted scans or recomputation.
+Large jobs make bounded, resumable progress. Bound each step's examined work, expanded representation and output
+bytes independently of the total logical set. A page limit must not become a lifetime ceiling or require rewriting
+the accumulated result. Partial evidence must not prove absence; an accelerator preserves the exact contract.
 
 A capability must hold wherever its abstraction appears. Inclusion in public scope means the complete architectural
 capability across its surfaces, rather than one working example.
