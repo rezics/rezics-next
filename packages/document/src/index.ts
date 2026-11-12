@@ -3,6 +3,7 @@ import canonicalize from 'canonicalize';
 import { Fragment, type Node as ProseMirrorNode } from 'prosemirror-model';
 import { TableMap } from 'prosemirror-tables';
 import { identifiableNodeNames, schemaForProfile, topLevelNodeNames, wireNodeChecker } from './schema.ts';
+import { blockTablesFitBudget } from './table-map-budget.ts';
 import {
   documentVersion,
   type DocumentNode,
@@ -109,6 +110,7 @@ function checkBlock(profile: DocumentProfile, block: unknown): CheckedBlock | nu
   }
   if (!isJson(block) || !wireChecks[profile](block)) return null;
   if (!topLevel[profile].has((block as DocumentNode).type)) return null;
+  if (profile === 'blocks' && !blockTablesFitBudget(block as DocumentNode)) return null;
   const ids = blockIds(block as DocumentNode);
   if (!ids) return null;
   const node = schemaForProfile(profile).nodeFromJSON(block);

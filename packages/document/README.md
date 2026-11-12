@@ -60,6 +60,17 @@ content expressions, table spans and unique IDs. Lists require a leading
 paragraph in each item; table cells contain blocks. An empty editable document
 contains one empty paragraph. Empty paragraph content can be omitted.
 
+Decision: Blocks tables have a static per-table expanded-map bound of 65,536
+cells, checked before ProseMirror node construction or `TableMap.get`. For a
+table with `R` rows and total cell column span `S`, `R × S` bounds the dense
+map: the map height is `R`, and its width cannot exceed the sum of every cell's
+column span, including cells active from earlier rows. Safe-integer addition
+and multiplication must prove that bound; otherwise the snapshot is invalid.
+The same bound limits span placement work because each cell can occupy at most
+`R` rows. Ordinary valid merged cells remain valid. The limit is a static
+contract choice, not a hardware maximum or a deployed-capacity measurement;
+validation of the supplied JSON remains proportional to its explicit input.
+
 Every block, table row, table cell and opaque inline component has a nonempty
 `attrs.id`, unique within its snapshot. IDs remain on moved or edited units;
 copies receive new IDs. Splits retain the original ID on one resulting unit;
