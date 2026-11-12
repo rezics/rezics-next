@@ -7,11 +7,12 @@ import { addAccessWork, EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkProdu
 import type { PoolClient, QueryResultRow } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import type { ReadDecisionEligibility } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import contextPublicExists from './context-public-exists.sql';
 import contextPublicEvidence from './context-public-evidence.sql';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import subjectPublicEvidence from './scope-leaf-evidence-eligibility.sql';
+import readSubjectRelatedStates from './read-subject-related-states.sql';
 
 const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value) ?? 'null');
 type Identity = { route: number; id: string };
@@ -155,14 +156,27 @@ export async function relatedReadVisibility(
 ): Promise<Readonly<Record<string, boolean>>> {
   if (ids.length > 256) throw new TypeError('A related read accepts at most 256 ids');
   const result: Record<string, boolean> = Object.create(null);
+  const groups = new Map<number, Identity[]>();
   for (const id of ids) {
     const route = routeOf(id);
     if (route === null) {
       result[id] = false;
       continue;
     }
-    const row = (await point(client, subjectPublicEvidence, { route, subject_id: id })) ?? null;
-    result[id] = row?.visibility === 'visible';
+    const partition = partitionOf(route);
+    const group = groups.get(partition) ?? [];
+    group.push({ route, id });
+    groups.set(partition, group);
+  }
+  for (const [partition, entries] of groups) {
+    const rows = (await readSubjectRelatedStates.run(client, {
+      partition_no: partition,
+      routes: entries.map(({ route }) => route),
+      subject_ids: entries.map(({ id }) => id),
+    })) as { id: string; visibility: string | null }[] | { id: string; visibility: string | null } | null;
+    const found = rows == null ? [] : Array.isArray(rows) ? rows : [rows];
+    for (const row of found) result[row.id] = row.visibility === 'visible';
+    for (const { id } of entries) if (!Object.hasOwn(result, id)) result[id] = false;
   }
   return result;
 }

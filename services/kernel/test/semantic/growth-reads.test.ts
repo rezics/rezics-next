@@ -449,8 +449,14 @@ async function growPopulation(population: Population, scale: number, previous: n
   await db.admin.query('CHECKPOINT');
 }
 
-async function readAnchor(id: string): Promise<{ related: Record<string, { labels?: Record<string, string> }> }> {
-  const response = await kernel.handle(new Request(`http://localhost/v1/subjects/${id}`));
+async function readAnchor(
+  id: string,
+  includeViewerActions = false,
+): Promise<{ related: Record<string, { labels?: Record<string, string> }> }> {
+  const query = includeViewerActions
+    ? `?${new URLSearchParams({ context: GLOBAL_CONTEXT, language: 'en', includeViewerActions: 'true' })}`
+    : '';
+  const response = await kernel.handle(new Request(`http://localhost/v1/subjects/${id}${query}`));
   const text = await response.text();
   if (response.status !== 200) throw new Error(`subject read ${response.status}: ${text}`);
   return JSON.parse(text) as { related: Record<string, { labels?: Record<string, string> }> };
@@ -485,7 +491,7 @@ test('semantic covering reads use unforced indexed access as populations grow', 
   });
   const unrelated = unrelatedSemanticPopulation('growth-reads-related-unrelated', BOOK_PARTITION);
   const operation = async () => {
-    const body = await readAnchor(bookId);
+    const body = await readAnchor(bookId, true);
     for (const id of people) {
       if (!body.related[id]) throw new Error(`missing related subject ${id}`);
     }
