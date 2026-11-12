@@ -126,7 +126,9 @@ test('an allowance that will expire unused alerts the supermanager, at most ever
     expect(alertUnspentAllowances([claude, codex], read, state, (s) => sent.push(s), now)).toBe(1);
     expect(sent[0]).toContain('claude has 18% unused');
     expect(sent[0]).toContain('fresh observation');
-    expect(sent[0]).toContain('missing or stale reset data falls back to static weighted ordering');
+    expect(sent[0]).toContain(
+      'missing or stale reset data falls back to the existing (100 - usedPercent) * weight score',
+    );
     expect(alertUnspentAllowances([claude, codex], read, state, (s) => sent.push(s), now + hour)).toBe(0);
     expect(alertUnspentAllowances([claude, codex], read, state, (s) => sent.push(s), now + 3 * hour)).toBe(1);
     writeFileSync(join(state, 'pacing-alerts.json'), 'not json');
