@@ -1,6 +1,7 @@
 import { suspendAccount } from '../../support/native-suspension-driver.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createAuthService } from '@rezics/auth';
+import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
@@ -165,6 +166,9 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       },
     }),
   });
+  const consent = createCurrentConsentReader({ database: authPool });
+  const readConsent = ({ actorAccountId, clientId }: { actorAccountId: string; clientId: string }) =>
+    consent.readCurrentConsent({ actorAccountId, clientId });
   let access: ReturnType<typeof createAccess>;
   function kernel() {
     // The webhook composition captures Date.now as its trusted clock. Install that
@@ -202,6 +206,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
           }),
           work,
         },
+        content: { readConsent },
       });
     } finally {
       Date.now = realNow;
@@ -268,7 +273,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     if (opened.status !== 200) throw new Error(`Opening ${group} failed: ${opened.status} ${await opened.text()}`);
   }
   const actor = (id: string) => access.authenticate(tokens.get(id)!, { pool: db.pool, deadline: Date.now() + 30_000 });
-  const commands = () => createCommerceCommands({ clock: () => new Date(), pool: db.pool, access });
+  const commands = () => createCommerceCommands({ clock: () => new Date(), pool: db.pool, access, readConsent });
   // Grant administration is an internal command, with its management action
   // declared by this trusted composition just as in Access's governance tests.
   const grantAccess = createAccess({
