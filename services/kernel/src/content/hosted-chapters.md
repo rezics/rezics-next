@@ -80,6 +80,8 @@ Later acceptance: run `bun run --cwd services/kernel check test/content/hosted-c
 verifier after landing. Pin native remote-home exact selection before recovery, complete versus partial coverage,
 same-home compatibility, indexed timestamp ties, sparse continuation, cursor scope/session/epoch binding, current
 author/revise/container disclosure, mid-read head/erasure changes, bounded idempotent recovery and restoration.
+Recovery acceptance also holds a source observation across a newer live Post projection and checks that membership
+is added without regressing its draft metadata or acknowledging the changed source.
 Existing hosted reading, HTTP and Subject catalogue assertions remain unchanged. Native/browser/growth and broader
 acceptance are deferred for this source sprint; the controller publishes the generated client.
 

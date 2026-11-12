@@ -81,10 +81,12 @@ async function readHostedSource(pool: Pool, catalogueId: string): Promise<Hosted
  * Post event cannot erase restored membership or overwrite newer draft state. */
 async function projectHostedLocator(pool: Pool, catalogueId: string) {
   const source = await readHostedSource(pool, catalogueId);
-  if (!source) return;
+  if (!source) return false;
   const authorRoute = routeOf(source.author_account_id)!;
   const locator = `author_item:post:${authorRoute}:${catalogueId}`;
-  const digest = createHash('sha256').update(JSON.stringify([catalogueId, source])).digest();
+  const digest = createHash('sha256')
+    .update(JSON.stringify([catalogueId, source]))
+    .digest();
   const outcome = await runCommand(
     pool,
     {
@@ -102,11 +104,13 @@ async function projectHostedLocator(pool: Pool, catalogueId: string) {
         await markAccountErasureFound(tx, source.author_account_id, 'content');
         return {
           value: true,
-          events: [{
-            type: 'com.rezics.access.account-updated.v1',
-            subject: source.author_account_id,
-            data: { accountId: source.author_account_id },
-          }],
+          events: [
+            {
+              type: 'com.rezics.access.account-updated.v1',
+              subject: source.author_account_id,
+              data: { accountId: source.author_account_id },
+            },
+          ],
         };
       }
       if (source.eligible) {
@@ -116,14 +120,37 @@ async function projectHostedLocator(pool: Pool, catalogueId: string) {
               source_epoch,source_position,hosted_catalogue,draft_state,draft_revision_id,draft_language)
            VALUES ($1,$2,'post',$3,$4,$5,$6,$7,$8,true,$9,$10,$11)
            ON CONFLICT (route,author_account_id,item_kind,item_id) DO UPDATE
-             SET hosted_catalogue=true,source_epoch=EXCLUDED.source_epoch,source_position=EXCLUDED.source_position,
-               draft_state=EXCLUDED.draft_state,draft_revision_id=EXCLUDED.draft_revision_id,
-               draft_language=EXCLUDED.draft_language
+             SET hosted_catalogue=true,
+               source_epoch=CASE WHEN ROW(indexed.source_epoch,indexed.source_position)<ROW(EXCLUDED.source_epoch,EXCLUDED.source_position)
+                 THEN EXCLUDED.source_epoch ELSE indexed.source_epoch END,
+               source_position=CASE WHEN ROW(indexed.source_epoch,indexed.source_position)<ROW(EXCLUDED.source_epoch,EXCLUDED.source_position)
+                 THEN EXCLUDED.source_position ELSE indexed.source_position END,
+               draft_state=CASE WHEN ROW(indexed.source_epoch,indexed.source_position)<ROW(EXCLUDED.source_epoch,EXCLUDED.source_position)
+                   OR (ROW(indexed.source_epoch,indexed.source_position)=ROW(EXCLUDED.source_epoch,EXCLUDED.source_position)
+                     AND indexed.draft_state='unknown') THEN EXCLUDED.draft_state ELSE indexed.draft_state END,
+               draft_revision_id=CASE WHEN ROW(indexed.source_epoch,indexed.source_position)<ROW(EXCLUDED.source_epoch,EXCLUDED.source_position)
+                   OR (ROW(indexed.source_epoch,indexed.source_position)=ROW(EXCLUDED.source_epoch,EXCLUDED.source_position)
+                     AND indexed.draft_state='unknown') THEN EXCLUDED.draft_revision_id ELSE indexed.draft_revision_id END,
+               draft_language=CASE WHEN ROW(indexed.source_epoch,indexed.source_position)<ROW(EXCLUDED.source_epoch,EXCLUDED.source_position)
+                   OR (ROW(indexed.source_epoch,indexed.source_position)=ROW(EXCLUDED.source_epoch,EXCLUDED.source_position)
+                     AND indexed.draft_state='unknown') THEN EXCLUDED.draft_language ELSE indexed.draft_language END
            WHERE ROW(indexed.source_epoch,indexed.source_position)<ROW(EXCLUDED.source_epoch,EXCLUDED.source_position)
+             OR NOT indexed.hosted_catalogue
              OR (ROW(indexed.source_epoch,indexed.source_position)=ROW(EXCLUDED.source_epoch,EXCLUDED.source_position)
-               AND (NOT indexed.hosted_catalogue OR indexed.draft_state='unknown'))`,
-          [authorRoute, source.author_account_id, catalogueId, source.thread_id, source.kind,
-            source.created_at, source.epoch, source.position,source.draft_state,source.draft_revision_id,source.draft_language],
+               AND indexed.draft_state='unknown')`,
+          [
+            authorRoute,
+            source.author_account_id,
+            catalogueId,
+            source.thread_id,
+            source.kind,
+            source.created_at,
+            source.epoch,
+            source.position,
+            source.draft_state,
+            source.draft_revision_id,
+            source.draft_language,
+          ],
         );
       }
       return {
@@ -139,7 +166,7 @@ async function projectHostedLocator(pool: Pool, catalogueId: string) {
   // Membership is permanent; release edits do not invalidate its acknowledgement.
   // A replacement partition must be observed again before clearing its obligation.
   const sourceRoute = routeOf(catalogueId)!;
-  await runCommand(
+  const acknowledged = await runCommand(
     pool,
     {
       partition: partitionOf(sourceRoute),
@@ -153,18 +180,18 @@ async function projectHostedLocator(pool: Pool, catalogueId: string) {
     async (tx) => {
       const current = await readPartition(tx, partitionOf(sourceRoute));
       if (current?.epoch !== source.epoch) throw new Error('Content partition changed during hosted locator repair');
-      await tx.query(
+      const result = await tx.query(
         `UPDATE content.post SET hosted_locator_pending=false
-         WHERE route=$1 AND post_id=$2 AND head_revision_id=$3 AND security_revision=$4
-           AND hosted_locator_pending`,
-        [sourceRoute, catalogueId,source.draft_revision_id,source.security_revision],
+         WHERE route=$1 AND post_id=$2 AND head_revision_id=$3 AND security_revision=$4`,
+        [sourceRoute, catalogueId, source.draft_revision_id, source.security_revision],
       );
       return {
-        value: null,
+        value: (result.rowCount ?? 0) > 0,
         events: [{ type: 'com.rezics.content.hosted-catalogue.locator-repaired.v1', data: {} }],
       };
     },
   );
+  return acknowledged.value;
 }
 
 /** At most 20 pending source keys and 20 census keys per maintenance step. The
@@ -177,19 +204,24 @@ export async function repairHostedCataloguePage(pool: Pool): Promise<{ complete:
     const pending = await client.query<{ post_id: string }>(
       'SELECT post_id FROM content.post WHERE hosted_locator_pending ORDER BY route,post_id LIMIT 20',
     );
-    const census = frontier.complete ? [] : (await client.query<{ route: number; catalogue_id: string }>(
-      `SELECT route,catalogue_id FROM content.hosted_catalogue
+    const census = frontier.complete
+      ? []
+      : (
+          await client.query<{ route: number; catalogue_id: string }>(
+            `SELECT route,catalogue_id FROM content.hosted_catalogue
        WHERE ROW(route,catalogue_id)>ROW($1::integer,$2::uuid)
        ORDER BY route,catalogue_id LIMIT 20`,
-      [frontier.after_route, frontier.after_catalogue],
-    )).rows;
+            [frontier.after_route, frontier.after_catalogue],
+          )
+        ).rows;
     return { frontier, pending: pending.rows, census };
   });
   const keys = new Set([
     ...selected.pending.map((row) => row.post_id),
     ...selected.census.map((row) => row.catalogue_id),
   ]);
-  for (const id of keys) await projectHostedLocator(pool, id);
+  let acknowledged = true;
+  for (const id of keys) acknowledged = (await projectHostedLocator(pool, id)) && acknowledged;
   const complete = selected.frontier.complete || selected.census.length < HOSTED_LOCATOR_REPAIR_PAGE;
   if (!selected.frontier.complete) {
     const last = selected.census.at(-1);
@@ -202,16 +234,22 @@ export async function repairHostedCataloguePage(pool: Pool): Promise<{ complete:
           actorAccountId: projector,
           kind: 'content.hosted-catalogue.locator-progress',
           key,
-          digest: createHash('sha256').update(JSON.stringify([selected.frontier, last, complete])).digest(),
+          digest: createHash('sha256')
+            .update(JSON.stringify([selected.frontier, last, complete]))
+            .digest(),
         },
       },
       async (tx) => {
         await tx.query(
           `UPDATE content.hosted_owned_progress SET after_route=$3,after_catalogue=$4,complete=$5
            WHERE singleton=0 AND NOT complete AND after_route=$1 AND after_catalogue=$2`,
-          [selected.frontier.after_route, selected.frontier.after_catalogue,
+          [
+            selected.frontier.after_route,
+            selected.frontier.after_catalogue,
             last?.route ?? selected.frontier.after_route,
-            last?.catalogue_id ?? selected.frontier.after_catalogue, complete],
+            last?.catalogue_id ?? selected.frontier.after_catalogue,
+            complete,
+          ],
         );
         return {
           value: null,
@@ -220,5 +258,8 @@ export async function repairHostedCataloguePage(pool: Pool): Promise<{ complete:
       },
     );
   }
-  return { complete: complete && selected.pending.length < HOSTED_LOCATOR_REPAIR_PAGE, examined: keys.size };
+  return {
+    complete: complete && acknowledged && selected.pending.length < HOSTED_LOCATOR_REPAIR_PAGE,
+    examined: keys.size,
+  };
 }

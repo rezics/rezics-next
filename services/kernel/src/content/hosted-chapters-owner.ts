@@ -199,7 +199,9 @@ export async function listOwnHostedCatalogues(
       return {
         rows,
         candidates: rows.map((row) => ({
-          item_id: row.catalogue_id, thread_id: row.thread_id, created_at: row.created_at,
+          item_id: row.catalogue_id,
+          thread_id: row.thread_id,
+          created_at: row.created_at,
         })),
         complete: false,
       };
