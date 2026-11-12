@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkpointFastPublication, preserveMainHotfixes, type PreservationConflict } from './cp-fast-preserve.ts';
+import { sync } from './cp-sync.ts';
 
 function git(cwd: string, ...args: string[]): string {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
@@ -19,6 +20,8 @@ function fixture() {
   git(checkout, 'config', 'user.email', 'test@example.invalid');
   git(checkout, 'config', 'user.name', 'Test');
   writeFileSync(join(checkout, '.gitignore'), '.temp/\n');
+  mkdirSync(join(checkout, 'tools/goal'), { recursive: true });
+  writeFileSync(join(checkout, 'tools/goal/control.ts'), 'const control = "snapshot";\n');
   writeFileSync(join(checkout, 'resident.ts'), 'const resident = "old";\n');
   writeFileSync(join(checkout, 'product.ts'), 'const product = "old";\n');
   git(checkout, 'add', '.');
@@ -162,6 +165,39 @@ test('checkpoint verifies the entire source tree and bootstrap rejects forged sn
     git(f.checkout, 'commit', '--allow-empty', '-qm', `control-plane: fast sync from dev ${f.source.slice(0, 10)}`);
     await expect(preserveMainHotfixes(f.options)).rejects.toThrow('source tree');
     expect(git(f.checkout, 'show', 'main:resident.ts')).toContain('hotfix');
+  } finally { f.dispose(); }
+});
+
+test('cp-sync uses only an exact fast-snapshot checkpoint with diverged commit identity', async () => {
+  const f = fixture();
+  try {
+    checkpointFastPublication(f.checkout, f.stateFile, f.published, f.source);
+    f.commit('dev', 'tools/goal/cp-sync.ts', 'export const laterControl = true;\n');
+    const options = {
+      cwd: f.checkout,
+      dryRun: true,
+      print: () => {},
+      checks: [{ name: 'fixture', argv: [process.execPath, '-e', 'process.exit(0)'], timeoutMs: 60_000 }],
+    };
+    expect(f.published).not.toBe(f.source);
+    expect(git(f.checkout, 'rev-parse', `${f.published}^{tree}`)).toBe(git(f.checkout, 'rev-parse', `${f.source}^{tree}`));
+    expect(spawnSync('git', ['merge-base', '--is-ancestor', f.published, 'dev'], { cwd: f.checkout }).status).not.toBe(0);
+    expect(await sync(options)).toBe(0);
+    expect(git(f.checkout, 'rev-parse', 'main')).toBe(f.published);
+    expect(git(f.checkout, 'rev-parse', 'dev')).not.toBe(f.source);
+
+    rmSync(f.stateFile);
+    await expect(sync(options)).rejects.toThrow('has commits dev lacks');
+    checkpointFastPublication(f.checkout, f.stateFile, f.published, f.source);
+    f.commit('main', 'resident.ts', 'const resident = "later main-only change";\n');
+    const changedMain = git(f.checkout, 'rev-parse', 'main');
+    await expect(sync(options)).rejects.toThrow('has commits dev lacks');
+
+    writeFileSync(
+      f.stateFile,
+      `${JSON.stringify({ publication: { main: changedMain, source: f.source }, adoptedMain: changedMain })}\n`,
+    );
+    await expect(sync(options)).rejects.toThrow('has commits dev lacks');
   } finally { f.dispose(); }
 });
 

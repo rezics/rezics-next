@@ -3284,8 +3284,10 @@ bun tools/goal/scripts/cp-sync.ts
 bun tools/goal/scripts/cp-sync.ts --rollback
 ```
 
-Run it from any checkout; it finds the main checkout by its checked-out `main`, and requires `main` to be inside
-`dev`. It adds a temporary worktree of the current `main` head in `../worktrees` beside the main checkout, replaces
+Run it from any checkout; it finds the main checkout by its checked-out `main`. It normally requires `main` inside
+`dev`; a verified fast-snapshot checkpoint permits the exact published `main` when its full tree equals the recorded
+source tree and that recorded source is an ancestor of captured `dev`. It adds a temporary worktree of the current
+`main` head in `../worktrees` beside the main checkout, replaces
 its `tools/goal` with dev's (`git checkout --no-overlay`, so dev's deletions apply) and checks it there: root and
 `tools/goal` installs, the `tools/goal` type check, a config smoke, and a CLI smoke. The config smoke runs
 `bun tools/goal/scripts/cp-config-smoke.ts` with `GOAL_MAIN_CHECKOUT` and `GOAL_LOCAL_CONFIG` naming the live checkout
@@ -3325,8 +3327,7 @@ Only when the gate passes does cp-sync publish. It first moves the main checkout
 captured values: `main` to the sync commit, `stabilize` (when present) to a merge of it that takes main's
 control-plane paths, and `dev` to a merge that keeps dev's tree. Main stays inside stabilize and dev, so promotion
 still fast-forwards and the next sync finds main inside dev. A failed transaction moves the files back.
-Decision: Sync, forward rollback and resident-host recovery share the same ref planner and publisher; stale compares
-re-plan from current branch heads, and failed publication restores the main checkout's files. Validation lives in `scripts/cp-sync-checks.ts`; `cp-sync.ts` coordinates publication, re-exports it, and stops the owned check there. Tests keep public-entry assertions and pin coordinator interruption of that child.
+Decision: Sync accepts a diverged `main` only when it exactly matches the explicit fast-publication checkpoint, its full tree matches the recorded source, and that source is an ancestor of captured `dev`; the existing ref planner and CAS retain both histories and preserve the `dev` tree while replacing only configured paths. Sync, forward rollback and resident-host recovery share the same ref planner and publisher; stale compares re-plan from current branch heads, and failed publication restores the main checkout's files. Validation lives in `scripts/cp-sync-checks.ts`; `cp-sync.ts` coordinates publication, re-exports it, and stops the owned check there. Tests keep public-entry assertions and pin coordinator interruption of that child.
 Processes hand over on the new `main:tools/goal`. If
 `tools/goal/package.json` or its lockfile changed, cp-sync reinstalls in the main checkout. Each sync appends the
 previous and new main, stabilize and dev heads to `.temp/goal/cp-sync-history.log`.

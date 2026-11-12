@@ -38,6 +38,42 @@ function verifyPublication(checkout: string, publication: Anchor): void {
   if (tree(checkout, publication.main) !== tree(checkout, publication.source))
     throw new Error('Fast publication does not have its recorded dev source tree.');
 }
+
+/** Read only an explicit checkpoint whose recorded commits still resolve and whose complete trees still match. */
+export function readFastPublicationCheckpoint(checkout: string, stateFile: string): Anchor | undefined {
+  if (!existsSync(stateFile)) return undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(stateFile, 'utf8'));
+  } catch (error) {
+    const missing = typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
+    if (error instanceof SyntaxError || missing) return undefined;
+    throw error;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const state = value as Partial<State>;
+  const publication = state.publication;
+  const commitId = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
+  if (
+    !publication ||
+    !commitId.test(publication.main) ||
+    !commitId.test(publication.source) ||
+    !state.adoptedMain ||
+    !commitId.test(state.adoptedMain)
+  )
+    return undefined;
+
+  const resolveStoredCommit = (value: string): string | undefined => {
+    const result = run(checkout, ['rev-parse', '--verify', `${value}^{commit}`]);
+    if (result.error) throw result.error;
+    return result.status === 0 ? result.stdout.trim() : undefined;
+  };
+  const main = resolveStoredCommit(publication.main);
+  const source = resolveStoredCommit(publication.source);
+  if (!main || !source || tree(checkout, main) !== tree(checkout, source)) return undefined;
+  return { main, source };
+}
+
 /** Bootstrap only from the existing publisher's commit metadata and an exact full-tree match. */
 function bootstrap(checkout: string): State {
   const history = git(checkout, 'log', 'main', '--first-parent', '-100', '--format=%H %s');

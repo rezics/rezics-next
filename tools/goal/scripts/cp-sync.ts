@@ -9,6 +9,7 @@
 import { readScriptPolicy, scriptPolicy, withScriptPolicy } from '../src/script-policy.ts';
 import { type ControlPolicy } from '../src/policy.ts';
 import { RESIDENT_CODE_UNITS } from '../src/service.ts';
+import { hasCpSyncAncestry } from './cp-sync-ancestry.ts';
 import {
   planCpSyncRefs,
   publishCpSyncRefs,
@@ -655,7 +656,14 @@ export async function sync(options: Options = {}): Promise<number> {
       print(
         `cp-sync: ${options.dryRun ? 'dry run: ' : ''}${DEV} ${short(source)} -> ${MAIN} ${short(main)} (${checkout})`,
       );
-      if (!isAncestor(checkout, main, source))
+      const hasAncestry = hasCpSyncAncestry(
+        checkout,
+        join(state, 'watch/cp-fast-state.json'),
+        main,
+        source,
+        (ancestor, descendant) => isAncestor(checkout, ancestor, descendant),
+      );
+      if (!hasAncestry)
         throw new Refusal(`${MAIN} ${short(main)} has commits ${DEV} lacks; syncing would drop them.`);
       if (paths.every((path) => object(checkout, main, path) === object(checkout, source, path))) {
         print(`cp-sync: ${MAIN} already has ${DEV}'s ${paths.join(', ')}; nothing to do.`);
