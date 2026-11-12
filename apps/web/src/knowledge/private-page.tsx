@@ -17,9 +17,35 @@ import { readerSessionSource } from '../reader/lifetime/index';
 import { useSession } from '../session/query';
 import { sessionRecoverySignInHref } from '../session/unavailable';
 import {
+  knowledgeAuthoringDestination,
+  knowledgeAuthoringNotebookSelection,
+  knowledgeAuthoringTemplateDraft,
+  type KnowledgeAuthoringDestination,
+  type KnowledgePlacementChoice,
+  type KnowledgeTemplateKind,
+} from './authoring.ts';
+import {
+  KnowledgeDestinationReview,
+  KnowledgePlacementChoiceBar,
+  KnowledgeTemplatePicker,
+  knowledgeTemplateCopy,
+} from './authoring-controls';
+import {
+  popKnowledgeBreadcrumb,
+  pushKnowledgeBreadcrumb,
+  type KnowledgeBreadcrumb,
+  type KnowledgeOutlinePage,
+  type KnowledgeOutlinePlacement,
+  type KnowledgeOwnedNotebook,
+  type KnowledgeOwnedNotebooksPage,
+} from './navigation.ts';
+import { KnowledgeOutlineList, KnowledgeOwnedNotebookList } from './navigation-lists';
+import {
   createKnowledgePrivateDocumentRequest,
   createKnowledgePrivateNotebookRequest,
   prepareKnowledgePrivateVisit,
+  readKnowledgeOutlineRequest,
+  readKnowledgeOwnedNotebooksRequest,
   readKnowledgePrivateVisit,
   reviseKnowledgePrivateDocumentRequest,
   selectKnowledgePublicationRequest,
@@ -35,6 +61,7 @@ import {
   type KnowledgePrivateHead,
   type KnowledgeRevisionReceipt,
 } from './private-knowledge';
+import type { KnowledgeNavigationFailure } from './navigation.ts';
 
 import { KnowledgePublicationPanel } from './publication-panel';
 import type { KnowledgePublicationIntent, KnowledgePublicationResult } from './publication';
@@ -64,6 +91,8 @@ export type KnowledgePrivatePageAccess =
       owner: string;
       read: KnowledgePrivateAdmission;
       createNotebook: KnowledgePrivateAdmission;
+      listNotebooks: KnowledgePrivateAdmission;
+      readOutline: KnowledgePrivateAdmission;
       createDocument: KnowledgePrivateAdmission;
       revise: KnowledgePrivateAdmission;
       publication: KnowledgePrivateAdmission;
@@ -86,11 +115,17 @@ type DocumentIntent = Readonly<
   DocumentDraft & {
     notebookId: string;
     structureRevisionId: string;
+    parentPlacementId: string | null;
     subjectId: string;
     idempotencyKey: string;
     binding: Binding;
   }
 >;
+type NavigationRead<T> =
+  | { state: 'ready'; page: T }
+  | KnowledgeNavigationFailure
+  | { state: 'signed-out' | 'retired' }
+  | { state: 'unavailable'; status?: number };
 type RevisionIntent = Readonly<
   DocumentDraft & {
     documentId: string;
@@ -112,6 +147,14 @@ export type KnowledgePrivateOperations = Readonly<{
     expected: Pick<Binding, 'viewer' | 'csrfToken'>,
   ) => Promise<KnowledgePrivateVisitRead>;
   createNotebook: (intent: NotebookIntent) => Promise<PrivateOperationResult<KnowledgeNotebookReceipt>>;
+  listNotebooks: (
+    cursor: string | null,
+    expected: Pick<Binding, 'viewer' | 'csrfToken'>,
+  ) => Promise<NavigationRead<KnowledgeOwnedNotebooksPage>>;
+  readOutline: (
+    input: { notebookId: string; parentPlacementId: string | null; cursor: string | null },
+    expected: Pick<Binding, 'viewer' | 'csrfToken'>,
+  ) => Promise<NavigationRead<KnowledgeOutlinePage>>;
   createDocument: (intent: DocumentIntent) => Promise<PrivateOperationResult<KnowledgeDocumentReceipt>>;
   revise: (intent: RevisionIntent) => Promise<PrivateOperationResult<KnowledgeRevisionReceipt>>;
   selectPublication: (intent: KnowledgePublicationIntent) => Promise<KnowledgePublicationResult>;
@@ -147,6 +190,18 @@ const nativeOperations: KnowledgePrivateOperations = {
       data: { ...intent, ...intent.binding },
       headers: { 'X-CSRF-Token': intent.binding.csrfToken },
     });
+  },
+  listNotebooks(cursor, expected) {
+    return readKnowledgeOwnedNotebooksRequest({
+      data: { ...expected, cursor },
+      headers: { 'X-CSRF-Token': expected.csrfToken },
+    }) as Promise<NavigationRead<KnowledgeOwnedNotebooksPage>>;
+  },
+  readOutline(input, expected) {
+    return readKnowledgeOutlineRequest({
+      data: { ...expected, ...input },
+      headers: { 'X-CSRF-Token': expected.csrfToken },
+    }) as Promise<NavigationRead<KnowledgeOutlinePage>>;
   },
   createDocument(intent) {
     return createKnowledgePrivateDocumentRequest({
@@ -461,9 +516,27 @@ function PrivateKnowledgeEditor({
   const [pending, setPending] = useState(false);
   const [publicationBusy, setPublicationBusy] = useState(false);
   const [retirementState, setRetirementState] = useState<'retired' | 'denied' | 'signed-out'>('retired');
+  const [placementChoice, setPlacementChoice] = useState<KnowledgePlacementChoice>('new-notebook');
+  const [notebooksPage, setNotebooksPage] = useState<KnowledgeOwnedNotebooksPage | null>(null);
+  const [notebooksState, setNotebooksState] = useState('idle');
+  const [notebooksBusy, setNotebooksBusy] = useState(false);
+  const [notebooksCursor, setNotebooksCursor] = useState<string | null>(null);
+  const [selectedNotebook, setSelectedNotebook] = useState<KnowledgeOwnedNotebook | null>(null);
+  const [outlinePage, setOutlinePage] = useState<KnowledgeOutlinePage | null>(null);
+  const [outlineState, setOutlineState] = useState('idle');
+  const [outlineBusy, setOutlineBusy] = useState(false);
+  const [outlineCursor, setOutlineCursor] = useState<string | null>(null);
+  const [outlineParent, setOutlineParent] = useState<string | null>(null);
+  const [breadcrumbs, setBreadcrumbs] = useState<KnowledgeBreadcrumb[]>([]);
+  const [destination, setDestination] = useState<KnowledgeAuthoringDestination | null>(null);
+  const [destinationReviewed, setDestinationReviewed] = useState(false);
+  const [templateKind, setTemplateKind] = useState<KnowledgeTemplateKind | null>(null);
+  const [createdAddress, setCreatedAddress] = useState<KnowledgePrivateAddress | null>(null);
   const notebookIntentRef = useRef(notebookIntent);
   const documentIntentRef = useRef(documentIntent);
   const revisionIntentRef = useRef(revisionIntent);
+  const notebooksSequence = useRef(0);
+  const outlineSequence = useRef(0);
   notebookIntentRef.current = notebookIntent;
   documentIntentRef.current = documentIntent;
   revisionIntentRef.current = revisionIntent;
@@ -500,6 +573,24 @@ function PrivateKnowledgeEditor({
     notebookIntentRef.current = null;
     documentIntentRef.current = null;
     revisionIntentRef.current = null;
+    notebooksSequence.current += 1;
+    outlineSequence.current += 1;
+    setPlacementChoice('new-notebook');
+    setNotebooksPage(null);
+    setNotebooksState('idle');
+    setNotebooksBusy(false);
+    setNotebooksCursor(null);
+    setSelectedNotebook(null);
+    setOutlinePage(null);
+    setOutlineState('idle');
+    setOutlineBusy(false);
+    setOutlineCursor(null);
+    setOutlineParent(null);
+    setBreadcrumbs([]);
+    setDestination(null);
+    setDestinationReviewed(false);
+    setTemplateKind(null);
+    setCreatedAddress(null);
     setRetirementState(state);
     setRetired(true);
   }
@@ -540,18 +631,24 @@ function PrivateKnowledgeEditor({
     retired,
   ]);
 
+  function resumeAddress(): KnowledgePrivateAddress | null {
+    if (createdAddress) return createdAddress;
+    return address.kind === 'resume' ? address : null;
+  }
+
   async function readCurrent(
     purpose: 'initial' | 'conflict' | 'readback',
     expectedRevisionId?: string,
     submittedDraft?: DocumentDraft,
   ) {
-    if (address.kind !== 'resume' || !active.current || access.read !== 'available' || readBusy) return;
+    const currentAddress = resumeAddress();
+    if (!currentAddress || !active.current || access.read !== 'available' || readBusy) return;
     const sequence = ++readSequence.current;
     setReadBusy(true);
     if (purpose === 'initial') setReadState('preparing');
     if (purpose === 'readback') setReadbackState('preparing');
     try {
-      const result = await operations.read(address, { viewer: access.viewer, csrfToken: access.csrfToken });
+      const result = await operations.read(currentAddress, { viewer: access.viewer, csrfToken: access.csrfToken });
       if (!active.current || readSequence.current !== sequence) return;
       const nextBinding = bindingFromRead(result, access);
       if (result.state === 'ready' && nextBinding) {
@@ -613,6 +710,156 @@ function PrivateKnowledgeEditor({
     retired,
   ]);
 
+  function closeNavigation(result: NavigationRead<unknown>, kind: 'notebooks' | 'outline') {
+    if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied') retire(result.state);
+    if (kind === 'notebooks') setNotebooksState(result.state);
+    else setOutlineState(result.state);
+  }
+
+  async function loadNotebooks(cursor: string | null) {
+    if (!binding || access.listNotebooks !== 'available' || !active.current) return;
+    const sequence = ++notebooksSequence.current;
+    setNotebooksCursor(cursor);
+    setNotebooksBusy(true);
+    setNotebooksState('preparing');
+    try {
+      const result = await operations.listNotebooks(cursor, { viewer: access.viewer, csrfToken: access.csrfToken });
+      if (!active.current || notebooksSequence.current !== sequence) return;
+      if (result.state === 'ready') {
+        setNotebooksPage(result.page);
+        setNotebooksState('ready');
+      } else closeNavigation(result, 'notebooks');
+    } catch {
+      if (active.current && notebooksSequence.current === sequence) setNotebooksState('unavailable');
+    } finally {
+      if (active.current && notebooksSequence.current === sequence) setNotebooksBusy(false);
+    }
+  }
+
+  async function loadOutline(parentPlacementId: string | null, cursor: string | null) {
+    if (!binding || !selectedNotebook || access.readOutline !== 'available' || !active.current) return;
+    const sequence = ++outlineSequence.current;
+    setOutlineParent(parentPlacementId);
+    setOutlineCursor(cursor);
+    setOutlineBusy(true);
+    setOutlineState('preparing');
+    try {
+      const result = await operations.readOutline(
+        { notebookId: selectedNotebook.notebookId, parentPlacementId, cursor },
+        { viewer: access.viewer, csrfToken: access.csrfToken },
+      );
+      if (!active.current || outlineSequence.current !== sequence) return;
+      if (result.state === 'ready' && result.page.notebookId === selectedNotebook.notebookId) {
+        setOutlinePage(result.page);
+        setOutlineState('ready');
+        setDestination(null);
+        setDestinationReviewed(false);
+      } else closeNavigation(result, 'outline');
+    } catch {
+      if (active.current && outlineSequence.current === sequence) setOutlineState('unavailable');
+    } finally {
+      if (active.current && outlineSequence.current === sequence) setOutlineBusy(false);
+    }
+  }
+
+  function resetExistingPlacement() {
+    notebooksSequence.current += 1;
+    outlineSequence.current += 1;
+    setNotebooksPage(null);
+    setNotebooksState('idle');
+    setNotebooksBusy(false);
+    setNotebooksCursor(null);
+    setSelectedNotebook(null);
+    setOutlinePage(null);
+    setOutlineState('idle');
+    setOutlineBusy(false);
+    setOutlineCursor(null);
+    setOutlineParent(null);
+    setBreadcrumbs([]);
+    setDestination(null);
+    setDestinationReviewed(false);
+    setTemplateKind(null);
+  }
+
+  function choosePlacement(next: KnowledgePlacementChoice) {
+    if (next === placementChoice || !!documentIntent || !!documentReceipt) return;
+    setPlacementChoice(next);
+    if (next === 'new-notebook') resetExistingPlacement();
+  }
+
+  function selectExistingNotebook(row: KnowledgeOwnedNotebook) {
+    if (documentIntent || documentReceipt) return;
+    outlineSequence.current += 1;
+    setSelectedNotebook(knowledgeAuthoringNotebookSelection(row));
+    setOutlinePage(null);
+    setOutlineState('idle');
+    setOutlineBusy(false);
+    setOutlineCursor(null);
+    setOutlineParent(null);
+    setBreadcrumbs([]);
+    setDestination(null);
+    setDestinationReviewed(false);
+  }
+
+  function placeAtObservedOutline() {
+    if (!selectedNotebook || !outlinePage || outlinePage.notebookId !== selectedNotebook.notebookId) return;
+    const next = knowledgeAuthoringDestination(selectedNotebook, outlinePage, breadcrumbs.at(-1)?.title ?? null);
+    if (!next) return;
+    setDestination(next);
+    setDestinationReviewed(true);
+  }
+
+  function openNestedParent(placement: KnowledgeOutlinePlacement) {
+    if (!selectedNotebook || documentIntent || documentReceipt) return;
+    setBreadcrumbs(
+      pushKnowledgeBreadcrumb(breadcrumbs, { placementId: placement.placementId, title: placement.title }),
+    );
+    setDestination(null);
+    setDestinationReviewed(false);
+    void loadOutline(placement.placementId, null);
+  }
+
+  function returnDestination() {
+    if (documentIntent || documentReceipt) return;
+    const next = popKnowledgeBreadcrumb(breadcrumbs);
+    setBreadcrumbs(next.trail);
+    setDestination(null);
+    setDestinationReviewed(false);
+    void loadOutline(next.parentPlacementId, null);
+  }
+
+  function applyTemplate(kind: KnowledgeTemplateKind) {
+    if (documentIntent || documentReceipt) return;
+    setTemplateKind(kind);
+    setDocumentDraft(knowledgeAuthoringTemplateDraft(knowledgeTemplateCopy(kind, locale), locale));
+  }
+
+  async function readCreated(addressToRead: KnowledgePrivateAddress) {
+    if (!active.current || access.read !== 'available') return;
+    const sequence = ++readSequence.current;
+    setReadBusy(true);
+    setReadState('preparing');
+    try {
+      const result = await operations.read(addressToRead, { viewer: access.viewer, csrfToken: access.csrfToken });
+      if (!active.current || readSequence.current !== sequence) return;
+      const nextBinding = bindingFromRead(result, access);
+      if (result.state === 'ready' && nextBinding) {
+        setBinding(nextBinding);
+        setHead(result.head);
+        setDraft(copyDraft(result.head));
+        setReadState('ready');
+      } else {
+        if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied')
+          retire(result.state);
+        setReadState(result.state);
+      }
+    } catch {
+      if (active.current && readSequence.current === sequence) setReadState('unavailable');
+    } finally {
+      if (active.current && readSequence.current === sequence) setReadBusy(false);
+    }
+  }
+
   function startNotebookIntent(): NotebookIntent | null {
     if (notebookIntentRef.current) return notebookIntentRef.current;
     if (address.kind !== 'create' || !binding || access.createNotebook !== 'available') return null;
@@ -662,12 +909,16 @@ function PrivateKnowledgeEditor({
 
   function startDocumentIntent(): DocumentIntent | null {
     if (documentIntentRef.current) return documentIntentRef.current;
-    if (address.kind !== 'create' || !binding || !notebookReceipt || access.createDocument !== 'available') return null;
+    if (address.kind !== 'create' || !binding || access.createDocument !== 'available') return null;
+    const existing = placementChoice === 'existing-notebook';
+    if (!existing && !notebookReceipt) return null;
+    if (existing && (!destination || !destinationReviewed)) return null;
     const next = immutable({
       ...structuredClone(documentDraft),
-      notebookId: notebookReceipt.notebookId,
-      structureRevisionId: notebookReceipt.structureRevisionId,
-      subjectId: address.subjectId,
+      notebookId: existing ? destination!.notebookId : notebookReceipt!.notebookId,
+      structureRevisionId: existing ? destination!.structureRevisionId : notebookReceipt!.structureRevisionId,
+      parentPlacementId: existing ? destination!.parentPlacementId : null,
+      subjectId: existing ? destination!.subjectId : address.subjectId,
       idempotencyKey: crypto.randomUUID(),
       binding,
     });
@@ -691,6 +942,7 @@ function PrivateKnowledgeEditor({
         receiptStatus<KnowledgeDocumentReceipt>(result, [
           'notebookId',
           'documentId',
+          'placementId',
           'revisionId',
           'structureRevisionId',
         ]) &&
@@ -701,6 +953,16 @@ function PrivateKnowledgeEditor({
         documentIntentRef.current = null;
         setDocumentCreateState('acknowledged');
         setUnresolved(false);
+        const opened = { notebookId: result.receipt.notebookId, documentId: result.receipt.documentId };
+        setCreatedAddress(opened);
+        void readCreated(opened);
+      } else if (result.state === 'conflict') {
+        setDocumentIntent(null);
+        documentIntentRef.current = null;
+        setDocumentCreateState('conflict');
+        setDestinationReviewed(false);
+        setUnresolved(false);
+        if (placementChoice === 'existing-notebook' && selectedNotebook) void loadOutline(outlineParent, null);
       } else {
         if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied')
           retire(result.state);
@@ -719,11 +981,12 @@ function PrivateKnowledgeEditor({
 
   function startRevisionIntent(): RevisionIntent | null {
     if (revisionIntentRef.current) return revisionIntentRef.current;
-    if (address.kind !== 'resume' || !head || !draft || !binding || access.revise !== 'available' || requiresHeadReview)
+    const currentAddress = resumeAddress();
+    if (!currentAddress || !head || !draft || !binding || access.revise !== 'available' || requiresHeadReview)
       return null;
     const next = immutable({
       ...structuredClone(draft),
-      documentId: address.documentId,
+      documentId: currentAddress.documentId,
       expectedHeadRevisionId: head.revisionId,
       subjectIds: [...head.subjectIds],
       idempotencyKey: crypto.randomUUID(),
@@ -846,8 +1109,8 @@ function PrivateKnowledgeEditor({
     setRevisionIntent(null);
     revisionIntentRef.current = null;
     setUnresolved(false);
-    if (address.kind === 'resume' && head) setDraft(copyDraft(head));
-    if (address.kind === 'create') {
+    if ((address.kind === 'resume' || createdAddress) && head) setDraft(copyDraft(head));
+    if (address.kind === 'create' && !createdAddress) {
       setNotebookTitle(copy.notebookTitle);
       setDocumentDraft({
         title: copy.documentTitle,
@@ -855,6 +1118,7 @@ function PrivateKnowledgeEditor({
         body: fromPlainText('', 'blocks'),
         licence: defaultLicence,
       });
+      setTemplateKind(null);
     }
   }
 
@@ -865,8 +1129,12 @@ function PrivateKnowledgeEditor({
       documentDraft.title !== copy.documentTitle ||
       documentDraft.language !== locale ||
       documentDraft.licence !== defaultLicence ||
-      hasDocumentContent(documentDraft.body));
-  const resumeDirty = address.kind === 'resume' && !!head && !sameDraft(draft, acknowledgedDraft ?? copyDraft(head));
+      hasDocumentContent(documentDraft.body) ||
+      !!selectedNotebook);
+  const resumeDirty =
+    (address.kind === 'resume' || !!createdAddress) &&
+    !!head &&
+    !sameDraft(draft, acknowledgedDraft ?? copyDraft(head));
   const departureSignature = JSON.stringify([
     access.owner,
     notebookTitle,
@@ -897,9 +1165,13 @@ function PrivateKnowledgeEditor({
       </PrivatePageFrame>
     );
 
-  if (address.kind === 'create') {
-    const canCreateNotebook = access.createNotebook === 'available' && !!binding && !notebookReceipt;
-    const canCreateDocument = access.createDocument === 'available' && !!notebookReceipt && !documentReceipt;
+  if (address.kind === 'create' && !(createdAddress && head && draft && readState === 'ready')) {
+    const existing = placementChoice === 'existing-notebook';
+    const canCreateNotebook = access.createNotebook === 'available' && !!binding && !notebookReceipt && !existing;
+    const canCreateDocument =
+      access.createDocument === 'available' &&
+      !documentReceipt &&
+      (existing ? !!destination && destinationReviewed : !!notebookReceipt);
     const notebookBusy = pending && notebookState === 'pending';
     const documentBusy = pending && documentCreateState === 'pending';
     const notebookRetry = !!notebookIntent && !notebookReceipt && !notebookBusy;
@@ -907,6 +1179,98 @@ function PrivateKnowledgeEditor({
     const notebookFailure = !['idle', 'pending', 'acknowledged'].includes(notebookState);
     const documentFailure = !['idle', 'pending', 'acknowledged'].includes(documentCreateState);
     const documentFrozen = !!documentIntent;
+    const subjectIds = existing && destination ? [destination.subjectId] : [address.subjectId];
+    const documentForm = (
+      <div className="min-w-0 space-y-5">
+        <KnowledgeTemplatePicker
+          locale={locale}
+          selected={templateKind}
+          disabled={documentFrozen || !!documentReceipt}
+          onSelect={applyTemplate}
+        />
+        <h2 className="text-lg font-semibold">{m.knowledge_private_document_title({}, options)}</h2>
+        <DocumentDraftFields
+          ids={ids}
+          locale={locale}
+          draft={documentDraft}
+          disabled={documentFrozen || !!documentReceipt}
+          onChange={setDocumentDraft}
+          subjectIds={subjectIds}
+        />
+        {destination && existing ? (
+          <KnowledgeDestinationReview locale={locale} destination={destination} subjectIds={subjectIds} />
+        ) : null}
+        <section
+          className="min-w-0 space-y-3 border-t border-border pt-5"
+          aria-labelledby="knowledge-private-document-review"
+        >
+          <h3 id="knowledge-private-document-review" className="font-medium">
+            {m.knowledge_private_review({}, options)}
+          </h3>
+          <ReviewMetadata draft={documentDraft} subjectIds={subjectIds} locale={locale} />
+          <div className="min-w-0 border-t border-border pt-3">
+            <DocumentBody document={documentDraft.body} locale={locale} />
+          </div>
+        </section>
+        {documentCreateState === 'conflict' ? (
+          <FailureNotice state="conflict" locale={locale} />
+        ) : documentFailure ? (
+          <FailureNotice state={documentCreateState} locale={locale} />
+        ) : null}
+        {documentCreateState === 'conflict' ? (
+          <p role="status" className="break-words">
+            {m.knowledge_private_structure_changed({}, options)}
+          </p>
+        ) : null}
+        {documentReceipt ? (
+          <section className="min-w-0 space-y-3" aria-live="polite">
+            <p role="status" className="break-words">
+              {m.knowledge_private_document_acknowledged({}, options)}
+            </p>
+            <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <IdentityValue label={m.knowledge_private_document_id({}, options)} value={documentReceipt.documentId} />
+              <IdentityValue
+                label={m.knowledge_private_placement_id({}, options)}
+                value={documentReceipt.placementId}
+              />
+              <IdentityValue label={m.knowledge_private_revision({}, options)} value={documentReceipt.revisionId} />
+            </dl>
+            {readState === 'preparing' ? <p role="status">{m.knowledge_private_readback({}, options)}</p> : null}
+            {readState !== 'ready' && readState !== 'preparing' && createdAddress ? (
+              <FailureNotice state={readState} locale={locale} retry={() => void readCreated(createdAddress)} />
+            ) : null}
+            <a
+              className={buttonVariants({ className: controlClass })}
+              href={privateDocumentHref(locale, documentReceipt.notebookId, documentReceipt.documentId)}
+            >
+              {m.knowledge_private_open_document({}, options)}
+            </a>
+          </section>
+        ) : (
+          <form className="min-w-0 space-y-5" onSubmit={(event) => void submitDocument(event)}>
+            {access.createDocument !== 'available' ? (
+              <FailureNotice state={access.createDocument} locale={locale} />
+            ) : null}
+            {existing && !destinationReviewed ? (
+              <p role="status" className="break-words text-sm">
+                {m.knowledge_private_review_destination({}, options)}
+              </p>
+            ) : null}
+            <Button
+              type="submit"
+              className={controlClass}
+              disabled={!canCreateDocument || documentBusy || !documentDraft.title.trim()}
+            >
+              {documentBusy
+                ? m.knowledge_private_creating_document({}, options)
+                : documentRetry
+                  ? m.knowledge_private_retry_exact({}, options)
+                  : m.knowledge_private_create_document({}, options)}
+            </Button>
+          </form>
+        )}
+      </div>
+    );
     return (
       <PrivatePageFrame title={m.knowledge_private_create_kind({}, options)} locale={locale}>
         {preparationState !== 'ready' || !binding ? (
@@ -917,117 +1281,123 @@ function PrivateKnowledgeEditor({
           />
         ) : null}
         <section className="min-w-0 space-y-5 rounded-xl border border-border bg-card p-4 sm:p-6">
-          <h2 className="text-lg font-semibold">{m.knowledge_private_notebook_title({}, options)}</h2>
-          <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
-            <IdentityValue label={m.knowledge_private_subject({}, options)} value={address.subjectId} />
-          </dl>
-          <form className="min-w-0 space-y-5" onSubmit={(event) => void submitNotebook(event)}>
-            <Field id={ids.notebookTitle} label={m.knowledge_private_notebook_title({}, options)}>
-              <Input
-                id={ids.notebookTitle}
-                className={inputClass}
-                value={notebookTitle}
-                maxLength={256}
-                autoComplete="off"
-                disabled={!!notebookIntent || !!notebookReceipt || !binding}
-                onChange={(event) => setNotebookTitle(event.currentTarget.value)}
-              />
-            </Field>
-            {access.createNotebook !== 'available' && !notebookReceipt ? (
-              <FailureNotice state={access.createNotebook} locale={locale} />
-            ) : null}
-            {notebookFailure ? <FailureNotice state={notebookState} locale={locale} /> : null}
-            <Button
-              type="submit"
-              className={controlClass}
-              disabled={!canCreateNotebook || notebookBusy || !notebookTitle.trim()}
-            >
-              {notebookBusy
-                ? m.knowledge_private_creating_notebook({}, options)
-                : notebookRetry
-                  ? m.knowledge_private_retry_exact({}, options)
-                  : m.knowledge_private_create_notebook({}, options)}
-            </Button>
-          </form>
-          {notebookReceipt ? (
-            <div className="min-w-0 space-y-5 border-t border-border pt-5">
-              <p role="status" className="break-words">
-                {m.knowledge_private_notebook_acknowledged({}, options)}
-              </p>
-              <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
-                <IdentityValue
-                  label={m.knowledge_private_notebook_id({}, options)}
-                  value={notebookReceipt.notebookId}
+          <KnowledgePlacementChoiceBar
+            locale={locale}
+            choice={placementChoice}
+            disabled={!!notebookIntent || !!notebookReceipt || !!documentIntent || !!documentReceipt}
+            onChange={choosePlacement}
+          />
+          {existing ? (
+            <div className="min-w-0 space-y-5">
+              {access.listNotebooks !== 'available' ? (
+                <FailureNotice state={access.listNotebooks} locale={locale} />
+              ) : (
+                <KnowledgeOwnedNotebookList
+                  locale={locale}
+                  state={notebooksState}
+                  page={notebooksPage}
+                  busy={notebooksBusy}
+                  selectedId={selectedNotebook?.notebookId ?? null}
+                  onOpen={() => void loadNotebooks(null)}
+                  onMore={() => void loadNotebooks(notebooksPage?.next ?? null)}
+                  onRetry={() => void loadNotebooks(notebooksCursor)}
+                  onSelect={selectExistingNotebook}
                 />
-                <IdentityValue
-                  label={m.knowledge_private_structure_revision({}, options)}
-                  value={notebookReceipt.structureRevisionId}
-                />
-              </dl>
-              <h2 className="text-lg font-semibold">{m.knowledge_private_document_title({}, options)}</h2>
-              <DocumentDraftFields
-                ids={ids}
-                locale={locale}
-                draft={documentDraft}
-                disabled={documentFrozen || !!documentReceipt}
-                onChange={setDocumentDraft}
-                subjectIds={[address.subjectId]}
-              />
-              <section
-                className="min-w-0 space-y-3 border-t border-border pt-5"
-                aria-labelledby="knowledge-private-document-review"
-              >
-                <h3 id="knowledge-private-document-review" className="font-medium">
-                  {m.knowledge_private_review({}, options)}
-                </h3>
-                <ReviewMetadata draft={documentDraft} subjectIds={[address.subjectId]} locale={locale} />
-                <div className="min-w-0 border-t border-border pt-3">
-                  <DocumentBody document={documentDraft.body} locale={locale} />
-                </div>
-              </section>
-              {documentFailure ? <FailureNotice state={documentCreateState} locale={locale} /> : null}
-              {documentReceipt ? (
-                <section className="min-w-0 space-y-3" aria-live="polite">
+              )}
+              {selectedNotebook ? (
+                <div className="min-w-0 space-y-5 border-t border-border pt-5">
                   <p role="status" className="break-words">
-                    {m.knowledge_private_document_acknowledged({}, options)}
+                    {m.knowledge_private_creating_at({}, options)}
                   </p>
                   <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
                     <IdentityValue
-                      label={m.knowledge_private_document_id({}, options)}
-                      value={documentReceipt.documentId}
+                      label={m.knowledge_private_notebook_title({}, options)}
+                      value={selectedNotebook.title}
                     />
                     <IdentityValue
-                      label={m.knowledge_private_revision({}, options)}
-                      value={documentReceipt.revisionId}
+                      label={m.knowledge_private_notebook_id({}, options)}
+                      value={selectedNotebook.notebookId}
+                    />
+                    <IdentityValue
+                      label={m.knowledge_private_subject({}, options)}
+                      value={selectedNotebook.subjectId}
                     />
                   </dl>
-                  <a
-                    className={buttonVariants({ className: controlClass })}
-                    href={privateDocumentHref(locale, documentReceipt.notebookId, documentReceipt.documentId)}
-                  >
-                    {m.knowledge_private_open_document({}, options)}
-                  </a>
-                </section>
-              ) : (
-                <form className="min-w-0 space-y-5" onSubmit={(event) => void submitDocument(event)}>
-                  {access.createDocument !== 'available' ? (
-                    <FailureNotice state={access.createDocument} locale={locale} />
-                  ) : null}
-                  <Button
-                    type="submit"
-                    className={controlClass}
-                    disabled={!canCreateDocument || documentBusy || !documentDraft.title.trim()}
-                  >
-                    {documentBusy
-                      ? m.knowledge_private_creating_document({}, options)
-                      : documentRetry
-                        ? m.knowledge_private_retry_exact({}, options)
-                        : m.knowledge_private_create_document({}, options)}
-                  </Button>
-                </form>
-              )}
+                  {access.readOutline !== 'available' ? (
+                    <FailureNotice state={access.readOutline} locale={locale} />
+                  ) : (
+                    <KnowledgeOutlineList
+                      locale={locale}
+                      state={outlineState}
+                      page={outlinePage}
+                      busy={outlineBusy}
+                      trail={breadcrumbs}
+                      onOpen={() => void loadOutline(outlineParent, null)}
+                      onMore={() => void loadOutline(outlineParent, outlinePage?.next ?? null)}
+                      onRetry={() => void loadOutline(outlineParent, outlineCursor)}
+                      onOpenParent={openNestedParent}
+                      onReturn={returnDestination}
+                      onPlaceHere={placeAtObservedOutline}
+                    />
+                  )}
+                  {documentForm}
+                </div>
+              ) : null}
             </div>
-          ) : null}
+          ) : (
+            <>
+              <h2 className="text-lg font-semibold">{m.knowledge_private_notebook_title({}, options)}</h2>
+              <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+                <IdentityValue label={m.knowledge_private_subject({}, options)} value={address.subjectId} />
+              </dl>
+              <form className="min-w-0 space-y-5" onSubmit={(event) => void submitNotebook(event)}>
+                <Field id={ids.notebookTitle} label={m.knowledge_private_notebook_title({}, options)}>
+                  <Input
+                    id={ids.notebookTitle}
+                    className={inputClass}
+                    value={notebookTitle}
+                    maxLength={256}
+                    autoComplete="off"
+                    disabled={!!notebookIntent || !!notebookReceipt || !binding}
+                    onChange={(event) => setNotebookTitle(event.currentTarget.value)}
+                  />
+                </Field>
+                {access.createNotebook !== 'available' && !notebookReceipt ? (
+                  <FailureNotice state={access.createNotebook} locale={locale} />
+                ) : null}
+                {notebookFailure ? <FailureNotice state={notebookState} locale={locale} /> : null}
+                <Button
+                  type="submit"
+                  className={controlClass}
+                  disabled={!canCreateNotebook || notebookBusy || !notebookTitle.trim()}
+                >
+                  {notebookBusy
+                    ? m.knowledge_private_creating_notebook({}, options)
+                    : notebookRetry
+                      ? m.knowledge_private_retry_exact({}, options)
+                      : m.knowledge_private_create_notebook({}, options)}
+                </Button>
+              </form>
+              {notebookReceipt ? (
+                <div className="min-w-0 space-y-5 border-t border-border pt-5">
+                  <p role="status" className="break-words">
+                    {m.knowledge_private_notebook_acknowledged({}, options)}
+                  </p>
+                  <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+                    <IdentityValue
+                      label={m.knowledge_private_notebook_id({}, options)}
+                      value={notebookReceipt.notebookId}
+                    />
+                    <IdentityValue
+                      label={m.knowledge_private_structure_revision({}, options)}
+                      value={notebookReceipt.structureRevisionId}
+                    />
+                  </dl>
+                  {documentForm}
+                </div>
+              ) : null}
+            </>
+          )}
         </section>
       </PrivatePageFrame>
     );
@@ -1298,6 +1668,8 @@ export function KnowledgePrivatePage({
   );
   const read = useOperationAdmission('knowledge_document.private_read');
   const createNotebook = useOperationAdmission('knowledge_notebook.create');
+  const listNotebooks = useOperationAdmission('knowledge_notebook.owned_list');
+  const readOutline = useOperationAdmission('knowledge_notebook.outline');
   const createDocument = useOperationAdmission('knowledge_document.create');
   const revise = useOperationAdmission('knowledge_document.revise');
   const publication = useOperationAdmission('knowledge_document.select_publication');
@@ -1340,6 +1712,8 @@ export function KnowledgePrivatePage({
         address,
         read,
         createNotebook,
+        listNotebooks,
+        readOutline,
         createDocument,
         revise,
         publication,
@@ -1347,6 +1721,8 @@ export function KnowledgePrivatePage({
       ]),
       read,
       createNotebook,
+      listNotebooks,
+      readOutline,
       createDocument,
       revise,
       publication,

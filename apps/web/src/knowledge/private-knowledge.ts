@@ -35,6 +35,7 @@ export type KnowledgeNotebookReceipt = Readonly<{ notebookId: string; structureR
 export type KnowledgeDocumentReceipt = Readonly<{
   notebookId: string;
   documentId: string;
+  placementId: string;
   revisionId: string;
   structureRevisionId: string;
 }>;
@@ -50,6 +51,7 @@ export type KnowledgeNotebookCommand = Readonly<{
 export type KnowledgeDocumentCommand = Readonly<{
   notebookId: string;
   structureRevisionId: string;
+  parentPlacementId: string | null;
   subjectId: string;
   title: string;
   language: string | null;
@@ -247,7 +249,7 @@ export async function createKnowledgePrivateNotebook(
   return commandResult(result, [200, 201], ['notebookId', 'structureRevisionId']);
 }
 
-/** Create one root document from the receipt of the already acknowledged notebook command. */
+/** Create one document at the observed destination. parentPlacementId is explicit, including root null. */
 export async function createKnowledgePrivateDocument(
   client: KernelClient,
   input: KnowledgeDocumentCommand,
@@ -264,11 +266,15 @@ export async function createKnowledgePrivateDocument(
       licence: input.licence,
       subjectIds: [input.subjectId],
       expectedStructureRevisionId: input.structureRevisionId,
-      parentPlacementId: null,
+      parentPlacementId: input.parentPlacementId,
     },
     { headers },
   );
-  return commandResult(result, [200, 201], ['notebookId', 'documentId', 'revisionId', 'structureRevisionId']);
+  return commandResult(
+    result,
+    [200, 201],
+    ['notebookId', 'documentId', 'placementId', 'revisionId', 'structureRevisionId'],
+  );
 }
 
 /** Revise only the exact current head observed by the caller. */

@@ -37,6 +37,8 @@ const session: Extract<KnowledgePrivatePageAccess, { state: 'ready' }> = {
   owner: 'story-visit',
   read: 'available',
   createNotebook: 'available',
+  listNotebooks: 'available',
+  readOutline: 'available',
   createDocument: 'available',
   revise: 'available',
   publication: 'denied',
@@ -69,6 +71,8 @@ function scenarioOperations(scenario: string): KnowledgePrivateOperations {
       state: 'acknowledged',
       receipt: { notebookId, structureRevisionId: knowledgeRevisionId },
     }),
+    listNotebooks: async () => ({ state: 'unavailable', status: 503 }),
+    readOutline: async () => ({ state: 'unavailable', status: 503 }),
     createDocument: async () =>
       scenario === 'document-failure'
         ? { state: 'unavailable', status: 503 }
@@ -77,6 +81,7 @@ function scenarioOperations(scenario: string): KnowledgePrivateOperations {
             receipt: {
               notebookId,
               documentId: knowledgeDocumentId,
+              placementId: nextRevisionId,
               revisionId: knowledgeRevisionId,
               structureRevisionId: nextRevisionId,
             },

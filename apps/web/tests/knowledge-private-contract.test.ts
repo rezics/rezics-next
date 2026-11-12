@@ -26,6 +26,7 @@ const documentId = knowledgeDocumentId;
 const revisionId = knowledgeRevisionId;
 const nextRevisionId = '0192f3a0-6c1e-7b2a-9d4e-000000000011';
 const structureRevisionId = '0192f3a0-6c1e-7b2a-9d4e-000000000012';
+const placementId = '0192f3a0-6c1e-7b2a-9d4e-000000000014';
 const idempotencyKey = '0192f3a0-6c1e-7b2a-9d4e-000000000013';
 const authorization = 'Bearer private-writer-token';
 const address: KnowledgePrivateAddress = { notebookId, documentId };
@@ -86,7 +87,7 @@ test('exact private head uses account-derived native route, no-store and canonic
   expect(result.state).toBe('ready');
   if (result.state !== 'ready') throw new Error('expected current private head');
   expect(result.head).toMatchObject({ accountId, ...address, revisionId, title: 'A private note' });
-  expect(JSON.stringify(result.head.body)).toContain('selected public knowledge');
+  expect(JSON.stringify(result.head.body)).toContain('The selected publication keeps these exact words.');
   expect(new URL(calls[0]!.url).pathname).toBe(
     `/v1/accounts/${accountId}/knowledge/notebooks/${notebookId}/documents/${documentId}`,
   );
@@ -126,8 +127,11 @@ test('native command receipts anchor root creation and observed-head revision CA
     const path = new URL(request.url).pathname;
     if (path === '/v1/knowledge/notebooks') return Response.json({ notebookId, structureRevisionId }, { status });
     if (path === `/v1/knowledge/notebooks/${notebookId}/documents`)
-      return Response.json({ notebookId, documentId, revisionId, structureRevisionId: nextRevisionId }, { status });
-    if (path === `/v1/knowledge/documents/${documentId}/revisions`)
+      return Response.json(
+        { notebookId, documentId, placementId, revisionId, structureRevisionId: nextRevisionId },
+        { status },
+      );
+    if (path.startsWith(`/v1/knowledge/documents/${documentId}/revisions`))
       return Response.json({ documentId, revisionId: nextRevisionId }, { status: 200 });
     return new Response(null, { status: 404 });
   });
@@ -143,6 +147,7 @@ test('native command receipts anchor root creation and observed-head revision CA
   const creation = await createKnowledgePrivateDocument(client, {
     notebookId,
     structureRevisionId,
+    parentPlacementId: null,
     subjectId: knowledgeSubjectId,
     title: 'Reviewed private note',
     language: 'en',
@@ -153,7 +158,7 @@ test('native command receipts anchor root creation and observed-head revision CA
   });
   expect(creation).toEqual({
     state: 'acknowledged',
-    receipt: { notebookId, documentId, revisionId, structureRevisionId: nextRevisionId },
+    receipt: { notebookId, documentId, placementId, revisionId, structureRevisionId: nextRevisionId },
   });
   const creationRequest = requests[1]!;
   expect(creationRequest.headers.get('authorization')).toBe(authorization);

@@ -9,6 +9,13 @@ import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } fr
 import { cookie, SESSION_COOKIE } from '../session/cookies';
 import { isSessionUnavailableError } from '../session/unavailable';
 import {
+  parseKnowledgeNavigationCursor,
+  readKnowledgeOutline,
+  readKnowledgeOwnedNotebooks,
+  type KnowledgeOutlineRead,
+  type KnowledgeOwnedNotebooksRead,
+} from './navigation.ts';
+import {
   createKnowledgePrivateDocument,
   createKnowledgePrivateNotebook,
   isKnowledgeId,
@@ -317,6 +324,17 @@ export const createKnowledgePrivateNotebookRequest = createServerFn({ method: 'P
     }
   });
 
+function parentPlacement(value: unknown): string | null {
+  if (value === null) return null;
+  return boundedId(value, 'parent placement');
+}
+
+function navigationCursor(value: unknown): string | null {
+  const parsed = parseKnowledgeNavigationCursor(value);
+  if (parsed === undefined) throw new Error('Invalid Knowledge navigation cursor');
+  return parsed;
+}
+
 function createDocumentInput(value: unknown): Omit<KnowledgeDocumentCommand, 'authorization'> & {
   viewer: string;
   csrfToken: string;
@@ -332,12 +350,62 @@ function createDocumentInput(value: unknown): Omit<KnowledgeDocumentCommand, 'au
     subjectId: value.subjectId,
     notebookId: value.notebookId,
     structureRevisionId: boundedId(value.structureRevisionId, 'structure revision'),
+    parentPlacementId: parentPlacement(value.parentPlacementId),
     title: boundedText(value.title, 512, 'document title'),
     language: language(value.language),
     body: documentBody(value.body),
     licence: boundedText(value.licence, 128, 'licence'),
   };
 }
+
+export const readKnowledgeOwnedNotebooksRequest = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value)) throw new Error('Invalid Knowledge notebook inventory read');
+    return { expected: expectedSession(value), cursor: navigationCursor(value.cursor) };
+  })
+  .handler(async ({ data }): Promise<KnowledgeOwnedNotebooksRead | ClosedIdentity> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = currentFor(data.expected, await currentIdentity());
+    if ('state' in identity) return identity;
+    try {
+      return await readKnowledgeOwnedNotebooks(kernelClient(), {
+        accountId: identity.viewer,
+        cursor: data.cursor,
+        authorization: identity.authorization,
+      });
+    } catch (error) {
+      if (isPlatformClosedError(error)) return { state: 'unavailable', status: 503 };
+      return { state: 'unavailable', status: 503 };
+    }
+  });
+
+export const readKnowledgeOutlineRequest = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value) || !isKnowledgeId(value.notebookId)) throw new Error('Invalid Knowledge outline read');
+    return {
+      expected: expectedSession(value),
+      notebookId: value.notebookId,
+      parentPlacementId: parentPlacement(value.parentPlacementId),
+      cursor: navigationCursor(value.cursor),
+    };
+  })
+  .handler(async ({ data }): Promise<KnowledgeOutlineRead | ClosedIdentity> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = currentFor(data.expected, await currentIdentity());
+    if ('state' in identity) return identity;
+    try {
+      return await readKnowledgeOutline(kernelClient(), {
+        accountId: identity.viewer,
+        notebookId: data.notebookId,
+        parentPlacementId: data.parentPlacementId,
+        cursor: data.cursor,
+        authorization: identity.authorization,
+      });
+    } catch (error) {
+      if (isPlatformClosedError(error)) return { state: 'unavailable', status: 503 };
+      return { state: 'unavailable', status: 503 };
+    }
+  });
 
 export const createKnowledgePrivateDocumentRequest = createServerFn({ method: 'POST' })
   .validator(createDocumentInput)

@@ -33,6 +33,8 @@ const access: Extract<KnowledgePrivatePageAccess, { state: 'ready' }> = {
   owner: 'session-1/exposure-1',
   read: 'available',
   createNotebook: 'available',
+  listNotebooks: 'available',
+  readOutline: 'available',
   createDocument: 'available',
   revise: 'available',
   publication: 'available',
@@ -69,6 +71,8 @@ test('creation retains the acknowledged notebook, then retries only the frozen r
       calls.push({ kind: 'notebook', input: structuredClone(intent) });
       return { state: 'acknowledged', receipt: { notebookId, structureRevisionId: knowledgeRevisionId } };
     },
+    listNotebooks: async () => ({ state: 'unavailable', status: 503 }),
+    readOutline: async () => ({ state: 'unavailable', status: 503 }),
     createDocument: async (intent) => {
       calls.push({ kind: 'document', input: structuredClone(intent) });
       if (documentAttempt++ === 0) return { state: 'unavailable', status: 503 };
@@ -77,6 +81,7 @@ test('creation retains the acknowledged notebook, then retries only the frozen r
         receipt: {
           notebookId,
           documentId: knowledgeDocumentId,
+          placementId: savedRevisionId,
           revisionId: nextRevisionId,
           structureRevisionId: savedRevisionId,
         },
@@ -101,6 +106,7 @@ test('creation retains the acknowledged notebook, then retries only the frozen r
     expect(documentCalls[0]!.input).toMatchObject({
       notebookId,
       structureRevisionId: knowledgeRevisionId,
+      parentPlacementId: null,
       subjectId: knowledgeSubjectId,
     });
     view.expectLink('/en/knowledge/notebooks/' + notebookId + '/documents/' + knowledgeDocumentId);
@@ -128,6 +134,8 @@ test('conflict keeps the draft, explicit reread supplies the next CAS head, and 
       return { state: 'ready', viewer, csrfToken, credential, head: current };
     },
     createNotebook: async () => ({ state: 'unavailable', status: 503 }),
+    listNotebooks: async () => ({ state: 'unavailable', status: 503 }),
+    readOutline: async () => ({ state: 'unavailable', status: 503 }),
     createDocument: async () => ({ state: 'unavailable', status: 503 }),
     revise: async (intent) => {
       revisions.push(structuredClone(intent));
@@ -175,6 +183,8 @@ test('viewer, exposure, locale, source and exact-address replacement retire late
     prepare: async () => ({ state: 'ready', viewer, csrfToken, credential }),
     read: async () => pending.promise,
     createNotebook: async () => ({ state: 'unavailable', status: 503 }),
+    listNotebooks: async () => ({ state: 'unavailable', status: 503 }),
+    readOutline: async () => ({ state: 'unavailable', status: 503 }),
     createDocument: async () => ({ state: 'unavailable', status: 503 }),
     revise: async () => ({ state: 'unavailable', status: 503 }),
   };
@@ -276,6 +286,8 @@ async function harness() {
       prepare: async () => ({ state: 'ready', viewer, csrfToken, credential }),
       read: async () => ({ state: 'unavailable', status: 503 }),
       createNotebook: async () => ({ state: 'unavailable', status: 503 }),
+      listNotebooks: async () => ({ state: 'unavailable', status: 503 }),
+      readOutline: async () => ({ state: 'unavailable', status: 503 }),
       createDocument: async () => ({ state: 'unavailable', status: 503 }),
       revise: async () => ({ state: 'unavailable', status: 503 }),
     },

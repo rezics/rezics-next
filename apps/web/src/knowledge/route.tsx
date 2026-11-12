@@ -16,6 +16,8 @@ import {
 
 export { readKnowledgeDocument } from './public-read';
 export { KnowledgeDocumentPage } from './page';
+export { parseKnowledgePrivateAddress, parseKnowledgePrivateSubjectSearch } from './private-knowledge';
+export { KnowledgePrivateAccessEntry, KnowledgePrivatePage } from './private-page';
 
 export type KnowledgeDocumentVisit = {
   request: KnowledgeReadRequest;
