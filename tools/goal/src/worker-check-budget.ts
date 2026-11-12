@@ -279,10 +279,7 @@ function readCheckEvidence(path: string): CheckEvidence | undefined {
   }
 }
 
-type OptionalCheckEvidence =
-  | { state: 'absent' }
-  | { state: 'invalid' }
-  | { state: 'present'; value: CheckEvidence };
+type OptionalCheckEvidence = { state: 'absent' } | { state: 'invalid' } | { state: 'present'; value: CheckEvidence };
 
 /** Distinguish a missing legacy file from a present but unreadable newer record. */
 function readOptionalCheckEvidence(path: string): OptionalCheckEvidence {
@@ -291,8 +288,7 @@ function readOptionalCheckEvidence(path: string): OptionalCheckEvidence {
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') return { state: 'absent' };
-    if (code === 'EACCES' || code === 'EPERM' || code === 'ENOTDIR' || code === 'ELOOP')
-      return { state: 'invalid' };
+    if (code === 'EACCES' || code === 'EPERM' || code === 'ENOTDIR' || code === 'ELOOP') return { state: 'invalid' };
     throw error;
   }
 

@@ -1870,9 +1870,7 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
       );
       expect(legacyHistory.remoteArgv).toBeUndefined();
       expect(legacyHistory.physicalRun).toBeUndefined();
-      expect(
-        legacyHistory.terminalProof,
-      ).toBeUndefined();
+      expect(legacyHistory.terminalProof).toBeUndefined();
       expect(existsSync(join(checkRoot, 'custody/receipts', `${previous.id}.${previous.physicalRunId}.json`))).toBe(
         false,
       );
