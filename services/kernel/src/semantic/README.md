@@ -1195,6 +1195,8 @@ Unrelated core/graph/history/command/lifecycle and existing concurrent CPU-valid
 
 ## Definition publication preparation
 
+Decision: cold publication needs a command-owned, freshly authorized receipt probe before current Definitions validation; keep preparation outside the command transaction and reauthorize on the eventual write.
+
 The production request deadline remains 2,000 ms. The current release schema is
 compiled once at module initialization, and validation already deduplicates pattern
 proofs within a call. Recompiling the schema per publication is not the correction.
