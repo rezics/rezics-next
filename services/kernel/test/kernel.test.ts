@@ -167,6 +167,7 @@ const typed = [
   'GET /v1/accounts/:accountId/hostedCatalogues/:id',
   'PATCH /v1/accounts/:accountId/preferences',
   'GET /v1/hostedCatalogues/:id',
+  'GET /v1/hostedCatalogues/:id/history',
   'GET /v1/hostedCatalogues/:id/children',
   'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId',
   'GET /v1/hostedCatalogues/:id/occurrences/:occurrenceId/navigation',
