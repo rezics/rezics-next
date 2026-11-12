@@ -40,11 +40,16 @@ capability across its surfaces, rather than one working example.
 One capability has one authority. Verticals, Realms, Zones and clients consume shared contracts rather than copying
 their storage, query, permission or lifecycle mechanisms. Derived indexes and views do not become another authority.
 
-Product writes, including imports, use the ordinary API and permission model. Fix an inadequate API rather than
-creating a privileged parallel write path. Test fixtures are not product write paths.
+The product API is the authority for business rules, permissions and state transitions. Every supported product
+operation, including imports, uses the ordinary API and permission model. Fix a missing or incorrect operation at
+its backend owner; do not implement it in a client or create a privileged parallel write path. Test fixtures are
+not product write paths.
 
-Definitions own semantic vocabulary. Product modules own generic behaviour. Presentation configures how those
-capabilities appear. A value's representation does not determine its semantic meaning or authority.
+Definitions own semantic vocabulary. Product modules own generic behaviour. Clients compose API results into
+interactions and presentation. When the same API operation works with the same inputs and persona but fails in
+multiple interfaces, trace the shared client boundary first. Fix the earliest shared transport, state adapter,
+interaction or component that causes the failure, and verify representative consumers. Use a page-local fix only
+when the failure is specific to that page. Representation does not determine semantic meaning or authority.
 
 ## Modules and boundaries
 
