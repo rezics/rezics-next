@@ -1,7 +1,21 @@
-import type { KnowledgeNavigationPage, KnowledgeNavigationRequest, KnowledgeNavigationResult, KnowledgeNotebookRow, KnowledgePlacementRow } from './navigation-read';
+import type {
+  KnowledgeNavigationPage,
+  KnowledgeNavigationRequest,
+  KnowledgeNavigationResult,
+  KnowledgeNotebookRow,
+  KnowledgePlacementRow,
+} from './navigation-read';
 import type { KnowledgePrivatePreparation } from './private-server';
 import type { KnowledgeDocumentReceipt } from './private-knowledge';
-import { sealKnowledgeCopy, type KnowledgeCopyIntent, type KnowledgeCopyReadback, type KnowledgeCopyResult, type KnowledgeExportResult, type KnowledgeTransferBinding, type KnowledgeTransferSource } from './transfer';
+import {
+  sealKnowledgeCopy,
+  type KnowledgeCopyIntent,
+  type KnowledgeCopyReadback,
+  type KnowledgeCopyResult,
+  type KnowledgeExportResult,
+  type KnowledgeTransferBinding,
+  type KnowledgeTransferSource,
+} from './transfer';
 
 export type KnowledgeTransferOperations = Readonly<{
   export: (source: KnowledgeTransferSource) => Promise<KnowledgeExportResult>;
@@ -17,7 +31,17 @@ export type KnowledgeTransferSaver = (bytes: string, filename: string) => Knowle
 export type KnowledgeTransferSnapshot = Readonly<{
   retired: boolean;
   exportState: 'idle' | 'preparing' | 'saved' | 'save-failed' | 'unavailable';
-  copyState: 'idle' | 'preparing' | 'choosing' | 'review' | 'pending' | 'uncertain' | 'conflict' | 'readback' | 'copied' | 'unavailable';
+  copyState:
+    | 'idle'
+    | 'preparing'
+    | 'choosing'
+    | 'review'
+    | 'pending'
+    | 'uncertain'
+    | 'conflict'
+    | 'readback'
+    | 'copied'
+    | 'unavailable';
   navigationState: 'idle' | 'preparing' | 'ready' | 'changed' | 'unavailable';
   page: KnowledgeNavigationPage | null;
   notebook: KnowledgeNotebookRow | null;
@@ -25,7 +49,17 @@ export type KnowledgeTransferSnapshot = Readonly<{
   reviewed: boolean;
   receipt: KnowledgeDocumentReceipt | null;
 }>;
-const initial = (): KnowledgeTransferSnapshot => ({ retired: false, exportState: 'idle', copyState: 'idle', navigationState: 'idle', page: null, notebook: null, parents: [], reviewed: false, receipt: null });
+const initial = (): KnowledgeTransferSnapshot => ({
+  retired: false,
+  exportState: 'idle',
+  copyState: 'idle',
+  navigationState: 'idle',
+  page: null,
+  notebook: null,
+  parents: [],
+  reviewed: false,
+  receipt: null,
+});
 
 /** Local download is a request to the browser, not proof that the person saved a file. */
 export const browserKnowledgeTransferSaver: KnowledgeTransferSaver = (bytes, filename) => {
@@ -36,9 +70,15 @@ export const browserKnowledgeTransferSaver: KnowledgeTransferSaver = (bytes, fil
       link.href = url;
       link.download = filename;
       document.body.append(link);
-      try { link.click(); } finally { link.remove(); }
+      try {
+        link.click();
+      } finally {
+        link.remove();
+      }
     },
-    dispose() { URL.revokeObjectURL(url); },
+    dispose() {
+      URL.revokeObjectURL(url);
+    },
   };
 };
 
@@ -62,15 +102,26 @@ export class KnowledgeTransferVisit {
     private readonly saver: KnowledgeTransferSaver = browserKnowledgeTransferSaver,
     binding: KnowledgeTransferBinding | null = null,
     private readonly onSourceLost: () => void = () => {},
-  ) { this.binding = binding; }
+  ) {
+    this.binding = binding;
+  }
   snapshot = () => this.value;
-  subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
   connect() {
     const connection = ++this.connection;
     this.stop?.();
     this.stop = this.operations.subscribeRetirement(() => this.retire());
     if (!this.operations.current()) this.retire();
-    return () => { queueMicrotask(() => { if (this.connection === connection) this.retire(); }); };
+    return () => {
+      queueMicrotask(() => {
+        if (this.connection === connection) this.retire();
+      });
+    };
   }
   private publish(change: Partial<KnowledgeTransferSnapshot>) {
     this.value = { ...this.value, ...change };
@@ -78,7 +129,10 @@ export class KnowledgeTransferVisit {
   }
   private current(generation = this.generation) {
     if (this.value.retired || generation !== this.generation) return false;
-    if (!this.operations.current()) { this.retire(); return false; }
+    if (!this.operations.current()) {
+      this.retire();
+      return false;
+    }
     return true;
   }
   retire = () => {
@@ -95,10 +149,11 @@ export class KnowledgeTransferVisit {
     this.navigation = { kind: 'owned' };
     this.publish({ ...initial(), retired: true });
   };
-  private lost(state: string) {
+  private lost(state: string, sourceLoss = false) {
     if (state === 'denied' || state === 'signed-out' || state === 'retired' || state === 'not-found') {
       this.retire();
-      if (this.source.representation === 'public' && (state === 'not-found' || state === 'denied')) this.onSourceLost();
+      if (sourceLoss && this.source.representation === 'public' && (state === 'not-found' || state === 'denied'))
+        this.onSourceLost();
       return true;
     }
     return false;
@@ -111,11 +166,15 @@ export class KnowledgeTransferVisit {
     this.download = null;
     this.publish({ exportState: 'preparing' });
     let result: KnowledgeExportResult;
-    try { result = await this.operations.export(this.source); }
-    catch { if (this.current(generation)) this.publish({ exportState: 'unavailable' }); return; }
+    try {
+      result = await this.operations.export(this.source);
+    } catch {
+      if (this.current(generation)) this.publish({ exportState: 'unavailable' });
+      return;
+    }
     if (!this.current(generation)) return;
     if (result.state !== 'ready') {
-      if (!this.lost(result.state)) this.publish({ exportState: 'unavailable' });
+      if (!this.lost(result.state, true)) this.publish({ exportState: 'unavailable' });
       return;
     }
     this.bytes = result.bytes;
@@ -137,8 +196,12 @@ export class KnowledgeTransferVisit {
     this.publish({ copyState: 'preparing' });
     if (!this.binding) {
       let result: KnowledgePrivatePreparation;
-      try { result = await this.operations.prepare(); }
-      catch { if (this.current(generation)) this.publish({ copyState: 'unavailable' }); return; }
+      try {
+        result = await this.operations.prepare();
+      } catch {
+        if (this.current(generation)) this.publish({ copyState: 'unavailable' });
+        return;
+      }
       if (!this.current(generation)) return;
       if (result.state !== 'ready') {
         if (!this.lost(result.state)) this.publish({ copyState: 'unavailable' });
@@ -149,18 +212,27 @@ export class KnowledgeTransferVisit {
     this.publish({ copyState: 'choosing' });
     await this.readDestination({ kind: 'owned' });
   }
-  private locked() { return ['pending', 'uncertain', 'readback', 'copied'].includes(this.value.copyState); }
+  private locked() {
+    return ['pending', 'uncertain', 'readback', 'copied'].includes(this.value.copyState);
+  }
   async readDestination(request: KnowledgeNavigationRequest) {
     if (!this.current() || !this.binding || this.locked() || this.value.navigationState === 'preparing') return;
-    const generation = this.generation, sequence = ++this.navigationSequence;
+    const generation = this.generation,
+      sequence = ++this.navigationSequence;
     this.navigation = request;
     this.publish({ page: null, reviewed: false, navigationState: 'preparing' });
     let result: KnowledgeNavigationResult;
-    try { result = await this.operations.navigate(request); }
-    catch { if (this.current(generation) && sequence === this.navigationSequence) this.publish({ navigationState: 'unavailable' }); return; }
+    try {
+      result = await this.operations.navigate(request);
+    } catch {
+      if (this.current(generation) && sequence === this.navigationSequence)
+        this.publish({ navigationState: 'unavailable' });
+      return;
+    }
     if (!this.current(generation) || sequence !== this.navigationSequence) return;
     if (result.state !== 'ready') {
-      if (!this.lost(result.state)) this.publish({ navigationState: result.state === 'changed' ? 'changed' : 'unavailable' });
+      if (!this.lost(result.state))
+        this.publish({ navigationState: result.state === 'changed' ? 'changed' : 'unavailable' });
       return;
     }
     this.publish({ page: result.page, navigationState: 'ready' });
@@ -178,7 +250,10 @@ export class KnowledgeTransferVisit {
   descend(row: KnowledgePlacementRow) {
     const notebook = this.value.notebook;
     if (!this.current() || !notebook || this.locked() || this.value.navigationState === 'preparing') return;
-    this.publish({ parents: [...this.value.parents, { placementId: row.placementId, title: row.title }], copyState: 'choosing' });
+    this.publish({
+      parents: [...this.value.parents, { placementId: row.placementId, title: row.title }],
+      copyState: 'choosing',
+    });
     void this.readDestination({ kind: 'outline', notebookId: notebook.notebookId, parentPlacementId: row.placementId });
   }
   up(root = false) {
@@ -186,7 +261,11 @@ export class KnowledgeTransferVisit {
     if (!this.current() || !notebook || this.locked() || this.value.navigationState === 'preparing') return;
     const parents = root ? [] : this.value.parents.slice(0, -1);
     this.publish({ parents, copyState: 'choosing' });
-    void this.readDestination({ kind: 'outline', notebookId: notebook.notebookId, parentPlacementId: parents.at(-1)?.placementId ?? null });
+    void this.readDestination({
+      kind: 'outline',
+      notebookId: notebook.notebookId,
+      parentPlacementId: parents.at(-1)?.placementId ?? null,
+    });
   }
   more() {
     if (!this.current() || !this.value.page?.next) return;
@@ -199,26 +278,53 @@ export class KnowledgeTransferVisit {
     const { cursor: _cursor, ...address } = this.navigation;
     void this.readDestination(address);
   }
-  retryNavigation() { void this.readDestination(this.navigation); }
+  retryNavigation() {
+    void this.readDestination(this.navigation);
+  }
   review() {
-    if (!this.current() || this.locked() || this.value.navigationState !== 'ready' || this.value.page?.kind !== 'outline') return;
+    if (
+      !this.current() ||
+      this.locked() ||
+      this.value.navigationState !== 'ready' ||
+      this.value.page?.kind !== 'outline'
+    )
+      return;
     this.publish({ copyState: 'review', reviewed: true });
   }
   confirm() {
-    if (!this.current() || !this.binding || !this.value.notebook || !this.value.reviewed || this.value.copyState !== 'review' || this.value.page?.kind !== 'outline') return;
-    this.intent = sealKnowledgeCopy({ source: this.source, notebookId: this.value.notebook.notebookId,
-      expectedStructureRevisionId: this.value.page.structureRevisionId, parentPlacementId: this.value.page.parentPlacementId,
-      binding: this.binding });
+    if (
+      !this.current() ||
+      !this.binding ||
+      !this.value.notebook ||
+      !this.value.reviewed ||
+      this.value.copyState !== 'review' ||
+      this.value.page?.kind !== 'outline'
+    )
+      return;
+    this.intent = sealKnowledgeCopy({
+      source: this.source,
+      notebookId: this.value.notebook.notebookId,
+      expectedStructureRevisionId: this.value.page.structureRevisionId,
+      parentPlacementId: this.value.page.parentPlacementId,
+      binding: this.binding,
+    });
     void this.send();
   }
-  retryCopy() { if (this.current() && this.value.copyState === 'uncertain') void this.send(); }
+  retryCopy() {
+    if (this.current() && this.value.copyState === 'uncertain') void this.send();
+  }
   private async send() {
     if (!this.current() || !this.intent || this.value.copyState === 'pending') return;
-    const generation = this.generation, intent = this.intent;
+    const generation = this.generation,
+      intent = this.intent;
     this.publish({ copyState: 'pending' });
     let result: KnowledgeCopyResult;
-    try { result = await this.operations.copy(intent); }
-    catch { if (this.current(generation)) this.publish({ copyState: 'uncertain' }); return; }
+    try {
+      result = await this.operations.copy(intent);
+    } catch {
+      if (this.current(generation)) this.publish({ copyState: 'uncertain' });
+      return;
+    }
     if (!this.current(generation)) return;
     if (result.state === 'acknowledged') {
       this.intent = null;
@@ -228,7 +334,7 @@ export class KnowledgeTransferVisit {
     else if (result.state === 'conflict') {
       this.intent = null;
       this.publish({ copyState: 'conflict', reviewed: false });
-    } else if (!this.lost(result.state)) {
+    } else if (!this.lost(result.state, true)) {
       this.intent = null;
       this.publish({ copyState: 'unavailable', reviewed: false });
     }
@@ -240,11 +346,16 @@ export class KnowledgeTransferVisit {
     const generation = this.generation;
     this.publish({ copyState: 'readback' });
     let result: KnowledgeCopyReadback;
-    try { result = await this.operations.readback(receipt); }
-    catch { this.readingCopy = false; if (this.current(generation)) this.publish({ copyState: 'unavailable' }); return; }
+    try {
+      result = await this.operations.readback(receipt);
+    } catch {
+      this.readingCopy = false;
+      if (this.current(generation)) this.publish({ copyState: 'unavailable' });
+      return;
+    }
     this.readingCopy = false;
     if (!this.current(generation)) return;
     if (result.state === 'ready') this.publish({ copyState: 'copied' });
-    else if (!this.lost(result.state)) this.publish({ copyState: 'unavailable' });
+    else if (result.state === 'not-found' || !this.lost(result.state)) this.publish({ copyState: 'unavailable' });
   }
 }

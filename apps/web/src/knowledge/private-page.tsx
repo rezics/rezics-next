@@ -1524,7 +1524,13 @@ function PrivateKnowledgeEditor({
           </div>
         </form>
         <KnowledgeTransferCaller
-          source={{ representation: 'authoring', accountId: access.viewer, notebookId: head.notebookId, documentId: head.documentId, revisionId: head.revisionId }}
+          source={{
+            representation: 'authoring',
+            accountId: access.viewer,
+            notebookId: head.notebookId,
+            documentId: head.documentId,
+            revisionId: head.revisionId,
+          }}
           title={head.title}
           locale={locale}
           binding={binding}

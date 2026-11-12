@@ -158,14 +158,15 @@ export function KnowledgeDocumentPage({
         {m.knowledge_retry()}
       </Button>
     ) : null;
-  const currentOpen = exact ? (
-    <a
-      href={liveHref}
-      className={buttonVariants({ variant: retry ? 'outline' : 'default', className: controlClass() })}
-    >
-      {m.knowledge_current_open()}
-    </a>
-  ) : null;
+  const currentOpen =
+    exact && lostPage !== page ? (
+      <a
+        href={liveHref}
+        className={buttonVariants({ variant: retry ? 'outline' : 'default', className: controlClass() })}
+      >
+        {m.knowledge_current_open()}
+      </a>
+    ) : null;
 
   return (
     <article

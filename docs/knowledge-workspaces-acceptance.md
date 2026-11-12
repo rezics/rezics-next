@@ -108,6 +108,15 @@ Each scenario includes native API observations first, then the browser where use
 5. Copy one document: body content survives; document/block IDs are new; exact references and provenance preserve
    their explicit meaning. Changing the copy does not change its source. The copy starts private.
 
+Web transfer acceptance uses `knowledge-transfer-wire.test.ts`, `knowledge-transfer.test.ts` and
+`knowledge-transfer-mounted.test.tsx` alongside the existing reader/private/navigation suites. Verify exact
+public/authoring export requests, unchanged native envelope bytes and local save retry, independent copied
+identity/provenance from a separate exact read, replacing 20-row destination pages, conflict refresh/review,
+immutable uncertain retry and complete retirement. The six illustrative `Pages/Knowledge/Transfer` stories are
+PublicExport, OwnExport, CopyReview, Copied, StructureChanged and Unavailable; inspect 390/1280px, both themes and
+eight locales. These authored fixtures do not substitute for native authorization/source-withdrawal, mounted
+return, visual/accessibility or promoted-revision proof.
+
 ### Audience, lists and cache equivalence
 
 One endpoint may return public facts, public contributions and A's private attachments. Prove audience handling for
@@ -126,15 +135,6 @@ indexer paused. A native retained plan eventually returns a useful page or prove
 association observation after finite source mutation stops. A capped sample is never an exact total or exhaustive
 empty response. Preparation failure stays failure/unavailable, not permanent successful preparing with no progress.
 Unacknowledged publication indexing may delay discovery but cannot delay source withdrawal.
-
-Web transfer acceptance uses `knowledge-transfer-wire.test.ts`, `knowledge-transfer.test.ts` and
-`knowledge-transfer-mounted.test.tsx` alongside the existing reader/private/navigation suites. Verify exact
-public/authoring export requests, unchanged native envelope bytes and local save retry, independent copied
-identity/provenance from a separate exact read, replacing 20-row destination pages, conflict refresh/review,
-immutable uncertain retry and complete retirement. The six illustrative `Pages/Knowledge/Transfer` stories are
-PublicExport, OwnExport, CopyReview, Copied, StructureChanged and Unavailable; inspect 390/1280px, both themes and
-eight locales. These authored fixtures do not substitute for native authorization/source-withdrawal, mounted
-return, visual/accessibility or promoted-revision proof.
 
 ## Native cost evidence
 

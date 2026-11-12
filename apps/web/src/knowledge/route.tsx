@@ -167,9 +167,22 @@ export function KnowledgeDocumentCaller({
     onRetry();
   };
 
-  return <KnowledgeDocumentPage request={request} page={page} onRetry={retry} transfer={(document, onSourceLost) => (
-    <KnowledgeTransferCaller key={`${document.documentId}:${document.revisionId}`} source={{ representation: 'public', documentId: document.documentId, revisionId: document.revisionId }} title={document.title} locale={request.locale} onSourceLost={onSourceLost} />
-  )} />;
+  return (
+    <KnowledgeDocumentPage
+      request={request}
+      page={page}
+      onRetry={retry}
+      transfer={(document, onSourceLost) => (
+        <KnowledgeTransferCaller
+          key={`${document.documentId}:${document.revisionId}`}
+          source={{ representation: 'public', documentId: document.documentId, revisionId: document.revisionId }}
+          title={document.title}
+          locale={request.locale}
+          onSourceLost={onSourceLost}
+        />
+      )}
+    />
+  );
 }
 
 export { KnowledgeNavigationRoute } from './navigation-route';
