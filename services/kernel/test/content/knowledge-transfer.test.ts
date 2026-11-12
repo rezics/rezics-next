@@ -57,10 +57,16 @@ test('exact owner export/copy and anonymous publication export share permitted s
         documentId: target.documentId,
         revisionId: target.revisionId,
         sha256: targetRead.value.document.sha256,
-        blockId: 'theorem-block',
+        blockId: JSON.parse(Buffer.from(targetRead.value.document.canonicalBytes, 'base64').toString()).doc.content[0]
+          .attrs.id,
       },
     },
   ];
+  references.push({
+    ...references[0]!,
+    id: 'missing-reference',
+    target: { ...references[0]!.target, blockId: 'missing-block' },
+  });
   const body = normalizeDocument({
     version: 'rezics-document-v1',
     profile: 'blocks',
@@ -80,6 +86,16 @@ test('exact owner export/copy and anonymous publication export share permitted s
                 version: '1',
                 payload: { referenceId: 'theorem-reference' },
                 fallback: 'Referenced theorem',
+              },
+            },
+            {
+              type: 'extensionInline',
+              attrs: {
+                id: 'missing-citation',
+                definition: KNOWLEDGE_REFERENCE_DEFINITION,
+                version: '1',
+                payload: { referenceId: 'missing-reference' },
+                fallback: 'Missing block',
               },
             },
           ],
@@ -148,7 +164,8 @@ test('exact owner export/copy and anonymous publication export share permitted s
   expect(canonical).toBe(canonicalKnowledgeJson(publicEnvelope));
   expect(publicEnvelope.representation).toBe('public');
   expect(publicEnvelope.selection.publicationId).toBe(published.publicationId);
-  expect(publicEnvelope.references).toEqual(references);
+  expect(publicEnvelope.references[0]).toEqual(references[0]);
+  expect(publicEnvelope.references[1]!.target).toBeNull();
   expect(canonical).not.toContain('private.example');
   expect(canonical).not.toContain('Hidden newer head');
   expect(canonical).not.toContain(sibling.documentId);

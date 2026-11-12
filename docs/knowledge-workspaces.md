@@ -261,7 +261,9 @@ is no timestamp or generated export identity to make repeated exports differ. `r
 optional for existing clients; when supplied it is limited to 64 entries and must match the registered components
 one to one. Each entry has a local ID, finite role, optional source block and a subject, live document or exact
 revision/digest/optional-block target; `null` retains an unavailable citation. Target disclosure performs bounded
-metadata-only one-hop checks, never fetches target bodies and never follows their outgoing references.
+metadata-only one-hop checks, never fetches target bodies and never follows their outgoing references. A stored
+block-ID projection derived from canonical Document child nodes checks exact block selections; a missing block is
+unavailable and never falls back to a nearby block.
 
 ## Access and lifecycle
 

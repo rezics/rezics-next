@@ -4734,7 +4734,8 @@ ancestry bound, structure CAS and registered document-created event. The stable 
 notebook and original request, including the selected source revision; concurrent same-key delivery creates one
 private document and returns one result. No source grants, child documents or sibling content are copied.
 
-Revision-owned `reference_manifest` and `copy_provenance` accompany canonical Document bytes. The registered
+Revision-owned `reference_manifest` and `copy_provenance` accompany canonical Document bytes. An immutable generated
+`block_ids` projection, derived only through Document child nodes, proves exact block existence without loading a target body. The registered
 `rezics.knowledge.reference` version `1` component carries only a local reference ID; the manifest owns target kinds,
 roles and exact selections. Public reads, exports and copies share one projection: metadata-only one-hop current
 target checks preserve eligible locators and replace withheld targets with null and an unavailable marker. Public

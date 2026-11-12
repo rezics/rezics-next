@@ -33,7 +33,8 @@ async function referenceVisible(
     !publication ||
     (target.kind === 'revision' &&
       (publication.revision_id !== target.revisionId ||
-        publication.publication_sha256.toString('hex') !== target.sha256))
+        publication.publication_sha256.toString('hex') !== target.sha256 ||
+        (target.blockId !== undefined && !publication.block_ids.includes(target.blockId))))
   )
     return false;
   const subjects = knowledgeSubjectTargets(publication.subject_id, publication.subject_ids);

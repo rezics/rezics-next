@@ -41,6 +41,7 @@ export type KnowledgePublicSelection = Readonly<{
   document_id: string;
   current_publication_id: string;
   publication_id: string;
+  block_ids: readonly string[];
   revision_id: string;
   subject_id: string;
   publication_sha256: Buffer;
@@ -210,6 +211,7 @@ export async function knowledgePublicSelection(
     ? {
         ...row,
         publication_sha256: Buffer.from(row.publication_sha256),
+        block_ids: row.block_ids as string[],
         subject_ids: storedSubjectIds(row.subject_ids),
       }
     : null;
