@@ -489,12 +489,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         now.getTime() - Math.max(flowHistoryMs, FLOW_RETRY_ALARM_WINDOW_MS),
       ).toISOString();
       const metrics = await lifecycleMetricsAsync(db, now, settings.policy);
-      const flow = flowReport(
-        readFlow(db, flowEventsSince),
-        readFlowTasks(db),
-        now.getTime(),
-        { reportSince },
-      );
+      const flow = flowReport(readFlow(db, flowEventsSince), readFlowTasks(db), now.getTime(), { reportSince });
       emitHourlyLifecycleMetrics(db, metrics, now);
       checkFlowAlarms(
         db,

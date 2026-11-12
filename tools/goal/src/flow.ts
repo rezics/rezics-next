@@ -863,7 +863,9 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     windowMs: FLOW_RETRY_ALARM_WINDOW_MS,
     ...generationTotals(allOrdered, recentIntegrations),
   };
-  const workerProcessLaunches = ordered.filter((event) => event.stage === 'worker' && event.action === 'started').length;
+  const workerProcessLaunches = ordered.filter(
+    (event) => event.stage === 'worker' && event.action === 'started',
+  ).length;
   const overBudgetLaunchesByLayer: Record<string, number> = {};
   for (const event of ordered) {
     if (!['worker', 'manager'].includes(event.stage) || event.action !== 'started' || !event.detail) continue;
