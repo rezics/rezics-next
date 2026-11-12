@@ -3651,6 +3651,24 @@ test('a fetched staged tree needs only working edits and untracked inputs, with 
   expect(overlay.files).not.toContain('src/staged.ts');
 });
 
+test('a Git-clean frozen permission difference enters the fetched overlay without ordinary clean files', async () => {
+  const directory = workspace();
+  const git = (...args: string[]) => spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+  expect(git('config', 'core.filemode', 'false').status).toBe(0);
+  chmodSync(join(directory, '.gitignore'), 0o644);
+  chmodSync(join(directory, 'package.json'), 0o644);
+  chmodSync(join(directory, 'src/tracked.ts'), 0o644);
+  expect(git('diff', '--quiet', '--', 'src/tracked.ts').status).toBe(0);
+  chmodSync(join(directory, 'src/tracked.ts'), 0o600);
+  expect(git('diff', '--quiet', '--', 'src/tracked.ts').status).toBe(0);
+
+  const frozen = await currentCheckSourceManifest(directory);
+  const overlay = gitWorkspaceOverlay(directory, workspaceFiles(directory), frozen);
+
+  expect(overlay.files.sort()).toEqual(['src/tracked.ts', 'src/untracked.ts']);
+  expect(overlay.removed).toEqual(['src/gone.ts']);
+});
+
 test.each([
   [0, 0, false],
   [1, 0, false],

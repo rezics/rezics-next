@@ -785,7 +785,13 @@ remain separate questions for the existing compiler/health chain; this cohort su
    identities and uncertain transport results cannot clean or overwrite another run's directory.
    Decision: active or published same-run identities are rejected; an abandoned ref is reusable only after acquiring
    its free per-run lock under the store lock and confirming the final checkout is absent.
-   Overlay rsync then sends only working edits and untracked inputs.
+   After a successful Git fetch, the overlay includes working edits and untracked inputs plus frozen regular files whose
+   permission mode differs from the frozen index tree's checkout mode (`100644` restores as `0644`, `100755` as
+   `0755`). The bounded candidate selection keeps Git-clean permission-only changes in the same rsync transfer, which
+   preserves their mode. Exact remote source verification still checks file modes, content digests, execute bits and
+   links; the overlay does not broaden to every tracked file.
+   Decision: fetched Git overlays include only frozen regular candidates whose permissions differ from the frozen index
+   tree's checkout mode; exact source verification remains authoritative.
    GitHub publication retries the same candidate/ref once after 250 ms within one absolute preparation deadline
    (the configured 900-second default). Each failed push reports its exit/signal status and credential-redacted stderr;
    final failure retains full snapshot upload. Local authentication never enters a manifest or host checkout.
