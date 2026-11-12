@@ -639,6 +639,10 @@ returning to defaults after changes retains the advancing version. A stale versi
 null removes overrides; unknown/mandatory notification keys or invalid values reject the whole patch. Native bounds,
 closed catalogues, envelope fields and whole-call costs live in [Viewer preferences][access-preferences].
 
+Growth fixtures retain maximal 32-layout shelves at every declared scale and prepare their JSONB value once per seed
+transaction. They write every route-valid account, preference, grant and receipt row in serialized 2,048-account
+batches, then commit before maintenance. Production preference SQL and cost bounds stay unchanged.
+
 `board_activity` is a distinct optional in-app kind. Thread watch uses `thread_watch`, never an overloaded Follow.
 There is no email delivery or backfill. Web and Performance own Settings/account-page presentation; Content owns
 notice delivery. Consumers do not own native preference policy or infer success from an ambiguous response.
