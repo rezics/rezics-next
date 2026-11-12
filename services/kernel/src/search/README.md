@@ -128,6 +128,9 @@ Decision: discovery live inventory SQL uses overflow LIMIT 4 (three retained inc
 probe) as a module-init literal, because circular import evaluation can observe generations.ts before
 `MAX_SUBJECT_GENERATIONS` initializes.
 
+Decision: on physical UUID or allocation-incarnation drift, retire the captured relay without writing to or deleting
+the replacement index; retain an active generation until a fresh native population is reconciled before activation.
+
 `subjectConsumer` and `discoveryConsumer` construct native checkpoint names from the exact admitted prefix, a
 positive safe generation and an explicit family (`subjects` or `discovery`). Ordinary names that already fit the
 63-character native consumer domain stay byte-for-byte. Coverage store, initialization and certification bind

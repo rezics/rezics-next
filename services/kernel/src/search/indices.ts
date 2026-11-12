@@ -160,6 +160,43 @@ export async function discoveryIndexUuid(search: OpenSearch, index: string, work
   return native.uuid;
 }
 
+export type DiscoveryPhysicalIdentity = Readonly<{ uuid: string; incarnation: string | null }>;
+
+/** Read both native identity components from one physical index observation. */
+export async function readDiscoveryPhysicalIdentity(
+  search: OpenSearch,
+  index: string,
+): Promise<DiscoveryPhysicalIdentity | null> {
+  let response: { status: number; body: unknown };
+  try {
+    response = await search.request<unknown>('GET', `/${index}`);
+  } catch (error) {
+    if (error instanceof OpenSearchError && error.status === 404) return null;
+    throw error;
+  }
+  if (response.status === 404) return null;
+  const { body } = response;
+  const entry = record(body) ? body[index] : undefined;
+  if (response.status !== 200 || !record(body) || Object.keys(body).length !== 1 || !record(entry))
+    throw new SearchUnavailableError('Discovery physical identity is unavailable');
+  const settings = record(entry.settings) ? entry.settings.index : undefined;
+  const mapping = record(entry.mappings) ? entry.mappings._meta : undefined;
+  if (!record(settings) || typeof settings.uuid !== 'string' || !settings.uuid)
+    throw new SearchUnavailableError('Discovery physical identity is malformed');
+  return {
+    uuid: settings.uuid,
+    incarnation: record(mapping) && typeof mapping.incarnation === 'string' ? mapping.incarnation : null,
+  };
+}
+
+export async function discoveryPhysicalTargetMatches(
+  search: OpenSearch,
+  target: Readonly<{ prefix: string; generation: number; uuid: string; incarnation: string }>,
+): Promise<boolean> {
+  const physical = await readDiscoveryPhysicalIdentity(search, discoveryIndexName(target.prefix, target.generation));
+  return physical?.uuid === target.uuid && physical.incarnation === target.incarnation;
+}
+
 async function createIndex(
   search: OpenSearch,
   prefix: string,

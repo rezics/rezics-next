@@ -26,7 +26,7 @@ import {
   type AnyDiscoveryIndexAction,
   type SecondScopeDiscoveryIndexAction,
 } from './discovery-documents.ts';
-import { discoveryIndexName, discoveryIndexUuid, readDiscoveryDocumentCodec } from './indices.ts';
+import { discoveryIndexName, discoveryPhysicalTargetMatches, readDiscoveryDocumentCodec } from './indices.ts';
 import { writeDiscoveryActions, validateRefreshResponse, validateDiscoveryWriteReceipt } from './write-actions.ts';
 import { validateObservation } from './indexer.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
@@ -313,6 +313,13 @@ export async function nativeDiscoveryRegistry(
 export type DiscoveryTarget = { prefix: string; generation: number; uuid: string; incarnation: string };
 export type DiscoveryProjection = ReturnType<typeof createDiscoveryProjection>;
 
+export class DiscoveryPhysicalTargetChangedError extends Error {
+  constructor() {
+    super('Discovery physical incarnation is no longer writable');
+    this.name = 'DiscoveryPhysicalTargetChangedError';
+  }
+}
+
 /** Native mixed identity is its allocation incarnation AND engine UUID, never a Subject writer alias. */
 export async function readDiscoveryWriterPhysicalTarget(pool: Pick<Pool, 'query'>, search: OpenSearch, index: string) {
   const match = /^(.*)discovery-g([1-9][0-9]*)$/.exec(index);
@@ -415,13 +422,12 @@ export async function withDiscoveryTarget<T>(
         !row ||
         row.index_uuid !== target.uuid ||
         row.incarnation !== target.incarnation ||
-        (purge ? ['retired', 'allocated'] : ['retiring', 'retired', 'quarantined', 'allocated']).includes(row.state) ||
-        (await discoveryIndexUuid(search, index)) !== target.uuid
+        (purge ? ['retired', 'allocated'] : ['retiring', 'retired', 'quarantined', 'allocated']).includes(row.state)
       )
-        throw new Error('Discovery physical incarnation is no longer writable');
+        throw new DiscoveryPhysicalTargetChangedError();
+      if (!(await discoveryPhysicalTargetMatches(search, target))) throw new DiscoveryPhysicalTargetChangedError();
       const value = await work(client, index);
-      if ((await discoveryIndexUuid(search, index)) !== target.uuid)
-        throw new Error('Discovery physical incarnation changed during write');
+      if (!(await discoveryPhysicalTargetMatches(search, target))) throw new DiscoveryPhysicalTargetChangedError();
       return value;
     } finally {
       try {
@@ -649,8 +655,7 @@ export function createDiscoveryProjection(options: {
       }
       if (held) {
         for (const action of pending) await readDiscoveryRepairWinner(search, index, action);
-        if ((await discoveryIndexUuid(search, index)) !== target.uuid)
-          throw new Error('Discovery physical incarnation changed during receiving');
+        if (!(await discoveryPhysicalTargetMatches(search, target))) throw new DiscoveryPhysicalTargetChangedError();
         await client.query('BEGIN');
       }
       try {

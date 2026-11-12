@@ -18,6 +18,7 @@ import {
   createDiscoveryProjection,
   validateAccountPage,
   validateAccountSnapshot,
+  DiscoveryPhysicalTargetChangedError,
   type DiscoveryProjection,
   type DiscoveryTarget,
 } from './account-discovery.ts';
@@ -55,6 +56,7 @@ import {
   readSubjectCreditMappingFormat,
   readSubjectCreditMappingFormatForIndex,
   readSubjectIndexUuid,
+  discoveryPhysicalTargetMatches,
   markSubjectCalendarReady,
   readSubjectSortFormat,
   SUBJECT_SORT_FORMAT,
@@ -1056,13 +1058,22 @@ async function reconcileMetadataDiscoveryPage(
 }
 
 async function retireDiscoveryCapability(pool: Pool, target: DiscoveryTarget) {
-  await withConnection(pool, (client) =>
-    client.query(
-      `UPDATE search.discovery_generation SET state='retiring' WHERE partition_no=0 AND prefix=$1 AND generation=$2
-     AND index_uuid=$3 AND incarnation=$4::uuid AND state NOT IN ('active','retired','quarantined')`,
-      [target.prefix, target.generation, target.uuid, target.incarnation],
-    ),
-  );
+  const index = discoveryIndexName(target.prefix, target.generation);
+  await withConnection(pool, async (client) => {
+    await client.query('BEGIN');
+    try {
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [index]);
+      await client.query(
+        `UPDATE search.discovery_generation SET state='retiring' WHERE partition_no=0 AND prefix=$1 AND generation=$2
+       AND index_uuid=$3 AND incarnation=$4::uuid AND state NOT IN ('active','retired','quarantined')`,
+        [target.prefix, target.generation, target.uuid, target.incarnation],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  });
 }
 
 /** An allocated owner later omitted as preparing/unavailable retires this generation; it must not loop as unsupported. */
@@ -1128,7 +1139,9 @@ export async function advanceDiscovery(options: {
   let generations = await discoveryGenerations(pool, prefix);
   const kinds = registry.entries.map(({ kind }) => kind).sort();
   const active = generations.find((row) => row.state === 'active');
-  let activeCoverageComplete = !active || discoveryCapabilityMatches(active, active.capability, witnesses);
+  const activePhysicalTargetMatches = active ? await discoveryPhysicalTargetMatches(search, active) : true;
+  let activeCoverageComplete =
+    !active || (activePhysicalTargetMatches && discoveryCapabilityMatches(active, active.capability, witnesses));
   if (active && requiredKinds.length > 0) {
     const coverage = await withConnection(
       pool,
@@ -1147,6 +1160,16 @@ export async function advanceDiscovery(options: {
       return owner?.complete === true && Number(owner.partitions) === PARTITIONS;
     });
   }
+  let retiredCapturedTarget = false;
+  for (const candidate of generations) {
+    if (!candidate.uuid || ['active', 'allocated', 'retiring', 'retired', 'quarantined'].includes(candidate.state))
+      continue;
+    if (!(await discoveryPhysicalTargetMatches(search, candidate))) {
+      await retireDiscoveryCapability(pool, candidate);
+      retiredCapturedTarget = true;
+    }
+  }
+  if (retiredCapturedTarget) return;
   if (
     generations.length === 0 ||
     generations.every((row) => ['retiring', 'quarantined'].includes(row.state)) ||
@@ -1208,13 +1231,22 @@ export async function advanceDiscovery(options: {
         ).rows,
     );
     if (populations.length > 0) {
+      let retiring: Promise<void> | undefined;
       await mapBounded(
         populations,
         DISCOVERY_POPULATION_CONCURRENCY,
-        (population) =>
-          target.state === 'populating'
-            ? populationPage(pool, projection, population)
-            : reconcileDiscoveryPage(pool, search, projection, population),
+        async (population) => {
+          try {
+            return await (target.state === 'populating'
+              ? populationPage(pool, projection, population)
+              : reconcileDiscoveryPage(pool, search, projection, population));
+          } catch (error) {
+            if (!(error instanceof DiscoveryPhysicalTargetChangedError)) throw error;
+            retiring ??= retireDiscoveryCapability(pool, target);
+            await retiring;
+            return true;
+          }
+        },
         (retired) => retired,
       );
       return;
@@ -1331,8 +1363,10 @@ export async function advanceDiscovery(options: {
       return;
     }
   }
-  if ((await discoveryIndexUuid(search, index)) !== target.uuid)
-    throw new Error('Discovery incarnation changed before activation');
+  if (!(await discoveryPhysicalTargetMatches(search, target))) {
+    await retireDiscoveryCapability(pool, target);
+    return;
+  }
   await assertDiscoveryCapabilityBinding(pool, target, metadataProducers);
   const previous = generations.find((row) => row.state === 'active');
   await withConnection(pool, (client) =>
@@ -1360,6 +1394,10 @@ export async function advanceDiscovery(options: {
   await withConnection(pool, async (client) => {
     await client.query('BEGIN');
     try {
+      if (previous)
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+          discoveryIndexName(prefix, previous.generation),
+        ]);
       await client.query(
         "UPDATE search.discovery_generation SET state='retiring' WHERE partition_no=0 AND prefix=$1 AND state='active' AND generation<>$2",
         [prefix, target.generation],
