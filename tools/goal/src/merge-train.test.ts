@@ -13,7 +13,7 @@ import { firstFailure, gateRunner, git } from './merge.ts';
 import { parseBrief, protectedRiskAreasForBrief, readRiskOwnership } from './briefs.ts';
 import { WorkerStore } from './store.ts';
 import { TrainResolver } from './train-resolver.ts';
-import { harvestContinuations } from './continuation.ts';
+import { completeContinuation, harvestContinuations } from './continuation.ts';
 import { readControlPolicy } from './policy.ts';
 import { integrationHarness, markdown, repository } from './test-support.ts';
 
@@ -70,16 +70,24 @@ test('tracked continuation custody leaves one clean product landing', async () =
     h.ensureDev();
     const base = h.head(),
       task = h.dispatch('result.txt');
-    const continuation = markdown
-      .replace('goal: fixture\n', `goal: fixture\nmanager: ${JSON.stringify(task.brief.manager)}\n`)
-      .replace(
-        'paths: [result.txt]\nwaiting: []',
-        `paths: [follow-up.txt]\nwaiting: []\nafter: ${JSON.stringify([task.id])}`,
-      )
-      .replace('Write the requested result and commit it.', 'Finish the follow-up slice.');
-    const ordinary = continuation
-      .replace('paths: [follow-up.txt]', 'paths: [ordinary.txt]')
-      .replace('Finish the follow-up slice.', 'Finish the ordinary slice.');
+    const continuation = completeContinuation(
+      markdown
+        .replace('goal: fixture\n', `goal: fixture\nmanager: ${JSON.stringify(task.brief.manager)}\n`)
+        .replace(
+          'paths: [result.txt]\nwaiting: []',
+          `paths: [follow-up.txt]\nwaiting: []\nafter: ${JSON.stringify([task.id])}`,
+        )
+        .replace('Write the requested result and commit it.', 'Finish the follow-up slice.'),
+      task,
+      undefined,
+    );
+    const ordinary = completeContinuation(
+      continuation
+        .replace('follow-up.txt', 'ordinary.txt')
+        .replace('Finish the follow-up slice.', 'Finish the ordinary slice.'),
+      task,
+      undefined,
+    );
     const planned = join(task.worktree, '.temp/goal/expected-continuation.md');
     mkdirSync(dirname(planned), { recursive: true });
     writeFileSync(planned, continuation);
