@@ -1236,6 +1236,10 @@ is never permission. A contention retry prepares native authority afresh under t
 original request deadline and evidence TTL; it does not renew the deadline or reuse
 authorization from before preparation.
 
+Decision: the cold HTTP acceptance child streams bounded phase tags for handler entry and return, response-body
+consumption, `kernel.stop(true)`, pool closure and historical-graph closure. Keep the existing orderly cleanup sequence
+and the 2,000 ms production deadline; repair only the owner of the first phase that fails to settle.
+
 The indivisible cold checker must leave the request event loop so unrelated requests
 can progress. A Bun thread running the same bounded checker is a candidate, not a
 delivered or frozen Core port. Before implementation, shared owners must specify and
