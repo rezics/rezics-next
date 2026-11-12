@@ -19,7 +19,7 @@ import type { AttemptRecord } from './types.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 type ReportPolicy = ControlPolicy['hourlyReport'];
 
-export const PRODUCT_LINE_FILTER_VERSION = 'rezics-product-code-v1';
+export const PRODUCT_LINE_FILTER_VERSION = 'rezics-product-code-v2';
 
 export type ProductLineMeasurement = {
   productLines: number | null;
@@ -111,35 +111,129 @@ function unknownMeasurement(
   };
 }
 
-function productLineCount(
-  repository: string,
-  revisions: string,
-  since: string | undefined,
-  until: string | undefined,
-  inWindow: (timestampMs: number) => boolean,
-): number | null {
-  const history = spawnSync(
+const GIT_OBJECT_ID = /^[a-f\d]{40}(?:[a-f\d]{24})?$/i;
+
+type GitCommit = { id: string; tree: string; parents: string[]; timestamp: number };
+type SourceHistory = { commits: Map<string, GitCommit>; excludedCommits: Set<string> };
+
+function gitHistoryIsComplete(repository: string): boolean {
+  const result = spawnSync('git', ['rev-parse', '--is-shallow-repository'], {
+    cwd: repository,
+    encoding: 'utf8',
+  });
+  if (result.error) throw result.error;
+  return result.status === 0 && result.stdout.trim() === 'false';
+}
+
+/** Read the reachable commit graph in one plumbing call, so merge classification stays bounded by calls, not merges. */
+function readGitCommitGraph(repository: string, revision: string): Map<string, GitCommit> | null {
+  const graph = spawnSync(
     'git',
-    [
-      'log',
-      revisions,
-      ...(since ? [`--since=${since}`] : []),
-      ...(until ? [`--until=${until}`] : []),
-      '--format=tformat:__COMMIT__%ct',
-      '--numstat',
-    ],
+    ['rev-list', '--no-commit-header', '--format=tformat:__COMMIT__%H%x09%T%x09%P%x09%ct', revision],
     { cwd: repository, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
   );
-  if (history.error) throw history.error;
-  if (history.status !== 0) return null;
+  if (graph.error) {
+    if ((graph.error as NodeJS.ErrnoException).code === 'ENOBUFS') return null;
+    throw graph.error;
+  }
+  if (graph.status !== 0) return null;
+
+  const commits = new Map<string, GitCommit>();
+  for (const row of graph.stdout.split(/\r?\n/)) {
+    if (!row) continue;
+    if (!row.startsWith('__COMMIT__')) return null;
+    const [id, tree, parentList, timestampText] = row.slice('__COMMIT__'.length).split('\t');
+    const timestamp = Number(timestampText);
+    if (
+      !id ||
+      !tree ||
+      parentList === undefined ||
+      !Number.isSafeInteger(timestamp) ||
+      !GIT_OBJECT_ID.test(id) ||
+      !GIT_OBJECT_ID.test(tree)
+    )
+      return null;
+    const parents = parentList ? parentList.split(' ') : [];
+    if (parents.some((parent) => !GIT_OBJECT_ID.test(parent)) || commits.has(id)) return null;
+    commits.set(id, { id, tree, parents, timestamp });
+  }
+  return commits.size ? commits : null;
+}
+
+/** Return commits and side history first made reachable by exact-tree-equal first-parent merges. */
+function sourceNeutralSideHistory(repository: string, revision: string): SourceHistory | null {
+  if (!gitHistoryIsComplete(repository)) return null;
+  const commits = readGitCommitGraph(repository, revision);
+  if (!commits) return null;
+
+  const firstParentHistory: GitCommit[] = [];
+  const firstParentSeen = new Set<string>();
+  let currentId = revision;
+  while (true) {
+    const commit = commits.get(currentId);
+    if (!commit || firstParentSeen.has(commit.id)) return null;
+    firstParentSeen.add(commit.id);
+    firstParentHistory.push(commit);
+    if (commit.parents.length === 0) break;
+    currentId = commit.parents[0]!;
+  }
+
+  const reachableAtPriorFirstParent = new Set<string>();
+  const excluded = new Set<string>();
+  for (let index = firstParentHistory.length - 1; index >= 0; index--) {
+    const commit = firstParentHistory[index]!;
+    const firstParent = commit.parents.length > 1 ? commits.get(commit.parents[0]!) : undefined;
+    if (commit.parents.length > 1 && !firstParent) return null;
+    const sourceNeutral = Boolean(firstParent && commit.tree === firstParent.tree);
+
+    for (const sideParent of commit.parents.slice(1)) {
+      const pending = [sideParent];
+      while (pending.length) {
+        const id = pending.pop()!;
+        if (reachableAtPriorFirstParent.has(id)) continue;
+        const sideCommit = commits.get(id);
+        if (!sideCommit) return null;
+        reachableAtPriorFirstParent.add(id);
+        if (sourceNeutral) excluded.add(id);
+        pending.push(...sideCommit.parents);
+      }
+    }
+    reachableAtPriorFirstParent.add(commit.id);
+  }
+  return { commits, excludedCommits: excluded };
+}
+
+function productLineCount(
+  repository: string,
+  commitIds: readonly string[],
+  commits: ReadonlyMap<string, GitCommit>,
+  excludedCommits: ReadonlySet<string>,
+  inWindow: (timestampMs: number) => boolean,
+): number | null {
+  const selected = commitIds.filter((id) => {
+    const commit = commits.get(id);
+    return Boolean(commit && !excludedCommits.has(id) && inWindow(commit.timestamp * 1000));
+  });
+  if (selected.length === 0) return 0;
+
+  const changes = spawnSync('git', ['diff-tree', '--root', '--numstat', '-r', '--stdin'], {
+    cwd: repository,
+    encoding: 'utf8',
+    input: `${selected.join('\n')}\n`,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (changes.error) {
+    if ((changes.error as NodeJS.ErrnoException).code === 'ENOBUFS') return null;
+    throw changes.error;
+  }
+  if (changes.status !== 0) return null;
 
   let includeCommit = false;
   let lines = 0;
-  for (const row of history.stdout.split(/\r?\n/)) {
-    if (row.startsWith('__COMMIT__')) {
-      const timestamp = Number(row.slice('__COMMIT__'.length));
-      if (!Number.isSafeInteger(timestamp)) return null;
-      includeCommit = inWindow(timestamp * 1000);
+  for (const row of changes.stdout.split(/\r?\n/)) {
+    if (GIT_OBJECT_ID.test(row)) {
+      if (!commits.has(row)) return null;
+      includeCommit = true;
       continue;
     }
     if (!includeCommit || !row) continue;
@@ -167,30 +261,43 @@ export function measureProductLineObservation(
   });
   if (head.error) throw head.error;
   const revision = head.status === 0 ? head.stdout.trim() : '';
-  if (!/^[a-f\d]{40}(?:[a-f\d]{24})?$/i.test(revision)) return unknownMeasurement();
+  if (!GIT_OBJECT_ID.test(revision)) return unknownMeasurement();
+  const sourceHistory = sourceNeutralSideHistory(repository, revision);
+  if (!sourceHistory) return unknownMeasurement(revision);
   const startMs = Date.parse(bucket.start);
   const endMs = Date.parse(bucket.end);
   const lines = productLineCount(
     repository,
-    revision,
-    bucket.start,
-    undefined,
+    [...sourceHistory.commits.keys()],
+    sourceHistory.commits,
+    sourceHistory.excludedCommits,
     (time) => time >= startMs && time < endMs,
   );
   if (lines === null) return unknownMeasurement(revision);
   const validPreviousRevision =
-    previousSourceRevision && /^[a-f\d]{40}(?:[a-f\d]{24})?$/i.test(previousSourceRevision)
-      ? previousSourceRevision
-      : null;
-  const backfillLines = validPreviousRevision
-    ? productLineCount(
-        repository,
-        `${validPreviousRevision}..${revision}`,
-        undefined,
-        undefined,
-        (time) => time < startMs,
-      )
-    : null;
+    previousSourceRevision && GIT_OBJECT_ID.test(previousSourceRevision) ? previousSourceRevision : null;
+  let backfillLines: number | null = null;
+  if (validPreviousRevision) {
+    const delta = spawnSync('git', ['rev-list', `${validPreviousRevision}..${revision}`], {
+      cwd: repository,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (delta.error) {
+      if ((delta.error as NodeJS.ErrnoException).code !== 'ENOBUFS') throw delta.error;
+    } else if (delta.status === 0) {
+      const commitIds = delta.stdout.trim() ? delta.stdout.trim().split(/\r?\n/) : [];
+      if (commitIds.every((id) => GIT_OBJECT_ID.test(id) && sourceHistory.commits.has(id))) {
+        backfillLines = productLineCount(
+          repository,
+          commitIds,
+          sourceHistory.commits,
+          sourceHistory.excludedCommits,
+          (time) => time < startMs,
+        );
+      }
+    }
+  }
   return {
     productLines: lines,
     attribution: 'measured',

@@ -125,10 +125,40 @@ test('an allowance that will expire unused alerts the supermanager, at most ever
     const read = (pool: Pool) => (pool === claude ? reading(claude, 52, 5) : reading(codex, 20, 150));
     expect(alertUnspentAllowances([claude, codex], read, state, (s) => sent.push(s), now)).toBe(1);
     expect(sent[0]).toContain('claude has 18% unused');
+    expect(sent[0]).toContain('fresh observation');
+    expect(sent[0]).toContain(
+      'missing or stale reset data falls back to the existing (100 - usedPercent) * weight score',
+    );
     expect(alertUnspentAllowances([claude, codex], read, state, (s) => sent.push(s), now + hour)).toBe(0);
     expect(alertUnspentAllowances([claude, codex], read, state, (s) => sent.push(s), now + 3 * hour)).toBe(1);
     writeFileSync(join(state, 'pacing-alerts.json'), 'not json');
     expect(alertUnspentAllowances([claude, codex], read, state, () => {}, now + 4 * hour)).toBe(1);
+  } finally {
+    rmSync(state, { recursive: true, force: true });
+  }
+});
+
+test('stale or reset-unknown observations do not produce a pacing alert or a trusted pace', () => {
+  const state = mkdtempSync(join(tmpdir(), 'pacing-stale-'));
+  try {
+    const stale = reading(claude, 52, 5);
+    stale.observedAt = new Date(now - 25 * hour).toISOString();
+    const sent: string[] = [];
+    expect(pace(stale, claude, now)).toBeUndefined();
+    expect(
+      alertUnspentAllowances(
+        [claude],
+        () => stale,
+        state,
+        (s) => sent.push(s),
+        now,
+      ),
+    ).toBe(0);
+    expect(sent).toEqual([]);
+
+    const noReset = reading(claude, 52, 5);
+    noReset.windows[1]!.resetsAt = null;
+    expect(pace(noReset, claude, now)).toBeUndefined();
   } finally {
     rmSync(state, { recursive: true, force: true });
   }

@@ -576,7 +576,7 @@ fields listed below; the empty policy object deliberately provides no account po
 | `configDirectory`       | Becomes `CODEX_HOME`, `GROK_HOME`, `CURSOR_CONFIG_DIR` or `CLAUDE_CONFIG_DIR`.                                                              |
 | `allowanceKey`          | Pools and CLI aliases sharing quota must use the same local key.                                                                            |
 | `usageFile`             | Optional normalized `PoolReading` JSON for providers without Codex rollout quota events.                                                    |
-| `policy.weight`         | Required positive number for relative pool preference.                                                                                      |
+| `policy.weight`         | Required positive number for static fallback ordering and ties between reset-pressure scores.                                               |
 | `policy.reservePercent` | Required number from zero up to, but excluding, 100.                                                                                        |
 | `policy.allowUnknown`   | Required boolean: whether dispatch may proceed without fresh quota observations.                                                            |
 | `policy.maxAgeMs`       | Required positive observation lifetime in milliseconds.                                                                                     |
@@ -588,6 +588,8 @@ CLI reports a usage-limit refusal, Goal checks the pool's latest quota reading: 
 than `maxAgeMs` excludes that allowance. A fresh reading with allowance left retries the same pool after three
 minutes. Three usage-limit refusals on one pool within an hour exclude its allowance for one hour. Other native quota
 failures exclude all aliases of that allowance immediately. There is no credit purchase or reset-card redemption path.
+
+Decision: eligible ordinary pools within one profile rank by fresh reset pressure (unused allowance above reserve per hour until the longest reset); all need trusted reset evidence or routing falls back to its existing `(100 - usedPercent) * weight` score; that score and then pool name break pressure ties, explicit same-attempt affinity wins first, and manager pools keep static ordering.
 
 Decision: each selection indexes retained same-window readings once by allowance key (one per pool per minute, last 90
 minutes / `policy.pacing.burnSpanMs`) and reuses that span rate across fallbacks. A window is the same when its
@@ -1248,6 +1250,10 @@ most the preceding bucket. The original 2,979 and 4,266 values and 7,245 observe
 history: no permitted original delivery source provided exact UTC labels or provenance, so no bucket is fabricated
 and 10,232 is not used.
 
+Decision: Native attribution excludes only newly reachable side history from first-parent merges whose tree exactly
+matches their first parent; source-bearing merges and later landings remain countable, incomplete history is unknown,
+and the path filter advances to v2.
+
 The private duty keeps its existing hourly sleep boundary, inbox alarm, and Telegram sender. After the source is
 promoted, the controller replaces the existing `.temp/goal/watch/hourly-report.sh` bridge in place at its ordinary
 post-send boundary. Remove its `lines()` helper and the `n=$(lines ...)` / `n2=$(lines ...)` calls. Keep its current
@@ -1308,8 +1314,9 @@ alarms keep their configured periodic escalation, and hourly flow reports contin
 alarms, daily audit notices, check-result reuse alerts and shared environment incidents go to the configured
 supermanager; priority grants and scope decisions remain with the supermanager.
 The worker retry alarm uses integrations from the trailing seven days and names that window, integrated-task sample,
-and attempt-generation sample. It rearms when the sampled ratio changes or recovers and breaches again; older history,
-waiting-task rotation, and same-attempt resumes do not rearm it. Actual queue age keeps its own alert.
+and attempt-generation sample. An active retry breach stays active through sampled-ratio drift, older history,
+waiting-task rotation, and same-attempt resumes; only a measured trailing-seven-day sample at or below the configured
+threshold records recovery. A later breach sends once. Actual queue age keeps its own alert.
 
 Decision: Flow attempt ratios count distinct task/generation pairs and add each integrated generation from its
 authoritative integration event; process launches stay separate, while retry alarms use the named trailing-seven-day
@@ -2095,6 +2102,7 @@ After rebasing a single or batched landing, a composed candidate that preserves 
 Decision: Publish every nonempty composed candidate through the existing checks and expected-head transaction; reconcile a false integrated outcome from its original delivered landing provenance, preserving the old outcome as evidence before replaying the same attempt.
 
 `bun tools/goal/src/cli.ts recover false-integration <task> <attempt>` reopens only that current task's delivered single-landing result when its saved candidate is a nonempty descendant of the reported commit and the accepted source branch still matches. It preserves the prior request and outcome, clears only resolver replay state, and leaves the same queue entry for the ordinary train.
+Decision: false-integration recovery keeps the completed landing operation immutable, reopens the same queue row with a fresh operation ID, records one enqueue in the reconciliation transaction, and creates no extra operation on replay.
 
 Specification conflicts, tool failures and exhausted quota are attempt facts, parsed from a structured worker exit or
 native CLI failure, and stored on the attempt. A usage-limit refusal with a fresh reading that shows allowance left
