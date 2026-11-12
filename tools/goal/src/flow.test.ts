@@ -895,34 +895,27 @@ test('retry alarms stay active through drift and rearm only after a measured rec
     attemptsPerIntegrated: integratedTasks ? attemptGenerations / integratedTasks : null,
   });
   report.attemptsPerIntegrated = 99;
-  report.attemptsPerIntegratedSample = sample(3, 11);
-  const waiting = { stage: 'check' as const, length: 1, oldestAgeMs: 1, tasks: ['waiting-task'] };
   const sent: string[] = [];
-  const run = (offset: number) =>
-    checkFlowAlarms(db, report, (summary) => sent.push(summary), new Date(now + offset), undefined, policy);
+  const run = (integratedTasks: number, generations: number, offset: number, taskId?: string) => {
+    report.attemptsPerIntegratedSample = sample(integratedTasks, generations);
+    if (taskId) report.queues[1] = { stage: 'check', length: 1, oldestAgeMs: 1, tasks: [taskId] };
+    return checkFlowAlarms(db, report, (summary) => sent.push(summary), new Date(now + offset), undefined, policy);
+  };
+  const active = () =>
+    db.query('SELECT active FROM flow_alarm_sends WHERE threshold=?').get('attempts-per-integrated');
+  const sentAt = new Date(now - 60_000).toISOString();
   try {
-    expect(run(0)).toEqual(['attempts-per-integrated']);
+    expect(run(3, 11, 0)).toEqual(['attempts-per-integrated']);
     expect(sent[0]).toContain('trailing 7 days (3 integrated tasks; 11 attempt generations)');
-    db.query('UPDATE flow_alarm_sends SET sent_at=?,fingerprint=NULL WHERE threshold=?').run(
-      new Date(now - 60_000).toISOString(),
-      'attempts-per-integrated',
-    );
-    report.queues[1] = { ...waiting, tasks: ['next-task'] };
-    report.attemptsPerIntegratedSample = sample(6, 24);
-    expect(run(10_001)).toEqual([]);
-    report.queues[1] = { ...waiting, tasks: ['rotated-task'] };
-    report.attemptsPerIntegratedSample = sample(0, 0);
-    expect(run(10_002)).toEqual([]);
-    expect(
-      db.query('SELECT active FROM flow_alarm_sends WHERE threshold=?').get('attempts-per-integrated'),
-    ).toEqual({ active: 1 });
-    report.attemptsPerIntegratedSample = sample(6, 6);
-    expect(run(10_003)).toEqual([]);
-    expect(
-      db.query('SELECT active FROM flow_alarm_sends WHERE threshold=?').get('attempts-per-integrated'),
-    ).toEqual({ active: 0 });
-    report.attemptsPerIntegratedSample = sample(4, 8);
-    expect(run(10_004)).toEqual(['attempts-per-integrated']);
+    db
+      .query('UPDATE flow_alarm_sends SET sent_at=?,fingerprint=NULL WHERE threshold=?')
+      .run(sentAt, 'attempts-per-integrated');
+    expect(run(6, 24, 10_001, 'next-task')).toEqual([]);
+    expect(run(0, 0, 10_002, 'rotated-task')).toEqual([]);
+    expect(active()).toEqual({ active: 1 });
+    expect(run(6, 6, 10_003)).toEqual([]);
+    expect(active()).toEqual({ active: 0 });
+    expect(run(4, 8, 10_004)).toEqual(['attempts-per-integrated']);
     expect(sent).toHaveLength(2);
     expect(report.attemptsPerIntegrated).toBe(99);
   } finally {

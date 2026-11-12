@@ -1077,6 +1077,17 @@ export type FlowThresholds = {
 };
 export const DEFAULT_FLOW_THRESHOLDS: FlowThresholds = defaults.flow;
 
+function flowAlarmRecovered(
+  threshold: string,
+  activeThresholds: ReadonlySet<string>,
+  retrySample: ReturnType<typeof flowReport>['attemptsPerIntegratedSample'],
+  retryThreshold: number,
+): boolean {
+  return threshold === 'attempts-per-integrated'
+    ? retrySample.attemptsPerIntegrated !== null && retrySample.attemptsPerIntegrated <= retryThreshold
+    : !activeThresholds.has(threshold);
+}
+
 function waitingQueueFingerprint(queues: ReturnType<typeof flowReport>['queues']): string {
   const hash = createHash('sha256');
   const add = (value: string) => hash.update(`${value.length}:`).update(value).update('\0');
@@ -1128,19 +1139,9 @@ export function checkFlowAlarms(
   const previouslyActive = db.query('SELECT threshold FROM flow_alarm_sends WHERE active=1').all() as {
     threshold: string;
   }[];
-  for (const row of previouslyActive) {
-    if (row.threshold === 'attempts-per-integrated') {
-      // Only a measured in-range sample proves this historical retry breach recovered.
-      if (
-        retrySample.attemptsPerIntegrated !== null &&
-        retrySample.attemptsPerIntegrated <= thresholds.attemptsPerIntegrated
-      )
-        db.query('UPDATE flow_alarm_sends SET active=0 WHERE threshold=?').run(row.threshold);
-      continue;
-    }
-    if (!activeThresholds.has(row.threshold))
+  for (const row of previouslyActive)
+    if (flowAlarmRecovered(row.threshold, activeThresholds, retrySample, thresholds.attemptsPerIntegrated))
       db.query('UPDATE flow_alarm_sends SET active=0 WHERE threshold=?').run(row.threshold);
-  }
   const queueFingerprint = waitingQueueFingerprint(report.queues);
   const hasWaitingTasks = report.queues.some((queue) => queue.length > 0 || queue.tasks.length > 0);
   for (const [key, stage, measurement] of breaches) {
