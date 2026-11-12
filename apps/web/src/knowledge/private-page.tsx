@@ -8,7 +8,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
 import { useLocation } from '@tanstack/react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { DocumentBody } from '../document-body';
 import { useOperationAdmission } from '../kernel/exposure';
@@ -1799,26 +1799,11 @@ export function KnowledgePrivatePage({
   const publication = useOperationAdmission('knowledge_document.select_publication');
   const history = useOperationAdmission('knowledge_document.history');
   const compare = useOperationAdmission('knowledge_document.compare');
-  const lifecycleExposure = useQuery({
-    ...viewerExposureQuery(exposureSnapshot.state === 'signed-in' ? exposureSnapshot.observation : undefined),
-    enabled: exposureSnapshot.state === 'signed-in',
-  });
+  const lifecycleRead = useOperationAdmission('knowledge_document.lifecycle');
+  const trash = useOperationAdmission('knowledge_document.trash');
+  const restore = useOperationAdmission('knowledge_document.restore');
 
   const viewer = session.state === 'signed-in' && typeof session.subject === 'string' ? session.subject : null;
-  // Lifecycle uses the native operation names from the same session-owned exposure read.
-  function lifecycleAdmission(
-    operation: 'knowledge_document.lifecycle' | 'knowledge_document.trash' | 'knowledge_document.restore',
-  ): KnowledgePrivateAdmission {
-    if (exposureSnapshot.state !== 'signed-in' || exposureSnapshot.observation.subject !== viewer) return 'unknown';
-    if (lifecycleExposure.isError) return 'unavailable';
-    const result = lifecycleExposure.data;
-    if (!result || result.subject !== viewer) return 'unknown';
-    if (result.state === 'unavailable' || result.state === 'denied') return result.state;
-    return result.admitted.includes(operation) ? 'available' : 'denied';
-  }
-  const lifecycleRead = lifecycleAdmission('knowledge_document.lifecycle');
-  const trash = lifecycleAdmission('knowledge_document.trash');
-  const restore = lifecycleAdmission('knowledge_document.restore');
   let exposureRevision = 'closed';
   if (exposureSnapshot.state === 'signed-in' && exposureSnapshot.observation.subject === viewer) {
     const key = viewerExposureQuery(exposureSnapshot.observation).queryKey;
