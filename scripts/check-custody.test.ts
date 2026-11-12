@@ -180,6 +180,7 @@ test('remote custody bounds round-trip generated, escaped and transitioned recor
     ['check-b', 'terminal'],
   ]);
   expect(record?.attempts[1]).toMatchObject({ id: 'second-run', native, settlement: expect.any(Object) });
+  expect(record?.binding).toEqual({ ...binding, hostsFile: join(root, 'hosts.json'), returns: [] });
 
   const max = CHECK_CUSTODY_RECORD_MAX_CHARACTERS;
   const boundary = { payload: 'x'.repeat(max - custodyJsonCharacters({ payload: '' })) };
@@ -196,8 +197,31 @@ test('remote custody bounds round-trip generated, escaped and transitioned recor
   const oversizedRunId = randomUUID();
   expect(() =>
     initializeRemoteRunCustody(root, oversizedRunId, { checkId, argv, remoteArgv: ['bun', 'x'.repeat(64 * 1024)] }),
-  ).toThrow('serialized custody record exceeds');
+  ).toThrow('worker-check: invalid remote custody binding');
   expect(existsSync(remoteRunCustodyPath(root, oversizedRunId))).toBe(false);
+
+  const aggregateRunId = randomUUID();
+  const aggregateRemoteArgv = ['a'.repeat(27_000), 'b'.repeat(27_000)];
+  const aggregateBinding = { checkId, argv, remoteArgv: aggregateRemoteArgv };
+  const aggregateRecordLimit = CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS;
+  expect([...argv, ...aggregateRemoteArgv].every((argument) => Buffer.byteLength(argument) <= 48 * 1024)).toBe(true);
+  expect(Buffer.byteLength(JSON.stringify([aggregateBinding.argv, aggregateBinding.remoteArgv]))).toBeLessThanOrEqual(
+    56 * 1024,
+  );
+  expect(
+    custodyJsonCharacters({
+      version: 1,
+      physicalRunId: aggregateRunId,
+      binding: aggregateBinding,
+      status: 'running',
+      attempts: [],
+      updatedAt: new Date().toISOString(),
+    }),
+  ).toBeGreaterThan(aggregateRecordLimit);
+  expect(() => initializeRemoteRunCustody(root, aggregateRunId, aggregateBinding)).toThrow(
+    `worker-check: serialized custody record exceeds ${aggregateRecordLimit}-character bound`,
+  );
+  expect(existsSync(remoteRunCustodyPath(root, aggregateRunId))).toBe(false);
 });
 
 afterEach(() => {

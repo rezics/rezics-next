@@ -58,7 +58,7 @@ serially and backlogs stayed empty. From 03:00 to 04:00 UTC on 2026-11-07, 9 wor
 
 Decision: ordinary product worker-check commands typecheck changed workspaces before landing and refuse test, native, browser and growth commands before upload. Urgent, control-plane, proof-run and acceptance-requires briefs keep their declared checks when the host-run budget is off.
 
-Decision: remote run custody admission and updates use the reader's 64 KiB serialized JSON character limit; initial admission reserves 12 KiB for host and terminal transitions. Generated typing commands retain their existing 3,000-character argv chunks and exact argument boundaries.
+Decision: remote run custody admission and updates use the reader's 64 KiB serialized JSON character limit; initial admission reserves 12 KiB for host and terminal transitions. Generated typing commands retain their existing 3,000-character argv chunks and exact argument boundaries. Tests separately pin per-argument binding rejection, aggregate serialized-record rejection, and terminal retention of the canonical binding, including compressed argv, hosts file and returns.
 
 Decision: the worker owns and completes the private-follow host fixture, Auth-persona served journey, and 64/512/4096
 fixed-neighborhood growth measurement case in the feature worktree. Capability promotion still waits for the installed
