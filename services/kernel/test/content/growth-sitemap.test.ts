@@ -247,6 +247,7 @@ for (const feed of ['boards', 'threads'] as const) {
     expect(nextPage.next).not.toBe(firstPage.next);
     const report = await checkGrowth(db, {
       name: `Sitemap ${feed} page, listed items`,
+      captureMode: 'cost-folded',
       rule: 'series',
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       grow: (_database, scale, previous) => grow(listed, scale, previous),
@@ -291,6 +292,7 @@ for (const feed of ['boards', 'threads'] as const) {
     expect(nextPage.next).not.toBe(firstPage.next);
     const report = await checkGrowth(db, {
       name: `Sitemap ${feed} page, protected Realm content`,
+      captureMode: 'cost-folded',
       ...(feed === 'boards' ? { rule: 'series' as const } : {}),
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       grow: (_database, scale, previous) => grow(hidden, scale, previous),

@@ -25,8 +25,11 @@ while dependency-held, urgent and control-plane tasks are exempt. Ready work wai
 `after` only when a brief calls another task's undelivered API, schema or component; overlapping files and repair tasks
 are not dependencies, since the train resolver merges conflicts. Declare a risk area only when a path touches it; the
 controller adds those from paths, and extra areas route work as slower claims. Own brief quality. In under 4,000
-characters, state one complete outcome, current evidence, owning paths, and acceptance. Name the worker's permitted
-checks and the verifier's checks separately. Preflight against current dev; remove stale work and instructions. Within
+characters, brief one concrete user outcome, current evidence, the worker-owned write boundary, and the smallest
+required check; name verifier acceptance separately. Preflight against current dev; remove stale work and instructions.
+Follow [the operating discipline](docs/development/efficiency.md#operating-discipline). Let the worker choose repair
+order and take the next evidenced fix within the owned boundary. Before a worker parks, have the next independent
+writable slice ready in the existing backlog. Within
 {{task.stoppedLimit}}, handle stopped work in order: first recover completed source waiting only for compiler typing
 evidence with `bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <n>`; then handle actual stopped source
 work as before by retrying with a rewritten brief, splitting or cancelling it. Leave mechanical gates, retries and merges

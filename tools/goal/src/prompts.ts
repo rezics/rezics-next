@@ -379,7 +379,7 @@ function promptView(input: WorkerPromptInput, deferOrdinaryTests = false): Promp
     checkOnce: owned ? OWNED_ONCE : SCARCE_ONCE,
     noWrapperRun: owned
       ? 'This base has no scripts/worker-check.ts; do not add one. Run your focused validation command in the foreground from the worktree root and let it finish; it gives no check id and no waiting result.'
-      : 'This base has no scripts/worker-check.ts; do not add one. Run the acceptance command in the foreground from the worktree root and let it finish, then report its actual exit status; it gives no check id and no waiting result.',
+      : `This base has no scripts/worker-check.ts; do not add one. ${localRun}`,
     ownedNoWrapperTail: owned ? ' Do not report success unless the chosen validation actually exits zero.' : '',
     wrapperInvocation: runner ? `${runner} -- <command...>` : 'bun scripts/worker-check.ts -- <command...>',
     wrapperResult:
@@ -387,7 +387,9 @@ function promptView(input: WorkerPromptInput, deferOrdinaryTests = false): Promp
     localRun,
     minimalOwned: owned
       ? 'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome; they run after landing in the dev verifier. A missing acceptance command is not a pass. Broader acceptance remains deferred under this policy. '
-      : '',
+      : brief.goal === 'control-plane' && command?.length
+        ? `${localRun} `
+        : '',
     proofSourceCommit: proofSource,
     proofCheckId,
     proofObservation,
