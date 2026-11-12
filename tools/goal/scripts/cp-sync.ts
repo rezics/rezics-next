@@ -8,7 +8,7 @@
  */
 import { readScriptPolicy, scriptPolicy, withScriptPolicy } from '../src/script-policy.ts';
 import { type ControlPolicy } from '../src/policy.ts';
-import { RESIDENT_CODE_UNITS } from '../src/service.ts';
+import { RESIDENT_CODE_UNITS, VERIFIER_UNIT } from '../src/service.ts';
 import { hasCpSyncAncestry } from './cp-sync-ancestry.ts';
 import {
   planCpSyncRefs,
@@ -414,6 +414,8 @@ export type ResidentHealth = {
 export type ResidentWindow = { samples: number; sampleMs: number };
 export type ResidentControl = {
   observe(checkout: string, sampling: ResidentWindow): Promise<ResidentHealth>;
+  /** Refuse a service reinstall that would activate an intentionally paused verifier, before refs move. */
+  preflight?(checkout: string): Promise<void>;
   restart(checkout: string, options?: { install: boolean }): Promise<void>;
 };
 
@@ -502,21 +504,23 @@ export const residentCommand: ResidentCommand = async (argv, checkout) => {
   return { code, output: out + err };
 };
 
-/** Run only after publication: the newly published main supplies the installer. */
-export async function restartResident(
-  checkout: string,
-  run: ResidentCommand = residentCommand,
-  install = false,
-): Promise<void> {
+type ResidentStatus = {
+  checked(argv: string[]): Promise<string>;
+  loads: Map<string, string>;
+  legacy: string;
+  verifierPaused: boolean;
+};
+
+async function residentStatus(checkout: string, run: ResidentCommand): Promise<ResidentStatus> {
   const checked = async (argv: string[]) => {
     const result = await run(argv, checkout);
     if (result.code !== 0 && !(argv.includes('--property=LoadState') && result.output.trim() === 'not-found'))
       throw new Refusal(result.output.trim() || `${argv.join(' ')}: exit ${result.code}`);
     return result.output.trim();
   };
-  const loads: string[] = [];
+  const loads = new Map<string, string>();
   for (const unit of RESIDENT_CODE_UNITS)
-    loads.push(await checked(['systemctl', '--user', 'show', '--property=LoadState', '--value', unit]));
+    loads.set(unit, await checked(['systemctl', '--user', 'show', '--property=LoadState', '--value', unit]));
   const legacy = await checked([
     'systemctl',
     '--user',
@@ -525,18 +529,66 @@ export async function restartResident(
     '--value',
     'rezics-goal-supervisor.service',
   ]);
-  if (
+  let verifierPaused = false;
+  if (loads.get(VERIFIER_UNIT) === 'loaded') {
+    const active = await checked([
+      'systemctl',
+      '--user',
+      'show',
+      '--property=ActiveState',
+      '--value',
+      VERIFIER_UNIT,
+    ]);
+    const unitFile = await checked([
+      'systemctl',
+      '--user',
+      'show',
+      '--property=UnitFileState',
+      '--value',
+      VERIFIER_UNIT,
+    ]);
+    verifierPaused = active === 'inactive' && unitFile === 'disabled';
+  }
+  return { checked, loads, legacy, verifierPaused };
+}
+
+function residentInstallRequired(checkout: string, status: ResidentStatus, install: boolean): boolean {
+  return (
     install ||
     !existsSync(join(checkout, '.temp/goal/goal.env')) ||
-    loads.includes('not-found') ||
-    legacy === 'loaded' ||
+    [...status.loads.values()].includes('not-found') ||
+    status.legacy === 'loaded' ||
     existsSync(join(checkout, '.temp/goal/manager-host-supervisor.lease')) ||
     existsSync(join(checkout, '.temp/goal/manager-host-liveness.json'))
-  )
-    await checked([process.execPath, 'tools/goal/src/cli.ts', 'service', 'install']);
+  );
+}
+
+function refusePausedVerifierInstall(): never {
+  throw new Refusal(
+    `${VERIFIER_UNIT} is loaded, inactive and disabled; refusing service installation because it would enable and start the verifier.`,
+  );
+}
+
+/** Check before publication when the installed services would otherwise be rendered, enabled and started. */
+export async function preflightResident(checkout: string, run: ResidentCommand = residentCommand): Promise<void> {
+  const status = await residentStatus(checkout, run);
+  if (status.verifierPaused && residentInstallRequired(checkout, status, false)) refusePausedVerifierInstall();
+}
+
+/** Run only after publication: the newly published main supplies the installer. */
+export async function restartResident(
+  checkout: string,
+  run: ResidentCommand = residentCommand,
+  install = false,
+): Promise<void> {
+  const status = await residentStatus(checkout, run);
+  const installServices = residentInstallRequired(checkout, status, install);
+  if (status.verifierPaused && installServices) refusePausedVerifierInstall();
+  if (installServices) await status.checked([process.execPath, 'tools/goal/src/cli.ts', 'service', 'install']);
   // Host Type=notify waits for READY=1; KillMode=process keeps worker scopes. The verifier restarts on its own unit.
   const publishedAtSec = Math.floor(Date.now() / 1000);
   for (const unit of RESIDENT_CODE_UNITS) {
+    if (unit === VERIFIER_UNIT && status.verifierPaused) continue;
     const restarted = await run(['systemctl', '--user', 'restart', unit], checkout);
     if (restarted.code !== 0)
       throw new Refusal(`${unit} failed to restart: ${restarted.output.trim() || `exit ${restarted.code}`}`);
@@ -563,6 +615,7 @@ export function residentRegression(before: ResidentHealth, after: ResidentHealth
 }
 const residentControl: ResidentControl = {
   observe: (checkout, sampling) => observeResident(checkout, sampling),
+  preflight: (checkout) => preflightResident(checkout, residentCommand),
   restart: (checkout, options) => restartResident(checkout, residentCommand, options?.install),
 };
 
@@ -835,6 +888,7 @@ export async function sync(options: Options = {}): Promise<number> {
         }
 
         const resident = options.resident ?? residentControl;
+        await resident.preflight?.(checkout);
         const before = await resident.observe(checkout, INSTANT);
         publicationStarted = true;
         const published = publishCpSyncRefs(refs, 'sync', main, commit, paths, source, print);
@@ -962,6 +1016,7 @@ export async function rollback(options: Options = {}): Promise<number> {
           print('cp-sync: dry run; no ref or checkout moved.');
           return 0;
         }
+        await resident.preflight?.(checkout);
         const published = publishCpSyncRefs(refs, 'rollback', current, commit, paths, undefined, print);
         moved = true;
         rollbackHead = commit;

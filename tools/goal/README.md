@@ -3620,24 +3620,28 @@ Decision: keep the minute sweep to 45 seconds by default and run regeneration se
 budget; both bounds are configurable under `policy.maintenance` and applied when installing services.
 
 Decision: cp-sync takes one instant reading before publication and a three-minute post-publication window of four
-readings. Only failed host or verifier readiness, a unit whose process did not start after publication, live workers
-falling by more than half, or no landing merged in the window while landings already in flight before publication
-restores the previous tree in a forward commit. Lower counts within half and quiet windows are normal.
+readings. Only failed readiness for a unit it is meant to run, a unit whose process did not start after publication,
+live workers falling by more than half, or no landing merged in the window while landings already in flight before
+publication restores the previous tree in a forward commit. Lower counts within half and quiet windows are normal.
 Decision: after publication a stale train lets its running control-plane command finish and hands off at the next command
 boundary instead of cancelling it, so the release does not restart a running check; the successor runs the published code.
 Decision: a resident host retires once main publishes another tools/goal, at most once per restartIntervalMs. A retiring
 host starts no new attempt, finishes its active requests and exits; systemd starts it on the published code.
-After publishing, a missing environment file or resident code unit triggers `goal service install` from the newly published
-main. Installation enables the resident units, stops the legacy transient `rezics-goal-supervisor`
-unit and any recorded supervisor and host by birth identity, then starts the units and waits for host readiness. It signals individual
-recorded processes, never worker groups or name patterns. cp-sync also completes migration when legacy state remains.
+Before publication, cp-sync checks whether it needs `goal service install`; if the verifier is explicitly paused and
+installation would activate it, cp-sync refuses without moving refs. Otherwise, a missing environment file or resident
+code unit triggers installation from the newly published main. Installation enables the resident units, stops the
+legacy transient `rezics-goal-supervisor` unit and any recorded supervisor and host by birth identity, then starts the
+units and waits for host readiness. It signals individual recorded processes, never worker groups or name patterns.
+cp-sync also completes migration when legacy state remains.
 Decision: the resident services that execute tools/goal continuously are the manager host and the dev verifier, listed
 once as `RESIDENT_CODE_UNITS`; maintenance and regenerate stay timer-driven oneshots. After publication and rollback,
 cp-sync restarts each of those units through systemd and checks that each unit's `ExecMainStartTimestamp` is at or
 after the restart. A unit that cannot restart or does not come back fails the sync by name. If rollback cannot install
 or activate its resident services, it restores the published code in another forward commit and restarts those services
 before exiting with failure; a rollback refusal also triggers activation on the current main. Dependency installation
-failures follow this same recovery path.
+failures follow this same recovery path. Recovery also refuses any service installation that would activate an
+explicitly paused verifier.
+Decision: cp-sync treats only a loaded verifier with `ActiveState=inactive` and `UnitFileState=disabled` as explicitly paused; it skips that verifier's restart and readiness check, and preflights any service installation that would enable and start it before publication. Active or enabled verifier configurations retain normal restart and readiness checks, while a missing unit still uses installer recovery.
 No ref rewinding is needed. Status, restart and
 logs show each unit's systemd state and result, including watchdog failure and timer health. Diagnostics live in the
 user journal; consult `systemd.service(5)` and `systemd.exec(5)` for service and environment semantics.
