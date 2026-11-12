@@ -58,7 +58,10 @@ async function stateSupport(f: World) {
   const profile = f.release.definition.libraryProfiles![type.library!.profileId]!;
   const set = profile.entryStateSet!;
   const choice = set.states.find((s) => s.role === 'active')!;
+  const emptySibling = set.states.find((s) => s.role === 'planned')!;
   expect(choice, `Actual released Book state in ${f.release.digest}`).toBeDefined();
+  expect(emptySibling, `Actual released empty Book sibling in ${f.release.digest}`).toBeDefined();
+  expect(emptySibling.id).not.toBe(choice.id);
   const subject = await f.createSubject('schema:Book', 'Native pin state support');
   const created = status(
     await f.request('alice', 'PUT', `/v1/libraryEntries/${subject.id}`, { state: choice.id }, discoveryKey()),
@@ -66,7 +69,13 @@ async function stateSupport(f: World) {
   );
   expect(created.body.libraryEntry).toMatchObject({ subjectId: subject.id, state: choice.id });
   await f.prepareOwnerIndex('alice');
-  return { profileId: profile.id, stateSetId: set.id, stateId: choice.id, siblings: set.states.map((s) => s.id) };
+  return {
+    profileId: profile.id,
+    stateSetId: set.id,
+    stateId: choice.id,
+    emptySiblingId: emptySibling.id,
+    siblings: set.states.map((s) => s.id),
+  };
 }
 function dynamic(c: Header, f: World, kind: Kind) {
   expect(c.membershipKind).toBe('dynamic');
@@ -88,7 +97,7 @@ async function pinDiscovered(f: World, kind: Kind) {
       (state === undefined ||
         (c.builtin?.profileId === state.profileId &&
           c.builtin.stateSetId === state.stateSetId &&
-          c.builtin.stateId !== state.stateId)),
+          c.builtin.stateId === state.emptySiblingId)),
   );
   expect(found, `Actual native ${kind} discovery: ${JSON.stringify(all)}`).toHaveLength(1);
   const target = found[0]!;

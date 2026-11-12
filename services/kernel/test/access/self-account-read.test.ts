@@ -7,14 +7,18 @@ import { accessCheck, AuthenticationError, type AccountActor } from '../../src/r
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { delegatedAssignmentFixture } from './delegated-auth-fixture.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
 const admin = createPool(url);
+const receiptKeys = testReceiptKeys();
+configureTestReceiptKeys(pool, receiptKeys);
+configureTestReceiptKeys(admin, receiptKeys);
 let assignments: Awaited<ReturnType<typeof delegatedAssignmentFixture>>;
 beforeAll(async () => {
-  assignments = await delegatedAssignmentFixture(admin);
+  assignments = await delegatedAssignmentFixture(admin, receiptKeys);
 }, 30000);
 afterAll(async () => {
   await assignments?.close();

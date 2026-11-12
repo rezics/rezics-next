@@ -8,6 +8,10 @@ unconditional discovery below supersede the older dynamic document's two-kind en
 [Collection source](collection-source.md) and [filtered lists](filtered-lists.md) retain their authorities.
 This is specification and native acceptance delivery, not an implemented or exposed Liked reader.
 
+Implementation decision: owner queries resolve logical built-in bindings at native Source capture and carry the same
+Collection Source instance through prefix and membership checks; only a current private-working observation is
+accepted, and GET remains materialization-free.
+
 ## Identity and common wire
 
 Every account has exactly one stable logical Liked Collection, including an account with no reactions or

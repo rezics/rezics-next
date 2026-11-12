@@ -188,6 +188,7 @@ test(
       const accepted = profile(f, 'schema:Book');
       const kind = accepted.copies?.kinds.find((choice) => choice.statuses.length > 0);
       expect(kind, `Bundled ${f.release.digest}: actual holding kind/status required`).toBeDefined();
+      await f.grantAccount('alice', ['copy:create'], f.personas.alice.accountId);
       status(
         await f.request(
           'alice',
@@ -456,6 +457,7 @@ test(
       const accepted = profile(f, 'schema:Book');
       const kind = accepted.copies?.kinds.find((choice) => choice.statuses.length > 0);
       expect(kind, `Bundled ${f.release.digest}: actual read-only holding control`).toBeDefined();
+      await f.grantAccount('alice', ['copy:create'], f.personas.alice.accountId);
       status(
         await f.request(
           'alice',

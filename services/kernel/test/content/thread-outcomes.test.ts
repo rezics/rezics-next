@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, setDefaultTimeout, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
@@ -14,8 +14,8 @@ afterAll(() => threadDriver.closeContentThreadSystem());
 
 await import('../../../../specs/content-thread-outcomes.test.ts');
 
-/** Neighbouring rows keep every key index worth its cost to the planner at the smallest scale, where it would
- * otherwise scan a table of a few dozen rows once per probe. */
+/** Seed the growing Access and Content relations read by the atomic create path. The harness analyzes these rows
+ * before each measurement so the planner sees the same indexed histories the command sees in production. */
 async function seedNeighbours(database: GrowthDatabase, count: number): Promise<void> {
   const accountId = newId(0x2345);
   const boardId = newId(0x3456);
@@ -24,15 +24,38 @@ async function seedNeighbours(database: GrowthDatabase, count: number): Promise<
     const posts = threads.map(() => newId(route));
     const revisions = threads.map(() => newId(route));
     const transaction = randomUUID();
+    const resources = [...threads, ...posts];
+    const resourceTypes = [
+      ...Array.from({ length: count }, () => 'content.thread'),
+      ...Array.from({ length: count }, () => 'content.post'),
+    ];
+    const grantRoles = [
+      ...Array.from({ length: count }, () => 'content.thread.owner'),
+      ...Array.from({ length: count }, () => 'content.post.owner'),
+    ];
     await database.admin.query(
       `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
        SELECT $1,resource_id,$2,'thread:read','(,)',$3 FROM unnest($4::uuid[]) AS resource_id`,
       [route, accountId, transaction, threads],
     );
     await database.admin.query(
+      `INSERT INTO access.resource_initialization(route,resource_id,resource_type,creator_id,initialized_at)
+       SELECT $1,resource_id,resource_type,$2,clock_timestamp()
+       FROM unnest($3::uuid[],$4::text[]) AS row(resource_id,resource_type)`,
+      [route, accountId, resources, resourceTypes],
+    );
+    await database.admin.query(
       `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
-       SELECT $1,resource_id,$2,'content.thread.owner','(,)',$3 FROM unnest($4::uuid[]) AS resource_id`,
-      [route, accountId, transaction, threads],
+       SELECT $1,resource_id,$2,grant_role,'(,)'::tstzrange,$3
+       FROM unnest($4::uuid[],$5::text[]) AS row(resource_id,grant_role)`,
+      [route, accountId, transaction, resources, grantRoles],
+    );
+    await database.admin.query(
+      `INSERT INTO access.resource_role_provenance
+         (route,resource_id,resource_type,original_creator,account_id,grant_role,side,source_transaction)
+       SELECT $1,resource_id,resource_type,$2,$2,'','creator',$3
+       FROM unnest($4::uuid[],$5::text[]) AS row(resource_id,resource_type)`,
+      [route, accountId, transaction, resources, resourceTypes],
     );
     await database.admin.query(
       `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
@@ -70,6 +93,34 @@ async function seedNeighbours(database: GrowthDatabase, count: number): Promise<
   }
 }
 
+/** Keep full-key and active-actor permit probes on their declared indexes as history grows. */
+async function seedSlowPermits(database: GrowthDatabase, count: number): Promise<void> {
+  const boardResult = await database.admin.query<{ route: number; board_id: string }>(
+    `SELECT route,board_id::text AS board_id FROM content.board
+     ORDER BY created_at DESC,board_id LIMIT 1`,
+  );
+  const board = boardResult.rows[0];
+  if (!board) throw new Error('Thread create growth board is missing');
+
+  const actorKeys = Array.from({ length: count }, () => createHash('sha256').update(randomUUID()).digest());
+  const commandKeys = Array.from({ length: count }, () => createHash('sha256').update(randomUUID()).digest());
+  const requestDigests = Array.from({ length: count }, () => createHash('sha256').update(randomUUID()).digest());
+  await database.admin.query(
+    `INSERT INTO content.board_slow_actor(route,board_id,actor_key)
+     SELECT $1,$2,actor_key FROM unnest($3::bytea[]) AS row(actor_key)`,
+    [board.route, board.board_id, actorKeys],
+  );
+  await database.admin.query(
+    `INSERT INTO content.board_slow_permit
+       (route,board_id,actor_key,command_key,request_digest,thread_route,command_kind,generation,
+        security_episode,interval_seconds,state)
+     SELECT $1,$2,actor_key,command_key,request_digest,$1,'content.thread.create',1,1,0,'reserved'
+     FROM unnest($3::bytea[],$4::bytea[],$5::bytea[])
+       AS row(actor_key,command_key,request_digest)`,
+    [board.route, board.board_id, actorKeys, commandKeys, requestDigests],
+  );
+}
+
 test('checkGrowth proves the declared three-scale machine-independent bound', async () => {
   const database = await openGrowthDatabase();
   try {
@@ -80,7 +131,10 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
         scales: [32, 256, 2048],
         bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
         grow: async (db, scale, previous) => {
-          if (previous === 0) await seedNeighbours(db, 2048);
+          if (previous === 0) {
+            await seedNeighbours(db, 2048);
+            await seedSlowPermits(db, 2048);
+          }
           await measured.grow(db, scale, previous);
         },
         operation: (db, scale, repetition) => measured.operation(db, scale, repetition),

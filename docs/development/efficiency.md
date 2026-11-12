@@ -94,10 +94,6 @@ record the effect, including when it is not yet observable.
 - Send a handoff as one message containing the revision, remaining question, proposed decision and affected consumer.
   Co-owner review answers accept or one counterexample.
 
-These rules were adopted on 2026-10-29. The
-[delivery report on main](https://github.com/rezics/rezics-next/blob/main/tools/goal/reports/delivery-efficiency-20261029.md)
-provides the evidence.
-
 Decision: enforce the six-task per-Goal limit at worker start admission; waiting checks and landing count, dependency-held, urgent and control-plane tasks are exempt, and ready work starts in order when a slot opens.
 
 ## Operating discipline
@@ -106,14 +102,15 @@ Decision: enforce the six-task per-Goal limit at worker start admission; waiting
   the maintainer. It reports the decision afterwards.
 - Every hour the supermanager checks that each manager session is running and its inbox is read, and renews a paused
   one. Control-plane work goes out as briefs the supermanager dispatches; no manager inbox stands in for that.
-- Advance each delivered result without waiting for unrelated checks: resume retained source or route the exact
-  failure. Keep independent repairs ready. At hourly review, separate ready work, writing and check waits. An empty
-  queue means no ready repair, missed planning or limited admission; identify which and act within current allowance.
-- The supermanager initiates efficiency work without a maintainer prompt. In the existing hourly review, identify the
-  largest evidenced avoidable loss, take the smallest action that addresses its cause, and report the action and
-  observed effect or the next measurement. When evidence is insufficient, name what is missing and collect the
-  smallest useful observation. Use existing watchers and tune worker width within authorized allowance and measured
-  host limits. Adding workers does not require adding managers; first clear obsolete work and assign independent repairs.
+- Give each worker a writable outcome and an owned boundary. Name the failing behaviour, current evidence and the
+  smallest required check. Let the worker choose the repair order and take the next evidenced fix within that
+  boundary; coordinate a new boundary before touching another worker's scope. Checkpoint coherent source and keep
+  the next independent repair ready before the current one parks. While its check runs, admit that repair within
+  existing limits. Return exact failures to their source owner. At review, track writing, ready repairs, admission
+  waits and verification separately; distinguish missing implementation from unintegrated or unverified source.
+- At the hourly review, the supermanager acts on the largest evidenced loss and reports the effect or the next
+  measurement. If evidence is missing, collect the smallest useful observation. Use existing watchers; clear obsolete
+  work and assign independent repairs before adjusting worker width within allowance and host limits.
 - An alarm fires only on a real problem, and its receiver fixes the cause at once. An alarm that repeats for the same
   cause without a fix escalates to the supermanager. Throttling or batching an alarm hides the problem; fix the cause or
   the threshold.
@@ -184,7 +181,9 @@ unknown causes and cross-module contract and security judgment.
 A model pin changes routing, not authorization to exceed an operating budget. Pause and pacing policy must be enforced
 by the controller.
 
-Do not spend allowance merely to exhaust it before a reset. Preserve explicit pauses and spending limits.
+Plan against each pool's observed reset and remaining allowance. When real work is ready, prefer the eligible pool
+whose allowance expires first and queue work early enough to save coherent changes before reset. Stay within explicit
+pauses, reserves, pacing and host limits; leave allowance unused when no suitable work is ready.
 
 Decision: The Claude allowance keeps the resident supermanager running and nothing else. It routes no workers, and it
 holds no reserve beyond that; workers run on Codex and Cursor.

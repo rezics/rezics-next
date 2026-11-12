@@ -2,7 +2,6 @@ export { readNativeAccessTime } from './native-time.ts';
 import { deadlineClient, within, remaining } from './deadline.ts';
 export { deadlineClient, within } from './deadline.ts';
 import {
-  accessNativeWork,
   accessCheckout,
   addAccessWork,
   EMPTY_ACCESS_WORK,
@@ -17,8 +16,7 @@ import { systemClock, type KernelClock } from '../clock.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRemoteJWKSet, customFetch, errors, jwtVerify, type FetchImplementation, type JWTPayload } from 'jose';
-import { withConnection } from '../database/pool.ts';
-import { AuthenticationError, type Access, type AccessClient, type AccessContext, type AccountActor } from './check.ts';
+import { AuthenticationError, type Access, type AccessContext, type AccountActor } from './check.ts';
 import { consumeDurableIdentity, type DurableIdentity } from './durable-identity.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { approvedIdentityClaims, type ApprovedIdentity } from './approved-identity.ts';

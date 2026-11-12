@@ -155,12 +155,13 @@ export async function openOwnerQuery(
     try {
       const domain = peekLibraryDomain();
       prepared = domain
-        ? await domain.sourceCapture.prepare({
+        ? await domain.sourceCapture.capture({
             actor: libraryActorOf(input.actor),
             collectionId: input.collectionId,
             deadline: input.deadline,
             at,
             allowance: sourceAllowance(),
+            source: native,
             ...(input.logical !== undefined ? { logical: input.logical } : {}),
             ordinaryPage: Boolean(planned),
           })

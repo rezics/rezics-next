@@ -223,6 +223,8 @@ export interface ReleasedDiscoveryFixture {
   prepareOwnerIndex(persona: DiscoveryAccountName): Promise<void>;
   /** Existing native grant administration, for current-disclosure acceptance controls. */
   grant(persona: Persona, actions: string[], resourceId: string): Promise<void>;
+  /** Grant ordinary action scopes to one of this fixture's authenticated owner accounts. */
+  grantAccount(persona: DiscoveryAccountName, actions: string[], resourceId?: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -1008,6 +1010,8 @@ export async function createReleasedDiscoveryFixture(
         return withReadTransaction(driver.fixtures.pool, (client) => client.query(sql, values ? [...values] : []));
       },
       grant: (persona, actions, resourceId) => driver.grant(persona, actions, resourceId),
+      grantAccount: (persona, actions, resourceId) =>
+        driver.fixtures.grantAccount(personas[persona], actions, resourceId),
       createSubject,
       adopt,
       read: (subject, persona = 'anonymous') => request(persona, 'GET', `/v1/subjects/${subject.id}`),

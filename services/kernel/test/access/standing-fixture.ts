@@ -42,6 +42,7 @@ export async function standingFixture(
   let standingResourceCreation: Promise<void> | undefined;
   let pendingOperation = 'create isolated Auth database';
   let closing: Promise<void> | undefined;
+  const activeOperations = new Map<Promise<unknown>, string>();
 
   function assertStarting(): void {
     if (closing) throw new Error(`Standing fixture is closing during ${pendingOperation}`);
@@ -50,9 +51,15 @@ export async function standingFixture(
   async function startup<T>(operation: string, action: () => Promise<T>): Promise<T> {
     assertStarting();
     pendingOperation = operation;
-    const result = await action();
-    assertStarting();
-    return result;
+    const work = Promise.resolve().then(action);
+    activeOperations.set(work, operation);
+    try {
+      const result = await work;
+      assertStarting();
+      return result;
+    } finally {
+      activeOperations.delete(work);
+    }
   }
 
   function close(): Promise<void> {
@@ -66,6 +73,8 @@ export async function standingFixture(
         }
       }
 
+      for (const [work, operation] of activeOperations)
+        await settle(`settle standing fixture operation ${operation}`, () => work);
       if (authDatabaseCreation) await settle('settle Auth database creation', () => authDatabaseCreation!);
       if (standingResourceCreation)
         await settle('settle standing resource table creation', () => standingResourceCreation!);

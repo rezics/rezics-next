@@ -6,14 +6,26 @@ import { createDelegationCommands } from '../../src/access/delegation-commands.t
 import { accessCommandAuthorization, type Actor, type Access } from '../../src/request/access.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { standingFixture } from './standing-fixture.ts';
+import { standingFixture, type StandingFixtureLifecycle } from './standing-fixture.ts';
 
 let f: Awaited<ReturnType<typeof standingFixture>>;
+let fixtureLifecycle: StandingFixtureLifecycle | undefined;
 beforeAll(async () => {
-  f = await standingFixture();
+  f = await standingFixture([], undefined, (lifecycle) => {
+    fixtureLifecycle = lifecycle;
+  });
+  fixtureLifecycle!.ready();
 }, 30000);
-beforeEach(() => f.reset());
-afterAll(() => f?.close());
+beforeEach(async () => {
+  await fixtureLifecycle!.run('reset standing fixture rows', () => f.reset());
+  fixtureLifecycle!.ready();
+});
+afterAll(async () => {
+  const pendingOperation = fixtureLifecycle?.pendingOperation;
+  await fixtureLifecycle?.close();
+  if (pendingOperation && pendingOperation !== 'ready')
+    throw new Error(`Standing fixture startup did not complete; pending operation: ${pendingOperation}`);
+});
 const commands = () => createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' });
 async function standing() {
   await f.grant(f.actor, 'subject:create');
