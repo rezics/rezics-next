@@ -53,7 +53,8 @@ export function admitKnowledgeLifecycle(value: unknown, address: KnowledgePrivat
     (dto.state === 'active'
       ? dto.restoreUntil !== null
       : typeof dto.restoreUntil !== 'string' || !Number.isFinite(Date.parse(dto.restoreUntil)))
-  ) return null;
+  )
+    return null;
   return {
     documentId: address.documentId,
     notebookId: address.notebookId,
@@ -74,9 +75,15 @@ function failure(status: number): KnowledgePrivateFailure {
 export async function readKnowledgeLifecycle(
   client: KernelClient,
   input: KnowledgePrivateAddress & { accountId: string; authorization: string },
-): Promise<{ state: 'ready'; lifecycle: KnowledgeLifecycle } | Exclude<KnowledgePrivateFailure, { state: 'conflict' | 'uncertain' }>> {
-  const result = await client.accounts({ accountId: input.accountId }).knowledge
-    .notebooks({ notebookId: input.notebookId }).documents({ documentId: input.documentId }).lifecycle.get({
+): Promise<
+  | { state: 'ready'; lifecycle: KnowledgeLifecycle }
+  | Exclude<KnowledgePrivateFailure, { state: 'conflict' | 'uncertain' }>
+> {
+  const result = await client
+    .accounts({ accountId: input.accountId })
+    .knowledge.notebooks({ notebookId: input.notebookId })
+    .documents({ documentId: input.documentId })
+    .lifecycle.get({
       headers: { authorization: input.authorization },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
@@ -98,27 +105,34 @@ export async function changeKnowledgeLifecycle(
     expectedStructureRevisionId: input.expectedStructureRevisionId,
     expectedGeneration: input.expectedGeneration,
   };
-  const options = { headers: {
-    authorization: input.authorization,
-    'idempotency-key': JSON.stringify(input.idempotencyKey),
-  } };
-  const result = input.action === 'trash'
-    ? await resource.$trash.post(body, options)
-    : await resource.$restore.post(body, options);
+  const options = {
+    headers: {
+      authorization: input.authorization,
+      'idempotency-key': JSON.stringify(input.idempotencyKey),
+    },
+  };
+  const result =
+    input.action === 'trash' ? await resource.$trash.post(body, options) : await resource.$restore.post(body, options);
   if (!result.response) return { state: 'uncertain' };
   if (result.error || result.status !== 200) return failure(result.status);
   const lifecycle = admitKnowledgeLifecycle(result.data, input.address);
   const dto = result.data as Record<string, unknown>;
-  if (!lifecycle || typeof dto.complete !== 'boolean' ||
+  if (
+    !lifecycle ||
+    typeof dto.complete !== 'boolean' ||
     (dto.complete
       ? dto.reason !== null || lifecycle.state !== (input.action === 'trash' ? 'trashed' : 'active')
       : dto.reason !== 'subtree_work_required' || lifecycle.state !== (input.action === 'trash' ? 'active' : 'trashed'))
-  ) return { state: 'uncertain' };
-  return { state: 'acknowledged', receipt: {
-    ...lifecycle,
-    complete: dto.complete,
-    reason: dto.reason as KnowledgeLifecycleReceipt['reason'],
-  } };
+  )
+    return { state: 'uncertain' };
+  return {
+    state: 'acknowledged',
+    receipt: {
+      ...lifecycle,
+      complete: dto.complete,
+      reason: dto.reason as KnowledgeLifecycleReceipt['reason'],
+    },
+  };
 }
 
 export function reviewKnowledgeLifecycle(

@@ -98,7 +98,8 @@ export function useKnowledgeLifecycle({
   }, [address?.notebookId, address?.documentId, expected.viewer, expected.csrfToken, operations, admission]);
 
   const lifecycle = observation?.lifecycle ?? null;
-  const allowed = (action: 'trash' | 'restore') => (action === 'trash' ? trashAdmission : restoreAdmission) === 'available';
+  const allowed = (action: 'trash' | 'restore') =>
+    (action === 'trash' ? trashAdmission : restoreAdmission) === 'available';
 
   function review(blocked: boolean) {
     if (blocked || !observation || readState !== 'ready' || intent || inFlight.current) return;

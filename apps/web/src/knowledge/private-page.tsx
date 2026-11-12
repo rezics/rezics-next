@@ -544,6 +544,7 @@ function PrivateKnowledgeEditor({
   const [documentCreateState, setDocumentCreateState] = useState('idle');
   const [documentReceipt, setDocumentReceipt] = useState<KnowledgeDocumentReceipt | null>(null);
   const [head, setHead] = useState<KnowledgePrivateHead | null>(null);
+  const [headLifecycleRevision, setHeadLifecycleRevision] = useState(0);
   const [draft, setDraft] = useState<DocumentDraft | null>(null);
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -709,6 +710,7 @@ function PrivateKnowledgeEditor({
         setBinding(nextBinding);
         if (purpose === 'initial' || !head) {
           setHead(result.head);
+          setHeadLifecycleRevision(lifecycle.revision);
           setDraft(copyDraft(result.head));
           setReadState('ready');
         } else if (purpose === 'conflict') {
@@ -1039,7 +1041,15 @@ function PrivateKnowledgeEditor({
   function startRevisionIntent(): RevisionIntent | null {
     if (revisionIntentRef.current) return revisionIntentRef.current;
     const currentAddress = resumeAddress();
-    if (!currentAddress || !head || !draft || !binding || access.revise !== 'available' || requiresHeadReview || lifecycle.locked)
+    if (
+      !currentAddress ||
+      !head ||
+      !draft ||
+      !binding ||
+      access.revise !== 'available' ||
+      requiresHeadReview ||
+      lifecycle.locked
+    )
       return null;
     const next = immutable({
       ...structuredClone(draft),
@@ -1460,7 +1470,8 @@ function PrivateKnowledgeEditor({
     );
   }
 
-  const lifecycleBlocked = resumeDirty || pending || !!revisionIntent || readBusy || requiresHeadReview || publicationBusy;
+  const lifecycleBlocked =
+    resumeDirty || pending || !!revisionIntent || readBusy || requiresHeadReview || publicationBusy;
   if (lifecycle.enabled && !lifecycle.editing) {
     return (
       <PrivatePageFrame title={m.knowledge_private_heading({}, options)} locale={locale}>
@@ -1470,8 +1481,15 @@ function PrivateKnowledgeEditor({
   }
 
   const canRead = access.read === 'available';
-  if (!canRead || readState !== 'ready' || !head || !draft || !binding) {
-    const state = !canRead ? (access.read === 'unknown' ? 'preparing' : access.read) : readState;
+  const freshLifecycleHead = !lifecycle.enabled || headLifecycleRevision === lifecycle.revision;
+  if (!canRead || readState !== 'ready' || !head || !draft || !binding || !freshLifecycleHead) {
+    const state = !canRead
+      ? access.read === 'unknown'
+        ? 'preparing'
+        : access.read
+      : !freshLifecycleHead && readState === 'ready'
+        ? 'preparing'
+        : readState;
     return (
       <PrivatePageFrame title={m.knowledge_private_heading({}, options)} locale={locale}>
         <FailureNotice
@@ -1618,7 +1636,15 @@ function PrivateKnowledgeEditor({
           locale={locale}
           binding={binding}
           lifetime={access.owner}
-          blocked={dirty || pending || !!revisionIntent || readBusy || requiresHeadReview || publicationBusy || lifecycle.locked}
+          blocked={
+            dirty ||
+            pending ||
+            !!revisionIntent ||
+            readBusy ||
+            requiresHeadReview ||
+            publicationBusy ||
+            lifecycle.locked
+          }
         />
         <KnowledgePublicationPanel
           head={reviewHead ?? head}

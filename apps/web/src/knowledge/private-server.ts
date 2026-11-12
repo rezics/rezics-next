@@ -338,8 +338,7 @@ export const readKnowledgeLifecycleVisit = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<KnowledgeLifecycleRead> => {
     setResponseHeader('cache-control', 'private, no-store');
     const identity = currentFor(data.expected, await currentIdentity());
-    if ('state' in identity)
-      return identity.state === 'unavailable' ? { state: 'unavailable', status: 503 } : identity;
+    if ('state' in identity) return identity.state === 'unavailable' ? { state: 'unavailable', status: 503 } : identity;
     try {
       const result = await readKnowledgeLifecycle(kernelClient(), {
         ...data.address,
@@ -363,8 +362,12 @@ export const readKnowledgeLifecycleVisit = createServerFn({ method: 'POST' })
 
 export const changeKnowledgeLifecycleRequest = createServerFn({ method: 'POST' })
   .validator((value: unknown) => {
-    if (!record(value) || !(value.action === 'trash' || value.action === 'restore') ||
-      !isKnowledgeLifecycleGeneration(value.expectedGeneration)) throw new Error('Invalid Knowledge lifecycle command');
+    if (
+      !record(value) ||
+      !(value.action === 'trash' || value.action === 'restore') ||
+      !isKnowledgeLifecycleGeneration(value.expectedGeneration)
+    )
+      throw new Error('Invalid Knowledge lifecycle command');
     return {
       address: address(value.address),
       action: value.action,
