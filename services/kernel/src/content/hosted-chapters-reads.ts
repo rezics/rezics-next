@@ -8,7 +8,12 @@ import {
   type NativePostMetadata,
   type RetainContentRead,
 } from './reads.ts';
-import { discloseHostedTargetMetadata, prepareHostedTarget } from './hosted-chapters-disclosure.ts';
+import {
+  discloseHostedTargetMetadata,
+  hostedTargetKey,
+  prepareHostedTarget,
+  prepareHostedTargetMetadata,
+} from './hosted-chapters-disclosure.ts';
 import {
   HOSTED_PLACEMENT_SELECT,
   hostedCatalogue,
@@ -165,7 +170,7 @@ export async function resolveHostedOccurrence(
   let document: HostedResolutionView['document'] = null;
   if (placement.kind === 'chapter') {
     const guard = await prepareHostedTarget(deps, placement.target, context);
-    const target = await guard?.final(true);
+    const target = await guard?.final();
     if (!target?.canonicalBytes) occurrence = unavailable(placement);
     else {
       anchors.push(target.anchor);
@@ -301,21 +306,21 @@ async function page(
   });
   if (raw.anchor.epoch !== selected.epoch) throw new ContentNotFoundError();
   const placements = raw.value.slice(0, limit).map(hostedPlacement);
-  const guards = new Map<string, Awaited<ReturnType<typeof prepareHostedTarget>>>();
+  const guards = new Map<string, Awaited<ReturnType<typeof prepareHostedTargetMetadata>>>();
   for (const placement of placements) {
     if (placement.kind !== 'chapter') continue;
-    const key = `${placement.target.postId}/${placement.target.revisionId}/${placement.target.sha256}`;
-    if (!guards.has(key)) guards.set(key, await prepareHostedTarget(deps, placement.target, context));
+    const key = hostedTargetKey(placement.target);
+    if (!guards.has(key)) guards.set(key, await prepareHostedTargetMetadata(deps, placement.target, context));
   }
   const targets = new Map<
     string,
-    Awaited<ReturnType<NonNullable<Awaited<ReturnType<typeof prepareHostedTarget>>>['final']>>
+    Awaited<ReturnType<NonNullable<Awaited<ReturnType<typeof prepareHostedTargetMetadata>>>['final']>>
   >();
   for (const [key, guard] of guards) targets.set(key, (await guard?.final()) ?? null);
   const anchors: AnchoredPosition[] = [raw.anchor];
   const items = placements.map((placement) => {
     if (placement.kind === 'part') return available(placement);
-    const target = targets.get(`${placement.target.postId}/${placement.target.revisionId}/${placement.target.sha256}`);
+    const target = targets.get(hostedTargetKey(placement.target));
     if (!target) return unavailable(placement);
     anchors.push(target.anchor);
     return available(placement);

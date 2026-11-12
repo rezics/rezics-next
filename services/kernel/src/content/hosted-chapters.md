@@ -204,6 +204,18 @@ catalogue and revision probes, at most one parent/origin probe and one indexed p
 Subject discovery seeks at most 21 indexed `subject_thread` and same-route catalogue-post candidates, then
 discloses at most 20 current publications. Each selected target has an initial and final native disclosure;
 catalogue disclosure also repeats at completion.
+Decision: Contents, previous/next and metadata-only occurrence reads share retained native metadata disclosure,
+keyed by the complete thread/Post/revision/digest identity. Initial and final checks load zero chapter bodies and
+compare exact identity plus unchanged author/licence. Denied slots still advance the raw frontier without titles
+or targets. Exact opening loads one body through ordinary Post disclosure, verifies its canonical digest and size,
+then closes the original metadata observation; a fresh exact read cannot bless a changed original source.
+The attachment validator remains the write-admission owner; metadata disclosure does not certify canonical bytes.
+
+Native observation is deferred to the dev verifier: `hosted-navigation-metadata.test.ts` observes zero body probes
+for Contents, both navigation directions and occurrence metadata, and exactly one verified body on exact opening.
+It also pins retained-source changes, concealed sparse slots and raw cursor continuation. Existing hosted reader,
+HTTP and Subject eligibility acceptance remains unchanged. No native/browser/Storybook or broader suite runs in
+the source pass; changed-file formatting and the affected Kernel typecheck are its selected checks.
 Pages retain metadata and authority handles, not manuscript bodies. Resolution serializes one canonical body.
 All nested native Access, Accounts, Board, Realm, partition, transaction, serialization and body work remains charged.
 
