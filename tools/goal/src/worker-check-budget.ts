@@ -252,7 +252,10 @@ type CheckEvidence = {
   receiptReference?: unknown;
   receiptSha256?: unknown;
   ownership?: { taskId?: unknown; attempt?: unknown };
-  physicalRun?: unknown;
+  physicalRun?: {
+    exitCode?: unknown;
+    resources?: { commandStartedMonoMs?: unknown } | null;
+  };
   binding?: {
     checkId?: unknown;
     ownership?: { taskId?: unknown; attempt?: unknown };
