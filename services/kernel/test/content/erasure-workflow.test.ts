@@ -4,6 +4,8 @@ import { fromPlainText, serializeDocument } from '@rezics/document';
 import { Pool } from 'pg';
 import { GrantDeniedError } from '../../src/access/contract/index.ts';
 import { runCommand, type AuthoritativeTime, type CommandTransaction } from '../../src/command/command.ts';
+import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { erasePostLogical } from '../../src/content/erase-post.ts';
 import { runAuthorErasure } from '../../src/content/erasure-workflow.ts';
 import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
@@ -30,6 +32,7 @@ const crashes = new Map<string, string[]>();
 const route = 0x6798;
 const partition = partitionOf(route);
 const routeKey = new Uint8Array(32).fill(7);
+const receiptKeys = testReceiptKeys();
 const context = () => ({
   deadline: Date.now() + 10_000,
   idempotencyKey: crypto.randomUUID(),
@@ -38,6 +41,8 @@ const context = () => ({
 
 beforeAll(async () => {
   fixture = await standingFixture(['account:read']);
+  configureTestReceiptKeys(fixture.pool, receiptKeys);
+  configureTestReceiptKeys(fixture.reader, receiptKeys);
   const preparePage = fixture.access.preparePage!.bind(fixture.access);
   fixture.access.preparePage = async (actor, action, page, context) => {
     if (action === 'post:erase') pagePrepares.push({ ids: page.ids });
@@ -49,6 +54,7 @@ beforeAll(async () => {
     return authorizePage(tx, actor, action, page, evidence, time);
   };
   systemPool = new Pool({ connectionString: process.env.DATABASE_URL!, max: 10 });
+  configureTestReceiptKeys(systemPool, receiptKeys);
   client = await createWorkClient(process.env.DATABASE_URL!);
   work = await composeWork(
     [
@@ -223,8 +229,17 @@ test('native initiation commits the provenance receipt required by durable initi
   const receipt = await fixture.reader.query<{ response: { operationId: string; durableInitiator?: string } }>(
     `SELECT response FROM core.receipt
      WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
-       AND command_kind='content.author-erasure' AND idempotency_key=$3`,
-    [partition, selected.actor.accountId, request.idempotencyKey],
+       AND command_kind='content.author-erasure' AND idempotency_key=ANY($3::text[])`,
+    [
+      partition,
+      selected.actor.accountId,
+      nativeReceiptKeyCandidates(
+        fixture.reader,
+        'content.author-erasure',
+        selected.actor.accountId,
+        request.idempotencyKey,
+      ),
+    ],
   );
   expect(receipt.rows).toHaveLength(1);
   expect(receipt.rows[0]!.response.operationId).toBe(result.value.operationId);
@@ -297,10 +312,29 @@ test('the content initiator reader accepts only the committed operation source a
   const receipt = await fixture.reader.query(
     `SELECT response FROM core.receipt
      WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
-       AND command_kind='content.author-erasure' AND idempotency_key=$3`,
-    [partition, selected.actor.accountId, request.idempotencyKey],
+       AND command_kind='content.author-erasure' AND idempotency_key=ANY($3::text[])`,
+    [
+      partition,
+      selected.actor.accountId,
+      nativeReceiptKeyCandidates(
+        fixture.reader,
+        'content.author-erasure',
+        selected.actor.accountId,
+        request.idempotencyKey,
+      ),
+    ],
   );
+  expect(receipt.rows).toHaveLength(1);
   expect(durableInitiatorCommitment(observed.value!)).toBe(receipt.rows[0].response.durableInitiator);
+  await inspect(async (tx, time) => {
+    // A live account and an existing receipt cannot authorize different source operands.
+    await tx.query('UPDATE content.operation SET upper_post_id=$3 WHERE route=$1 AND operation_id=$2', [
+      route,
+      operation.id,
+      newId(route),
+    ]);
+    expect(await readErasureInitiator(tx, operation, time)).toBeNull();
+  });
   const copiedId = newId(route);
   await fixture.reader.query(
     `INSERT INTO content.operation
@@ -621,9 +655,25 @@ test('all logical pages commit before cleanup, with one command and T per page a
       );
       expect(events.rows).toEqual([{ n: page.length, commands: 1 }]);
     }
+    // Continuations include PostgreSQL's lossless timestamp spelling. Probe each
+    // exact original command key through the producer codec, never a raw prefix.
+    const boundaries = await fixture.reader.query<{ post_id: string; at: string }>(
+      'SELECT post_id, created_at::text AS at FROM content.post WHERE route=$1 AND post_id=ANY($2::uuid[]) ORDER BY created_at, post_id',
+      [route, [selected.ids[99], selected.ids[199]]],
+    );
+    const keys = [{ at: '-infinity', post_id: started.operationId }, ...boundaries.rows].flatMap((after) =>
+      nativeReceiptKeyCandidates(
+        fixture.reader,
+        'content.author-erasure.page',
+        selected.actor.accountId,
+        `wf:${started.operationId}:erase:${after.at}:${after.post_id}`,
+      ),
+    );
     const receipts = await fixture.reader.query(
-      "SELECT response FROM core.receipt WHERE partition_no=$1 AND command_kind='content.author-erasure.page' AND idempotency_key LIKE $2",
-      [partition, `wf:${started.operationId}:erase:%`],
+      `SELECT response FROM core.receipt WHERE partition_no=$1
+       AND principal_kind='account' AND principal_id=$2
+       AND command_kind='content.author-erasure.page' AND idempotency_key=ANY($3::text[])`,
+      [partition, selected.actor.accountId, keys],
     );
     expect(receipts.rows.map((row) => row.response.processedPosts).sort((a, b) => a - b)).toEqual([5, 100, 100]);
   } finally {
@@ -682,6 +732,7 @@ test('every measured revision erasure is a HOT update while another backend hold
   const { checkGrowth, openGrowthDatabase } = await import('../support/growth.ts');
   const { nullErasedRevisionPage } = await import('../../src/content/erasure-workflow.ts');
   const db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool, receiptKeys);
   const rollback = new Error('Rollback measured cleanup');
   let snapshot: import('pg').PoolClient | undefined;
   const values = new Map<number, Awaited<ReturnType<typeof scope>>>();
@@ -787,6 +838,7 @@ test('checkGrowth proves fixed native erasure pages against unrelated and same-p
   const { pageAuthorErasurePosts, nullErasedRevisionPage, eraseRevisionMedia } =
     await import('../../src/content/erasure-workflow.ts');
   const db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool, receiptKeys);
   const population = {
     name: 'erasure-history',
     hotPartition: partition,
@@ -932,6 +984,7 @@ test('checkGrowth proves fixed native erasure pages against unrelated and same-p
 test('checkGrowth fixes a 205-post author while other authors grow in the same partition', async () => {
   const { checkGrowth, openGrowthDatabase, seed } = await import('../support/growth.ts');
   const db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool, receiptKeys);
   let selected: Awaited<ReturnType<typeof scope>>;
   let spare: Awaited<ReturnType<typeof scope>>;
   let paused: Awaited<ReturnType<typeof launchSelection>> | undefined;

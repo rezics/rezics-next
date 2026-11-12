@@ -9,6 +9,9 @@ import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { runCommand } from '../../src/command/command.ts';
+import readOwnCompletion from '../../src/command/read-own-completion.sql';
+import readReceipt from '../../src/command/read-receipt.sql';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { nullErasedRevisionPage } from '../../src/content/erasure-workflow.ts';
 import { clearErasedPostRevisions } from '../../src/content/erased-post-cleanup.ts';
 import erase from '../../src/content/erase-content.sql';
@@ -135,6 +138,7 @@ beforeAll(async () => {
   app = createKernel({
     pool: db.pool,
     routeKey,
+    receiptKeys: testReceiptKeys(),
     writeRate: createWriteRateLimiter({ secret: 'author-delete-test-only-rate-secret-at-least-32-bytes' }),
     access: (config) =>
       createAccess({
@@ -272,8 +276,28 @@ test('an author deletes their own post: removed slots preserve replies and clean
   expect(deleted.status).toBe(204);
   expect(await deleted.text()).toBe('');
   expect(deleted.headers.get(SESSION_HEADER)).not.toBeNull();
-  const statements = observer.records.slice(start).map((row) => row.statement);
-  expect(statements.filter((sql) => sql === readScope.sql)).toHaveLength(1);
+  const executions = observer.records.slice(start);
+  const statements = executions.map((row) => row.statement);
+  // Discovery preparation preflights the receipt; the actual tombstone command
+  // authorizes again at its own T. Each phase observes the scope exactly once.
+  const phases: string[][] = [];
+  const active = new Map<number, string[]>();
+  for (const { statement, connectionId } of executions) {
+    if (statement.startsWith('BEGIN')) active.set(connectionId, []);
+    const phase = active.get(connectionId);
+    phase?.push(statement);
+    if (statement === 'COMMIT' || statement === 'ROLLBACK') {
+      if (phase?.includes(readScope.sql))
+        phases.push(
+          phase.filter((sql) => [readScope.sql, readOwnCompletion.sql, readReceipt.sql, erase.sql].includes(sql)),
+        );
+      active.delete(connectionId);
+    }
+  }
+  expect(phases).toEqual([
+    [readScope.sql, readOwnCompletion.sql],
+    [readScope.sql, readReceipt.sql, erase.sql],
+  ]);
   expect(statements.filter((sql) => sql === erase.sql)).toHaveLength(1);
   expect(statements).not.toContain(nullRevisions.sql);
   expect(
