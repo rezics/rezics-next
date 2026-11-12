@@ -162,6 +162,9 @@ export type CommandOutcome<T> = {
   replayed: boolean;
 };
 
+const receiptNotFound = Symbol('receipt-not-found');
+type CommandExecution<T> = CommandOutcome<T> | typeof receiptNotFound;
+
 declare const authoritativeTime: unique symbol;
 /** Opaque authoritative time minted for one live command attempt or one read. */
 export type AuthoritativeTime = { readonly [authoritativeTime]: true };
@@ -561,13 +564,54 @@ export async function runCommand<T>(
   input: LegacyCommandOptions | PrincipalCommandInput,
   body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
 ): Promise<CommandOutcome<T>> {
+  const result = await runCommandLifetime(pool, input, body, false);
+  if (result === receiptNotFound) throw new TypeError('A normal command cannot return a receipt preflight result');
+  return result;
+}
+
+/**
+ * Settle an existing receipt before a command owner performs expensive validation.
+ * `undefined` means authorization succeeded and the key is absent; that read-only
+ * result is committed without a receipt, event, domain write or callback. Callers
+ * must validate and use `runCommand` for a subsequent write, which reauthorizes
+ * and rechecks the receipt.
+ */
+export function preflightCommandReceipt<T>(
+  pool: Pool,
+  options: LegacyCommandOptions,
+): Promise<CommandOutcome<T> | undefined>;
+export function preflightCommandReceipt<T>(
+  pool: Pool,
+  options: PrincipalCommandInput,
+): Promise<CommandOutcome<T> | undefined>;
+export async function preflightCommandReceipt<T>(
+  pool: Pool,
+  input: LegacyCommandOptions | PrincipalCommandInput,
+): Promise<CommandOutcome<T> | undefined> {
+  const result = await runCommandLifetime<T>(
+    pool,
+    input,
+    async () => {
+      throw new TypeError('A receipt preflight never executes a command body');
+    },
+    true,
+  );
+  return result === receiptNotFound ? undefined : result;
+}
+
+async function runCommandLifetime<T>(
+  pool: Pool,
+  input: LegacyCommandOptions | PrincipalCommandInput,
+  body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
+  receiptPreflight: boolean,
+): Promise<CommandExecution<T>> {
   commandPhase('command_overhead');
   const dispatch = claimCommandDispatchLifetime(pool, input);
   const publisher = claimPublisherCoordination(pool, input);
   let succeeded = false;
   try {
     if (dispatch) await dispatch.prepare();
-    const result = await executeCommand(pool, input, body, dispatch, publisher);
+    const result = await executeCommand(pool, input, body, dispatch, publisher, receiptPreflight);
     dispatch?.checkpoint();
     publisher?.assertLive();
     succeeded = true;
@@ -585,8 +629,12 @@ async function executeCommand<T>(
   body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
   dispatch?: CommandDispatchLifetime,
   publisher?: ReturnType<typeof claimPublisherCoordination>,
-): Promise<CommandOutcome<T>> {
+  receiptPreflight = false,
+): Promise<CommandExecution<T>> {
   const options = normalizeOptions(input);
+  if (receiptPreflight && !options.receipt) throw new TypeError('Receipt preflight requires a command receipt');
+  if (receiptPreflight && !options.authorization)
+    throw new TypeError('Receipt preflight requires current command authorization');
   dispatch?.assertOptions(pool, options);
   if (publisher && (dispatch || options.authorization || options.principal || options.receipt || options.basis))
     throw new TypeError('Publisher coordination is a receipt-free mechanical command');
@@ -715,6 +763,12 @@ async function executeCommand<T>(
             }
           }
           if (mode === 'receipt-only') throw authorization!.denied();
+          if (receiptPreflight) {
+            receiptOwners.delete(tx);
+            await measureCommandPhase('commit', () => client.query('COMMIT'));
+            sealEventTypes();
+            return receiptNotFound;
+          }
           if (publisher) {
             const replay = await publisher.lookup(client);
             if (replay) {
