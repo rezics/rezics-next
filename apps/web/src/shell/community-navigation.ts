@@ -44,8 +44,6 @@ function shellDestinationPath(destination: NativeDestination): `/${string}` | nu
       return `/spaces/${encodeURIComponent(destination.address)}`;
     case 'realm':
       return `/realms/${encodeURIComponent(destination.realmId)}`;
-    case 'zone':
-      return null;
   }
 }
 
