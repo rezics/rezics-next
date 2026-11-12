@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { serializeDocument } from '@rezics/document';
+import { operationIsAdmitted } from '../src/kernel/exposure';
 import {
   admitKnowledgeHistory,
   parseKnowledgeHistoryCursor,
@@ -16,6 +17,16 @@ import {
   knowledgeOtherRevisionId as rightRevisionId,
   knowledgeSubjectId,
 } from '../src/stories/knowledge-document-fixtures';
+
+test('history and comparison require their own exact exposure admission', () => {
+  for (const operation of ['knowledge_document.history', 'knowledge_document.compare'] as const) {
+    expect(operationIsAdmitted(operation, undefined)).toBe(false);
+    expect(operationIsAdmitted(operation, ['knowledge_document.private_read'])).toBe(false);
+    expect(operationIsAdmitted(operation, [operation])).toBe(true);
+  }
+  expect(operationIsAdmitted('knowledge_document.history', ['knowledge_document.compare'])).toBe(false);
+  expect(operationIsAdmitted('knowledge_document.compare', ['knowledge_document.history'])).toBe(false);
+});
 
 const input = {
   accountId: '0192f3a0-6c1e-7b2a-9d4e-000000000099',

@@ -9,6 +9,8 @@ export const operationGroups = {
   'knowledge_notebook.owned_list': 'knowledge_notebook.owned_list',
   'knowledge_notebook.outline': 'knowledge_notebook.outline',
   'knowledge_document.private_read': 'knowledge_document.private_read',
+  'knowledge_document.history': 'knowledge_document.history',
+  'knowledge_document.compare': 'knowledge_document.compare',
   'knowledge_notebook.create': 'knowledge_notebook.create',
   'knowledge_document.create': 'knowledge_document.create',
   'knowledge_document.revise': 'knowledge_document.revise',
