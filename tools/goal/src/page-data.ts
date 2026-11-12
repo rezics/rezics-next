@@ -225,11 +225,40 @@ function assertPreparedPageDataHead(preparedHead: string, currentHead: string): 
 /** Reconcile the exact prepared dev source before resuming a seeded stack or starting importer work. */
 export async function runPageDataSeedBoundary<T>(
   preparedHead: string,
-  currentHead: () => string,
+  preparedReleaseFile: string,
+  captureCurrentRelease: () => Buffer,
   reconcile: (head: string) => Promise<void>,
   seedOrResume: () => Promise<T>,
 ): Promise<T> {
-  assertPreparedPageDataHead(preparedHead, currentHead());
+  let preparedRelease: Buffer;
+  try {
+    preparedRelease = readFileSync(preparedReleaseFile);
+  } catch (error) {
+    throw new PageDataStackError(
+      'boot',
+      `Page-data Definitions release input unavailable: prepared dev head=${preparedHead}; ` +
+        `could not read ${preparedReleaseFile}: ${errorMessage(error)}`,
+    );
+  }
+
+  let currentRelease: Buffer;
+  try {
+    currentRelease = captureCurrentRelease();
+  } catch (error) {
+    throw new PageDataStackError(
+      'boot',
+      `Page-data Definitions release input unavailable: prepared dev head=${preparedHead}; ` +
+        `could not capture current dev release: ${errorMessage(error)}`,
+    );
+  }
+  if (!preparedRelease.equals(currentRelease))
+    throw new PageDataStackError(
+      'boot',
+      `Page-data Definitions release changed before reconciliation: prepared dev head=${preparedHead}; ` +
+        `prepared sha256=${createHash('sha256').update(preparedRelease).digest('hex')}; ` +
+        `current dev sha256=${createHash('sha256').update(currentRelease).digest('hex')}; refusing stale activation`,
+    );
+
   await reconcile(preparedHead);
   return seedOrResume();
 }
@@ -1288,6 +1317,18 @@ function runGit(cwd: string, args: string[]): string {
   return result.stdout.trim();
 }
 
+function runGitCapture(cwd: string, args: string[]): Buffer {
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: null,
+    maxBuffer: defaultPolicy.merge.gitBufferBytes,
+    timeout: defaultPolicy.merge.commandTimeoutMs,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(result.stderr.toString('utf8').trim() || `git ${args[0]} failed`);
+  return result.stdout;
+}
+
 function refreshWorktree(settings: Settings, worktree: string, head: string): void {
   if (!existsSync(worktree)) {
     runGit(settings.mainCheckout, ['worktree', 'add', '--detach', worktree, head]);
@@ -1957,7 +1998,12 @@ async function runDedicatedPageDataStack(
 
     seedStatus = await runPageDataSeedBoundary(
       head,
-      () => runGit(settings.mainCheckout, ['rev-parse', '--verify', `refs/heads/${settings.integrationBranch}`]),
+      join(worktree, pageDataDefinitionsReleaseFile),
+      () =>
+        runGitCapture(settings.mainCheckout, [
+          'show',
+          `refs/heads/${settings.integrationBranch}:${pageDataDefinitionsReleaseFile}`,
+        ]),
       async () => {
         await runCommand(
           bun,
@@ -2094,6 +2140,8 @@ async function runDedicatedPageDataStack(
 function pageDataDefinitionsActivationCommand(): string[] {
   return ['services/auth/scripts/dev-stack.ts', 'page-data-definitions', '--activate'];
 }
+
+const pageDataDefinitionsReleaseFile = 'packages/definitions/release/rezics.json';
 
 export async function reconcileDedicatedPageDataDefinitions(settings: Settings): Promise<void> {
   if (!existsSync(join(settings.stateDirectory, 'page-data-stack.json')))
