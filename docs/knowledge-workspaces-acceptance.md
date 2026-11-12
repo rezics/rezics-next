@@ -97,6 +97,13 @@ Each scenario includes native API observations first, then the browser where use
 
 1. Two editors of A's account save from the same head. At most one stale-basis update commits; the other draft stays
    recoverable with comparison and retry. The interface never calls this automatic real-time merge.
+   Open history from the private editor without losing draft or publication selection. Each explicit action reads
+   one limit-20 metadata page; preserve native ordering and exact opaque continuations, including sparse pages.
+   Retry repeats the attempted cursor; changed cursors require explicit restart. Select two saved IDs, compare the
+   exact oriented pair once, and return with the draft intact and focus on its surviving initiating control.
+   After a stale save, explicitly read the current head and compare it with the saved base beside the labeled local
+   draft. Comparison does not adopt or save; only explicit head adoption enables a deliberate new save. Retire all
+   history and late bodies on session, CSRF, exposure, locale, source or document replacement, with no focus effects.
 2. Time out after a successful command. Retry its sealed idempotent intent and read back the one acknowledged
    effect; do not create duplicate documents, publications or associations. Session replacement cannot send the
    retained command under another identity. Rejected publication keeps the private draft intact.

@@ -35,6 +35,15 @@ import {
   type KnowledgeNavigationResult,
 } from './navigation-read';
 
+import {
+  parseKnowledgeHistoryCursor,
+  parseKnowledgeHistoryPair,
+  readKnowledgeHistory,
+  readKnowledgeHistoryComparison,
+  type KnowledgeHistoryRead,
+  type KnowledgeHistoryCompareRead,
+} from './history';
+
 const domain = 'rezics:knowledge-private-visit:v1';
 const tokenPattern = /^[A-Za-z0-9_-]{1,8192}$/;
 const commandKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -500,6 +509,55 @@ export const readKnowledgeNavigationVisit = createServerFn({ method: 'POST' })
       });
     } catch (error) {
       if (isPlatformClosedError(error)) return { state: 'unavailable' };
+      throw error;
+    }
+  });
+
+/** Explicit private history reads use the prepared viewer, never an account supplied by the browser. */
+export const readKnowledgeHistoryVisit = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value)) throw new Error('Invalid Knowledge history read');
+    const cursor = parseKnowledgeHistoryCursor(value.cursor);
+    if (cursor === undefined) throw new Error('Invalid Knowledge history cursor');
+    return { address: address(value.address), expected: expectedSession(value.expected), cursor };
+  })
+  .handler(async ({ data }): Promise<KnowledgeHistoryRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = currentFor(data.expected, await currentIdentity());
+    if ('state' in identity) return identity;
+    try {
+      return await readKnowledgeHistory(kernelClient(), {
+        ...data.address,
+        cursor: data.cursor,
+        accountId: identity.viewer,
+        authorization: identity.authorization,
+      });
+    } catch (error) {
+      if (isPlatformClosedError(error)) return { state: 'unavailable', status: 503 };
+      throw error;
+    }
+  });
+
+export const readKnowledgeHistoryComparisonVisit = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value)) throw new Error('Invalid Knowledge comparison read');
+    const pair = parseKnowledgeHistoryPair(value.pair);
+    if (!pair) throw new Error('Invalid Knowledge comparison pair');
+    return { address: address(value.address), expected: expectedSession(value.expected), pair };
+  })
+  .handler(async ({ data }): Promise<KnowledgeHistoryCompareRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = currentFor(data.expected, await currentIdentity());
+    if ('state' in identity) return identity;
+    try {
+      return await readKnowledgeHistoryComparison(kernelClient(), {
+        ...data.address,
+        ...data.pair,
+        accountId: identity.viewer,
+        authorization: identity.authorization,
+      });
+    } catch (error) {
+      if (isPlatformClosedError(error)) return { state: 'unavailable', status: 503 };
       throw error;
     }
   });

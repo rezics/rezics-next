@@ -47,6 +47,8 @@ import {
   readKnowledgeOutlineRequest,
   readKnowledgeOwnedNotebooksRequest,
   readKnowledgePrivateVisit,
+  readKnowledgeHistoryVisit,
+  readKnowledgeHistoryComparisonVisit,
   reviseKnowledgePrivateDocumentRequest,
   selectKnowledgePublicationRequest,
   type KnowledgePrivatePreparation,
@@ -67,6 +69,8 @@ import { KnowledgePublicationPanel } from './publication-panel';
 import type { KnowledgePublicationIntent, KnowledgePublicationResult } from './publication';
 import { KnowledgeNavigationReturnLink } from './navigation-return-link';
 import { knowledgeNavigationBinding } from './navigation-return';
+import { KnowledgeHistoryPanel } from './history-panel';
+import type { KnowledgeHistoryOperations } from './history';
 
 const controlClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words px-4 py-2 leading-snug focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -96,6 +100,8 @@ export type KnowledgePrivatePageAccess =
       createDocument: KnowledgePrivateAdmission;
       revise: KnowledgePrivateAdmission;
       publication: KnowledgePrivateAdmission;
+      history?: KnowledgePrivateAdmission;
+      compare?: KnowledgePrivateAdmission;
     };
 
 type Binding = Readonly<{ viewer: string; csrfToken: string; credential: string }>;
@@ -141,6 +147,7 @@ type PrivateOperationResult<T> =
   | { state: 'unavailable'; status?: number };
 
 export type KnowledgePrivateOperations = Readonly<{
+  history?: KnowledgeHistoryOperations;
   prepare: (subjectId: string, expectedViewer: string) => Promise<KnowledgePrivatePreparation>;
   read: (
     address: KnowledgePrivateAddress,
@@ -170,6 +177,20 @@ function operationSourceId(operations: KnowledgePrivateOperations): number {
 }
 
 const nativeOperations: KnowledgePrivateOperations = {
+  history: {
+    read(address, cursor, expected) {
+      return readKnowledgeHistoryVisit({
+        data: { address, cursor, expected },
+        headers: { 'X-CSRF-Token': expected.csrfToken },
+      });
+    },
+    compare(address, pair, expected) {
+      return readKnowledgeHistoryComparisonVisit({
+        data: { address, pair, expected },
+        headers: { 'X-CSRF-Token': expected.csrfToken },
+      });
+    },
+  },
   selectPublication(intent) {
     return selectKnowledgePublicationRequest({
       data: { ...intent, ...intent.binding },
@@ -1522,6 +1543,22 @@ function PrivateKnowledgeEditor({
             </Button>
           </div>
         </form>
+        <KnowledgeHistoryPanel
+          address={{ notebookId: head.notebookId, documentId: head.documentId }}
+          binding={binding}
+          admission={access.history ?? 'unavailable'}
+          compareAdmission={access.compare ?? 'unavailable'}
+          operations={operations.history}
+          conflictPair={
+            requiresHeadReview && reviewHead && head.revisionId !== reviewHead.revisionId
+              ? { leftRevisionId: head.revisionId, rightRevisionId: reviewHead.revisionId }
+              : null
+          }
+          draft={draft.body}
+          locale={locale}
+          isCurrent={() => active.current}
+          onRetire={retire}
+        />
         <KnowledgePublicationPanel
           head={reviewHead ?? head}
           binding={binding}
@@ -1673,6 +1710,8 @@ export function KnowledgePrivatePage({
   const createDocument = useOperationAdmission('knowledge_document.create');
   const revise = useOperationAdmission('knowledge_document.revise');
   const publication = useOperationAdmission('knowledge_document.select_publication');
+  const history = useOperationAdmission('knowledge_document.history');
+  const compare = useOperationAdmission('knowledge_document.compare');
 
   const viewer = session.state === 'signed-in' && typeof session.subject === 'string' ? session.subject : null;
   let exposureRevision = 'closed';
@@ -1717,6 +1756,8 @@ export function KnowledgePrivatePage({
         createDocument,
         revise,
         publication,
+        history,
+        compare,
         operationSourceId(operations),
       ]),
       read,
@@ -1726,6 +1767,8 @@ export function KnowledgePrivatePage({
       createDocument,
       revise,
       publication,
+      history,
+      compare,
     };
   } else access = { state: 'preparing' };
 

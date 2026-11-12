@@ -76,6 +76,23 @@ locale, address and source replacement retire private rows and callbacks. These 
 shared query caches, persistent storage or URL payloads. The existing seeded integration lane owns native,
 browser and visual acceptance; source attempts add focused wire and mounted regressions.
 
+Decision: Private document history stays inline in the retained editor. One explicit history request reads one
+replacing native page with `limit=20`, preserving order and opaque continuation; retry repeats the attempted cursor
+and restart explicitly clears it. Empty with continuation remains sparse, not exhausted. Selection retains two
+exact revision IDs across pages; explicit comparison reads one oriented `leftRevisionId`/`rightRevisionId` pair and
+holds at most those two saved bodies. Canonical source is retained losslessly; the existing Document renderer
+shows each side with block-identity difference labels and supplied references, without target hydration. Native
+response admission rejects mismatched document/revision identities, digests and oversized metadata pages.
+Conflict review can compare the saved base with the explicitly observed current head beside the retained local
+writing, which is never labeled a saved revision. Reading changes neither publication selection nor save basis.
+The existing adopt-current-head action admits that basis, followed by deliberate Save; uncertain retries keep their
+original intent, key and sealed credential. Session, CSRF, exposure, locale, document and source retirement discard
+history, selections, callbacks and late work. No history/body enters public SSR, shared caches, URLs or persistence.
+Consumer work is O(P + B + R), for P ≤ 20 metadata rows, two bodies of at most 2 MiB each and at most 64 supplied
+references per body; block comparison uses a linear identity map, not edit-distance alignment. Content owns native
+query and authorization cost. Focused wire/mounted regressions and five illustrative History stories cover source
+behavior; the integrated verifier owns native two-editor/history, accessibility, visual review and promotion.
+
 Every saved document revision fixes its validated canonical document bytes, SHA-256 digest, title, language,
 references, authorship and licence. A publication is an immutable record selecting one exact document revision and
 the notebook Subject. The document's current-publication pointer is the only public availability authority. Saving
@@ -419,17 +436,17 @@ These are initial design limits, owned here until native module contracts adopt 
 They are acceptance inputs, not measured runtime performance. Performance may propose a justified revision in this
 owner document before dependent work; a lower arbitrary cap must not silently remove an accepted scenario.
 
-| Dimension                         | Launch bound                                                                                         |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Canonical body                    | Existing Content maximum, 2 MiB per document revision                                                |
-| Primary containment depth         | 32 placements below notebook root                                                                    |
-| Ordinary list page                | 50 items plus one lookahead                                                                          |
-| References in one revision        | 64 distinct managed references, including at most 16 about-Subject associations                      |
-| Reference resolution per response | 64 distinct targets; nested target expansion is zero                                                 |
-| Body loading                      | One full body; referenced previews load separately, at most 8 excerpts of 4 KiB in a preview request |
-| Public subject contributions      | 20 results; at most 128 examined association candidates per foreground step                          |
-| Structure mutation                | One source/destination placement pair; at most two depth-32 ancestor paths                           |
-| Cleanup/preparation               | At most 100 local rows or 128 publication candidates per retained step, respectively                 |
+| Dimension                         | Launch bound                                                                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Canonical body                    | Existing Content maximum, 2 MiB per document revision                                                                                 |
+| Primary containment depth         | 32 placements below notebook root                                                                                                     |
+| Ordinary list page                | 50 items plus one lookahead                                                                                                           |
+| References in one revision        | 64 distinct managed references, including at most 16 about-Subject associations                                                       |
+| Reference resolution per response | 64 distinct targets; nested target expansion is zero                                                                                  |
+| Body loading                      | One working/read body; explicit saved-revision comparison reads two; referenced previews load separately, at most 8 excerpts of 4 KiB |
+| Public subject contributions      | 20 results; at most 128 examined association candidates per foreground step                                                           |
+| Structure mutation                | One source/destination placement pair; at most two depth-32 ancestor paths                                                            |
+| Cleanup/preparation               | At most 100 local rows or 128 publication candidates per retained step, respectively                                                  |
 
 Let N be indexed population, B the selected body bytes, P a page limit, H the depth cap, R selected references and
 W a retained-step limit. Page reads seek a full route/owner/parent or subject key and cost O(log N + P) for the local
