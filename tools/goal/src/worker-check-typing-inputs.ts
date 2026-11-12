@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { gzipSync } from 'node:zlib';
 import {
   existsSync,
   lstatSync,
@@ -115,7 +116,7 @@ type CompilerGraph = { workspaces: Set<string>; executables: Set<string> };
 function directKernelOwnerCommand(argv: readonly string[]): boolean {
   return (
     argv.length === 2 &&
-    (argv[0] === 'bun' || argv[0]?.endsWith('/bun')) &&
+    (argv[0] === 'bun' || argv[0]?.endsWith('/bun') === true) &&
     argv[1] === 'services/kernel/scripts/typecheck.ts'
   );
 }
@@ -218,7 +219,7 @@ export function isDirectKernelTypingCompiler(root: string, command: readonly str
 function misorderedWorkspaceTypecheckIntent(command: readonly string[]): boolean {
   return (
     command.length === 5 &&
-    (command[0] === 'bun' || command[0]?.endsWith('/bun')) &&
+    (command[0] === 'bun' || command[0]?.endsWith('/bun') === true) &&
     command[1] === '--cwd' &&
     command[3] === 'run' &&
     command[4] === 'typecheck'
@@ -468,24 +469,23 @@ function stableSource(started: TypingInputs, completed: TypingInputs, outputs: r
 /** Capture every admitted physical command, including workspace runners predating compiler receipt support. */
 export function typingInputCommand(command: readonly string[]): string[] {
   // Carry the current standalone capture implementation through argv: old frozen worktrees need no source rewrite.
-  // Keep each transferred argument under remote custody's 4096-character bound.
-  const payload = Buffer.from(
-    JSON.stringify({
-      captureModule: readFileSync(import.meta.path).toString('base64'),
-      command,
-    }),
-  ).toString('base64');
+  // Compress the source and invocation together so this physical receipt fits remote custody's bounded record.
+  const payload = gzipSync(JSON.stringify({ captureModule: readFileSync(import.meta.path, 'utf8'), command })).toString(
+    'base64',
+  );
   const payloadChunks = payload.match(/.{1,3000}/g) ?? [];
   return [
     'bun',
     '-e',
     `
 const payload = process.argv.slice(1).join('');
-const { captureModule, command } = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
+const { gunzipSync } = await import('node:zlib');
+const { captureModule, command } = JSON.parse(gunzipSync(Buffer.from(payload, 'base64')).toString('utf8'));
 let complete;
 let readReceipt;
 try {
-  const inputs = await import('data:text/typescript;base64,' + captureModule);
+  const source = Buffer.from(captureModule, 'utf8').toString('base64');
+  const inputs = await import('data:text/typescript;base64,' + source);
   readReceipt = inputs.readTypingInputReceipt;
   complete = inputs.beginTypingInputReceipt(process.cwd(), process.env, command);
 } catch (error) { console.error('typing inputs unavailable before compilation: ' + error); }

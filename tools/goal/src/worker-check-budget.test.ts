@@ -777,7 +777,8 @@ test('a retained Kernel pass waits for later cancellation custody and then reuse
     ).toBe('unknown');
     const waiting = await recoverWorkerTyping(h.tasks, { enqueue: () => {} }, retained.ref);
     expect(waiting).toMatchObject({ status: 'pending' });
-    expect(waiting.result).toContain('no additional compiler run was authorized');
+    const waitingResult = 'result' in waiting ? waiting.result : undefined;
+    expect(waitingResult).toContain('no additional compiler run was authorized');
     expect(workerCheckHostRunsUsed(budget)).toBe(2);
     expect(existsSync(join(budget, 'typing-recovery'))).toBe(false);
 

@@ -33,6 +33,7 @@ import {
   startWorkerCheck,
   stopWorkerCheck,
   waitWorkerCheck,
+  withOriginalContext,
 } from './worker-check.ts';
 import { remoteCheckCustodyCallbacks } from './remote-check.ts';
 import { typingInputCommand } from '../tools/goal/src/worker-check-typing-inputs.ts';
@@ -114,11 +115,22 @@ test('remote custody bounds round-trip generated, escaped and transitioned recor
     checkId = randomUUID(),
     physicalRunId = randomUUID();
   const ownership = { taskId: randomUUID(), attempt: 4 },
-    argv = ['bun', 'scripts/typecheck.ts', '--root'];
-  const remoteArgv = typingInputCommand(argv),
+    argv = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'];
+  const remoteArgv = withOriginalContext(
+      [
+        'env',
+        `REZICS_TYPING_INPUTS_PHYSICAL=${physicalRunId}`,
+        `REZICS_TYPING_INPUTS_COMMAND=${Buffer.from(JSON.stringify(argv)).toString('base64')}`,
+        ...typingInputCommand(argv),
+      ],
+      {
+        GOAL_TASK_ID: ownership.taskId,
+        GOAL_ATTEMPT: String(ownership.attempt),
+        GOAL_ACCEPTANCE_REQUIRES: 'native,root',
+      },
+    ),
     binding = { checkId, ownership, argv, remoteArgv };
-  expect(remoteArgv).toHaveLength(21);
-  expect(Math.max(...remoteArgv.map((argument) => argument.length))).toBe(3000);
+  expect(Math.max(...remoteArgv.map((argument) => argument.length))).toBeLessThanOrEqual(4096);
   const file = remoteRunCustodyPath(root, physicalRunId);
   initializeRemoteRunCustody(root, physicalRunId, binding);
   expect(readJsonFile<CheckRemoteRunCustody>(file)?.binding?.remoteArgv).toEqual(remoteArgv);
