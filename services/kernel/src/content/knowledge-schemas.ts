@@ -1,3 +1,4 @@
+import { KnowledgeReferencesSchema, KnowledgeProvenanceSchema } from './knowledge-portable.ts';
 import { t } from 'elysia';
 
 const UUID = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
@@ -5,6 +6,7 @@ const documentInput = {
   title: t.String({ minLength: 1, maxLength: 512 }),
   language: t.Optional(t.Union([t.String({ minLength: 1, maxLength: 64 }), t.Null()])),
   body: t.Unknown(),
+  references: t.Optional(KnowledgeReferencesSchema),
   licence: t.String({ minLength: 1, maxLength: 128 }),
   subjectIds: t.Array(UUID, { maxItems: 64, uniqueItems: true }),
 };
@@ -66,6 +68,8 @@ const byteDocument = {
   revisionId: UUID,
   title: t.String({ minLength: 1, maxLength: 512 }),
   language: t.Union([t.String({ minLength: 1, maxLength: 64 }), t.Null()]),
+  references: KnowledgeReferencesSchema,
+  provenance: t.Union([KnowledgeProvenanceSchema, t.Null()]),
   canonicalBytes: t.String(),
   sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
   licence: t.String({ minLength: 1, maxLength: 128 }),
@@ -135,6 +139,23 @@ export const KnowledgeOutlineSchema = t.Object(
       { maxItems: 50 },
     ),
     next: nextSchema,
+  },
+  { additionalProperties: false },
+);
+
+export const KnowledgeOwnerExportQuerySchema = t.Object({ revisionId: UUID }, { additionalProperties: false });
+export const KnowledgeSourceSelectionSchema = t.Union([
+  t.Object({ representation: t.Literal('public'), documentId: UUID, revisionId: UUID }, { additionalProperties: false }),
+  t.Object(
+    { representation: t.Literal('authoring'), accountId: UUID, notebookId: UUID, documentId: UUID, revisionId: UUID },
+    { additionalProperties: false },
+  ),
+]);
+export const KnowledgeCopySchema = t.Object(
+  {
+    source: KnowledgeSourceSelectionSchema,
+    expectedStructureRevisionId: UUID,
+    parentPlacementId: t.Union([UUID, t.Null()]),
   },
   { additionalProperties: false },
 );

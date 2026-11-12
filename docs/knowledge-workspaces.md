@@ -243,6 +243,26 @@ Single-document copy uses the same permitted selected representation, creates ne
 remaps source-local anchors, and retains exact external references and provenance. It never clones hidden revisions,
 target content, public grants or child documents. The copy starts private in the destination owner's notebook.
 
+Decision: native export uses canonical JSON only; Document currently provides Markdown import but no permitted
+Markdown exporter. Owner export requires an explicit revision ID; public export and copy use the same current
+publication disclosure as the public reader, even for the author. Copy requests pin an exact revision and use the
+destination notebook's existing account authority, structure CAS and receipt transaction. The versioned reference
+component is `rezics.knowledge.reference` version `1`, with only `{referenceId}` in its opaque payload; the revision
+stores the finite-role typed manifest separately. Missing targets become unavailable markers without target IDs.
+Block IDs, component IDs, reference IDs, manifest source anchors and local `#block` links are regenerated on copy;
+external exact locators and unrelated opaque payloads are preserved. Provenance retains the original permitted
+source selection, and public output withholds authoring-origin provenance. Knowledge has no media claim destination;
+public media nodes become unavailable markers and copy creates no media claims. Managed media and lifecycle
+acceptance remain with their owner integrations before opening the capability.
+
+The export digest is SHA-256 over RFC 8785 JSON of all envelope fields except `sha256`; `selection.sha256` hashes
+only the selected representation's canonical Document bytes. Both can be checked independently of storage. There
+is no timestamp or generated export identity to make repeated exports differ. `references` on create/revise is
+optional for existing clients; when supplied it is limited to 64 entries and must match the registered components
+one to one. Each entry has a local ID, finite role, optional source block and a subject, live document or exact
+revision/digest/optional-block target; `null` retains an unavailable citation. Target disclosure performs bounded
+metadata-only one-hop checks, never fetches target bodies and never follows their outgoing references.
+
 ## Access and lifecycle
 
 Access owns all grants and decisions. Notebook and document modules supply native resource facts and lifecycle

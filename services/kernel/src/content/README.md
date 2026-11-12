@@ -4695,6 +4695,7 @@ create an account-home notebook, attach stable private document resources, save 
 select one exact revision for public use, and withdraw the current selection. Writes use native command receipts,
 account `account:update` authority and compare-and-swap against the structure, document head and current publication.
 Private document reads use the owner's `account:read` authority and admit the complete stable placement chain.
+An optional exact revision selector reads a retained own revision through that same admitted placement.
 
 `GET /v1/knowledge/documents/{id}?revisionId=...` reads bytes from the current publication pointer. It checks
 anonymous Subject read authority for the notebook Subject and selected revision references before re-reading that
@@ -4717,3 +4718,36 @@ Native acceptance coverage is in `test/content/knowledge-first-loop.test.ts`: tw
 revision selection, anonymous exact bytes, private-owner isolation, same-key replay, stale compare-and-swap,
 immediate withdrawal without Search processing, and the 32-ancestor/64-reference bounds. The controller runs this
 suite after landing. The implementation worker does not run native suites.
+
+### Single-document export and copy
+
+`GET /v1/knowledge/documents/{id}/export` returns `knowledge-document-export-v1` as canonical JSON, selecting the
+current eligible publication, optionally pinned by `revisionId`. The equivalent owner document address ending in
+`/export?revisionId=...` requires an exact own revision and returns its authoring representation. Neither path
+upgrades a public request to owner bytes. Both use `private, no-store` and record source session positions.
+The wrapper and Document have independent validators; the wrapper digest excludes only its own `sha256` field.
+Its selection digest names the actual exported Document representation, including any disclosure redaction.
+
+`POST /v1/knowledge/notebooks/{id}/documents:copy` accepts an exact `source` selector, an expected destination
+structure revision and a nullable parent placement. It shares the create transaction, account update authority,
+ancestry bound, structure CAS and registered document-created event. The stable receipt digest binds the destination
+notebook and original request, including the selected source revision; concurrent same-key delivery creates one
+private document and returns one result. No source grants, child documents or sibling content are copied.
+
+Revision-owned `reference_manifest` and `copy_provenance` accompany canonical Document bytes. The registered
+`rezics.knowledge.reference` version `1` component carries only a local reference ID; the manifest owns target kinds,
+roles and exact selections. Public reads, exports and copies share one projection: metadata-only one-hop current
+target checks preserve eligible locators and replace withheld targets with null and an unavailable marker. Public
+provenance is withheld unless its original public selection is still eligible; authoring provenance stays private.
+Media nodes become unavailable markers in public projections because Knowledge has no native media claim destination.
+Other opaque authored extension payloads, mathematical source, licence and language round-trip through Document.
+Copy regenerates node/reference identities, manifest source anchors and fragment links while retaining exact external
+citations. No Markdown artifact is offered; the installed Document package has import only.
+
+Cost is proportional to one bounded body (2 MiB), at most 64 references and one placement path (32 rows). Each
+managed document/revision target uses two exact publication metadata reads and at most 65 Subject identities per
+currentness round; no target body, target manifest or outgoing reference is loaded. The shared destination write
+reads only its notebook, parent path and indexed sibling maximum. `test/content/knowledge-portable.test.ts` pins
+artifact validation and local remapping; `test/content/knowledge-transfer.test.ts` pins native owner/public selection,
+private copy, CAS, replay, target withdrawal and disclosure. Native acceptance and lifecycle integration remain
+controller-deferred under the implementation sprint policy.

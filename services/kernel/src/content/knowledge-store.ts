@@ -1,3 +1,4 @@
+import type { KnowledgeReference, KnowledgeProvenance } from './knowledge-portable.ts';
 import type { Pool } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
 import { withReadTransaction } from '../semantic/read.ts';
@@ -25,6 +26,8 @@ export type KnowledgePublicRow = Readonly<{
   publication_sha256: Buffer;
   title: string;
   language: string | null;
+  reference_manifest: readonly KnowledgeReference[];
+  copy_provenance: KnowledgeProvenance | null;
   canonical_bytes: Buffer;
   body_sha256: Buffer;
   licence: string;
@@ -52,11 +55,14 @@ export type KnowledgePrivateRow = Readonly<{
   structure_revision_id: string;
   document_id: string;
   head_revision_id: string;
+  revision_id: string;
   current_publication_id: string | null;
   placement_id: string;
   parent_id: string | null;
   title: string;
   language: string | null;
+  reference_manifest: readonly KnowledgeReference[];
+  copy_provenance: KnowledgeProvenance | null;
   canonical_bytes: Buffer;
   body_sha256: Buffer;
   licence: string;
@@ -156,11 +162,14 @@ export async function knowledgePrivateRow(
   route: number,
   notebookId: string,
   documentId: string,
+  revisionId: string | null = null,
 ): Promise<KnowledgePrivateRow | null> {
-  const row = await privateRead.run(tx, { route, notebook_id: notebookId, document_id: documentId });
+  const row = await privateRead.run(tx, { route, notebook_id: notebookId, document_id: documentId, revision_id: revisionId });
   if (!row) return null;
   return {
     ...row,
+    reference_manifest: row.reference_manifest as unknown as readonly KnowledgeReference[],
+    copy_provenance: row.copy_provenance as unknown as KnowledgeProvenance | null,
     canonical_bytes: Buffer.from(row.canonical_bytes),
     body_sha256: Buffer.from(row.body_sha256),
     subject_ids: storedSubjectIds(row.subject_ids),
@@ -177,6 +186,8 @@ export async function knowledgePublicRow(
   return {
     ...row,
     publication_sha256: Buffer.from(row.publication_sha256),
+    reference_manifest: row.reference_manifest as unknown as readonly KnowledgeReference[],
+    copy_provenance: row.copy_provenance as unknown as KnowledgeProvenance | null,
     canonical_bytes: Buffer.from(row.canonical_bytes),
     body_sha256: Buffer.from(row.body_sha256),
     subject_ids: storedSubjectIds(row.subject_ids),
