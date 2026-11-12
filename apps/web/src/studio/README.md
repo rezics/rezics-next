@@ -62,3 +62,38 @@ and native same-home decoding, coverage versus empty pages, sparse continuation 
 scope/cursor/access, session replacement during reads, and exact organizer/publication opening. Existing publication
 selection assertions remain unchanged. Mounted browser/native/Storybook and broader acceptance are deferred to the
 dev verifier; implementation verification is changed-file formatting and the affected Web typecheck only.
+
+## Exact Book history
+
+Decision: the existing Book organizer mounts author history only when requested, with an isolated read-only exact
+outline beside the editable draft. Closing the disclosure destroys its visit. History never enters the draft adapter,
+release selection, review or publication commands; the current draft remains usable throughout inspection.
+
+The authenticated session-bound BFF calls `hosted_catalogue.history`, requesting at most 20 metadata rows per page.
+It performs no detail reads while listing. Native timestamps retain their original precision and offset; current-draft
+and current-release markers are native page observations, not comparisons with the loaded draft. Both revision kinds
+share native ordering. An empty release is shown as a withdrawn release when its exact outline is opened.
+
+Each mounted visit owns its opaque cursor and exact inspector. Retry repeats the failed cursor; stale continuation
+requires an explicit restart. Empty first history, empty continuation pages, denied access and unavailable reads have
+distinct presentation. Failed replacement pages remove old rows and outlines. Duplicate/repeated continuations cannot
+loop. Browser account or session replacement, including replacement by the same account, permanently retires the visit,
+aborts its reads and discards late responses. Book navigation and closing the panel dispose the same lifetime.
+
+Selecting a listed entry uses the existing native exact reader with catalogue, kind and revision ID. Its admitted
+source structure must also match the entry. The inspector presents native chapter order and pinned versions without
+editor, placement or publication controls. An unavailable exact tree stays unavailable rather than showing a partial
+or empty outline. The native author-history permission remains authoritative; public release access never grants
+history discovery.
+
+Sources read before design: this owner document, `book-organizer.tsx`, `hosted-actions.ts`, `hosted-native.ts`,
+`hosted-contract.ts`, their workspace and inventory callers, and Content's `hosted-chapters-routes.ts`,
+`hosted-chapters-schemas.ts` and [author-history contract](../../../../services/kernel/src/content/hosted-chapters.md#author-history).
+The base already includes the generated history client; no backend or inventory change is required.
+
+Later acceptance: the dev verifier runs `bun run --cwd apps/web test src/studio/hosted-history.test.tsx
+ tests/studio-hosted-inventory.test.ts tests/studio-hosted-publication.test.ts`. History cases cover metadata-only
+paging and exact retry, native timestamps/markers, empty/denied/unavailable/stale states, exact identity and chapter
+order, withdrawal, session replacement, late selections and disposal. Existing publication and inventory assertions
+remain unchanged; their native doubles include history. Native, browser, Storybook and broader acceptance remain
+deferred; this source pass uses changed-file formatting and the affected Web typecheck.

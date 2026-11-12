@@ -9,6 +9,7 @@ import type { StudioResult } from './contract';
 import {
   hostedCreate,
   hostedId,
+  hostedHistoryRequest,
   hostedOwnerBinding,
   hostedOwnerViewer,
   hostedKey,
@@ -111,6 +112,13 @@ export const listHostedBooks = createServerFn({ method: 'GET' })
     ),
   );
 
+/** History discovery is always an authenticated author action, even for a public release. */
+export const listHostedBookHistory = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => v.parse(hostedHistoryRequest, input))
+  .handler(({ data }) =>
+    admittedOwner((native, _accountId, signal) => native.listHistory(data.catalogueId, data.cursor, signal)),
+  );
+
 export const readOwnedHostedBook = createServerFn({ method: 'GET' })
   .validator((input: unknown) =>
     v.parse(
@@ -132,6 +140,7 @@ export const readOwnedHostedBook = createServerFn({ method: 'GET' })
 
 /** Browser callers receive admitted data only. Credentials remain inside the ordinary BFF session boundary. */
 export const hostedBookNative: HostedBookNative = {
+  listHistory: (catalogueId, cursor, signal) => listHostedBookHistory({ data: { catalogueId, cursor }, signal }),
   read: (data, signal) => readHostedBook({ data, signal }),
   listOwn: (accountId, cursor, signal, expected) => listHostedBooks({ data: { accountId, cursor, expected }, signal }),
   readOwn: (accountId, catalogueId, signal, expectedViewer) =>

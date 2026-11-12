@@ -12,12 +12,14 @@ import { StudioPublication } from './publication';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref, type Locale } from '../paraglide/runtime.js';
 import { HostedInventoryVisit, hostedOwnerBookHref } from './hosted-inventory';
+import type { HostedHistoryBinding } from './hosted-history';
 import './studio.css';
 
 export type StudioWorkspaceProps = {
   input: StudioInput;
   port: StudioPort;
   bookPort?: BookOrganizerPort;
+  bookHistory?: HostedHistoryBinding;
   presentation?: StudioPresentation;
   /** Lets the mounted composition guard internal route navigation as well as browser departure. */
   onDepartureRiskChange?: (atRisk: boolean) => void;
@@ -29,7 +31,7 @@ export function StudioWorkspace(props: StudioWorkspaceProps) {
     return <p role="status">This Studio visit has ended. Reopen the workspace to continue.</p>;
   return <StudioVisit key={props.input.visitKey} {...props} />;
 }
-function StudioVisit({ input, port, bookPort, presentation = {}, onDepartureRiskChange }: StudioWorkspaceProps) {
+function StudioVisit({ input, port, bookPort, bookHistory, presentation = {}, onDepartureRiskChange }: StudioWorkspaceProps) {
   const [controller] = useState(() => new StudioController(input, port, bookPort));
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [tab, setTab] = useState<'write' | 'preview' | 'versions'>('write');
@@ -368,7 +370,7 @@ function StudioVisit({ input, port, bookPort, presentation = {}, onDepartureRisk
           >
             <summary>Documents and {input.profile.kind === 'book' ? 'table of contents' : 'articles'}</summary>
             <div className="studio-stack">
-              {state.structure ? <BookOrganizer controller={controller} state={state} onOpen={open} /> : null}
+              {state.structure ? <BookOrganizer controller={controller} state={state} onOpen={open} history={bookHistory} /> : null}
               <section
                 aria-label={input.profile.kind === 'book' ? 'Document drafts' : 'Articles'}
                 className="studio-stack"

@@ -238,6 +238,7 @@ test('the existing organizer opens exactly the admitted foreign structure and cu
   const selections: unknown[] = [];
   const epochs: unknown[] = [];
   const native: HostedBookNative = {
+    listHistory: async () => ok({ catalogueId, items: [], nextCursor: null }),
     listOwn: async () => ok(page()),
     readOwn: async (_account, _id, _signal, expected) => {
       epochs.push(expected);

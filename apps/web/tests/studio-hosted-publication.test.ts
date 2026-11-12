@@ -53,6 +53,7 @@ const ok = <T>(value: T): StudioResult<T> => ({ ok: true, value });
 test('hosted Book publication freezes only selected exact chapter occurrences and required ancestors', async () => {
   let sent: HostedPublish | null = null;
   const native: HostedBookNative = {
+    listHistory: async () => ok({ catalogueId, items: [], nextCursor: null }),
     listOwn: async () =>
       ok({
         scope: { kind: 'same-home', route: 0, crossHome: 'unavailable' },

@@ -3,13 +3,17 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { bookTocRows, moveBookOccurrence, type BookTocRow } from './book-toc';
 import { sameExact, type BookStructure, type BookStructureChange } from './contract';
+import { HostedHistoryDisclosure } from './hosted-history-view';
+import type { HostedHistoryBinding } from './hosted-history';
 import type { StudioController, StudioState } from './controller';
 
 export function BookOrganizer({
   controller,
   state,
   onOpen,
+  history,
 }: {
+  history?: HostedHistoryBinding;
   controller: StudioController;
   state: StudioState;
   onOpen: (postId: string) => void;
@@ -59,6 +63,7 @@ export function BookOrganizer({
           onChange={controller.organize}
         />
       ) : null}
+      {history ? <HostedHistoryDisclosure key={structure.catalogueId} binding={history} /> : null}
       <details className="studio-technical">
         <summary>Structure version</summary>
         <dl>

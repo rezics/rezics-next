@@ -68,6 +68,25 @@ export const hostedPage = v.strictObject({
   ),
   nextCursor: v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
 });
+/** Author-only metadata: list rendering never needs chapter or document reads. */
+export const hostedHistoryRequest = v.strictObject({
+  catalogueId: hostedId,
+  cursor: v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
+});
+export const hostedHistoryEntry = v.strictObject({
+  ...revision,
+  createdAt: v.pipe(v.string(), v.isoTimestamp()),
+  isCurrentDraft: v.boolean(),
+  isCurrentRelease: v.boolean(),
+});
+export const hostedHistoryPage = v.strictObject({
+  catalogueId: hostedId,
+  items: v.pipe(v.array(hostedHistoryEntry), v.maxLength(20)),
+  nextCursor: v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
+});
+export type HostedHistoryEntry = v.InferOutput<typeof hostedHistoryEntry>;
+export type HostedHistoryPage = v.InferOutput<typeof hostedHistoryPage>;
+
 export const hostedSelection = v.strictObject({
   catalogueId: hostedId,
   kind: v.picklist(['structure', 'publication']),
@@ -137,6 +156,11 @@ export function sameHostedViewer(left: HostedOwnerViewer, right: HostedOwnerView
 
 /** Reads admit the complete bounded tree or fail; redacted slots never become editable empty chapters. */
 export interface HostedBookNative {
+  listHistory(
+    catalogueId: string,
+    cursor: string | null,
+    signal: AbortSignal,
+  ): Promise<StudioResult<HostedHistoryPage>>;
   listOwn(
     accountId: string,
     cursor: string | null,

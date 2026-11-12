@@ -6,6 +6,9 @@ import {
   hostedCommand,
   hostedCreate,
   hostedId,
+  hostedHistoryPage,
+  hostedHistoryRequest,
+  type HostedHistoryPage,
   hostedKey,
   hostedOwnerBookResponse,
   sameHostedViewer,
@@ -147,6 +150,45 @@ export function createHostedBookNative(client: KernelClient): HostedBookNative {
       return unavailable();
     }
   }
+  async function listHistory(
+    catalogueId: string,
+    cursor: string | null,
+    signal: AbortSignal,
+  ): Promise<StudioResult<HostedHistoryPage>> {
+    const unavailableHistory = () => hostedFailure('unavailable', 'Book history is unavailable. Retry this page.');
+    const input = v.safeParse(hostedHistoryRequest, { catalogueId, cursor });
+    if (!input.success) return hostedFailure('invalid', 'The book history address is invalid. Reopen the book.');
+    if (signal.aborted) return unavailableHistory();
+    try {
+      const response = await client.hostedCatalogues({ id: catalogueId }).history.get(
+        queryOptions(signal, { limit: '20', ...(cursor === null ? {} : { cursor }) }),
+      );
+      if (signal.aborted) return unavailableHistory();
+      if (response.status === 401 || response.status === 403)
+        return hostedFailure('denied', 'Your current session cannot browse this book history. Reopen the book.');
+      if (response.status === 400 || response.status === 409)
+        return hostedFailure('stale', 'This history continuation is no longer valid. Restart history.');
+      if (response.error || response.status !== 200) return unavailableHistory();
+      const parsed = v.safeParse(hostedHistoryPage, response.data);
+      if (!parsed.success || parsed.output.catalogueId !== catalogueId) return unavailableHistory();
+      const page = parsed.output;
+      const ids = new Set<string>();
+      for (const entry of page.items) {
+        // A mixed-catalogue or mislabelled response must never become a selectable exact version.
+        if (
+          entry.catalogueId !== catalogueId ||
+          ids.has(entry.revisionId) ||
+          (entry.kind === 'structure'
+            ? entry.sourceRevisionId !== null || entry.isCurrentRelease
+            : entry.sourceRevisionId === null || entry.isCurrentDraft)
+        ) return unavailableHistory();
+        ids.add(entry.revisionId);
+      }
+      return { ok: true, value: page };
+    } catch {
+      return unavailableHistory();
+    }
+  }
   async function listOwn(accountId: string, cursor: string | null, signal: AbortSignal, expected?: HostedOwnerBinding) {
     if (signal.aborted) return unavailable();
     try {
@@ -220,6 +262,7 @@ export function createHostedBookNative(client: KernelClient): HostedBookNative {
   }
   return {
     read,
+    listHistory,
     listOwn,
     readOwn,
     async create(input, key, signal) {

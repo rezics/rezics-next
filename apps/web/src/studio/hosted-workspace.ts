@@ -20,7 +20,7 @@ export type StudioDocumentPort = Pick<
 >;
 export type HostedStudioInput = Omit<StudioInput, 'profile' | 'canPublish' | 'publicationUnavailableReason'>;
 export type HostedStudioBinding = Readonly<{
-  workspace: Pick<StudioWorkspaceProps, 'input' | 'port' | 'bookPort'>;
+  workspace: Pick<StudioWorkspaceProps, 'input' | 'port' | 'bookPort' | 'bookHistory'>;
   book: HostedBookAdapter;
 }>;
 
@@ -265,6 +265,7 @@ export async function openHostedStudio(
         },
         port,
         bookPort: book,
+        bookHistory: { native, accountId: options.accountId, catalogueId: options.catalogueId, isCurrent: current },
       },
     },
   };
