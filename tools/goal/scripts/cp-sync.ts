@@ -531,14 +531,7 @@ async function residentStatus(checkout: string, run: ResidentCommand): Promise<R
   ]);
   let verifierPaused = false;
   if (loads.get(VERIFIER_UNIT) === 'loaded') {
-    const active = await checked([
-      'systemctl',
-      '--user',
-      'show',
-      '--property=ActiveState',
-      '--value',
-      VERIFIER_UNIT,
-    ]);
+    const active = await checked(['systemctl', '--user', 'show', '--property=ActiveState', '--value', VERIFIER_UNIT]);
     const unitFile = await checked([
       'systemctl',
       '--user',

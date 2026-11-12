@@ -22,14 +22,14 @@ function systemdState(
   const output =
     property === '--property=LoadState'
       ? unit === VERIFIER_UNIT
-        ? verifier.load ?? 'loaded'
+        ? (verifier.load ?? 'loaded')
         : unit === 'rezics-goal-supervisor.service' || (unit === RESIDENT_CODE_UNITS[0] && verifier.missingHost)
           ? 'not-found'
           : 'loaded'
       : unit === VERIFIER_UNIT && property === '--property=ActiveState'
-        ? verifier.active ?? 'active'
+        ? (verifier.active ?? 'active')
         : unit === VERIFIER_UNIT && property === '--property=UnitFileState'
-          ? verifier.unitFile ?? 'enabled'
+          ? (verifier.unitFile ?? 'enabled')
           : undefined;
   return output === undefined ? undefined : { code: 0, output };
 }
@@ -41,10 +41,12 @@ function successfulResident(
   const startedAtSec = Math.floor(Date.now() / 1000) + 5;
   return async (argv: string[]) => {
     calls.push(argv);
-    return systemdState(argv, verifier) ?? {
-      code: 0,
-      output: argv.includes('restart') ? '' : `ActiveState=active\nExecMainStartTimestamp=@${startedAtSec}\n`,
-    };
+    return (
+      systemdState(argv, verifier) ?? {
+        code: 0,
+        output: argv.includes('restart') ? '' : `ActiveState=active\nExecMainStartTimestamp=@${startedAtSec}\n`,
+      }
+    );
   };
 }
 
@@ -125,7 +127,9 @@ test('cp-sync preserves a paused verifier and refuses any service install that w
   try {
     await restartResident(root, successfulResident(calls, paused));
     const installer = successfulResident(installerCalls, { ...paused, missingHost: true });
-    await expect(preflightResident(root, installer)).rejects.toThrow(`${VERIFIER_UNIT} is loaded, inactive and disabled`);
+    await expect(preflightResident(root, installer)).rejects.toThrow(
+      `${VERIFIER_UNIT} is loaded, inactive and disabled`,
+    );
     await expect(restartResident(root, installer, true)).rejects.toThrow(
       `${VERIFIER_UNIT} is loaded, inactive and disabled`,
     );
@@ -134,7 +138,11 @@ test('cp-sync preserves a paused verifier and refuses any service install that w
   }
   expect(calls).toContainEqual(['systemctl', '--user', 'restart', RESIDENT_CODE_UNITS[0]]);
   expect(calls).not.toContainEqual(['systemctl', '--user', 'restart', VERIFIER_UNIT]);
-  expect(calls.some((call) => call.includes(VERIFIER_UNIT) && call.includes('--property=ActiveState,ExecMainStartTimestamp'))).toBe(false);
+  expect(
+    calls.some(
+      (call) => call.includes(VERIFIER_UNIT) && call.includes('--property=ActiveState,ExecMainStartTimestamp'),
+    ),
+  ).toBe(false);
   expect(calls).not.toContainEqual([process.execPath, 'tools/goal/src/cli.ts', 'service', 'install']);
   expect(calls.some((call) => call.some((arg) => arg.endsWith('.timer')))).toBe(false);
   expect(installerCalls.every((call) => call.includes('show'))).toBe(true);
@@ -153,7 +161,11 @@ test('An enabled inactive verifier restarts normally, while a missing verifier r
     rmSync(root, { recursive: true, force: true });
   }
   expect(intendedCalls).toContainEqual(['systemctl', '--user', 'restart', VERIFIER_UNIT]);
-  expect(intendedCalls.some((call) => call.includes(VERIFIER_UNIT) && call.includes('--property=ActiveState,ExecMainStartTimestamp'))).toBe(true);
+  expect(
+    intendedCalls.some(
+      (call) => call.includes(VERIFIER_UNIT) && call.includes('--property=ActiveState,ExecMainStartTimestamp'),
+    ),
+  ).toBe(true);
   expect(missingCalls).toContainEqual([process.execPath, 'tools/goal/src/cli.ts', 'service', 'install']);
   expect(missingCalls).toContainEqual(['systemctl', '--user', 'restart', VERIFIER_UNIT]);
 });
