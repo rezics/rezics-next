@@ -387,9 +387,9 @@ export async function serveManagers(runtime: IntegrationRuntime, options: Manage
                   .get(owner) as { state: string; worktree: string; workspace: unknown } | null;
                 return Boolean(
                   task &&
-                    (TERMINAL_TASK_STATES as readonly string[]).includes(task.state) &&
-                    task.worktree === worktree &&
-                    !task.workspace,
+                  (TERMINAL_TASK_STATES as readonly string[]).includes(task.state) &&
+                  task.worktree === worktree &&
+                  !task.workspace,
                 );
               },
             });

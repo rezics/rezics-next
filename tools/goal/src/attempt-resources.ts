@@ -423,7 +423,9 @@ async function inventoryTerminalWorktreeProcesses(
 }
 
 function sameIdentity(left: ProcessIdentity | null, right: ProcessIdentity): boolean {
-  return left?.pid === right.pid && left.start === right.start && left.boot === right.boot && left.group === right.group;
+  return (
+    left?.pid === right.pid && left.start === right.start && left.boot === right.boot && left.group === right.group
+  );
 }
 
 async function terminalCandidateState(
@@ -459,8 +461,7 @@ async function stopTerminalWorktreeProcesses(
     if ((await terminalCandidateState(candidate, procRoot, boot, isCurrentOwner)) === 'owned') {
       if (await signalProcessIdentity(candidate.identity, 'SIGTERM', processPolicy)) sentTerm.push(candidate);
     }
-    if ((index + 1) % PROCESS_INVENTORY_BATCH === 0)
-      await new Promise<void>((done) => setImmediate(done));
+    if ((index + 1) % PROCESS_INVENTORY_BATCH === 0) await new Promise<void>((done) => setImmediate(done));
   }
   if (!sentTerm.length) return [];
 
@@ -488,8 +489,7 @@ async function stopTerminalWorktreeProcesses(
       else if ((await terminalCandidateState(candidate, procRoot, boot, isCurrentOwner)) === 'gone')
         completed.push(candidate);
     }
-    if ((index + 1) % PROCESS_INVENTORY_BATCH === 0)
-      await new Promise<void>((done) => setImmediate(done));
+    if ((index + 1) % PROCESS_INVENTORY_BATCH === 0) await new Promise<void>((done) => setImmediate(done));
   }
   await Promise.all(killed.map(({ identity }) => waitForProcess(identity, undefined, undefined, processPolicy)));
   completed.push(...killed);
@@ -712,15 +712,8 @@ export async function reapAttemptResources(
 }
 
 /** Five-minute sweep: terminal tasks' resources, and throwaway databases whose owner pid is gone. */
-export async function sweepAbandonedResources(
-  options: SweepAbandonedResourcesOptions,
-): Promise<ReapCounts> {
-  const {
-    tasks,
-    currentTerminalOwner,
-    terminalProcessSweep,
-    ...resourceOptions
-  } = options;
+export async function sweepAbandonedResources(options: SweepAbandonedResourcesOptions): Promise<ReapCounts> {
+  const { tasks, currentTerminalOwner, terminalProcessSweep, ...resourceOptions } = options;
   const now = resourceOptions.now ?? Date.now();
   const terminal = tasks.filter((task) => (TERMINAL_TASK_STATES as readonly string[]).includes(task.state));
   const worktreeOwners = terminal
@@ -746,12 +739,10 @@ export async function sweepAbandonedResources(
   if (!worktreeOwners.length) return totals;
   const procRoot = resourceOptions.procRoot ?? '/proc';
   const graceMs = resourceOptions.graceMs ?? 1000;
-  const processSweep =
-    terminalProcessSweep ?? createTerminalProcessSweep(procRoot, graceMs, defaultPolicy.process);
+  const processSweep = terminalProcessSweep ?? createTerminalProcessSweep(procRoot, graceMs, defaultPolicy.process);
   const currentOwners = new Map(worktreeOwners.map((owner) => [owner.id, resolve(owner.worktree)]));
   const isCurrentOwner =
-    currentTerminalOwner ??
-    ((owner: string, worktree: string) => currentOwners.get(owner) === resolve(worktree));
+    currentTerminalOwner ?? ((owner: string, worktree: string) => currentOwners.get(owner) === resolve(worktree));
   const candidates = await processSweep.inventory(worktreeOwners);
   const reaped = await processSweep.stop(candidates, isCurrentOwner);
   const log = resourceOptions.log ?? ((line: string) => console.log(line));
