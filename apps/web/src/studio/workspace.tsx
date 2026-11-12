@@ -31,7 +31,14 @@ export function StudioWorkspace(props: StudioWorkspaceProps) {
     return <p role="status">This Studio visit has ended. Reopen the workspace to continue.</p>;
   return <StudioVisit key={props.input.visitKey} {...props} />;
 }
-function StudioVisit({ input, port, bookPort, bookHistory, presentation = {}, onDepartureRiskChange }: StudioWorkspaceProps) {
+function StudioVisit({
+  input,
+  port,
+  bookPort,
+  bookHistory,
+  presentation = {},
+  onDepartureRiskChange,
+}: StudioWorkspaceProps) {
   const [controller] = useState(() => new StudioController(input, port, bookPort));
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [tab, setTab] = useState<'write' | 'preview' | 'versions'>('write');
@@ -370,7 +377,9 @@ function StudioVisit({ input, port, bookPort, bookHistory, presentation = {}, on
           >
             <summary>Documents and {input.profile.kind === 'book' ? 'table of contents' : 'articles'}</summary>
             <div className="studio-stack">
-              {state.structure ? <BookOrganizer controller={controller} state={state} onOpen={open} history={bookHistory} /> : null}
+              {state.structure ? (
+                <BookOrganizer controller={controller} state={state} onOpen={open} history={bookHistory} />
+              ) : null}
               <section
                 aria-label={input.profile.kind === 'book' ? 'Document drafts' : 'Articles'}
                 className="studio-stack"

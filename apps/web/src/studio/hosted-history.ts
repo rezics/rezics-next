@@ -161,7 +161,8 @@ export class HostedHistoryVisit {
       }
       if (request.signal.aborted || this.detailRequest !== request || this.state.kind !== 'ready') return;
       if (!result.ok) {
-        if (result.error.kind === 'denied') this.update({ kind: 'failed', cursor: this.state.cursor, error: result.error });
+        if (result.error.kind === 'denied')
+          this.update({ kind: 'failed', cursor: this.state.cursor, error: result.error });
         else this.update({ ...this.state, selection: { kind: 'failed', entry, error: result.error } });
         return;
       }

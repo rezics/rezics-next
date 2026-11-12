@@ -160,9 +160,9 @@ export function createHostedBookNative(client: KernelClient): HostedBookNative {
     if (!input.success) return hostedFailure('invalid', 'The book history address is invalid. Reopen the book.');
     if (signal.aborted) return unavailableHistory();
     try {
-      const response = await client.hostedCatalogues({ id: catalogueId }).history.get(
-        queryOptions(signal, { limit: '20', ...(cursor === null ? {} : { cursor }) }),
-      );
+      const response = await client
+        .hostedCatalogues({ id: catalogueId })
+        .history.get(queryOptions(signal, { limit: '20', ...(cursor === null ? {} : { cursor }) }));
       if (signal.aborted) return unavailableHistory();
       if (response.status === 401 || response.status === 403)
         return hostedFailure('denied', 'Your current session cannot browse this book history. Reopen the book.');
@@ -181,7 +181,8 @@ export function createHostedBookNative(client: KernelClient): HostedBookNative {
           (entry.kind === 'structure'
             ? entry.sourceRevisionId !== null || entry.isCurrentRelease
             : entry.sourceRevisionId === null || entry.isCurrentDraft)
-        ) return unavailableHistory();
+        )
+          return unavailableHistory();
         ids.add(entry.revisionId);
       }
       return { ok: true, value: page };

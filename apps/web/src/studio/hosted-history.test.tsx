@@ -14,24 +14,45 @@ const id = (value: number) => `00000000-0000-8000-8000-0002000000${value.toStrin
 const catalogueId = id(1);
 const accountId = id(2);
 const structure: HostedHistoryEntry = {
-  catalogueId, revisionId: id(3), kind: 'structure', sourceRevisionId: null,
-  createdAt: '2026-11-12T12:34:56.123456Z', isCurrentDraft: true, isCurrentRelease: false,
+  catalogueId,
+  revisionId: id(3),
+  kind: 'structure',
+  sourceRevisionId: null,
+  createdAt: '2026-11-12T12:34:56.123456Z',
+  isCurrentDraft: true,
+  isCurrentRelease: false,
 };
 const release: HostedHistoryEntry = {
-  ...structure, revisionId: id(4), kind: 'publication', sourceRevisionId: structure.revisionId,
-  isCurrentDraft: false, isCurrentRelease: true,
+  ...structure,
+  revisionId: id(4),
+  kind: 'publication',
+  sourceRevisionId: structure.revisionId,
+  isCurrentDraft: false,
+  isCurrentRelease: true,
 };
-const page = (items = [release, structure], nextCursor: string | null = null): HostedHistoryPage => ({ catalogueId, items, nextCursor });
+const page = (items = [release, structure], nextCursor: string | null = null): HostedHistoryPage => ({
+  catalogueId,
+  items,
+  nextCursor,
+});
 const book = (entry = structure): HostedBook => ({
   revision: { catalogueId, revisionId: entry.revisionId, kind: entry.kind, sourceRevisionId: entry.sourceRevisionId },
   placements: [
     { occurrenceId: id(6), parentId: null, position: 0, title: 'Part one', kind: 'part' },
     {
-      occurrenceId: id(7), parentId: id(6), position: 0, title: 'First chapter', kind: 'chapter',
+      occurrenceId: id(7),
+      parentId: id(6),
+      position: 0,
+      title: 'First chapter',
+      kind: 'chapter',
       target: { threadId: id(8), postId: id(9), revisionId: id(10), sha256: 'a'.repeat(64) },
     },
     {
-      occurrenceId: id(11), parentId: id(6), position: 1, title: 'Second chapter', kind: 'chapter',
+      occurrenceId: id(11),
+      parentId: id(6),
+      position: 1,
+      title: 'Second chapter',
+      kind: 'chapter',
       target: { threadId: id(12), postId: id(13), revisionId: id(14), sha256: 'b'.repeat(64) },
     },
   ],
@@ -40,27 +61,37 @@ const ok = <T,>(value: T): StudioResult<T> => ({ ok: true, value });
 const signal = () => new AbortController().signal;
 function nativeResponse(data: unknown, status = 200) {
   const calls: URL[] = [];
-  const native = createHostedBookNative(createKernelClient('https://kernel.test', {
-    fetch: async (input) => {
-      calls.push(new URL(input instanceof Request ? input.url : String(input)));
-      return Response.json(data, { status });
-    },
-  }));
+  const native = createHostedBookNative(
+    createKernelClient('https://kernel.test', {
+      fetch: async (input) => {
+        calls.push(new URL(input instanceof Request ? input.url : String(input)));
+        return Response.json(data, { status });
+      },
+    }),
+  );
   return { native, calls };
 }
 function mounted(native: HostedHistoryBinding['native']) {
   const client = new QueryClient();
   const session = { state: 'signed-in', subject: accountId, csrfToken: 'test' };
   client.setQueryData(['session'], session);
-  const visit = new HostedHistoryVisit({ native, catalogueId, accountId, isCurrent: () => true }, historicalReaderSource(client));
+  const visit = new HostedHistoryVisit(
+    { native, catalogueId, accountId, isCurrent: () => true },
+    historicalReaderSource(client),
+  );
   return {
     visit,
     replace: (subject = accountId) => client.setQueryData(['session'], { ...session, subject }),
     html: () => renderToStaticMarkup(createElement(HostedHistoryPanel, { visit })),
-    dispose: () => { visit.dispose(); client.clear(); },
+    dispose: () => {
+      visit.dispose();
+      client.clear();
+    },
   };
 }
-const noDetail = async () => { throw new Error('Listing history must not fetch exact details'); };
+const noDetail = async () => {
+  throw new Error('Listing history must not fetch exact details');
+};
 
 test('native directory uses one metadata request, preserving opaque cursors, microseconds and native flags', async () => {
   const value = page(undefined, 'opaque+cursor/=');
@@ -88,9 +119,19 @@ test('external metadata rejects mixed catalogues, duplicate IDs, invalid kinds, 
     { ...page(), nextCursor: '' },
   ]) {
     const { native } = nativeResponse(value);
-    expect(await native.listHistory(catalogueId, null, signal())).toMatchObject({ ok: false, error: { kind: 'unavailable' } });
+    expect(await native.listHistory(catalogueId, null, signal())).toMatchObject({
+      ok: false,
+      error: { kind: 'unavailable' },
+    });
   }
-  for (const [status, kind] of [[400, 'stale'], [409, 'stale'], [401, 'denied'], [403, 'denied'], [404, 'unavailable'], [503, 'unavailable']] as const) {
+  for (const [status, kind] of [
+    [400, 'stale'],
+    [409, 'stale'],
+    [401, 'denied'],
+    [403, 'denied'],
+    [404, 'unavailable'],
+    [503, 'unavailable'],
+  ] as const) {
     const { native } = nativeResponse({}, status);
     expect(await native.listHistory(catalogueId, 'retained', signal())).toMatchObject({ ok: false, error: { kind } });
   }
@@ -102,8 +143,13 @@ test('paging retries the failed cursor, removes prior rows, and never converts e
   const screen = mounted({
     listHistory: async (_id, cursor) => {
       calls.push(cursor);
-      return ++count === 1 ? ok(page(undefined, 'next')) : count === 2 ? hostedFailure('unavailable', 'Retry history') : ok(page([], null));
-    }, read: noDetail,
+      return ++count === 1
+        ? ok(page(undefined, 'next'))
+        : count === 2
+          ? hostedFailure('unavailable', 'Retry history')
+          : ok(page([], null));
+    },
+    read: noDetail,
   });
   await screen.visit.load();
   expect(screen.html()).toContain('Current draft');
@@ -133,7 +179,13 @@ test('empty, sparse, denied and stale directories have different recovery and no
     screen.dispose();
   }
   const cursors: (string | null)[] = [];
-  const screen = mounted({ listHistory: async (_id, cursor) => { cursors.push(cursor); return ok(page([], 'repeat')); }, read: noDetail });
+  const screen = mounted({
+    listHistory: async (_id, cursor) => {
+      cursors.push(cursor);
+      return ok(page([], 'repeat'));
+    },
+    read: noDetail,
+  });
   await screen.visit.load();
   await screen.visit.next();
   expect(screen.visit.snapshot()).toMatchObject({ kind: 'failed', error: { kind: 'stale' } });
@@ -148,7 +200,10 @@ test('inspection reads only an admitted exact selection, preserves chapter order
   const frozen = structuredClone(draft);
   const screen = mounted({
     listHistory: async () => ok(page()),
-    read: async (selection) => { selections.push(selection); return ok(selection.kind === 'structure' ? draft : { revision: book(release).revision, placements: [] }); },
+    read: async (selection) => {
+      selections.push(selection);
+      return ok(selection.kind === 'structure' ? draft : { revision: book(release).revision, placements: [] });
+    },
   });
   await screen.visit.load();
   expect(selections).toHaveLength(0);
@@ -173,11 +228,37 @@ test('inspection reads only an admitted exact selection, preserves chapter order
   screen.dispose();
 });
 
+test('failed exact reads remain unavailable and revoked author access clears the entire history', async () => {
+  for (const kind of ['unavailable', 'denied'] as const) {
+    let readable = true;
+    const screen = mounted({
+      listHistory: async () => ok(page()),
+      read: async () => (readable ? ok(book()) : hostedFailure(kind, 'Exact version access failed')),
+    });
+    await screen.visit.load();
+    await screen.visit.inspect(structure.revisionId);
+    expect(screen.html()).toContain('First chapter');
+    readable = false;
+    await screen.visit.inspect(structure.revisionId);
+    expect(screen.html()).not.toContain('First chapter');
+    expect(screen.html()).not.toContain('This structure has no parts');
+    expect(screen.html()).toContain('Exact version access failed');
+    expect(screen.visit.snapshot().kind).toBe(kind === 'denied' ? 'failed' : 'ready');
+    screen.dispose();
+  }
+});
+
 test('a substituted catalogue, kind, revision or source cannot be shown as the selected version', async () => {
   for (const change of [
-    { catalogueId: id(20) }, { kind: 'publication' as const }, { revisionId: id(20) }, { sourceRevisionId: id(20) },
+    { catalogueId: id(20) },
+    { kind: 'publication' as const },
+    { revisionId: id(20) },
+    { sourceRevisionId: id(20) },
   ]) {
-    const screen = mounted({ listHistory: async () => ok(page()), read: async () => ok({ ...book(), revision: { ...book().revision, ...change } }) });
+    const screen = mounted({
+      listHistory: async () => ok(page()),
+      read: async () => ok({ ...book(), revision: { ...book().revision, ...change } }),
+    });
     await screen.visit.load();
     await screen.visit.inspect(structure.revisionId);
     expect(screen.visit.snapshot()).toMatchObject({ kind: 'ready', selection: { kind: 'failed' } });
@@ -192,12 +273,26 @@ test('same-account replacement, account switch and unmount abort pending reads a
       let finish!: () => void;
       let requestSignal!: AbortSignal;
       const screen = mounted({
-        listHistory: async (_id, _cursor, request) => phase === 'page' ? new Promise((resolve) => { requestSignal = request; finish = () => resolve(ok(page())); }) : ok(page()),
-        read: async (_selection, request) => new Promise((resolve) => { requestSignal = request; finish = () => resolve(ok(book())); }),
+        listHistory: async (_id, _cursor, request) =>
+          phase === 'page'
+            ? new Promise((resolve) => {
+                requestSignal = request;
+                finish = () => resolve(ok(page()));
+              })
+            : ok(page()),
+        read: async (_selection, request) =>
+          new Promise((resolve) => {
+            requestSignal = request;
+            finish = () => resolve(ok(book()));
+          }),
       });
       let pending = screen.visit.load();
-      if (phase === 'detail') { await pending; pending = screen.visit.inspect(structure.revisionId); }
-      if (replacement === 'dispose') screen.visit.dispose(); else screen.replace(replacement);
+      if (phase === 'detail') {
+        await pending;
+        pending = screen.visit.inspect(structure.revisionId);
+      }
+      if (replacement === 'dispose') screen.visit.dispose();
+      else screen.replace(replacement);
       expect(requestSignal.aborted).toBe(true);
       expect(screen.visit.snapshot()).toEqual({ kind: 'ended' });
       finish();
@@ -212,10 +307,14 @@ test('later selection and page navigation discard older pending outlines; closed
   let finish!: (value: StudioResult<HostedBook>) => void;
   let oldSignal!: AbortSignal;
   const screen = mounted({
-    listHistory: async () => ok(page(undefined, 'older')),
-    read: async (selection, request) => selection.revisionId === structure.revisionId
-      ? new Promise((resolve) => { finish = resolve; oldSignal = request; })
-      : ok({ revision: book(release).revision, placements: [] }),
+    listHistory: async (_id, cursor) => ok(page(undefined, cursor === null ? 'older' : null)),
+    read: async (selection, request) =>
+      selection.revisionId === structure.revisionId
+        ? new Promise((resolve) => {
+            finish = resolve;
+            oldSignal = request;
+          })
+        : ok({ revision: book(release).revision, placements: [] }),
   });
   await screen.visit.load();
   const old = screen.visit.inspect(structure.revisionId);
@@ -230,9 +329,11 @@ test('later selection and page navigation discard older pending outlines; closed
   finish(ok(book()));
   await next;
   expect(screen.visit.snapshot()).toMatchObject({ kind: 'ready', selection: { kind: 'none' } });
-  const html = renderToStaticMarkup(createElement(HostedHistoryDisclosure, {
-    binding: { catalogueId, accountId, isCurrent: () => true, native: { listHistory: noDetail, read: noDetail } },
-  }));
+  const html = renderToStaticMarkup(
+    createElement(HostedHistoryDisclosure, {
+      binding: { catalogueId, accountId, isCurrent: () => true, native: { listHistory: noDetail, read: noDetail } },
+    }),
+  );
   expect(html).toContain('aria-expanded="false"');
   expect(html).not.toContain('Loading book history');
   screen.dispose();

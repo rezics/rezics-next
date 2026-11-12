@@ -1,8 +1,8 @@
-import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { historicalReaderSource } from '../threads/historical-reader-provenance';
-import { bookTocRows } from './book-toc';
+import { bookTocRows, type BookTocRow } from './book-toc';
 import { hostedBookStructure } from './hosted-structure';
 import { HostedHistoryVisit, type HostedHistoryBinding, type HostedHistorySelection } from './hosted-history';
 import type { HostedHistoryEntry } from './hosted-contract';
@@ -38,6 +38,13 @@ function MountedHistory({ binding }: { binding: HostedHistoryBinding }) {
 export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
   const state = useSyncExternalStore(visit.subscribe, visit.snapshot, visit.snapshot);
   const headingId = useId();
+  const inspector = useRef<HTMLElement>(null);
+  const selectedTrigger = useRef<HTMLButtonElement | null>(null);
+  const selectedId =
+    state.kind === 'ready' && state.selection.kind !== 'none' ? state.selection.entry.revisionId : null;
+  useEffect(() => {
+    if (selectedId) inspector.current?.focus();
+  }, [selectedId]);
   return (
     <section className="studio-stack" aria-labelledby={headingId} aria-busy={state.kind === 'loading'}>
       <h3 id={headingId}>Book history</h3>
@@ -50,10 +57,14 @@ export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
         <div className="studio-stack" role="alert">
           <p>{state.error.message}</p>
           {state.error.kind === 'unavailable' ? (
-            <Button type="button" variant="outline" onClick={() => void visit.load()}>Retry this page</Button>
+            <Button type="button" variant="outline" onClick={() => void visit.load()}>
+              Retry this page
+            </Button>
           ) : null}
           {state.error.kind === 'stale' ? (
-            <Button type="button" variant="outline" onClick={() => void visit.restart()}>Restart history</Button>
+            <Button type="button" variant="outline" onClick={() => void visit.restart()}>
+              Restart history
+            </Button>
           ) : null}
         </div>
       ) : null}
@@ -74,8 +85,13 @@ export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
                     type="button"
                     variant="outline"
                     aria-label={`Inspect ${entry.kind === 'structure' ? 'structure' : 'release'} ${entry.revisionId}`}
-                    aria-pressed={state.selection.kind !== 'none' && state.selection.entry.revisionId === entry.revisionId}
-                    onClick={() => void visit.inspect(entry.revisionId)}
+                    aria-pressed={
+                      state.selection.kind !== 'none' && state.selection.entry.revisionId === entry.revisionId
+                    }
+                    onClick={(event) => {
+                      selectedTrigger.current = event.currentTarget;
+                      void visit.inspect(entry.revisionId);
+                    }}
                   >
                     Inspect version
                   </Button>
@@ -83,28 +99,58 @@ export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
               ))}
             </ol>
           ) : (
-            <p>{state.cursor === null && state.page.nextCursor === null ? 'No saved book versions yet.' : 'No versions on this page.'}</p>
+            <p>
+              {state.cursor === null && state.page.nextCursor === null
+                ? 'No saved book versions yet.'
+                : 'No versions on this page.'}
+            </p>
           )}
           <div className="studio-action-row">
             {state.page.nextCursor !== null ? (
-              <Button type="button" variant="outline" onClick={() => void visit.next()}>Older versions</Button>
-            ) : <p className="studio-help">End of book history.</p>}
+              <Button type="button" variant="outline" onClick={() => void visit.next()}>
+                Older versions
+              </Button>
+            ) : (
+              <p className="studio-help">End of book history.</p>
+            )}
             {state.cursor !== null ? (
-              <Button type="button" variant="ghost" onClick={() => void visit.restart()}>Newest versions</Button>
+              <Button type="button" variant="ghost" onClick={() => void visit.restart()}>
+                Newest versions
+              </Button>
             ) : null}
           </div>
           {state.selection.kind !== 'none' ? (
-            <section className="studio-stack" aria-label="Read-only book version" aria-busy={state.selection.kind === 'loading'}>
+            <section
+              ref={inspector}
+              tabIndex={-1}
+              className="studio-stack"
+              aria-label="Read-only book version"
+              aria-busy={state.selection.kind === 'loading'}
+            >
               <div className="studio-section-heading">
                 <h4>{state.selection.entry.kind === 'structure' ? 'Saved structure' : 'Saved release'} · Read-only</h4>
-                <Button type="button" variant="ghost" onClick={visit.closeSelection}>Close inspection</Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    visit.closeSelection();
+                    selectedTrigger.current?.focus();
+                  }}
+                >
+                  Close inspection
+                </Button>
               </div>
               <p className="studio-help">Inspection does not change the draft or the current release.</p>
               <dl className="studio-break">
-                <dt>Catalogue</dt><dd>{state.selection.entry.catalogueId}</dd>
-                <dt>Version</dt><dd>{state.selection.entry.revisionId}</dd>
+                <dt>Catalogue</dt>
+                <dd>{state.selection.entry.catalogueId}</dd>
+                <dt>Version</dt>
+                <dd>{state.selection.entry.revisionId}</dd>
                 {state.selection.entry.sourceRevisionId ? (
-                  <><dt>Source structure</dt><dd>{state.selection.entry.sourceRevisionId}</dd></>
+                  <>
+                    <dt>Source structure</dt>
+                    <dd>{state.selection.entry.sourceRevisionId}</dd>
+                  </>
                 ) : null}
               </dl>
               <NativeTimestamp entry={state.selection.entry} />
@@ -119,38 +165,62 @@ export function HostedHistoryPanel({ visit }: { visit: HostedHistoryVisit }) {
 
 function NativeTimestamp({ entry }: { entry: HostedHistoryEntry }) {
   // Keep microseconds and the native offset; Date formatting would silently truncate precision.
-  return <time className="studio-help studio-break" dateTime={entry.createdAt}>{entry.createdAt}</time>;
+  return (
+    <time className="studio-help studio-break" dateTime={entry.createdAt}>
+      {entry.createdAt}
+    </time>
+  );
 }
 
 function HistorySelection({ selection, visit }: { selection: HostedHistorySelection; visit: HostedHistoryVisit }) {
   if (selection.kind === 'none') return null;
   if (selection.kind === 'loading') return <p role="status">Loading the exact version…</p>;
-  if (selection.kind === 'failed') return (
-    <div role="alert" className="studio-stack">
-      <p>{selection.error.message}</p>
-      <Button type="button" variant="outline" onClick={() => void visit.inspect(selection.entry.revisionId)}>Retry exact version</Button>
-    </div>
-  );
+  if (selection.kind === 'failed')
+    return (
+      <div role="alert" className="studio-stack">
+        <p>{selection.error.message}</p>
+        <Button type="button" variant="outline" onClick={() => void visit.inspect(selection.entry.revisionId)}>
+          Retry exact version
+        </Button>
+      </div>
+    );
   const rows = bookTocRows(hostedBookStructure(selection.book));
-  if (!rows.length) return (
-    <p>{selection.entry.kind === 'publication' ? 'This release contains no chapters (withdrawn).' : 'This structure has no parts or chapters.'}</p>
-  );
+  if (!rows.length)
+    return (
+      <p>
+        {selection.entry.kind === 'publication'
+          ? 'This release contains no chapters (withdrawn).'
+          : 'This structure has no parts or chapters.'}
+      </p>
+    );
+  return <HistoryOutline rows={rows} parent={null} />;
+}
+
+function HistoryOutline({ rows, parent }: { rows: readonly BookTocRow[]; parent: string | null }) {
   return (
-    <ol className="studio-toc-branch" aria-label="Exact chapter order">
-      {rows.map(({ placement, depth }) => (
-        <li key={placement.occurrenceId} style={{ paddingInlineStart: `${depth}rem` }}>
-          <div className="studio-toc-entry">
-            <strong>{placement.title}</strong>
-            {placement.target.kind === 'chapter' ? (
-              <dl className="studio-help studio-break">
-                <dt>Chapter</dt><dd>{placement.target.document.postId}</dd>
-                <dt>Pinned version</dt><dd>{placement.target.document.revisionId}</dd>
-                <dt>SHA-256</dt><dd>{placement.target.document.sha256}</dd>
-              </dl>
-            ) : <p className="studio-help">Part</p>}
-          </div>
-        </li>
-      ))}
+    <ol className="studio-toc-branch" aria-label={parent === null ? 'Exact chapter order' : undefined}>
+      {rows
+        .filter(({ placement }) => placement.parentOccurrenceId === parent)
+        .map(({ placement }) => (
+          <li key={placement.occurrenceId}>
+            <div className="studio-toc-entry">
+              <strong>{placement.title}</strong>
+              {placement.target.kind === 'chapter' ? (
+                <dl className="studio-help studio-break">
+                  <dt>Chapter</dt>
+                  <dd>{placement.target.document.postId}</dd>
+                  <dt>Pinned version</dt>
+                  <dd>{placement.target.document.revisionId}</dd>
+                  <dt>SHA-256</dt>
+                  <dd>{placement.target.document.sha256}</dd>
+                </dl>
+              ) : (
+                <p className="studio-help">Part</p>
+              )}
+            </div>
+            {placement.target.kind === 'part' ? <HistoryOutline rows={rows} parent={placement.occurrenceId} /> : null}
+          </li>
+        ))}
     </ol>
   );
 }

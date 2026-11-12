@@ -75,7 +75,10 @@ export const hostedHistoryRequest = v.strictObject({
 });
 export const hostedHistoryEntry = v.strictObject({
   ...revision,
-  createdAt: v.pipe(v.string(), v.isoTimestamp()),
+  createdAt: v.pipe(
+    v.string(),
+    v.check((value) => Number.isFinite(Date.parse(value))),
+  ),
   isCurrentDraft: v.boolean(),
   isCurrentRelease: v.boolean(),
 });
