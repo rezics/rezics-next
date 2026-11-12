@@ -85,7 +85,11 @@ async function hidden(result: ApiResult<unknown>, effect: 'not_applicable' | 'no
 async function unchanged(before: Awaited<ReturnType<ContentThreadDriver['inspect']>>) {
   expect(await driver.inspect()).toEqual(before);
 }
-function authorizedReceiptQuery(trace: Awaited<ReturnType<ContentThreadDriver['commandTrace']>>, boardId: string) {
+function authorizedReceiptQuery(
+  trace: Awaited<ReturnType<ContentThreadDriver['commandTrace']>>,
+  action: string,
+  resourceId: string,
+) {
   const receipt = [...trace.queries].reverse().find((query) => query.statement.includes('FROM core.receipt'));
   expect(receipt).toBeDefined();
   if (!receipt) throw new Error('The command receipt query was not observed');
@@ -102,8 +106,8 @@ function authorizedReceiptQuery(trace: Awaited<ReturnType<ContentThreadDriver['c
       check.connectionId === receipt.connectionId &&
       check.statement > (begin?.index ?? Number.POSITIVE_INFINITY) &&
       check.statement < receipt.index &&
-      check.action === 'thread:create' &&
-      check.resourceId === boardId,
+      check.action === action &&
+      check.resourceId === resourceId,
   );
   expect(begin).toBeDefined();
   expect(authorization).toBeDefined();
@@ -424,7 +428,7 @@ test('identical idempotency payload replays IDs with one creation and publicatio
   expect(new Set(creation.map((row) => row.idempotencyKey)).size).toBe(1);
   expect(ok(await driver.create(request, options('same')))).toEqual(thread);
   const replayTrace = await driver.commandTrace();
-  const replayReceipt = authorizedReceiptQuery(replayTrace, fixture.board.id);
+  const replayReceipt = authorizedReceiptQuery(replayTrace, 'thread:create', fixture.board.id);
   expect(
     replayTrace.queries.some(
       (query) =>
@@ -719,7 +723,7 @@ test('parent create grant authorizes before receipt and body with no new-ID gran
   const response = await driver.create(input(), options('parent-grant'));
   const thread = ok(response);
   const trace = await driver.commandTrace();
-  const receipt = authorizedReceiptQuery(trace, fixture.board.id);
+  const receipt = authorizedReceiptQuery(trace, 'thread:create', fixture.board.id);
   const body = trace.queries.find(
     (query) =>
       query.connectionId === receipt.connectionId &&
@@ -783,6 +787,7 @@ test('commands carry session headers and transactional outbox envelopes and inje
   const before = await driver.inspect();
   const response = await driver.create(input(), options('transaction'));
   const thread = ok(response);
+  authorizedReceiptQuery(await driver.commandTrace(), 'thread:create', fixture.board.id);
   const session = await driver.session(response.response, fixture.owner);
   expect(session.token.length).toBeGreaterThan(0);
   expect(response.response.headers.get('rezics-session-token')).toBe(session.token);
@@ -794,6 +799,7 @@ test('commands carry session headers and transactional outbox envelopes and inje
     },
   );
   const post = ok(postResponse);
+  authorizedReceiptQuery(await driver.commandTrace(), 'post:create', thread.id);
   expect((await driver.session(postResponse.response, fixture.owner)).partitions).toEqual([thread.route >>> 4]);
   const childResponse = await driver.reply(
     {
@@ -805,11 +811,13 @@ test('commands carry session headers and transactional outbox envelopes and inje
     options('effect-reply'),
   );
   const child = ok(childResponse);
+  authorizedReceiptQuery(await driver.commandTrace(), 'post:create', thread.id);
   const editResponse = await driver.revise(
     { threadId: thread.id, itemId: post.id, body: fromPlainText('Edited effect') },
     options('effect-edit'),
   );
   const edited = ok(editResponse, 200);
+  authorizedReceiptQuery(await driver.commandTrace(), 'post:revise', post.id);
   for (const result of [childResponse, editResponse]) {
     expect((await driver.session(result.response, fixture.owner)).partitions).toEqual([thread.route >>> 4]);
   }

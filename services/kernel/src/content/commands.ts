@@ -6,6 +6,7 @@ import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/contract/index.ts';
 import {
+  commandAccessContext,
   createResourceCreationManifest,
   initializeResourceGrants,
   parentCreationAuthorization,
@@ -18,6 +19,7 @@ import {
   authoritativeTimeValue,
   principalCommandIdentity,
   runCommand,
+  type CommandAttempt,
   type AuthoritativeTime,
   type CommandAuthorization,
   type CommandOutcome,
@@ -386,8 +388,34 @@ async function prepareContentParticipation(
   return proof;
 }
 
-/** Private read checks compose Access. No grant rows or ownership policy are
- * interpreted by content, and no connection is held during evidence preparation. */
+/** Keep command-action Access evidence attempt-bound until the command transaction. */
+function commandActionCheck(
+  dependencies: ContentCommandDependencies,
+  actor: Actor,
+  authorization: CommandAuthorization,
+  deadline: number,
+) {
+  const checks = new WeakMap<CommandAttempt, Awaited<ReturnType<typeof accessCheck>>>();
+  return {
+    async prepare(attempt: CommandAttempt): Promise<void> {
+      const check = await accessCheck(
+        dependencies.access,
+        actor,
+        authorization.action,
+        authorization.resource,
+        commandAccessContext({ pool: dependencies.pool, deadline }, attempt),
+      );
+      checks.set(attempt, check);
+    },
+    async authorize(tx: CommandTransaction, attempt: CommandAttempt): Promise<void> {
+      const check = checks.get(attempt);
+      if (!check) throw authorization.denied();
+      checks.delete(attempt);
+      if (!(await check(tx, attempt.time))) throw authorization.denied();
+    },
+  };
+}
+
 function containerAuthorization(
   dependencies: ContentCommandDependencies,
   actor: Actor,
@@ -438,6 +466,7 @@ function containerAuthorization(
       return currentPlaceId;
     },
     wrap(base: CommandAuthorization, includeSlowMode = admitSlowMode): CommandAuthorization {
+      const actionCheck = commandActionCheck(dependencies, actor, base, context.deadline);
       return {
         ...base,
         async prepare(attempt) {
@@ -507,10 +536,12 @@ function containerAuthorization(
               throw new ContentNotFoundError();
             throw error;
           }
+          await actionCheck.prepare(attempt);
           if (includeSlowMode) await slow.prepare(prepared.thread.board_id, attempt.time);
           return evidence;
         },
         async authorize(tx, attempt, evidence) {
+          await actionCheck.authorize(tx, attempt);
           const mode = await base.authorize(tx, attempt, evidence);
           // Recheck the sole mutation partition in its serializable transaction,
           // before the receipt seam, including for replay.
@@ -745,58 +776,68 @@ export async function createThread(
       manifest: createResourceCreationManifest(entries),
     },
   });
-  const makeAuthorization = (admitSlowMode: boolean): CommandAuthorization => ({
-    ...base,
-    async prepare(attempt) {
-      boardCheck = await accessCheck(dependencies.access, actor, 'board:read', board, {
-        pool: dependencies.pool,
-        deadline: context.deadline,
-      });
-      if (dependencies.realmParticipation) {
-        const current = await mediaParentSnapshot(dependencies.pool, board.route, context.deadline, async (client) => {
-          try {
-            return await mediaParentBoard(client, board.id);
-          } catch (error) {
-            if (error instanceof GrantDeniedError) throw new ContentNotFoundError();
-            throw error;
-          }
+  const makeAuthorization = (admitSlowMode: boolean): CommandAuthorization => {
+    const actionCheck = commandActionCheck(dependencies, actor, base, context.deadline);
+    return {
+      ...base,
+      async prepare(attempt) {
+        boardCheck = await accessCheck(dependencies.access, actor, 'board:read', board, {
+          pool: dependencies.pool,
+          deadline: context.deadline,
         });
-        const proof = await prepareContentParticipation(
-          dependencies,
-          actor,
-          current.realm_id,
-          attempt.time,
-          context.deadline,
-        );
-        if (!proof.allowed) throw new ContentForbiddenError();
-        participation.set(attempt.time, proof);
-      }
-      if (threadKind === 'discussion' && body.visibility === 'published') {
-        const original = await mediaParentSnapshot(dependencies.pool, board.route, context.deadline, (client) =>
-          readDiscoveryBoard.run(client, {
-            route: board.route,
-            board_id: board.id,
-            at: authoritativeTimeValue(attempt.time),
-          }),
-        );
-        if (original && original.realm_id !== null) {
-          const binding = await prepareRealmDiscoverySource(
+        if (dependencies.realmParticipation) {
+          const current = await mediaParentSnapshot(
+            dependencies.pool,
+            board.route,
+            context.deadline,
+            async (client) => {
+              try {
+                return await mediaParentBoard(client, board.id);
+              } catch (error) {
+                if (error instanceof GrantDeniedError) throw new ContentNotFoundError();
+                throw error;
+              }
+            },
+          );
+          const proof = await prepareContentParticipation(
             dependencies,
-            original.realm_id,
+            actor,
+            current.realm_id,
             attempt.time,
             context.deadline,
           );
-          if (binding) discovery.set(attempt.time, { boardVersion: original.security_revision, binding });
+          if (!proof.allowed) throw new ContentForbiddenError();
+          participation.set(attempt.time, proof);
         }
-      }
-      const evidence = await base.prepare!(attempt);
-      if (admitSlowMode) await slow.prepare(body.boardId, attempt.time);
-      return evidence;
-    },
-    async authorize(tx, attempt, evidence) {
-      return base.authorize(tx, attempt, evidence);
-    },
-  });
+        if (threadKind === 'discussion' && body.visibility === 'published') {
+          const original = await mediaParentSnapshot(dependencies.pool, board.route, context.deadline, (client) =>
+            readDiscoveryBoard.run(client, {
+              route: board.route,
+              board_id: board.id,
+              at: authoritativeTimeValue(attempt.time),
+            }),
+          );
+          if (original && original.realm_id !== null) {
+            const binding = await prepareRealmDiscoverySource(
+              dependencies,
+              original.realm_id,
+              attempt.time,
+              context.deadline,
+            );
+            if (binding) discovery.set(attempt.time, { boardVersion: original.security_revision, binding });
+          }
+        }
+        const evidence = await base.prepare!(attempt);
+        await actionCheck.prepare(attempt);
+        if (admitSlowMode) await slow.prepare(body.boardId, attempt.time);
+        return evidence;
+      },
+      async authorize(tx, attempt, evidence) {
+        await actionCheck.authorize(tx, attempt);
+        return base.authorize(tx, attempt, evidence);
+      },
+    };
+  };
   const preflightAuthorization = makeAuthorization(false);
   const authorization = makeAuthorization(true);
   try {

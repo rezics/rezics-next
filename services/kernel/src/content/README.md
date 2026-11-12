@@ -1684,6 +1684,10 @@ receipt and events share the native transaction; revision insertion and head adv
 A failed validation or transaction leaves no content or author grant from that attempt. Retrying a rejected
 request with the same key may succeed because rejection stores no receipt.
 
+Decision: mounted thread/post create and post revise commands evaluate the requested action again on the live
+serializable command transaction before receipt lookup; released preparation checks remain useful for parent and
+container evidence but do not replace this current command-connection check.
+
 ## Post revision provenance
 
 Ordinary site edits omit `licence`, allowing the native revision command to inherit the stored SPDX identifier.

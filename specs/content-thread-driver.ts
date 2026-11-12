@@ -179,9 +179,9 @@ export interface ContentThreadDriver {
   }>;
   /** Decode and verify the real response session header with production keys. */
   session(response: Response, actor: Persona): Promise<{ token: string; partitions: number[] }>;
-  /** Actual SQL executions for the last request, with parent checks decoded from their native query bindings. */
+  /** Actual SQL, bindings and backend PID for the last request; checks decode the native permission bindings. */
   commandTrace(): Promise<{
-    queries: { statement: string; connectionId: number; index: number }[];
+    queries: { statement: string; parameters: readonly unknown[]; connectionId: number; index: number }[];
     checks: {
       action: string;
       resourceId: string;

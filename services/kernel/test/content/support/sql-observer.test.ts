@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import pg, { type PoolClient, type QueryResult } from 'pg';
+import outboxFence from '../../../src/command/fence.sql';
 import { observeSql, type SqlObserver } from './sql-observer.ts';
 
 const url = process.env.DATABASE_URL;
@@ -248,6 +249,46 @@ test('exact text and relative occurrences select one-shot before/after faults wi
   await client.query(insert(), [7, 'fault consumed by native failure']);
   expect(await ids()).toEqual([0, 1, 2, 4, 5, 7]);
   expect(wire.filter((sql) => sql === insert())).toHaveLength(7);
+});
+
+test('faults the observed Reylo outbox fence before protocol submission and rolls back its probe', async () => {
+  const client = await connect();
+  const pid = (await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  const trace = start();
+  const event = {
+    id: crypto.randomUUID(),
+    type: 'sql-observer.test',
+    subject: 'sql-observer',
+    data: { observed: true },
+  };
+  const parameters = {
+    partition_no: 0,
+    events: JSON.stringify([event]),
+    transaction_id: crypto.randomUUID(),
+    basis: null,
+    receipt: null,
+  };
+
+  await client.query('BEGIN');
+  await outboxFence.run(client, parameters);
+  const executed = trace.records.find(
+    (record) =>
+      record.statement.includes('UPDATE core.partition') && record.statement.includes('INSERT INTO core.outbox'),
+  );
+  expect(executed).toBeDefined();
+  if (!executed) throw new Error('The real outbox fence query was not observed');
+  expect(executed.connectionId).toBe(pid);
+  expect(executed.parameters).toContain(parameters.events);
+  await client.query('ROLLBACK');
+
+  const fault = new Error('stop before outbox submission');
+  const nextParameters = { ...parameters, transaction_id: crypto.randomUUID() };
+  await client.query('BEGIN');
+  trace.armFault({ match: { statement: executed.statement }, boundary: 'before', error: fault });
+  const failure = await outboxFence.run(client, nextParameters).catch((error) => error);
+  expect(failure).toBe(fault);
+  expect(wire.filter((statement) => statement === executed.statement)).toHaveLength(1);
+  await client.query('ROLLBACK');
 });
 
 test('occurrence holds select invocation order across clients even when completion order differs', async () => {
