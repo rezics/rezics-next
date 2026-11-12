@@ -432,7 +432,6 @@ breadcrumbs, one selected source and one sealed intent/receipt; history changes 
 ceiling. **Growth** O(page + depth) retained data, no tree scans, prefetch, refill, body reads or per-row hydration.
 Content owns native mutation/history costs; consumer bounds do not claim native cost proof.
 
-
 ## Search, discovery and public value
 
 At launch the subject visit composes its ordinary public facts, a bounded page of published contributions and a
