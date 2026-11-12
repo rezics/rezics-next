@@ -2031,6 +2031,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import resource
 import selectors
 import shutil
 import signal
@@ -2254,180 +2255,591 @@ def detach_artifacts(cache, entry, measured=None):
     return True
 
 
-# Linux directory cookies let a bounded scan resume without re-listing an arbitrarily large namespace.
-# Cookies are best effort across mutation; every completed pass starts again to reconcile concurrent changes.
-def directory_entries(namespace, cookie):
-    class Dirent(ctypes.Structure):
-        _fields_ = [('ino', ctypes.c_ulong), ('off', ctypes.c_long), ('length', ctypes.c_ushort),
-                    ('kind', ctypes.c_ubyte), ('name', ctypes.c_char * 256)]
-    libc = ctypes.CDLL(None, use_errno=True)
-    libc.opendir.argtypes = [ctypes.c_char_p]
-    libc.opendir.restype = ctypes.c_void_p
-    libc.readdir.argtypes = [ctypes.c_void_p]
-    libc.readdir.restype = ctypes.POINTER(Dirent)
-    libc.seekdir.argtypes = [ctypes.c_void_p, ctypes.c_long]
-    libc.telldir.argtypes = [ctypes.c_void_p]
-    libc.telldir.restype = ctypes.c_long
-    libc.closedir.argtypes = [ctypes.c_void_p]
-    stream = libc.opendir(os.fsencode(namespace))
-    if not stream:
-        error = ctypes.get_errno()
-        if error != errno.ENOENT:
-            raise OSError(error, os.strerror(error))
-        yield None, 0
-        return
-    try:
-        libc.seekdir(stream, cookie)
-        while True:
-            ctypes.set_errno(0)
-            item = libc.readdir(stream)
-            if not item:
-                error = ctypes.get_errno()
-                if error:
-                    raise OSError(error, os.strerror(error))
-                yield None, 0
-                return
-            yield os.fsdecode(item.contents.name), libc.telldir(stream)
-    finally:
-        libc.closedir(stream)
+# Maintenance state is a bounded checkpoint, not an index of artifact contents.
+MAINTENANCE_WORK_BUDGET = 8192
+MAINTENANCE_SAFE_RSS_BYTES = 224 * 1024 * 1024
+MAINTENANCE_STATE_LIMIT = 512 * 1024
+MAINTENANCE_STATUS_LIMIT = 64 * 1024
+MAINTENANCE_MARKER_LIMIT = 512
+MAINTENANCE_WORK = None
+MAINTENANCE_WORK_REMAINING = 0
 
 
-def tree_nodes(root):
-    # Postorder without Python recursion or a wide in-memory list. Parent directory streams stay open while
-    # descending: telldir cookies are valid only on that stream, so a reopen cannot resume. No symlink is followed.
-    # Empty names and a child equal to the current path are skipped: a misread dirent would otherwise reopen the
-    # same directory until the sweep deadline.
-    stack = []
-    path = root
-    iterator = directory_entries(path, 0)
+class DirectoryCursorLost(Exception):
+    pass
+
+
+def bounded_json(path, limit):
+    with path.open('rb') as source:
+        raw = source.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError('bounded JSON file exceeds ' + str(limit) + ' bytes')
+    return json.loads(raw)
+
+
+def atomic_json(path, value, limit):
+    encoded = json.dumps(value, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    if len(encoded) > limit:
+        raise ValueError('bounded JSON state exceeds ' + str(limit) + ' bytes')
+    temporary = path.with_name(path.name + '.pending')
+    with temporary.open('wb') as target:
+        target.write(encoded)
+        target.flush()
+        os.fsync(target.fileno())
+    temporary.replace(path)
+    fsync_parent(path.parent)
+
+
+def diagnostic(error):
+    return str(error).replace('\x00', '?')[:512]
+
+
+def valid_status_shape(value):
+    if type(value) is not dict or len(value) > 40:
+        return False
+    text_limits = {'host': 255, 'cache': 4096, 'accountingWindow': 128, 'state': 64,
+                   'phase': 64, 'yieldReason': 64, 'error': 512}
+    optional_paths = {'retiringEntry'}
+    boolean_fields = {'measurementValid', 'alarm'}
+    numeric_fields = {'updatedAt', 'creditBytes', 'admittedBytes', 'deletedBytes', 'deletedNodes',
+                      'garbageBytes', 'totalBytes', 'thresholdBytes', 'garbageFraction', 'observedAt',
+                      'attachedBytes', 'attachedObservedAt', 'totalMeasuredCacheBytes', 'boundBytes',
+                      'windowStartedAt', 'pid', 'memoryHighWaterBytes', 'workNodes', 'workBudget'}
+    allowed = set(text_limits) | optional_paths | boolean_fields | numeric_fields | {'schema'}
+    for key, item in value.items():
+        if key not in allowed:
+            return False
+        if key in text_limits and key == 'error' and item is None:
+            continue
+        if key in text_limits and (type(item) is not str or len(item) > text_limits[key]):
+            return False
+        if key in optional_paths and item is not None and (type(item) is not str or len(item) > 4096):
+            return False
+        if key in boolean_fields and type(item) is not bool:
+            return False
+        if key in numeric_fields and (type(item) not in (int, float) or item < 0 or item > 2**63 - 1):
+            return False
+        if key in numeric_fields and type(item) is float and (item != item or item in (float('inf'), float('-inf'))):
+            return False
+        if key == 'schema' and (type(item) is not int or item not in (1, 2)):
+            return False
+    return True
+
+
+def valid_relative_path(value):
+    if type(value) is not str or not value or len(value) > 4096 or value.startswith('/'):
+        return False
+    parts = value.split('/')
+    return all(part not in ('', '.', '..') and len(part) <= 255 and chr(0) not in part for part in parts)
+
+
+def valid_name_cursor(value):
+    return value is None or (type(value) is str and len(value) <= 255 and value not in ('', '.', '..')
+                             and '/' not in value and chr(0) not in value)
+
+
+def valid_identity(value):
+    return (type(value) is list and len(value) == 3 and
+            all(type(item) is int and 0 <= item <= 2**63 - 1 for item in value))
+
+
+def fresh_eviction_state():
+    return {'namespace': 0, 'cursor': None, 'bytes': 0, 'known': [], 'pending': None, 'plan': None,
+            'batchCount': 0}
+
+
+def fresh_retirement_state():
+    return {'namespace': 0, 'cursor': None, 'pending': None}
+
+
+def fresh_observation_state():
+    return {'stage': 'garbage', 'namespace': 0, 'cursor': None, 'bytes': 0, 'pending': None}
+
+
+def fresh_work_state():
+    return {'schema': 4, 'phase': 'initial-observation', 'observation': None,
+            'eviction': fresh_eviction_state(), 'retirement': fresh_retirement_state(),
+            'tree': None, 'observedGarbage': None}
+
+
+def valid_observation(value):
+    return (type(value) is dict and set(value) == {'stage', 'namespace', 'cursor', 'bytes', 'pending'} and
+            value['stage'] in ('garbage', 'namespaces') and type(value['namespace']) is int and
+            0 <= value['namespace'] <= 2 and valid_name_cursor(value['cursor']) and
+            type(value['bytes']) is int and 0 <= value['bytes'] <= 2**63 - 1 and
+            (value['pending'] is None or valid_relative_path(value['pending'])))
+
+
+def valid_tree_state(value):
+    if value is None:
+        return True
+    if type(value) is not dict or set(value) != {'root', 'identity', 'bytes', 'stack'}:
+        return False
+    if (not valid_relative_path(value['root']) or not valid_identity(value['identity']) or
+            type(value['bytes']) is not int or not 0 <= value['bytes'] <= 2**63 - 1 or
+            type(value['stack']) is not list or not value['stack'] or len(value['stack']) > 4096):
+        return False
+    path_bytes = 0
+    for index, frame in enumerate(value['stack']):
+        if type(frame) is not dict or set(frame) != {'name', 'cursor', 'identity'}:
+            return False
+        if (type(frame['name']) is not str or (index == 0 and frame['name'] != '') or
+                (index > 0 and not valid_name_cursor(frame['name'])) or not valid_name_cursor(frame['cursor'])):
+            return False
+        if not valid_identity(frame['identity']):
+            return False
+        if index > 0 and value['stack'][index - 1]['cursor'] != frame['name']:
+            return False
+        path_bytes += len(frame['name'].encode('utf-8', errors='surrogatepass'))
+    return path_bytes <= 128 * 1024
+
+
+def valid_eviction_state(value):
+    if type(value) is not dict or set(value) != {'namespace', 'cursor', 'bytes', 'known', 'pending', 'plan', 'batchCount'}:
+        return False
+    if (type(value['namespace']) is not int or not 0 <= value['namespace'] <= 2 or
+            not valid_name_cursor(value['cursor']) or type(value['bytes']) is not int or
+            not 0 <= value['bytes'] <= 2**63 - 1 or type(value['known']) is not list or len(value['known']) > 32 or
+            type(value['batchCount']) is not int or not 0 <= value['batchCount'] <= 128):
+        return False
+    for item in value['known']:
+        if (type(item) is not list or len(item) != 6 or type(item[0]) is not int or not 0 <= item[0] <= 2**63 - 1 or
+                type(item[1]) is not int or not 0 <= item[1] <= 2**63 - 1 or
+                type(item[2]) is not int or not 0 <= item[2] <= 2**63 - 1 or
+                not valid_relative_path(item[3]) or type(item[4]) is not int or not 0 <= item[4] <= 2**63 - 1 or
+                type(item[5]) is not bool):
+            return False
+    pending = value['pending']
+    if pending is not None and (type(pending) is not dict or
+            set(pending) not in ({'name', 'identity', 'oldSize', 'invalid'},
+                                 {'name', 'identity', 'oldSize', 'invalid', 'size'}) or
+            not valid_relative_path(pending['name']) or not valid_identity(pending['identity']) or
+            type(pending['oldSize']) is not int or not 0 <= pending['oldSize'] <= 2**63 - 1 or
+            type(pending['invalid']) is not bool):
+        return False
+    if pending is not None and 'size' in pending and (
+            type(pending['size']) is not int or not 0 <= pending['size'] <= 2**63 - 1):
+        return False
+    plan = value['plan']
+    if plan is not None and (type(plan) is not dict or set(plan) != {'index', 'garbage', 'bound', 'stage'} or
+            type(plan['index']) is not int or not 0 <= plan['index'] <= len(value['known']) or
+            type(plan['garbage']) is not int or not 0 <= plan['garbage'] <= 2**63 - 1 or
+            type(plan['bound']) is not int or not 0 <= plan['bound'] <= 2**63 - 1 or
+            plan['stage'] not in ('select', 'measure', 'apply', 'clean', 'reobserve', 'retire')):
+        return False
+    if plan is not None and plan['stage'] in ('apply', 'clean', 'reobserve', 'retire') and (
+            pending is None or 'size' not in pending):
+        return False
+    return True
+
+
+def valid_retirement_state(value):
+    if type(value) is not dict or set(value) != {'namespace', 'cursor', 'pending'}:
+        return False
+    if type(value['namespace']) is not int or not 0 <= value['namespace'] <= 2 or not valid_name_cursor(value['cursor']):
+        return False
+    pending = value['pending']
+    if pending is None:
+        return True
+    return (type(pending) is dict and set(pending) == {'kind', 'path', 'identity', 'stage', 'oldSize'} and
+            pending['kind'] in ('resume', 'in-place') and valid_relative_path(pending['path']) and
+            valid_identity(pending['identity']) and pending['stage'] in ('observe', 'delete', 'finish', 'final-observation') and
+            type(pending['oldSize']) is int and 0 <= pending['oldSize'] <= 2**63 - 1)
+
+
+def valid_work_state(value):
+    if type(value) is not dict or set(value) != {'schema', 'phase', 'observation', 'eviction', 'retirement', 'tree', 'observedGarbage'}:
+        return False
+    if value['schema'] != 4 or value['phase'] not in ('initial-observation', 'clean-garbage', 'retirements',
+            'pre-eviction-observation', 'eviction', 'final-observation', 'idle'):
+        return False
+    if value['observation'] is not None and not valid_observation(value['observation']):
+        return False
+    if not valid_eviction_state(value['eviction']) or not valid_retirement_state(value['retirement']) or not valid_tree_state(value['tree']):
+        return False
+    return value['observedGarbage'] is None or (type(value['observedGarbage']) is int and 0 <= value['observedGarbage'] <= 2**63 - 1)
+
+
+def memory_high_water_bytes():
+    return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024)
+
+
+def work_available():
+    return (MAINTENANCE_WORK_REMAINING > 0 and not MAINTENANCE_STOP and
+            memory_high_water_bytes() < MAINTENANCE_SAFE_RSS_BYTES)
+
+
+def spend_work():
+    global MAINTENANCE_WORK_REMAINING
+    if not work_available():
+        return False
+    MAINTENANCE_WORK_REMAINING -= 1
+    return True
+
+
+def save_work_state(cache):
+    atomic_json(cache / '.sweep-state.json', MAINTENANCE_WORK, MAINTENANCE_STATE_LIMIT)
+
+
+def owner_relative(cache, path):
+    return path.relative_to(cache).as_posix()
+
+
+def owner_path(cache, relative):
+    if not valid_relative_path(relative):
+        raise ValueError('invalid owner-relative maintenance path')
+    return cache.joinpath(*relative.split('/'))
+
+
+def directory_identity(info):
+    return [info.st_dev, info.st_ino, info.st_mtime_ns]
+
+
+def open_directory(path, expected=None):
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, 'O_CLOEXEC', 0)
+    descriptor = os.open(path, flags)
+    info = os.fstat(descriptor)
+    if expected is not None and directory_identity(info) != expected:
+        os.close(descriptor)
+        raise DirectoryCursorLost(str(path))
+    return descriptor, info
+
+
+def directory_entries_after(path, cursor, expected=None):
+    descriptor, _ = open_directory(path, expected)
     try:
-        while not MAINTENANCE_STOP:
-            descended = False
-            while True:
-                try:
-                    name, _cookie = next(iterator)
-                except StopIteration:
-                    name = None
-                if MAINTENANCE_STOP:
-                    return
-                if name is None:
-                    break
-                if not name or name in ('.', '..') or '/' in name or chr(0) in name:
+        with os.scandir(descriptor) as stream:
+            found = cursor is None
+            for item in stream:
+                name = item.name
+                if not found:
+                    if name == cursor:
+                        found = True
                     continue
-                child = path / name
-                if child == path or any(child == parent for parent, _ in stack):
+                if cursor is not None and name == cursor:
                     continue
-                try:
-                    info = child.lstat()
-                except OSError:
-                    continue
-                if stat.S_ISDIR(info.st_mode):
-                    stack.append((path, iterator))
-                    path = child
-                    iterator = directory_entries(path, 0)
-                    descended = True
-                    break
-                yield child, info
-            if descended:
-                continue
-            iterator.close()
-            yield path, path.lstat()
-            if not stack:
-                return
-            path, iterator = stack.pop()
+                yield name, None
+            if not found:
+                raise DirectoryCursorLost(str(path))
     finally:
-        pending = [iterator, *[parent for _, parent in stack]]
-        for item in pending:
-            try:
-                item.close()
-            except Exception:
-                pass
+        os.close(descriptor)
+
+
+def maintenance_temporary_name(name):
+    return name in ('.sweep-state.json.pending', '.maintenance-status.json.pending')
+
+
+def valid_status_record(value):
+    return valid_status_shape(value)
 
 
 def maintenance_report(cache, force=False, **values):
     global LAST_REPORT
+    if 'error' in values and values['error'] is not None:
+        values['error'] = diagnostic(values['error'])
+    if 'retiringEntry' in values and values['retiringEntry'] is not None:
+        values['retiringEntry'] = str(values['retiringEntry'])[:4096]
     MAINTENANCE_STATUS.update(values)
     now = time.monotonic()
     if not force and now - LAST_REPORT < 5:
         return
     LAST_REPORT = now
-    MAINTENANCE_STATUS.update(host=platform.node(), cache=str(cache), updatedAt=time.time(),
-                              creditBytes=RECLAIM_CREDIT, accountingWindow='current singleton process')
+    MAINTENANCE_STATUS.update(schema=2, host=platform.node()[:255], cache=str(cache)[:4096], updatedAt=time.time(),
+                              creditBytes=RECLAIM_CREDIT, accountingWindow='current singleton process',
+                              memoryHighWaterBytes=memory_high_water_bytes(),
+                              workBudget=MAINTENANCE_WORK_BUDGET,
+                              workNodes=MAINTENANCE_WORK_BUDGET - MAINTENANCE_WORK_REMAINING)
     snapshot = dict(MAINTENANCE_STATUS)
     try:
-        temporary = cache / '.maintenance-status.pending'
-        temporary.write_text(json.dumps(snapshot, sort_keys=True))
-        temporary.replace(cache / '.maintenance-status.json')
+        atomic_json(cache / '.maintenance-status.json', snapshot, MAINTENANCE_STATUS_LIMIT)
     except OSError as error:
-        print('remote-check: cache diagnostics write failed: ' + str(error), file=sys.stderr, flush=True)
+        print('remote-check: cache diagnostics write failed: ' + diagnostic(error), file=sys.stderr, flush=True)
     print('remote-check: cache maintenance ' + json.dumps(snapshot, sort_keys=True), file=sys.stderr, flush=True)
 
 
+def load_work_state(cache):
+    path = cache / '.sweep-state.json'
+    try:
+        value = bounded_json(path, MAINTENANCE_STATE_LIMIT)
+    except FileNotFoundError:
+        return fresh_work_state(), None
+    except (OSError, ValueError, TypeError, RecursionError) as error:
+        return fresh_work_state(), diagnostic(error)
+    if not valid_work_state(value):
+        return fresh_work_state(), 'invalid fixed-shape maintenance state'
+    return value, None
+
+
 def measure_tree(cache, entry):
-    size = 0
-    for _, info in tree_nodes(entry):
-        size += info.st_blocks * 512
-        maintenance_report(cache, state='measuring')
+    # One directory stream is open at a time. Name cursors are searched in a fresh stream and are never
+    # interpreted as kernel cookies. A changed path or cursor discards the partial sum and starts over.
+    global MAINTENANCE_WORK
+    if MAINTENANCE_WORK is None:
+        MAINTENANCE_WORK = fresh_work_state()
+    try:
+        info = entry.lstat()
+    except FileNotFoundError:
+        MAINTENANCE_WORK['tree'] = None
+        return 0
+    if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+        if not spend_work():
+            return None
+        MAINTENANCE_WORK['tree'] = None
+        return info.st_blocks * 512
+    relative = owner_relative(cache, entry)
+    identity = directory_identity(info)
+    tree = MAINTENANCE_WORK.get('tree')
+    if tree is None or tree['root'] != relative or tree['identity'] != identity:
+        tree = {'root': relative, 'identity': identity, 'bytes': info.st_blocks * 512,
+                'stack': [{'name': '', 'cursor': None, 'identity': identity}]}
+        MAINTENANCE_WORK['tree'] = tree
+    processed = 0
+    while tree['stack'] and not MAINTENANCE_STOP:
+        frame = tree['stack'][-1]
+        directory = entry.joinpath(*[item['name'] for item in tree['stack'][1:]])
+        try:
+            descriptor, opened = open_directory(directory, frame['identity'])
+        except DirectoryCursorLost:
+            MAINTENANCE_WORK['tree'] = None
+            save_work_state(cache)
+            return None
+        except FileNotFoundError:
+            MAINTENANCE_WORK['tree'] = None
+            return None
+        descended = False
+        cursor_found = frame['cursor'] is None
+        partial = False
+        try:
+            with os.scandir(descriptor) as stream:
+                for child in stream:
+                    name = child.name
+                    if not cursor_found:
+                        if name == frame['cursor']:
+                            cursor_found = True
+                        continue
+                    if frame['cursor'] is not None and name == frame['cursor']:
+                        continue
+                    if not work_available():
+                        partial = True
+                        break
+                    try:
+                        child_info = child.stat(follow_symlinks=False)
+                    except FileNotFoundError:
+                        partial = True
+                        break
+                    if not spend_work():
+                        partial = True
+                        break
+                    frame['cursor'] = name
+                    tree['bytes'] += child_info.st_blocks * 512
+                    processed += 1
+                    if stat.S_ISDIR(child_info.st_mode) and not stat.S_ISLNK(child_info.st_mode):
+                        tree['stack'].append({'name': name, 'cursor': None,
+                                              'identity': directory_identity(child_info)})
+                        descended = True
+                        break
+                    if processed % 64 == 0:
+                        save_work_state(cache)
+                if not cursor_found:
+                    raise DirectoryCursorLost(str(directory))
+                if not partial and not descended:
+                    tree['stack'].pop()
+        except DirectoryCursorLost:
+            MAINTENANCE_WORK['tree'] = None
+            save_work_state(cache)
+            return None
+        finally:
+            os.close(descriptor)
+        if partial:
+            save_work_state(cache)
+            maintenance_report(cache, state='measuring', phase='tree-measurement', measurementValid=False)
+            return None
     if MAINTENANCE_STOP:
-        raise InterruptedError('cache measurement interrupted')
-    return size
+        save_work_state(cache)
+        return None
+    result = tree['bytes']
+    MAINTENANCE_WORK['tree'] = None
+    save_work_state(cache)
+    return result
 
 
-def observe_garbage(cache):
-    # Only the maintenance owner traverses garbage. A failed/incomplete observation cannot clear an alarm.
-    maintenance_report(cache, force=True, state='measuring', measurementValid=False)
-    garbage = cache / '.garbage'
-    size = measure_tree(cache, garbage) - garbage.lstat().st_blocks * 512 if garbage.exists() else 0
-    for namespace in [cache, cache / 'native']:
-        with contextlib.closing(directory_entries(namespace, 0)) as stream:
-            for name, _ in stream:
-                if name is None:
-                    break
-                if re.fullmatch(r'[a-f0-9]{64}\.retiring', name):
-                    entry = namespace / name[:-9]
-                    if entry.exists():
-                        size += measure_tree(cache, entry)
+def complete_observation(cache, observation):
+    size = observation['bytes']
     total = shutil.disk_usage(cache).total
     if total <= 0:
         raise OSError('filesystem capacity unavailable')
     alarm = size > total * .05 or (size == total * .05 and MAINTENANCE_STATUS.get('alarm', False))
-    maintenance_report(cache, force=True, state='observed', measurementValid=True,
+    MAINTENANCE_WORK['observedGarbage'] = size
+    MAINTENANCE_WORK['observation'] = None
+    save_work_state(cache)
+    maintenance_report(cache, force=True, state='observed', phase='complete-measurement', measurementValid=True,
         garbageBytes=size, totalBytes=total, thresholdBytes=total * .05, garbageFraction=size / total,
         alarm=alarm, observedAt=time.time())
     if alarm:
         print('remote-check: ALARM garbage exceeds 5% host=' + platform.node() + ' cache=' + str(cache) +
               ' measuredBytes=' + str(size) + ' totalBytes=' + str(total) + ' thresholdBytes=' +
               str(total * .05), file=sys.stderr, flush=True)
-    return size
+
+
+def observe_garbage(cache):
+    # A partial observation persists its phase and sum; it never changes the last complete alarm.
+    observation = MAINTENANCE_WORK.get('observation')
+    if observation is None:
+        observation = fresh_observation_state()
+        MAINTENANCE_WORK['observation'] = observation
+    maintenance_report(cache, force=True, state='measuring', phase='garbage-measurement', measurementValid=False)
+    if observation['stage'] == 'garbage':
+        garbage = cache / '.garbage'
+        if garbage.exists():
+            measured = measure_tree(cache, garbage)
+            if measured is None:
+                save_work_state(cache)
+                return False
+            observation['bytes'] += max(0, measured - garbage.lstat().st_blocks * 512)
+        observation['stage'] = 'namespaces'
+        save_work_state(cache)
+    if observation['pending'] is not None:
+        entry = owner_path(cache, observation['pending'])
+        measured = measure_tree(cache, entry)
+        if measured is None:
+            save_work_state(cache)
+            return False
+        observation['bytes'] += measured
+        observation['pending'] = None
+        save_work_state(cache)
+    while observation['namespace'] < 2 and not MAINTENANCE_STOP:
+        namespace = cache if observation['namespace'] == 0 else cache / 'native'
+        if not namespace.exists():
+            observation['namespace'] += 1
+            observation['cursor'] = None
+            continue
+        try:
+            with contextlib.closing(directory_entries_after(namespace, observation['cursor'])) as stream:
+                for name, _ in stream:
+                    if maintenance_temporary_name(name):
+                        continue
+                    if not spend_work():
+                        save_work_state(cache)
+                        return False
+                    if re.fullmatch(r'[a-f0-9]{64}\.retiring', name):
+                        marker_entry = namespace / name
+                        observation['pending'] = owner_relative(cache, namespace / name[:-9])
+                        observation['cursor'] = name
+                        save_work_state(cache)
+                        entry = owner_path(cache, observation['pending'])
+                        if entry.exists():
+                            measured = measure_tree(cache, entry)
+                            if measured is None:
+                                return False
+                            observation['bytes'] += measured
+                        observation['pending'] = None
+                    else:
+                        observation['cursor'] = name
+                    if MAINTENANCE_WORK_REMAINING <= 0:
+                        save_work_state(cache)
+                        return False
+                    if MAINTENANCE_WORK_REMAINING % 64 == 0:
+                        save_work_state(cache)
+        except DirectoryCursorLost:
+            MAINTENANCE_WORK['tree'] = None
+            MAINTENANCE_WORK['observation'] = fresh_observation_state()
+            save_work_state(cache)
+            return False
+        observation['namespace'] += 1
+        observation['cursor'] = None
+        save_work_state(cache)
+    if MAINTENANCE_STOP:
+        save_work_state(cache)
+        return False
+    complete_observation(cache, observation)
+    return True
+
+
+def first_removal_node(root):
+    # Rewalk from the root after each unlink. Deleted entries are the durable cursor, so a restart cannot
+    # lose position. Only one path and one directory stream are retained.
+    path = root
+    while True:
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            return None
+        if stat.S_ISDIR(info.st_mode) and not stat.S_ISLNK(info.st_mode):
+            try:
+                descriptor, opened = open_directory(path, directory_identity(info))
+            except DirectoryCursorLost:
+                continue
+            except FileNotFoundError:
+                continue
+            child_name = None
+            try:
+                with os.scandir(descriptor) as stream:
+                    for child in stream:
+                        child_name = child.name
+                        break
+            finally:
+                os.close(descriptor)
+            if child_name is not None:
+                path = path / child_name
+                continue
+        return path, info
+
+
+def fsync_parent(path):
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, 'O_CLOEXEC', 0)
+    descriptor = os.open(path, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def delete_tree(cache, root, keep_root=False):
     global RECLAIM_CREDIT
-    for path, info in tree_nodes(root):
+    while not MAINTENANCE_STOP:
+        if not work_available():
+            return False
+        found = first_removal_node(root)
+        if found is None:
+            return True
+        path, observed = found
         if keep_root and path == root:
+            return True
+        try:
+            current = path.lstat()
+        except FileNotFoundError:
             continue
-        if stat.S_ISDIR(info.st_mode):
+        if (current.st_dev, current.st_ino) != (observed.st_dev, observed.st_ino):
+            continue
+        if stat.S_ISDIR(current.st_mode) and not stat.S_ISLNK(current.st_mode):
             path.rmdir()
         else:
             os.unlink(path)
-        # Hardlinked legacy files earn nothing until their final link is removed. Credit is in-memory per
-        # ownership interval; a crash before the next admit loses it rather than inventing it.
-        freed = info.st_blocks * 512 if stat.S_ISDIR(info.st_mode) or info.st_nlink == 1 else 0
+        fsync_parent(path.parent)
+        # Hardlinked legacy files earn nothing until their final link is removed.
+        freed = current.st_blocks * 512 if stat.S_ISDIR(current.st_mode) or current.st_nlink == 1 else 0
         RECLAIM_CREDIT = min(RECLAIM_LIMIT, RECLAIM_CREDIT + freed)
         MAINTENANCE_STATUS['deletedBytes'] = MAINTENANCE_STATUS.get('deletedBytes', 0) + freed
         MAINTENANCE_STATUS['deletedNodes'] = MAINTENANCE_STATUS.get('deletedNodes', 0) + 1
-        # Progress is not a new measurement and cannot clear the last observed alarm.
-        maintenance_report(cache, state='deleting', measurementValid=False)
+        spend_work()
+        maintenance_report(cache, state='deleting', phase='tree-deletion', measurementValid=False)
+    return False
 
 
 def clean_garbage(cache):
     garbage = cache / '.garbage'
-    if garbage.exists():
-        delete_tree(cache, garbage, keep_root=True)
+    return True if not garbage.exists() else delete_tree(cache, garbage, keep_root=True)
 
 
 def retirement_marker(entry):
     return entry.parent / (entry.name + '.retiring')
+
+
+def read_retirement_identity(marker):
+    identity = bounded_json(marker, MAINTENANCE_MARKER_LIMIT)
+    if not valid_identity(identity):
+        raise ValueError('invalid retirement identity')
+    return identity
 
 
 def finish_retirement(entry):
@@ -2435,166 +2847,352 @@ def finish_retirement(entry):
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            return
+            return False
         (entry.parent / (entry.name + '.invalid')).unlink(missing_ok=True)
         retirement_marker(entry).unlink(missing_ok=True)
+    fsync_parent(entry.parent)
+    return True
 
 
-def retire_in_place(cache, entry, identity):
-    # Bootstrap/oversized legacy admission: one unavailable attached entry is reclaimed in place,
-    # rather than renaming unmeasured bytes into garbage. All users consult its durable tombstone.
-    # No recursive work holds a preparation lock. A crash leaves the tombstone for the next owner.
+def persist_retirement_marker(marker, identity):
+    with marker.open('wb') as record:
+        record.write(json.dumps(identity, separators=(',', ':')).encode('ascii'))
+        record.flush()
+        os.fsync(record.fileno())
+    fsync_parent(marker.parent)
+
+
+def continue_retirement(cache):
+    retirement = MAINTENANCE_WORK['retirement']
+    pending = retirement['pending']
+    if pending is None:
+        return True
+    entry = owner_path(cache, pending['path'])
+    if pending['stage'] == 'observe':
+        if not observe_garbage(cache):
+            return False
+        pending['stage'] = 'delete'
+        save_work_state(cache)
+    if pending['stage'] == 'delete':
+        if not delete_tree(cache, entry):
+            return False
+        pending['stage'] = 'finish'
+        save_work_state(cache)
+    if pending['stage'] == 'finish':
+        if not finish_retirement(entry):
+            return False
+        pending['stage'] = 'final-observation' if pending['kind'] == 'in-place' else 'done'
+        maintenance_report(cache, force=True, retiringEntry=None, state='deleting',
+                           phase='retirement-finished', measurementValid=False)
+    if pending['stage'] == 'final-observation':
+        if not observe_garbage(cache):
+            return False
+        eviction = MAINTENANCE_WORK['eviction']
+        eviction['bytes'] = max(0, eviction['bytes'] - pending['oldSize'])
+        if eviction['plan'] is not None:
+            eviction['plan']['garbage'] = MAINTENANCE_WORK['observedGarbage']
+            eviction['plan']['index'] += 1
+            eviction['plan']['stage'] = 'select'
+    retirement['pending'] = None
+    save_work_state(cache)
+    return True
+
+
+def retire_in_place(cache, entry, identity, old_size=0):
+    # A durable tombstone makes the selected entry unavailable before bounded deletion starts.
+    current_pending = MAINTENANCE_WORK['retirement']['pending']
+    if current_pending is not None and current_pending['kind'] == 'in-place' and current_pending['path'] == owner_relative(cache, entry):
+        return continue_retirement(cache)
     marker = retirement_marker(entry)
     with (entry.parent / (entry.name + '.lock')).open('a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            return
+            return True
         if entry.exists():
             info = entry.lstat()
             if [info.st_mtime_ns, info.st_dev, info.st_ino] != identity:
-                return
-            with marker.open('w') as record:
-                record.write(json.dumps(identity))
-                record.flush()
-                os.fsync(record.fileno())
-            descriptor = os.open(entry.parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
-    maintenance_report(cache, force=True, retiringEntry=str(entry), measurementValid=False)
-    observe_garbage(cache)
-    delete_tree(cache, entry)
-    if not MAINTENANCE_STOP:
-        finish_retirement(entry)
-        maintenance_report(cache, force=True, retiringEntry=None)
-        observe_garbage(cache)
+                return True
+            if marker.exists():
+                if read_retirement_identity(marker) != identity:
+                    raise RuntimeError('retirement identity changed: ' + str(entry))
+            else:
+                persist_retirement_marker(marker, identity)
+    MAINTENANCE_WORK['retirement']['pending'] = {
+        'kind': 'in-place', 'path': owner_relative(cache, entry),
+        'identity': [identity[1], identity[2], identity[0]], 'stage': 'observe', 'oldSize': old_size}
+    maintenance_report(cache, force=True, retiringEntry=str(entry), state='measuring',
+                       phase='retirement-observation', measurementValid=False)
+    save_work_state(cache)
+    return continue_retirement(cache)
 
 
 def resume_retirements(cache):
-    for namespace in [cache, cache / 'native']:
-        with contextlib.closing(directory_entries(namespace, 0)) as stream:
-            for name, _ in stream:
-                if name is None or MAINTENANCE_STOP:
-                    break
-                if not re.fullmatch(r'[a-f0-9]{64}\.retiring', name):
-                    continue
-                entry = namespace / name[:-9]
-                # Revalidate identity under its stable lock, but never retain that lock while deleting.
-                with (namespace / (entry.name + '.lock')).open('a') as lock:
-                    try:
-                        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    except BlockingIOError:
+    retirement = MAINTENANCE_WORK['retirement']
+    if retirement['pending'] is not None:
+        return continue_retirement(cache)
+    while retirement['namespace'] < 2 and not MAINTENANCE_STOP:
+        namespace = cache if retirement['namespace'] == 0 else cache / 'native'
+        if not namespace.exists():
+            retirement['namespace'] += 1
+            retirement['cursor'] = None
+            continue
+        try:
+            with contextlib.closing(directory_entries_after(namespace, retirement['cursor'])) as stream:
+                for name, _ in stream:
+                    if maintenance_temporary_name(name):
                         continue
+                    if not spend_work():
+                        save_work_state(cache)
+                        return False
+                    if not re.fullmatch(r'[a-f0-9]{64}\.retiring', name):
+                        retirement['cursor'] = name
+                        continue
+                    entry = namespace / name[:-9]
                     marker = namespace / name
-                    identity = json.loads(marker.read_text())
+                    identity = read_retirement_identity(marker)
                     if entry.exists():
-                        info = entry.lstat()
-                        if [info.st_dev, info.st_ino] != identity[1:]:
-                            raise RuntimeError('retirement inode changed: ' + str(entry))
+                        with (namespace / (entry.name + '.lock')).open('a') as lock:
+                            try:
+                                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            except BlockingIOError:
+                                retirement['cursor'] = name
+                                continue
+                            info = entry.lstat()
+                            if [info.st_dev, info.st_ino] != identity[1:]:
+                                raise RuntimeError('retirement inode changed: ' + str(entry))
+                        retirement['pending'] = {'kind': 'resume', 'path': owner_relative(cache, entry),
+                            'identity': [identity[1], identity[2], identity[0]], 'stage': 'delete', 'oldSize': 0}
+                        maintenance_report(cache, force=True, retiringEntry=str(entry), state='deleting',
+                                           phase='retirement-resume', measurementValid=False)
+                        if not continue_retirement(cache):
+                            return False
                     else:
                         (entry.parent / (entry.name + '.invalid')).unlink(missing_ok=True)
-                        marker.unlink()
-                        continue
-                maintenance_report(cache, force=True, retiringEntry=str(entry), measurementValid=False)
-                delete_tree(cache, entry)
-                if not MAINTENANCE_STOP:
-                    finish_retirement(entry)
-                    maintenance_report(cache, force=True, retiringEntry=None)
+                        marker.unlink(missing_ok=True)
+                        fsync_parent(namespace)
+                    # Keep the preceding surviving entry as the name cursor while this marker disappears.
+                    if MAINTENANCE_WORK_REMAINING <= 0:
+                        save_work_state(cache)
+                        return False
+        except DirectoryCursorLost:
+            retirement['cursor'] = None
+            save_work_state(cache)
+            return False
+        retirement['namespace'] += 1
+        retirement['cursor'] = None
+        save_work_state(cache)
+    return retirement['namespace'] == 2
 
 
-def evict_artifacts(cache):
-    # Bounded namespace discovery; physical measurement and reclamation run outside all preparation locks.
-    fresh = {'namespace': 0, 'cookie': 0, 'bytes': 0, 'known': []}
-    state_file = cache / '.sweep-state.json'
+def eviction_candidate(cache, eviction):
+    pending = eviction['pending']
+    if pending is None:
+        return True
+    entry = owner_path(cache, pending['name'])
     try:
-        state = json.loads(state_file.read_text())
-        if state.get('schema') != 3:
-            raise ValueError('old sweep state')
-    except (OSError, ValueError):
-        state = dict(fresh, known=[])
-    remaining = 128
-    while remaining and state['namespace'] < 2 and not MAINTENANCE_STOP:
-        namespace = cache if state['namespace'] == 0 else cache / 'native'
-        with contextlib.closing(directory_entries(namespace, state['cookie'])) as stream:
-            for name, cookie in stream:
-                if not remaining or MAINTENANCE_STOP:
-                    break
-                remaining -= 1
-                state['cookie'] = cookie
-                if name is None:
-                    state['namespace'] += 1
-                    break
-                if not re.fullmatch(r'[a-f0-9]{64}', name):
-                    continue
-                entry = namespace / name
-                try:
-                    info = entry.lstat()
-                    if not stat.S_ISDIR(info.st_mode) or retirement_marker(entry).exists():
-                        continue
-                    identity = [info.st_mtime_ns, info.st_dev, info.st_ino]
-                    size = measure_tree(cache, entry)
-                    current = entry.lstat()
-                    if [current.st_mtime_ns, current.st_dev, current.st_ino] != identity:
-                        continue
-                    state['bytes'] += size
-                    invalid = (entry.parent / (entry.name + '.invalid')).exists()
-                    with (namespace / (name + '.lock')).open('a') as lock:
-                        try:
-                            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                        except BlockingIOError:
-                            continue
-                    state['known'].append([*identity, str(entry.relative_to(cache)), size, invalid])
-                    state['known'].sort(key=lambda item: (not item[5], item[0]))
-                    del state['known'][32:]
-                except FileNotFoundError:
-                    continue
-    if state['namespace'] == 2 and not MAINTENANCE_STOP:
-        disk = shutil.disk_usage(cache)
-        garbage = observe_garbage(cache)
-        bound = max(0, min(disk.total // 10, state['bytes'] + garbage + disk.free - disk.total // 10))
-        for last_use, device, inode, name, old_size, invalid in state['known']:
-            if (state['bytes'] + garbage <= bound and not invalid) or MAINTENANCE_STOP:
+        size = measure_tree(cache, entry)
+    except FileNotFoundError:
+        eviction['pending'] = None
+        return True
+    if size is None:
+        return False
+    try:
+        current = entry.lstat()
+    except FileNotFoundError:
+        eviction['pending'] = None
+        return True
+    if directory_identity(current) != pending['identity']:
+        eviction['pending'] = None
+        return True
+    eviction['bytes'] += size
+    eviction['known'].append([pending['identity'][2], pending['identity'][0], pending['identity'][1],
+                              pending['name'], size, pending['invalid']])
+    eviction['known'].sort(key=lambda item: (not item[5], item[0]))
+    del eviction['known'][32:]
+    eviction['pending'] = None
+    save_work_state(cache)
+    return True
+
+
+def process_eviction_plan(cache, eviction):
+    plan = eviction['plan']
+    while plan is not None and not MAINTENANCE_STOP:
+        if plan['stage'] == 'select':
+            if plan['index'] >= len(eviction['known']):
                 break
-            entry = cache / name
+            if eviction['bytes'] + plan['garbage'] <= plan['bound'] and not eviction['known'][plan['index']][5]:
+                break
+            item = eviction['known'][plan['index']]
+            eviction['pending'] = {'name': item[3], 'identity': [item[1], item[2], item[0]],
+                                   'oldSize': item[4], 'invalid': item[5]}
+            plan['stage'] = 'measure'
+        pending = eviction['pending']
+        entry = owner_path(cache, pending['name'])
+        if plan['stage'] == 'measure':
             try:
-                # Measure again outside locks; timestamps and inode are revalidated under the key lock.
                 size = measure_tree(cache, entry)
+            except FileNotFoundError:
+                size = None
+                eviction['pending'] = None
+                plan['index'] += 1
+                plan['stage'] = 'select'
+                continue
+            if size is None:
+                maintenance_report(cache, state='measuring', phase='eviction-measurement', measurementValid=False)
+                save_work_state(cache)
+                return False
+            eviction['pending']['size'] = size
+            plan['stage'] = 'apply'
+            save_work_state(cache)
+        if plan['stage'] == 'apply':
+            pending = eviction['pending']
+            entry = owner_path(cache, pending['name'])
+            size = pending['size']
+            try:
                 with (entry.parent / (entry.name + '.lock')).open('a') as lock:
                     try:
                         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     except BlockingIOError:
+                        eviction['pending'] = None
+                        plan['index'] += 1
+                        plan['stage'] = 'select'
                         continue
                     info = entry.lstat()
-                    identity = [last_use, device, inode]
-                    if [info.st_mtime_ns, info.st_dev, info.st_ino] != identity:
+                    identity = [info.st_mtime_ns, info.st_dev, info.st_ino]
+                    if identity != [pending['identity'][2], pending['identity'][0], pending['identity'][1]]:
+                        eviction['pending'] = None
+                        plan['index'] += 1
+                        plan['stage'] = 'select'
                         continue
                     detached = detach_artifacts(cache, entry, size)
-                if detached:
-                    (entry.parent / (entry.name + '.invalid')).unlink(missing_ok=True)
-                    state['bytes'] -= old_size
-                    garbage += size
-                    # Drain before selecting the next producer; no detachment can outrun earned credit.
-                    clean_garbage(cache)
-                    garbage = observe_garbage(cache)
-                elif garbage == 0:
-                    retire_in_place(cache, entry, identity)
-                    if not entry.exists():
-                        state['bytes'] -= old_size
             except FileNotFoundError:
+                eviction['pending'] = None
+                plan['index'] += 1
+                plan['stage'] = 'select'
                 continue
-        maintenance_report(cache, force=True, attachedBytes=state['bytes'], attachedObservedAt=time.time(),
-                           totalMeasuredCacheBytes=state['bytes'] + garbage, boundBytes=bound)
-        state = dict(fresh, known=[])
-    state['schema'] = 3
-    temporary = state_file.with_suffix('.pending')
-    temporary.write_text(json.dumps(state))
-    temporary.replace(state_file)
+            if detached:
+                (entry.parent / (entry.name + '.invalid')).unlink(missing_ok=True)
+                eviction['bytes'] = max(0, eviction['bytes'] - pending['oldSize'])
+                plan['garbage'] += size
+                plan['stage'] = 'clean'
+            elif plan['garbage'] == 0:
+                plan['stage'] = 'retire'
+            else:
+                eviction['pending'] = None
+                plan['index'] += 1
+                plan['stage'] = 'select'
+            save_work_state(cache)
+        if plan['stage'] == 'clean':
+            if not clean_garbage(cache):
+                maintenance_report(cache, state='deleting', phase='garbage-drain', measurementValid=False)
+                save_work_state(cache)
+                return False
+            plan['stage'] = 'reobserve'
+        if plan['stage'] == 'reobserve':
+            if not observe_garbage(cache):
+                return False
+            plan['garbage'] = MAINTENANCE_WORK['observedGarbage']
+            eviction['pending'] = None
+            plan['index'] += 1
+            plan['stage'] = 'select'
+        if plan['stage'] == 'retire':
+            pending = eviction['pending']
+            identity = [pending['identity'][2], pending['identity'][0], pending['identity'][1]]
+            if not retire_in_place(cache, entry, identity, pending['oldSize']):
+                return False
+            if MAINTENANCE_WORK['retirement']['pending'] is None and plan['index'] < len(eviction['known']) and plan['stage'] == 'retire':
+                eviction['pending'] = None
+                plan['index'] += 1
+                plan['stage'] = 'select'
+            # continue_retirement accounts for the removed bytes and advances the plan.
+            plan = eviction['plan']
+            continue
+    if MAINTENANCE_STOP:
+        save_work_state(cache)
+        return False
+    if plan is not None:
+        MAINTENANCE_STATUS.update(attachedBytes=eviction['bytes'], attachedObservedAt=time.time(),
+                                  totalMeasuredCacheBytes=eviction['bytes'] + plan['garbage'],
+                                  boundBytes=plan['bound'])
+    eviction['plan'] = None
+    eviction['pending'] = None
+    eviction['namespace'] = 0
+    eviction['cursor'] = None
+    eviction['bytes'] = 0
+    eviction['known'] = []
+    eviction['batchCount'] = 0
+    save_work_state(cache)
+    return True
+
+
+def evict_artifacts(cache):
+    # Namespace pages and per-tree measurements share one finite work budget.
+    eviction = MAINTENANCE_WORK['eviction']
+    if eviction['plan'] is not None:
+        return process_eviction_plan(cache, eviction)
+    if eviction['pending'] is not None and not eviction_candidate(cache, eviction):
+        return False
+    while eviction['namespace'] < 2 and eviction['batchCount'] < 128 and not MAINTENANCE_STOP:
+        namespace = cache if eviction['namespace'] == 0 else cache / 'native'
+        if not namespace.exists():
+            eviction['namespace'] += 1
+            eviction['cursor'] = None
+            continue
+        try:
+            with contextlib.closing(directory_entries_after(namespace, eviction['cursor'])) as stream:
+                for name, _ in stream:
+                    if maintenance_temporary_name(name):
+                        continue
+                    if not spend_work():
+                        save_work_state(cache)
+                        return False
+                    eviction['cursor'] = name
+                    eviction['batchCount'] += 1
+                    if re.fullmatch(r'[a-f0-9]{64}', name):
+                        entry = namespace / name
+                        try:
+                            info = entry.lstat()
+                            if stat.S_ISDIR(info.st_mode) and not stat.S_ISLNK(info.st_mode) and not retirement_marker(entry).exists():
+                                eviction['pending'] = {'name': owner_relative(cache, entry),
+                                    'identity': directory_identity(info), 'oldSize': 0,
+                                    'invalid': (entry.parent / (entry.name + '.invalid')).exists()}
+                                if not eviction_candidate(cache, eviction):
+                                    return False
+                        except FileNotFoundError:
+                            pass
+                    if eviction['batchCount'] >= 128 or MAINTENANCE_WORK_REMAINING <= 0:
+                        save_work_state(cache)
+                        if MAINTENANCE_WORK_REMAINING <= 0:
+                            return False
+                        break
+        except DirectoryCursorLost:
+            MAINTENANCE_WORK['tree'] = None
+            MAINTENANCE_WORK['eviction'] = fresh_eviction_state()
+            save_work_state(cache)
+            return False
+        if eviction['batchCount'] >= 128:
+            eviction['batchCount'] = 0
+            save_work_state(cache)
+            return True
+        eviction['namespace'] += 1
+        eviction['cursor'] = None
+        save_work_state(cache)
+    if MAINTENANCE_STOP:
+        return False
+    if eviction['namespace'] < 2:
+        return True
+    disk = shutil.disk_usage(cache)
+    garbage = MAINTENANCE_WORK['observedGarbage'] or 0
+    bound = max(0, min(disk.total // 10, eviction['bytes'] + garbage + disk.free - disk.total // 10))
+    eviction['known'].sort(key=lambda item: (not item[5], item[0]))
+    eviction['plan'] = {'index': 0, 'garbage': garbage, 'bound': bound, 'stage': 'select'}
+    save_work_state(cache)
+    return process_eviction_plan(cache, eviction)
 
 
 def maintain(cache, service=False):
-    global RECLAIM_CREDIT, MAINTENANCE_STOP
+    global RECLAIM_CREDIT, MAINTENANCE_STOP, MAINTENANCE_WORK, MAINTENANCE_WORK_REMAINING
     cache.mkdir(parents=True, exist_ok=True)
     # Stable across service replacement and independent of run scopes. A competing registration exits harmlessly.
     with (cache / '.maintenance.lock').open('a') as owner:
@@ -2603,34 +3201,85 @@ def maintain(cache, service=False):
         except BlockingIOError:
             return 0
         RECLAIM_CREDIT = 0
+        MAINTENANCE_STOP = False
+        MAINTENANCE_WORK_REMAINING = MAINTENANCE_WORK_BUDGET
         try:
-            previous = json.loads((cache / '.maintenance-status.json').read_text())
-            if previous.get('cache') == str(cache):
+            previous = bounded_json(cache / '.maintenance-status.json', MAINTENANCE_STATUS_LIMIT)
+            if valid_status_record(previous) and previous.get('cache') == str(cache):
                 MAINTENANCE_STATUS.update(previous)
+            elif not valid_status_record(previous):
+                maintenance_report(cache, force=True, state='error', phase='status-read',
+                                   measurementValid=False, error='invalid fixed-shape maintenance status')
         except FileNotFoundError:
             pass
-        except (OSError, ValueError, TypeError) as error:
-            maintenance_report(cache, force=True, state='error', measurementValid=False, error=str(error))
+        except (OSError, ValueError, TypeError, RecursionError) as error:
+            maintenance_report(cache, force=True, state='error', phase='status-read',
+                               measurementValid=False, error=error)
+        MAINTENANCE_WORK, state_error = load_work_state(cache)
+        if state_error:
+            maintenance_report(cache, force=True, state='error', phase='sweep-state-read',
+                               measurementValid=False, error=state_error)
+        MAINTENANCE_STATUS.pop('yieldReason', None)
         MAINTENANCE_STATUS.update(windowStartedAt=time.time(), pid=os.getpid(),
-                                  deletedBytes=0, deletedNodes=0, admittedBytes=0, measurementValid=False)
+                                  deletedBytes=0, deletedNodes=0, admittedBytes=0,
+                                  measurementValid=False, memoryHighWaterBytes=memory_high_water_bytes())
         if service and update_host_pressure(cache.parent / 'slots')[0]:
-            maintenance_report(cache, force=True, state='deferred', error=None)
+            maintenance_report(cache, force=True, state='deferred', phase=MAINTENANCE_WORK['phase'],
+                               error=None, measurementValid=False)
+            save_work_state(cache)
             return 0
         for number in [signal.SIGTERM, signal.SIGINT, signal.SIGHUP]:
             signal.signal(number, lambda *_: globals().__setitem__('MAINTENANCE_STOP', True))
+        if MAINTENANCE_WORK['phase'] == 'idle':
+            MAINTENANCE_WORK['phase'] = 'initial-observation'
+            MAINTENANCE_WORK['observation'] = None
+            MAINTENANCE_WORK['retirement'] = fresh_retirement_state()
         try:
-            observe_garbage(cache)
-            clean_garbage(cache)
-            resume_retirements(cache)
-            if not MAINTENANCE_STOP:
-                observe_garbage(cache)
-                evict_artifacts(cache)
-                observe_garbage(cache)
-                maintenance_report(cache, force=True, state='idle', error=None)
-            else:
-                maintenance_report(cache, force=True, state='stopped', measurementValid=False)
+            while work_available():
+                phase = MAINTENANCE_WORK['phase']
+                if phase == 'initial-observation':
+                    if not observe_garbage(cache):
+                        break
+                    MAINTENANCE_WORK['phase'] = 'clean-garbage'
+                elif phase == 'clean-garbage':
+                    if not clean_garbage(cache):
+                        break
+                    MAINTENANCE_WORK['phase'] = 'retirements'
+                elif phase == 'retirements':
+                    if not resume_retirements(cache):
+                        break
+                    MAINTENANCE_WORK['phase'] = 'pre-eviction-observation'
+                elif phase == 'pre-eviction-observation':
+                    if not observe_garbage(cache):
+                        break
+                    MAINTENANCE_WORK['phase'] = 'eviction'
+                elif phase == 'eviction':
+                    if not evict_artifacts(cache):
+                        break
+                    MAINTENANCE_WORK['phase'] = 'final-observation'
+                elif phase == 'final-observation':
+                    if not observe_garbage(cache):
+                        break
+                    MAINTENANCE_WORK['phase'] = 'idle'
+                    MAINTENANCE_STATUS.pop('yieldReason', None)
+                    maintenance_report(cache, force=True, state='idle', phase='complete',
+                                       measurementValid=True, error=None)
+                    save_work_state(cache)
+                elif phase == 'idle':
+                    break
+                save_work_state(cache)
+            if MAINTENANCE_STOP:
+                maintenance_report(cache, force=True, state='stopped', phase=MAINTENANCE_WORK['phase'],
+                                   measurementValid=False)
+            elif MAINTENANCE_WORK['phase'] != 'idle':
+                reason = 'memory-high-water' if memory_high_water_bytes() >= MAINTENANCE_SAFE_RSS_BYTES else 'work-budget'
+                maintenance_report(cache, force=True, state='yielded', phase=MAINTENANCE_WORK['phase'],
+                                   measurementValid=False, yieldReason=reason)
+            save_work_state(cache)
         except Exception as error:
-            maintenance_report(cache, force=True, state='error', measurementValid=False, error=str(error))
+            maintenance_report(cache, force=True, state='error', phase=MAINTENANCE_WORK['phase'],
+                               measurementValid=False, error=error)
+            save_work_state(cache)
             raise
     return 0
 

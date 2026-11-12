@@ -8410,7 +8410,7 @@ def install():`,
     await waitForOutput(holder, 'LOCKED\n');
     sweepArtifacts(fixture.directory, guarded);
     expect(entries.every(existsSync)).toBe(true); // A partial accounting batch cannot claim completion.
-    expect(JSON.parse(readFileSync(join(cache, '.sweep-state.json'), 'utf8')).cookie).not.toBe(0);
+    expect(JSON.parse(readFileSync(join(cache, '.sweep-state.json'), 'utf8')).eviction.cursor).not.toBeNull();
     let last = '';
     for (let tick = 0; tick < 100 && entries.slice(1).some(existsSync); tick++) {
       last = sweepArtifacts(fixture.directory, guarded).stderr;
@@ -8666,6 +8666,76 @@ test('sparse logical bytes and legacy hardlinks do not create reclamation credit
   const probe = '\ndef evict_artifacts(cache):\n    assert RECLAIM_CREDIT == 0\n';
   sweepArtifacts(fixture.directory, dependencyPreparationProgram.replace('def install():', probe + '\ndef install():'));
   expect(readFileSync(retained, 'utf8')).toHaveLength(8192);
+});
+
+test('large artifact measurements yield at a fixed work budget and resume before retirement', () => {
+  const fixture = preparationFixture();
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  const key = 'e'.repeat(64);
+  const entry = join(cache, key);
+  mkdirSync(entry, { recursive: true });
+  for (let index = 0; index < 256; index++) writeFileSync(join(entry, `payload-${index}`), 'legacy');
+  writeFileSync(entry + '.invalid', '');
+  const bounded = dependencyPreparationProgram.replace(
+    'MAINTENANCE_WORK_BUDGET = 8192',
+    'MAINTENANCE_WORK_BUDGET = 128',
+  );
+
+  sweepArtifacts(fixture.directory, bounded);
+  const firstState = JSON.parse(readFileSync(join(cache, '.sweep-state.json'), 'utf8'));
+  const firstStatus = JSON.parse(readFileSync(join(cache, '.maintenance-status.json'), 'utf8'));
+  expect(firstState.tree?.root).toBe(key);
+  expect(firstStatus.measurementValid).toBe(false);
+  expect(firstStatus.memoryHighWaterBytes).toBeGreaterThan(0);
+
+  for (let pass = 0; pass < 80 && existsSync(entry); pass++) sweepArtifacts(fixture.directory, bounded);
+  expect(existsSync(entry)).toBe(false);
+  expect(existsSync(entry + '.retiring')).toBe(false);
+  expect(JSON.parse(readFileSync(join(cache, '.maintenance-status.json'), 'utf8')).measurementValid).toBe(true);
+});
+
+test('a new maintenance cycle discovers tombstones after the prior namespace scan completed', () => {
+  const fixture = preparationFixture();
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  sweepArtifacts(fixture.directory);
+
+  const key = 'c'.repeat(64);
+  const entry = join(cache, key);
+  mkdirSync(entry);
+  writeFileSync(join(entry, 'payload'), 'retired');
+  const marker = spawnSync(
+    'python3',
+    [
+      '-c',
+      "import json,os,sys; p=sys.argv[1]; s=os.stat(p); open(p+'.retiring','w').write(json.dumps([s.st_mtime_ns,s.st_dev,s.st_ino]))",
+      entry,
+    ],
+    { encoding: 'utf8' },
+  );
+  expect(marker.status, marker.stderr).toBe(0);
+
+  sweepArtifacts(fixture.directory);
+  expect(existsSync(entry)).toBe(false);
+  expect(existsSync(entry + '.retiring')).toBe(false);
+});
+
+test('oversized maintenance records and malformed retirement markers stay bounded and cannot authorize deletion', () => {
+  const fixture = preparationFixture();
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  const key = 'd'.repeat(64);
+  const entry = join(cache, key);
+  mkdirSync(entry, { recursive: true });
+  writeFileSync(join(entry, 'payload'), 'retain');
+  writeFileSync(entry + '.retiring', 'x'.repeat(1024));
+  writeFileSync(join(cache, '.maintenance-status.json'), 'x'.repeat(70 * 1024));
+  writeFileSync(join(cache, '.sweep-state.json'), 'x'.repeat(600 * 1024));
+
+  const result = spawnSync('python3', ['-c', dependencyPreparationProgram, 'sweep', cache], { encoding: 'utf8' });
+  expect(result.status).toBe(70);
+  expect(existsSync(entry)).toBe(true);
+  const status = JSON.parse(readFileSync(join(cache, '.maintenance-status.json'), 'utf8'));
+  expect(status.state).toBe('error');
+  expect(status.error.length).toBeLessThanOrEqual(512);
 });
 
 test('idle service reports physical garbage alarm and recovery and continues without completed checks', async () => {

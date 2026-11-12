@@ -895,8 +895,12 @@ remain separate questions for the existing compiler/health chain; this cohort su
    `.maintenance.lock` admits one owner, including manual sweeps; shutdown cooperates between filesystem operations,
    with a 15-second systemd stop timeout and whole-control-group teardown. Interrupted deletion restarts from the
    remaining namespace, without a recursive call stack or one descriptor per tree depth. Symlinks are unlinked.
-   Namespace discovery still pages through 128 records per pass using directory cookies. Physical entry measurement
-   streams in the background; neither measurement nor recursive deletion holds a global cache or preparation lock.
+   Each run spends at most 8,192 tree or namespace work units. Namespace discovery pages through 128 records using
+   validated entry names; tree measurements checkpoint relative path components, entry names and inode metadata in
+   `.sweep-state.json`. A restart locates the saved name in a newly opened stream instead of reusing a directory
+   cookie. Tree work opens one no-follow directory stream at a time, and deletion resumes from entries already
+   removed. A partial measurement remains invalid and cannot authorize detachment. Physical entry measurement streams
+   in the background; neither measurement nor deletion holds a global cache or preparation lock.
    Stable per-key locks, inode and last-use revalidation protect active or newly reused/replaced entries. Cache copies
    remain private to each run. Unknown/malformed legacy sizes receive the same physical measurement as other entries.
 
@@ -918,11 +922,14 @@ remain separate questions for the existing compiler/health chain; this cohort su
    Garbage above **5% of the containing filesystem's total capacity** logs `ALARM garbage exceeds 5%` with host,
    cache path, measured bytes, total bytes and threshold. `.maintenance-status.json` and the systemd journal expose
    physical garbage, fraction, attached samples, total measured cache storage, bytes/nodes deleted, admitted bytes,
-   credit and timestamps. Progress emits at most every five seconds between operations; measurement, transitions and
-   errors also emit. Attached samples span a paged pass and are timestamped separately. Traversal uses bounded memory
-   and runs only in the idle-priority service, never in checks. An incomplete/failed observation has
-   `measurementValid=false`; it retains the previous alarm. Only a valid observation strictly below threshold clears
-   it. An absent status or `updatedAt` older than 120 seconds is unhealthy, including a blocked deletion syscall;
+   credit, current phase, memory high-water and timestamps. Status, sweep state and retirement markers are read with
+   byte limits and fixed-shape validation; diagnostic strings are capped. The limits are 64 KiB for status, 512 KiB
+   for sweep state and 512 bytes for each retirement marker. Progress emits at most every five seconds between
+   operations; measurement, transitions and errors also emit. Attached samples span a paged pass and are timestamped
+   separately. Traversal uses bounded memory and runs only in the idle-priority service, never in checks. An
+   incomplete/failed observation has `measurementValid=false`; it retains the previous alarm. Only a valid
+   observation strictly below threshold clears it. An absent status or `updatedAt` older than 120 seconds is
+   unhealthy, including a blocked deletion syscall;
    `observedAt` records the last complete garbage measurement. A live deletion can retain an old observation while
    reporting progress. Use the commands below to distinguish a draining backlog from a stale or failed service.
    Preparation failure returns infrastructure status 70, writes `preparation-status.json` and `exit-status`, and streams a
@@ -1089,6 +1096,12 @@ memory lease is needed.
 
 ### Dependency garbage maintenance operations
 
+Decision: maintenance keeps an atomic schema-4 work record in the cache owner area, resumes namespace and tree scans
+with validated entry names rather than directory cookies, and spends a fixed node budget per service run. Traversal
+opens one no-follow directory stream at a time. Partial tree measurements remain invalid and cannot authorize
+detachment; deletion resumes from the remaining tree. Status, sweep state and retirement markers are read with byte
+limits and fixed-shape validation, and diagnostic strings are capped.
+
 The supermanager deploys this repair after coordinating the maintainer's manual cleanup. These commands do not
 remove garbage or touch check scopes. Run from the reviewed checkout; `a` and `b` below are the configured SSH
 endpoints, and include `c` in the loop only when configured. The explicit stop replaces the old transient timer and
@@ -1112,7 +1125,12 @@ Restart resets credit to zero and resumes tombstones and remaining garbage. Insp
 ssh a 'sudo systemctl status rezics-check-cache-registration.service rezics-check-cache-maintenance.service --no-pager; sudo journalctl -u rezics-check-cache-registration.service -u rezics-check-cache-maintenance.service --since "10 minutes ago" --no-pager; python3 -' <<'PYTHON'
 import json, time
 from pathlib import Path
-status = json.loads(Path("/srv/rezics-check/dependency-artifacts/.maintenance-status.json").read_text())
+status_path = Path("/srv/rezics-check/dependency-artifacts/.maintenance-status.json")
+with status_path.open("rb") as source:
+    raw = source.read(65537)
+if len(raw) > 65536:
+    raise ValueError("maintenance status exceeds 65536 bytes")
+status = json.loads(raw)
 print(json.dumps(status, indent=2))
 unhealthy = (time.time() - status["updatedAt"] > 120 or bool(status.get("error"))
              or not status.get("measurementValid") or bool(status.get("alarm")))
