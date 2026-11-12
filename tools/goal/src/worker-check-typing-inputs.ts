@@ -441,19 +441,28 @@ function stableSource(started: TypingInputs, completed: TypingInputs, outputs: r
 /** Capture every admitted physical command, including workspace runners predating compiler receipt support. */
 export function typingInputCommand(command: readonly string[]): string[] {
   // Carry the current standalone capture implementation through argv: old frozen worktrees need no source rewrite.
-  const captureModule = `data:text/typescript;base64,${Buffer.from(readFileSync(import.meta.path)).toString('base64')}`;
+  // Keep each transferred argument under remote custody's 4096-character bound.
+  const payload = Buffer.from(
+    JSON.stringify({
+      captureModule: readFileSync(import.meta.path).toString('base64'),
+      command,
+    }),
+  ).toString('base64');
+  const payloadChunks = payload.match(/.{1,3000}/g) ?? [];
   return [
     'bun',
     '-e',
     `
+const payload = process.argv.slice(1).join('');
+const { captureModule, command } = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
 let complete;
 let readReceipt;
 try {
-  const inputs = await import(${JSON.stringify(captureModule)});
+  const inputs = await import('data:text/typescript;base64,' + captureModule);
   readReceipt = inputs.readTypingInputReceipt;
-  complete = inputs.beginTypingInputReceipt(process.cwd(), process.env, ${JSON.stringify(command)});
+  complete = inputs.beginTypingInputReceipt(process.cwd(), process.env, command);
 } catch (error) { console.error('typing inputs unavailable before compilation: ' + error); }
-const child = Bun.spawn(${JSON.stringify(command)}, { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+const child = Bun.spawn(command, { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal));
 const code = await child.exited;
 try {
@@ -463,6 +472,8 @@ try {
 } catch (error) { console.error('typing inputs unavailable after compilation: ' + error); }
 process.exit(code);
 `,
+    '--',
+    ...payloadChunks,
   ];
 }
 

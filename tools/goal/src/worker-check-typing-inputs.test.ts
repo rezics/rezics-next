@@ -170,10 +170,12 @@ test.each(['local', 'remote-return'] as const)(
       PATH: `${dirname(process.execPath)}:${process.env.PATH}`,
       REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(workspaceCommand)).toString('base64'),
     };
+    const captureCommand = typingInputCommand(workspaceCommand);
+    expect(captureCommand.every((argument) => argument.length <= 4096)).toBe(true);
     // The exact old entrypoint succeeds without producing the artifact demanded by the wrapper.
     expect(Bun.spawnSync(workspaceCommand, { cwd: root, env: { ...process.env, ...request } }).exitCode).toBe(0);
     expect(readTypingInputReceipt(root, physical, workspaceCommand)).toBeUndefined();
-    const result = Bun.spawnSync([process.execPath, ...typingInputCommand(workspaceCommand).slice(1)], {
+    const result = Bun.spawnSync([process.execPath, ...captureCommand.slice(1)], {
       cwd: root,
       env: { ...process.env, ...request },
     });
