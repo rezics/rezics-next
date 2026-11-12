@@ -363,7 +363,7 @@ export type PageDataFlowRun = {
   sections: Partial<Record<PageDataClass, PageDataReportSection[]>>;
   repairs?: PageDataRepairReport[];
   coverage?: { status: 'incomplete' };
-  seed?: { status: 'publication-incomplete'; omissions: number };
+  seed?: { status: 'publication-incomplete'; omissions: number } | { status: 'admission-deferred' };
   failure?: { phase: 'boot' | 'check'; firstErrorLine: string };
 };
 
@@ -378,7 +378,7 @@ export function pageDataFlowRuns(
       head?: string;
       classes?: Partial<Record<PageDataClass, number>>;
       coverage?: { status: 'incomplete' };
-      seed?: { status: 'publication-incomplete'; omissions: number };
+      seed?: { status: 'publication-incomplete'; omissions: number } | { status: 'admission-deferred' };
     };
     const sections: Partial<Record<PageDataClass, PageDataReportSection[]>> = {};
     for (const row of pageEvents.filter(
@@ -442,7 +442,9 @@ export function formatPageDataFlowRuns(runs: readonly PageDataFlowRun[]): string
       return [`Page-data ${run.failure.phase} failure at ${run.at} (${run.head}): ${run.failure.firstErrorLine}`];
     const counts = PAGE_DATA_CLASSES.map((className) => `${className}=${run.classes[className] ?? 0}`).join(' ');
     const coverage = run.coverage ? '; coverage=incomplete' : '';
-    const seed = run.seed ? `; seed=${run.seed.status} omissions=${run.seed.omissions}` : '';
+    const seed = run.seed
+      ? `; seed=${run.seed.status}${'omissions' in run.seed ? ` omissions=${run.seed.omissions}` : ''}`
+      : '';
     return [
       `Page-data run at ${run.at} (${run.head}): ${counts}${coverage}${seed}.`,
       ...(run.repairs ?? []).map(

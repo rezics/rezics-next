@@ -1812,12 +1812,12 @@ and teardown reason. Observed config output proves only that stage was reached; 
 A later teardown error stays in the transcript without replacing the pre-teardown cause. Content owns Web stage
 instrumentation and startup repair; page-data owns child/readiness capture. Logs and notices redact recognized credentials.
 
-Decision: a page-data seed with the seed owner's versioned publication-incomplete handoff runs route checks on the
-same stack and records its incomplete status and omission count in the page-data run. Only the exact current result
-path, matching artifact SHA-256 and exit code 1 are admitted; the seed command remains strict. A partial run does not
-create the seeded marker, so the next cycle retries. Partial reuse stays unavailable until existing stack owners
-expose the actual dedicated PostgreSQL generation and a cheap exact identity for every locally selected seed input;
-URL-derived database identity, mtimes and artifact path or digest alone cannot authorize reuse.
+Decision: admit the seed owner's versioned publication-incomplete handoff only for its exact current result path,
+matching SHA-256 and exit 1; keep the command strict, continue route checks on the same stack and record omissions.
+When the existing capacity brake pauses, terminate only the owned cross-media seed group with SIGTERM and its
+existing grace period, record `admission-deferred`, preserve the stack and journal, continue page checks, and retry at
+next two-hour due cycle. Defer SEED repair routing for that run. Partial reuse still requires exact dedicated
+database generation and selected-input identity; URL, mtime and artifact digest alone are insufficient.
 
 Decision: isolate each page-data prerequisite at its owning boundary. A member browser setup failure leaves anonymous
 readers, SQL counts and independently token-authorized member native reads running on the same owned browser/stack.

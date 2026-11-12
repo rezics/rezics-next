@@ -10,6 +10,7 @@ import { openDb } from './db.ts';
 import { flowReport, formatPageDataFlowRuns, readFlow } from './flow.ts';
 import { WorkerJob } from './job.ts';
 import { routePageDataRepair } from './config.ts';
+import { verifyDev } from './dev-verifier.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import {
   waitForStack,
@@ -21,6 +22,7 @@ import {
   parsePageDataOutput,
   parsePageDataCompletion,
   pageDataSeedStatus,
+  pageDataSeedAdmission,
   pageDataCheckScopeArguments,
   pageDataCheckScopeUnit,
   PageDataStackError,
@@ -36,10 +38,11 @@ import {
   dependencyFilesChanged,
   reconcileDedicatedPageDataDefinitions,
   runPageDataSeedBoundary,
+  runPageDataSeedWithAdmission,
 } from './page-data.ts';
-import type { Settings, Task } from './types.ts';
+import type { DevVerifierRun, Settings, Task } from './types.ts';
 import { harness } from './test-support.ts';
-import { readControlPolicy } from './policy.ts';
+import { defaultPolicy, readControlPolicy } from './policy.ts';
 import { CHECK_SLICE, WORKER_SCOPE_MEMORY_MAX } from './worker-slice.ts';
 
 const roots: string[] = [];
@@ -287,6 +290,124 @@ test('the policy interval, defect transition, section output and per-run report 
     });
     expect(formatPageDataFlowRuns(pageDataRuns).join('\n')).toContain('API (1): home/anonymous/feed');
   } finally {
+    h.db.close();
+  }
+});
+
+test('admission pressure yields only the page-data seed and resumes its journal at the next due verifier cycle', async () => {
+  const h = fixture();
+  const db = openDb(':memory:');
+  try {
+    const pressureFile = join(h.settings.stateDirectory, 'capacity-pressure.json');
+    writeFileSync(pressureFile, JSON.stringify({ paused: false }));
+    h.settings.policy = {
+      ...defaultPolicy,
+      pageData: { ...defaultPolicy.pageData, intervalMs: 25 },
+      verifier: { ...defaultPolicy.verifier, roundIntervalMs: 1 },
+    };
+    h.settings.verifierChecks = [{ paths: ['services/kernel/**'], command: ['native-check'] }];
+
+    const runs = new Map<string, DevVerifierRun>();
+    const verifierStore = {
+      tasks: () => [],
+      devVerifierRun: (key: string) => runs.get(key),
+      devVerifierLatestRound: () => [...runs.values()].reverse().find((run) => run.round),
+      saveDevVerifierRun: (run: DevVerifierRun) => void runs.set(run.key, run),
+    } as unknown as Parameters<typeof verifyDev>[0]['store'];
+    const firstNative = Promise.withResolvers<void>();
+    const nextNative = Promise.withResolvers<void>();
+    const firstSeed = Promise.withResolvers<void>();
+    const nextSeed = Promise.withResolvers<void>();
+    const admission = pageDataSeedAdmission(h.settings.stateDirectory);
+    const interval = h.settings.policy!.pageData.intervalMs;
+    let now = new Date('2026-11-12T00:00:00.000Z');
+    let pageRun = 0;
+    let journal = '';
+    let seeded = false;
+    const registry = h.registry;
+    const pageData = {
+      settings: h.settings,
+      db,
+      tasks: verifierStore,
+      inbox: { deliver() {} },
+      now: () => now,
+      routeDefect: async () => 'dispatched' as const,
+      runStack: async (_head: string, invocation: string) => {
+        const cycle = ++pageRun;
+        const execution = await runPageDataSeedWithAdmission(admission, async (signal) => {
+          if (seeded) return { status: 'completed', value: undefined };
+          if (!journal) journal = 'retained-tag-parent-checkpoint';
+          if (cycle === 1) {
+            firstSeed.resolve();
+            await new Promise<void>((resolve, reject) => {
+              const timeout = setTimeout(() => reject(new Error('admission pressure did not reach page-data seed')), 2000);
+              signal.addEventListener(
+                'abort',
+                () => {
+                  clearTimeout(timeout);
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+            return { status: 'admission-deferred' };
+          }
+          expect(journal).toBe('retained-tag-parent-checkpoint');
+          nextSeed.resolve();
+          await nextNative.promise;
+          journal = 'published-tag-parent-checkpoint';
+          seeded = true;
+          return { status: 'completed', value: undefined };
+        });
+        return {
+          output: completed(invocation, 'home anonymous feed DATA\n'),
+          exitCode: 0,
+          registry,
+          ...(execution.status === 'admission-deferred' ? { seed: { status: execution.status } } : {}),
+        };
+      },
+    };
+    const runVerifier = () =>
+      verifyDev({
+        settings: h.settings,
+        store: verifierStore,
+        runPageData: async () => expect(await runPageDataCycle(pageData)).toBe('ran'),
+        runGate: async () => {
+          if (pageRun === 1) firstNative.resolve();
+          if (pageRun === 2) nextNative.resolve();
+          return { passed: true, output: '', timedOut: false };
+        },
+      });
+
+    const firstCycle = runVerifier();
+    await firstSeed.promise;
+    await firstNative.promise;
+    writeFileSync(pressureFile, JSON.stringify({ paused: true }));
+    await firstCycle;
+    const deferred = readLatestPageDataRun(db)!;
+    expect(deferred).toMatchObject({
+      seed: { status: 'admission-deferred' },
+      sections: [{ page: 'home', persona: 'anonymous', section: 'feed', class: 'DATA' }],
+    });
+    expect(journal).toBe('retained-tag-parent-checkpoint');
+    expect(formatPageDataFlowRuns(flowReport(readFlow(db), [], Date.parse(deferred.at)).pageDataRuns).join('\n'))
+      .toContain('seed=admission-deferred');
+
+    now = new Date(Date.parse(deferred.at) + interval);
+    writeFileSync(pressureFile, JSON.stringify({ paused: false }));
+    mkdirSync(join(h.root, 'repo/services/kernel'), { recursive: true });
+    writeFileSync(join(h.root, 'repo/services/kernel/resume.ts'), 'export const resumed = true;\n');
+    h.git('add', 'services/kernel/resume.ts');
+    h.git('commit', '-m', 'Advance verifier head for resumed seed');
+
+    const nextCycle = runVerifier();
+    await nextSeed.promise;
+    await nextNative.promise;
+    await nextCycle;
+    expect(journal).toBe('published-tag-parent-checkpoint');
+    expect(readLatestPageDataRun(db)?.seed).toBeUndefined();
+  } finally {
+    db.close();
     h.db.close();
   }
 });
