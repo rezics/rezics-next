@@ -370,7 +370,7 @@ export const changeKnowledgeLifecycleRequest = createServerFn({ method: 'POST' }
       throw new Error('Invalid Knowledge lifecycle command');
     return {
       address: address(value.address),
-      action: value.action,
+      action: value.action as 'trash' | 'restore',
       expectedStructureRevisionId: boundedId(value.expectedStructureRevisionId, 'structure revision'),
       expectedGeneration: value.expectedGeneration,
       binding: commandBinding(value),

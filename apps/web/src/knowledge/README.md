@@ -15,6 +15,8 @@ Lifecycle mutations compare both the observed notebook structure revision and li
 private editor's session-bound encrypted credential, CSRF header and native idempotency key. Retrying an uncertain
 operation preserves the complete reviewed intent, including its original key and credential. A definite conflict
 discards that intent and rereads the lifecycle before another review. Permission or session loss retires the visit.
+The lifecycle controls check their exact native operation names in the existing viewer-bound exposure query;
+missing operation admission keeps each control unavailable independently.
 
 The native command decides leaf eligibility. `complete: false` with `subtree_work_required` is displayed as no
 completed change. This route does not traverse or mutate a subtree and does not provide a trash inventory.
