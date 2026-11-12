@@ -576,7 +576,7 @@ fields listed below; the empty policy object deliberately provides no account po
 | `configDirectory`       | Becomes `CODEX_HOME`, `GROK_HOME`, `CURSOR_CONFIG_DIR` or `CLAUDE_CONFIG_DIR`.                                                              |
 | `allowanceKey`          | Pools and CLI aliases sharing quota must use the same local key.                                                                            |
 | `usageFile`             | Optional normalized `PoolReading` JSON for providers without Codex rollout quota events.                                                    |
-| `policy.weight`         | Required positive number for static fallback ordering and ties between reset-pressure scores.                                                |
+| `policy.weight`         | Required positive number for static fallback ordering and ties between reset-pressure scores.                                               |
 | `policy.reservePercent` | Required number from zero up to, but excluding, 100.                                                                                        |
 | `policy.allowUnknown`   | Required boolean: whether dispatch may proceed without fresh quota observations.                                                            |
 | `policy.maxAgeMs`       | Required positive observation lifetime in milliseconds.                                                                                     |
