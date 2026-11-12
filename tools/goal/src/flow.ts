@@ -1141,9 +1141,9 @@ export function dispatchDailyStepAudit(
 ): Task | null {
   // Host ticks call this repeatedly. Avoid taking SQLite's writer lock just to recheck an unchanged schema.
   const latest = flowMigrations[flowMigrations.length - 1]!.version;
-  const current = db
-    .query('SELECT MAX(version) AS version FROM schema_migrations WHERE module = ?')
-    .get('flow') as { version: number | null };
+  const current = db.query('SELECT MAX(version) AS version FROM schema_migrations WHERE module = ?').get('flow') as {
+    version: number | null;
+  };
   if ((current.version ?? 0) < latest) ensureFlow(db);
   const day = now.toISOString().slice(0, 10);
   // A synchronous outbox delivery and its acknowledgement share the inbox's SQLite transaction.

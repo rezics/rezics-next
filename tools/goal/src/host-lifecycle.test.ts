@@ -514,9 +514,9 @@ exit 0
     writer = spawn(process.execPath, [lockScript], { env: f.env, stdio: 'ignore' });
     await waitForFlag(locked, writer, 'database lock');
     const started = performance.now();
-    await expect(hostRequest(join(f.path, 'manager.sock'), { command: 'decision', manager: 'absent' }, 1000)).rejects.toThrow(
-      'Unknown manager',
-    );
+    await expect(
+      hostRequest(join(f.path, 'manager.sock'), { command: 'decision', manager: 'absent' }, 1000),
+    ).rejects.toThrow('Unknown manager');
     expect(performance.now() - started).toBeLessThan(500);
     await waitForFlag(heartbeat, host.child, 'watchdog ping');
     expect(existsSync(released)).toBe(false);
