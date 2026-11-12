@@ -60,6 +60,8 @@ Decision: ordinary product worker-check commands typecheck changed workspaces be
 
 Decision: remote run custody admission and updates use the reader's 64 KiB serialized JSON character limit; initial admission reserves 12 KiB for host and terminal transitions. Generated typing commands retain their existing 3,000-character argv chunks and exact argument boundaries. Tests separately pin per-argument binding rejection, aggregate serialized-record rejection, and terminal retention of the canonical binding, including compressed argv, hosts file and returns.
 
+Decision: per-physical remote checks publish native receipts and settlement details once as immutable evidence artifacts keyed by logical check, physical generation, host/run and SHA-256; bounded custody and result records retain byte-counted references and verify identity and content before accepting a verdict. Settlement references omit the native receipt and terminal cleanup remains separately recorded. Version-1 inline records remain readable.
+
 Decision: the worker owns and completes the private-follow host fixture, Auth-persona served journey, and 64/512/4096
 fixed-neighborhood growth measurement case in the feature worktree. Capability promotion still waits for the installed
 controller-owned native/browser run after integration; the worker's minimal check covers changed-workspace typing

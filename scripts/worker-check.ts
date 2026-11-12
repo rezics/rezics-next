@@ -103,6 +103,8 @@ import {
   validateOwnership,
   validateRunnerIdentity,
   initializeRemoteRunCustody,
+  publishRemoteRunEvidence,
+  readRemoteRunEvidence,
   validatedRegistryDirectory,
   withCheckFence,
   writeAtomicJson,
@@ -111,6 +113,8 @@ import {
   type CheckOwnership,
   type CheckRegistration,
   type CheckRemoteRunCustody,
+  type CheckRemoteEvidenceReference,
+  type CheckRemoteEvidenceIdentity,
   type RunnerIdentity,
   registrationIsPresent,
   publishCheckRegistration,
@@ -199,6 +203,7 @@ export type CheckRecord = {
   reruns?: number;
   infrastructureFailureFinal?: boolean;
   physicalRun?: RemotePhysicalRunReceipt;
+  physicalRunReference?: CheckRemoteEvidenceReference;
 };
 
 type CheckRecordRunnerFields =
@@ -207,7 +212,8 @@ type CheckRecordRunnerFields =
   | 'runnerHost'
   | 'exitCode'
   | 'infrastructureFailureFinal'
-  | 'physicalRun';
+  | 'physicalRun'
+  | 'physicalRunReference';
 
 function clearRunnerHead(record: CheckRecord): Omit<CheckRecord, CheckRecordRunnerFields> {
   const {
@@ -217,6 +223,7 @@ function clearRunnerHead(record: CheckRecord): Omit<CheckRecord, CheckRecordRunn
     exitCode: _exitCode,
     infrastructureFailureFinal: _infrastructureFailureFinal,
     physicalRun: _physicalRun,
+    physicalRunReference: _physicalRunReference,
     ...head
   } = record;
   return head;
@@ -396,7 +403,51 @@ function readRecord(cwd: string, id: string): CheckRecord {
 
 function writeRecord(record: CheckRecord): void {
   const file = recordPath(record.cwd, record.id);
-  writeAtomicJson(file, record);
+  if (record.physicalRun === undefined) {
+    writeAtomicJson(file, record);
+    return;
+  }
+  if (!record.physicalRunId) throw new Error('worker-check: remote result has no physical run identity');
+  const custodyFile = remoteRunCustodyPath(record.cwd, record.physicalRunId);
+  const identity = {
+    checkId: record.id,
+    physicalRunId: record.physicalRunId,
+    host: record.physicalRun.host,
+    run: record.physicalRun.run,
+  } satisfies CheckRemoteEvidenceIdentity;
+  let reference = record.physicalRunReference;
+  if (reference !== undefined) {
+    const existing = readRemoteRunEvidence<RemotePhysicalRunReceipt>(custodyFile, reference, identity, 'native');
+    if (!existing || JSON.stringify(existing) !== JSON.stringify(record.physicalRun))
+      throw new Error('worker-check: existing remote result evidence is unavailable or conflicting');
+  } else {
+    reference = publishRemoteRunEvidence(custodyFile, identity, 'native', record.physicalRun);
+  }
+  const { physicalRun: _physicalRun, ...head } = record;
+  writeAtomicJson(file, { ...head, physicalRunReference: reference });
+}
+
+function readRecordPhysicalRun(record: CheckRecord, root: string): RemotePhysicalRunReceipt | undefined {
+  if (record.physicalRunReference === undefined) return record.physicalRun;
+  const reference = record.physicalRunReference;
+  if (
+    !record.physicalRunId ||
+    reference.kind !== 'native' ||
+    reference.checkId !== record.id ||
+    reference.physicalRunId !== record.physicalRunId
+  )
+    return undefined;
+  return readRemoteRunEvidence<RemotePhysicalRunReceipt>(
+    remoteRunCustodyPath(root, record.physicalRunId),
+    reference,
+    {
+      checkId: record.id,
+      physicalRunId: record.physicalRunId,
+      host: reference.host,
+      run: reference.run,
+    },
+    'native',
+  );
 }
 
 function sameOwnership(left: CheckOwnership | undefined, right: CheckOwnership | undefined): boolean {
@@ -2537,7 +2588,10 @@ export function startWorkerCheck(
 }
 
 export function readWorkerCheckRecord(id: string, cwd = process.cwd()): CheckRecord {
-  return readRecord(resolve(cwd), id);
+  const root = resolve(cwd);
+  const record = readRecord(root, id);
+  const physicalRun = readRecordPhysicalRun(record, root);
+  return physicalRun === undefined ? record : { ...record, physicalRun };
 }
 
 /** Observe an already-finished incarnation. No signal, restart, capacity release or inferred missing-PID proof. */
@@ -2598,20 +2652,20 @@ export function readWorkerCheckCancellation(id: string, cwd = process.cwd()): Ch
   return checkCancelled(resolve(cwd), id);
 }
 
-function remoteSettlementProvesWrapperExit(
-  value: unknown,
-  receipt: RemotePhysicalRunReceipt,
-): value is RemoteCheckSettlement {
+function remoteSettlementProvesWrapperExit(value: unknown, receipt: RemotePhysicalRunReceipt): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const settlement = value as Record<string, unknown>;
+  const keys = Object.keys(settlement).sort().join(',');
+  const legacyKeys = 'cleanup,host,native,preparedInputs,returns,run,schema,transportChildReaped';
+  const normalizedKeys = 'cleanup,host,preparedInputs,returns,run,schema,transportChildReaped';
   if (
-    Object.keys(settlement).sort().join(',') !==
-      'cleanup,host,native,preparedInputs,returns,run,schema,transportChildReaped' ||
+    (keys !== legacyKeys && keys !== normalizedKeys) ||
     settlement.schema !== 1 ||
     settlement.host !== receipt.host ||
     settlement.run !== receipt.run ||
     settlement.transportChildReaped !== true ||
-    JSON.stringify(parseRemotePhysicalRunReceipt(settlement.native)) !== JSON.stringify(receipt)
+    (Object.hasOwn(settlement, 'native') &&
+      JSON.stringify(parseRemotePhysicalRunReceipt(settlement.native)) !== JSON.stringify(receipt))
   )
     return false;
   const returns = settlement.returns as Record<string, unknown> | null;
@@ -2641,6 +2695,80 @@ function remoteSettlementProvesWrapperExit(
   );
 }
 
+function remoteAttemptNative(
+  custodyFile: string,
+  custody: CheckRemoteRunCustody,
+  checkId: string,
+  attempt: CheckRemoteRunCustody['attempts'][number],
+): unknown {
+  if (attempt.nativeReference === undefined) return attempt.native;
+  return readRemoteRunEvidence(
+    custodyFile,
+    attempt.nativeReference,
+    { checkId, physicalRunId: custody.physicalRunId, host: attempt.host, run: attempt.id },
+    'native',
+  );
+}
+
+function remoteAttemptSettlement(
+  custodyFile: string,
+  custody: CheckRemoteRunCustody,
+  checkId: string,
+  attempt: CheckRemoteRunCustody['attempts'][number],
+): unknown {
+  if (attempt.settlementReference === undefined) return attempt.settlement;
+  if (attempt.cleanup === undefined) return undefined;
+  const evidence = readRemoteRunEvidence<Omit<RemoteCheckSettlement, 'native' | 'cleanup'>>(
+    custodyFile,
+    attempt.settlementReference,
+    { checkId, physicalRunId: custody.physicalRunId, host: attempt.host, run: attempt.id },
+    'settlement',
+  );
+  if (!evidence) return undefined;
+  const native = remoteAttemptNative(custodyFile, custody, checkId, attempt);
+  return { ...evidence, native: native ?? null, cleanup: attempt.cleanup };
+}
+
+function retainedRemotePhysicalReceipt(
+  record: CheckRecord,
+  root: string,
+  custody: CheckRemoteRunCustody | undefined,
+): RemotePhysicalRunReceipt | undefined {
+  if (!record.physicalRunReference || !record.physicalRunId) return undefined;
+  const custodyFile = remoteRunCustodyPath(root, record.physicalRunId);
+  const physical = readPhysicalRecord(root, record.id, record.physicalRunId);
+  if (
+    !physical ||
+    !matchingRemoteCustody(record, physical, custody) ||
+    custody.status !== 'terminal' ||
+    custody.attempts.some((attempt) => attempt.status !== 'terminal' && attempt.status !== 'not-started')
+  )
+    return undefined;
+  const completed = custody.attempts.filter((attempt) => attempt.status === 'terminal');
+  if (completed.length !== 1) return undefined;
+  const attempt = completed[0]!;
+  if (
+    record.physicalRunReference.checkId !== record.id ||
+    record.physicalRunReference.physicalRunId !== record.physicalRunId ||
+    attempt.host !== record.physicalRunReference.host ||
+    attempt.id !== record.physicalRunReference.run ||
+    (attempt.nativeReference !== undefined &&
+      JSON.stringify(attempt.nativeReference) !== JSON.stringify(record.physicalRunReference))
+  )
+    return undefined;
+  const receipt = parseRemotePhysicalRunReceipt(remoteAttemptNative(custodyFile, custody, record.id, attempt));
+  const settlement = remoteAttemptSettlement(custodyFile, custody, record.id, attempt);
+  if (
+    !receipt ||
+    !settlement ||
+    !remoteSettlementProvesWrapperExit(settlement, receipt) ||
+    (record.exitCode !== undefined && record.exitCode !== receipt.exitCode) ||
+    (physical.exitCode !== undefined && physical.exitCode !== receipt.exitCode)
+  )
+    return undefined;
+  return receipt;
+}
+
 function matchingRemoteCustody(
   record: CheckRecord,
   physical: CheckPhysicalRecord,
@@ -2668,7 +2796,9 @@ async function reconcileRetainedRemoteResult(record: CheckRecord, root: string, 
   const hostsFile = binding.hostsFile;
   if (!hostsFile) return false;
   const unresolved = custody.attempts.filter(
-    (attempt) => attempt.status === 'running' || (attempt.status === 'terminal' && attempt.settlement === undefined),
+    (attempt) =>
+      attempt.status === 'running' ||
+      (attempt.status === 'terminal' && attempt.settlement === undefined && attempt.settlementReference === undefined),
   );
   if (unresolved.length !== 1) return false;
   const attempt = unresolved[0]!;
@@ -2697,12 +2827,27 @@ async function reconcileRetainedRemoteResult(record: CheckRecord, root: string, 
       const attempts = [...latestCustody.attempts];
       const prior = attempts[index]!;
       if (prior.status !== 'running' && prior.status !== 'terminal') return;
-      if (prior.native !== undefined && JSON.stringify(prior.native) !== JSON.stringify(settlement.native)) return;
+      const identity = {
+        checkId: id,
+        physicalRunId: record.physicalRunId!,
+        host: settlement.host,
+        run: settlement.run,
+      };
+      const previousNative = remoteAttemptNative(custodyFile, latestCustody, id, prior);
+      if (
+        (prior.nativeReference !== undefined && previousNative === undefined) ||
+        (previousNative !== undefined && JSON.stringify(previousNative) !== JSON.stringify(settlement.native))
+      )
+        return;
+      const nativeReference = publishRemoteRunEvidence(custodyFile, identity, 'native', settlement.native);
+      const { native: _native, cleanup: _cleanup, ...settlementEvidence } = settlement;
+      const settlementReference = publishRemoteRunEvidence(custodyFile, identity, 'settlement', settlementEvidence);
+      const { native: _priorNative, settlement: _priorSettlement, ...retained } = prior;
       attempts[index] = {
-        ...prior,
+        ...retained,
         status: 'terminal',
-        native: settlement.native,
-        settlement,
+        nativeReference,
+        settlementReference,
         cleanup: settlement.cleanup,
         endedAt: prior.endedAt ?? new Date().toISOString(),
       };
@@ -2742,7 +2887,8 @@ async function receiveRetainedRemoteResult(record: CheckRecord, root: string, id
     !sameOwnership(physical.ownership, record.ownership)
   )
     return false;
-  const custody = readJsonFile<CheckRemoteRunCustody>(remoteRunCustodyPath(root, record.physicalRunId));
+  const custodyFile = remoteRunCustodyPath(root, record.physicalRunId);
+  const custody = readJsonFile<CheckRemoteRunCustody>(custodyFile);
   if (!matchingRemoteCustody(record, physical, custody) || custody.status !== 'terminal') return false;
   const completed = custody.attempts.filter((attempt) => attempt.status === 'terminal');
   if (
@@ -2751,23 +2897,25 @@ async function receiveRetainedRemoteResult(record: CheckRecord, root: string, id
   )
     return false;
   const attempt = completed[0]!;
-  const receipt = parseRemotePhysicalRunReceipt(attempt.native);
+  const receipt = parseRemotePhysicalRunReceipt(remoteAttemptNative(custodyFile, custody, id, attempt));
+  const settlement = remoteAttemptSettlement(custodyFile, custody, id, attempt);
+  const recordPhysicalRun = readRecordPhysicalRun(record, root);
   if (
     !receipt ||
-    !attempt.settlement ||
-    !remoteSettlementProvesWrapperExit(attempt.settlement, receipt) ||
+    !settlement ||
+    !remoteSettlementProvesWrapperExit(settlement, receipt) ||
     attempt.host !== receipt.host ||
     attempt.id !== receipt.run ||
     (physical.exitCode !== undefined && physical.exitCode !== receipt.exitCode) ||
     (record.exitCode !== undefined && record.exitCode !== receipt.exitCode) ||
-    (record.physicalRun !== undefined &&
-      JSON.stringify(parseRemotePhysicalRunReceipt(record.physicalRun)) !== JSON.stringify(receipt))
+    (record.physicalRunReference !== undefined && recordPhysicalRun === undefined) ||
+    (recordPhysicalRun !== undefined && JSON.stringify(recordPhysicalRun) !== JSON.stringify(receipt))
   )
     return false;
   return await withCheckFence(root, id, () => {
     const latest = readRecord(root, id);
     const latestPhysical = readPhysicalRecord(root, id, record.physicalRunId!);
-    const latestCustody = readJsonFile<CheckRemoteRunCustody>(remoteRunCustodyPath(root, record.physicalRunId!));
+    const latestCustody = readJsonFile<CheckRemoteRunCustody>(custodyFile);
     if (
       latest.status !== 'running' ||
       latest.physicalRunId !== record.physicalRunId ||
@@ -2785,23 +2933,29 @@ async function receiveRetainedRemoteResult(record: CheckRecord, root: string, id
     const latestCompleted = latestCustody.attempts.filter((item) => item.status === 'terminal');
     if (latestCompleted.length !== 1) return false;
     const latestAttempt = latestCompleted[0]!;
-    const latestReceipt = parseRemotePhysicalRunReceipt(latestAttempt.native);
+    const latestReceipt = parseRemotePhysicalRunReceipt(
+      remoteAttemptNative(custodyFile, latestCustody, id, latestAttempt),
+    );
+    const latestSettlement = remoteAttemptSettlement(custodyFile, latestCustody, id, latestAttempt);
+    const latestRecordPhysicalRun = readRecordPhysicalRun(latest, root);
     if (
       !latestReceipt ||
-      !remoteSettlementProvesWrapperExit(latestAttempt.settlement, latestReceipt) ||
+      !latestSettlement ||
+      !remoteSettlementProvesWrapperExit(latestSettlement, latestReceipt) ||
       latestAttempt.host !== latestReceipt.host ||
       latestAttempt.id !== latestReceipt.run ||
       (latestPhysical.exitCode !== undefined && latestPhysical.exitCode !== latestReceipt.exitCode) ||
       (latest.exitCode !== undefined && latest.exitCode !== latestReceipt.exitCode) ||
-      (latest.physicalRun !== undefined &&
-        JSON.stringify(parseRemotePhysicalRunReceipt(latest.physicalRun)) !== JSON.stringify(latestReceipt)) ||
+      (latest.physicalRunReference !== undefined && latestRecordPhysicalRun === undefined) ||
+      (latestRecordPhysicalRun !== undefined &&
+        JSON.stringify(latestRecordPhysicalRun) !== JSON.stringify(latestReceipt)) ||
       (latestPhysical.terminalProof !== undefined &&
         (latestPhysical.terminalProof.local !== true ||
           latestPhysical.terminalProof.remote !== true ||
           latestPhysical.terminalProof.resultKnown !== true))
     )
       return false;
-    const returns = (latestAttempt.settlement as RemoteCheckSettlement).returns;
+    const returns = (latestSettlement as RemoteCheckSettlement).returns;
     if (returns.entries.some((entry) => entry.path === artifactRunRelativePath(record.physicalRunId!))) {
       const restored = restoreArtifactReturns(
         root,
@@ -3453,6 +3607,12 @@ export async function waitWorkerCheck(
     );
     record = readRecord(root, id);
   }
+  if (
+    record.physicalRunReference &&
+    (!record.physicalRunId ||
+      !retainedRemotePhysicalReceipt(record, root, readJsonFile(remoteRunCustodyPath(root, record.physicalRunId))))
+  )
+    return unknownCustodyResult(record, write);
   if (checkCancelled(root, id)) {
     write('worker-check: logically cancelled; physical cleanup remains unknown\n');
     return 125;
@@ -3845,12 +4005,17 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
       current.status = 'finished';
       current.exitCode = exitCode;
       writeRecord(current);
-      settleWorkerCheckHostBudget(process.env, exitCode, workerCheckHostCommandReached(current.physicalRun), {
-        log: join(root, current.log),
-        argv: current.argv,
-        worktree: root,
-        physicalRunId,
-      });
+      settleWorkerCheckHostBudget(
+        process.env,
+        exitCode,
+        workerCheckHostCommandReached(readRecordPhysicalRun(current, root)),
+        {
+          log: join(root, current.log),
+          argv: current.argv,
+          worktree: root,
+          physicalRunId,
+        },
+      );
     });
   };
   if (initial.waitForPhysicalRunId) {
