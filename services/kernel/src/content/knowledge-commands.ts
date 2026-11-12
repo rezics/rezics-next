@@ -352,37 +352,35 @@ async function rebalanceKnowledgeSiblings(
   ];
   const step = (upper - lower) / BigInt(desired.length + 1);
   if (step < 1n) throw new KnowledgeInvalidInputError();
-  return desired.flatMap((row, index) => {
+  const changes: KnowledgePositionChange[] = [];
+  for (const [index, row] of desired.entries()) {
     const position = lower + step * BigInt(index + 1);
     if (position < 0n || position > MAX_KNOWLEDGE_POSITION) throw new KnowledgeInvalidInputError();
     if ('moving' in row) {
-      return [
-        {
-          placementId: moving.placement_id,
-          documentId: moving.document_id,
-          oldParentId: moving.parent_id,
-          oldPosition: BigInt(moving.position),
-          parentId: destinationParentId,
-          position,
-          action: moving.parent_id === destinationParentId ? 'placement_reordered' : 'placement_moved',
-        } satisfies KnowledgePositionChange,
-      ];
+      changes.push({
+        placementId: moving.placement_id,
+        documentId: moving.document_id,
+        oldParentId: moving.parent_id,
+        oldPosition: BigInt(moving.position),
+        parentId: destinationParentId,
+        position,
+        action: moving.parent_id === destinationParentId ? 'placement_reordered' : 'placement_moved',
+      });
+      continue;
     }
     const oldPosition = BigInt(row.position);
-    return oldPosition === position
-      ? []
-      : [
-          {
-            placementId: row.placement_id,
-            documentId: row.document_id,
-            oldParentId: row.parent_id,
-            oldPosition,
-            parentId: row.parent_id,
-            position,
-            action: 'order_rebalanced' as const,
-          },
-        ];
-  });
+    if (oldPosition !== position)
+      changes.push({
+        placementId: row.placement_id,
+        documentId: row.document_id,
+        oldParentId: row.parent_id,
+        oldPosition,
+        parentId: row.parent_id,
+        position,
+        action: 'order_rebalanced',
+      });
+  }
+  return changes;
 }
 
 export async function createKnowledgeNotebook(
