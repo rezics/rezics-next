@@ -2143,9 +2143,11 @@ Decision: A control-plane release gate failure remains an ordinary gate failure 
 
 A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own
 outcome as a continuation brief at `.temp/continuation/<name>.md` in its worktree. When the attempt ends, settlement
-harvests only untracked regular files created after that attempt started (creation time, not modification time).
-Decision: preserve tracked continuation files and directories containing them so harvesting cannot dirty retained
-source or remove another outcome's briefs. Older untracked files
+harvests only regular Markdown created after that attempt started (creation time, not modification time), and only
+when its top-level path was not tracked in the live index, prepared source, recorded launch trees or direct parents of
+recorded merge commits. Those commit lookups read path names only under `.temp/continuation`.
+Decision: preserve paths tracked in the live index, prepared source, recorded launch trees and direct merge parents;
+query only names under `.temp/continuation`, and leave inherited local bytes in place. Older untracked files
 are dropped with a recorded reason, including files inherited from another attempt. Valid briefs keep the source
 Goal and manager; a foreign Goal is dropped with its reason. Before a brief becomes ready, its remaining paths and
 normalized title are compared with the same Goal's ready, running, held, landing and stopped tasks and its ready, held

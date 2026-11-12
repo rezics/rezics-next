@@ -102,8 +102,10 @@ test("the prompt names the landing's exact test commands for the files the branc
       workerTestCommands(['packages/filter/src/match.ts', 'tools/goal/src/new.test.ts', 'gone.test.ts'], root),
     ).toEqual([['bun', 'test', 'packages/filter/src/match.test.ts', 'tools/goal/src/new.test.ts']]);
 
+    const changedTask = promptTask('web', { worktree: root, base } as Partial<Task>);
+    changedTask.brief.acceptance = { ...changedTask.brief.acceptance, requires: ['native'] };
     const prompt = workerPrompt(
-      promptTask('web', { worktree: root, base } as Partial<Task>),
+      changedTask,
       undefined,
       undefined,
       [],
