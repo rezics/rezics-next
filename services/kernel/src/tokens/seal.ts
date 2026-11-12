@@ -6,7 +6,7 @@ export type KeyRing = {
 };
 
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
-const MAX_TOKEN_LENGTH = 4_096;
+export const MAX_TOKEN_LENGTH = 4_096;
 
 function encodeBase64Url(value: Uint8Array): string {
   return Buffer.from(value).toString('base64url');

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../src/tokens/cursor.ts';
-import { seal, unseal, type KeyRing } from '../src/tokens/seal.ts';
+import { MAX_TOKEN_LENGTH, seal, unseal, type KeyRing } from '../src/tokens/seal.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../src/tokens/session.ts';
 
 const key = (byte: number) => new Uint8Array(32).fill(byte);
@@ -150,4 +150,27 @@ test('a cursor is a sealed epoch, keyset and issue time valid for 15 minutes', (
     { e: 1, a: [] },
   ])
     expect(decodeCursor(ring, binding, seal(ring, scope, payload), now)).toEqual({ ok: false, reason: 'invalid' });
+});
+
+test('legacy cursors stay within the decoder limit for ASCII, UTF-8 and escaped keys', () => {
+  const boundary: CursorBinding = { operation: 'boundary', parameters: {} };
+  const scope = 'cursor\0boundary\0{}';
+  const cases = [
+    ['a'.repeat(3003), 'a'.repeat(3004)],
+    ['界'.repeat(1001), `${'界'.repeat(1001)}a`],
+    [`${'\\'.repeat(1501)}a`, '\\'.repeat(1502)],
+  ] as const;
+
+  for (const [readable, oversized] of cases) {
+    const token = encodeCursor(ring, boundary, { epoch: 1, after: [readable] }, now);
+    expect(token).toHaveLength(MAX_TOKEN_LENGTH);
+    expect(decodeCursor(ring, boundary, token, now)).toMatchObject({ ok: true, epoch: 1 });
+
+    const oversizedToken = seal(ring, scope, { e: 1, a: [oversized], t: now });
+    expect(oversizedToken).toHaveLength(MAX_TOKEN_LENGTH + 2);
+    expect(decodeCursor(ring, boundary, oversizedToken, now)).toEqual({ ok: false, reason: 'invalid' });
+    expect(() => encodeCursor(ring, boundary, { epoch: 1, after: [oversized] }, now)).toThrow(
+      'Encoded cursor exceeds decoder limit',
+    );
+  }
 });
