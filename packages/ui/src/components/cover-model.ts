@@ -141,6 +141,17 @@ export function ratioValue(ratio: CoverRatio): number {
   return width! / height!;
 }
 
+/** Bound both axes through the effective ratio, so a block limit never crops the aspect frame. */
+export function coverFrameStyle(size: CoverSize, ratio: CoverRatio, maxBlockSize?: number) {
+  const width = size === 'fill' ? '100%' : `${coverWidths[size]}px`;
+  return maxBlockSize === undefined
+    ? { width }
+    : {
+        width: `min(${width}, ${maxBlockSize * ratioValue(ratio)}px)`,
+        maxBlockSize,
+      };
+}
+
 /** Portraits of characters and people keep the top of the image when it is cropped. */
 export function keepsTop(types: readonly string[]): boolean {
   return types.some((type) => ['schema:Person', 'wd:Q5', 'wd:Q95074'].includes(type));

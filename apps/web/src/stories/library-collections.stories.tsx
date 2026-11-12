@@ -95,6 +95,7 @@ export const ManyCollections: Story = {
 };
 
 export const PreviewMembers: Story = {
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
   render: () =>
     render('many', `${pagePaths['library-collections']}?layout=previews`, {
       pinCount: 1,
@@ -109,6 +110,14 @@ export const PreviewMembers: Story = {
     const main = canvas.getByRole('main');
     const preview = collectionCard(main, collectionRecording.collection.title, true);
     expect(preview.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(3);
+    for (const cover of preview.querySelectorAll<HTMLElement>('[data-slot="cover-card"] [data-slot="cover"]')) {
+      const box = cover.getBoundingClientRect();
+      expect(box.height).toBeGreaterThan(0);
+      expect(box.height).toBeLessThanOrEqual(134.5);
+      expect(box.width / box.height).toBeCloseTo(5 / 7, 2);
+      expect(cover.parentElement!.getBoundingClientRect().width).toBeGreaterThan(box.width);
+    }
+    await expect(within(preview).getByRole('link', { name: 'Snow Country' })).toHaveAttribute('title', 'Snow Country');
     expect(within(preview).queryByRole('link', { name: 'Kokoro' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: m.library_layout_list() }));
     await waitFor(async () =>

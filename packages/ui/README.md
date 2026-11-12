@@ -220,16 +220,22 @@ Import `CoverCard`, `CoverGrid` and `CoverRow` from `@rezics/ui/cover-card`.
 Any surface that shows a subject as a card (shelves, Continue, home rows, collections, search results in grid
 mode, relation, edition and character tiles) follows one pattern:
 
-- The cover fills the tile's top edge to edge, followed by the caption on the page background. The tile has no
+- The cover sits centered at the tile's top, followed by the caption on the page background. The tile has no
   background, outline, border or shadow, including on hover. Keyboard focus shows a visible ring around the whole
   tile. `Cover` owns the one cover radius. The cover frame in a tile, each `CoverRow` or `CoverGrid` item and a
   standalone `Cover` use that radius; the `CoverRow` rail uses it too, while `CoverCard` sets no radius of its own.
   At 1280 px about eight tiles fit per row with an 8 px gap; the title is centered and wraps to remain readable.
 - Below the cover: the wrapping title, then supplied secondary text (creator, year, relation label or active
   sort context), then the item's state (progress, status or score). Full details belong on
-  the subject page. The last row wraps when needed, with state or progress first and the menu at the end, aligned with the cover’s right edge. It sits at the bottom of the full-height tile so tiles in a grid row line up. A menu alone stays at the end; with neither state, progress nor menu, no last row is rendered.
+  the subject page. The last row wraps when needed, with state or progress first and the menu at the end, aligned with the tile’s right edge. It sits at the bottom of the full-height tile so tiles in a grid row line up. A menu alone stays at the end; with neither state, progress nor menu, no last row is rendered.
 - Every card defaults to the shared portrait frame and honors its actual member Type's configured list aspect. Its title and metadata remain attached beneath that image;
   a grid's composition ratio is only the fallback when the member has no known list presentation.
+- Density bounds only the image frame, never the whole card or its text and controls. Medium is the default:
+  its maximum block size is the shared 160 px wide, 5:7 portrait geometry (224 px high). Small uses the compact
+  96 px scale (134.4 px high); large explicitly opts into the 240 px scale (336 px high). Cards inherit density
+  from `CoverGrid` or `CoverRow` and can override it. The effective portrait, landscape or square ratio determines
+  the bounded width; narrow tracks shrink both axes, while wider tracks leave space around the cover. The
+  three-member Collection preview uses small. Standalone `Cover` and work-detail hero defaults are unchanged.
 - The title link stretches across plain card areas to the subject; a site passes its client-side router link as
   `link`. Supplied secondary/meta and state content can keep independent links, disclosures and form controls above
   that target. Each native control is raised and receives a visible focus outline; plain slot content stays under the

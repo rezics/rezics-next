@@ -12,6 +12,36 @@ import { CoverCard, CoverGrid } from '../src/components/cover-card.tsx';
 import { ShelfListRow } from '@rezics/ui/shelf-list';
 import { ShelfTable } from '@rezics/ui/shelf-table';
 import { MemberListRow, MemberReadingItem } from '../src/components/list-presentation.tsx';
+import { ratioValue } from '../src/components/cover-model.ts';
+
+test('Card density bounds the effective frame while standalone and hero covers keep their sizes', () => {
+  const subject = { id: 'book', title: 'A book', types: ['schema:Book'] };
+  for (const [density, height] of [
+    ['small', 134.4],
+    ['medium', 224],
+    ['large', 336],
+  ] as const) {
+    for (const [imageAspect, ratio] of [
+      ['portrait', '5:7'],
+      ['landscape', '16:9'],
+      ['square', '1:1'],
+    ] as const) {
+      const cover = { subject, cover: null, src: () => '', listPresentation: { imageAspect, keyFacts: [] } };
+      const html = renderToStaticMarkup(
+        <CoverGrid ratio="2:3" density={density}>
+          <CoverCard title={subject.title} cover={cover} />
+        </CoverGrid>,
+      );
+      expect(html).toContain(`width:min(100%, ${height * ratioValue(ratio)}px);max-block-size:${height}px`);
+      expect(html).toContain(`data-ratio="${ratio}"`);
+    }
+  }
+  for (const size of ['fill', 'lg'] as const) {
+    const html = renderToStaticMarkup(<Cover subject={subject} cover={null} src={() => ''} size={size} />);
+    expect(html).toContain(`style="width:${size === 'fill' ? '100%' : '240px'}"`);
+    expect(html).not.toContain('max-block-size');
+  }
+});
 
 test('Every default catalogue kind uses a portrait cover frame while landscape artwork remains whole', () => {
   const wide: CoverSummary = {

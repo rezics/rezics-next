@@ -20,6 +20,8 @@ test('card renders a title link and separate actions, with wrapping text and a f
   expect(html).toContain('href="/book"');
   expect(html).toContain('More actions for A book');
   expect(html).toContain('data-size="fill"');
+  expect(html).toContain('width:min(100%, 160px);max-block-size:224px');
+  expect(html.match(/<article\b[^>]*>/u)?.[0]).not.toMatch(/max-block-size|overflow-hidden/u);
   expect(html).toContain('wrap-anywhere');
   expect(html).toContain('whitespace-normal');
   expect(html).not.toContain('line-clamp-');

@@ -1,15 +1,15 @@
 import { EyeIcon, ImageIcon } from 'lucide-react';
-import { createContext, useContext, useCallback, useMemo, type CSSProperties } from 'react';
+import { createContext, useContext, useCallback, useMemo } from 'react';
 import { AspectRatio } from '../shadcn/aspect-ratio.tsx';
 import { Button } from '../shadcn/button.tsx';
 import { cn } from '../utils.ts';
 import { listPresentationRatio, parseListPresentation, type ListPresentation } from './list-presentation-model.ts';
 import {
   coverFit,
+  coverFrameStyle,
   coverIncarnation,
   coverRatio,
   coverSizes,
-  coverWidths,
   intrinsicSize,
   objectPosition,
   parseCoverRatio,
@@ -75,6 +75,8 @@ export interface CoverProps {
   /** The cover summary the kernel returned with the subject, or null when the reader may not see a cover. */
   cover: CoverSummary | null;
   size: CoverSize;
+  /** Optional image-frame block limit; its width shrinks with the effective ratio. */
+  maxBlockSize?: number;
   /** The address of one variant, from the site's media route. `Cover` never builds addresses itself. */
   src: (media: string, format: CoverFormat, width: number) => string;
   /** Additional classes for the ratio frame around the image. */
@@ -109,6 +111,7 @@ export function Cover({
   subject,
   cover,
   size,
+  maxBlockSize,
   src,
   frameClassName,
   ratio,
@@ -157,7 +160,6 @@ export function Cover({
 
   const colors = placeholderColors(subject);
   const dimensions = intrinsicSize(size, frameRatio);
-  const width: CSSProperties = size === 'fill' ? { width: '100%' } : { width: coverWidths[size] };
 
   const frame = (
     <div
@@ -174,7 +176,7 @@ export function Cover({
       role={state === 'placeholder' && !decorative ? 'img' : undefined}
       aria-label={state === 'placeholder' && !decorative ? subject.title : undefined}
       aria-hidden={state === 'placeholder' && decorative ? true : undefined}
-      style={width}
+      style={coverFrameStyle(size, frameRatio, maxBlockSize)}
     >
       <AspectRatio
         ratio={ratioValue(frameRatio)}
