@@ -2283,33 +2283,29 @@ For example, a readable unlabeled empty Global review page has
 A concealed selection returns the ordinary 404 problem without context or threads; a failed or changed required
 observation returns the ordinary problem without an advanced cursor.
 
-Native thread entries now carry Home's reaction projection: `reactions` and, for an authenticated viewer,
-`viewerReaction` (including explicit `null` after clearing). Anonymous entries omit `viewerReaction`.
-`reactionsAsOf` is the native producer's oldest observed count watermark, or `null` when it observed none.
+Native thread entries now carry the selected-card batch's reaction projection: `reactions` and, for an
+authenticated viewer, `viewerReaction` (including explicit `null` after clearing). Anonymous entries omit
+`viewerReaction`. `reactionsAsOf` is that native producer's oldest observed count watermark, or `null` when it
+observed none.
 For example, `{id,...,reactions:{love:1},viewerReaction:"love"}` preserves the thread id and distinguishes
 the viewer's current slot from relayed totals. An empty reaction object with no watermark does not prove an
 exact zero or projection coverage. Authenticated responses use `private, no-store`.
 
-`projectSubjectThreadReactions(dependencies: ContentReadDependencies, subjectId: string, placeId: string,
-selected: readonly ThreadView[], context: ReadContext)` returns
-`Promise<{entries: readonly SubjectThreadWithReactions[], anchors: readonly AnchoredPosition[],
-reactionsAsOf: ReactionCountFreshness | null}>`. This installed adapter sends at most 20 original thread keys
-to `projectFeedReactions`, without another count or viewer-slot reader. After hydration it repeats
-`readSubjectThread` for each selected source, retaining its exact final value and anchor. Final concealment
-withholds that entry without refill; a changed readable value fails with `dependency_unavailable` and leaves the
-input cursor retryable. Required page context is finalized after these source observations. A failed reaction
-dependency fails the request instead of returning empty totals. Each reader retains its own observation;
-the count watermark does not represent source or viewer-slot atomicity.
-
-Decision: reuse Home's reaction assembly for original thread keys, preserve the raw frontier on final concealment,
-and retry changed readable sources before returning hydrated entries.
-
-Subject cards now compose the shared selected-card final observation, Home's original-parent and exact review-context
-projector, current public conversation activity, and bounded authorized media presentations. The installed factory
-is `projectSubjectThreadCards(dependencies, subjectId, placeId, selected, context, reactionsAsOf)` in
+The installed card projector is `projectSubjectThreadCards(dependencies, subjectId, placeId, selected, context)` in
 `subject-threads-cards.ts`; it returns card entries, source anchors, and the retained reaction watermark. The
-existing `subject_threads.list` operation and its `threads`, `next`, `context`, and `reactionsAsOf` envelope remain
-stable. Each retained thread adds a closed `card` object with thread/opening-post author identity, presentation,
+selected-card batch performs the one bounded reaction count and viewer-slot projection for the retained page; the
+Subject route does not repeat that projection or add a separate reaction-only Subject disclosure pass. Its final
+thread/card observations still validate the selected native source after enrichment. A changed readable source
+fails with `dependency_unavailable` and leaves the input cursor retryable. The batch's reaction currentness and
+watermark travel with the counts it returns; they do not claim atomicity with source, author, or viewer state.
+
+Decision: reuse the selected-card batch's reaction result for the Subject page, keep its final selected-source
+checks, and avoid a second reaction projection before card construction.
+
+Subject cards compose the shared selected-card final observation, Home's original-parent and exact review-context
+projector, current public conversation activity, and bounded authorized media presentations. The existing
+`subject_threads.list` operation and its `threads`, `next`, `context`, and `reactionsAsOf` envelope remain stable.
+Each retained thread adds a closed `card` object with thread/opening-post author identity, presentation,
 media, public comment coverage, mounted action references, reply/watch state, immediate parent context, and
 per-field currentness. Exact stored review citations remain on the entry and are not recomputed from current rating
 state. Erased or withheld sources do not gain author, media, action, comment, or rating disclosure. Missing media
@@ -2331,7 +2327,7 @@ action/recovery after installation; no rendered Web completion is claimed here.
 
 ### Cost: listSubjectThreads context
 
-- Touches: selection performs one released Subject Access snapshot and a bounded `(route,subject_id,place_id,kind,last_activity_at DESC,thread_id ASC)` prefix read. Subject context prepares and finalizes one Semantic reference/current-label observation and, for Realm places, two separate ordinary Realm reads with Realm/Space binding, membership/ban and native Access work. Candidate disclosure reads at most 80 raw keys until it retains 20 through native Board batches, then the existing reaction seam invokes Home's count projection once per represented partition and its viewer-slot projection once for an account; it repeats one Subject-scoped disclosure batch for the retained keys. Card composition adds the shared selected-card batch and final source/author/reaction/action/watch observations, with fresh Subject-scoped thread batches in preparation and finish; Home's bounded feed-context factory reads the exact opening post, immediate parent, identity summaries and recorded question/revision/scale/units citation, then rechecks selected thread/post/parent and owner observations with a Subject-scoped thread batch. Conversation activity selects and confirms at most 20 keys in one released read-only repeatable-read transaction per represented partition per phase. Media presents only IDs on each available opening post, in chunks of at most 32; each media key performs exact native enumeration and two ordinary source/authority validations, including media Access, container/ancestor/Board, Realm/Space and rights/credit checks. Each phase releases its checkout before opening a foreign home or preparing/evaluating Access; transaction controls, pool releases, nested Access executor/fence work, retries and the actual Subject, Semantic, Realm, Content, account-discovery, activity, reaction and media runner phases remain charged. Empty, denied, withheld and dependency-failure branches pay their reached work and never turn a failed observation into a successful empty result.
+- Touches: selection performs one released Subject Access snapshot and a bounded `(route,subject_id,place_id,kind,last_activity_at DESC,thread_id ASC)` prefix read. Subject context prepares and finalizes one Semantic reference/current-label observation and, for Realm places, two separate ordinary Realm reads with Realm/Space binding, membership/ban and native Access work. Candidate disclosure reads at most 80 raw keys until it retains 20 through native Board batches. Card composition adds the shared selected-card batch, including one bounded reaction count/viewer-slot projection, plus final source/author/reaction/action/watch observations and fresh Subject-scoped thread batches in preparation and finish; Home's bounded feed-context factory reads the exact opening post, immediate parent, identity summaries and recorded question/revision/scale/units citation, then rechecks selected thread/post/parent and owner observations with a Subject-scoped thread batch. Conversation activity selects and confirms at most 20 keys in one released read-only repeatable-read transaction per represented partition per phase. Media presents only IDs on each available opening post, in chunks of at most 32; each media key performs exact native enumeration and two ordinary source/authority validations, including media Access, container/ancestor/Board, Realm/Space and rights/credit checks. Each phase releases its checkout before opening a foreign home or preparing/evaluating Access; transaction controls, pool releases, nested Access executor/fence work, retries and the actual Subject, Semantic, Realm, Content, account-discovery, activity, reaction and media runner phases remain charged. Empty, denied, withheld and dependency-failure branches pay their reached work and never turn a failed observation into a successful empty result.
 - Bound: raw scanning is at most 80 candidates, output and all per-card context batches are at most 20, each thread body is bounded by the native 2 MiB body admission, each opening post has at most 32 unique media IDs and the page therefore presents at most 640 media IDs through at most 20 chunks. Feed context admits at most 20 exact keys, up to three authors per key, one immediate parent preview capped at 640 bytes per key, and one exact review question per key; action references are limited to each selected thread and available opening post, with the mounted operation catalogue's existing 256-operation ceiling. Reaction rows remain at most seven count rows and one viewer slot per target. The activity batch selects no protected cohort and returns only current coverage or typed unavailable state. Retained memory includes initial/final selected entries, parsed documents, parent excerpts, author and citation intermediates, reaction/activity maps, image metadata and final serialized entries; repeated source comparisons retain bounded native bodies and JSON witnesses. Semantic redirect/history/current-term rows, label aggregation, ordinary Realm summaries, nested Access materialization and database examined history inherit their owners' physical behavior and have no claimed output-derived ceiling. No total serialized-byte or examined-work ceiling is inferred from Page20/raw80 or the per-image caps.
 - Growth check: worker tests pin populated, empty, concealed, unavailable and same-cursor retry behavior on the real Kernel path. Independent native 256/1024/4096 growth, strict physical-prefix evidence, fixed selected-key/home/byte caps while each unrelated and retained-history axis grows, all-pool runner accounting, concurrent authority changes and uncertain-write/replay outcomes remain deferred to the controller's independent acceptance. The Web owner must review phone and desktop consumers and one real action/recovery using populated, empty, concealed, unavailable and revoked examples after the generated client is installed. No source review, generated declaration, or test fixture claims native, generated and rendered completion together.
 
@@ -3061,9 +3057,12 @@ Cost per operation:
 
 Decision: author-erasure receipt evidence uses `nativeReceiptKeyCandidates` with the original command kind,
 account principal and raw key; every caller-owned workflow and growth pool retains the same dedicated fixture
-ring as initiation. Point erasure keeps discovery receipt preflight and actual-command scope currentness in
-separate native transactions. Tests assert one scope observation in each phase, exact committed receipts and
-bounded cleanup; fixture repairs alone establish no production erasure defect.
+ring as initiation. Receipt-free fixture transaction wrappers explicitly bind that ring before invoking native
+receipt readers; pool configuration alone does not bind a wrapper. Point erasure keeps discovery receipt preflight
+and actual-command scope currentness in separate native transactions. SQL observations retain the exact driver text;
+expectations for Reylo `.run()` use its Standard Query text, including dispatch comments. Tests assert one scope
+observation in each phase, the original receipt operands, exact committed receipts and bounded cleanup; fixture
+repairs alone establish no production erasure defect.
 
 Authenticated `GET /v1/threads/{id}` adds the private optional envelope field
 `authorErasure: { authorId: string, mayErase: boolean }`. Anonymous reads omit it. The acting account supplies

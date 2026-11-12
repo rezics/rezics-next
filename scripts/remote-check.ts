@@ -6770,8 +6770,12 @@ export async function withCheckGitTransfer<T>(
   }
 }
 
-/** Git supplies the staged tree; retain working edits, untracked inputs, and tracked deletions. */
-export function gitWorkspaceOverlay(workspace: string, files: string[]): { files: string[]; removed: string[] } {
+/** Git supplies the staged tree; retain working edits, untracked inputs, permission deltas, and tracked deletions. */
+export function gitWorkspaceOverlay(
+  workspace: string,
+  files: string[],
+  frozen?: Pick<ExpectedSourceManifest, 'entries' | 'indexTree'>,
+): { files: string[]; removed: string[] } {
   const list = (args: string[]) => {
     const result = Bun.spawnSync(['git', ...args], { cwd: workspace, stdout: 'pipe', stderr: 'pipe' });
     if (result.exitCode !== 0) throw new Error('remote-check: cannot list Git workspace overlay');
@@ -6780,8 +6784,25 @@ export function gitWorkspaceOverlay(workspace: string, files: string[]): { files
   const tracked = new Set(list(['ls-files', '-z']));
   const modified = new Set(list(['diff', '--name-only', '-z']));
   const wanted = new Set(files);
+  const permissionChanged = new Set<string>();
+  if (frozen) {
+    const frozenModes = new Map<string, number>();
+    for (const entry of frozen.entries)
+      if (entry.kind === 'file' && wanted.has(entry.path)) frozenModes.set(entry.path, entry.mode);
+    if (frozenModes.size > 0) {
+      for (const entry of list(['ls-tree', '-r', '-z', '--full-tree', frozen.indexTree])) {
+        const separator = entry.indexOf('\t');
+        const mode = entry.slice(0, entry.indexOf(' '));
+        if (separator < 0 || (mode !== '100644' && mode !== '100755')) continue;
+        const path = entry.slice(separator + 1);
+        const frozenMode = frozenModes.get(path);
+        const checkoutMode = mode === '100755' ? 0o755 : 0o644;
+        if (frozenMode !== undefined && frozenMode !== checkoutMode) permissionChanged.add(path);
+      }
+    }
+  }
   return {
-    files: files.filter((file) => !tracked.has(file) || modified.has(file)),
+    files: files.filter((file) => !tracked.has(file) || modified.has(file) || permissionChanged.has(file)),
     removed: [...tracked].filter((file) => !wanted.has(file)),
   };
 }
@@ -6893,7 +6914,7 @@ async function uploadRun(
             reportObservedDuration('shared-store lock/fetch', gitPhases.sharedStoreLockFetchSeconds, host.name);
             reportObservedDuration('checkout', gitPhases.checkoutSeconds, host.name);
           } else console.error(`remote-check: GitHub fetch phase details unavailable on ${host.name}`);
-          const overlay = gitWorkspaceOverlay(options.workspace, files);
+          const overlay = gitWorkspaceOverlay(options.workspace, files, options.expectedSourceManifest);
           if (overlay.removed.length) {
             const deleted = await boundedSsh(
               host,

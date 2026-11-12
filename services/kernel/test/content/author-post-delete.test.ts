@@ -4,13 +4,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createAuthService } from '@rezics/auth';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
+import { Pool, types } from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { runCommand } from '../../src/command/command.ts';
 import readOwnCompletion from '../../src/command/read-own-completion.sql';
 import readReceipt from '../../src/command/read-receipt.sql';
+import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { nullErasedRevisionPage } from '../../src/content/erasure-workflow.ts';
 import { clearErasedPostRevisions } from '../../src/content/erased-post-cleanup.ts';
@@ -271,8 +272,9 @@ test('an author deletes their own post: removed slots preserve replies and clean
   await db.admin.query('COMMIT');
   const beforeRequest = new Request(`http://kernel.test/v1/threads/${f.thread}/posts`);
   const before = await (await assertSetupResponse(await app.handle(beforeRequest), beforeRequest, 200)).json();
+  const key = randomUUID();
   const start = observer.records.length;
-  const deleted = await request(`/posts/${f.post}`, 'DELETE', author);
+  const deleted = await request(`/posts/${f.post}`, 'DELETE', author, key);
   expect(deleted.status).toBe(204);
   expect(await deleted.text()).toBe('');
   expect(deleted.headers.get(SESSION_HEADER)).not.toBeNull();
@@ -280,6 +282,9 @@ test('an author deletes their own post: removed slots preserve replies and clean
   const statements = executions.map((row) => row.statement);
   // Discovery preparation preflights the receipt; the actual tombstone command
   // authorizes again at its own T. Each phase observes the scope exactly once.
+  // .run() adds Reylo's source comment at dispatch; .sql is the uncommented text.
+  const completionProbe = readOwnCompletion['~standard'].query.text;
+  const receiptProbe = readReceipt['~standard'].query.text;
   const phases: string[][] = [];
   const active = new Map<number, string[]>();
   for (const { statement, connectionId } of executions) {
@@ -290,16 +295,28 @@ test('an author deletes their own post: removed slots preserve replies and clean
       if (phase?.includes(readScope.sql))
         phases.push(
           phase.filter((sql) =>
-            [readScope.sql, readOwnCompletion.sql, readReceipt.sql, erase.sql].some((expected) => expected === sql),
+            [readScope.sql, completionProbe, receiptProbe, erase.sql].some((expected) => expected === sql),
           ),
         );
       active.delete(connectionId);
     }
   }
   expect(phases).toEqual([
-    [readScope.sql, readOwnCompletion.sql],
-    [readScope.sql, readReceipt.sql, erase.sql],
+    [readScope.sql, completionProbe],
+    [readScope.sql, receiptProbe, erase.sql],
   ]);
+  const probes = executions.filter(({ statement }) => statement === completionProbe || statement === receiptProbe);
+  expect(probes).toHaveLength(2);
+  for (const { parameters } of probes) {
+    expect(parameters.slice(0, 4)).toEqual([partitionOf(route), 'account', author, 'content.post:erase']);
+    const encoded = parameters[4];
+    // PostgreSQL text-array OID: Reylo encodes arrays before entering the driver.
+    const candidates =
+      typeof encoded === 'string'
+        ? types.getTypeParser(1009 as Parameters<typeof types.getTypeParser>[0], 'text')(encoded)
+        : encoded;
+    expect(candidates).toEqual(nativeReceiptKeyCandidates(db.pool, 'content.post:erase', author, key));
+  }
   expect(statements.filter((sql) => sql === erase.sql)).toHaveLength(1);
   expect(statements).not.toContain(nullRevisions.sql);
   expect(

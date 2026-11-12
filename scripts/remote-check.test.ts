@@ -3298,7 +3298,11 @@ test('a pinned placement rehomes only after a healthy alternative can take its p
         .filter((event) => event.kind === 'rsync' && event.step === 'workspace upload')
         .map((event) => String(event.destination).split(':')[0]),
     ).toEqual(['ops@b.test', 'ops@c.test']);
-    expect(events().filter((event) => event.kind === 'run').map((event) => event.address)).toEqual(['ops@c.test']);
+    expect(
+      events()
+        .filter((event) => event.kind === 'run')
+        .map((event) => event.address),
+    ).toEqual(['ops@c.test']);
   } finally {
     if (!exited) {
       run.child.kill('SIGTERM');
@@ -3649,6 +3653,24 @@ test('a fetched staged tree needs only working edits and untracked inputs, with 
   expect(overlay.files.sort()).toEqual(['src/tracked.ts', 'src/untracked.ts']);
   expect(overlay.removed).toEqual(['src/gone.ts']);
   expect(overlay.files).not.toContain('src/staged.ts');
+});
+
+test('a Git-clean frozen permission difference enters the fetched overlay without ordinary clean files', async () => {
+  const directory = workspace();
+  const git = (...args: string[]) => spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+  expect(git('config', 'core.filemode', 'false').status).toBe(0);
+  chmodSync(join(directory, '.gitignore'), 0o644);
+  chmodSync(join(directory, 'package.json'), 0o644);
+  chmodSync(join(directory, 'src/tracked.ts'), 0o644);
+  expect(git('diff', '--quiet', '--', 'src/tracked.ts').status).toBe(0);
+  chmodSync(join(directory, 'src/tracked.ts'), 0o600);
+  expect(git('diff', '--quiet', '--', 'src/tracked.ts').status).toBe(0);
+
+  const frozen = await currentCheckSourceManifest(directory);
+  const overlay = gitWorkspaceOverlay(directory, workspaceFiles(directory), frozen);
+
+  expect(overlay.files.sort()).toEqual(['src/tracked.ts', 'src/untracked.ts']);
+  expect(overlay.removed).toEqual(['src/gone.ts']);
 });
 
 test.each([
@@ -8334,16 +8356,20 @@ test('scheduled cache maintenance defers before scanning while host pressure is 
   const entry = join(cache, '.garbage', 'retained');
   mkdirSync(dirname(entry), { recursive: true });
   writeFileSync(entry, 'pending cleanup');
-  const program = dependencyPreparationProgram.replace('def maintain(cache, service=False):', `
+  const program = dependencyPreparationProgram.replace(
+    'def maintain(cache, service=False):',
+    `
 def update_host_pressure(_):
     return True, False, None
 def observe_garbage(_):
     raise RuntimeError('paused maintenance must not scan')
-def maintain(cache, service=False):`);
+def maintain(cache, service=False):`,
+  );
   const result = spawnSync('python3', ['-c', program, 'maintain', cache], { encoding: 'utf8' });
   expect(result.status, result.stderr).toBe(0);
   expect(JSON.parse(readFileSync(join(cache, '.maintenance-status.json'), 'utf8'))).toMatchObject({
-    state: 'deferred', measurementValid: false,
+    state: 'deferred',
+    measurementValid: false,
   });
   expect(readFileSync(entry, 'utf8')).toBe('pending cleanup');
 });

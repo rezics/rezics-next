@@ -4,7 +4,12 @@ import { fromPlainText, serializeDocument } from '@rezics/document';
 import { Pool } from 'pg';
 import { GrantDeniedError } from '../../src/access/contract/index.ts';
 import { runCommand, type AuthoritativeTime, type CommandTransaction } from '../../src/command/command.ts';
-import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
+import {
+  bindReceiptKeys,
+  configuredReceiptKeys,
+  nativeReceiptKeyCandidates,
+  receiptKeysFor,
+} from '../../src/command/receipt-key.ts';
 import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { erasePostLogical } from '../../src/content/erase-post.ts';
 import { runAuthorErasure } from '../../src/content/erasure-workflow.ts';
@@ -249,13 +254,15 @@ test('native initiation commits the provenance receipt required by durable initi
 });
 
 test('the content initiator reader accepts only the committed operation source and creation receipt', async () => {
-  const { readErasureInitiator } = await import('../../src/content/erasure-initiator.ts');
+  const { readErasureInitiator, readWorkflowErasureOperation } = await import('../../src/content/erasure-initiator.ts');
   const { durableInitiatorCommitment } = await import('../../src/access/durable-initiator-capture.ts');
   async function inspect<T>(read: (tx: CommandTransaction, time: AuthoritativeTime) => Promise<T>) {
     let value!: T;
     const complete = new Error('Read complete; roll back without publishing an event');
     try {
       await runCommand(fixture.pool, { partition }, async (tx, { time }) => {
+        // Receipt-free inspection has no command principal to bind the wrapper's ring.
+        bindReceiptKeys(tx, receiptKeysFor(fixture.pool));
         value = await read(tx, time);
         throw complete;
       });
@@ -326,6 +333,65 @@ test('the content initiator reader accepts only the committed operation source a
   );
   expect(receipt.rows).toHaveLength(1);
   expect(durableInitiatorCommitment(observed.value!)).toBe(receipt.rows[0].response.durableInitiator);
+  for (const pool of [fixture.pool, fixture.reader, systemPool]) {
+    const raw = await pool.connect();
+    try {
+      expect(configuredReceiptKeys(raw)).toEqual(receiptKeys);
+      expect(
+        await readWorkflowErasureOperation(raw, { partition_no: partition, route, operation_id: operation.id }),
+      ).toMatchObject({
+        recorded_transaction_id: created.transactionId,
+        receipt_transaction_id: created.transactionId,
+        receipt_request_digest: observed.value!.creation.requestDigest,
+        receipt_commitment: durableInitiatorCommitment(observed.value!),
+      });
+    } finally {
+      raw.release();
+    }
+  }
+  for (const changed of [
+    { kind: 'content.other', accountId: selected.actor.accountId, key: request.idempotencyKey },
+    { kind: operation.kind, accountId: fixture.principal, key: request.idempotencyKey },
+    { kind: operation.kind, accountId: selected.actor.accountId, key: crypto.randomUUID() },
+  ]) {
+    await inspect(async (tx, time) => {
+      const changedReceipt = await tx.query(
+        `UPDATE core.receipt SET idempotency_key=$4
+         WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+           AND command_kind=$3 AND idempotency_key=ANY($5::text[])`,
+        [
+          partition,
+          selected.actor.accountId,
+          operation.kind,
+          nativeReceiptKeyCandidates(tx, changed.kind, changed.accountId, changed.key)[0],
+          nativeReceiptKeyCandidates(tx, operation.kind, selected.actor.accountId, request.idempotencyKey),
+        ],
+      );
+      expect(changedReceipt.rowCount).toBe(1);
+      expect(await readErasureInitiator(tx, operation, time)).toBeNull();
+    });
+  }
+  for (const change of [
+    'transaction_id = gen_random_uuid()',
+    "request_digest = sha256('changed creation request'::bytea)",
+    `response = jsonb_set(response, '{durableInitiator}', '"changed commitment"'::jsonb)`,
+  ]) {
+    await inspect(async (tx, time) => {
+      const changedReceipt = await tx.query(
+        `UPDATE core.receipt SET ${change}
+         WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+           AND command_kind=$3 AND idempotency_key=ANY($4::text[])`,
+        [
+          partition,
+          selected.actor.accountId,
+          operation.kind,
+          nativeReceiptKeyCandidates(tx, operation.kind, selected.actor.accountId, request.idempotencyKey),
+        ],
+      );
+      expect(changedReceipt.rowCount).toBe(1);
+      expect(await readErasureInitiator(tx, operation, time)).toBeNull();
+    });
+  }
   await inspect(async (tx, time) => {
     // A live account and an existing receipt cannot authorize different source operands.
     await tx.query('UPDATE content.operation SET upper_post_id=$3 WHERE route=$1 AND operation_id=$2', [
@@ -940,6 +1006,9 @@ test('checkGrowth proves fixed native erasure pages against unrelated and same-p
         const selected = fixedScopes.get(repetition)!;
         try {
           await runCommand(target.pool, { partition }, async (tx) => {
+            // This receipt-free measurement still invokes the native page-receipt reader.
+            bindReceiptKeys(tx, receiptKeysFor(target.pool));
+            expect(configuredReceiptKeys(tx)).toEqual(receiptKeys);
             const posts = await pageAuthorErasurePosts(tx, {
               route,
               partition_no: partition,

@@ -579,6 +579,7 @@ test('shared admission and native point/author commands stay bounded at three po
       expect(fetches).toBe(jwksReads);
     },
   });
+  expect(report.rule).toBe('series');
   expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
   for (const { cost } of report.samples) {
     expect(cost.statements).toBe(report.samples[0]!.cost.statements);

@@ -23,7 +23,6 @@ const commandSeededRelations = [...preferenceSeededRelations, 'access.resource_g
 const route = 0x4567;
 const accountId = newId(route);
 const databaseUrl = process.env.DATABASE_URL;
-const preferenceSeedBatchSize = 2_048;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 let db: GrowthDatabase;
 
@@ -57,7 +56,7 @@ const maximalShelf = (): Shelf =>
     ],
   }) as Shelf;
 
-/** Seeds route-valid IDs in bounded batches and prepares the full preference JSONB value once per transaction. */
+/** Seeds a scale as one set-based population and prepares each full preference JSONB value once per transaction. */
 async function seedPreferencePopulation(
   database: GrowthDatabase,
   route: number,
@@ -67,7 +66,7 @@ async function seedPreferencePopulation(
     readonly spoilerLevel?: 0 | 1 | 2;
     readonly grant?: boolean;
     readonly receipt?: boolean;
-  } = {},
+  },
 ): Promise<void> {
   const shelfValue = options.shelf === undefined ? null : JSON.stringify(options.shelf);
   const notificationValue = JSON.stringify(notifications);
@@ -87,64 +86,59 @@ async function seedPreferencePopulation(
        SELECT $1::jsonb AS shelf, $2::jsonb AS notifications`,
       [shelfValue, notificationValue],
     );
-
-    for (let offset = 0; offset < count; offset += preferenceSeedBatchSize) {
-      const batchCount = Math.min(preferenceSeedBatchSize, count - offset);
-      await client.query('TRUNCATE TABLE growth_preference_seed_ids');
+    await client.query(
+      `INSERT INTO growth_preference_seed_ids(account_id)
+       SELECT (
+         substr(value, 1, 14) || '7' || substr(value, 16, 9) ||
+         lpad(to_hex($1::integer), 4, '0') || right(value, 8)
+       )::uuid
+       FROM (
+         SELECT gen_random_uuid()::text AS value
+         FROM generate_series(1, $2::integer)
+       ) AS uuid_values`,
+      [route, count],
+    );
+    await client.query(
+      `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
+       SELECT $1, account_id, 'actor', 'active', account_id FROM growth_preference_seed_ids`,
+      [route],
+    );
+    if (options.shelf !== undefined) {
       await client.query(
-        `INSERT INTO growth_preference_seed_ids(account_id)
-         SELECT (
-           substr(value, 1, 14) || '7' || substr(value, 16, 9) ||
-           lpad(to_hex($1::integer), 4, '0') || right(value, 8)
-         )::uuid
-         FROM (
-           SELECT gen_random_uuid()::text AS value
-           FROM generate_series(1, $2::integer)
-         ) AS uuid_values`,
-        [route, batchCount],
+        `INSERT INTO access.account_preferences
+           (route, account_id, spoiler_level, suitability, shelf, notifications, version)
+         SELECT $1, ids.account_id, $2, 'blur', seed_value.shelf, seed_value.notifications, 1
+         FROM growth_preference_seed_ids AS ids
+         CROSS JOIN growth_preference_seed_values AS seed_value`,
+        [route, options.spoilerLevel ?? 2],
       );
+    } else {
       await client.query(
-        `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
-         SELECT $1, account_id, 'actor', 'active', account_id FROM growth_preference_seed_ids`,
+        `INSERT INTO access.account_preferences
+           (route, account_id, spoiler_level, suitability, notifications, version)
+         SELECT $1, ids.account_id, $2, 'blur', seed_value.notifications, 1
+         FROM growth_preference_seed_ids AS ids
+         CROSS JOIN growth_preference_seed_values AS seed_value`,
+        [route, options.spoilerLevel ?? 0],
+      );
+    }
+    if (options.grant)
+      await client.query(
+        `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+         SELECT $1, account_id, account_id, 'account:update', '(,)', account_id
+         FROM growth_preference_seed_ids`,
         [route],
       );
-      if (options.shelf !== undefined) {
-        await client.query(
-          `INSERT INTO access.account_preferences
-             (route, account_id, spoiler_level, suitability, shelf, notifications, version)
-           SELECT $1, ids.account_id, $2, 'blur', seed_value.shelf, seed_value.notifications, 1
-           FROM growth_preference_seed_ids AS ids
-           CROSS JOIN growth_preference_seed_values AS seed_value`,
-          [route, options.spoilerLevel ?? 2],
-        );
-      } else {
-        await client.query(
-          `INSERT INTO access.account_preferences
-             (route, account_id, spoiler_level, suitability, notifications, version)
-           SELECT $1, ids.account_id, $2, 'blur', seed_value.notifications, 1
-           FROM growth_preference_seed_ids AS ids
-           CROSS JOIN growth_preference_seed_values AS seed_value`,
-          [route, options.spoilerLevel ?? 0],
-        );
-      }
-      if (options.grant)
-        await client.query(
-          `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
-           SELECT $1, account_id, account_id, 'account:update', '(,)', account_id
-           FROM growth_preference_seed_ids`,
-          [route],
-        );
-      if (options.receipt)
-        await client.query(
-          `INSERT INTO core.receipt
-             (partition_no, principal_kind, principal_id, command_kind, idempotency_key, request_digest,
-              epoch, position, transaction_id, response)
-           SELECT $1, 'account', account_id, 'access.account.preferences', account_id::text,
-                  decode(repeat('0', 64), 'hex'), 1, 1, account_id, '{}'
-           FROM growth_preference_seed_ids`,
-          [partitionOf(route)],
-        );
-    }
+    if (options.receipt)
+      await client.query(
+        `INSERT INTO core.receipt
+           (partition_no, principal_kind, principal_id, command_kind, idempotency_key, request_digest,
+            epoch, position, transaction_id, response)
+         SELECT $1, 'account', account_id, 'access.account.preferences', account_id::text,
+                decode(repeat('0', 64), 'hex'), 1, 1, account_id, '{}'
+         FROM growth_preference_seed_ids`,
+        [partitionOf(route)],
+      );
     await client.query('COMMIT');
     transactionOpen = false;
   } catch (error) {
