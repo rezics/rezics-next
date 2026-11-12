@@ -108,6 +108,8 @@ import {
 } from './cross-media-dump-cache.ts';
 import { crossMediaDumpCacheRoot } from './datasets/fetch-dumps.ts';
 import {
+  publishRemoteRunEvidence,
+  readRemoteRunEvidence,
   remoteRunCustodyUpdateLimit,
   readJsonFile,
   writeAtomicJson,
@@ -8284,12 +8286,22 @@ export function remoteCheckCustodyCallbacks(
       update((_current, attempts) => {
         const index = findAttempt(attempts, receipt);
         const previous = attempts[index]!;
-        if (previous.native !== undefined && JSON.stringify(previous.native) !== JSON.stringify(receipt))
+        const identity = { checkId, physicalRunId, host: receipt.host, run: receipt.run };
+        const previousNative =
+          previous.nativeReference === undefined
+            ? previous.native
+            : readRemoteRunEvidence(file, previous.nativeReference, identity, 'native');
+        if (previous.nativeReference !== undefined && previousNative === undefined)
+          throw new Error('remote-check: retained native evidence is unavailable');
+        if (previousNative !== undefined && JSON.stringify(previousNative) !== JSON.stringify(receipt))
           throw new Error('remote-check: conflicting native receipt for one remote reservation');
+        if (previous.settlement !== undefined || previous.settlementReference !== undefined) return attempts;
+        const nativeReference = publishRemoteRunEvidence(file, identity, 'native', receipt);
+        const { native: _native, ...retained } = previous;
         attempts[index] = {
-          ...previous,
+          ...retained,
           status: 'terminal',
-          native: receipt,
+          nativeReference,
           endedAt: previous.endedAt ?? new Date().toISOString(),
         };
         return attempts;
@@ -8308,11 +8320,32 @@ export function remoteCheckCustodyCallbacks(
           JSON.stringify(previous.native) !== JSON.stringify(native)
         )
           throw new Error('remote-check: settlement replaced the native receipt');
+        const identity = { checkId, physicalRunId, host: settlement.host, run: settlement.run };
+        const previousNative =
+          previous.nativeReference === undefined
+            ? previous.native
+            : readRemoteRunEvidence(file, previous.nativeReference, identity, 'native');
+        if (native !== null && previous.nativeReference !== undefined && previousNative === undefined)
+          throw new Error('remote-check: retained native evidence is unavailable');
+        if (
+          previousNative !== undefined &&
+          native !== null &&
+          JSON.stringify(previousNative) !== JSON.stringify(native)
+        )
+          throw new Error('remote-check: settlement replaced the native receipt');
+        const nativeEvidence = native ?? previousNative;
+        const nativeReference =
+          nativeEvidence === undefined
+            ? previous.nativeReference
+            : publishRemoteRunEvidence(file, identity, 'native', nativeEvidence);
+        const { native: _native, cleanup: _cleanup, ...settlementEvidence } = settlement;
+        const settlementReference = publishRemoteRunEvidence(file, identity, 'settlement', settlementEvidence);
+        const { native: _previousNative, settlement: _previousSettlement, ...retained } = previous;
         attempts[index] = {
-          ...previous,
+          ...retained,
           status: native ? 'terminal' : 'uncertain',
-          ...(native ? { native } : {}),
-          settlement,
+          ...(nativeReference ? { nativeReference } : {}),
+          settlementReference,
           cleanup: settlement.cleanup,
           endedAt: previous.endedAt ?? new Date().toISOString(),
         };

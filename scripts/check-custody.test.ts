@@ -10,6 +10,8 @@ import {
   controllerProofReservationPath,
   custodyJsonCharacters,
   initializeRemoteRunCustody,
+  publishRemoteRunEvidence,
+  readRemoteRunEvidence,
   readJsonFile,
   remoteRunCustodyPath,
   validateControllerProofBinding,
@@ -111,6 +113,38 @@ function markerPid(path: string): number {
   return Number(readFileSync(path, 'utf8'));
 }
 
+function largeReceipt(host: string, run: string, exitCode: number): RemotePhysicalRunReceipt {
+  return {
+    schema: 1,
+    host,
+    run,
+    exitCode,
+    lifetimeFailure: null,
+    resources: {
+      schema: 1,
+      host,
+      run,
+      boot: 'check-host-boot-id',
+      supervisor: { pid: 700, start: '1000', group: 700 },
+      cgroup: null,
+      cadenceMs: 5000,
+      startedMonoMs: 0,
+      commandStartedMonoMs: 5000,
+      terminalMonoMs: 1_440_000,
+      samples: Array.from({ length: 288 }, (_, index) => ({
+        monoMs: (index + 1) * 5000,
+        phase: 'command' as const,
+        usageUsec: null,
+        memoryPeakBytes: null,
+        intervalMs: null,
+        cores: null,
+        unavailable: 'resource counters unavailable during host pressure sampling',
+      })),
+      sampledMaxCores: null,
+    },
+  };
+}
+
 test('remote custody bounds round-trip generated, escaped and transitioned records', async () => {
   const root = rootFixture(),
     checkId = randomUUID(),
@@ -180,24 +214,26 @@ test('remote custody bounds round-trip generated, escaped and transitioned recor
       },
     };
   await callbacks.completed!(native);
-  await callbacks.settled!({
+  const cleanup = {
+    schema: 1 as const,
+    ...run,
+    status: 'verified' as const,
+    supervisorStopped: true,
+    commandGroupTerminal: true,
+    containersRemoved: true,
+    runDirectoryRemoved: true,
+    failures: [],
+  };
+  const settlement = {
     schema: 1,
     ...run,
     native,
     preparedInputs: null,
     returns: { schema: 1, status: 'empty', entries: [], missing: [], failures: [] },
-    cleanup: {
-      schema: 1,
-      ...run,
-      status: 'verified',
-      supervisorStopped: true,
-      commandGroupTerminal: true,
-      containersRemoved: true,
-      runDirectoryRemoved: true,
-      failures: [],
-    },
+    cleanup,
     transportChildReaped: true,
-  });
+  };
+  await callbacks.settled!(settlement);
   const record = readJsonFile<CheckRemoteRunCustody>(file);
   expect([record?.physicalRunId, record?.binding?.checkId, record?.binding?.ownership]).toEqual([
     physicalRunId,
@@ -209,12 +245,62 @@ test('remote custody bounds round-trip generated, escaped and transitioned recor
     ['check-a', 'not-started'],
     ['check-b', 'terminal'],
   ]);
-  expect(record?.attempts[1]).toMatchObject({ id: 'second-run', native, settlement: expect.any(Object) });
+  const attempt = record?.attempts[1];
+  expect(attempt).toMatchObject({ id: 'second-run', cleanup });
+  expect(attempt?.native).toBeUndefined();
+  expect(attempt?.settlement).toBeUndefined();
+  expect(attempt?.nativeReference).toMatchObject({
+    kind: 'native',
+    checkId,
+    physicalRunId,
+    host: 'check-b',
+    run: 'second-run',
+  });
+  expect(attempt?.settlementReference).toMatchObject({
+    kind: 'settlement',
+    checkId,
+    physicalRunId,
+    host: 'check-b',
+    run: 'second-run',
+  });
+  expect(readRemoteRunEvidence(file, attempt?.nativeReference, { checkId, physicalRunId, ...run }, 'native')).toEqual(
+    native,
+  );
+  expect(
+    readRemoteRunEvidence(file, attempt?.settlementReference, { checkId, physicalRunId, ...run }, 'settlement'),
+  ).toEqual({
+    schema: settlement.schema,
+    ...run,
+    preparedInputs: settlement.preparedInputs,
+    returns: settlement.returns,
+    transportChildReaped: settlement.transportChildReaped,
+  });
+  expect(readdirSync(join(root, '.temp/goal/checks/custody/remote-evidence'))).toHaveLength(2);
   expect(record?.binding).toEqual({ ...binding, hostsFile: join(root, 'hosts.json'), returns: [] });
-  expect(custodyJsonCharacters(record)).toBeGreaterThan(
+  expect(custodyJsonCharacters(record)).toBeLessThanOrEqual(CHECK_CUSTODY_RECORD_MAX_CHARACTERS);
+  expect(custodyJsonCharacters(record)).toBeLessThan(
     initialCustodyCharacters + CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS,
   );
-  expect(custodyJsonCharacters(record)).toBeLessThanOrEqual(CHECK_CUSTODY_RECORD_MAX_CHARACTERS);
+
+  const priorSettlementReference = attempt!.settlementReference!;
+  publishRemoteRunEvidence(file, { checkId, physicalRunId, ...run }, 'settlement', {
+    ...settlement,
+    native: undefined,
+    cleanup: undefined,
+    returns: { ...settlement.returns, failures: ['newer'] },
+  });
+  expect(
+    readRemoteRunEvidence(file, priorSettlementReference, { checkId, physicalRunId, ...run }, 'settlement'),
+  ).toEqual({
+    schema: settlement.schema,
+    ...run,
+    preparedInputs: settlement.preparedInputs,
+    returns: settlement.returns,
+    transportChildReaped: settlement.transportChildReaped,
+  });
+  expect(
+    readRemoteRunEvidence(file, attempt?.nativeReference, { checkId: randomUUID(), physicalRunId, ...run }, 'native'),
+  ).toBeUndefined();
 
   const max = CHECK_CUSTODY_RECORD_MAX_CHARACTERS;
   const boundary = { payload: 'x'.repeat(max - custodyJsonCharacters({ payload: '' })) };
@@ -257,6 +343,122 @@ test('remote custody bounds round-trip generated, escaped and transitioned recor
     `worker-check: serialized custody record exceeds ${aggregateRecordLimit}-character bound`,
   );
   expect(existsSync(remoteRunCustodyPath(root, aggregateRunId))).toBe(false);
+});
+
+test('large physical receipts publish once and retain exact verdicts through host and terminal transitions', async () => {
+  for (const exitCode of [0, 1]) {
+    const root = rootFixture();
+    const checkId = randomUUID();
+    const physicalRunId = randomUUID();
+    const run = { host: 'check-b', run: `large-run-${exitCode}` };
+    const argv = ['bun', 'test', 'scripts/native-large-receipt.test.ts'];
+    const remoteArgv = ['env', `REZICS_CHECK_PHYSICAL_RUN_ID=${physicalRunId}`, ...argv];
+    const file = remoteRunCustodyPath(root, physicalRunId);
+    initializeRemoteRunCustody(root, physicalRunId, { checkId, argv, remoteArgv });
+    Object.assign(process.env, {
+      REZICS_CHECK_REMOTE_CUSTODY_FILE: file,
+      REZICS_CHECK_REMOTE_CUSTODY_ID: checkId,
+      REZICS_CHECK_PHYSICAL_RUN_ID: physicalRunId,
+    });
+    const callbacks = remoteCheckCustodyCallbacks(
+      remoteArgv,
+      ['.temp/goal/checks/receipt.json'],
+      join(root, 'hosts.json'),
+    );
+    await callbacks.allocated!({ host: 'check-a', run: 'transport-before-start' });
+    await callbacks.notStarted!({ host: 'check-a', run: 'transport-before-start' }, null, 'host did not start');
+    await callbacks.allocated!(run);
+    const native = largeReceipt(run.host, run.run, exitCode);
+    expect(native.resources?.samples).toHaveLength(288);
+    expect(Buffer.byteLength(JSON.stringify(native))).toBeGreaterThan(50_000);
+    const cleanup = {
+      schema: 1 as const,
+      ...run,
+      status: 'verified' as const,
+      supervisorStopped: true,
+      commandGroupTerminal: true,
+      containersRemoved: true,
+      runDirectoryRemoved: true,
+      failures: [],
+    };
+    const settlement = {
+      schema: 1,
+      ...run,
+      native,
+      preparedInputs: {
+        schema: 1 as const,
+        sourceSha256: 'a'.repeat(64),
+        manifestSha256: 'b'.repeat(64),
+        fileCount: 288,
+        totalBytes: 50_000,
+      },
+      returns: {
+        schema: 1 as const,
+        status: 'complete' as const,
+        entries: [{ path: '.temp/goal/checks/receipt.json', size: 123, sha256: 'c'.repeat(64), kind: 'file' as const }],
+        missing: [],
+        failures: [],
+      },
+      cleanup,
+      transportChildReaped: true,
+    };
+    await callbacks.completed!(native);
+    await callbacks.settled!(settlement);
+
+    const record = readJsonFile<CheckRemoteRunCustody>(file)!;
+    const attempt = record.attempts[1]!;
+    expect(record.status).toBe('terminal');
+    expect(record.attempts.map(({ host, status }) => [host, status])).toEqual([
+      ['check-a', 'not-started'],
+      ['check-b', 'terminal'],
+    ]);
+    expect(attempt.native).toBeUndefined();
+    expect(attempt.settlement).toBeUndefined();
+    expect(attempt.cleanup).toEqual(cleanup);
+    expect(attempt.nativeReference?.bytes).toBeGreaterThan(50_000);
+    expect(custodyJsonCharacters(record)).toBeLessThanOrEqual(CHECK_CUSTODY_RECORD_MAX_CHARACTERS);
+    expect(custodyJsonCharacters(record)).toBeLessThan(20_000);
+    expect(readRemoteRunEvidence(file, attempt.nativeReference, { checkId, physicalRunId, ...run }, 'native')).toEqual(
+      native,
+    );
+    expect(
+      readRemoteRunEvidence(file, attempt.settlementReference, { checkId, physicalRunId, ...run }, 'settlement'),
+    ).toEqual({
+      schema: settlement.schema,
+      ...run,
+      preparedInputs: settlement.preparedInputs,
+      returns: settlement.returns,
+      transportChildReaped: settlement.transportChildReaped,
+    });
+
+    const oldSettlementReference = attempt.settlementReference!;
+    // A stop after artifact publication but before pointer replacement leaves the old bytes reachable.
+    publishRemoteRunEvidence(file, { checkId, physicalRunId, ...run }, 'settlement', {
+      schema: 1,
+      ...run,
+      preparedInputs: settlement.preparedInputs,
+      returns: { ...settlement.returns, failures: ['unpublished newer settlement'] },
+      transportChildReaped: true,
+    });
+    expect(
+      readRemoteRunEvidence(file, oldSettlementReference, { checkId, physicalRunId, ...run }, 'settlement'),
+    ).toMatchObject({ returns: settlement.returns });
+    expect(
+      readRemoteRunEvidence(file, attempt.nativeReference, { checkId: randomUUID(), physicalRunId, ...run }, 'native'),
+    ).toBeUndefined();
+    const evidenceDirectory = join(root, '.temp/goal/checks/custody/remote-evidence');
+    const nativeFile = join(
+      evidenceDirectory,
+      readdirSync(evidenceDirectory).find((name) => name.includes('.native.'))!,
+    );
+    if (exitCode === 0) rmSync(nativeFile);
+    else writeFileSync(nativeFile, 'changed evidence\n');
+    expect(
+      readRemoteRunEvidence(file, attempt.nativeReference, { checkId, physicalRunId, ...run }, 'native'),
+    ).toBeUndefined();
+    restoreEnvironment();
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 afterEach(() => {

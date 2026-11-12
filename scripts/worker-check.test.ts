@@ -50,6 +50,7 @@ import {
   initializeRemoteRunCustody,
   physicalHistoryPath,
   processIdentity,
+  publishRemoteRunEvidence,
   remoteRunCustodyPath,
   validControllerProofRegistration,
   withCheckFence,
@@ -642,7 +643,15 @@ async function deadRunnerIdentity() {
 
 async function writeLostRemoteCheck(
   root: string,
-  state: 'pending' | 'terminal' | 'empty' | 'missing' | 'mismatched',
+  state:
+    | 'pending'
+    | 'terminal'
+    | 'empty'
+    | 'missing'
+    | 'mismatched'
+    | 'referenced-terminal'
+    | 'missing-evidence'
+    | 'mismatched-evidence',
 ): Promise<{ id: string; physicalRunId: string; runnerIdentity: Awaited<ReturnType<typeof deadRunnerIdentity>> }> {
   const id = randomUUID();
   const physicalRunId = randomUUID();
@@ -678,10 +687,14 @@ async function writeLostRemoteCheck(
     runnerHost: hostname(),
     runnerIdentity,
     log,
-    status: state === 'terminal' ? 'finished' : 'running',
+    status: ['terminal', 'referenced-terminal'].includes(state) ? 'finished' : 'running',
     remoteExpected: true,
     createdAt: new Date().toISOString(),
-    ...(state === 'terminal' ? { exitCode: 0, finishedAt: new Date().toISOString() } : {}),
+    ...(state === 'terminal'
+      ? { exitCode: 0, finishedAt: new Date().toISOString() }
+      : state === 'referenced-terminal'
+        ? { exitCode: 1, finishedAt: new Date().toISOString() }
+        : {}),
   });
   if (state !== 'missing') {
     initializeRemoteRunCustody(root, physicalRunId, { checkId: id, ownership, argv, remoteArgv });
@@ -705,12 +718,62 @@ async function writeLostRemoteCheck(
               },
               retainedAttempt('check-b', 'reservation-terminal'),
             ]
-          : [];
+          : ['referenced-terminal', 'missing-evidence', 'mismatched-evidence'].includes(state)
+            ? (() => {
+                const now = new Date().toISOString();
+                const legacy = retainedAttempt('check-b', 'reservation-terminal');
+                const identity = {
+                  checkId: id,
+                  physicalRunId,
+                  host: legacy.host,
+                  run: legacy.id,
+                };
+                const nativeReference = publishRemoteRunEvidence(
+                  remoteRunCustodyPath(root, physicalRunId),
+                  identity,
+                  'native',
+                  { ...legacy.native, exitCode: state === 'referenced-terminal' ? 1 : 0 },
+                );
+                const {
+                  native: _native,
+                  cleanup: _cleanup,
+                  ...settlementEvidence
+                } = legacy.settlement as Record<string, unknown>;
+                const settlementReference = publishRemoteRunEvidence(
+                  remoteRunCustodyPath(root, physicalRunId),
+                  identity,
+                  'settlement',
+                  settlementEvidence,
+                );
+                const attempt = {
+                  host: legacy.host,
+                  id: legacy.id,
+                  status: 'terminal',
+                  startedAt: now,
+                  endedAt: now,
+                  nativeReference:
+                    state === 'mismatched-evidence' ? { ...nativeReference, checkId: randomUUID() } : nativeReference,
+                  settlementReference,
+                  cleanup: legacy.cleanup,
+                };
+                if (state === 'missing-evidence') {
+                  const directory = join(root, '.temp/goal/checks/custody/remote-evidence');
+                  const nativeFile = join(
+                    directory,
+                    readdirSync(directory).find((name) => name.includes(nativeReference.sha256))!,
+                  );
+                  rmSync(nativeFile);
+                }
+                return [attempt];
+              })()
+            : [];
     writeAtomicJson(remoteRunCustodyPath(root, physicalRunId), {
       version: 1,
       physicalRunId: state === 'mismatched' ? randomUUID() : physicalRunId,
       binding,
-      status: state === 'terminal' ? 'terminal' : 'running',
+      status: ['terminal', 'referenced-terminal', 'missing-evidence', 'mismatched-evidence'].includes(state)
+        ? 'terminal'
+        : 'running',
       attempts,
       updatedAt: new Date().toISOString(),
     });
@@ -902,6 +965,21 @@ test('a retained terminal result survives host move and duplicate wake without a
   expect(existsSync(join(root, 'rerun-marker'))).toBe(false);
 });
 
+test('a referenced native exit 1 survives recovery and duplicate wake without another physical run', async () => {
+  const root = mkdtempSync(join(suiteRoot, 'worker-check-retained-referenced-terminal-'));
+  dirs.push(root);
+  const { id, physicalRunId } = await writeLostRemoteCheck(root, 'referenced-terminal');
+  const first: string[] = [];
+  expect(await waitWorkerCheck(id, root, 100, { pollMs: 5, write: (chunk) => first.push(chunk) })).toBe(1);
+  const record = readWorkerCheckRecord(id, root);
+  expect(record.status).toBe('finished');
+  expect(record.exitCode).toBe(1);
+  expect(record.physicalRun).toMatchObject({ host: 'check-b', run: 'reservation-terminal', exitCode: 1 });
+  expect(record.physicalRunReference).toMatchObject({ checkId: id, physicalRunId, kind: 'native' });
+  expect(await waitWorkerCheck(id, root, 0, { write: () => {} })).toBe(1);
+  expect(existsSync(join(root, 'rerun-marker'))).toBe(false);
+});
+
 test('missing, empty or mismatched physical identity keeps a lost remote check unknown', async () => {
   for (const state of ['missing', 'empty', 'mismatched'] as const) {
     const root = mkdtempSync(join(suiteRoot, `worker-check-retained-${state}-`));
@@ -912,6 +990,21 @@ test('missing, empty or mismatched physical identity keeps a lost remote check u
     expect(out.join('')).toContain('physical custody is unknown');
     expect(readWorkerCheckRecord(id, root).status).toBe('running');
     expect(readWorkerCheckHistory(id, physicalRunId, root)?.status).toBe('running');
+    expect(existsSync(join(root, 'rerun-marker'))).toBe(false);
+  }
+});
+
+test('missing or mismatched evidence references remain unknown without replacing the physical run', async () => {
+  for (const state of ['missing-evidence', 'mismatched-evidence'] as const) {
+    const root = mkdtempSync(join(suiteRoot, `worker-check-retained-${state}-`));
+    dirs.push(root);
+    const { id, physicalRunId } = await writeLostRemoteCheck(root, state);
+    const out: string[] = [];
+    expect(await waitWorkerCheck(id, root, 100, { pollMs: 5, write: (chunk) => out.push(chunk) })).toBe(75);
+    expect(out.join('')).toContain('physical custody is unknown');
+    expect(readWorkerCheckRecord(id, root).status).toBe('running');
+    expect(readWorkerCheckHistory(id, physicalRunId, root)?.status).toBe('running');
+    expect(readFileSync(remoteRunCustodyPath(root, physicalRunId), 'utf8')).toContain('settlementReference');
     expect(existsSync(join(root, 'rerun-marker'))).toBe(false);
   }
 });
