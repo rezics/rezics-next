@@ -1,3 +1,4 @@
+import type { KnowledgeReference } from './knowledge-portable.ts';
 import type { ContentCommandDependencies } from './commands.ts';
 import type { ContentReadDependencies } from './reads.ts';
 
@@ -17,6 +18,7 @@ export type KnowledgeDocumentInput = Readonly<{
   body: unknown;
   licence: string;
   subjectIds: readonly string[];
+  references?: readonly KnowledgeReference[];
 }>;
 export type KnowledgeCreateNotebookInput = Readonly<{ subjectId: string; title: string }>;
 export type KnowledgeCreateDocumentInput = KnowledgeDocumentInput &

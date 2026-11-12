@@ -1,3 +1,6 @@
+import { parseDocument, serializeDocument } from '@rezics/document';
+import { projectKnowledgePublicBody, projectKnowledgePublicProvenance } from './knowledge-disclosure.ts';
+import { knowledgeDigest, type KnowledgeReference, type KnowledgeProvenance } from './knowledge-portable.ts';
 import { createHash } from 'node:crypto';
 import { accessCheck } from './access-port.ts';
 import { prepareEditionSubjectIdentities } from './edition-subject.ts';
@@ -44,6 +47,8 @@ function baseDocument(row: {
   body_sha256: Buffer;
   licence: string;
   subject_ids: string[];
+  reference_manifest: readonly KnowledgeReference[];
+  copy_provenance: KnowledgeProvenance | null;
 }) {
   return {
     documentId: row.document_id,
@@ -54,6 +59,8 @@ function baseDocument(row: {
     sha256: row.body_sha256.toString('hex'),
     licence: row.licence,
     subjectIds: [...row.subject_ids],
+    references: [...row.reference_manifest],
+    provenance: row.copy_provenance,
   };
 }
 
@@ -136,9 +143,26 @@ export async function readKnowledgePublicDocument(
     return row;
   });
   if (!final.value || !(await visible())) throw new KnowledgeNotFoundError();
+  const projection = await projectKnowledgePublicBody(
+    deps,
+    parseDocument(JSON.parse(final.value.canonical_bytes.toString('utf8'))),
+    final.value.reference_manifest,
+    context.deadline,
+  );
+  const canonical = serializeDocument(projection.snapshot);
+  const provenance = await projectKnowledgePublicProvenance(deps, final.value.copy_provenance, context.deadline);
+  const current = await snapshot(deps, documentId, context, (client) =>
+    knowledgePublicSelection(client, sourceRoute, documentId),
+  );
+  if (current.value?.publication_id !== selected.publication_id || !(await visible()))
+    throw new KnowledgeNotFoundError();
   const value = {
     document: {
       ...baseDocument(final.value),
+      canonicalBytes: Buffer.from(canonical).toString('base64'),
+      sha256: knowledgeDigest(canonical),
+      references: [...projection.references],
+      provenance,
       publicationId: final.value.current_publication_id,
       subjectId: final.value.subject_id,
       publishedAt: final.value.published_at.toISOString(),
@@ -147,7 +171,7 @@ export async function readKnowledgePublicDocument(
       authorId: null,
     },
   };
-  const anchors: AnchoredPosition[] = [initial.anchor, final.anchor];
+  const anchors: AnchoredPosition[] = [initial.anchor, final.anchor, current.anchor];
   return { value, anchors };
 }
 
@@ -159,9 +183,11 @@ export async function readKnowledgePrivateDocument(
   notebookId: string,
   documentId: string,
   context: ReadContext,
+  revisionId?: string,
 ) {
   const sourceRoute = route(documentId);
   if (
+    (revisionId !== undefined && route(revisionId) !== sourceRoute) ||
     context.actor.kind !== 'account' ||
     context.actor.accountId !== accountId ||
     route(accountId) !== sourceRoute ||
@@ -178,7 +204,7 @@ export async function readKnowledgePrivateDocument(
   );
   const result = await snapshot(deps, documentId, context, async (client) => {
     if (!(await check(client))) return null;
-    const row = await knowledgePrivateRow(client, sourceRoute, notebookId, documentId);
+    const row = await knowledgePrivateRow(client, sourceRoute, notebookId, documentId, revisionId ?? null);
     if (!row || row.owner_account_id !== accountId) return null;
     const path = await knowledgeAncestorPath(client, sourceRoute, notebookId, row.placement_id);
     const stablePath = path.map(({ placement_id, parent_id }) => ({ placementId: placement_id, parentId: parent_id }));
@@ -189,7 +215,7 @@ export async function readKnowledgePrivateDocument(
   return {
     value: {
       document: {
-        ...baseDocument({ ...result.value, revision_id: result.value.head_revision_id }),
+        ...baseDocument(result.value),
         notebookId: result.value.notebook_id,
         publicationId: result.value.current_publication_id,
       },
