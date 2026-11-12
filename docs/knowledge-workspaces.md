@@ -382,6 +382,29 @@ by canonical identity does not prove containment validity. Formula dependency DA
 capability and have their own cycle and evaluation contract. One logical graph does not imply one untyped edge table
 or a common ownership/transaction boundary for every kind of edge.
 
+### Owned notebook organization consumer
+
+Decision: the existing notebook route offers explicit source selection, lazy destination-parent browsing, and a
+before-sibling/end review from observed placement identities. One native structure revision binds both observations;
+labels and order keys confer no authority. Native Content resolves cycles, depth and order maintenance. A conflict
+preserves the prior choice for comparison, requires fresh source and destination selection, and creates a new command
+only on deliberate review. An uncertain retry retains the exact operands, key and captured credential. The native
+receipt remains visible while a separate explicit fresh outline establishes current placement. Document IDs and
+existing editor/exact addresses survive movement; organization reads no bodies and changes no publication.
+
+History uses one explicit twenty-row native history page and one selected-revision/parent historical outline page.
+Unavailable history is labelled, never rendered as an empty historical tree. Historical rows cannot select a move;
+returning to current root or the prior current parent admits a fresh reading first. More and Retry replace one page,
+retain opaque continuation and retry the attempted cursor; stale traversal offers an explicit parent restart.
+Session, account, CSRF, exposure, source, locale and address replacement retire pages, choices, late work and focus.
+
+Consumer cost: **Touches** one generated read per Open/More/Retry/history selection or one move per confirmation/retry,
+with the existing private-session preparation for a new review. **Bound** one twenty-row page, at most 32 visited
+breadcrumbs, one selected source and one sealed intent/receipt; history changes retain the native 129-per-revision
+ceiling. **Growth** O(page + depth) retained data, no tree scans, prefetch, refill, body reads or per-row hydration.
+Content owns native mutation/history costs; consumer bounds do not claim native cost proof.
+
+
 ## Search, discovery and public value
 
 At launch the subject visit composes its ordinary public facts, a bounded page of published contributions and a
@@ -494,25 +517,3 @@ and computational parity. The source code and native proof gaps in those reports
 The architectural extension is an authored knowledge capability over existing owners. It does not adopt a separate
 graph database, another permissions framework, a workspace-wide CRDT, automatic recursive publication or private
 facts in public search. Cross-domain APIs are installed through existing module contracts and composition roots.
-
-### Owned notebook organization consumer
-
-Decision: the existing notebook route offers explicit source selection, lazy destination-parent browsing, and a
-before-sibling/end review from observed placement identities. One native structure revision binds both observations;
-labels and order keys confer no authority. Native Content resolves cycles, depth and order maintenance. A conflict
-preserves the prior choice for comparison, requires fresh source and destination selection, and creates a new command
-only on deliberate review. An uncertain retry retains the exact operands, key and captured credential. The native
-receipt remains visible while a separate explicit fresh outline establishes current placement. Document IDs and
-existing editor/exact addresses survive movement; organization reads no bodies and changes no publication.
-
-History uses one explicit twenty-row native history page and one selected-revision/parent historical outline page.
-Unavailable history is labelled, never rendered as an empty historical tree. Historical rows cannot select a move;
-returning to current root or the prior current parent admits a fresh reading first. More and Retry replace one page,
-retain opaque continuation and retry the attempted cursor; stale traversal offers an explicit parent restart.
-Session, account, CSRF, exposure, source, locale and address replacement retire pages, choices, late work and focus.
-
-Consumer cost: **Touches** one generated read per Open/More/Retry/history selection or one move per confirmation/retry,
-with the existing private-session preparation for a new review. **Bound** one twenty-row page, at most 32 visited
-breadcrumbs, one selected source and one sealed intent/receipt; history changes retain the native 129-per-revision
-ceiling. **Growth** O(page + depth) retained data, no tree scans, prefetch, refill, body reads or per-row hydration.
-Content owns native mutation/history costs; consumer bounds do not claim native cost proof.

@@ -6,7 +6,12 @@ import { getLocale } from '../paraglide/runtime.js';
 import { readerSessionSource } from '../reader/lifetime';
 import { useSession } from '../session/query';
 import { isKnowledgeId } from './private-knowledge';
-import { readKnowledgeNavigationVisit, readKnowledgeOrganizationVisit, prepareKnowledgeOrganizationVisit, moveKnowledgeOrganizationPlacement } from './private-server';
+import {
+  readKnowledgeNavigationVisit,
+  readKnowledgeOrganizationVisit,
+  prepareKnowledgeOrganizationVisit,
+  moveKnowledgeOrganizationPlacement,
+} from './private-server';
 import {
   KnowledgeNavigationEntry,
   type KnowledgeNavigationAccess,
@@ -70,11 +75,27 @@ export function KnowledgeNavigationRoute({ notebookId }: { notebookId?: string }
           data: { request, expected: { viewer, csrfToken } },
           headers: { 'X-CSRF-Token': csrfToken ?? '' },
         }),
-      ...(notebookId !== undefined && move === 'available' && history === 'available' ? { organization: {
-        read: (request: import('./organization-read').OrganizationRequest) => readKnowledgeOrganizationVisit({ data: { request, expected: { viewer, csrfToken } }, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
-        prepare: () => prepareKnowledgeOrganizationVisit({ data: { viewer, csrfToken }, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
-        move: (intent: import('./organization-read').OrganizationIntent) => moveKnowledgeOrganizationPlacement({ data: intent, headers: { 'X-CSRF-Token': intent.binding.csrfToken } }),
-      } } : {}),
+      ...(notebookId !== undefined && move === 'available' && history === 'available'
+        ? {
+            organization: {
+              read: (request: import('./organization-read').OrganizationRequest) =>
+                readKnowledgeOrganizationVisit({
+                  data: { request, expected: { viewer, csrfToken } },
+                  headers: { 'X-CSRF-Token': csrfToken ?? '' },
+                }),
+              prepare: () =>
+                prepareKnowledgeOrganizationVisit({
+                  data: { viewer, csrfToken },
+                  headers: { 'X-CSRF-Token': csrfToken ?? '' },
+                }),
+              move: (intent: import('./organization-read').OrganizationIntent) =>
+                moveKnowledgeOrganizationPlacement({
+                  data: intent,
+                  headers: { 'X-CSRF-Token': intent.binding.csrfToken },
+                }),
+            },
+          }
+        : {}),
       current: () => source.snapshot() === sessionRevision && revision() === exposureRevision && getLocale() === locale,
       subscribeRetirement: (retire) => {
         const stopSession = source.subscribe(retire);

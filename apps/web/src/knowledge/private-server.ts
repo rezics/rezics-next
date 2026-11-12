@@ -1,4 +1,10 @@
-import { parseOrganizationRequest, readOrganization, moveOrganizationPlacement, type OrganizationReadResult, type OrganizationMoveResult } from './organization-read';
+import {
+  parseOrganizationRequest,
+  readOrganization,
+  moveOrganizationPlacement,
+  type OrganizationReadResult,
+  type OrganizationMoveResult,
+} from './organization-read';
 import { parseDocument, type DocumentSnapshot } from '@rezics/document';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -505,14 +511,20 @@ export const readKnowledgeNavigationVisit = createServerFn({ method: 'POST' })
     }
   });
 
-
 export const prepareKnowledgeOrganizationVisit = createServerFn({ method: 'POST' })
   .validator(expectedSession)
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const identity = currentFor(data, await currentIdentity());
     if ('state' in identity) return { state: identity.state };
-    return { state: 'ready' as const, binding: { viewer: identity.viewer, csrfToken: identity.csrfToken, credential: await captureCredential(getRequest(), identity) } };
+    return {
+      state: 'ready' as const,
+      binding: {
+        viewer: identity.viewer,
+        csrfToken: identity.csrfToken,
+        credential: await captureCredential(getRequest(), identity),
+      },
+    };
   });
 
 export const readKnowledgeOrganizationVisit = createServerFn({ method: 'POST' })
@@ -527,7 +539,11 @@ export const readKnowledgeOrganizationVisit = createServerFn({ method: 'POST' })
     const identity = currentFor(data.expected, await currentIdentity());
     if ('state' in identity) return { state: identity.state };
     try {
-      return await readOrganization(kernelClient(), { request: data.request, accountId: identity.viewer, authorization: identity.authorization });
+      return await readOrganization(kernelClient(), {
+        request: data.request,
+        accountId: identity.viewer,
+        authorization: identity.authorization,
+      });
     } catch (error) {
       if (isPlatformClosedError(error)) return { state: 'unavailable' };
       throw error;
@@ -551,7 +567,11 @@ export const moveKnowledgeOrganizationPlacement = createServerFn({ method: 'POST
     const identity = await commandIdentity(data.binding);
     if ('state' in identity) return { state: identity.state };
     try {
-      return await moveOrganizationPlacement(kernelClient(), { ...data, idempotencyKey: data.binding.idempotencyKey, authorization: identity.authorization });
+      return await moveOrganizationPlacement(kernelClient(), {
+        ...data,
+        idempotencyKey: data.binding.idempotencyKey,
+        authorization: identity.authorization,
+      });
     } catch (error) {
       return isPlatformClosedError(error) ? { state: 'unavailable' } : { state: 'uncertain' };
     }

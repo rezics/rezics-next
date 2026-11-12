@@ -153,7 +153,11 @@ function KnowledgeNavigationOwner({
       };
     }
     const { frontier, expired } = initial.current;
-    if (operations.organization && address.kind === 'outline') { setReading(undefined); setInitialized(true); return; }
+    if (operations.organization && address.kind === 'outline') {
+      setReading(undefined);
+      setInitialized(true);
+      return;
+    }
     const current = new KnowledgeNavigationReading(operations.read, frontier, expired, operations.current);
     const stop = operations.subscribeRetirement?.(() => current.retire());
     setReading(current);
@@ -166,7 +170,19 @@ function KnowledgeNavigationOwner({
       current.retire();
     };
   }, [JSON.stringify(address), binding, operations, returning]);
-  if (operations.organization && initialized && initial.current && address.kind === 'outline') return <KnowledgeOrganizationOwner frontier={initial.current.frontier} expired={initial.current.expired} locale={locale} binding={binding} operations={operations.organization} current={operations.current} subscribeRetirement={operations.subscribeRetirement} returning={returning} />;
+  if (operations.organization && initialized && initial.current && address.kind === 'outline')
+    return (
+      <KnowledgeOrganizationOwner
+        frontier={initial.current.frontier}
+        expired={initial.current.expired}
+        locale={locale}
+        binding={binding}
+        operations={operations.organization}
+        current={operations.current}
+        subscribeRetirement={operations.subscribeRetirement}
+        returning={returning}
+      />
+    );
   if (!reading) return <p role="status">{m.knowledge_navigation_preparing({}, { locale: locale as never })}</p>;
   return <KnowledgeNavigationRows reading={reading} locale={locale} binding={binding} returning={returning} />;
 }
