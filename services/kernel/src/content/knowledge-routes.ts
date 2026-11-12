@@ -135,6 +135,22 @@ function requireAccount(actor: import('../request/access.ts').Actor) {
   return actor;
 }
 
+function knowledgePageInput(query: Readonly<{ limit?: string | number; cursor?: string }>) {
+  return {
+    ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+    ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+  };
+}
+
+function knowledgeOutlinePageInput(
+  query: Readonly<{ limit?: string | number; cursor?: string; parentPlacementId?: string }>,
+) {
+  return {
+    ...knowledgePageInput(query),
+    ...(query.parentPlacementId === undefined ? {} : { parentPlacementId: query.parentPlacementId }),
+  };
+}
+
 /** Native private authoring and exact public document reads. Search candidates never grant current disclosure. */
 export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, deps: KnowledgeDependencies) {
   app.wrap((handle) => async (request) => {
@@ -165,7 +181,10 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
       async ({ params: { accountId }, query, actor, admission, job, session, set }) => {
         const result = await operation(() =>
           admission.run('normal', job, () =>
-            readKnowledgeOwnedNotebooks(deps, accountId, query, { actor, deadline: job.deadline }),
+            readKnowledgeOwnedNotebooks(deps, accountId, knowledgePageInput(query), {
+              actor,
+              deadline: job.deadline,
+            }),
           ),
         );
         for (const anchor of result.anchors) session.record(sessionComponent(anchor));
@@ -192,7 +211,10 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
       async ({ params: { accountId, notebookId }, query, actor, admission, job, session, set }) => {
         const result = await operation(() =>
           admission.run('normal', job, () =>
-            readKnowledgeOutline(deps, accountId, notebookId, query, { actor, deadline: job.deadline }),
+            readKnowledgeOutline(deps, accountId, notebookId, knowledgeOutlinePageInput(query), {
+              actor,
+              deadline: job.deadline,
+            }),
           ),
         );
         for (const anchor of result.anchors) session.record(sessionComponent(anchor));

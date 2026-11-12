@@ -230,7 +230,12 @@ export async function knowledgeOwnedNotebookPage(
         limit,
       })
     : await ownedNotebooks.run(tx, { route, owner_account_id: ownerId, limit });
-  return rows.map((row) => ({ ...row, created_at: new Date(row.created_at) }));
+  return rows.map((row) => ({
+    ...row,
+    created_at: new Date(row.created_at),
+    // created_at is NOT NULL in the notebook table; its deterministic key is therefore non-null too.
+    created_at_key: row.created_at_key!,
+  }));
 }
 
 export async function knowledgeNotebookSelection(
@@ -251,15 +256,26 @@ export async function knowledgeOutlineChildrenPage(
   after: Readonly<{ position: string; placementId: string }> | null,
   limit: number,
 ): Promise<readonly KnowledgeOutlineChildRow[]> {
-  const params = { route, notebook_id: notebookId, parent_id: parentId, limit };
-  const afterParams = after ? { after_position: after.position, after_placement_id: after.placementId } : null;
-  const rows =
-    parentId === null
-      ? afterParams
-        ? await outlineRootAfter.run(tx, { route, notebook_id: notebookId, limit, ...afterParams })
-        : await outlineRoot.run(tx, { route, notebook_id: notebookId, limit })
-      : afterParams
-        ? await outlineChildrenAfter.run(tx, { ...params, ...afterParams })
-        : await outlineChildren.run(tx, params);
+  let rows: readonly KnowledgeOutlineChildRow[];
+  if (parentId === null) {
+    rows = after
+      ? await outlineRootAfter.run(tx, {
+          route,
+          notebook_id: notebookId,
+          limit,
+          after_position: after.position,
+          after_placement_id: after.placementId,
+        })
+      : await outlineRoot.run(tx, { route, notebook_id: notebookId, limit });
+  } else {
+    const params = { route, notebook_id: notebookId, parent_id: parentId, limit };
+    rows = after
+      ? await outlineChildrenAfter.run(tx, {
+          ...params,
+          after_position: after.position,
+          after_placement_id: after.placementId,
+        })
+      : await outlineChildren.run(tx, params);
+  }
   return rows.map((row) => ({ ...row, position: String(row.position) }));
 }

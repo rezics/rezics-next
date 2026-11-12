@@ -71,7 +71,7 @@ function knowledgeCursorBinding(
   return { operation: path, parameters: { accountId, ...query } };
 }
 
-async function readCursor(deps: KnowledgeDependencies, binding: ListCursorBinding, token?: string) {
+async function readCursor(deps: KnowledgeDependencies, binding: CursorBinding, token?: string) {
   if (token === undefined) return null;
   const cursor = decodeCursor(deps.tokens, binding, token, deps.clock().getTime());
   if (!cursor.ok) throw new KnowledgeInvalidCursorError();

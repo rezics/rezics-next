@@ -100,7 +100,7 @@ test('owners reload paged notebooks and current outlines, then review publicatio
   expect(currentSecondOutline.value.next).toBeNull();
   const outline = [...currentFirstOutline.value.placements, ...currentSecondOutline.value.placements];
   expect(outline.map(({ documentId }: { documentId: string }) => documentId)).toEqual(
-    documents.map(({ documentId }) => documentId),
+    documents.map(({ documentId }) => documentId!),
   );
   expect(
     outline.every(({ parentPlacementId }: { parentPlacementId: string | null }) => parentPlacementId === null),
