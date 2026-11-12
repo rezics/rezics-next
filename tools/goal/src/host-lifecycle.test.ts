@@ -5,6 +5,7 @@ import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { AppServer } from './app-server.ts';
 import { openDb } from './db.ts';
+import { dispatchDailyStepAudit, ensureFlow } from './flow.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { ManagerSessions, type ManagerSpec } from './managers.ts';
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
@@ -427,6 +428,108 @@ test('manager commands request systemd activation and retain its exact failure',
     f.close();
   }
 });
+
+test('an idle daily audit does not hold the resident socket or watchdog behind another SQLite writer', async () => {
+  const f = fixture();
+  const waiting = join(f.path, 'audit-waiting');
+  const locked = join(f.path, 'database-locked');
+  const released = join(f.path, 'database-released');
+  const heartbeat = join(f.path, 'watchdog-ping');
+  const hostScript = join(f.path, 'audit-host.ts');
+  const lockScript = join(f.path, 'database-writer.ts');
+  const dbPath = join(f.path, 'state.sqlite');
+  const auditAt = new Date();
+  let host: Hosted | undefined;
+  let writer: ChildProcess | undefined;
+  try {
+    const db = openDb(dbPath);
+    ensureFlow(db);
+    db.query('INSERT INTO flow_audit_runs(day, task_id) VALUES (?, ?)').run(
+      auditAt.toISOString().slice(0, 10),
+      'existing-audit',
+    );
+    db.close();
+    const module = (name: string) => JSON.stringify(join(import.meta.dir, name));
+    writeFileSync(
+      lockScript,
+      `import { Database } from 'bun:sqlite';
+import { writeFileSync } from 'node:fs';
+const db = new Database(${JSON.stringify(dbPath)});
+db.exec('BEGIN IMMEDIATE');
+writeFileSync(${JSON.stringify(locked)}, '1');
+await new Promise(resolve => setTimeout(resolve, 1500));
+writeFileSync(${JSON.stringify(released)}, '1');
+db.exec('ROLLBACK');
+db.close();
+`,
+    );
+    writeFileSync(
+      hostScript,
+      `import { existsSync, writeFileSync } from 'node:fs';
+import { createIntegrationRuntime } from ${module('fixtures/cli-runtime.ts')};
+import { serveManagers } from ${module('manager-host.ts')};
+import { dispatchDailyStepAudit } from ${module('flow.ts')};
+const runtime = createIntegrationRuntime();
+runtime.dispatchDailyStepAudit = async () => {
+  writeFileSync(${JSON.stringify(waiting)}, '1');
+  while (!existsSync(${JSON.stringify(locked)})) await new Promise(resolve => setTimeout(resolve, 10));
+  dispatchDailyStepAudit(runtime.db, [], () => { throw new Error('existing audit must not be dispatched'); }, new Date(${JSON.stringify(auditAt.toISOString())}));
+};
+await serveManagers(runtime);
+runtime.db.close();
+`,
+    );
+    const bin = join(f.path, 'bin');
+    mkdirSync(bin);
+    const notify = join(bin, 'systemd-notify');
+    writeFileSync(
+      notify,
+      `#!/bin/sh
+case "$*" in *WATCHDOG=1*) touch ${JSON.stringify(heartbeat)} ;; esac
+exit 0
+`,
+    );
+    chmodSync(notify, 0o755);
+    f.env.PATH = `${bin}:${process.env.PATH ?? ''}`;
+    f.env.NOTIFY_SOCKET = '/fixture/notify';
+    f.env.WATCHDOG_USEC = '200000';
+    host = {
+      child: spawn(process.execPath, [hostScript], { env: f.env, stdio: ['ignore', 'pipe', 'pipe'] }),
+      exited: Promise.resolve(),
+      ready: Promise.resolve(),
+      pid: 0,
+    };
+    host.exited = new Promise<void>((resolve) => host!.child.once('exit', () => resolve()));
+    host.pid = host.child.pid!;
+    host.ready = new Promise<void>((resolve, reject) => {
+      const lines = createInterface({ input: host!.child.stdout! });
+      lines.once('line', (line) => {
+        lines.close();
+        line === 'ready' ? resolve() : reject(new Error(line));
+      });
+      host!.child.once('exit', (code) => reject(new Error(`audit host exited before ready (${code})`)));
+    });
+    await host.ready;
+    await waitForFlag(waiting, host.child, 'audit wait');
+    writer = spawn(process.execPath, [lockScript], { env: f.env, stdio: 'ignore' });
+    await waitForFlag(locked, writer, 'database lock');
+    const started = performance.now();
+    await expect(hostRequest(join(f.path, 'manager.sock'), { command: 'decision', manager: 'absent' }, 1000)).rejects.toThrow(
+      'Unknown manager',
+    );
+    expect(performance.now() - started).toBeLessThan(500);
+    await waitForFlag(heartbeat, host.child, 'watchdog ping');
+    expect(existsSync(released)).toBe(false);
+  } finally {
+    if (writer && writer.exitCode === null && writer.signalCode === null) {
+      const exited = new Promise<void>((resolve) => writer!.once('exit', () => resolve()));
+      writer.kill('SIGKILL');
+      await exited;
+    }
+    await cleanHosted(f.path, host);
+    f.close();
+  }
+}, 10_000);
 
 test('daily audit validation and dispatch failures are durable and reported once without escaping the real host', async () => {
   for (const failure of ['parse', 'dispatch']) {

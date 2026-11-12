@@ -3509,6 +3509,10 @@ a background command or yields between bounded batches; a removal fallback on th
 from the current-attempt index; attempt-resource sweeps project only terminal task ids and worktrees from that index
 and run Docker asynchronously; the daily audit reads unsettled tasks and removal reads finished tasks through the
 state index; the worktree and CPU samples yield between entries; removal commands run asynchronously.
+Decision: an idle daily-audit tick checks the current flow schema, UTC run row and failure outbox with reads before
+taking any SQLite write transaction. It acquires the existing transaction only for a pending migration, new audit
+claim or unreported failure, so a completed audit with an empty outbox cannot wait on another process's writer lock
+on the resident event loop.
 Decision: manager recovery, retry intents, landing recovery and verifier starts use no synchronous child process on the
 host loop. Git, tmux and worker launch run through `runHostProcess`; start, retry, released and first-start work run in
 `_host-start` children. The host logs an event-loop stall over ten seconds with the operation that caused it, at most
