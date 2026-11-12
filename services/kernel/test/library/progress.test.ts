@@ -98,7 +98,7 @@ test('a session has exactly one mode for one subject and an optional version sub
     parseSessionCreate({ subjectId, mode: 'scalar_amount', unit: 'minute', amount: '1', locator: 'page' }),
     'amount',
   );
-  rejected(parseSessionCreate({ subjectId: 'not-a-subject', unit: 'page', mode: ['scalar_amount'] }), 'subjectId');
+  rejected(parseSessionCreate({ subjectId: 'not-a-subject', unit: 'page', mode: 'cursor_position' }), 'subjectId');
 });
 
 test('every record matches the session mode and rejects another mode, two modes, or none', () => {
