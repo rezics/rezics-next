@@ -217,7 +217,7 @@ function WideDocumentReadingVisit({
     (node: DocumentNode, children: ReactNode, defaultContent: ReactNode, occurrence: number) => {
       const descriptor = descriptorsByOccurrence.code.get(occurrence);
       if (!descriptor) {
-        return callerCodeBlock ? callerCodeBlock(node, children, defaultContent) : defaultContent;
+        return callerCodeBlock ? callerCodeBlock(node, children, defaultContent, occurrence) : defaultContent;
       }
       return (
         <WideDocumentCode
@@ -241,7 +241,7 @@ function WideDocumentReadingVisit({
     (node: DocumentNode, children: ReactNode, defaultContent: ReactNode, occurrence: number) => {
       const descriptor = descriptorsByOccurrence.table.get(occurrence);
       if (!descriptor) {
-        return callerTable ? callerTable(node, children, defaultContent) : defaultContent;
+        return callerTable ? callerTable(node, children, defaultContent, occurrence) : defaultContent;
       }
       return (
         <WideDocumentTable
