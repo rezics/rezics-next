@@ -28,6 +28,9 @@ test('only admitted address or actual Realm identity builds the localized commun
       'en',
     ),
   ).toBeNull();
+  expect(
+    suppliedDestination({ ...follow('space'), destination: { kind: 'zone', zoneId: realmId } }, 'Zone', 'en'),
+  ).toBeNull();
   expect(suppliedDestination({ ...addressTarget, destination: { kind: 'unavailable' } }, 'Community', 'en')).toBeNull();
   expect(
     suppliedDestination({ ...addressTarget, destination: { kind: 'space', spaceId, address: '' } }, 'Community', 'en'),

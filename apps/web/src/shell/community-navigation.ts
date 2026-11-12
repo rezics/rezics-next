@@ -28,6 +28,7 @@ export function shellFollowDestination(follow: FollowEdge): ShellCommunity | nul
   const title = typeof target.label === 'string' ? target.label : target.label.value;
   const titleLanguage = typeof target.label === 'string' ? undefined : target.label.language;
   const path = shellDestinationPath(destination);
+  if (path === null) return null;
   return {
     id: follow.targetId,
     kind: destination.kind,
@@ -37,12 +38,14 @@ export function shellFollowDestination(follow: FollowEdge): ShellCommunity | nul
   };
 }
 
-function shellDestinationPath(destination: NativeDestination): `/${string}` {
+function shellDestinationPath(destination: NativeDestination): `/${string}` | null {
   switch (destination.kind) {
     case 'space':
       return `/spaces/${encodeURIComponent(destination.address)}`;
     case 'realm':
       return `/realms/${encodeURIComponent(destination.realmId)}`;
+    case 'zone':
+      return null;
   }
 }
 

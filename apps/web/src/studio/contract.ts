@@ -9,13 +9,17 @@ export type ExactDocument = Readonly<{
   revisionId: string;
   sha256: string;
 }>;
-export type StudioRevision = Readonly<{
+/** Native metadata projection. Post revisions carry no historical title. */
+export type StudioRevisionHeader = Readonly<{
   exact: ExactDocument;
-  title: string;
-  body: DocumentSnapshot;
-  mediaIds: readonly string[];
   savedAt: string;
 }>;
+export type StudioRevision = StudioRevisionHeader &
+  Readonly<{
+    title: string;
+    body: DocumentSnapshot;
+    mediaIds: readonly string[];
+  }>;
 export type StudioDocument = Readonly<{
   postId: string;
   title: string;
@@ -180,7 +184,7 @@ export interface StudioPort {
   versions(
     input: { projectId: string; postId: string; cursor: string | null },
     signal: AbortSignal,
-  ): Promise<StudioResult<StudioPage<Omit<StudioRevision, 'body' | 'mediaIds'>>>>;
+  ): Promise<StudioResult<StudioPage<StudioRevisionHeader>>>;
   revision(
     input: { projectId: string; document: ExactDocument },
     signal: AbortSignal,

@@ -1,12 +1,6 @@
 import { checkDocument, hasDocumentContent, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import { editionDocumentDigest } from '../content-editions/edition-model';
-import {
-  draftFetch,
-  readExactRevision,
-  readPostHistory,
-  revisePost,
-  type EditFailure,
-} from '../threads/studio-document';
+import { draftFetch, readExactRevision, revisePost, type EditFailure } from '../threads/studio-document';
 import {
   createHistoricalReadBinding,
   historicalActualMatches,
@@ -27,6 +21,7 @@ import {
   type StudioSelection,
 } from './contract';
 import { readPostDocumentHead } from './post-document-read';
+import { readPostRevisionHeaders } from './post-revision-headers-read';
 
 /** Compose exact Post reads and conditional revisions; account inventory and private creation have their own owner. */
 export type PostDocumentPort = Pick<
@@ -278,14 +273,14 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
     async versions(input, signal) {
       if (!admitted(input.projectId, input.postId, signal)) return unavailable();
       const request = binding({
-        kind: 'post-history',
+        kind: 'post-revision-headers',
         postId: input.postId,
         cursor: input.cursor,
         locale: visit.locale,
         credentialMode: 'session',
       });
       try {
-        const response = await readPostHistory({
+        const response = await readPostRevisionHeaders({
           data: {
             postId: input.postId,
             ...(input.cursor === null ? {} : { cursor: input.cursor }),
@@ -296,21 +291,7 @@ export function createPostDocumentPort(visit: PostDocumentVisit): PostDocumentPo
           signal,
         });
         if (!admitted(input.projectId, input.postId, signal) || !accepts(request, response)) return unavailable();
-        const page = response.data;
-        if (!page.available || !page.context || page.context.conversation.title === null) return unavailable();
-        const title = page.context.conversation.title;
-        const items: Omit<StudioRevision, 'body' | 'mediaIds'>[] = [];
-        for (const post of page.revisions) {
-          // Studio's summary cannot express withheld/erased identities. Do not forge a digest or an empty page.
-          if (post.id !== input.postId || post.availability !== 'available' || !digest.test(post.sha256))
-            return unavailable();
-          items.push({
-            exact: { postId: post.id, revisionId: post.revisionId, sha256: post.sha256 },
-            title,
-            savedAt: post.revisedAt ?? post.createdAt,
-          });
-        }
-        return { ok: true, value: { items, nextCursor: page.next } };
+        return response.data;
       } catch {
         return unavailable();
       }
