@@ -1687,6 +1687,19 @@ thirty minutes. Failure signatures from attempts ended in the previous thirty mi
 failures across at least two tasks produce one incident with the attempt and task counts, affected Goal names and one
 example. The incident repeats after two hours while the signature remains present.
 
+The existing reminder sweep also recognizes a same-generation false-ready retry when the current attempt is stopped
+for missing compiler evidence, a pending retry exists for that exact attempt, and the job sweep records that the
+existing typing-evidence reconciler could not establish a terminal result. It reports only after the ordinary
+no-worker deadline, when dependencies, backoff, check-host outage and capacity-ticket waits are absent and the live
+route/allowance observation finds an admitted provider pool. The one-line alert names the task, attempt, eligible age,
+available supply and next action. The authenticated task owner, or configured operations manager, runs
+`bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <attempt>` and follows the existing recovery
+result. The alert routes to the active managed `control-plane` owner, falling back to the configured supermanager;
+the existing per-generation watchdog state prevents a second wake. Scheduling flow alarms use the same owner and
+fallback. Other watchdog alerts keep their existing routing.
+
+Decision: The watchdog reports a same-generation stopped typing-evidence retry only after its eligible no-worker deadline and positive live pool supply; it routes that alert and flow alarms to the active control-plane manager, falling back to the supermanager, and directs the authenticated task owner to run the existing `typing-recover` command.
+
 A running attempt that exceeds its routed time limit (two hours by default) sends its owning manager one event. The
 event includes elapsed time, commits in the task worktree, time recorded waiting for check slots and the last ten shell
 commands in the run log. Check wait time is reported separately; it does not reduce this elapsed time. If those recent

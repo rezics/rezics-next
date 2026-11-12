@@ -47,7 +47,7 @@ import {
   type HostStartKind,
 } from './process.ts';
 import { assessUsageLimitRefusal, markExhausted } from './usage.ts';
-import { PoolUnavailableError } from './allowance.ts';
+import { findAllowedPool, PoolUnavailableError } from './allowance.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure, estimateOverrun } from './failures.ts';
@@ -66,7 +66,7 @@ import {
   CHECK_HOST_TRANSPORT,
   reportsSuccess,
 } from './records.ts';
-import { readRouting } from './routing.ts';
+import { admissionProfiles, readRouting } from './routing.ts';
 import {
   FINAL_REPORT_PROMPT,
   finalReportPending,
@@ -92,7 +92,7 @@ import {
   type RetryOptions,
 } from './tasks.ts';
 import type { ManagerEventKind } from './contracts.ts';
-import type { Attempt, Task } from './types.ts';
+import type { Attempt, RetryIntent, Task } from './types.ts';
 import { pageDataRepairEvidence, type PageDataRepair } from './page-data.ts';
 import type { RunningWorker } from './launch.ts';
 import { applyRenderedPrompt, checkWaitMs, launch, renderWorkerPrompt, workerActivityBaseline } from './launch.ts';
@@ -254,6 +254,23 @@ export class WorkerJob implements GateOutcomeSink {
     // The manager host sets this so git, bun install and follow run in a child, not on the host event loop.
     private readonly offloadStart?: (taskId: string, kind: HostStartKind) => Promise<void>,
   ) {}
+  /** Whether the current scheduler would admit a retry using the task's live route, allowance and pool limits. */
+  hasRunnableRetrySupply(task: Task, intent: RetryIntent): boolean {
+    const admission = this.tasks.resolverPools();
+    const routing = readRouting(this.tasks.settings.routingFile, this.tasks.settings.policy?.routing);
+    const routed = admissionProfiles(task.brief, routing, task.sequence);
+    const profiles = intent.options.profile ? { first: intent.options.profile, fallbacks: [] } : routed;
+    return Boolean(
+      findAllowedPool(profiles.first, profiles.fallbacks, admission.pools, admission.readings, {
+        now: admission.now,
+        spanMs: admission.spanMs,
+        history: admission.history,
+        running: admission.running,
+        policy: this.policy.provider,
+        ...(intent.options.excludePools ? { exclude: intent.options.excludePools } : {}),
+      }),
+    );
+  }
   async runHostTask(kind: HostStartKind, taskId: string): Promise<void> {
     try {
       if (kind === 'retry') {
@@ -332,8 +349,16 @@ export class WorkerJob implements GateOutcomeSink {
         }
         if (completed.typingEvidencePending || isTypingEvidenceUnavailableResult(completed.result)) {
           if (!reconcileStoppedTypingFailureRetry(this.tasks, ref)) {
-            // Stopped source stays parked until current compiler inputs and physical checks prove its terminal failure.
-            if (completed.state === 'stopped') return;
+            // Keep the unresolved same-generation retry visible to the existing watchdog without waking a second owner.
+            if (completed.state === 'stopped') {
+              if (
+                task.state === 'ready' &&
+                task.brief.kind !== 'verification' &&
+                !store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'typing-retry-unreconciled')
+              )
+                store.event(ref, 'typing-retry-unreconciled', { action: 'typing-recover' });
+              return;
+            }
             await recoverWorkerTyping(this.tasks, this.landing, ref, undefined, this.afterSettle);
             return;
           }
