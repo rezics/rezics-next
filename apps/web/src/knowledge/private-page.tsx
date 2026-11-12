@@ -1,4 +1,7 @@
 import { KnowledgeTransferCaller } from './transfer-caller';
+import { useKnowledgeLifecycle } from './lifecycle-controller';
+import { KnowledgeLifecyclePanel } from './lifecycle-panel';
+import type { KnowledgeLifecycleOperations } from './lifecycle';
 import { fromPlainText, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 import { RichTextEditor, type RichTextEditorLabels } from '@rezics/ui';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -42,6 +45,8 @@ import {
 } from './navigation.ts';
 import { KnowledgeOutlineList, KnowledgeOwnedNotebookList } from './navigation-lists';
 import {
+  readKnowledgeLifecycleVisit,
+  changeKnowledgeLifecycleRequest,
   createKnowledgePrivateDocumentRequest,
   createKnowledgePrivateNotebookRequest,
   prepareKnowledgePrivateVisit,
@@ -101,6 +106,9 @@ export type KnowledgePrivatePageAccess =
       createDocument: KnowledgePrivateAdmission;
       revise: KnowledgePrivateAdmission;
       publication: KnowledgePrivateAdmission;
+      lifecycleRead?: KnowledgePrivateAdmission;
+      trash?: KnowledgePrivateAdmission;
+      restore?: KnowledgePrivateAdmission;
       history?: KnowledgePrivateAdmission;
       compare?: KnowledgePrivateAdmission;
     };
@@ -148,6 +156,7 @@ type PrivateOperationResult<T> =
   | { state: 'unavailable'; status?: number };
 
 export type KnowledgePrivateOperations = Readonly<{
+  lifecycle?: KnowledgeLifecycleOperations;
   history?: KnowledgeHistoryOperations;
   prepare: (subjectId: string, expectedViewer: string) => Promise<KnowledgePrivatePreparation>;
   read: (
@@ -178,6 +187,20 @@ function operationSourceId(operations: KnowledgePrivateOperations): number {
 }
 
 const nativeOperations: KnowledgePrivateOperations = {
+  lifecycle: {
+    read(address, expected) {
+      return readKnowledgeLifecycleVisit({
+        data: { address, expected },
+        headers: { 'X-CSRF-Token': expected.csrfToken },
+      });
+    },
+    change(intent) {
+      return changeKnowledgeLifecycleRequest({
+        data: { ...intent, ...intent.binding },
+        headers: { 'X-CSRF-Token': intent.binding.csrfToken },
+      });
+    },
+  },
   history: {
     read(address, cursor, expected) {
       return readKnowledgeHistoryVisit({
@@ -559,6 +582,15 @@ function PrivateKnowledgeEditor({
   const revisionIntentRef = useRef(revisionIntent);
   const notebooksSequence = useRef(0);
   const outlineSequence = useRef(0);
+  const lifecycle = useKnowledgeLifecycle({
+    address: createdAddress ?? (address.kind === 'resume' ? address : null),
+    expected: { viewer: access.viewer, csrfToken: access.csrfToken },
+    operations: operations.lifecycle,
+    admission: access.lifecycleRead ?? 'unavailable',
+    trashAdmission: access.trash ?? 'unavailable',
+    restoreAdmission: access.restore ?? 'unavailable',
+    onRetire: retire,
+  });
   notebookIntentRef.current = notebookIntent;
   documentIntentRef.current = documentIntent;
   revisionIntentRef.current = revisionIntent;
@@ -664,7 +696,7 @@ function PrivateKnowledgeEditor({
     submittedDraft?: DocumentDraft,
   ) {
     const currentAddress = resumeAddress();
-    if (!currentAddress || !active.current || access.read !== 'available' || readBusy) return;
+    if (!currentAddress || !active.current || access.read !== 'available' || readBusy || !lifecycle.editing) return;
     const sequence = ++readSequence.current;
     setReadBusy(true);
     if (purpose === 'initial') setReadState('preparing');
@@ -714,7 +746,7 @@ function PrivateKnowledgeEditor({
   }
 
   useEffect(() => {
-    if (address.kind !== 'resume' || retired) return;
+    if ((address.kind !== 'resume' && !createdAddress) || retired || !lifecycle.editing) return;
     if (access.read !== 'available') {
       setReadState(access.read === 'denied' ? 'denied' : access.read === 'unavailable' ? 'unavailable' : 'preparing');
       return;
@@ -729,6 +761,9 @@ function PrivateKnowledgeEditor({
     address.kind === 'resume' ? address.notebookId : '',
     address.kind === 'resume' ? address.documentId : '',
     operations.read,
+    createdAddress,
+    lifecycle.editing,
+    lifecycle.revision,
     retired,
   ]);
 
@@ -1004,7 +1039,7 @@ function PrivateKnowledgeEditor({
   function startRevisionIntent(): RevisionIntent | null {
     if (revisionIntentRef.current) return revisionIntentRef.current;
     const currentAddress = resumeAddress();
-    if (!currentAddress || !head || !draft || !binding || access.revise !== 'available' || requiresHeadReview)
+    if (!currentAddress || !head || !draft || !binding || access.revise !== 'available' || requiresHeadReview || lifecycle.locked)
       return null;
     const next = immutable({
       ...structuredClone(draft),
@@ -1169,8 +1204,8 @@ function PrivateKnowledgeEditor({
     pending,
   ]);
   useAuthoringDeparture(
-    createDirty || resumeDirty || unresolved || pending,
-    unresolved || pending,
+    createDirty || resumeDirty || unresolved || pending || lifecycle.unresolved || lifecycle.pending,
+    unresolved || pending || lifecycle.unresolved || lifecycle.pending,
     departureSignature,
     discardDraft,
     retire,
@@ -1425,6 +1460,15 @@ function PrivateKnowledgeEditor({
     );
   }
 
+  const lifecycleBlocked = resumeDirty || pending || !!revisionIntent || readBusy || requiresHeadReview || publicationBusy;
+  if (lifecycle.enabled && !lifecycle.editing) {
+    return (
+      <PrivatePageFrame title={m.knowledge_private_heading({}, options)} locale={locale}>
+        <KnowledgeLifecyclePanel controller={lifecycle} blocked={lifecycleBlocked} locale={locale} />
+      </PrivatePageFrame>
+    );
+  }
+
   const canRead = access.read === 'available';
   if (!canRead || readState !== 'ready' || !head || !draft || !binding) {
     const state = !canRead ? (access.read === 'unknown' ? 'preparing' : access.read) : readState;
@@ -1446,11 +1490,12 @@ function PrivateKnowledgeEditor({
     dirty &&
     !pending &&
     !publicationBusy &&
+    !lifecycle.locked &&
     !requiresHeadReview &&
     (!revisionReceipt || readbackState === 'ready');
-  const canReplay = !!revisionIntent && !pending && !publicationBusy;
+  const canReplay = !!revisionIntent && !pending && !publicationBusy && !lifecycle.locked;
   const showRevisionFailure = !['idle', 'pending', 'acknowledged'].includes(revisionState);
-  const formLocked = !!revisionIntent || revisionBusy;
+  const formLocked = !!revisionIntent || revisionBusy || lifecycle.locked;
   return (
     <PrivatePageFrame title={head.title} locale={locale}>
       <div className="min-w-0 space-y-6 rounded-xl border border-border bg-card p-4 sm:p-6">
@@ -1544,6 +1589,7 @@ function PrivateKnowledgeEditor({
             </Button>
           </div>
         </form>
+        <KnowledgeLifecyclePanel controller={lifecycle} blocked={lifecycleBlocked} locale={locale} />
         <KnowledgeHistoryPanel
           address={{ notebookId: head.notebookId, documentId: head.documentId }}
           binding={binding}
@@ -1572,14 +1618,14 @@ function PrivateKnowledgeEditor({
           locale={locale}
           binding={binding}
           lifetime={access.owner}
-          blocked={dirty || pending || !!revisionIntent || readBusy || requiresHeadReview || publicationBusy}
+          blocked={dirty || pending || !!revisionIntent || readBusy || requiresHeadReview || publicationBusy || lifecycle.locked}
         />
         <KnowledgePublicationPanel
           head={reviewHead ?? head}
           binding={binding}
           admission={access.publication}
           locale={locale}
-          blocked={pending || !!revisionIntent || readBusy}
+          blocked={pending || !!revisionIntent || readBusy || lifecycle.locked}
           operations={operations}
           onRetire={retire}
           onBusyChange={setPublicationBusy}
@@ -1727,6 +1773,9 @@ export function KnowledgePrivatePage({
   const publication = useOperationAdmission('knowledge_document.select_publication');
   const history = useOperationAdmission('knowledge_document.history');
   const compare = useOperationAdmission('knowledge_document.compare');
+  const lifecycleRead = useOperationAdmission('knowledge_document.lifecycle');
+  const trash = useOperationAdmission('knowledge_document.trash');
+  const restore = useOperationAdmission('knowledge_document.restore');
 
   const viewer = session.state === 'signed-in' && typeof session.subject === 'string' ? session.subject : null;
   let exposureRevision = 'closed';
@@ -1773,6 +1822,9 @@ export function KnowledgePrivatePage({
         publication,
         history,
         compare,
+        lifecycleRead,
+        trash,
+        restore,
         operationSourceId(operations),
       ]),
       read,
@@ -1784,6 +1836,9 @@ export function KnowledgePrivatePage({
       publication,
       history,
       compare,
+      lifecycleRead,
+      trash,
+      restore,
     };
   } else access = { state: 'preparing' };
 
