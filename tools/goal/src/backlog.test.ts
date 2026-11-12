@@ -684,7 +684,7 @@ test('a running manager below eight ready briefs is woken at most once an hour',
   expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
 });
 
-test('an authenticated no-work disposition survives time and restart, while foreign and unrelated evidence do not control it', async () => {
+test('administrative notices preserve an authenticated no-work disposition while scoped receiving evidence rearms it', async () => {
   const f = fixture({ workerCap: 0 });
   manager(f.db, 'web', {
     kind: 'managed',
@@ -706,6 +706,8 @@ test('an authenticated no-work disposition survives time and restart, while fore
   });
 
   expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  const lowBacklogReminder = f.inbox.pending('web').find(({ event }) => event.summary.startsWith('Backlog low:'));
+  expect(lowBacklogReminder?.event.from).toBe('system:backlog-low-water');
   await expect(backlogDisposition(f, 'web', 'no-work', 'foreign', 'foreign-session')).rejects.toThrow(
     'authenticated unique running owner',
   );
@@ -722,6 +724,14 @@ test('an authenticated no-work disposition survives time and restart, while fore
 
   f.inbox.deliver({ managerId: 'web', goalId: 'other', kind: 'info', summary: 'Other Goal received new evidence' });
   task(f.db, 'global-dev-task', 'running', { goal: 'dev', manager: 'dev' }, 1);
+  f.inbox.deliver({ managerId: 'web', goalId: 'web', kind: 'width', summary: 'Same-Goal width notice' });
+  f.inbox.deliver({
+    managerId: 'web',
+    from: 'system:backlog-low-water',
+    goalId: 'web',
+    kind: 'instruction',
+    summary: 'Backlog low: repeated administrative reminder',
+  });
   f.clock.now += BACKLOG_WAKE_INTERVAL_MS * 3;
   expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
 
@@ -732,6 +742,18 @@ test('an authenticated no-work disposition survives time and restart, while fore
     .get('web');
   expect(saved).toMatchObject({ low_work_manager: 'web', low_work_session: 'web-session' });
   expect((saved as { low_work_scope: string }).low_work_scope).toBe(recorded.scope);
+
+  f.db
+    .query(`INSERT INTO manager_inbox(manager, event, wakeable, created_at, goal_id)
+            VALUES (?, ?, ?, ?, ?)`)
+    .run(
+      'web',
+      JSON.stringify({ managerId: 'web', goalId: 'web', kind: 'info', summary: 'Legacy scoped receiving evidence' }),
+      1,
+      f.clock.now,
+      'web',
+    );
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
 });
 
 test('low-backlog no-work dispositions rearm on a brief, scoped source, receiving evidence, owner change, or clear', async () => {

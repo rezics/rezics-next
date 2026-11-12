@@ -58,6 +58,11 @@ one path); this bounds the path and Access work without borrowing the hosted-boo
 document-count limit. Sibling pages and mutations use indexed positions and a structure revision rather than
 loading or rewriting every sibling.
 
+Decision: reload navigation pages owned notebooks through the owner index and immediate outline children through the
+parent/order index. The first outline page selects the current structure revision; its encrypted continuation binds
+the owner, notebook, parent and selection, and returns `409 stale_cursor` after a structure change. Each outline
+request examines at most 128 indexed candidates and advances past sparse ineligible rows.
+
 Every saved document revision fixes its validated canonical document bytes, SHA-256 digest, title, language,
 references, authorship and licence. A publication is an immutable record selecting one exact document revision and
 the notebook Subject. The document's current-publication pointer is the only public availability authority. Saving
@@ -98,6 +103,8 @@ receipted no-effect command.
 Decision: Knowledge route metadata comes from the public Content adapter; imported schemas are memoized when routes mount.
 
 Decision: Web’s first public consumer is the localized `/knowledge/documents/$id` reader, with optional `revisionId`, over `knowledge_document.public_read`. Live and exact addresses stay distinct; null `authorId` is deidentified attribution; the primary Subject link uses the supplied id without a label lookup. The fewest focused Web tests pin live/exact rendering, native outcome states, malformed HTTP, one-read/no-store transport, retry operands, replacement fencing and copy feedback; directory, notebook, visual and browser proof stay with later Goals.
+
+Decision: Web creates a private notebook only after the writer reviews and submits its title, then holds the acknowledged notebook receipt separately while creating a root document. Private bodies, drafts, command intents and receipts live only in the current page visit; exact private heads are read directly by the prepared viewer and revision writes compare against that observed head.
 
 Primary placements form a forest under one notebook root. A document has one primary placement there. Later reference
 placements can show the same document elsewhere without moving or copying it; they do not recursively acquire its

@@ -38,6 +38,17 @@ export const KnowledgeExactReadQuerySchema = t.Object(
   { revisionId: t.Optional(UUID) },
   { additionalProperties: false },
 );
+export const KnowledgePageQuerySchema = t.Object(
+  {
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50, multipleOf: 1 })),
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+  },
+  { additionalProperties: false },
+);
+export const KnowledgeOutlinePageQuerySchema = t.Object(
+  { ...KnowledgePageQuerySchema.properties, parentPlacementId: t.Optional(UUID) },
+  { additionalProperties: false },
+);
 
 export const KnowledgeCommandResponseSchema = t.Object(
   {
@@ -61,7 +72,12 @@ const byteDocument = {
   subjectIds: t.Array(UUID, { maxItems: 64 }),
 };
 export const KnowledgePrivateDocumentSchema = t.Object(
-  { document: t.Object({ ...byteDocument, notebookId: UUID }, { additionalProperties: false }) },
+  {
+    document: t.Object(
+      { ...byteDocument, notebookId: UUID, publicationId: t.Union([UUID, t.Null()]) },
+      { additionalProperties: false },
+    ),
+  },
   { additionalProperties: false },
 );
 export const KnowledgePublicDocumentSchema = t.Object(
@@ -76,6 +92,49 @@ export const KnowledgePublicDocumentSchema = t.Object(
       },
       { additionalProperties: false },
     ),
+  },
+  { additionalProperties: false },
+);
+
+const nextSchema = t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]);
+export const KnowledgeOwnedNotebooksSchema = t.Object(
+  {
+    notebooks: t.Array(
+      t.Object(
+        {
+          notebookId: UUID,
+          subjectId: UUID,
+          title: t.String({ minLength: 1, maxLength: 256 }),
+          structureRevisionId: UUID,
+          createdAt: t.String({ format: 'date-time' }),
+        },
+        { additionalProperties: false },
+      ),
+      { maxItems: 50 },
+    ),
+    next: nextSchema,
+  },
+  { additionalProperties: false },
+);
+export const KnowledgeOutlineSchema = t.Object(
+  {
+    notebookId: UUID,
+    structureRevisionId: UUID,
+    parentPlacementId: t.Union([UUID, t.Null()]),
+    placements: t.Array(
+      t.Object(
+        {
+          placementId: UUID,
+          documentId: UUID,
+          parentPlacementId: t.Union([UUID, t.Null()]),
+          position: t.String({ pattern: '^(?:0|[1-9][0-9]{0,18})$' }),
+          title: t.String({ minLength: 1, maxLength: 512 }),
+        },
+        { additionalProperties: false },
+      ),
+      { maxItems: 50 },
+    ),
+    next: nextSchema,
   },
   { additionalProperties: false },
 );

@@ -14,7 +14,13 @@ import { strictContentSchema } from './schema-validation.ts';
 import { ContentForbiddenError, RevisionPreconditionError } from './commands.ts';
 import { ContentNotFoundError as ReadNotFoundError } from './reads.ts';
 import { DocumentTooLargeError, InvalidDocumentError } from './document.ts';
-import { KnowledgeInvalidInputError, KnowledgeNotFoundError, type KnowledgeDependencies } from './knowledge-model.ts';
+import {
+  KnowledgeInvalidCursorError,
+  KnowledgeInvalidInputError,
+  KnowledgeNotFoundError,
+  KnowledgeStaleCursorError,
+  type KnowledgeDependencies,
+} from './knowledge-model.ts';
 import type { AnchoredPosition } from './model.ts';
 import {
   createKnowledgeDocument,
@@ -22,7 +28,12 @@ import {
   reviseKnowledgeDocument,
   setKnowledgePublication,
 } from './knowledge-commands.ts';
-import { readKnowledgePrivateDocument, readKnowledgePublicDocument } from './knowledge-reads.ts';
+import {
+  readKnowledgeOutline,
+  readKnowledgeOwnedNotebooks,
+  readKnowledgePrivateDocument,
+  readKnowledgePublicDocument,
+} from './knowledge-reads.ts';
 import {
   KnowledgeCommandResponseSchema,
   KnowledgeDocumentCreateSchema,
@@ -30,6 +41,10 @@ import {
   KnowledgeExactReadQuerySchema,
   KnowledgeIdSchema,
   KnowledgeNotebookCreateSchema,
+  KnowledgeOutlinePageQuerySchema,
+  KnowledgeOutlineSchema,
+  KnowledgeOwnedNotebooksSchema,
+  KnowledgePageQuerySchema,
   KnowledgePrivateDocumentSchema,
   KnowledgePublicationSchema,
   KnowledgePublicDocumentSchema,
@@ -48,6 +63,16 @@ function privateParams() {
     ),
   );
 }
+function accountParams() {
+  return memoizedValue(accountParams, () =>
+    t.Object({ accountId: KnowledgeIdSchema }, { additionalProperties: false }),
+  );
+}
+function notebookParams() {
+  return memoizedValue(notebookParams, () =>
+    t.Object({ accountId: KnowledgeIdSchema, notebookId: KnowledgeIdSchema }, { additionalProperties: false }),
+  );
+}
 const readSecurity: Record<string, string[]>[] = [{}, { bearerAuth: [] }];
 const writeSecurity = [{ bearerAuth: [] }];
 const writeRate = () => defineRateLimit({ family: 'write', units: 1 });
@@ -58,11 +83,12 @@ const sessionComponent = (anchor: AnchoredPosition) => ({
 });
 function failures() {
   return memoizedValue(failures, () => ({
-    400: problemSchema('invalid_request'),
+    400: problemSchema('invalid_request', 'invalid_cursor'),
     401: problemSchema('authentication_required', 'invalid_credentials'),
     403: problemSchema('forbidden', 'platform_closed'),
     404: problemSchema('not_found'),
     412: problemSchema('precondition_failed'),
+    409: problemSchema('stale_cursor'),
     413: problemSchema('content_too_large'),
     422: problemSchema('idempotency_conflict', 'too_many_events'),
     429: problemSchema('rate_limited'),
@@ -86,6 +112,8 @@ async function operation<T>(run: () => Promise<T>): Promise<T> {
       throw new ProblemError('not_found');
     if (error instanceof KnowledgeInvalidInputError || error instanceof InvalidDocumentError)
       throw new ProblemError('invalid_request');
+    if (error instanceof KnowledgeInvalidCursorError) throw new ProblemError('invalid_cursor');
+    if (error instanceof KnowledgeStaleCursorError) throw new ProblemError('stale_cursor');
     if (error instanceof DocumentTooLargeError) throw new ProblemError('content_too_large');
     if (error instanceof ContentForbiddenError || error instanceof GrantDeniedError)
       throw new ProblemError('forbidden');
@@ -107,6 +135,22 @@ function requireAccount(actor: import('../request/access.ts').Actor) {
   return actor;
 }
 
+function knowledgePageInput(query: Readonly<{ limit?: string | number; cursor?: string }>) {
+  return {
+    ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+    ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+  };
+}
+
+function knowledgeOutlinePageInput(
+  query: Readonly<{ limit?: string | number; cursor?: string; parentPlacementId?: string }>,
+) {
+  return {
+    ...knowledgePageInput(query),
+    ...(query.parentPlacementId === undefined ? {} : { parentPlacementId: query.parentPlacementId }),
+  };
+}
+
 /** Native private authoring and exact public document reads. Search candidates never grant current disclosure. */
 export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, deps: KnowledgeDependencies) {
   app.wrap((handle) => async (request) => {
@@ -118,6 +162,66 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
   });
 
   return app
+    .get(
+      '/v1/accounts/:accountId/knowledge/notebooks',
+      {
+        params: accountParams(),
+        query: strictContentSchema(KnowledgePageQuerySchema),
+        response: {
+          200: withHeaders(strictContentSchema(KnowledgeOwnedNotebooksSchema), responseHeaders),
+          ...failures(),
+        },
+        detail: {
+          operationId: 'knowledge_notebook.owned_list',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { accountId }, query, actor, admission, job, session, set }) => {
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            readKnowledgeOwnedNotebooks(deps, accountId, knowledgePageInput(query), {
+              actor,
+              deadline: job.deadline,
+            }),
+          ),
+        );
+        for (const anchor of result.anchors) session.record(sessionComponent(anchor));
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/knowledge/notebooks/:notebookId/outline',
+      {
+        params: notebookParams(),
+        query: strictContentSchema(KnowledgeOutlinePageQuerySchema),
+        response: {
+          200: withHeaders(strictContentSchema(KnowledgeOutlineSchema), responseHeaders),
+          ...failures(),
+        },
+        detail: {
+          operationId: 'knowledge_notebook.outline',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { accountId, notebookId }, query, actor, admission, job, session, set }) => {
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            readKnowledgeOutline(deps, accountId, notebookId, knowledgeOutlinePageInput(query), {
+              actor,
+              deadline: job.deadline,
+            }),
+          ),
+        );
+        for (const anchor of result.anchors) session.record(sessionComponent(anchor));
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
     .get(
       '/v1/knowledge/documents/:id',
       {

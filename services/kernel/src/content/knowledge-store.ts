@@ -7,6 +7,13 @@ import publicRead from './knowledge-public-read.sql';
 import publicSelection from './knowledge-public-selection.sql';
 import privateRead from './knowledge-private-read.sql';
 import readAncestors from './knowledge-placement-ancestors.sql';
+import ownedNotebooks from './knowledge-owned-notebooks.sql';
+import ownedNotebooksAfter from './knowledge-owned-notebooks-after.sql';
+import notebookSelection from './knowledge-notebook-selection.sql';
+import outlineChildren from './knowledge-outline-children.sql';
+import outlineChildrenAfter from './knowledge-outline-children-after.sql';
+import outlineRoot from './knowledge-outline-root.sql';
+import outlineRootAfter from './knowledge-outline-root-after.sql';
 import { KNOWLEDGE_ANCESTOR_LIMIT } from './knowledge-model.ts';
 
 export type KnowledgePublicRow = Readonly<{
@@ -58,6 +65,26 @@ export type KnowledgePrivateRow = Readonly<{
 }>;
 
 export type KnowledgeAncestorRow = Readonly<{ placement_id: string; parent_id: string | null; depth: number }>;
+export type KnowledgeOwnedNotebookRow = Readonly<{
+  notebook_id: string;
+  owner_account_id: string;
+  subject_id: string;
+  title: string;
+  structure_revision_id: string;
+  created_at: Date;
+  created_at_key: string;
+}>;
+export type KnowledgeNotebookSelection = Readonly<{
+  owner_account_id: string;
+  structure_revision_id: string;
+}>;
+export type KnowledgeOutlineChildRow = Readonly<{
+  placement_id: string;
+  document_id: string;
+  parent_id: string | null;
+  position: string;
+  title: string;
+}>;
 
 /** Revision writes validate every Subject id before storing this JSON array. */
 function storedSubjectIds(ids: (string | null)[]): string[] {
@@ -184,4 +211,71 @@ export async function knowledgeAncestorPath(
     placement_id: placementId,
     maximum_depth: KNOWLEDGE_ANCESTOR_LIMIT,
   });
+}
+
+/** Reads the bounded owner directory through its `(route, owner, created_at, notebook)` index. */
+export async function knowledgeOwnedNotebookPage(
+  tx: CommandTransaction,
+  route: number,
+  ownerId: string,
+  after: Readonly<{ createdAt: string; notebookId: string }> | null,
+  limit: number,
+): Promise<readonly KnowledgeOwnedNotebookRow[]> {
+  const rows = after
+    ? await ownedNotebooksAfter.run(tx, {
+        route,
+        owner_account_id: ownerId,
+        after_created_at: after.createdAt,
+        after_notebook_id: after.notebookId,
+        limit,
+      })
+    : await ownedNotebooks.run(tx, { route, owner_account_id: ownerId, limit });
+  return rows.map((row) => ({
+    ...row,
+    created_at: new Date(row.created_at),
+    // created_at is NOT NULL in the notebook table; its deterministic key is therefore non-null too.
+    created_at_key: row.created_at_key!,
+  }));
+}
+
+export async function knowledgeNotebookSelection(
+  tx: CommandTransaction,
+  route: number,
+  notebookId: string,
+): Promise<KnowledgeNotebookSelection | null> {
+  const row = await notebookSelection.run(tx, { route, notebook_id: notebookId });
+  return row ?? null;
+}
+
+/** Reads only one indexed sibling range. Sparse rows are resumed by the caller's last examined key. */
+export async function knowledgeOutlineChildrenPage(
+  tx: CommandTransaction,
+  route: number,
+  notebookId: string,
+  parentId: string | null,
+  after: Readonly<{ position: string; placementId: string }> | null,
+  limit: number,
+): Promise<readonly KnowledgeOutlineChildRow[]> {
+  let rows: readonly (Omit<KnowledgeOutlineChildRow, 'position'> & Readonly<{ position: bigint | string }>)[];
+  if (parentId === null) {
+    rows = after
+      ? await outlineRootAfter.run(tx, {
+          route,
+          notebook_id: notebookId,
+          limit,
+          after_position: after.position,
+          after_placement_id: after.placementId,
+        })
+      : await outlineRoot.run(tx, { route, notebook_id: notebookId, limit });
+  } else {
+    const params = { route, notebook_id: notebookId, parent_id: parentId, limit };
+    rows = after
+      ? await outlineChildrenAfter.run(tx, {
+          ...params,
+          after_position: after.position,
+          after_placement_id: after.placementId,
+        })
+      : await outlineChildren.run(tx, params);
+  }
+  return rows.map((row) => ({ ...row, position: String(row.position) }));
 }
