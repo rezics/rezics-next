@@ -13,14 +13,7 @@ import type {
 } from '../../../../specs/agent-profile-driver.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import {
-  completeAgentVerification,
-  finishAgentVerification,
-  mergeVerifiedAgent,
-  readAgentVerificationWorkflowRequest,
-  recordPendingAgentVerification,
-  writeAgentVerificationPage,
-} from '../../src/access/agent-verification.ts';
+import { readAgentVerificationWorkflowRequest } from '../../src/access/agent-verification.ts';
 import { createImageJob } from '../../src/content/image-job.ts';
 import type { MediaStorage } from '../../src/content/media-storage.ts';
 import { createAuthorItemEffect } from '../../src/content/author-item-index.ts';
@@ -33,7 +26,9 @@ import { accountAgentId } from '../../src/semantic/agents.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { createPersonas } from '../support/personas.ts';
-import { registerTestClient, testKernel } from '../support/test-kernel.ts';
+import { registerTestClient, testKernel, testRouteKey } from '../support/test-kernel.ts';
+import { runAccountIdentityVerification } from '../support/account-identity-publication.ts';
+import { startAccountIdentityPublication } from '../support/identity-work-process.ts';
 import { cookies, issuer, nativeFixture, password } from './native-account-bindings-fixture.ts';
 
 const write = (method: string, body: unknown, key = crypto.randomUUID()): RequestInit => ({
@@ -61,19 +56,24 @@ export async function createAgentProfileDriver(): Promise<AgentProfileDriver> {
   let created = false;
   let pool: ReturnType<typeof createPool> | undefined;
   let auth: Awaited<ReturnType<typeof nativeFixture>> | undefined;
+  let publication: Awaited<ReturnType<typeof startAccountIdentityPublication>> | undefined;
   let closing: Promise<void> | undefined;
   const close = () =>
     (closing ??= (async () => {
       try {
-        await auth?.close();
+        await publication?.stop();
       } finally {
         try {
-          await pool?.end();
+          await auth?.close();
         } finally {
           try {
-            if (created) await admin.query(`DROP DATABASE "${name}" WITH (FORCE)`);
+            await pool?.end();
           } finally {
-            await admin.end();
+            try {
+              if (created) await admin.query(`DROP DATABASE "${name}" WITH (FORCE)`);
+            } finally {
+              await admin.end();
+            }
           }
         }
       }
@@ -194,6 +194,15 @@ export async function createAgentProfileDriver(): Promise<AgentProfileDriver> {
       })),
     };
     await bootstrapProfile(database, profile);
+    const openSearchUrl = process.env.OPENSEARCH_URL;
+    if (openSearchUrl === undefined) throw new Error('OPENSEARCH_URL is required for account identity publication');
+    publication = await startAccountIdentityPublication({
+      databaseUrl: source.href,
+      routeKey: Buffer.from(testRouteKey()).toString('base64url'),
+      searchPrefix: `agent-profile-${crypto.randomUUID().slice(0, 8)}-`,
+      openSearchUrl,
+    });
+    const identityWorkClient = publication.workClient;
     // Prove that the revoked Alice session previously had working profile authority.
     const revokedClient = `revoked_profile_${crypto.randomUUID()}`;
     await registerTestClient(service, { clientId: revokedClient, firstParty: false, scopes });
@@ -492,12 +501,12 @@ export async function createAgentProfileDriver(): Promise<AgentProfileDriver> {
         );
         await checked(approval.clone(), 'Approve verification');
         const decision = (await readAgentVerificationWorkflowRequest(database, submitted.verificationRequest.id))!;
-        const workflow = { ...decision, receiptId: decision.decisionReceiptId! };
-        await recordPendingAgentVerification(database, workflow, () => new Date());
-        await mergeVerifiedAgent(database, workflow);
-        await writeAgentVerificationPage(database, workflow);
-        await completeAgentVerification(database, workflow, () => new Date());
-        await finishAgentVerification(database, workflow, () => new Date());
+        await runAccountIdentityVerification(
+          database,
+          identityWorkClient,
+          submitted.verificationRequest.id,
+          decision.decisionReceiptId!,
+        );
         await drain();
         return { subjectId: subject.id, request: submission, approval };
       },
