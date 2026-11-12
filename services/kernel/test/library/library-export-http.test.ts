@@ -748,6 +748,33 @@ test('native owner export streams independent persisted facts, preserves dates, 
   await sql`UPDATE library.collection_member SET note='edited' WHERE route=${route} AND collection_id=${collection}`;
   expect(await get(firstPath)).toMatchObject({ state: 'stale', records: [], manifest: null });
 });
+test('Bangumi expiry between its header and evidence pages stales the capture', async () => {
+  const capturedAt = now;
+  try {
+    await sql`UPDATE library.bangumi_upload SET expires_at=${new Date(capturedAt + 12 * 60_000).toISOString()}
+      WHERE route=${route} AND account_id=${owner}`;
+    const original = await capture();
+    let cursor: string | null = original.first;
+    let page: any;
+    while (cursor) {
+      page = await get(`/v1/libraryExports/${original.exportId}/pages?cursor=${encodeURIComponent(cursor)}`);
+      cursor = page.next;
+      if (page.records.some((record: any) => record.section === 'bangumiUploads')) break;
+    }
+    expect(page.records.some((record: any) => record.section === 'bangumiUploads' && record.upload_id === copy)).toBe(
+      true,
+    );
+    expect(cursor).toBeString();
+
+    now = capturedAt + 13 * 60_000;
+    expect(
+      await get(`/v1/libraryExports/${original.exportId}/pages?cursor=${encodeURIComponent(cursor!)}`),
+    ).toMatchObject({ state: 'stale', records: [], next: null, manifest: null });
+  } finally {
+    now = capturedAt;
+  }
+});
+
 test('provider changes, expiry and completed-request replay cannot deliver a different population', async () => {
   for (const mutation of [
     () => sql`UPDATE library.vndb_import SET state='cancelled' WHERE route=${route} AND account_id=${owner}`,
