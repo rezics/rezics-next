@@ -187,6 +187,8 @@ selection reader. The route-leading fact index is installed in the normal semant
 
 Decision: compact relation facts use route, Subject, slot and statement key seeks; inverse keys without a slot use the existing route/Subject/statement index, and the core schema dump remains core-only.
 
+Decision: relation-growth fixtures validate full subjects against released Definitions with pointer-rich failures, pass statement-only fragments to `itemFacts`, and create their anchor through real Access authorization so native command-history evidence is bound; relation counts, read budgets and disclosure assertions stay unchanged.
+
 Related link and relation summaries retain the statement's original item key while using the authorized survivor summary and a one-hop `redirect` for visible merged subjects. The reader uses Semantic's existing `loadRelated` resolver; concealed and missing originals disclose no redirect.
 
 The derived read budget, SQL controls, byte inputs, partition checkouts and plan-evidence case are documented in
