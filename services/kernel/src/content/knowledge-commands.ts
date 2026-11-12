@@ -1,4 +1,8 @@
-import { validateKnowledgeReferences, type KnowledgeReference, type KnowledgeProvenance } from './knowledge-portable.ts';
+import {
+  validateKnowledgeReferences,
+  type KnowledgeReference,
+  type KnowledgeProvenance,
+} from './knowledge-portable.ts';
 import type { AccessClient, Actor } from '../request/access.ts';
 import {
   authoritativeTimeValue,
@@ -262,7 +266,8 @@ export async function writeKnowledgeDocument(
       );
       const notebook = current.rows[0];
       if (!notebook || notebook.owner_account_id !== ownerId) throw new KnowledgeNotFoundError();
-      if (notebook.structure_revision_id !== placement.expectedStructureRevisionId) throw new RevisionPreconditionError();
+      if (notebook.structure_revision_id !== placement.expectedStructureRevisionId)
+        throw new RevisionPreconditionError();
       const parentId = placement.parentPlacementId;
       if (parentId !== null) {
         const path = await knowledgeAncestorPath(tx, route, notebookId, parentId);

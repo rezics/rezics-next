@@ -36,10 +36,18 @@ export async function exportKnowledgeDocument(
   const result =
     source.representation === 'authoring'
       ? await readKnowledgePrivateDocument(
-          deps, source.accountId, source.notebookId, source.documentId, context, source.revisionId,
+          deps,
+          source.accountId,
+          source.notebookId,
+          source.documentId,
+          context,
+          source.revisionId,
         )
       : await readKnowledgePublicDocument(
-          deps, source.documentId, source.revisionId === undefined ? {} : { revisionId: source.revisionId }, context,
+          deps,
+          source.documentId,
+          source.revisionId === undefined ? {} : { revisionId: source.revisionId },
+          context,
         );
   const document = result.value.document;
   const snapshot = parseDocument(JSON.parse(Buffer.from(document.canonicalBytes, 'base64').toString('utf8')));

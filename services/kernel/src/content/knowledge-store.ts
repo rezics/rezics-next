@@ -164,7 +164,12 @@ export async function knowledgePrivateRow(
   documentId: string,
   revisionId: string | null = null,
 ): Promise<KnowledgePrivateRow | null> {
-  const row = await privateRead.run(tx, { route, notebook_id: notebookId, document_id: documentId, revision_id: revisionId });
+  const row = await privateRead.run(tx, {
+    route,
+    notebook_id: notebookId,
+    document_id: documentId,
+    revision_id: revisionId,
+  });
   if (!row) return null;
   return {
     ...row,

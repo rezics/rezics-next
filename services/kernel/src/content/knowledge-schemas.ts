@@ -145,7 +145,10 @@ export const KnowledgeOutlineSchema = t.Object(
 
 export const KnowledgeOwnerExportQuerySchema = t.Object({ revisionId: UUID }, { additionalProperties: false });
 export const KnowledgeSourceSelectionSchema = t.Union([
-  t.Object({ representation: t.Literal('public'), documentId: UUID, revisionId: UUID }, { additionalProperties: false }),
+  t.Object(
+    { representation: t.Literal('public'), documentId: UUID, revisionId: UUID },
+    { additionalProperties: false },
+  ),
   t.Object(
     { representation: t.Literal('authoring'), accountId: UUID, notebookId: UUID, documentId: UUID, revisionId: UUID },
     { additionalProperties: false },

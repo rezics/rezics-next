@@ -154,7 +154,8 @@ export async function readKnowledgePublicDocument(
   const current = await snapshot(deps, documentId, context, (client) =>
     knowledgePublicSelection(client, sourceRoute, documentId),
   );
-  if (current.value?.publication_id !== selected.publication_id || !(await visible())) throw new KnowledgeNotFoundError();
+  if (current.value?.publication_id !== selected.publication_id || !(await visible()))
+    throw new KnowledgeNotFoundError();
   const value = {
     document: {
       ...baseDocument(final.value),

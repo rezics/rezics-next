@@ -32,7 +32,8 @@ async function referenceVisible(
   if (
     !publication ||
     (target.kind === 'revision' &&
-      (publication.revision_id !== target.revisionId || publication.publication_sha256.toString('hex') !== target.sha256))
+      (publication.revision_id !== target.revisionId ||
+        publication.publication_sha256.toString('hex') !== target.sha256))
   )
     return false;
   const subjects = knowledgeSubjectTargets(publication.subject_id, publication.subject_ids);
@@ -59,9 +60,14 @@ export async function projectKnowledgePublicBody(
   const context = { actor: { kind: 'anonymous' as const }, deadline };
   const permitted: KnowledgeReference[] = [];
   for (const reference of references) {
-    permitted.push({ ...reference, target: (await referenceVisible(deps, reference.target, context)) ? reference.target : null });
+    permitted.push({
+      ...reference,
+      target: (await referenceVisible(deps, reference.target, context)) ? reference.target : null,
+    });
   }
-  const available = new Set(permitted.filter((reference) => reference.target !== null).map((reference) => reference.id));
+  const available = new Set(
+    permitted.filter((reference) => reference.target !== null).map((reference) => reference.id),
+  );
   const rewrite = (node: DocumentNode): DocumentNode => {
     if (
       (node.type === 'extensionBlock' || node.type === 'extensionInline') &&
@@ -95,7 +101,8 @@ export async function projectKnowledgePublicProvenance(
   const selected = await snapshot(deps, provenance.documentId, context, (tx) =>
     knowledgePublicSelection(tx, route, provenance.documentId),
   );
-  return selected.value?.revision_id === provenance.revisionId && selected.value.publication_id === provenance.publicationId
+  return selected.value?.revision_id === provenance.revisionId &&
+    selected.value.publication_id === provenance.publicationId
     ? provenance
     : null;
 }

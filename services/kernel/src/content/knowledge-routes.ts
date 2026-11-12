@@ -259,7 +259,6 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
       {
         params: privateParams(),
         query: strictContentSchema(KnowledgeExactReadQuerySchema),
-        query: strictContentSchema(t.Object({}, { additionalProperties: false })),
         response: {
           200: withHeaders(strictContentSchema(KnowledgePrivateDocumentSchema), responseHeaders),
           ...failures(),
@@ -274,7 +273,14 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
       async ({ params: { accountId, notebookId, documentId }, query, actor, admission, job, session, set }) => {
         const result = await operation(() =>
           admission.run('normal', job, () =>
-            readKnowledgePrivateDocument(deps, accountId, notebookId, documentId, { actor, deadline: job.deadline }, query.revisionId),
+            readKnowledgePrivateDocument(
+              deps,
+              accountId,
+              notebookId,
+              documentId,
+              { actor, deadline: job.deadline },
+              query.revisionId,
+            ),
           ),
         );
         for (const anchor of result.anchors) session.record(sessionComponent(anchor));
@@ -300,9 +306,15 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
         },
       },
       async ({ params: { id }, query, actor, admission, job, session }) => {
-        const result = await operation(() => admission.run('normal', job, () =>
-          exportKnowledgeDocument(deps, { representation: 'public', documentId: id, ...query }, { actor, deadline: job.deadline }),
-        ));
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            exportKnowledgeDocument(
+              deps,
+              { representation: 'public', documentId: id, ...query },
+              { actor, deadline: job.deadline },
+            ),
+          ),
+        );
         for (const anchor of result.anchors) session.record(sessionComponent(anchor));
         return new Response(serializeKnowledgeExport(result.value), {
           headers: { 'content-type': 'application/json', 'cache-control': 'private, no-store' },
@@ -326,9 +338,15 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
         },
       },
       async ({ params, query, actor, admission, job, session }) => {
-        const result = await operation(() => admission.run('normal', job, () =>
-          exportKnowledgeDocument(deps, { representation: 'authoring', ...params, revisionId: query.revisionId }, { actor, deadline: job.deadline }),
-        ));
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            exportKnowledgeDocument(
+              deps,
+              { representation: 'authoring', ...params, revisionId: query.revisionId },
+              { actor, deadline: job.deadline },
+            ),
+          ),
+        );
         for (const anchor of result.anchors) session.record(sessionComponent(anchor));
         return new Response(serializeKnowledgeExport(result.value), {
           headers: { 'content-type': 'application/json', 'cache-control': 'private, no-store' },
@@ -355,9 +373,11 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
       },
       async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
         requireAccount(actor);
-        const result = await operation(() => admission.run('normal', job, () =>
-          copyKnowledgeDocument(deps, actor, id, body, commandContext(request, job.deadline)),
-        ));
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            copyKnowledgeDocument(deps, actor, id, body, commandContext(request, job.deadline)),
+          ),
+        );
         session.record(result);
         set.status = 201;
         set.headers['cache-control'] = 'private, no-store';
