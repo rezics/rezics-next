@@ -61,7 +61,7 @@ test('current-text uses the queried generation analyzers for terms, phrases and 
   expect(seen.some((entry) => entry.startsWith(`${NAME_PREFIX_ANALYZER}:`))).toBe(true);
 });
 
-test('malformed analyzer replies stay unavailable, and native scan truncation keeps later names out', async () => {
+test('malformed analyzer replies stay unavailable, and omitted names remain unproven', async () => {
   const disclosure = createCurrentTextDisclosure(
     client(async () => {
       throw new OpenSearchError(400, { error: { reason: 'generation-internal' } });
@@ -108,8 +108,40 @@ test('malformed analyzer replies stay unavailable, and native scan truncation ke
       }),
       parseText('shutage'),
     ),
-  ).toBe(false);
+  ).toBe('not_proven');
   expect(analyzed).toContain('shutage');
   expect(analyzed).toContain(bulky);
   expect(analyzed).not.toContain('Shutage');
+});
+
+test('coverage preserves witnesses and decisive Boolean operands without certifying capped absence', async () => {
+  const matcher = createCurrentTextDisclosure(analyzing(), 'subjects-test-1');
+  const complete = releasedMultilingualSubject({
+    labels: [{ language: 'en', value: 'Shutage' }],
+    aliases: [],
+    descriptions: [],
+    statements: [],
+  });
+  const capped = { ...complete, aliases: [{ language: 'en', value: 'x'.repeat(CURRENT_TEXT_LIMITS.scanBytes) }] };
+  for (const [query, expected] of [
+    ['shutage', true],
+    ['absent', 'not_proven'],
+    ['"late phrase"', 'not_proven'],
+    ['-absent', 'not_proven'],
+    ['shutage absent', 'not_proven'],
+    ['-shutage absent', false],
+    ['shutage | absent', true],
+    ['-shutage | absent', 'not_proven'],
+    ['-(shutage | absent)', false],
+    ['-(-shutage absent)', true],
+  ] as const)
+    expect(await matcher.matchesText(capped, parseText(query))).toBe(expected);
+  expect(await matcher.matchesText(complete, parseText('absent'))).toBe(false);
+  expect(await matcher.matchesText(complete, parseText('-absent'))).toBe(true);
+  expect(await matcher.matchesPrefix(capped, 'Shut')).toBe(true);
+  expect(await matcher.matchesPrefix(capped, 'absent')).toBe('not_proven');
+  expect(await matcher.matchesPrefix(complete, 'absent')).toBe(false);
+  const descriptionsOnly = { ...complete, descriptions: capped.aliases };
+  expect(await matcher.matchesText(descriptionsOnly, parseText('absent'))).toBe('not_proven');
+  expect(await matcher.matchesPrefix(descriptionsOnly, 'absent')).toBe(false);
 });

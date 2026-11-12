@@ -368,7 +368,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
       });
       // A changed credit cut retires this window; unavailable proof removes its candidate, never a positive match.
       if (creditChanged) throw new SearchOperationError('search_restart_required');
-      if (checked.relationRejected) throw new SearchOperationError('index_not_ready');
+      if (checked.relationRejected || checked.textRejected) throw new SearchOperationError('index_not_ready');
       for (const { subject } of checked.passed)
         if (subject.type === entry.kind) checkedSubjects.set(subject.id, subject);
       const accepted = new Set(checkedSubjects.keys());

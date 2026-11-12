@@ -197,9 +197,15 @@ export async function checkHits<NativeHit extends Hit>(
     observeRelationRelease?: () => Promise<CurrentRelationRelease | null>;
     conceptFilter?: ConceptFilterExecution;
     /** Re-evaluate a stale indexed text hint against the current native Subject projection. */
-    currentText?: (subject: IndexedSubject) => Promise<boolean>;
+    currentText?: (subject: IndexedSubject) => Promise<RelationFacetMatch>;
   },
-): Promise<{ passed: { hit: NativeHit; subject: IndexedSubject }[]; dropped: number; relationRejected?: true }> {
+): Promise<{
+  passed: { hit: NativeHit; subject: IndexedSubject }[];
+  dropped: number;
+  relationRejected?: true;
+  /** An eligible candidate has undecidable text; it cannot certify counts or a consumed continuation. */
+  textRejected?: true;
+}> {
   const requestedConcurrency = options?.concurrency ?? 8;
   if (!Number.isSafeInteger(requestedConcurrency) || requestedConcurrency < 1)
     throw new RangeError('Concurrency must be a positive safe integer');
@@ -217,6 +223,12 @@ export async function checkHits<NativeHit extends Hit>(
   const relationProperties = new Set(options?.relationProperties);
   let relationRejected = false;
   let sourceChanged = false;
+  let textRejected = false;
+  const currentTextMatches = async (subject: IndexedSubject): Promise<boolean> => {
+    const match = options?.currentText ? await options.currentText(subject) : true;
+    textRejected ||= match === 'not_proven';
+    return match === true;
+  };
   const hints = new Map<string, number>();
   if (plan) {
     for (const [name, clause] of clauses) {
@@ -413,7 +425,7 @@ export async function checkHits<NativeHit extends Hit>(
           })
         )
           continue;
-        if (!options?.currentText || (await options.currentText(subject))) checked[index] = { hit, subject };
+        if (await currentTextMatches(subject)) checked[index] = { hit, subject };
       }
       const pending = [...points.values()];
       pagePoints.push(...pending);
@@ -498,8 +510,7 @@ export async function checkHits<NativeHit extends Hit>(
             relationRejected = true;
             continue;
           }
-          if (result.passed && (!options?.currentText || (await options.currentText(subject))))
-            checked[index] = { hit, subject };
+          if (result.passed && (await currentTextMatches(subject))) checked[index] = { hit, subject };
           relationRejected ||= result.relationRejected;
         }
       });
@@ -549,5 +560,10 @@ export async function checkHits<NativeHit extends Hit>(
       return { passed: [], dropped: hits.length, relationRejected: true };
   }
   const passed = checked.filter((entry) => entry !== undefined);
-  return { passed, dropped: hits.length - passed.length, ...(relationRejected ? { relationRejected: true } : {}) };
+  return {
+    passed,
+    dropped: hits.length - passed.length,
+    ...(relationRejected ? { relationRejected: true } : {}),
+    ...(textRejected ? { textRejected: true } : {}),
+  };
 }

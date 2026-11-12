@@ -80,7 +80,7 @@ import { createScopedFacetApplication } from './scoped-facet-application.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import { ScopeWork, scopeAllowance } from './scope-work.ts';
 import { readSavedCatalogueMembers, type SavedCatalogueMembers } from './service-saved-collection.ts';
-import type { IndexedSubject, SubjectSource } from './source.ts';
+import type { IndexedSubject, RelationFacetMatch, SubjectSource } from './source.ts';
 import { compileText, parseText, positiveText } from './text.ts';
 import { publicCatalogueKindCounts } from './kind-count-proof.ts';
 import { collectUsefulPage } from './useful-page.ts';
@@ -181,6 +181,13 @@ function scopedCatalogueCondition(value: unknown, scope: FacetDiscoveryScope): u
 
 function indexNotReady(): ProblemError {
   return new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+}
+
+/** An undecidable candidate cannot be skipped by a page, aggregate or suggestion continuation. */
+async function requireCurrentTextMatch(result: Promise<RelationFacetMatch>): Promise<boolean> {
+  const match = await result;
+  if (match === 'not_proven') throw indexNotReady();
+  return match;
 }
 
 /** Preserve already classified adapter failures while native evidence recovery owns preparation. */
@@ -1192,7 +1199,8 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
               : {}),
             ...(currentTextDisclosure && text
               ? {
-                  currentText: (subject: IndexedSubject) => currentTextDisclosure.matchesText(subject, text),
+                  currentText: (subject: IndexedSubject) =>
+                    requireCurrentTextMatch(currentTextDisclosure.matchesText(subject, text)),
                 }
               : {}),
           }),
@@ -1758,7 +1766,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             hits.map((hit) => ({ ...hit, matched: [] })),
             new Map(),
             {
-              currentText: (subject) => currentTextDisclosure!.matchesPrefix(subject, q),
+              currentText: (subject) => requireCurrentTextMatch(currentTextDisclosure!.matchesPrefix(subject, q)),
             },
           ),
         );
@@ -1850,7 +1858,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             filter: catalogue!,
             release: current.release,
             source,
-            currentText: (subject) => currentTextDisclosure!.matchesPrefix(subject, q),
+            currentText: (subject) => requireCurrentTextMatch(currentTextDisclosure!.matchesPrefix(subject, q)),
             ...(scope ? { scope } : {}),
             ...(preparedScope ? { preparedScope } : {}),
             ...(scopeWork ? { scopeWork } : {}),
@@ -1906,7 +1914,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
               queried.result.map((hit) => ({ ...hit, matched: [] })),
               new Map(),
               {
-                currentText: (subject) => currentTextDisclosure!.matchesPrefix(subject, q),
+                currentText: (subject) => requireCurrentTextMatch(currentTextDisclosure!.matchesPrefix(subject, q)),
               },
             ),
           );
@@ -1945,7 +1953,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           hits.map((hit) => ({ ...hit, matched: [] })),
           new Map(),
           {
-            currentText: (subject) => currentTextDisclosure!.matchesPrefix(subject, q),
+            currentText: (subject) => requireCurrentTextMatch(currentTextDisclosure!.matchesPrefix(subject, q)),
           },
         ),
       );

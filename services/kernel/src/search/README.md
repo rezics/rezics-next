@@ -517,8 +517,15 @@ current filter evidence in the existing partial implementation; hit data is proj
 and item facet labels also use current source checks. This suppresses stale results while relay repair catches up,
 subject to the pending real-source/composition proof in [Indexed membership, current disclosure and convergence](#indexed-membership-current-disclosure-and-convergence).
 Match evidence is unavailable when an engine excerpt cannot be mapped uniquely to one current public title, alias or description value and language; locale fallback is never evidence. Positive named field probes retain the installed text query as the sole required clause and add no score. Engine excerpts are parsed on the server and only bounded safe text spans leave the service.
-Decision: names, descriptions and copied search text store character offsets so the unified highlighter returns exact source text, including `und` aliases, rather than ICU-folded tokens. Display locale never rewrites evidence language. Native truncation keeps the engine excerpt and the 32 KiB current-name scan; a later alias beyond that scan cannot become evidence.
-`engine-analysis.ts` is the installed-node `_analyze` and plugin inventory: `requireDevelopmentAnalyzer` proves OpenSearch 3.x with `analysis-icu` and ICU folding, and `analyzeInstalled` returns native offsets for the generation analyzer. Malformed analyzer or plugin replies are `SearchUnavailableError` and never retain engine bodies. `disclosure/current-text.ts` reuses those analyzers for query and prefix disclosure, including the same 16-way analyze bound as sort-key preparation, held as a module-init literal rather than a load-time read of `ENGINE_ANALYSIS_LIMITS`.
+Names, descriptions and copied text retain source character offsets and languages, including `und`; locale/ICU
+never rewrite evidence. `engine-analysis.ts` supplies generation `_analyze`, offsets and OpenSearch 3.x/`analysis-icu`
+inventory. Malformed replies are `SearchUnavailableError` without bodies. Current analysis retains a literal 16-way bound.
+
+Decision: current text admits whole language/value pairs within 32 KiB with explicit coverage: names/descriptions
+for terms/phrases, names for prefixes. Witnesses are true; absence requires complete coverage, otherwise `not_proven`.
+Tokenless queries are false. The current-filter algebra preserves unknown through NOT/AND/OR; false decides AND,
+true decides OR. Disclosure retains decided hits and flags unknown text. Search/suggest require readiness for unknown: it cannot disclose, certify empty/exhausted pages, counts/facets or advance continuations.
+Omitted aliases supply no evidence.
 `cjk_bigram_v2` and `name_prefix` omit empty terms: an empty returned token is unavailable, since accepting it
 would let an empty prefix match every current name. This boundary rule does not reject empty normalized keys.
 The native CJK case independently re-reads current source text before the writer catches up, checks that retired

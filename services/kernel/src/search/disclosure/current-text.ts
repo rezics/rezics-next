@@ -1,5 +1,6 @@
+import { allCurrentMatch, anyCurrentMatch, notCurrentMatch } from '../current-filter-plan.ts';
 import { publicNames } from '../document-names.ts';
-import type { IndexedSubject } from '../source.ts';
+import type { IndexedSubject, RelationFacetMatch } from '../source.ts';
 import type { TextNode } from '../text.ts';
 import { CJK_ANALYZER, NAME_PREFIX_ANALYZER, type EngineToken } from './admission.ts';
 
@@ -8,7 +9,8 @@ export type CurrentTextAnalysis = (analyzer: CurrentTextAnalyzer, text: string) 
 type Analyzer = CurrentTextAnalyzer;
 export const CURRENT_TEXT_LIMITS = Object.freeze({ scanBytes: 32 * 1024, concurrency: 16 });
 
-function uniqueValues(subject: IndexedSubject, includeDescriptions: boolean): string[] {
+/** Only admitted whole values reach analysis; an omitted value leaves relevant coverage incomplete. */
+function uniqueValues(subject: IndexedSubject, includeDescriptions: boolean): { values: string[]; complete: boolean } {
   const unique = new Set<string>();
   const values: string[] = [];
   let scanned = 0;
@@ -23,14 +25,14 @@ function uniqueValues(subject: IndexedSubject, includeDescriptions: boolean): st
     return true;
   };
   for (const name of publicNames(subject)) {
-    if (!add(name.language, name.value)) return values;
+    if (!add(name.language, name.value)) return { values, complete: false };
   }
   if (includeDescriptions) {
     for (const name of subject.descriptions) {
-      if (!add(name.language, name.value)) return values;
+      if (!add(name.language, name.value)) return { values, complete: false };
     }
   }
-  return values;
+  return { values, complete: true };
 }
 
 /** Analyze current native text with the same analyzer installed on the queried Search generation. */
@@ -60,8 +62,8 @@ export function createCurrentTextMatcher(analyzeCurrent: CurrentTextAnalysis) {
     return result;
   }
 
-  async function matchesText(subject: IndexedSubject, query: TextNode): Promise<boolean> {
-    const texts = uniqueValues(subject, true);
+  async function matchesText(subject: IndexedSubject, query: TextNode): Promise<RelationFacetMatch> {
+    const { values: texts, complete } = uniqueValues(subject, true);
     const [queryLeaves, currentValues] = await Promise.all([
       (async () => {
         const leaves = new Map<string, readonly EngineToken[]>();
@@ -86,17 +88,15 @@ export function createCurrentTextMatcher(analyzeCurrent: CurrentTextAnalysis) {
       Promise.all(texts.map((text) => analyze(CJK_ANALYZER, text))),
     ]);
     const all = new Set(currentValues.flatMap((tokens) => tokens.map(({ token }) => token)));
-    const leafMatches = new Map<string, boolean>();
+    const leafMatches = new Map<string, RelationFacetMatch>();
+    const absence = complete ? false : 'not_proven';
     for (const [key, tokens] of queryLeaves) {
       if (!tokens.length) {
         leafMatches.set(key, false);
         continue;
       }
       if (key.startsWith('term\0')) {
-        leafMatches.set(
-          key,
-          tokens.every(({ token }) => all.has(token)),
-        );
+        leafMatches.set(key, tokens.every(({ token }) => all.has(token)) ? true : absence);
         continue;
       }
       const phrase = tokens.map(({ token, position }) => ({ token, offset: position - tokens[0]!.position }));
@@ -114,35 +114,35 @@ export function createCurrentTextMatcher(analyzeCurrent: CurrentTextAnalysis) {
         }
         return false;
       });
-      leafMatches.set(key, matched);
+      leafMatches.set(key, matched ? true : absence);
     }
-    const evaluate = (node: TextNode): boolean => {
+    const evaluate = (node: TextNode): RelationFacetMatch => {
       switch (node.kind) {
         case 'term':
         case 'phrase':
           return leafMatches.get(`${node.kind}\0${node.value}`) ?? false;
         case 'not':
-          return !evaluate(node.child);
+          return notCurrentMatch(evaluate(node.child));
         case 'and':
-          return node.children.every(evaluate);
+          return allCurrentMatch(node.children.map(evaluate));
         case 'or':
-          return node.children.some(evaluate);
+          return anyCurrentMatch(node.children.map(evaluate));
       }
     };
     return evaluate(query);
   }
 
-  async function matchesPrefix(subject: IndexedSubject, prefix: string): Promise<boolean> {
+  async function matchesPrefix(subject: IndexedSubject, prefix: string): Promise<RelationFacetMatch> {
     const query = await analyze(NAME_PREFIX_ANALYZER, prefix);
     if (!query.length) return false;
-    const names = uniqueValues(subject, false);
+    const { values: names, complete } = uniqueValues(subject, false);
     const candidates = await Promise.all(names.map((name) => analyze(NAME_PREFIX_ANALYZER, name)));
     const exact = new Set(candidates.flatMap((tokens) => tokens.map(({ token }) => token)));
     const final = query.at(-1)!.token;
-    return (
+    const matched =
       query.slice(0, -1).some(({ token }) => exact.has(token)) ||
-      candidates.some((tokens) => tokens.some(({ token }) => token.startsWith(final)))
-    );
+      candidates.some((tokens) => tokens.some(({ token }) => token.startsWith(final)));
+    return matched ? true : complete ? false : 'not_proven';
   }
 
   return { matchesText, matchesPrefix };

@@ -40,7 +40,7 @@ import type {
   DiscoveryKey,
 } from './discovery.ts';
 import type { DiscoverySearch } from './discovery-api.ts';
-import type { IndexedSubject } from './source.ts';
+import type { IndexedSubject, RelationFacetMatch } from './source.ts';
 import type {
   PublicFilterConsumerJob,
   PublicDiscoveryConsumerOperations,
@@ -151,7 +151,11 @@ type DiscoveryConfiguration = {
       countCandidateLimit: number;
     }>,
   ): Promise<ConceptFilterExecution | undefined>;
-  currentTextMatches?: (physicalTarget: string, subject: IndexedSubject, query: TextNode) => Promise<boolean>;
+  currentTextMatches?: (
+    physicalTarget: string,
+    subject: IndexedSubject,
+    query: TextNode,
+  ) => Promise<RelationFacetMatch>;
   prepare?(job: PublicFilterConsumerJob): Promise<void>;
 };
 
