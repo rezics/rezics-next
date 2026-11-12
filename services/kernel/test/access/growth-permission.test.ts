@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess as createPermissionAccess, permissionEvidenceDeadline } from '../../src/access/permission.ts';
@@ -6,6 +6,7 @@ import { creationCapability, parentCreationAuthorization } from '../../src/acces
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import type { AccountActor, Resource } from '../../src/request/access.ts';
+import { traceTestPool } from '../support/test-kernel.ts';
 import {
   capture,
   checkGrowth,
@@ -43,6 +44,8 @@ let target: Resource;
 let actor: AccountActor;
 let assignmentActor: AccountActor;
 let permissions: ReturnType<typeof createPermissionAccess>;
+let permissionPhase: string | undefined;
+const reportPermissionQueries: Array<() => void> = [];
 
 const seededAccountIds: string[] = [];
 const seededOrganizationIds: string[] = [];
@@ -283,6 +286,10 @@ const assignmentGrowthPopulation: Population = {
 
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
+  reportPermissionQueries.push(
+    traceTestPool(db.pool, () => permissionPhase && `permission:measured:${permissionPhase}`),
+    traceTestPool(db.admin, () => permissionPhase && `permission:admin:${permissionPhase}`),
+  );
   actorId = newId(anchorRoute);
   principalId = newId(anchorRoute);
   assignmentRequestId = newId(anchorRoute);
@@ -364,6 +371,10 @@ beforeAll(async () => {
   await db.admin.query(`ANALYZE ${resources}`);
 }, 90_000);
 
+afterEach(() => {
+  for (const report of reportPermissionQueries) report();
+});
+
 afterAll(async () => {
   if (!db) return;
   try {
@@ -419,6 +430,7 @@ function growth(name: string, operation: GrowthCheck['operation']): GrowthCheck 
     warmups: 1,
     seededRelations: permissionSeededRelations,
     grow: async (growthDb, scale, previous) => {
+      permissionPhase = `grow ${previous} to ${scale}`;
       const range = {
         from: previous * ordinalsPerScaleUnit,
         to: scale * ordinalsPerScaleUnit,
@@ -430,12 +442,14 @@ function growth(name: string, operation: GrowthCheck['operation']): GrowthCheck 
       seedPositionBase = BigInt(tail.rows[0]!.position);
       seedPositionRangeFrom = range.from;
       await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, range);
+      permissionPhase = `grown ${scale}; harness maintenance`;
     },
     operation,
   };
 }
 
 async function resetSeededRows(): Promise<void> {
+  permissionPhase = 'reset seeded rows';
   const database = db!;
   if (seededResourceIds.length) {
     await database.admin.query('DELETE FROM access.resource_grant WHERE resource_id = ANY($1::uuid[])', [
@@ -476,16 +490,37 @@ async function resetSeededRows(): Promise<void> {
   seededOrganizationIds.length = 0;
   seededTestResourceIds.length = 0;
   assignmentGrowthPrincipalIds.length = 0;
+  permissionPhase = 'seeded rows reset';
 }
 
 async function prepare(pool: Pool, resource = target, principal = actor): Promise<unknown> {
+  permissionPhase = 'prepare';
   const evidence = await permissions.prepare!(principal, action, resource, {
     pool,
     deadline: Date.now() + 5_000,
   });
   if (permissionEvidenceDeadline(evidence) === undefined)
     throw new Error('Permission preparation produced no usable evidence');
+  permissionPhase = 'prepared';
   return evidence;
+}
+
+async function authorizeCurrent(
+  growthDb: GrowthDatabase,
+  principal = actor,
+  preparationPool = growthDb.admin,
+): Promise<boolean> {
+  const evidence = await prepare(preparationPool, target, principal);
+  permissionPhase = 'acquire final permission client';
+  const client = await growthDb.pool.connect();
+  try {
+    permissionPhase = 'authorize current permission';
+    return await permissions.authorize(client, principal, action, target, evidence);
+  } finally {
+    permissionPhase = 'release final permission client';
+    client.release();
+    permissionPhase = 'final permission settled; harness drain';
+  }
 }
 
 test('Permission preparation stays within its bound as O grows', async () => {
@@ -505,25 +540,13 @@ test('Final permission check stays within its bound as G grows', async () => {
     growth('Final permission check stays within its bound as G grows', async (growthDb) => {
       // Evidence lives one second, so it is prepared right before the check. The uninstrumented pool keeps the
       // preparation's statements out of the measured window, which holds only the final formula.
-      const evidence = await prepare(growthDb.admin);
-      const client = await growthDb.pool.connect();
-      try {
-        if (!(await permissions.authorize(client, actor, action, target, evidence)))
-          throw new Error('The bounded resource grant did not authorize its actor');
-      } finally {
-        client.release();
-      }
+      if (!(await authorizeCurrent(growthDb)))
+        throw new Error('The bounded resource grant did not authorize its actor');
     }),
   );
   const finalPlan = await capture(db!, async () => {
-    const evidence = await prepare(db!.pool);
-    const client = await db!.pool.connect();
-    try {
-      if (!(await permissions.authorize(client, actor, action, target, evidence)))
-        throw new Error('The bounded resource grant did not authorize its actor');
-    } finally {
-      client.release();
-    }
+    if (!(await authorizeCurrent(db!, actor, db!.pool)))
+      throw new Error('The bounded resource grant did not authorize its actor');
   });
   expectIndex(finalPlan.capture.plans, 'resource_grant_pkey');
 }, 85_000);
@@ -536,32 +559,22 @@ test('Assignment permission check stays within its bound as assignments and gran
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     seededRelations: assignmentSeededRelations,
     grow: async (growthDb, scale, previous) => {
+      permissionPhase = `grow assignments ${previous} to ${scale}`;
       await seed({ pool: growthDb.pool, admin: growthDb.admin }, assignmentGrowthPopulation, {
         from: previous,
         to: scale,
       });
+      permissionPhase = `assignments grown ${scale}; harness maintenance`;
     },
     operation: async (growthDb) => {
-      const evidence = await prepare(growthDb.admin, target, assignmentActor);
-      const client = await growthDb.pool.connect();
-      try {
-        if (!(await permissions.authorize(client, assignmentActor, action, target, evidence)))
-          throw new Error('The current assignment and resource grants did not authorize the actor');
-      } finally {
-        client.release();
-      }
+      if (!(await authorizeCurrent(growthDb, assignmentActor)))
+        throw new Error('The current assignment and resource grants did not authorize the actor');
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
   const assignmentPlan = await capture(db!, async () => {
-    const evidence = await prepare(db!.admin, target, assignmentActor);
-    const client = await db!.pool.connect();
-    try {
-      if (!(await permissions.authorize(client, assignmentActor, action, target, evidence)))
-        throw new Error('The current assignment and resource grants did not authorize the actor');
-    } finally {
-      client.release();
-    }
+    if (!(await authorizeCurrent(db!, assignmentActor)))
+      throw new Error('The current assignment and resource grants did not authorize the actor');
   });
   expectIndex(assignmentPlan.capture.plans, 'principal_assignment_pkey');
   expectIndex(assignmentPlan.capture.plans, 'resource_grant_pkey');
@@ -569,6 +582,7 @@ test('Assignment permission check stays within its bound as assignments and gran
 
 test('the final delegated formula retains a full-key assignment probe', async () => {
   await resetSeededRows();
+  permissionPhase = 'seed full-key assignment population and maintain';
   await seed(
     { pool: db!.pool, admin: db!.admin },
     assignmentGrowthPopulation,
@@ -576,13 +590,7 @@ test('the final delegated formula retains a full-key assignment probe', async ()
     { maintenance: { analyze: true, relations: assignmentSeededRelations } },
   );
   const measured = await capture(db!, async () => {
-    const evidence = await prepare(db!.admin, target, assignmentActor);
-    const client = await db!.pool.connect();
-    try {
-      expect(await permissions.authorize(client, assignmentActor, action, target, evidence)).toBe(true);
-    } finally {
-      client.release();
-    }
+    expect(await authorizeCurrent(db!, assignmentActor)).toBe(true);
   });
   const assignments: Record<string, unknown>[] = [];
   function visit(value: unknown): void {

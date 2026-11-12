@@ -8,7 +8,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { accessCheck, type Resource, type AccessClient } from '../../src/request/access.ts';
-import { registerTestClient, testAccess, testKernel } from '../support/test-kernel.ts';
+import { registerTestClient, testAccess, testKernel, traceTestPool } from '../support/test-kernel.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
@@ -43,6 +43,8 @@ export async function standingFixture(
   let pendingOperation = 'create isolated Auth database';
   let closing: Promise<void> | undefined;
   const activeOperations = new Map<Promise<unknown>, string>();
+  const startedAt = performance.now();
+  let reportAuthQueries: (() => void) | undefined;
 
   function assertStarting(): void {
     if (closing) throw new Error(`Standing fixture is closing during ${pendingOperation}`);
@@ -51,6 +53,11 @@ export async function standingFixture(
   async function startup<T>(operation: string, action: () => Promise<T>): Promise<T> {
     assertStarting();
     pendingOperation = operation;
+    const phaseStartedAt = performance.now();
+    console.error(
+      '[standing-fixture]',
+      JSON.stringify({ operation, state: 'start', elapsed: Math.round(phaseStartedAt - startedAt) }),
+    );
     const work = Promise.resolve().then(action);
     activeOperations.set(work, operation);
     try {
@@ -59,11 +66,16 @@ export async function standingFixture(
       return result;
     } finally {
       activeOperations.delete(work);
+      console.error(
+        '[standing-fixture]',
+        JSON.stringify({ operation, state: 'settled', elapsed: Math.round(performance.now() - phaseStartedAt) }),
+      );
     }
   }
 
   function close(): Promise<void> {
     closing ??= (async () => {
+      reportAuthQueries?.();
       const failures: Error[] = [];
       async function settle(label: string, action: () => Promise<unknown>): Promise<void> {
         try {
@@ -114,11 +126,9 @@ export async function standingFixture(
       'load Auth migration entry',
       () => import(new URL('../../../auth/scripts/database.ts', import.meta.url).href),
     );
-    pendingOperation = 'migrate isolated Auth database';
-    assertStarting();
-    migrate(authUrl.toString());
-    assertStarting();
+    await startup('migrate isolated Auth database', async () => migrate(authUrl.toString()));
     const authDatabasePool = new Pool({ connectionString: authUrl.toString() });
+    reportAuthQueries = traceTestPool(authDatabasePool, () => pendingOperation);
     authPool = authDatabasePool;
     const signingKey = await startup('generate Auth signing key', async () => ({
       ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -220,7 +230,9 @@ export async function standingFixture(
       'thread:create': ['content.thread', 'content.post'],
       'post:create': ['content.post'],
     };
-    const mountedActions = actionCatalogue(testKernel({ pool }));
+    const mountedActions = await startup('compose fixture action catalogue', async () =>
+      actionCatalogue(testKernel({ pool })),
+    );
     const fixtureActions = new Map(mountedActions);
     for (const action of actions) {
       const mounted = mountedActions.get(action);

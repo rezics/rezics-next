@@ -1,7 +1,7 @@
 import { configureTestReceiptKeys, testReceiptKeys } from './receipt-keys.ts';
 import type { AuthService } from '@rezics/auth';
 import { randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import type { AccessConfig } from '../../src/access/index.ts';
 import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
 import type { ResourceRoleCatalogue } from '../../src/access/resource-roles.ts';
@@ -258,6 +258,94 @@ export async function registerTestClient(
     scopes: [...scopes],
     ...(options.displayName === undefined ? {} : { displayName: options.displayName }),
   });
+}
+
+/** Fixture-only query evidence, bounded in memory and emitted at an explicit lifecycle boundary.
+ * No timer, connection, transaction or growth capture is introduced by this observer. */
+export function traceTestPool(pool: Pool, phase: () => string | undefined): () => void {
+  type Entry = {
+    id: number;
+    phase: string;
+    backend: number | undefined;
+    sql: string | undefined;
+    started: number;
+    elapsed?: number;
+    error?: string;
+  };
+  let sequence = 0;
+  const pending = new Map<number, Entry>();
+  const recent: Entry[] = [];
+  const observed = new WeakSet<PoolClient>();
+  const backend = (client: PoolClient) => (client as PoolClient & { processID?: number }).processID;
+  const observe = (client: PoolClient) => {
+    if (observed.has(client)) return;
+    observed.add(client);
+    const query = client.query;
+    client.query = ((...args: unknown[]) => {
+      const current = phase();
+      if (current === undefined) return Reflect.apply(query, client, args);
+      const statement = args[0] as string | { text?: string };
+      const entry: Entry = {
+        id: ++sequence,
+        phase: current,
+        backend: backend(client),
+        started: performance.now(),
+        sql: (typeof statement === 'string' ? statement : statement.text)?.replace(/\s+/g, ' ').slice(0, 180),
+      };
+      // Fixture operations are sequential; retain a bounded first set if a producer fans out unexpectedly.
+      if (pending.size < 16) pending.set(entry.id, entry);
+      const done = (error?: unknown) => {
+        pending.delete(entry.id);
+        entry.elapsed = Math.round(performance.now() - entry.started);
+        if (error) entry.error = String(error).slice(0, 240);
+        recent.push(entry);
+        if (recent.length > 16) recent.shift();
+      };
+      const callback = args.at(-1);
+      if (typeof callback === 'function') {
+        args[args.length - 1] = (...result: unknown[]) => {
+          done(result[0]);
+          return Reflect.apply(callback, undefined, result);
+        };
+      }
+      try {
+        const result = Reflect.apply(query, client, args);
+        if (typeof callback !== 'function' && result instanceof Promise)
+          return result.then(
+            (value) => {
+              done();
+              return value;
+            },
+            (error) => {
+              done(error);
+              throw error;
+            },
+          );
+        return result;
+      } catch (error) {
+        done(error);
+        throw error;
+      }
+    }) as typeof client.query;
+  };
+  pool.on('connect', observe);
+  // Also observe connections opened by growth's own startup probe before the fixture installed this observer.
+  pool.on('acquire', observe);
+  return () =>
+    console.error(
+      '[fixture-pool]',
+      JSON.stringify({
+        phase: phase(),
+        total: pool.totalCount,
+        idle: pool.idleCount,
+        waiting: pool.waitingCount,
+        pending: [...pending.values()].map((entry) => ({
+          ...entry,
+          elapsed: Math.round(performance.now() - entry.started),
+        })),
+        recent,
+      }),
+    );
 }
 
 type TestReceiptPrincipal =
