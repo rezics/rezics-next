@@ -340,9 +340,7 @@ function retainedNativeExitReceiptTerminal(
     return false;
 
   const root = join(worktree, '.temp', 'goal', 'checks');
-  const physical = readCheckEvidence(
-    join(root, 'custody', 'history', `${record.id}.${record.physicalRunId}.json`),
-  );
+  const physical = readCheckEvidence(join(root, 'custody', 'history', `${record.id}.${record.physicalRunId}.json`));
   if (
     !physical ||
     physical.version !== 1 ||

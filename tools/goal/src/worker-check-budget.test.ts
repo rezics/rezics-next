@@ -1582,10 +1582,18 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
       approaches: [],
     });
     const previousChecks = [
-      { id: 'a7a7a7a7-7777-4777-8777-777777777777', physicalRunId: 'b8b8b8b8-8888-4888-8888-888888888888',
-        remoteRunId: 'retained-web-pass', exitCode: 0 },
-      { id: 'c9c9c9c9-9999-4999-8999-999999999999', physicalRunId: 'd0d0d0d0-0000-4000-8000-000000000000',
-        remoteRunId: 'retained-web-failure', exitCode: 1 },
+      {
+        id: 'a7a7a7a7-7777-4777-8777-777777777777',
+        physicalRunId: 'b8b8b8b8-8888-4888-8888-888888888888',
+        remoteRunId: 'retained-web-pass',
+        exitCode: 0,
+      },
+      {
+        id: 'c9c9c9c9-9999-4999-8999-999999999999',
+        physicalRunId: 'd0d0d0d0-0000-4000-8000-000000000000',
+        remoteRunId: 'retained-web-failure',
+        exitCode: 1,
+      },
     ];
     const checkRoot = join(worktree, '.temp/goal/checks');
     const results = join(checkRoot, 'results');
@@ -1594,7 +1602,12 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
     mkdirSync(results, { recursive: true });
     mkdirSync(history, { recursive: true });
     mkdirSync(remoteCustody, { recursive: true });
-    const oldRunner = { pid: 2_000_000_002, start: '1', boot: '11111111-1111-4111-8111-111111111111', group: 2_000_000_002 };
+    const oldRunner = {
+      pid: 2_000_000_002,
+      start: '1',
+      boot: '11111111-1111-4111-8111-111111111111',
+      group: 2_000_000_002,
+    };
     const remoteHost = 'check-b';
     for (const previous of previousChecks) {
       const resources = {
@@ -1833,9 +1846,9 @@ test('a withdrawn Web interface retry gets one exact terminal compiler receipt a
       expect(
         JSON.parse(readFileSync(join(history, `${previous.id}.${previous.physicalRunId}.json`), 'utf8')).terminalProof,
       ).toBeUndefined();
-      expect(
-        existsSync(join(checkRoot, 'custody/receipts', `${previous.id}.${previous.physicalRunId}.json`)),
-      ).toBe(false);
+      expect(existsSync(join(checkRoot, 'custody/receipts', `${previous.id}.${previous.physicalRunId}.json`))).toBe(
+        false,
+      );
     }
     const issuedProof = recoveryProof(issued);
     expect(issuedProof.commands).toHaveLength(1);
