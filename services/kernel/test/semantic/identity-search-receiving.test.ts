@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import {
   searchReceivingOwnedStatementCosts,
   searchReceivingOwnedPageStatements,
+  searchReceivingProductionDeclaration,
 } from '../../src/semantic/identity-search-receiving-statements.ts';
 import { searchNativeReceivingStatements } from '../../src/search/identity-receiving-native-store.ts';
 import {
@@ -806,6 +807,27 @@ test('a local SQL subtotal cannot admit the unresolved deferred Source capture g
 });
 
 import { snapshotSearchIdentityReceivingFrontier } from '../../src/search/identity-receiving-native-contract.ts';
+import sourceControl from '../../src/semantic/identity-epoch-store-select-control.sql';
+import sourceMappingStep from '../../src/semantic/identity-epoch-store-select-step.sql';
+import sourceDefinitionRead from '../../src/semantic/public-filter-source-binding-definition.sql';
+import projectionPage from '../../src/semantic/public-filter-projection-page.sql';
+import { permissionCheckStatements } from '../../src/access/permission.ts';
+
+test('the installed receiving declaration covers Semantic Source support and projection SQL', () => {
+  const declared = new Map(searchReceivingProductionDeclaration().statements.map(({ sql, work }) => [sql, work]));
+  for (const sql of [
+    sourceControl.sql,
+    sourceMappingStep.sql,
+    sourceDefinitionRead.sql,
+    projectionPage.sql,
+    permissionCheckStatements.time,
+    permissionCheckStatements.formula,
+  ]) {
+    const cost = declared.get(sql);
+    expect(cost?.nativeRows).toBeGreaterThan(0);
+    expect(cost?.statements).toBeGreaterThan(0);
+  }
+});
 
 test('the Search frontier snapshot rejects JSON coercion and survives caller mutation before callbacks', () => {
   const original = { after: ['original', 2, null], segment: 0 };

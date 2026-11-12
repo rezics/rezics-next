@@ -436,6 +436,11 @@ anonymous original eligibility and the native Source's own Type, release, candid
 related-item guards. Exact-job installed mappings become available only inside that asynchronous operation;
 ordinary pending reads retain their existing behavior. Hidden originals cannot borrow visible terminal facts.
 
+Fixed Search receiving declares the transitive Semantic Source, Access public-read and projection SQL with bounded
+costs; each projection call advances one selected key through the sealed support frontier. Coordinator recovery
+appends a deterministic segment for the same native job after terminal SDK failure, preserving its source cursor and
+receipts.
+
 FAA's admitted-support declarations and visibly provisional unavailable binding factory are in
 `public-filter-source-binding.ts`, alongside the existing `PublicFilterNativeSource` handoff. The existing
 `subject-source-key-pages.ts` port is preserved unchanged; the bridge does not consume its rebuild interface.

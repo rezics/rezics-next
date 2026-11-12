@@ -94,6 +94,14 @@ import { ACCOUNT_ROLE_BITS as HISTORY_ROLE } from '../history/contract/index.ts'
 // foreign callbacks. Ordinary preparation retains its installed owner protocol.
 const kindOriginalInvocation = new AsyncLocalStorage<boolean>();
 
+/** Exact literals for callers that include Access checks in an outer SQL work envelope.
+ * This exposes no prepared evidence, evaluator or authorization result.
+ */
+export const permissionCheckStatements = Object.freeze({
+  time: timeRead.sql,
+  formula: permissionRead.sql,
+});
+
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.
  * Identity and this record must come from verified Auth/Access, never request JSON.
  */

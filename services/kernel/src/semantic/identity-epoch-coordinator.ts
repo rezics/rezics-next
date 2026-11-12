@@ -64,8 +64,6 @@ function nativeJob(job: JobLocator): IdentityJobRef {
   locator(ref);
   return ref;
 }
-const workflowId = (job: JobLocator) => identityEpochWorkflowId(job);
-
 async function readWorkflowState(client: WorkContext['client'], id: string): Promise<WorkflowState> {
   const workflow = await client.getWorkflow(id);
   if (!workflow) return null;
@@ -75,6 +73,26 @@ async function readWorkflowState(client: WorkContext['client'], id: string): Pro
       ? output.nextSegment
       : null;
   return { status: workflow.status, nextSegment };
+}
+
+/** Select the first absent segment, or append after the first terminal workflow failure. */
+async function recoverySegment(status: Installation['status'], job: JobLocator): Promise<number | null> {
+  for (let segment = 0; ; segment++) {
+    const workflow = await status(identityEpochWorkflowId(job, segment));
+    if (!workflow) return segment;
+    if (workflow.status === 'SUCCESS') {
+      if (workflow.nextSegment !== segment + 1 || !Number.isSafeInteger(workflow.nextSegment)) throw noProgress();
+      continue;
+    }
+    if (workflow.status === 'ERROR' || workflow.status === 'MAX_RECOVERY_ATTEMPTS_EXCEEDED') {
+      if (!(await status(identityEpochWorkflowId(job, segment + 1)))) return segment + 1;
+      continue;
+    }
+    if (workflow.status === 'CANCELLED')
+      throw new IdentityEpochStoreError('identity_effect_stale', 'Cancelled native identity work cannot be resumed');
+    // A live original or continuation already owns this saved job.
+    return null;
+  }
 }
 
 /** Observe only this job's native control home, releasing the snapshot before another command or engine. */
@@ -230,20 +248,25 @@ export function registerIdentityEpochCoordinator(
   installations.set(context.pool, Object.freeze({ client: context.client, identity, read, status }));
 }
 
-/** Enqueue only the original saved identity. Returning from enqueue is never publication completion. */
+/** Resume only the original saved identity. A failed immutable SDK history advances by one bounded
+ * segment; each segment rereads native cursors and receipts from that same job before doing work.
+ */
 export const resumeIdentityEpochJob: ResumeIdentityEpochJob = async (pool, job) => {
   const input = locator(job);
   const next = await readNext(pool, job);
   if (next === 'published' || next === 'cancelled') return;
   const binding = installed(pool);
-  const id = workflowId(input);
-  const handle = await binding.client.enqueue(
-    { workflowName, workflowID: id, workflowIDReusePolicy: 'return-existing', queueName: 'maintenance' },
-    input,
-  );
-  // Enqueue's return-existing behavior must not silently turn a terminal SDK failure into successful resumption.
-  if ((await handle.getStatus())?.status === 'ERROR')
-    throw unavailable('Native identity publication workflow failed; its original job remains pending');
+  const segment = await recoverySegment(binding.status, input);
+  if (segment === null) return;
+  const id = identityEpochWorkflowId(input, segment);
+  const options = {
+    workflowName,
+    workflowID: id,
+    workflowIDReusePolicy: 'return-existing' as const,
+    queueName: 'maintenance',
+  };
+  if (segment === 0) await binding.client.enqueue(options, input);
+  else await binding.client.enqueue(options, input, segment);
 };
 
 /** Wait for native job AND published control custody, never an SDK result or ordinary projection checkpoint. */
@@ -273,6 +296,16 @@ export const waitIdentityEpochPublished: WaitIdentityEpochPublished = async (poo
       if (actual === 'published') return;
       if (workflow.status === 'SUCCESS') {
         if (workflow.nextSegment !== segment + 1 || !Number.isSafeInteger(workflow.nextSegment)) throw noProgress();
+        segment++;
+      } else if (workflow.status === 'ERROR' || workflow.status === 'MAX_RECOVERY_ATTEMPTS_EXCEEDED') {
+        // resumeIdentityEpochJob may already have created the successor after this immutable
+        // terminal history. Follow it only when it exists; otherwise the caller can explicitly
+        // resume the still-pending native job without resetting any native cursor or receipt.
+        const successor = await current.status(identityEpochWorkflowId(input, segment + 1));
+        if (!successor)
+          throw unavailable(
+            'Native identity publication workflow stopped before publication; the original job remains pending',
+          );
         segment++;
       } else {
         throw unavailable(

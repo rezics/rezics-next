@@ -27,6 +27,9 @@ import stepStatement from './identity-epoch-store-select-step.sql';
 import controlStatement from './identity-epoch-store-select-control.sql';
 
 const SCOPE = 'semantic.identity-source-support';
+// Search's reconciliation operation has a fixed per-call native allowance. A larger selected-key
+// projection is resumed through this reader's sealed frontier instead of borrowing that allowance.
+const PROJECTION_INPUT_LIMIT = 1;
 const zero = (): PublicFilterCost => ({
   inputKeys: 0,
   candidates: 0,
@@ -348,7 +351,7 @@ export const createIdentitySourceSupportReader: IdentitySourceSupportReaderFacto
             terminal: mapping.terminal,
             meaning: request.definition.meaning,
             frontier: projectionFrontier,
-            inputLimit: allowance,
+            inputLimit: Math.min(allowance, PROJECTION_INPUT_LIMIT),
             context: request.context,
           });
           cost = add(cost, result.cost);
