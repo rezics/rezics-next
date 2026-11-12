@@ -4,7 +4,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import type { CurrentPost } from '../threads/actions';
+import type { CurrentPost } from '../threads/studio-document';
 import type { StudioResult } from './contract';
 
 type AvailablePost = Extract<CurrentPost, { availability: 'available' }>;

@@ -1654,6 +1654,7 @@
         "apps/web/src/moderation/workbench-queue/read.ts",
         "apps/web/src/moderation/workbench-history/window-history.ts",
         "apps/web/src/threads/historical-reader-provenance.ts",
+        "apps/web/src/threads/studio-document.ts",
         "apps/web/src/threads/revision-return/history-return.ts",
         "apps/web/src/ratings/question-management/types.ts",
         "apps/web/src/ratings/question-management/address.ts",
