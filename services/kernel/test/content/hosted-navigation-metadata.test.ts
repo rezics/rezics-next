@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import * as reads from '../../src/content/reads.ts';
 import { resolveHostedOccurrenceMetadata } from '../../src/content/hosted-chapters-reads.ts';
+import type { HostedOccurrenceView } from '../../src/content/hosted-chapters-model.ts';
 import readChain from '../../src/content/read-chain.sql';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
@@ -50,8 +51,8 @@ afterAll(async () => {
   await f?.close();
 });
 const get = (suffix: string) => f.native.call('GET', `${path}${suffix}`, undefined, { anonymous: true });
-const unavailable = (position: number) => ({
-  occurrenceId: ids[position],
+const unavailable = (position: number): HostedOccurrenceView => ({
+  occurrenceId: ids[position]!,
   parentId: null,
   position,
   kind: 'chapter',
