@@ -25,7 +25,7 @@ export function suppliedDestination(follow: MineFollow, title: string, locale: s
     if (supplied.spaceId !== follow.targetId || !v.is(address, supplied.address)) return null;
     return { kind: 'space', href: `/${encodeURIComponent(locale)}/spaces/${encodeURIComponent(supplied.address)}` };
   }
-  if (!v.is(uuid, supplied.realmId)) return null;
+  if (supplied.kind !== 'realm' || !v.is(uuid, supplied.realmId)) return null;
   return { kind: 'realm', href: `/${encodeURIComponent(locale)}/realms/${encodeURIComponent(supplied.realmId)}` };
 }
 
