@@ -6,6 +6,7 @@ import {
   countAllowanceWaiting,
   countRunningByPool,
   countWaitingByPool,
+  managerWakePoolAllowed,
   PoolUnavailableError,
   poolAllowed,
   poolBurnStatus,
@@ -82,6 +83,29 @@ test('A pool whose window used percent rose 2 points over the last 90 minutes, w
     { name: 'fixture', allowanceKey: 'fixture', burnPerHour: 2 / 1.5, maxBurnPerHour: 0.8 },
     { name: 'cursor', allowanceKey: 'cursor', burnPerHour: 0 },
   ]);
+});
+
+test('Manager mailbox admission bypasses worker reserve, pacing and concurrency, while confirmed provider exhaustion still refuses it', () => {
+  const base = fixturePool();
+  const pool = {
+    ...base,
+    policy: {
+      ...base.policy,
+      reservePercent: 20,
+      reservePerHour: 10,
+      maxBurnPerHour: 0.1,
+      maxConcurrent: 1,
+      allowUnknown: false,
+    },
+  };
+  const currentNow = Date.now();
+  const resetsAt = currentNow + 8 * hour;
+  const history = [observed(pool, 10, currentNow - span, resetsAt)];
+  const current = observed(pool, 95, currentNow, resetsAt);
+  expect(poolAllowed(pool, [current], { now: currentNow, history, spanMs: span, running: { fixture: 1 } })).toBe(false);
+  expect(managerWakePoolAllowed(pool, [current])).toBe(true);
+  current.exhausted = true;
+  expect(managerWakePoolAllowed(pool, [current])).toBe(false);
 });
 
 test('Integer percent readings taken every few minutes, where most consecutive readings are equal, still yield the true rate over the measurement span', () => {

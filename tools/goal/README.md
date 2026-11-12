@@ -2357,6 +2357,8 @@ The transcript identifies the Codex account directory. Resident and managed mail
 reserve and do not apply worker hourly pacing or worker concurrency. A currently reported exhausted provider still
 cannot start a turn. Unread mail coalesces and stays durable; the hourly report sender and direct operator messages
 are independent of the wake gate.
+Decision: mailbox wake admission skips worker reserve, burn ceiling and concurrency checks; fresh provider exhaustion
+still blocks a model start.
 The atomic `--cursor <file>` and transport journal retain one outstanding notification until personal read progress across
 retries and restarts. Consuming its triggering event rearms notification for remaining unread pages once explicitly
 idle; new mail without owner consumption coalesces. Waking never consumes messages. Global read, acknowledgement

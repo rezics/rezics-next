@@ -273,11 +273,7 @@ export function choosePool(
 }
 
 /** Apply the same freshness, reserve, pacing and occupancy rules to one already selected pool. */
-export function poolAllowed(
-  pool: Pool,
-  readings: readonly PoolReading[],
-  options: PoolSelectionOptions = {},
-): boolean {
+export function poolAllowed(pool: Pool, readings: readonly PoolReading[], options: PoolSelectionOptions = {}): boolean {
   const now = options.now ?? Date.now();
   const spanMs = options.spanMs ?? defaultPolicy.pacing.burnSpanMs;
   return (
