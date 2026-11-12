@@ -486,9 +486,13 @@ export async function readKnowledgeHistoricalOutline(
 
     if (parentId !== null) {
       const path = await knowledgeAncestorPath(client, sourceRoute, notebookId, parentId);
-      if (path[0]?.placement_id !== parentId || !admitsKnowledgeAncestorPath(
-        path.map(({ placement_id, parent_id }) => ({ placementId: placement_id, parentId: parent_id })),
-      )) return null;
+      if (
+        path[0]?.placement_id !== parentId ||
+        !admitsKnowledgeAncestorPath(
+          path.map(({ placement_id, parent_id }) => ({ placementId: placement_id, parentId: parent_id })),
+        )
+      )
+        return null;
     }
     const root = await client.query<{ root_page_id: string | null }>(
       `SELECT root_page_id FROM content.knowledge_structure_parent_root
@@ -548,13 +552,15 @@ export async function readKnowledgeHistoricalOutline(
       structureRevisionId: revisionId,
       revisionNumber: result.value.revisionNumber,
       parentPlacementId: parentId,
-      placements: page.filter((row) => row.title !== undefined).map((row) => ({
-        placementId: row.placementId,
-        documentId: row.documentId,
-        parentPlacementId: row.parentId,
-        position: row.position.toString(),
-        title: row.title,
-      })),
+      placements: page
+        .filter((row) => row.title !== undefined)
+        .map((row) => ({
+          placementId: row.placementId,
+          documentId: row.documentId,
+          parentPlacementId: row.parentId,
+          position: row.position.toString(),
+          title: row.title,
+        })),
       next,
     },
     anchors: [result.anchor],

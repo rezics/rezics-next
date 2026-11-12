@@ -354,26 +354,22 @@ subject visit. Canonical identity aggregation consumes Semantic's admitted mappi
 mapping cannot be approximated by scanning all originals.
 
 Trash, restoration, erasure, legal holds, moderation and account termination follow [Deletion](deletion.md).
-Decision: native synchronous lifecycle admits one leaf document; a primary child returns
-`complete: false, reason: subtree_work_required` without mutation. Subtree restore/purge needs durable work and is
-not implemented by that command. References and unrelated branches are never traversed.
+Decision: native lifecycle admits one leaf; a primary child returns `complete: false, reason: subtree_work_required`
+without mutation. Subtree restore/purge requires separate durable work. References and unrelated branches are untouched.
 
 `POST /v1/knowledge/documents/{id}:trash` and `:restore` require current owner `account:update`,
 `expectedStructureRevisionId` and exact decimal `expectedGeneration`. Both use native receipts. Notebook structure
 locking orders moves, insertions and lifecycle changes; current ownership, retained data and ancestor eligibility
-are checked before receipt replay. The owner-only document address ending in `/lifecycle` returns IDs, current
-structure/generation, state and restore deadline, never titles or bytes. Restore is available strictly within
-30 days of trash, before purge starts. Legal holds preserve data; they neither extend that deadline nor republish.
-Each transition advances generation and clears public selection. Stable document/placement identity and private
-revisions survive; selecting a revision publicly again is always explicit and creates a fresh publication.
+are checked before receipt replay. The owner-only document `/lifecycle` address returns IDs, structure/generation, state and restore deadline, never
+bytes or titles. Restore requires trash within 30 days and no purge start. Legal holds do not extend that deadline.
+Transitions advance generation and clear publication. Identity and private revisions survive; republication is
+explicit and creates a fresh publication.
 
-Shared current eligibility checks at most 32 primary placements, rejecting hidden or purging ancestors, missing
-parents and incomplete chains. It fences private/history/compare, current and historical outlines, public selection,
-discovery including lagged indexes, copy/export and native writers. A move cannot bypass trash. Historical outline
-pages advance over hidden candidates without exposing their titles or locators. Future subtree work must keep its
+Shared eligibility checks at most 32 primary placements, rejecting hidden/purging ancestors and incomplete chains.
+It fences private/history/compare, current/historical outlines, public selection, lagged discovery, copy/export and
+writers. Moves cannot bypass trash; historical pages advance over hidden candidates without exposing titles or locators. Future subtree work must keep its
 root hidden, freeze its structure, retire every descendant's public generation through durable traversal, and only
-then reactivate the root. Independently trashed nested roots remain hidden. Purge/expiry must share the notebook and
-exact document fence, preserve legal holds, and use the existing erasure disposition below.
+then reactivate the root. Independently trashed nested roots remain hidden. Purge/expiry must share those fences, preserve holds and use the erasure disposition below.
 
 For account erasure, private drafts and never-published revisions are erased. Eligible published contributions may
 remain under the existing de-identified public-contribution policy. The retained publication must be independent of

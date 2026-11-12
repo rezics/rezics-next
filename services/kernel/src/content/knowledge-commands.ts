@@ -490,7 +490,12 @@ export async function writeKnowledgeDocument(
   if (!owner || owner.route !== route) throw new KnowledgeNotFoundError();
   const ownerId = owner.owner_account_id;
   const authorization = fenceKnowledgeAuthorization(
-    await accountUpdateAuthorization(deps, actor, ownerId, context), route, notebookId, ownerId, undefined, placement.parentPlacementId === null ? [] : [placement.parentPlacementId],
+    await accountUpdateAuthorization(deps, actor, ownerId, context),
+    route,
+    notebookId,
+    ownerId,
+    undefined,
+    placement.parentPlacementId === null ? [] : [placement.parentPlacementId],
   );
   let document: StoredBody;
   let provenance: KnowledgeProvenance | null;
@@ -657,8 +662,13 @@ export async function moveKnowledgePlacement(
   if (!notebookOwner || notebookOwner.route !== route) throw new KnowledgeNotFoundError();
   const authorization = fenceKnowledgeAuthorization(
     await accountUpdateAuthorization(deps, actor, notebookOwner.owner_account_id, context),
-    route, notebookId, notebookOwner.owner_account_id, undefined,
-    [placementId, input.destinationParentPlacementId, input.beforePlacementId].filter((id): id is string => id !== null),
+    route,
+    notebookId,
+    notebookOwner.owner_account_id,
+    undefined,
+    [placementId, input.destinationParentPlacementId, input.beforePlacementId].filter(
+      (id): id is string => id !== null,
+    ),
   );
   const verifySubject = await preparePublicSubjects(deps, notebookOwner.subject_id, [], context.deadline);
   authorization.prepare = async () => {
@@ -894,7 +904,10 @@ export async function reviseKnowledgeDocument(
   if (!owner) throw new KnowledgeNotFoundError();
   const authorization = fenceKnowledgeAuthorization(
     await accountUpdateAuthorization(deps, actor, owner.owner_account_id, context),
-    owner.route, owner.notebook_id, owner.owner_account_id, documentId,
+    owner.route,
+    owner.notebook_id,
+    owner.owner_account_id,
+    documentId,
   );
   const document = storedBody(input);
   const revisionId = newId(owner.route);
@@ -963,7 +976,10 @@ export async function setKnowledgePublication(
   if (!owner) throw new KnowledgeNotFoundError();
   const authorization = fenceKnowledgeAuthorization(
     await accountUpdateAuthorization(deps, actor, owner.owner_account_id, context),
-    owner.route, owner.notebook_id, owner.owner_account_id, documentId,
+    owner.route,
+    owner.notebook_id,
+    owner.owner_account_id,
+    documentId,
   );
   const kind = 'content.knowledge.document.publication';
   const verifySubject =

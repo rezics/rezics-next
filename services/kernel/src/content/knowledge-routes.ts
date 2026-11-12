@@ -198,9 +198,11 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
         },
       },
       async ({ params: { accountId, notebookId, documentId }, actor, admission, job, session, set }) => {
-        const result = await operation(() => admission.run('normal', job, () =>
-          readKnowledgeLifecycle(deps, accountId, notebookId, documentId, { actor, deadline: job.deadline }),
-        ));
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            readKnowledgeLifecycle(deps, accountId, notebookId, documentId, { actor, deadline: job.deadline }),
+          ),
+        );
         for (const anchor of result.anchors) session.record(sessionComponent(anchor));
         set.headers['cache-control'] = 'private, no-store';
         return result.value;
@@ -209,7 +211,8 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
     .post(
       customMethod('/v1/knowledge/documents/:id', 'trash'),
       {
-        params: idParams(), headers,
+        params: idParams(),
+        headers,
         body: strictContentSchema(KnowledgeLifecycleCommandSchema),
         response: {
           200: withHeaders(strictContentSchema(KnowledgeLifecycleResultSchema), responseHeaders),
@@ -217,15 +220,19 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
         },
         detail: {
           operationId: 'knowledge_document.trash',
-          'x-exposure': 'public', 'x-action': 'account:update',
-          'x-rate-limit': writeRate(), security: writeSecurity,
+          'x-exposure': 'public',
+          'x-action': 'account:update',
+          'x-rate-limit': writeRate(),
+          security: writeSecurity,
         },
       },
       async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
         requireAccount(actor);
-        const result = await operation(() => admission.run('normal', job, () =>
-          changeKnowledgeLifecycle(deps, actor, id, 'trash', body, commandContext(request, job.deadline)),
-        ));
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            changeKnowledgeLifecycle(deps, actor, id, 'trash', body, commandContext(request, job.deadline)),
+          ),
+        );
         session.record(result);
         set.headers['cache-control'] = 'private, no-store';
         return result.value;
@@ -234,7 +241,8 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
     .post(
       customMethod('/v1/knowledge/documents/:id', 'restore'),
       {
-        params: idParams(), headers,
+        params: idParams(),
+        headers,
         body: strictContentSchema(KnowledgeLifecycleCommandSchema),
         response: {
           200: withHeaders(strictContentSchema(KnowledgeLifecycleResultSchema), responseHeaders),
@@ -242,15 +250,19 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
         },
         detail: {
           operationId: 'knowledge_document.restore',
-          'x-exposure': 'public', 'x-action': 'account:update',
-          'x-rate-limit': writeRate(), security: writeSecurity,
+          'x-exposure': 'public',
+          'x-action': 'account:update',
+          'x-rate-limit': writeRate(),
+          security: writeSecurity,
         },
       },
       async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
         requireAccount(actor);
-        const result = await operation(() => admission.run('normal', job, () =>
-          changeKnowledgeLifecycle(deps, actor, id, 'restore', body, commandContext(request, job.deadline)),
-        ));
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            changeKnowledgeLifecycle(deps, actor, id, 'restore', body, commandContext(request, job.deadline)),
+          ),
+        );
         session.record(result);
         set.headers['cache-control'] = 'private, no-store';
         return result.value;
