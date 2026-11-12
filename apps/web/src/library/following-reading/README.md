@@ -15,7 +15,8 @@ owners. The panel returns to that existing row control rather than mounting anot
 FULL Space rows carry the Community producer's current destination and applicable-action projection. A Space
 destination uses its supplied address; a Realm destination uses its supplied Realm ID; an unavailable destination
 creates no link. Space UUID is neither address nor Realm UUID. The row opens a supplied destination without point
-reads.
+reads. This community receiver supports only Space and Realm destinations; other native kinds, including Zone,
+produce no link.
 
 Explicit inspection may make one typed `client.spaces({spaceId}).get` under the same prepared viewer and current
 exposure. The response names its reader, target and locale. The selected request checks those against its parent

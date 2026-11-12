@@ -1,8 +1,8 @@
 import type { KernelClient } from '@rezics/client';
 import { followListQuery, getFollowList, type FollowEdge } from '../library/follow-transport';
 
-/** The native Follow destination union is the receiving seam for future supported destinations. */
-type NativeDestination = Exclude<NonNullable<FollowEdge['destination']>, { kind: 'unavailable' }>;
+/** This Space-filtered receiver supports only native Space and Realm destinations. */
+type NativeDestination = Extract<NonNullable<FollowEdge['destination']>, { kind: 'space' | 'realm' }>;
 export type ShellCommunity = {
   id: string;
   kind: NativeDestination['kind'];
@@ -22,7 +22,7 @@ export function shellFollowDestination(follow: FollowEdge): ShellCommunity | nul
     !('label' in target) ||
     !target.label ||
     !destination ||
-    destination.kind === 'unavailable'
+    (destination.kind !== 'space' && destination.kind !== 'realm')
   )
     return null;
   const title = typeof target.label === 'string' ? target.label : target.label.value;

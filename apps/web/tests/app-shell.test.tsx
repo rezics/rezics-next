@@ -252,6 +252,7 @@ test('a native Space-filtered FULL page supplies canonical navigation without po
         follows: [
           row('realm-space', { value: '読書会', language: 'ja' }, { kind: 'realm', realmId: 'native-realm' }),
           row('ordinary', 'Quiet space', { kind: 'space', spaceId: 'ordinary', address: 'quiet room' }),
+          { ...row('zone', 'Independent Zone', { kind: 'zone', zoneId: 'zone' }), targetType: 'zone' },
           row('hidden', null, { kind: 'unavailable' }),
           row('withheld', 'Withheld destination', { kind: 'unavailable' }),
           row('missing-destination', 'No address', undefined),

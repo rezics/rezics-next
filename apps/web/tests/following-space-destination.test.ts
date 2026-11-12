@@ -21,6 +21,13 @@ test('only admitted address or actual Realm identity builds the localized commun
   ).toBe(`/de/realms/${realmId}`);
   expect(suppliedDestination(addressTarget, 'Community', 'ja')?.href).toBe('/ja/spaces/quiet%20%2F%20reading');
   expect(realmId).not.toBe(spaceId);
+  expect(
+    suppliedDestination(
+      { ...follow('zone'), destination: { kind: 'zone', zoneId: spaceId } },
+      'Independent Zone',
+      'en',
+    ),
+  ).toBeNull();
   expect(suppliedDestination({ ...addressTarget, destination: { kind: 'unavailable' } }, 'Community', 'en')).toBeNull();
   expect(
     suppliedDestination({ ...addressTarget, destination: { kind: 'space', spaceId, address: '' } }, 'Community', 'en'),

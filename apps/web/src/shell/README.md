@@ -22,11 +22,10 @@ Native label language annotations survive the projection. The drawer receives th
 manage link. Rows keep 44px targets, visible keyboard focus, segment-boundary current-path matching and current
 theme tokens; collapsed rails retain named icons and an accessible manage control.
 
-The generic Follow engine is the subscription authority. Its current native targets are Subject, Collection and
-Space. A Realm-backed Space can supply a Realm destination; an ordinary Space can supply its address. Zone is an
-independent identity under [Zones](../../../../docs/zones.md), with no supported native Zone Follow edge on this Dev.
-The shell's typed native-destination projection is the receiving seam for future destinations delivered by that
-same engine; this Space query fix neither creates Zone subscriptions nor starts a second system.
+The generic Follow engine is the subscription authority for Subject, Collection, Space and Zone targets.
+A Realm-backed Space can supply a Realm destination; an ordinary Space can supply its address. Zone is an
+independent identity under [Zones](../../../../docs/zones.md). This Space-filtered shell receiver accepts only
+Space and Realm destinations; other native destination kinds produce no link.
 
 Navigation reads are private and bound to the current account, locale and operation admission. Unread counts use the inbox's existing current-viewer query and blue badges. AppShell binds Inbox's shell port so the badge observes that same session query, and Settings' shell port so display, heading, subject addresses and exposure use the installed shell and kernel implementations.
 
