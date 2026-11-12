@@ -292,7 +292,6 @@ function createCollectionSourceRuntime(
     if (route === null) throw new ProblemError('not_found');
     const current = await l.run((allowance) =>
       readNativeLogicalBuiltinBinding(dependencies.pool, {
-        route,
         collectionId,
         deadline: input.deadline,
         allowance,
