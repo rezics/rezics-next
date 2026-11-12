@@ -249,23 +249,29 @@ Dispatch waits without a model for the child to exit, records its tokens and quo
 enqueues its landing request, and starts the train. Requests targeting `main` use the `train-main.lease`; other
 requests use `train.lease`. The two lanes select and order their own requests. Existing dev backlog drains first. An ordinary control-plane
 release, while holding the main lane, borrows the existing dev lane only when its queue is empty, before capturing
-refs or forming its candidate. With no new dev work it retains both leases through all required checks and the final
-atomic main/dev/stabilize compare-and-swap, including verification of the accepted source ref.
+refs or forming its candidate. It releases its positively owned dev lease before the long proof commands. The main
+proof then runs independently while the normal dev train can acquire that same native lease and drain queued product
+work, even if the initial idle dev drain has already returned. If no independent pump is live, the release owner gives
+the ordinary dev drain a turn after the proof settles. Queue arrival alone does not interrupt the proof. Its source,
+loaded code, captured refs, candidate and final atomic main/dev/stabilize compare-and-swap remain fenced; a changed
+capture cannot make old evidence approve a different publication.
+
+Decision: once an ordinary Main proof releases its Dev lease, queued Dev work proceeds through the existing native
+train without aborting that proof; source, code, candidate, ref and final compare-and-swap fencing remain mandatory.
 
 Proof admission and integration routing use the same committed source diff from its fork from `main`. A release brief
 whose source also changes files outside `tools/goal/` follows the existing dev integration and conflict resolver path;
 it does not create an ordinary control-plane proof attempt. Recovery of an already published release retains its exact
 source and original main fork rather than reclassifying an empty diff after publication.
 
-While that proof is running, its controller observes the native dev queue every 50 ms and checks custody before each
-proof command and publication. A newly queued dev request interrupts the controller's own proof. Per-invocation
-`GateRunner` cancellation kills only that proof's command groups and awaits the complete runner, including terminal
-cleanup supplied by the receiving tree; parallel proof commands all settle before the controller releases its
-positively owned dev lease. The same existing dev drain then takes a turn,
-even if the initial idle dev drain returned or found another live owner. No manager signal or extra enqueue is needed.
-The main request stays pending and unpublished; it is not retried again in that drain. Another live dev owner is never
-removed or replaced. Stale code lets the proof command already running finish, then stops at the next command boundary,
-before any publication, and uses the existing current-code handoff; the successor reruns the proof with current code.
+While that proof is running, its controller checks custody before each proof command and publication. Queue arrival
+does not cancel proof commands; the normal dev drain uses the durable queue and existing native lease, with no extra
+enqueue or queue watcher. Per-invocation `GateRunner` cancellation still kills only that proof's command groups and
+awaits the complete runner, including terminal cleanup supplied by the receiving tree. Parallel proof commands all
+settle before the proof exits and the main train releases its lease. If captured refs move, mandatory checks run again
+on the new capture; old evidence never approves it. Another live dev owner is never removed or replaced. Stale code
+lets the proof command already running finish, then stops at the next command boundary, before any publication, and
+uses the existing current-code handoff; the successor reruns the proof with current code.
 
 `control-plane-proof-<queue-id>.json` retains each ordinary attempt's exact source, candidate, captured refs, status and
 separate log. An interrupted or crashed proof remains non-green, with no reusable proof or release record. A later
