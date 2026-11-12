@@ -100,13 +100,13 @@ export class KnowledgeNavigationReading {
         const breadcrumbs = snapshot.frontier.breadcrumbs.slice(0, index + 1);
         const parent = breadcrumbs.at(-1)!;
         void this.open({
+          ...snapshot.frontier,
           request: {
             kind: 'outline',
             notebookId: snapshot.frontier.request.notebookId,
             parentPlacementId: parent.placementId,
           },
           breadcrumbs,
-          structureRevisionId: snapshot.frontier.structureRevisionId,
         });
       },
       children: (row: KnowledgePlacementRow) => {

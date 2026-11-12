@@ -74,7 +74,7 @@ export function KnowledgeNavigationEntry({
   binding: string;
   access: KnowledgeNavigationAccess;
   operations: KnowledgeNavigationOperations;
-  returning?: KnowledgeNavigationReturn;
+  returning?: KnowledgeNavigationReturn | undefined;
   retryAccess?: () => void;
 }) {
   const options = { locale: locale as never };
@@ -105,8 +105,9 @@ export function KnowledgeNavigationEntry({
             <a
               className={knowledgeNavigationLink}
               href={sessionRecoverySignInHref(
-                address.kind === 'owned' ? '/knowledge' : `/knowledge/notebooks/${address.notebookId}`,
-                locale,
+                address.kind === 'owned'
+                  ? `/${locale}/knowledge`
+                  : `/${locale}/knowledge/notebooks/${address.notebookId}`,
               )}
             >
               {m.knowledge_private_sign_in({}, options)}
@@ -134,7 +135,7 @@ function KnowledgeNavigationOwner({
   locale: string;
   binding: string;
   operations: KnowledgeNavigationOperations;
-  returning?: KnowledgeNavigationReturn;
+  returning?: KnowledgeNavigationReturn | undefined;
 }) {
   const initial = useRef<{ frontier: KnowledgeNavigationFrontier; expired: boolean }>(null);
   const [reading, setReading] = useState<KnowledgeNavigationReading>();
@@ -173,7 +174,7 @@ function KnowledgeNavigationRows({
   reading: KnowledgeNavigationReading;
   locale: string;
   binding: string;
-  returning?: KnowledgeNavigationReturn;
+  returning?: KnowledgeNavigationReturn | undefined;
 }) {
   const snapshot = useSyncExternalStore(reading.subscribe, reading.getSnapshot, reading.getSnapshot);
   const options = { locale: locale as never };
