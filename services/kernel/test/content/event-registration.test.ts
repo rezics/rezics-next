@@ -54,6 +54,12 @@ const fixtures = {
   'com.rezics.content.edition.created.v1': { editionId: itemId, editionRevision: '1' },
   'com.rezics.content.edition.published.v1': { editionId: itemId, editionRevision: '2' },
   'com.rezics.content.edition.unpublished.v1': { editionId: itemId, editionRevision: '3' },
+  'com.rezics.content.knowledge.lifecycle.changed.v1': {
+    documentId: itemId,
+    notebookId: containerId,
+    generation: '1',
+    action: 'trash',
+  },
   'com.rezics.content.knowledge.publication.changed.v1': {
     action: 'selected',
     documentId: itemId,

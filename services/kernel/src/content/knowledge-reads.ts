@@ -553,7 +553,7 @@ export async function readKnowledgeHistoricalOutline(
       revisionNumber: result.value.revisionNumber,
       parentPlacementId: parentId,
       placements: page
-        .filter((row) => row.title !== undefined)
+        .filter((row): row is typeof row & { title: string } => row.title !== undefined)
         .map((row) => ({
           placementId: row.placementId,
           documentId: row.documentId,
