@@ -586,14 +586,10 @@ test('source-neutral propagation stays out of attribution while real and late la
       GIT_COMMITTER_DATE: '2026-10-30T23:55:00Z',
     });
     git(repository, ['switch', 'dev']);
-    git(
-      repository,
-      ['merge', '--no-ff', '-s', 'ours', 'cp-sync', '-m', 'source-neutral history propagation'],
-      {
-        GIT_AUTHOR_DATE: '2026-10-31T00:20:00Z',
-        GIT_COMMITTER_DATE: '2026-10-31T00:20:00Z',
-      },
-    );
+    git(repository, ['merge', '--no-ff', '-s', 'ours', 'cp-sync', '-m', 'source-neutral history propagation'], {
+      GIT_AUTHOR_DATE: '2026-10-31T00:20:00Z',
+      GIT_COMMITTER_DATE: '2026-10-31T00:20:00Z',
+    });
     expect(git(repository, ['rev-parse', 'HEAD^{tree}']).trim()).toBe(
       git(repository, ['rev-parse', 'HEAD^1^{tree}']).trim(),
     );
@@ -606,14 +602,10 @@ test('source-neutral propagation stays out of attribution while real and late la
       GIT_COMMITTER_DATE: '2026-10-31T00:40:00Z',
     });
     git(repository, ['switch', 'dev']);
-    git(
-      repository,
-      ['merge', '--no-ff', 'late-worker', '-m', 'source-bearing late landing'],
-      {
-        GIT_AUTHOR_DATE: '2026-10-31T00:50:00Z',
-        GIT_COMMITTER_DATE: '2026-10-31T00:50:00Z',
-      },
-    );
+    git(repository, ['merge', '--no-ff', 'late-worker', '-m', 'source-bearing late landing'], {
+      GIT_AUTHOR_DATE: '2026-10-31T00:50:00Z',
+      GIT_COMMITTER_DATE: '2026-10-31T00:50:00Z',
+    });
     expect(git(repository, ['rev-parse', 'HEAD^{tree}']).trim()).not.toBe(
       git(repository, ['rev-parse', 'HEAD^1^{tree}']).trim(),
     );

@@ -216,16 +216,12 @@ function productLineCount(
   });
   if (selected.length === 0) return 0;
 
-  const changes = spawnSync(
-    'git',
-    ['diff-tree', '--root', '--numstat', '-r', '--stdin'],
-    {
-      cwd: repository,
-      encoding: 'utf8',
-      input: `${selected.join('\n')}\n`,
-      maxBuffer: 64 * 1024 * 1024,
-    },
-  );
+  const changes = spawnSync('git', ['diff-tree', '--root', '--numstat', '-r', '--stdin'], {
+    cwd: repository,
+    encoding: 'utf8',
+    input: `${selected.join('\n')}\n`,
+    maxBuffer: 64 * 1024 * 1024,
+  });
   if (changes.error) {
     if ((changes.error as NodeJS.ErrnoException).code === 'ENOBUFS') return null;
     throw changes.error;
@@ -279,9 +275,7 @@ export function measureProductLineObservation(
   );
   if (lines === null) return unknownMeasurement(revision);
   const validPreviousRevision =
-    previousSourceRevision && GIT_OBJECT_ID.test(previousSourceRevision)
-      ? previousSourceRevision
-      : null;
+    previousSourceRevision && GIT_OBJECT_ID.test(previousSourceRevision) ? previousSourceRevision : null;
   let backfillLines: number | null = null;
   if (validPreviousRevision) {
     const delta = spawnSync('git', ['rev-list', `${validPreviousRevision}..${revision}`], {
