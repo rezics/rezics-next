@@ -2847,6 +2847,8 @@ Decision: at the existing stopped-task expiry, the sweep reconciles compiler-onl
 
 Authenticated owning or operations managers reconcile that same attempt without starting a model:
 
+Decision: when local `integration.operationsManager` is absent, typing-recovery event checks admit the owning task manager only; the nonempty actor session and retained source checks remain required.
+
 ```sh
 bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <n>
 ```

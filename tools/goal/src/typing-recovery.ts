@@ -66,14 +66,15 @@ function originalBudgetRefusal(
 function eventActorIsAllowed(
   body: Record<string, unknown>,
   task: ReturnType<WorkerTasks['store']['task']>,
-  operationsManager: string,
+  operationsManager?: string,
 ): boolean {
   const actor = body.actor;
   if (!actor || typeof actor !== 'object' || Array.isArray(actor)) return false;
   const value = actor as { id?: unknown; sessionId?: unknown };
   return (
     typeof value.id === 'string' &&
-    [task.brief.manager, operationsManager].includes(value.id) &&
+    (value.id === task.brief.manager ||
+      (operationsManager !== undefined && value.id === operationsManager)) &&
     typeof value.sessionId === 'string' &&
     value.sessionId.length > 0
   );
