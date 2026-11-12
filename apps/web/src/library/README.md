@@ -34,6 +34,32 @@ Ready import results can leave for browsing without cancellation commands; uncer
 departure protection. Any session, credential, browser observation, source, locale, admission or visit replacement
 retires pending reads permanently, including A/B/A and equal successful observation replacements.
 
+## Saved hosted Book chapters
+
+Decision: Continue mounts one compact Books window alongside independent Entry progress, replacing at most 20 native
+checkpoint rows with at most eight accepted predecessor cursors. Books paging is local to the mounted visit and
+never changes the Entry cursor, URL, persistent storage or QueryClient page cache. Retry repeats the failed cursor;
+Refresh rereads the accepted page; opening the newest page deliberately starts without a cursor. A sparse or empty
+page retains its native continuation. Native order is preserved without sorting, deduplication or per-row reads.
+
+The BFF prepares the private no-store session and matches its subject to the requesting viewer. Browser receiving
+uses the Library application's actual recovery observation identity, including equal-value credential replacement
+and A/B/A. Replacement synchronously removes titles, addresses, predecessors and active controls; abort and episode
+identity also prevent late work from settling. Locale replacement and disposal retire the window. Signed out,
+denied, stale and unavailable reads never appear as successful empty pages. Unknown session state stays loading.
+
+Available metadata supplies chapter titles. Withheld metadata becomes a neutral unavailable row without a title,
+address or open action. Available links use the hosted reader's public `hostedBookHref` with the exact saved Subject,
+Catalogue, publication revision and occurrence; no latest-publication or latest-chapter fallback is allowed. The
+mounted reader independently rechecks access. External response decoding checks the complete native metadata shape
+and rejects mismatched occurrence or target revision/digest associations before showing titles.
+
+The native owner is [hosted-reading](../../../../services/kernel/src/library/contract/hosted-reading.ts).
+`hosted-checkpoint-source.ts` owns wire decoding and the one-read transport seam; its pending binding returns explicit
+unavailable until the installed generated Client includes the native checkpoints operation. No handwritten HTTP
+endpoint or assertion around a stale Client declaration substitutes for that binding. Focused receiving, link and
+retirement regressions run in the dev verifier; native, browser and Storybook acceptance remain deferred.
+
 ## My uploaded media
 
 `/library/media` reads one native `GET /v1/media` page for the admitted account and its opaque cursor. Sparse empty

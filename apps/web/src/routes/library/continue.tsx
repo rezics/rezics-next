@@ -6,6 +6,8 @@ import { requireSignedIn } from '../../session/guard';
 import { sessionQueryKey } from '../../session/browser-state';
 import { ContinueSection, useContinueRefresh, type ContinueWindowAction } from '../../library/continue';
 import { readContinueEntries } from '../../library/continue-read';
+import { HostedCheckpointBooks } from '../../library/hosted-checkpoint-books';
+import { hostedBookHref } from '../../books/reader/route';
 import { continueAddress, continueCursorHref, continueNewestHref } from '../../library/continue-address';
 import {
   CONTINUE_WINDOW_QUERY_KEY,
@@ -286,6 +288,7 @@ function ContinuePage() {
         pins={navigation.data?.pins ?? { state: 'closed' }}
         collections={navigation.data?.collections ?? []}
       />
+      <HostedCheckpointBooks locale={locale} bookHref={hostedBookHref} />
       <ContinueSection
         destination
         newestHref={continueNewestHref(locale, location.searchStr, location.hash)}
