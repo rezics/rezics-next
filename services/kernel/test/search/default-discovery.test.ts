@@ -9,11 +9,10 @@ import { createSemanticDriver } from '../semantic/outcome-driver.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { startOutcomeWorkerProcess } from './support/outcome-rpc.ts';
 import { createOpenSearch, type OpenSearch, type SearchRequestOptions } from '../../src/search/opensearch.ts';
+import { discoveryAlias, discoveryIndexName } from '../../src/search/indices.ts';
 import { startSearchIndexing } from '../../src/search/runner.ts';
 import type { SubjectSource } from '../../src/search/source.ts';
-import { allocateDiscovery, discoveryConsumer, discoveryGenerations } from '../../src/search/generations.ts';
-import { nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
-import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
+import { discoveryConsumer, discoveryGenerations } from '../../src/search/generations.ts';
 import { readFreshness } from '../../src/search/freshness.ts';
 import type { DiscoveryPage, DiscoveryUnionHit } from '../../src/search/discovery.ts';
 
@@ -249,25 +248,118 @@ test('ordinary configured server returns current mixed discovery through its def
     const current = await page({ ...request, limit: 100 });
     expect(current.hits.map(({ key }) => key.id)).toEqual([account.accountId]);
     expect(current.next).toBeNull();
-    const routeKey = new Uint8Array(Buffer.from(runtime.routeKey, 'base64url'));
-    const { composeSearchNativePorts } = await import('../../src/composition/search-native.ts');
-    const nativePorts = composeSearchNativePorts();
-    const registry = await nativeDiscoveryRegistry(
-      pool,
-      routeKey,
-      createRatedSubjectSource(pool, routeKey, undefined, nativePorts).source,
+    const firstBookTitle = `${marker} Current book`;
+    const firstBook = await driver.request(
+      'editor',
+      'POST',
+      '/v1/subjects',
+      { type: 'schema:Book', labels: { en: firstBookTitle } },
+      { 'Idempotency-Key': `"${randomUUID()}"` },
     );
-    await allocateDiscovery(pool, prefix, registry);
-    await eventually(async () =>
-      (await discoveryGenerations(pool, prefix)).some(
-        ({ generation, state }) => generation > active.generation && state === 'active',
-      )
-        ? true
-        : undefined,
+    expect(firstBook.status, JSON.stringify(firstBook.body)).toBe(201);
+    const firstBookId = (firstBook.body.subject as { id: string }).id;
+    const bookRequest = {
+      representation: 'discovery-v1',
+      text: firstBookTitle,
+      filter: { kind: { in: ['schema:Book'] } },
+      languages: ['en'],
+      sort: 'id',
+      limit: 10,
+    };
+    const findBook = async (id: string, text = firstBookTitle) =>
+      eventually(async () => {
+        const result = await send({ ...bookRequest, text });
+        if (result.response.status === 200) {
+          const found = result.body as DiscoveryPage;
+          return found.hits.some(({ key }) => key.id === id) ? found : undefined;
+        }
+        expect(result.response.status, JSON.stringify(result.body)).toBe(503);
+        expect(result.body.code).toBe('index_not_ready');
+        return undefined;
+      });
+    await findBook(firstBookId);
+    const captured = active;
+    const capturedIndex = discoveryIndexName(prefix, captured.generation);
+    const oldMapping = await search.request<Record<string, { mappings: Record<string, unknown> }>>(
+      'GET',
+      `/${capturedIndex}/_mapping`,
     );
+    await search.request('DELETE', `/${capturedIndex}`);
+    const recreated = await search.request<{ acknowledged: boolean }>('PUT', `/${capturedIndex}`, {
+      mappings: oldMapping.body[capturedIndex]!.mappings,
+      aliases: {
+        [`${capturedIndex}-write`]: { is_write_index: true },
+        [discoveryAlias(prefix)]: {},
+      },
+    });
+    expect(recreated.body.acknowledged).toBe(true);
+    const replacedPhysical = await search.request<Record<string, { settings: { index: { uuid: string } } }>>(
+      'GET',
+      `/${capturedIndex}/_settings`,
+    );
+    expect(replacedPhysical.body[capturedIndex]!.settings.index.uuid).not.toBe(captured.uuid);
+    const duringReplacement = await send(bookRequest);
+    if (duringReplacement.response.status === 200) {
+      expect((duringReplacement.body as DiscoveryPage).hits.map(({ key }) => key.id)).toContain(firstBookId);
+    } else {
+      expect(duringReplacement.response.status, JSON.stringify(duringReplacement.body)).toBe(503);
+      expect(duringReplacement.body.code).toBe('index_not_ready');
+    }
+
+    const replacementBookTitle = `${marker} Book after replacement`;
+    const replacementBook = await driver.request(
+      'editor',
+      'POST',
+      '/v1/subjects',
+      { type: 'schema:Book', labels: { en: replacementBookTitle } },
+      { 'Idempotency-Key': `"${randomUUID()}"` },
+    );
+    expect(replacementBook.status, JSON.stringify(replacementBook.body)).toBe(201);
+    const replacementBookId = (replacementBook.body.subject as { id: string }).id;
+    const replacementHome = partitionOf(routeOf(replacementBookId)!);
+    const head = await pool.query<{ position: string }>(
+      'SELECT position::text FROM core.partition WHERE partition_no=$1',
+      [replacementHome],
+    );
+    const capturedCheckpoint = await pool.query<{ position: string }>(
+      'SELECT position::text FROM core.consumer_checkpoint WHERE partition_no=$1 AND consumer=$2',
+      [replacementHome, discoveryConsumer(prefix, captured.generation)],
+    );
+    expect(capturedCheckpoint.rows).toHaveLength(1);
+    expect(BigInt(capturedCheckpoint.rows[0]!.position)).toBeLessThan(BigInt(head.rows[0]!.position));
+
+    const resumed = await eventually(async () =>
+      (await discoveryGenerations(pool, prefix)).find(
+        ({ generation, state }) => generation > captured.generation && state === 'active',
+      ),
+    );
+    const quiescedCheckpoint = await pool.query<{ position: string }>(
+      'SELECT position::text FROM core.consumer_checkpoint WHERE partition_no=$1 AND consumer=$2',
+      [replacementHome, discoveryConsumer(prefix, captured.generation)],
+    );
+    expect(quiescedCheckpoint.rows).toHaveLength(1);
+    expect(quiescedCheckpoint.rows[0]!.position).toBe(capturedCheckpoint.rows[0]!.position);
     const switched = await send({ ...request, cursor: first.next });
     expect(switched.response.status, JSON.stringify(switched.body)).toBe(409);
     expect(switched.body.code).toBe('search_restart_required');
+    const coverage = await pool.query<{ owner: string; complete: boolean; partitions: number }>(
+      `SELECT owner,bool_and(complete AND certified) AS complete,count(*)::integer AS partitions
+       FROM search.discovery_population WHERE prefix=$1 AND generation=$2
+         AND owner IN ('accounts','semantic') GROUP BY owner ORDER BY owner`,
+      [prefix, resumed.generation],
+    );
+    expect(coverage.rows).toEqual([
+      { owner: 'accounts', complete: true, partitions: 4096 },
+      { owner: 'semantic', complete: true, partitions: 4096 },
+    ]);
+    const restoredBook = await findBook(replacementBookId, replacementBookTitle);
+    expect(restoredBook.hits.map(({ key }) => key.id)).toEqual([replacementBookId]);
+    const restoredCurrent = await page({ ...request, limit: 100 });
+    expect(restoredCurrent.hits.map(({ key }) => key.id)).toEqual([account.accountId]);
+    const stalePhysical = await search.request<{ count: number }>('POST', `/${capturedIndex}/_count`, {
+      query: { match_all: {} },
+    });
+    expect(stalePhysical.body.count).toBe(0);
   } finally {
     try {
       await server?.stop();

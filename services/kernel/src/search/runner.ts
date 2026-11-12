@@ -18,7 +18,7 @@ import {
 import { createDiscoveryIndexer } from './indexer.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import { resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
-import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
+import { discoveryIndexName, discoveryPhysicalTargetMatches, readDiscoveryPhysicalIdentity } from './indices.ts';
 import type { PublicPreparation } from './public-preparation.ts';
 import type { Pool } from 'pg';
 import { relayConcurrencyForPool, startRelays } from '../events/relays.ts';
@@ -428,10 +428,11 @@ export function startDiscoveryIndexing(options: {
         ? 0
         : (options.intervalMs ?? 100);
 
-    const relayTargets = generations.filter(
-      (target): target is DiscoveryGeneration & { uuid: string } =>
-        Boolean(target.uuid) && !['allocated', 'retired', 'quarantined', 'retiring'].includes(target.state),
-    );
+    const relayTargets: (DiscoveryGeneration & { uuid: string })[] = [];
+    for (const target of generations) {
+      if (!target.uuid || ['allocated', 'retired', 'quarantined', 'retiring'].includes(target.state)) continue;
+      if (await discoveryPhysicalTargetMatches(options.search, target)) relayTargets.push(target);
+    }
     const bindings = new Map<number, string>(
       relayTargets.map((target) => [target.generation, target.uuid + ':' + target.incarnation]),
     );
@@ -611,12 +612,15 @@ async function retireDiscovery(
   await withConnection(pool, async (client) => {
     await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))', [index]);
     try {
-      try {
-        if ((await discoveryIndexUuid(search, index)) !== target.uuid)
-          throw new Error('Discovery retirement incarnation mismatch');
-        await search.request('DELETE', `/${index}`);
-      } catch (error) {
-        if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
+      const physical = await readDiscoveryPhysicalIdentity(search, index);
+      // The name may now refer to a replacement owned by another incarnation. Drain this
+      // persisted generation without deleting or writing that physical index.
+      if (physical?.uuid === target.uuid) {
+        try {
+          await search.request('DELETE', `/${index}`);
+        } catch (error) {
+          if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
+        }
       }
     } finally {
       await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', [index]);

@@ -1230,6 +1230,8 @@ export function createSearchGenerationPublication(
             if (job.family === 'discovery') {
               await client.query('BEGIN');
               try {
+                if (job.previous_target)
+                  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [job.previous_target]);
                 await client.query(
                   `UPDATE search.discovery_generation SET state='retiring' WHERE partition_no=0 AND prefix=$1 AND state='active' AND generation<>$2`,
                   [job.prefix, job.generation],
