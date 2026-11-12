@@ -515,11 +515,7 @@ test('a retained conservative receipt qualifies for the installed direct Kernel 
     }),
   );
   write(root, 'services/kernel/scripts/typecheck.ts', 'export {};');
-  write(
-    root,
-    'services/kernel/src/index.ts',
-    "import note from '../../../docs/ledger.md'; export default note;",
-  );
+  write(root, 'services/kernel/src/index.ts', "import note from '../../../docs/ledger.md'; export default note;");
   write(root, 'packages/fixture/package.json', JSON.stringify({ name: '@fixture/types', scripts: {} }));
   write(root, 'services/kernel/node_modules/@fixture/types/package.json', '{"version":"1"}');
   write(root, 'docs/remote-only.md', '# Unconsumed remote document\n');

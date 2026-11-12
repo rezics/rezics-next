@@ -505,23 +505,23 @@ function terminalCancelledPhysicalCheck(
     (history.status === 'unknown' && history.exitCode === undefined && proof?.resultKnown === false);
   return Boolean(
     cancellation.version === 1 &&
-      cancellation.checkId === record.id &&
-      cancellation.physicalRunId === record.physicalRunId &&
-      cancellation.ownership?.taskId === taskId &&
-      cancellation.ownership.attempt === attempt &&
-      cancellation.disposition === 'logically-cancelled-physical-cleanup-unknown' &&
-      cancellation.recordSha256 === createHash('sha256').update(result).digest('hex') &&
-      history.version === 1 &&
-      history.id === record.id &&
-      history.cwd === worktree &&
-      history.physicalRunId === record.physicalRunId &&
-      JSON.stringify(history.argv) === JSON.stringify(record.argv) &&
-      history.ownership?.taskId === taskId &&
-      history.ownership.attempt === attempt &&
-      typeof history.remoteExpected === 'boolean' &&
-      proof?.local === true &&
-      proof.remote === (history.remoteExpected ? true : null) &&
-      physicalResultKnown
+    cancellation.checkId === record.id &&
+    cancellation.physicalRunId === record.physicalRunId &&
+    cancellation.ownership?.taskId === taskId &&
+    cancellation.ownership.attempt === attempt &&
+    cancellation.disposition === 'logically-cancelled-physical-cleanup-unknown' &&
+    cancellation.recordSha256 === createHash('sha256').update(result).digest('hex') &&
+    history.version === 1 &&
+    history.id === record.id &&
+    history.cwd === worktree &&
+    history.physicalRunId === record.physicalRunId &&
+    JSON.stringify(history.argv) === JSON.stringify(record.argv) &&
+    history.ownership?.taskId === taskId &&
+    history.ownership.attempt === attempt &&
+    typeof history.remoteExpected === 'boolean' &&
+    proof?.local === true &&
+    proof.remote === (history.remoteExpected ? true : null) &&
+    physicalResultKnown,
   );
 }
 
@@ -1194,7 +1194,8 @@ export function workerCheckHostTypingSettlement(input: {
       } else if (source.typingRequest) {
         sourceReason ??= 'Compiler input closure was not returned by the owning compiler.';
       } else if (!fullTreeMatches) {
-        sourceReason ??= 'Legacy evidence has no retained compiler-input closure; its original full content identity is required.';
+        sourceReason ??=
+          'Legacy evidence has no retained compiler-input closure; its original full content identity is required.';
       }
       unavailableReason ??= sourceReason;
     }

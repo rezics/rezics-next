@@ -611,10 +611,7 @@ const REMOTE_PREPARATION_MARKERS = new Set([
  * onto the current configured inventory: all admitted source paths still bind exactly, while documents are
  * omitted only when the installed Kernel graph proves they are unconsumed.
  */
-function retainedKernelSourceMatches(
-  completed: TypingInputs,
-  current: TypingInputs,
-): boolean {
+function retainedKernelSourceMatches(completed: TypingInputs, current: TypingInputs): boolean {
   if (completed.profile !== 'conservative' || current.profile !== 'configured-typescript') return false;
   const compiled = new Map(completed.source.map((entry) => [entry.path, entry.digest]));
   if (compiled.size !== completed.source.length) return false;
@@ -652,8 +649,7 @@ export function qualifyTypingInputs(
   const current = captureTypingInputs(root, receipt.compilerCommand);
   if (current.runtime !== receipt.completed.runtime) return 'evidence-unavailable';
   const retainedKernelReceipt =
-    directKernelOwnerCommand(receipt.compilerCommand) &&
-    retainedKernelSourceMatches(receipt.completed, current);
+    directKernelOwnerCommand(receipt.compilerCommand) && retainedKernelSourceMatches(receipt.completed, current);
   if (!same(current.source, receipt.completed.source) && !retainedKernelReceipt) return 'source-changed';
   // This legacy pass is reused only when every installed dependency and generated input remains identical.
   if (retainedKernelReceipt && !same(current.prepared, receipt.completed.prepared)) return 'prepared-changed';
