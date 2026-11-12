@@ -16,7 +16,10 @@ test('published Zone follows use common receipts, bounded pages and retained-edg
   const zones = [await f.create(), await f.create()];
   const privateAttempt = await f.call('owner', 'PUT', `/v1/follows/${zones[0]!.id}`);
   expect(privateAttempt.status).toBe(404);
-  const receipts = new Map<string, { headers: Record<string, string>; body: unknown }>();
+  const receipts = new Map<
+    string,
+    { headers: Record<string, string>; body: Awaited<ReturnType<ResourceFixture['call']>>['body'] }
+  >();
   for (const zone of zones) {
     const published = await f.call(
       'owner',

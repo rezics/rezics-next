@@ -296,6 +296,7 @@ const typed = [
   'POST /v1/posts/:id/$restore',
   'POST /v1/posts/:id/revisions',
   'GET /v1/posts/:id/revisions',
+  'GET /v1/posts/:id/revision-headers',
   'GET /v1/posts/:id/revisions/:revisionId',
   'GET /v1/boards/:id/threads',
   'POST /v1/boards/:id/threads/:threadId/pin',
