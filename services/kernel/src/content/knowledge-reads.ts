@@ -59,7 +59,7 @@ function baseDocument(row: {
     sha256: row.body_sha256.toString('hex'),
     licence: row.licence,
     subjectIds: [...row.subject_ids],
-    references: row.reference_manifest,
+    references: [...row.reference_manifest],
     provenance: row.copy_provenance,
   };
 }
@@ -161,7 +161,7 @@ export async function readKnowledgePublicDocument(
       ...baseDocument(final.value),
       canonicalBytes: Buffer.from(canonical).toString('base64'),
       sha256: knowledgeDigest(canonical),
-      references: projection.references,
+      references: [...projection.references],
       provenance,
       publicationId: final.value.current_publication_id,
       subjectId: final.value.subject_id,

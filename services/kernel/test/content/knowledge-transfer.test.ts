@@ -50,10 +50,10 @@ test('exact owner export/copy and anonymous publication export share permitted s
   const references = [
     {
       id: 'theorem-reference',
-      role: 'cites',
+      role: 'cites' as const,
       sourceBlockId: 'statement',
       target: {
-        kind: 'revision',
+        kind: 'revision' as const,
         documentId: target.documentId,
         revisionId: target.revisionId,
         sha256: targetRead.value.document.sha256,

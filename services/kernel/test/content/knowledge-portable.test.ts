@@ -103,7 +103,7 @@ test('copy remaps local component/reference/block identities and fragment links 
   expect(copied.references[0]!.id).not.toBe(external.id);
   expect(copied.references[0]!.target).toEqual(external.target);
   const paragraph = copied.snapshot.doc.content![0]!;
-  expect(copied.references[0]!.sourceBlockId).toBe(paragraph.attrs!.id);
+  expect(copied.references[0]!.sourceBlockId).toBe(paragraph.attrs!.id as string);
   expect(paragraph.content![0]!.marks![0]!.attrs!.href).toBe(`#${paragraph.attrs!.id}`);
   expect(paragraph.content![1]!.attrs!.payload).toEqual({ referenceId: copied.references[0]!.id });
   expect(copied.snapshot.doc.content![1]!.attrs!.payload).toEqual(snapshot.doc.content![1]!.attrs!.payload);

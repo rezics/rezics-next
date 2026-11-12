@@ -81,7 +81,7 @@ export async function projectKnowledgePublicBody(
     if (node.type === 'image' || node.type === 'media')
       return {
         type: 'paragraph',
-        attrs: { id: node.attrs!.id },
+        attrs: { id: node.attrs!.id! },
         content: [{ type: 'text', text: 'Unavailable media' }],
       };
     return { ...node, ...(node.content ? { content: node.content.map(rewrite) } : {}) };
