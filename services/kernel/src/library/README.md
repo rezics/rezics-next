@@ -3003,6 +3003,9 @@ The retained native inputs are `test/library/follow-counts-outcomes.test.ts`,
 That factory uses the existing `createLibraryDriver` world, original kernel Responses, native source reconciliation
 and target delivery, and the shared growth capture/classifier. The additive native fixture ports expose existing
 Auth provisioning/consent, bearer transport and observation of actual Access calls; they confer no authority.
+Decision: fixture setup provisions independent ordinary Auth actors in bounded groups, growth target creation reuses
+existing ordinary accounts, and construction failure settles every owned host, executor, client, pool and database
+before another fixture can acquire Auth workflow ownership.
 
 These restored inputs do not establish native completion. The current world lacks an Auth account-operation host
 for operated-account creation and terminal deletion. Whole Library page observations must include raw examined

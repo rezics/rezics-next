@@ -471,7 +471,7 @@ export function typingInputCommand(command: readonly string[]): string[] {
   // Carry the standalone capture implementation through argv for old frozen worktrees, compressed to fit custody.
   const payload = deflateSync(
     JSON.stringify({
-      captureModule: readFileSync(import.meta.path).toString(),
+      captureModule: readFileSync(import.meta.path, 'utf8'),
       command,
     }),
   ).toString('base64');
