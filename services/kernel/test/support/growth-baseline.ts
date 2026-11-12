@@ -48,11 +48,6 @@ export const GROWTH_BASELINE: readonly GrowthBaselineEntry[] = [
     reason: 'T: docs/research/growth-shadow-triage-content-b.md',
   },
   {
-    name: 'Authenticated content command admission',
-    file: 'services/kernel/test/content/point-command-admission.test.ts',
-    reason: 'T: docs/research/growth-shadow-triage-content-b.md',
-  },
-  {
     name: 'post revise precondition and revisedAt read',
     file: 'services/kernel/test/content/post-revise-precondition.test.ts',
     reason: 'T: docs/research/growth-shadow-triage-content-b.md',

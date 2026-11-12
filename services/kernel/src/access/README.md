@@ -2,6 +2,10 @@
 
 ## Policy boundary
 
+Authenticated Content command admission uses the series growth rule at populations 256, 1024 and 4096.
+Its point-command admission test covers current Access, native effects, history and replay; it has no step-rule
+baseline exception. The existing point series is the acceptance test for this choice.
+
 Authentication failure vocabulary has one constructor in `contract/authentication.ts`. Request's
 `authentication-error.ts` and `access.ts`, Access's `check.ts` and the contract barrel re-export that identity.
 The HTTP mapper imports the request compatibility leaf. Platform depends on the Access contract for this vocabulary;
