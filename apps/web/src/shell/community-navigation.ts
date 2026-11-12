@@ -28,7 +28,13 @@ export function shellFollowDestination(follow: FollowEdge): ShellCommunity | nul
   const title = typeof target.label === 'string' ? target.label : target.label.value;
   const titleLanguage = typeof target.label === 'string' ? undefined : target.label.language;
   const path = shellDestinationPath(destination);
-  return { id: follow.targetId, kind: destination.kind, title, titleLanguage, path };
+  return {
+    id: follow.targetId,
+    kind: destination.kind,
+    title,
+    ...(titleLanguage === undefined ? {} : { titleLanguage }),
+    path,
+  };
 }
 
 function shellDestinationPath(destination: NativeDestination): `/${string}` {

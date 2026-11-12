@@ -266,7 +266,7 @@ test('a native Space-filtered FULL page supplies canonical navigation without po
   expect(result).toEqual({
     items: [
       { id: 'realm-space', kind: 'realm', title: '読書会', titleLanguage: 'ja', path: '/realms/native-realm' },
-      { id: 'ordinary', kind: 'space', title: 'Quiet space', titleLanguage: undefined, path: '/spaces/quiet%20room' },
+      { id: 'ordinary', kind: 'space', title: 'Quiet space', path: '/spaces/quiet%20room' },
     ],
     more: true,
   });
