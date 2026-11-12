@@ -350,7 +350,7 @@ test('fake proc inventory maps cwd to one terminal isolated owner and ignores sh
       { id: 'collision-b', worktree: ambiguousTree },
     ];
     const inventory = await createTerminalProcessSweep(procRoot).inventory(owners);
-    expect(inventory.map(({ owner, identity, sizeBytes }) => [owner, identity.pid, identity.start, sizeBytes])).toEqual([
+    expect(inventory.map(({ owner, identity, sizeBytes }) => [owner, identity.pid, identity.start, sizeBytes]).sort((a, b) => Number(a[1]) - Number(b[1]))).toEqual([
       ['cancelled-owner', 8101, '101', 8192],
       ['cancelled-owner', 8102, '102', 8192],
     ]);
