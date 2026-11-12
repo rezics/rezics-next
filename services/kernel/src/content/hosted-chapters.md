@@ -76,7 +76,7 @@ revision in the same partition epoch. Failure leaves pending work or the census 
 initial census is over catalogue primary keys, not all Posts, and completes only after all selected keys are projected.
 New insertions behind its frontier are covered by their native pending obligations. No new watcher or schedule is added.
 
-Later acceptance: run `bun run --cwd services/kernel check test/content/hosted-chapters-owner.test.ts` in the dev
+Later acceptance: run `bun run --cwd services/kernel check test/content/hosted-chapters-owner.test.ts test/content/event-registration.test.ts` in the dev
 verifier after landing. Pin native remote-home exact selection before recovery, complete versus partial coverage,
 same-home compatibility, indexed timestamp ties, sparse continuation, cursor scope/session/epoch binding, current
 author/revise/container disclosure, mid-read head/erasure changes, bounded idempotent recovery and restoration.

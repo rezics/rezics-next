@@ -43,6 +43,8 @@ const fixtures = {
     revision: 1,
   },
   'com.rezics.content.watch.removed.v1': { accountId: actorId, kind: 'board', watchId: itemId },
+  'com.rezics.content.own-drafts.repaired.v1': {},
+  'com.rezics.content.hosted-catalogue.locator-repaired.v1': {},
   'com.rezics.content.board.slow-mode.changed.v1': { boardId: containerId, intervalSeconds: 60 },
   'com.rezics.content.feed.indexed.v1': {},
   'com.rezics.content.feed.delivered.v1': {},
@@ -215,7 +217,6 @@ const fixtures = {
   },
   'com.rezics.content.realm-discovery.prepared.v1': { route: 1234, intent: 'a'.repeat(64), generation: '1' },
   'com.rezics.content.realm-discovery.outcome.v1': { route: 1234, intent: 'a'.repeat(64), generation: '1' },
-  'com.rezics.content.own-drafts.repaired.v1': {},
 } satisfies { [T in ContentEventType]: ContentEventData<T> };
 const entries = Object.entries(fixtures);
 let nextPartition = 1400;
