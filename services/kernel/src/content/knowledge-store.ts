@@ -256,7 +256,7 @@ export async function knowledgeOutlineChildrenPage(
   after: Readonly<{ position: string; placementId: string }> | null,
   limit: number,
 ): Promise<readonly KnowledgeOutlineChildRow[]> {
-  let rows: readonly KnowledgeOutlineChildRow[];
+  let rows: readonly (Omit<KnowledgeOutlineChildRow, 'position'> & Readonly<{ position: bigint | string }>)[];
   if (parentId === null) {
     rows = after
       ? await outlineRootAfter.run(tx, {
