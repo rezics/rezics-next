@@ -17,3 +17,5 @@ export type { HostedCreateInput, HostedReviseInput, HostedPublishInput, HostedPl
 export { createKnowledgeNotebook, createKnowledgeDocument, reviseKnowledgeDocument, setKnowledgePublication, } from './knowledge-commands.ts';
 export { readKnowledgePrivateDocument, readKnowledgePublicDocument } from './knowledge-reads.ts';
 export type { KnowledgeCommandContext, KnowledgeCommandValue, KnowledgeCreateDocumentInput, KnowledgeCreateNotebookInput, KnowledgeDependencies, KnowledgeDocumentInput, KnowledgeDocumentView, KnowledgePublicationInput, KnowledgePublicDocumentView, KnowledgeReadContext, KnowledgeReviseDocumentInput, } from './knowledge-model.ts';
+export { createKnowledgeDiscoverySource } from './knowledge-discovery.ts';
+export type { KnowledgeDiscoveryCandidate, KnowledgeDiscoverySummary, KnowledgeDiscoveryContext, KnowledgeDiscoveryCurrent, KnowledgeDiscoverySource, } from './knowledge-discovery.ts';

@@ -46,18 +46,26 @@ export async function readLibraryEntryTiles(
   }
   const result = new Map<string, LibraryEntryTile>();
   if (distinct.size === 0) return result;
-  const entryPlan = labelEntryTilesPlan({ route: input.route, accountId: input.accountId, subjectIds: [...distinct] });
+  const orderedSubjectIds = [...distinct];
+  const entryPlan = labelEntryTilesPlan({
+    route: input.route,
+    accountId: input.accountId,
+    subjectIds: orderedSubjectIds,
+  });
   const entries = await executeLabelSql(entryPlan, (operands) =>
     entryTiles.run({ query: client.query.bind(client) }, operands),
   );
   if (entries.length === 0) return result;
+  const entriesBySubject = new Map(entries.map((entry) => [entry.subjectId, entry]));
   const sessions = await createShelfActiveReader().sessions(
     client,
     input.route,
     input.accountId,
-    entries.map((entry) => entry.subjectId),
+    orderedSubjectIds.filter((subjectId) => entriesBySubject.has(subjectId)),
   );
-  for (const entry of entries) {
+  for (const subjectId of orderedSubjectIds) {
+    const entry = entriesBySubject.get(subjectId);
+    if (!entry) continue;
     if (entry.createdAt === null || entry.updatedAt === null || entry.lastActivityAt === null)
       throw new Error('Library entry timestamps are required');
     const active = sessions.get(entry.subjectId);

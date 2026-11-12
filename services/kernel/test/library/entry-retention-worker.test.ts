@@ -45,7 +45,7 @@ test('profile workers use explicit fixture keys and preserve the database URL', 
 });
 beforeAll(async () => {
   f = await createProfileEntryFixture({ clock });
-  client = await createWorkClient(process.env.DATABASE_URL!);
+  client = await createWorkClient(process.env.DATABASE_URL!, f.pool);
 }, 120000);
 afterAll(async () => {
   const failures: unknown[] = [];

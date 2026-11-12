@@ -1,62 +1,63 @@
 import type { KernelClient } from '@rezics/client';
+import { followListQuery, getFollowList, type FollowEdge } from '../library/follow-transport';
 
+/** The native Follow destination union is the receiving seam for future supported destinations. */
+type NativeDestination = Exclude<NonNullable<FollowEdge['destination']>, { kind: 'unavailable' }>;
 export type ShellCommunity = {
   id: string;
-  kind: 'realm' | 'space';
+  kind: NativeDestination['kind'];
   title: string;
-  path: `/realms/${string}` | `/spaces/${string}`;
-  /** Realm routes redirect to a Space address when one exists. Both mark the same destination. */
-  alternatePath?: `/realms/${string}`;
+  titleLanguage?: string;
+  path: `/${string}`;
 };
 export type ShellCommunities = { subject: string; locale: string; items: ShellCommunity[]; more: boolean };
 export const SHELL_COMMUNITY_LIMIT = 12;
 
-/** A bounded first follows page; only readable active Spaces are enriched, never arbitrary target IDs. */
+/** Consume the FULL projection; never infer a Realm from ownership or a Space address from its UUID. */
+export function shellFollowDestination(follow: FollowEdge): ShellCommunity | null {
+  const { target, destination } = follow;
+  if (
+    follow.state !== 'following' ||
+    !target ||
+    !('label' in target) ||
+    !target.label ||
+    !destination ||
+    destination.kind === 'unavailable'
+  )
+    return null;
+  const title = typeof target.label === 'string' ? target.label : target.label.value;
+  const titleLanguage = typeof target.label === 'string' ? undefined : target.label.language;
+  const path = shellDestinationPath(destination);
+  return {
+    id: follow.targetId,
+    kind: destination.kind,
+    title,
+    ...(titleLanguage === undefined ? {} : { titleLanguage }),
+    path,
+  };
+}
+
+function shellDestinationPath(destination: NativeDestination): `/${string}` {
+  switch (destination.kind) {
+    case 'space':
+      return `/spaces/${encodeURIComponent(destination.address)}`;
+    case 'realm':
+      return `/realms/${encodeURIComponent(destination.realmId)}`;
+  }
+}
+
+/** Filter before native paging so Subject follows cannot crowd Spaces out of the rail. */
 export async function loadShellCommunities(
   client: KernelClient,
   authorization: string,
 ): Promise<Pick<ShellCommunities, 'items' | 'more'>> {
-  const auth = { headers: { authorization }, fetch: { cache: 'no-store' as const, redirect: 'manual' as const } };
-  const follows = await client.follows.get({ ...auth, query: { view: 'FULL', limit: 100 } });
-  if (follows.error || !follows.data) throw new Error('Community navigation unavailable');
-  const spaces = follows.data.follows.filter(
-    (follow) => follow.targetType === 'space' && follow.state === 'following' && follow.target,
-  );
-  const items = await Promise.all(
-    spaces.slice(0, SHELL_COMMUNITY_LIMIT).map(async (follow): Promise<ShellCommunity | null> => {
-      try {
-        const result = await client.spaces({ spaceId: follow.targetId }).get(auth);
-        const space = !result.error && result.data?.space;
-        if (!space || space.state !== 'active' || space.spaceId !== follow.targetId) return null;
-        if (space.realmId) {
-          const result = await client.realms({ realmId: space.realmId }).get(auth);
-          const realm = !result.error && result.data?.realm;
-          if (realm && realm.state === 'active' && realm.realmId === space.realmId && realm.spaceId === space.spaceId) {
-            const realmPath = `/realms/${encodeURIComponent(realm.realmId)}` as const;
-            return {
-              id: space.spaceId,
-              kind: 'realm',
-              title: realm.title,
-              path: space.address ? `/spaces/${encodeURIComponent(space.address)}` : realmPath,
-              alternatePath: realmPath,
-            };
-          }
-        }
-        return space.address
-          ? {
-              id: space.spaceId,
-              kind: 'space',
-              title: space.title,
-              path: `/spaces/${encodeURIComponent(space.address)}`,
-            }
-          : null;
-      } catch {
-        return null;
-      }
-    }),
-  );
+  const result = await getFollowList(client, authorization, followListQuery(undefined, SHELL_COMMUNITY_LIMIT, 'space'));
+  if (result.error || !result.data) throw new Error('Community navigation unavailable');
   return {
-    items: items.filter((item): item is ShellCommunity => item !== null),
-    more: !!follows.data.next || spaces.length > SHELL_COMMUNITY_LIMIT,
+    items: result.data.follows.flatMap((follow) => {
+      const item = shellFollowDestination(follow);
+      return item ? [item] : [];
+    }),
+    more: !!result.data.next,
   };
 }

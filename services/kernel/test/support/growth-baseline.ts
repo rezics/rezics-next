@@ -58,11 +58,6 @@ export const GROWTH_BASELINE: readonly GrowthBaselineEntry[] = [
     reason: 'T: docs/research/growth-shadow-triage-content-b.md',
   },
   {
-    name: 'Protected Realm member thread read',
-    file: 'services/kernel/test/content/realm-boards.test.ts',
-    reason: 'B: docs/research/growth-shadow-triage-content-b.md',
-  },
-  {
     name: 'content write participation with unrelated Realms, members and bans',
     file: 'services/kernel/test/content/realm-participation.test.ts',
     reason: 'T: docs/research/growth-shadow-triage-content-b.md',

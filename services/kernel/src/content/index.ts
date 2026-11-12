@@ -75,3 +75,12 @@ export type {
   KnowledgeReadContext,
   KnowledgeReviseDocumentInput,
 } from './knowledge-model.ts';
+
+export { createKnowledgeDiscoverySource } from './knowledge-discovery.ts';
+export type {
+  KnowledgeDiscoveryCandidate,
+  KnowledgeDiscoverySummary,
+  KnowledgeDiscoveryContext,
+  KnowledgeDiscoveryCurrent,
+  KnowledgeDiscoverySource,
+} from './knowledge-discovery.ts';

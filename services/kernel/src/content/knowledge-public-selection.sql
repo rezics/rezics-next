@@ -1,6 +1,6 @@
 SELECT d.route, d.document_id, d.current_publication_id,
        p.publication_id, p.revision_id, p.subject_id, p.body_sha256 AS publication_sha256,
-       r.subject_ids
+       r.subject_ids, r.block_ids
 FROM content.knowledge_document d
 JOIN content.knowledge_publication p
   ON p.route=d.route AND p.document_id=d.document_id AND p.publication_id=d.current_publication_id

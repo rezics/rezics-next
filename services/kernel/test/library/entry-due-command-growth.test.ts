@@ -15,7 +15,12 @@ import {
   openGrowthDatabase,
   type GrowthDatabase,
 } from '../support/growth.ts';
-import { archive, growRetentionPopulation, renewRetentionIdentities } from './entry-retention-worker-runtime.ts';
+import {
+  archive,
+  growRetentionPopulation,
+  renewRetentionIdentities,
+  type RetentionGrowthProgress,
+} from './entry-retention-worker-runtime.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 let db: GrowthDatabase, f: NativeProfileFixture;
@@ -26,7 +31,7 @@ let subject: string, noise: string;
 let partition: number;
 beforeAll(async () => {
   db = await openGrowthDatabase();
-  f = await createProfileEntryFixture({ pool: db.pool, clock, singleConnection: true, projectLinks: false });
+  f = await createProfileEntryFixture({ pool: db.pool, clock, projectLinks: false });
   subject = await f.createSubject('game');
   noise = await f.createSubject('game');
   const route = routeOf(f.owner.actor.accountId);
@@ -46,6 +51,13 @@ afterAll(async () => {
 });
 const purge = (key: DueEntryDeletionKey, deadline?: number) =>
   purgeExpiredEntryDeletion({ pool: db.pool, clock, ...(deadline === undefined ? {} : { deadline }) }, key);
+
+function reportRetentionSeed(progress: RetentionGrowthProgress) {
+  const { phase, from, count, completed, target, connections } = progress;
+  process.stderr.write(
+    `Library due growth: phase=${phase} from=${from} count=${count} completed=${completed}/${target} elapsed=${progress.elapsedMs}ms pool=${connections.total}/${connections.idle}/${connections.waiting} max=${connections.max}\n`,
+  );
+}
 
 test('whole native exact due command stays keyed across legal unrelated owners, archives, live facts, receipts and outbox history', async () => {
   let key: DueEntryDeletionKey, second: DueEntryDeletionKey;
@@ -82,7 +94,7 @@ test('whole native exact due command stays keyed across legal unrelated owners, 
     async grow(_db, scale, previous) {
       // All unrelated archives have a later original deadline than the fixed target.
       time = origin + 86400000;
-      await growRetentionPopulation(f, partition, noise, previous, scale);
+      await growRetentionPopulation(f, partition, noise, previous, scale, reportRetentionSeed);
     },
     prepare,
     async warmup() {

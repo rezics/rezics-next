@@ -20,6 +20,7 @@ export let createNativeLibrarySourceCustody: SearchNativePorts['createNativeLibr
 export let createPublicFilterSourceBinding: SearchNativePorts['createPublicFilterSourceBinding'];
 export let createPublicIdentitySourceCapture: SearchNativePorts['createPublicIdentitySourceCapture'];
 export let createRealmSubjectSource: SearchNativePorts['createRealmSubjectSource'];
+export let createKnowledgeDiscoverySource: SearchNativePorts['createKnowledgeDiscoverySource'];
 export let createReviewDiscoverySource: SearchNativePorts['createReviewDiscoverySource'];
 export let createSubjectSourceKeyPages: SearchNativePorts['createSubjectSourceKeyPages'];
 export let currentReadSnapshot: SearchNativePorts['currentReadSnapshot'];
@@ -85,6 +86,7 @@ export function bindSearchNativePorts(port: SearchNativePorts): SearchNativePort
   createPublicFilterSourceBinding = port.createPublicFilterSourceBinding;
   createPublicIdentitySourceCapture = port.createPublicIdentitySourceCapture;
   createRealmSubjectSource = port.createRealmSubjectSource;
+  createKnowledgeDiscoverySource = port.createKnowledgeDiscoverySource;
   createReviewDiscoverySource = port.createReviewDiscoverySource;
   createSubjectSourceKeyPages = port.createSubjectSourceKeyPages;
   currentReadSnapshot = port.currentReadSnapshot;

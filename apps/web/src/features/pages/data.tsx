@@ -1,9 +1,10 @@
+import { BookOverviewContext } from './book-overview';
+import { BookOverviewRating } from './subject-ratings-view';
 import { Members } from './member-list';
 import { ReactionSummary } from './reaction-summary';
 import type { MemberPageTarget } from './member-list-query';
 import {
   pickLanguage,
-  pickText,
   pageDocumentReferences,
   planReads,
   platformRegistry,
@@ -20,13 +21,12 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
-import { languageName, LANGUAGE_PROPERTY, originalLanguage, originalTitle } from '../../subject/language';
+import { originalLanguage, originalTitle } from '../../subject/language';
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
 import type { ReleasedRelationDirectionResult } from '@rezics/definitions';
 import type { Related, Subject, Summary } from '../../subject/types';
 import { subjectHref } from '../../subject/subject-href';
-import { quantityPresentation } from '../../subject/quantity-presentation';
 import type { PageDocument } from './render';
 import { statementDocument } from './documents';
 import * as accounts from './account';
@@ -59,12 +59,9 @@ import {
   bestRank,
   fieldLabel,
   isRecord,
-  linkClass,
-  linkColor,
   pageText,
   PlainLink,
   spoilerLevel,
-  webUrl,
   type PageLink,
   type Snak,
   type Sources,
@@ -265,6 +262,10 @@ function foldName(text: string): string {
   return text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+function BookIdentityRating({ subject, locale }: { subject: string; locale: string }) {
+  return useContext(BookOverviewContext) ? <BookOverviewRating subject={subject} locale={locale} /> : null;
+}
+
 function subjectHeader(read: SubjectRead, creators: Creator[], date: string | null, options: Options) {
   const { subject, summary } = read;
   const original = originalLanguage(subject);
@@ -347,6 +348,7 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
               ))}
             </p>
           )}
+          <BookIdentityRating subject={subject.id} locale={options.locale} />
         </div>
         <div
           data-slot="subject-primary-actions"

@@ -1290,6 +1290,7 @@
         "apps/web/src/library/application.tsx",
         "apps/web/src/library/private-lifetime.tsx",
         "apps/web/src/library/follow-control.tsx",
+        "apps/web/src/library/follow-transport.ts",
         "apps/web/src/library/score-write.ts",
         "apps/web/src/library/loans-current.tsx",
         "apps/web/src/library/loans-query.ts",

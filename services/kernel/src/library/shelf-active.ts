@@ -21,11 +21,15 @@ export function createShelfActiveReader(): ShelfActiveReader {
       const result = new Map<string, ShelfSession>();
       if (distinct.size === 0) return result;
 
-      const plan = labelActiveSessionsPlan({ route, accountId, subjectIds: [...distinct] });
+      const orderedSubjectIds = [...distinct];
+      const plan = labelActiveSessionsPlan({ route, accountId, subjectIds: orderedSubjectIds });
       const rows = await executeLabelSql(plan, (operands) =>
         activeSessions.run({ query: client.query.bind(client) }, operands),
       );
-      for (const row of rows) {
+      const sessionsBySubject = new Map(rows.map((row) => [row.subjectId, row]));
+      for (const subjectId of orderedSubjectIds) {
+        const row = sessionsBySubject.get(subjectId);
+        if (!row) continue;
         if (row.startedAt === null) throw new Error('Progress session start timestamp is missing');
         // Match progress-store's BASIC serialization, including numeric text and millisecond ISO timestamps.
         result.set(row.subjectId, {

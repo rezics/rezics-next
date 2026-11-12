@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { DownloadDecision } from '../src/media/kernel.ts';
 import { mediaRequest, type MediaEnv } from '../src/media/index.ts';
+import type { MediaStorage } from '../src/media/storage.ts';
 
 const id = '00000000-0000-4000-8000-000000000001';
 const key = `m/${id}/original`;
@@ -159,6 +160,107 @@ function expectOneFreshAuthorization(
     authorization: credential,
   });
 }
+
+test('the explicit native store serves current authorized AVIF and WebP derivatives ahead of a MEDIA binding', async () => {
+  const variants = [
+    { variant: 'avif-320', mediaType: 'image/avif', bytes: new Uint8Array([0, 0, 0, 1, 65, 86, 73, 70]) },
+    { variant: 'webp-320', mediaType: 'image/webp', bytes: new Uint8Array([82, 73, 70, 70, 87, 69, 66, 80]) },
+  ];
+  const objects = new Map(variants.map((item) => [`m/${id}/${item.variant}`, item]));
+  const decisions = new Map<string, Extract<DownloadDecision, { allowed: true }>>(
+    variants.map((item) => [
+      item.variant,
+      {
+        allowed: true,
+        key: `m/${id}/${item.variant}`,
+        sha256: digest,
+        mediaType: item.mediaType,
+        byteCount: item.bytes.length,
+        publicCache: false,
+        cacheControl: 'private, no-cache',
+      },
+    ]),
+  );
+  const authorizationCalls: Array<{ path: string; variant: string | null; authorization: string | null }> = [];
+  const nativeCalls: Array<{ method: string; path: string; token: string | null; authorization: string | null }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const outgoing = new Request(input, init);
+    const url = new URL(outgoing.url);
+    if (url.hostname === 'kernel.test') {
+      const variant = url.searchParams.get('variant');
+      authorizationCalls.push({
+        path: url.pathname,
+        variant,
+        authorization: outgoing.headers.get('authorization'),
+      });
+      const decision = decisions.get(variant ?? '');
+      return decision ? Response.json(decision) : Response.json({ allowed: false }, { status: 404 });
+    }
+
+    nativeCalls.push({
+      method: outgoing.method,
+      path: url.pathname,
+      token: outgoing.headers.get('x-local-media-key'),
+      authorization: outgoing.headers.get('authorization'),
+    });
+    const key = url.pathname.slice('/_local/media/'.length);
+    const object = objects.get(key);
+    if (!object) return new Response(null, { status: 404 });
+    return new Response(outgoing.method === 'HEAD' ? null : object.bytes, {
+      headers: { 'content-length': String(object.bytes.length) },
+    });
+  };
+
+  const unusedMedia = {
+    async head() {
+      throw new Error('The configured native media store should be selected');
+    },
+    async get() {
+      throw new Error('The configured native media store should be selected');
+    },
+    async put() {},
+    async delete() {},
+  } as unknown as MediaStorage;
+
+  try {
+    for (const item of variants) {
+      const response = await mediaRequest(
+        new Request(`https://site.test/media/${id}/${item.variant}`, {
+          headers: { authorization: 'Bearer current-viewer' },
+        }),
+        {
+          KERNEL_ORIGIN: 'https://kernel.test',
+          MEDIA: unusedMedia,
+          LOCAL_MEDIA_ORIGIN: 'http://127.0.0.1:41234',
+          LOCAL_MEDIA_TOKEN: 'private-test-transport',
+        },
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe(item.mediaType);
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(item.bytes);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  expect(authorizationCalls).toEqual(
+    variants.map((item) => ({
+      path: `/v1/media/${id}:authorizeDownload`,
+      variant: item.variant,
+      authorization: 'Bearer current-viewer',
+    })),
+  );
+  expect(nativeCalls).toEqual(
+    variants.flatMap((item) => {
+      const path = `/_local/media/m/${id}/${item.variant}`;
+      return [
+        { method: 'HEAD', path, token: 'private-test-transport', authorization: null },
+        { method: 'GET', path, token: 'private-test-transport', authorization: null },
+      ];
+    }),
+  );
+});
 
 test('every response decision is freshly authorized and success headers match full GET, including HEAD', async () => {
   await withFixture(async (value) => {

@@ -937,6 +937,58 @@ CREATE TABLE search.index_prefix_control (
 
 
 --
+-- Name: knowledge_discovery_association; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.knowledge_discovery_association (
+    subject_id uuid NOT NULL,
+    document_id uuid NOT NULL,
+    publication_id uuid NOT NULL,
+    revision_id uuid NOT NULL,
+    published_at timestamp with time zone NOT NULL,
+    sequence bigint NOT NULL,
+    CONSTRAINT knowledge_discovery_association_published_at_check CHECK (isfinite(published_at)),
+    CONSTRAINT knowledge_discovery_association_sequence_check CHECK ((sequence > 0))
+);
+
+
+--
+-- Name: knowledge_discovery_installation; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.knowledge_discovery_installation (
+    version integer NOT NULL,
+    CONSTRAINT knowledge_discovery_installation_version_check CHECK ((version = 1))
+);
+
+
+--
+-- Name: knowledge_discovery_preparation; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.knowledge_discovery_preparation (
+    id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    revision integer NOT NULL,
+    state jsonb NOT NULL,
+    expires_at bigint NOT NULL,
+    CONSTRAINT knowledge_discovery_preparation_revision_check CHECK ((revision > 0)),
+    CONSTRAINT knowledge_discovery_preparation_state_check CHECK ((octet_length((state)::text) <= 16384))
+);
+
+
+--
+-- Name: knowledge_discovery_subject; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.knowledge_discovery_subject (
+    subject_id uuid NOT NULL,
+    sequence bigint NOT NULL,
+    CONSTRAINT knowledge_discovery_subject_sequence_check CHECK ((sequence >= 0))
+);
+
+
+--
 -- Name: public_filter_coverage_baseline; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -1731,6 +1783,46 @@ ALTER TABLE ONLY search.index_prefix_control
 
 
 --
+-- Name: knowledge_discovery_association knowledge_discovery_association_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.knowledge_discovery_association
+    ADD CONSTRAINT knowledge_discovery_association_pkey PRIMARY KEY (subject_id, publication_id);
+
+
+--
+-- Name: knowledge_discovery_association knowledge_discovery_association_subject_id_sequence_key; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.knowledge_discovery_association
+    ADD CONSTRAINT knowledge_discovery_association_subject_id_sequence_key UNIQUE (subject_id, sequence);
+
+
+--
+-- Name: knowledge_discovery_installation knowledge_discovery_installation_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.knowledge_discovery_installation
+    ADD CONSTRAINT knowledge_discovery_installation_pkey PRIMARY KEY (version);
+
+
+--
+-- Name: knowledge_discovery_preparation knowledge_discovery_preparation_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.knowledge_discovery_preparation
+    ADD CONSTRAINT knowledge_discovery_preparation_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: knowledge_discovery_subject knowledge_discovery_subject_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.knowledge_discovery_subject
+    ADD CONSTRAINT knowledge_discovery_subject_pkey PRIMARY KEY (subject_id);
+
+
+--
 -- Name: public_filter_coverage_baseline public_filter_coverage_baseline_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -2028,6 +2120,27 @@ CREATE INDEX identity_writer_pending ON search.identity_writer USING btree (part
 --
 
 CREATE INDEX index_home_coverage_retire ON search.index_home_coverage USING btree (consumer, index_uuid, partition_no);
+
+
+--
+-- Name: knowledge_discovery_preparation_expiry; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX knowledge_discovery_preparation_expiry ON search.knowledge_discovery_preparation USING btree (expires_at, id);
+
+
+--
+-- Name: knowledge_discovery_preparation_subject; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX knowledge_discovery_preparation_subject ON search.knowledge_discovery_preparation USING btree (subject_id, expires_at, id);
+
+
+--
+-- Name: knowledge_discovery_publication_page; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX knowledge_discovery_publication_page ON search.knowledge_discovery_association USING btree (subject_id, published_at DESC, document_id, publication_id);
 
 
 --

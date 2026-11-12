@@ -6,7 +6,7 @@ import { PhoneNavigation, PhoneCreationProvider, PhoneUnreadDot, phoneTabClass }
 import { useOperation, useOperationAdmission } from '../kernel/exposure';
 import { subjectHref } from '../subject/subject-href';
 import { cn } from '@rezics/ui/utils';
-import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button } from '@rezics/ui/shadcn/button';
 import { Toaster } from '@rezics/ui/shadcn/toast';
 import { Menu } from '@rezics/ui/menu';
 import {
@@ -29,7 +29,7 @@ import { PageHeading } from './page-heading';
 import { RouteState } from './route-state';
 import { ShellSearch } from '../search/header-search/shell-search';
 import { HeaderSearchFilterProvider } from '../search/header-search/filter-region';
-import { createInboxShellPort, InboxShellProvider, UnreadBadge } from '../inbox';
+import { createInboxShellPort, InboxShellProvider } from '../inbox';
 import { createSettingsShellPort, SettingsShellProvider } from '../settings';
 import {
   Folders,
@@ -39,13 +39,19 @@ import {
   LogOut,
   Menu as MenuIcon,
   Settings,
+  Wrench,
   ShieldCheck,
   UserRound,
   Users,
 } from 'lucide-react';
 import type { SessionEnv } from '../session/client.ts';
 import { NavigationEntries, NavigationLinks, NavigationProvider } from './navigation-view';
-import { navigationPathMatches, type NavigationContribution, type NavigationSession } from './navigation';
+import {
+  navigationPathMatches,
+  navigationPathname,
+  type NavigationContribution,
+  type NavigationSession,
+} from './navigation';
 import { FeatureSlotsProvider } from './feature-slots';
 import type { SubjectPurchaseRegions } from '../features/pages/subject-slots';
 import { useSession } from '../session/query';
@@ -62,32 +68,8 @@ const skipLink = cn(
   // The offset keeps the ring visible against the primary fill.
   'focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background focus:outline-none',
 );
-const messages = {
-  shell_skip_to_content: m.shell_skip_to_content,
-  shell_navigation: m.shell_navigation,
-  shell_language: m.shell_language,
-  shell_theme: m.shell_theme,
-  shell_theme_system: m.shell_theme_system,
-  shell_theme_light: m.shell_theme_light,
-  shell_theme_dark: m.shell_theme_dark,
-  nav_home: m.nav_home,
-  nav_library: m.nav_library,
-  nav_orders: m.nav_orders,
-  nav_inbox: m.nav_inbox,
-  nav_search: m.nav_search,
-  shell_open_navigation: m.shell_open_navigation,
-  shell_close_navigation: m.shell_close_navigation,
-  shell_collapse_navigation: m.shell_collapse_navigation,
-  shell_expand_navigation: m.shell_expand_navigation,
-  not_found_heading: m.not_found_heading,
-  not_found_message: m.not_found_message,
-  error_heading: m.error_heading,
-  error_message: m.error_message,
-};
 const headerControlClass =
   'h-9 rounded-full border border-border/60 focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background';
-const statusControlClass =
-  'h-11 rounded-full px-4 focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background';
 const accountMenuLinkClass =
   'flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl px-3 py-2 text-sm wrap-anywhere whitespace-normal [&_svg]:shrink-0 outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground';
 const readAuthIssuer = createServerFn({ method: 'GET' }).handler(async () => {
@@ -123,7 +105,12 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
       <SidebarContent className="max-h-[calc(100svh-4rem)] overflow-y-auto!">
         <SidebarGroup>
           <SidebarMenu>
-            <NavigationEntries context={{ locale: getLocale(), pathname }} session={session} desktop>
+            <NavigationEntries
+              context={{ locale: getLocale(), pathname }}
+              session={session}
+              placement="global-sidebar"
+              desktop
+            >
               {(item) => {
                 const Icon = item.icon;
                 return (
@@ -149,14 +136,13 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
                         {item.label}
                       </span>
                       {item.unavailable && <span className="sr-only">{`: ${m.library_subject_unavailable()}`}</span>}
-                      {item.id === 'shell.inbox' && <UnreadBadge />}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
               }}
             </NavigationEntries>
           </SidebarMenu>
-          <div className="group-data-[collapsible=icon]:[&_h2]:sr-only group-data-[collapsible=icon]:[&_[data-community-label]]:sr-only group-data-[collapsible=icon]:[&_[data-community-footer]]:hidden">
+          <div className="group-data-[collapsible=icon]:[&_h2]:sr-only group-data-[collapsible=icon]:[&_[data-community-label]]:sr-only group-data-[collapsible=icon]:[&_[data-community-footer]]:sr-only">
             {communities}
           </div>
         </SidebarGroup>
@@ -179,7 +165,12 @@ function ScriptFreeNavigation({ pathname, session }: { pathname: string; session
     <noscript>
       <nav aria-label={m.shell_navigation()} className="border-b border-border/60 px-3 py-2 md:hidden">
         <ul className="flex flex-wrap gap-1">
-          <NavigationEntries context={{ locale: getLocale(), pathname }} session={session} desktop>
+          <NavigationEntries
+            context={{ locale: getLocale(), pathname }}
+            session={session}
+            placement="global-sidebar"
+            desktop
+          >
             {(item) => {
               const Icon = item.icon;
               if (item.unavailable)
@@ -229,7 +220,12 @@ export function NavigationToggle({
   const communities = useSideNavCommunities();
   const navigation = (
     <div className="grid gap-3">
-      <NavigationLinks context={{ locale: getLocale(), pathname }} session={session} label={m.shell_navigation()} />
+      <NavigationLinks
+        context={{ locale: getLocale(), pathname }}
+        session={session}
+        placement="global-sidebar"
+        label={m.shell_navigation()}
+      />
       {communities}
     </div>
   );
@@ -411,6 +407,10 @@ export function AccountMenu({
                 {m.settings_heading()}
               </a>
             )}
+            <a href={`/${locale}/settings#account-tools`} className={accountMenuLinkClass}>
+              <Wrench aria-hidden="true" className="size-4" />
+              {m.shell_account_tools()}
+            </a>
             <a href={`/${locale}/accounts`} className={accountMenuLinkClass}>
               <Users aria-hidden="true" className="size-4" />
               {m.av_accounts()}
@@ -597,7 +597,28 @@ function ShellContent({
                   tabIndex={-1}
                   className="min-w-0 px-3 py-6 pb-[calc(var(--bottom-nav-height)+1.5rem)] outline-none md:p-6"
                 >
-                  <div className="mx-auto w-full max-w-5xl">{children}</div>
+                  <div className="mx-auto w-full max-w-5xl">
+                    {children}
+                    {session === 'signed-in' &&
+                      navigationPathname({ locale: getLocale(), pathname: location.pathname }) === '/settings' && (
+                        <section
+                          id="account-tools"
+                          aria-labelledby="account-tools-heading"
+                          className="mt-8 scroll-mt-20 border-t border-border/60 pt-6"
+                        >
+                          <h2 id="account-tools-heading" className="mb-3 text-lg font-semibold">
+                            {m.shell_account_tools()}
+                          </h2>
+                          <NavigationLinks
+                            context={{ locale: getLocale(), pathname: location.pathname }}
+                            session={session}
+                            placement="account-tools"
+                            label={m.shell_account_tools()}
+                            className="grid min-w-0 gap-1 sm:grid-cols-2"
+                          />
+                        </section>
+                      )}
+                  </div>
                 </SidebarInset>
               </div>
               <PhoneNavigation

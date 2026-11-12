@@ -7,6 +7,10 @@ import { planReads, platformRegistry, type CompositionDocument } from '@rezics/c
 import platform from '@rezics/composition/profiles/platform.json';
 import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject.tsx';
 import type { PageMessages } from '../src/features/pages/data.tsx';
+import { RatingsPreviewContext } from '../src/features/pages/subject-ratings-view';
+import { GLOBAL, QUESTION, type RatingSources } from '../src/features/pages/subject-ratings';
+import { subjectTabs } from '../src/features/pages/views';
+import { SubjectCommunityRegion } from '../src/features/pages/subject-community-view';
 
 const subjectId = '01a1740d-7480-71e4-841f-66c04022d7d0';
 const authorId = '01a1740d-7480-71e4-841f-66c04022d7d1';
@@ -386,4 +390,132 @@ test("a value or entry above the reader's spoiler level is hidden behind a revea
   expect(render(withheld, 'en', { reader: { spoilerLevel: 0, suitability: 'show' } })).not.toContain(
     'data-state="withheld"',
   );
+});
+
+test('Book Overview puts the admitted rating and reading action by identity, then synopsis and three real reviews', () => {
+  const synopsis = 'A pilot meets a young traveller in the desert.';
+  const page = pageOf({
+    subject: subject([
+      statement('schema:author', 'wikibase-item', value(authorId)),
+      statement('schema:abstract', 'document', value(document(synopsis))),
+    ]),
+    summary: summary(['schema:Book', 'schema:CreativeWork']),
+  });
+  page.views = ['overview', 'relations', 'reviews', 'discussion', 'editions', 'details'];
+  // Even an entirely fitting relation preview now belongs on the canonical Relations route.
+  const related = '01a1740d-7480-71e4-841f-66c04022d7f0';
+  const plan = planReads(platformRegistry, page.document as CompositionDocument, { subject: subjectId });
+  for (const [key, planned] of Object.entries(plan.reads)) {
+    if (planned.kind === 'links')
+      page.reads[key] = {
+        status: 200,
+        body: {
+          links: [{ subject: related, property: planned.property, label: 'A related edition' }],
+          count: { value: 1, exact: true },
+          next: null,
+        },
+      };
+  }
+  page.community = {
+    now: '2026-11-01T00:00:00Z',
+    authors: {},
+    regions: {
+      review: {
+        state: 'ready',
+        next: 'native-next',
+        context: { subjectId, subjectLabel: 'The Little Prince', place: { kind: 'global', id: GLOBAL } },
+        reactionsAsOf: { epoch: 1, position: '1' },
+        threads: Array.from({ length: 5 }, (_, index) => ({
+          id: `review-${index}`,
+          title: `Admitted review ${index}`,
+          summary: `Reader impression ${index}`,
+          boardId: 'book-board',
+          authorId,
+          createdAt: '2026-10-31T00:00:00Z',
+          licence: 'CC-BY-4.0',
+          voteCitation: null,
+          reactions: {},
+        })),
+      },
+    },
+  };
+  const ratings: RatingSources = {
+    question: { kind: 'absent' },
+    global: { kind: 'absent' },
+    statistics: { kind: 'absent' },
+    figure: {
+      kind: 'ready',
+      value: {
+        questionId: QUESTION,
+        populationId: GLOBAL,
+        scale: { min: 0, max: 20, displayStep: 1 },
+        count: 12,
+        state: 'ready',
+        mean: 8.4,
+        score: 7.9,
+      },
+    },
+  };
+  const tabs = subjectTabs(page);
+  expect(tabs.some(({ view }) => view === 'relations')).toBe(true);
+  const html = renderToString(
+    createElement(
+      RatingsPreviewContext.Provider,
+      { value: ratings },
+      createElement(SubjectPage, {
+        page,
+        locale: 'en',
+        messages,
+        renderJsonLd: false,
+        tabs,
+        tabLabels: {
+          views: 'Subject views',
+          names: {
+            overview: 'Overview',
+            relations: 'Relations',
+            reviews: 'Reviews',
+            discussion: 'Discussion',
+            editions: 'Editions',
+            details: 'Details',
+          },
+        } as never,
+        actions: () => createElement('a', { href: '/en/library', 'data-slot': 'reading-action' }, 'My reading'),
+      }),
+    ),
+  );
+  expect(html).toContain('data-slot="book-overview"');
+  expect(html).toContain('Antoine de Saint-Exupéry');
+  expect(html).toContain('8.4');
+  expect(html).toContain('12');
+  expect(html.indexOf('data-slot="book-identity-ratings"')).toBeLessThan(html.indexOf('data-slot="reading-action"'));
+  expect(html.indexOf('data-slot="reading-action"')).toBeLessThan(html.indexOf(synopsis));
+  expect(html.indexOf(synopsis)).toBeLessThan(html.indexOf('Admitted review 0'));
+  expect(html).not.toContain('data-slot="summary-disclosure"');
+  for (const index of [0, 1, 2]) expect(html).toContain(`Admitted review ${index}`);
+  for (const index of [3, 4]) expect(html).not.toContain(`Admitted review ${index}`);
+  expect(html).not.toContain('data-slot="community-next"');
+  expect(html).not.toContain('data-slot="work-franchise"');
+  expect(html).not.toContain('A related edition');
+  expect(html).toContain('data-view="relations"');
+  expect(html).toContain(`/en/subjects/${subjectId}/${slug('The Little Prince')}/relations`);
+  expect(html).toContain('data-slot="see-all"');
+  // Rendering the preview does not mutate or consume its retained native window.
+  expect(page.community.regions.review?.state === 'ready' && page.community.regions.review.threads).toHaveLength(5);
+  const region = page.community.regions.review!;
+  const full = renderToString(
+    createElement(SubjectCommunityRegion, {
+      id: 'full-reviews',
+      kind: 'review',
+      region,
+      authors: {},
+      now: page.community.now,
+      subject: { id: subjectId, label: 'The Little Prince' },
+      locale: 'en',
+      href: `/en/subjects/${subjectId}/the-little-prince/reviews`,
+      paged: true,
+      previewLimit: 3,
+    }),
+  );
+  for (const index of [0, 1, 2, 3, 4]) expect(full).toContain(`Admitted review ${index}`);
+  expect(full).toContain('data-slot="community-next"');
 });

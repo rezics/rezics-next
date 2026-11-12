@@ -49,7 +49,7 @@ beforeAll(async () => {
   noise = await f.createSubject('game');
   subjects = [];
   for (let n = 0; n < 101; n++) subjects.push(await f.createSubject('game'));
-  client = await createWorkClient(db.url, db.openPool());
+  client = await createWorkClient(db.url, db.pool);
   work = await composeWork(
     [
       libraryWorkModule,

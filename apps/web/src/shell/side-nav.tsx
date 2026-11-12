@@ -1,7 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
-import { ChevronDown, Globe, Users } from 'lucide-react';
+import { Globe, Settings2, Users } from 'lucide-react';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { useReaderCurrentOrigin } from '../session/reader';
@@ -32,49 +31,39 @@ export function SideNav({
   const context = { locale, pathname };
   return (
     <section aria-label={m.library_following_heading()} className="mt-3 min-w-0 border-t border-border/60 pt-3">
-      {(['realm', 'space'] as const).map((kind) => (
-        <section key={kind} aria-label={kind === 'realm' ? m.realms_heading() : m.library_following_spaces()}>
-          <Collapsible defaultOpen>
-            <h2>
-              <CollapsibleTrigger className="group/community flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3 text-start text-xs font-semibold text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                {m.library_following_heading()} · {kind === 'realm' ? m.realms_heading() : m.library_following_spaces()}
-                <ChevronDown
-                  aria-hidden
-                  className="size-4 shrink-0 transition-transform duration-150 group-aria-expanded/community:rotate-180 motion-reduce:transition-none"
-                />
-              </CollapsibleTrigger>
-            </h2>
-            <CollapsibleContent>
-              <ul className="grid min-w-0 gap-1">
-                {items
-                  .filter((item) => item.kind === kind)
-                  .map((item) => {
-                    const Icon = kind === 'realm' ? Globe : Users;
-                    const current =
-                      navigationPathMatches(context, item.path, 'prefix') ||
-                      (!!item.alternatePath && navigationPathMatches(context, item.alternatePath, 'prefix'));
-                    return (
-                      <li key={item.id} className="min-w-0">
-                        <a
-                          href={`/${locale}${item.path}`}
-                          title={item.title}
-                          aria-current={current ? 'page' : undefined}
-                          className="flex min-h-11 min-w-0 items-center gap-3 rounded-xl px-3 text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:font-semibold aria-[current=page]:text-primary"
-                        >
-                          <Icon aria-hidden="true" className="size-4 shrink-0 text-primary" />
-                          <span data-community-label className="truncate">
-                            {item.title}
-                          </span>
-                        </a>
-                      </li>
-                    );
-                  })}
-              </ul>
-            </CollapsibleContent>
-          </Collapsible>
-        </section>
-      ))}
+      <h2 className="px-3 pb-2 text-xs font-semibold text-muted-foreground">{m.library_following_heading()}</h2>
+      <ul className="grid min-w-0 gap-1">
+        {items.map((item) => {
+          const Icon = item.kind === 'realm' ? Globe : Users;
+          const current = navigationPathMatches(context, item.path, 'prefix');
+          return (
+            <li key={item.id} className="min-w-0">
+              <a
+                href={`/${locale}${item.path}`}
+                title={item.title}
+                aria-current={current ? 'page' : undefined}
+                className="flex min-h-11 min-w-0 items-center gap-3 rounded-xl px-3 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:font-semibold aria-[current=page]:text-primary"
+              >
+                <Icon aria-hidden="true" className="size-4 shrink-0 text-sidebar-primary" />
+                <span data-community-label lang={item.titleLanguage} className="truncate">
+                  {item.title}
+                </span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
       <div data-community-footer>{footer}</div>
+      <a
+        href={`/${locale}/library/following`}
+        title={m.shell_manage_following()}
+        className="mt-1 flex min-h-11 min-w-0 items-center gap-3 rounded-xl px-3 text-sm text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Settings2 aria-hidden="true" className="size-4 shrink-0" />
+        <span data-community-label className="truncate">
+          {m.shell_manage_following()}
+        </span>
+      </a>
     </section>
   );
 }
@@ -127,12 +116,6 @@ function FollowedCommunities({ children }: { children: ReactNode }) {
                   ? m.library_following_page_empty()
                   : null}
           </p>
-          <a
-            className="mt-2 inline-flex min-h-11 items-center text-sm text-primary hover:underline"
-            href={`/${locale}/library/following`}
-          >
-            {m.library_following_heading()}
-          </a>
         </div>
       }
     />

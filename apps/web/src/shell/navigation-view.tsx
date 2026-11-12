@@ -1,11 +1,13 @@
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { FileText, Folders, House, Inbox, Library, ReceiptText, Search, ShieldCheck } from 'lucide-react';
+import { FilePenLine, FileText, Folders, House, Inbox, Library, ReceiptText, Search, ShieldCheck } from 'lucide-react';
 import { useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { bookCatalogueNavigation } from '../books/catalogue/navigation';
 import {
   createNavigation,
   resolveNavigation,
+  navigationForPlacement,
+  type NavigationPlacement,
   type NavigationContext,
   type NavigationContribution,
   type NavigationSession,
@@ -82,6 +84,17 @@ export const defaultNavigation = createNavigation([
     signedIn: true,
   },
   {
+    id: 'shell.studio',
+    kind: 'navigation',
+    group: 'personal',
+    order: 16,
+    href: '/studio',
+    label: ({ locale }) => m.own_drafts_open_studio({}, { locale }),
+    icon: FilePenLine,
+    signedIn: true,
+    match: 'prefix',
+  },
+  {
     id: 'shell.inbox',
     kind: 'navigation',
     group: 'personal',
@@ -136,12 +149,14 @@ export function NavigationEntries({
   session,
   kind,
   desktop = false,
+  placement = 'contextual',
   children,
 }: {
   context: NavigationContext;
   session: NavigationSession;
   kind?: NavigationContribution['kind'];
   desktop?: boolean;
+  placement?: NavigationPlacement;
   children: (entry: ResolvedNavigationEntry) => ReactNode;
 }) {
   const entries = useContext(NavigationContextValue);
@@ -150,7 +165,7 @@ export function NavigationEntries({
     () => true,
     () => false,
   );
-  return resolveNavigation(entries, context).map((entry) => {
+  return resolveNavigation(navigationForPlacement(entries, placement, session), context).map((entry) => {
     if ((kind && entry.kind !== kind) || (entry.desktopOnly && !desktop)) return null;
     if (entry.signedIn && (!hydrated || session !== 'signed-in')) {
       return entry.retainWhenUnavailable ? (

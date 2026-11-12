@@ -1,3 +1,5 @@
+import { knowledgeDiscoveryRoutes } from '../http.ts';
+import type { KeyRing } from '../../tokens/seal.ts';
 import { memoizedValue } from '../../memoized.ts';
 import { TextDiagnosticSchema } from './text-diagnostic.ts';
 export { FactSchema } from './catalogue.ts';
@@ -76,6 +78,7 @@ export function searchRoutes<App>(
     access,
     gateAccess,
     clock = systemClock,
+    tokens,
   }: {
     pool: Pool;
     routeKey: Uint8Array;
@@ -84,6 +87,7 @@ export function searchRoutes<App>(
     access?: Access | AccessFactory;
     gateAccess?: () => Access;
     clock?: KernelClock;
+    tokens?: KeyRing;
   },
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
@@ -99,7 +103,13 @@ export function searchRoutes<App>(
   const { fill, publicBases } = catalogueResponses;
 
   const trending = createTrendingSearchesService({ pool, clock });
-  const routed = (app as ReturnType<typeof createApp>)
+  const mounted = knowledgeDiscoveryRoutes(app, {
+    pool,
+    ...(tokens ? { tokens } : {}),
+    access: routeAccess,
+    now: () => clock().getTime(),
+  });
+  const routed = (mounted as ReturnType<typeof createApp>)
     .model('PublicFigure', PublicFigureSchema)
     .get(
       '/v1/trendingSearches',
@@ -619,5 +629,5 @@ export function searchRoutes<App>(
       },
     );
   actionCatalogueApp = routed as Parameters<typeof actionCatalogue>[0];
-  return routed as typeof routed & App;
+  return routed as typeof routed & typeof mounted & App;
 }

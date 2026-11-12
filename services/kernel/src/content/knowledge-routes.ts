@@ -1,3 +1,5 @@
+import { copyKnowledgeDocument, exportKnowledgeDocument, serializeKnowledgeExport } from './knowledge-transfer.ts';
+import { KnowledgeExportSchema } from './knowledge-portable.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '@rezics/operations/protocol';
@@ -36,6 +38,8 @@ import {
 } from './knowledge-reads.ts';
 import {
   KnowledgeCommandResponseSchema,
+  KnowledgeCopySchema,
+  KnowledgeOwnerExportQuerySchema,
   KnowledgeDocumentCreateSchema,
   KnowledgeDocumentReviseSchema,
   KnowledgeExactReadQuerySchema,
@@ -254,7 +258,7 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
       '/v1/accounts/:accountId/knowledge/notebooks/:notebookId/documents/:documentId',
       {
         params: privateParams(),
-        query: strictContentSchema(t.Object({}, { additionalProperties: false })),
+        query: strictContentSchema(KnowledgeExactReadQuerySchema),
         response: {
           200: withHeaders(strictContentSchema(KnowledgePrivateDocumentSchema), responseHeaders),
           ...failures(),
@@ -266,13 +270,116 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
           security: writeSecurity,
         },
       },
-      async ({ params: { accountId, notebookId, documentId }, actor, admission, job, session, set }) => {
+      async ({ params: { accountId, notebookId, documentId }, query, actor, admission, job, session, set }) => {
         const result = await operation(() =>
           admission.run('normal', job, () =>
-            readKnowledgePrivateDocument(deps, accountId, notebookId, documentId, { actor, deadline: job.deadline }),
+            readKnowledgePrivateDocument(
+              deps,
+              accountId,
+              notebookId,
+              documentId,
+              { actor, deadline: job.deadline },
+              query.revisionId,
+            ),
           ),
         );
         for (const anchor of result.anchors) session.record(sessionComponent(anchor));
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .get(
+      '/v1/knowledge/documents/:id/export',
+      {
+        params: idParams(),
+        query: strictContentSchema(KnowledgeExactReadQuerySchema),
+        response: {
+          200: withHeaders(strictContentSchema(KnowledgeExportSchema), responseHeaders),
+          ...failures(),
+        },
+        detail: {
+          operationId: 'knowledge_document.public_export',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          'x-resource-types': ['semantic.subject'],
+          security: readSecurity,
+        },
+      },
+      async ({ params: { id }, query, actor, admission, job, session }) => {
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            exportKnowledgeDocument(
+              deps,
+              { representation: 'public', documentId: id, ...query },
+              { actor, deadline: job.deadline },
+            ),
+          ),
+        );
+        for (const anchor of result.anchors) session.record(sessionComponent(anchor));
+        return new Response(serializeKnowledgeExport(result.value), {
+          headers: { 'content-type': 'application/json', 'cache-control': 'private, no-store' },
+        });
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/knowledge/notebooks/:notebookId/documents/:documentId/export',
+      {
+        params: privateParams(),
+        query: strictContentSchema(KnowledgeOwnerExportQuerySchema),
+        response: {
+          200: withHeaders(strictContentSchema(KnowledgeExportSchema), responseHeaders),
+          ...failures(),
+        },
+        detail: {
+          operationId: 'knowledge_document.own_export',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: writeSecurity,
+        },
+      },
+      async ({ params, query, actor, admission, job, session }) => {
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            exportKnowledgeDocument(
+              deps,
+              { representation: 'authoring', ...params, revisionId: query.revisionId },
+              { actor, deadline: job.deadline },
+            ),
+          ),
+        );
+        for (const anchor of result.anchors) session.record(sessionComponent(anchor));
+        return new Response(serializeKnowledgeExport(result.value), {
+          headers: { 'content-type': 'application/json', 'cache-control': 'private, no-store' },
+        });
+      },
+    )
+    .post(
+      customMethod('/v1/knowledge/notebooks/:id/documents', 'copy'),
+      {
+        params: idParams(),
+        headers,
+        body: strictContentSchema(KnowledgeCopySchema),
+        response: {
+          201: withHeaders(strictContentSchema(KnowledgeCommandResponseSchema), responseHeaders),
+          ...failures(),
+        },
+        detail: {
+          operationId: 'knowledge_document.copy',
+          'x-exposure': 'public',
+          'x-action': 'account:update',
+          'x-rate-limit': writeRate(),
+          security: writeSecurity,
+        },
+      },
+      async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
+        requireAccount(actor);
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            copyKnowledgeDocument(deps, actor, id, body, commandContext(request, job.deadline)),
+          ),
+        );
+        session.record(result);
+        set.status = 201;
         set.headers['cache-control'] = 'private, no-store';
         return result.value;
       },

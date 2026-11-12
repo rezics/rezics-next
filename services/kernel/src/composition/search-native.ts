@@ -8,6 +8,7 @@ import {
 import { deadlineClient } from '../access/authenticate.ts';
 import { readErasureStatus, recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
 import { SPACE_DISCOVERY_NATIVE_EVENTS, spaceDiscoveryInvalidation } from '../community/space-discovery.ts';
+import { createKnowledgeDiscoverySource } from '../content/index.ts';
 import { createRealmSubjectSource } from '../content/realm-subject-source.ts';
 import {
   REVIEW_DISCOVERY_PAGE_LIMIT,
@@ -116,6 +117,7 @@ export function composeSearchNativePorts(): SearchNativePorts {
     createPublicIdentitySourceCapture,
     createRealmSubjectSource,
     createReviewDiscoverySource,
+    createKnowledgeDiscoverySource,
     createSubjectSourceKeyPages,
     currentReadSnapshot,
     deadlineClient,

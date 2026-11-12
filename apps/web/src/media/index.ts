@@ -11,16 +11,16 @@ export async function mediaRequest(
   bindings: Partial<MediaEnv & LocalMediaBindings> = {},
 ): Promise<Response> {
   try {
+    const localMedia =
+      bindings.LOCAL_MEDIA_ORIGIN && bindings.LOCAL_MEDIA_TOKEN
+        ? localMediaStorage({
+            LOCAL_MEDIA_ORIGIN: bindings.LOCAL_MEDIA_ORIGIN,
+            LOCAL_MEDIA_TOKEN: bindings.LOCAL_MEDIA_TOKEN,
+          })
+        : undefined;
     const env = {
       ...bindings,
-      MEDIA:
-        bindings.MEDIA ??
-        (bindings.LOCAL_MEDIA_ORIGIN && bindings.LOCAL_MEDIA_TOKEN
-          ? localMediaStorage({
-              LOCAL_MEDIA_ORIGIN: bindings.LOCAL_MEDIA_ORIGIN,
-              LOCAL_MEDIA_TOKEN: bindings.LOCAL_MEDIA_TOKEN,
-            })
-          : undefined),
+      MEDIA: localMedia ?? bindings.MEDIA,
     };
     if (!env.MEDIA || !env.KERNEL_ORIGIN) throw dependencyUnavailable(503);
     const pathname = new URL(request.url).pathname;

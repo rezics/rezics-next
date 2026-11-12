@@ -1,3 +1,8 @@
+import {
+  validateKnowledgeReferences,
+  type KnowledgeReference,
+  type KnowledgeProvenance,
+} from './knowledge-portable.ts';
 import type { AccessClient, Actor } from '../request/access.ts';
 import {
   authoritativeTimeValue,
@@ -99,6 +104,7 @@ type StoredBody = Readonly<{
   subjectIds: readonly string[];
   title: string;
   language: string | null;
+  references: readonly KnowledgeReference[];
 }>;
 
 function storedBody(input: KnowledgeDocumentInput): StoredBody {
@@ -122,6 +128,7 @@ function storedBody(input: KnowledgeDocumentInput): StoredBody {
     subjectIds: validated.subjectIds,
     title: input.title,
     language: input.language ?? null,
+    references: validateKnowledgeReferences(validated.snapshot, input.references),
   };
 }
 
@@ -211,20 +218,46 @@ export async function createKnowledgeDocument(
   input: KnowledgeCreateDocumentInput,
   context: KnowledgeCommandContext,
 ) {
+  return writeKnowledgeDocument(deps, actor, notebookId, input, context, {
+    kind: 'content.knowledge.document.create',
+    receiptInput: input,
+    prepare: async () => ({ input, provenance: null }),
+  });
+}
+
+/** Shared destination path: account authority, structure CAS, ancestry, private insert, event and receipt. */
+export async function writeKnowledgeDocument(
+  deps: KnowledgeDependencies,
+  actor: Actor,
+  notebookId: string,
+  placement: Readonly<{ expectedStructureRevisionId: string; parentPlacementId: string | null }>,
+  context: KnowledgeCommandContext,
+  source: Readonly<{
+    kind: string;
+    receiptInput: unknown;
+    prepare: () => Promise<Readonly<{ input: KnowledgeDocumentInput; provenance: KnowledgeProvenance | null }>>;
+  }>,
+) {
   const route = routed(notebookId);
   const owner = await knowledgeNotebookOwner(deps.pool, notebookId);
   if (!owner || owner.route !== route) throw new KnowledgeNotFoundError();
   const ownerId = owner.owner_account_id;
   const authorization = await accountUpdateAuthorization(deps, actor, ownerId, context);
-  const document = storedBody(input);
+  let document: StoredBody;
+  let provenance: KnowledgeProvenance | null;
+  authorization.prepare = async () => {
+    const selected = await source.prepare();
+    document = storedBody(selected.input);
+    provenance = selected.provenance;
+  };
   const documentId = newId(route);
   const revisionId = newId(route);
   const placementId = newId(route);
   const structureRevisionId = newId(route);
-  const kind = 'content.knowledge.document.create';
+  const kind = source.kind;
   return runCommand(
     deps.pool,
-    commandOptions(actor, route, context, kind, documentId, input, authorization),
+    commandOptions(actor, route, context, kind, notebookId, source.receiptInput, authorization),
     async (tx, { transactionId, time }) => {
       const current = await tx.query<{ owner_account_id: string; structure_revision_id: string }>(
         `SELECT owner_account_id,structure_revision_id FROM content.knowledge_notebook
@@ -233,8 +266,9 @@ export async function createKnowledgeDocument(
       );
       const notebook = current.rows[0];
       if (!notebook || notebook.owner_account_id !== ownerId) throw new KnowledgeNotFoundError();
-      if (notebook.structure_revision_id !== input.expectedStructureRevisionId) throw new RevisionPreconditionError();
-      const parentId = input.parentPlacementId;
+      if (notebook.structure_revision_id !== placement.expectedStructureRevisionId)
+        throw new RevisionPreconditionError();
+      const parentId = placement.parentPlacementId;
       if (parentId !== null) {
         const path = await knowledgeAncestorPath(tx, route, notebookId, parentId);
         const parentPath: StableAncestor[] = path.map((item) => ({
@@ -257,8 +291,8 @@ export async function createKnowledgeDocument(
       );
       await tx.query(
         `INSERT INTO content.knowledge_revision
-          (route,document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids,author_account_id,recorded_transaction_id,created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          (route,document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids,author_account_id,recorded_transaction_id,created_at,reference_manifest,copy_provenance)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [
           route,
           documentId,
@@ -272,6 +306,8 @@ export async function createKnowledgeDocument(
           accountId(actor),
           transactionId,
           authoritativeTimeValue(time),
+          JSON.stringify(document.references),
+          provenance === null ? null : JSON.stringify(provenance),
         ],
       );
       await tx.query(
@@ -330,8 +366,9 @@ export async function reviseKnowledgeDocument(
       if (row.head_revision_id !== input.expectedHeadRevisionId) throw new RevisionPreconditionError();
       await tx.query(
         `INSERT INTO content.knowledge_revision
-          (route,document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids,author_account_id,recorded_transaction_id,created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          (route,document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids,author_account_id,recorded_transaction_id,created_at,reference_manifest,copy_provenance)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
+           (SELECT copy_provenance FROM content.knowledge_revision WHERE route=$1 AND document_id=$2 AND revision_id=$14))`,
         [
           owner.route,
           documentId,
@@ -345,6 +382,8 @@ export async function reviseKnowledgeDocument(
           accountId(actor),
           transactionId,
           authoritativeTimeValue(time),
+          JSON.stringify(document.references),
+          row.head_revision_id,
         ],
       );
       await tx.query(`UPDATE content.knowledge_document SET head_revision_id=$3 WHERE route=$1 AND document_id=$2`, [

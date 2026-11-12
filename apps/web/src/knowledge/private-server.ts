@@ -21,6 +21,8 @@ import {
   type KnowledgeRevisionCommand,
 } from './private-knowledge';
 
+import { selectKnowledgePublication } from './publication';
+
 const domain = 'rezics:knowledge-private-visit:v1';
 const tokenPattern = /^[A-Za-z0-9_-]{1,8192}$/;
 const commandKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -376,6 +378,30 @@ export const reviseKnowledgePrivateDocumentRequest = createServerFn({ method: 'P
     if ('state' in identity) return identity;
     try {
       return await reviseKnowledgePrivateDocument(kernelClient(), { ...data, authorization: identity.authorization });
+    } catch (error) {
+      return isPlatformClosedError(error) ? { state: 'unavailable', status: 503 } : { state: 'uncertain' };
+    }
+  });
+
+/** The existing prepared-session binding also fences publication and exact replay. */
+export const selectKnowledgePublicationRequest = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!record(value)) throw new Error('Invalid Knowledge publication command');
+    return {
+      ...commandBinding(value),
+      documentId: boundedId(value.documentId, 'document'),
+      expectedHeadRevisionId: boundedId(value.expectedHeadRevisionId, 'head revision'),
+      expectedPublicationId:
+        value.expectedPublicationId === null ? null : boundedId(value.expectedPublicationId, 'publication'),
+      revisionId: value.revisionId === null ? null : boundedId(value.revisionId, 'selected revision'),
+    };
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = await commandIdentity(data);
+    if ('state' in identity) return identity;
+    try {
+      return await selectKnowledgePublication(kernelClient(), { ...data, authorization: identity.authorization });
     } catch (error) {
       return isPlatformClosedError(error) ? { state: 'unavailable', status: 503 } : { state: 'uncertain' };
     }

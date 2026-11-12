@@ -14,6 +14,15 @@ Link each capability to its `docs/goals/<goal>.capabilities.md` evidence entry u
 states, viewers, viewports and their recorded API evidence. Missing user scenarios of a cross-Goal contract are frozen
 red before implementation; acceptance a Goal owns alone is written by its worker.
 
+## Release progress
+
+Report current release scope in two parts. Start with backend capabilities: for each unfinished outcome, give
+the remaining API logic, the smallest decisive [native API check](verification.md#capability-evidence), and its
+owner and evidence. Then report frontend integration and interaction: distinguish a missing API from a defect
+in how the client consumes a working API, and name the shared repair where applicable. Run independent frontend
+work in parallel against stable contracts. Report release qualification separately, with an estimate based on
+the current critical path. Archived scope and historical task counts do not measure current completion.
+
 ## Brief preflight
 
 The worker of product work on dev verifies every concrete premise of its brief against its base before it designs

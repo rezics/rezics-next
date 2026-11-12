@@ -31,6 +31,20 @@ every Context a page could be scored in. A layout with one block, tab or section
 those numbers; so does ranking that only works for a handful of Contexts. Show what the design renders and costs at
 the limit, not only in the fixture.
 
+## Information placement
+
+Use the default overview for the information or actions that help almost everyone complete the primary job
+(roughly 90 percent). Use a tab for a distinct, recurring journey that helps a large majority (roughly 70
+percent). These are design heuristics, not measured thresholds. Give less frequent material a single link to
+its owning page, or an inline disclosure when it still supports the current job. Do not duplicate a complete
+secondary list in an overview. For a Book, identity, synopsis, ratings and a small review sample help readers
+decide what to read; related works belong in their own view.
+
+Keep the global sidebar to a few essential destinations and a compact list of the user's actual subscriptions.
+A task-specific tool belongs in its owning view or menu. Read current destinations from the shared native
+follow contract; the shell neither creates another subscription model nor infers destinations from ownership.
+Treat future personalization as an extension of these placement policies, not a prerequisite for useful defaults.
+
 For all content, one of the core designs is that it is easy to extend and iterate: what content declares has a
 versioned specification, so it can be extended and changed without breaking what already exists. A kind's filter
 conditions and presentation are one example.

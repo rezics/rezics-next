@@ -80,10 +80,26 @@ scan of account homes. Direct public resolution is available as soon as the Cont
 not wait for Search acknowledgement. The native first-loop proof selects and reads one exact publication, then
 withdraws it while derived indexing is paused.
 
-The current Search Content source port exposes review discovery but has no Knowledge candidate-page contract. The
-first native loop therefore proves direct exact reads against current Content source authority; it does not claim
-subject useful-page discovery. Search must add its own bounded Knowledge candidate observation and preparation API
-before subject contribution pages are exposed.
+Decision: `GET /v1/subjects/:id/knowledgeDocuments` (`knowledge_document.discover`) supplies the native
+Subject candidate page under `gate:search`. Search indexes only explicit current publication identities through
+Content's native publication effect, with existing selected publications seeded at installation. Publication time
+(descending), document ID and publication ID fix ordering. A committed per-Subject receiving cut fixes membership
+for the visit. Post-cut rows spend the same bounded scan budget and are omitted; there is no SQL filter that can
+scan an unbounded newer population. This is coverage of the indexed association cut, not all native publications.
+
+Each step examines at most 128 candidates, retaining only nomination identities and its frontier until 20 permitted
+rows or exhaustion. Sparse steps return `202` and a confidential Search continuation bound to viewer, Subject and
+limit. No short successful intermediate page or total is returned. Prepared candidates are checked again through
+Content's metadata-only exact-current-publication seam and anonymous Subject authority on every continuation and
+before disclosure. Withdrawal/replacement closes an old row while receiving is paused. Missing source/index
+installation is unavailable; changed, expired or concurrently consumed progress restarts explicitly. Retention is
+15 minutes from initial capture, at most 256 active preparations per Subject; expiry cleanup is bounded to 100 rows
+per new retained chain. The index/preparation retain no body, account locator, private ancestry or permission result.
+
+The fewest focused tests pin fixed-cut publication ordering, sparse progress and exhaustion, stale selection
+omission, final-disclosure withdrawal, unavailable evidence and confidential viewer/query/expiry continuation.
+Native receiving/replay, Subject-access closure, paused-index withdrawal, exact navigation, SQL growth and mounted
+client/browser proof are deferred to the dev verifier. The direct native first-loop assertions remain unchanged.
 
 At account-erasure time, private notebook structure, attachments, heads, unselected revisions and owner links are
 erased. An eligible current publication retains only its selected immutable revision and permitted public fields as
@@ -93,7 +109,7 @@ the erasure fence has no retained public selection. Moderation and later source 
 retained contribution.
 
 Decision: the native first loop uses account-home notebooks, a 32-placement ancestor bound and exact current Content
-publication pointers for direct anonymous reads; Subject useful-page discovery waits for Search's bounded
+publication pointers for direct anonymous reads; Subject discovery uses Search's bounded
 candidate-preparation API, and erasure retains only eligible selected revisions in deidentified form.
 
 Decision: Knowledge create, revise, select and withdrawal commands commit registered domain events with native
@@ -105,6 +121,16 @@ Decision: Knowledge route metadata comes from the public Content adapter; import
 Decision: Web’s first public consumer is the localized `/knowledge/documents/$id` reader, with optional `revisionId`, over `knowledge_document.public_read`. Live and exact addresses stay distinct; null `authorId` is deidentified attribution; the primary Subject link uses the supplied id without a label lookup. The fewest focused Web tests pin live/exact rendering, native outcome states, malformed HTTP, one-read/no-store transport, retry operands, replacement fencing and copy feedback; directory, notebook, visual and browser proof stay with later Goals.
 
 Decision: Web creates a private notebook only after the writer reviews and submits its title, then holds the acknowledged notebook receipt separately while creating a root document. Private bodies, drafts, command intents and receipts live only in the current page visit; exact private heads are read directly by the prepared viewer and revision writes compare against that observed head.
+
+Decision: Web reviews only a captured saved current head before explicit single-document publication or update;
+withdrawal reviews the observed current publication identity. Confirmation freezes the document, expected head,
+expected publication, selected revision and prepared-session credential with one idempotency key. A changed private
+observation retires confirmation; conflict requires reread and fresh review while retaining the draft. Uncertain
+commands permit explicit exact replay only, and a matching read never acknowledges them. Native receipts, private
+current-head readback and independently admitted public reading remain separate. Acknowledged live and exact links
+retain the selected revision through later private saves and retire on withdrawal or changed publication identity.
+The fewest wire and mounted tests cover publish A, save B privately, update B, withdrawal, conflict, immutable replay
+and visit retirement; native, browser and visual proof remain with integration's seeded lane.
 
 Primary placements form a forest under one notebook root. A document has one primary placement there. Later reference
 placements can show the same document elsewhere without moving or copying it; they do not recursively acquire its
@@ -232,6 +258,28 @@ potentially lossy convenience. Import is a later feature, so a valid export is n
 Single-document copy uses the same permitted selected representation, creates new document/block/reference IDs,
 remaps source-local anchors, and retains exact external references and provenance. It never clones hidden revisions,
 target content, public grants or child documents. The copy starts private in the destination owner's notebook.
+
+Decision: native export uses canonical JSON only; Document currently provides Markdown import but no permitted
+Markdown exporter. Owner export requires an explicit revision ID; public export and copy use the same current
+publication disclosure as the public reader, even for the author. Copy requests pin an exact revision and use the
+destination notebook's existing account authority, structure CAS and receipt transaction. The versioned reference
+component is `rezics.knowledge.reference` version `1`, with only `{referenceId}` in its opaque payload; the revision
+stores the finite-role typed manifest separately. Missing targets become unavailable markers without target IDs.
+Block IDs, component IDs, reference IDs, manifest source anchors and local `#block` links are regenerated on copy;
+external exact locators and unrelated opaque payloads are preserved. Provenance retains the original permitted
+source selection, and public output withholds authoring-origin provenance. Knowledge has no media claim destination;
+public media nodes become unavailable markers and copy creates no media claims. Managed media and lifecycle
+acceptance remain with their owner integrations before opening the capability.
+
+The export digest is SHA-256 over RFC 8785 JSON of all envelope fields except `sha256`; `selection.sha256` hashes
+only the selected representation's canonical Document bytes. Both can be checked independently of storage. There
+is no timestamp or generated export identity to make repeated exports differ. `references` on create/revise is
+optional for existing clients; when supplied it is limited to 64 entries and must match the registered components
+one to one. Each entry has a local ID, finite role, optional source block and a subject, live document or exact
+revision/digest/optional-block target; `null` retains an unavailable citation. Target disclosure performs bounded
+metadata-only one-hop checks, never fetches target bodies and never follows their outgoing references. A stored
+block-ID projection derived from canonical Document child nodes checks exact block selections; a missing block is
+unavailable and never falls back to a nearby block.
 
 ## Access and lifecycle
 

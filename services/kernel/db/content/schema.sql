@@ -677,6 +677,26 @@ $$;
 
 
 --
+-- Name: knowledge_block_ids(bytea); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.knowledge_block_ids(bytes bytea) RETURNS text[]
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $$
+  WITH RECURSIVE nodes(value) AS (
+    SELECT convert_from(bytes, 'UTF8')::jsonb -> 'doc'
+    UNION ALL
+    SELECT child.value
+    FROM nodes
+    CROSS JOIN LATERAL jsonb_array_elements(COALESCE(nodes.value -> 'content', '[]'::jsonb)) child(value)
+  )
+  SELECT COALESCE(array_agg(value -> 'attrs' ->> 'id')
+    FILTER (WHERE value -> 'attrs' ->> 'id' IS NOT NULL), '{}'::text[])
+  FROM nodes;
+$$;
+
+
+--
 -- Name: media_routes_match(integer, uuid[]); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -1599,6 +1619,9 @@ CREATE TABLE content.knowledge_revision (
     author_account_id uuid,
     recorded_transaction_id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
+    reference_manifest jsonb DEFAULT '[]'::jsonb NOT NULL,
+    copy_provenance jsonb,
+    block_ids text[] GENERATED ALWAYS AS (content.knowledge_block_ids(canonical_bytes)) STORED,
     CONSTRAINT knowledge_revision_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
     CONSTRAINT knowledge_revision_canonical_bytes_check CHECK ((octet_length(canonical_bytes) <= 2097152)),
     CONSTRAINT knowledge_revision_check CHECK ((route = ((get_byte(uuid_send(document_id), 10) * 256) + get_byte(uuid_send(document_id), 11)))),

@@ -1,6 +1,6 @@
 SELECT d.route, d.document_id, d.current_publication_id,
        p.revision_id, p.subject_id, p.body_sha256 AS publication_sha256,
-       r.title, r.language, r.canonical_bytes, r.body_sha256, r.licence, r.subject_ids, r.author_account_id,
+       r.title, r.language, r.canonical_bytes, r.body_sha256, r.licence, r.subject_ids, r.author_account_id, r.reference_manifest, r.copy_provenance,
        p.published_at
 FROM content.knowledge_document d
 JOIN content.knowledge_publication p

@@ -42,6 +42,10 @@ composition, forwarding and constructor-identity tests preserve existing behavio
 Decision: the profile entry fixture composes its native Library domain once when lazy Access is ready, preserving its
 Pool, route key and selected clock for entry, session and growth commands through startup.
 
+Decision: retention fixtures pass the same caller-owned Pool object to `createWorkClient` and `composeWork` in each
+process; growth keeps one fresh Auth actor per owner, pairs only adjacent-partition actors, and commits archive and
+replacement work before capture while reporting the current phase and bounded pool counts.
+
 Decision: Collection directory/list/order authorization consumes Library `AuthorizationCapability.specializeCollectionList` and Access's funded collection-update preparation bound. Access adapters own the catalogue residual, permission SQL and inverse membership limit (1000); Library directory SQL binds only the admitted curator/public parameter map. Collection mutation and Progress descriptors stay independent. Fewest tests: owner/public/unavailable list outcomes, preparation memberships, directory public-floor bytes, unchanged order/read assertions.
 
 Decision: Progress HTTP fixtures build Access through Kernel's post-catalogue factory, preserving mounted Subject resource declarations and native composition ports; Subject creation requires both bearer scope and an ordinary identity grant on Global Context.
@@ -282,12 +286,15 @@ the key equalities keep the complete primary key visible to the planner. Active-
 after its fence and still names `progress_session_active`. Set, unassign, restore and rename select each named operand once in the one-row request
 and read those columns in the mutation WHERE.
 
-Decision: active-session point probes repeat route, account and subject scalar equalities beside their row bounds,
-keeping the complete partial-index key visible to generic plans. Entry-tile growth associates each captured sort with
-its declared statement and applies the request-key-only relation assertion only to a sort directly fed by the request
-key `generate_series`; every sort retains its bounded row/loop check and every statement remains costed. Active-shelf
-growth analyzes only `library.progress_session`; the 1/48 page requests, owner separation, three history populations
-and 64/512/4096 scales remain unchanged.
+Decision: Entry-tile and active-session Maps preserve first-seen request order after matching point-probe rows. Entry
+growth binds each sort to its captured statement and relation subtree: request-key sorts use requested subjects,
+Library entry/session point sorts use requested/present subjects, catalog-only sorts use their declared catalog
+statement classification under the catalog statement-count allowance, and other non-catalog sorts retain their
+page-work bound. Every statement remains costed. Active-shelf growth owns its seed and analysis connections, records
+bounded phase/backend evidence, bulk-loads valid synthetic rows with user triggers disabled while constraints and
+indexes remain active, and runs `ANALYZE` only on
+`library.progress_session`. The 1/48 page requests, owner separation, three history populations and 64/512/4096
+scales remain unchanged.
 
 Decision: Source capture, member preparation, owner-query preparation, publication, presentation, Entry/progress and funded Progress-operation planning/admission use
 one fake-capability application suite; ordinary composition binds the real Access, Semantic, Search and Content
