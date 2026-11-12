@@ -114,6 +114,7 @@ function stoppedTypingRetryFixture(
   const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, task.id, ref.attempt);
   const admitted = admitWorkerCheckHostRun({ directory: budget, worktree, limit: 2 });
   if (!admitted.ok) throw new Error(admitted.message);
+  if (!('stamp' in admitted)) throw new Error('Compiler fixture requires a stamped budget admission');
   const env: NodeJS.ProcessEnv = {
     GOAL_WORKER_CHECK_BUDGET: '2',
     GOAL_WORKER_CHECK_BUDGET_DIR: budget,
