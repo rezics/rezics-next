@@ -716,6 +716,35 @@ $$;
 
 
 --
+-- Name: knowledge_document_eligible(integer, uuid, boolean); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.knowledge_document_eligible(selected_route integer, selected_document uuid, include_trashed_target boolean DEFAULT false) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+  WITH RECURSIVE path AS (
+    SELECT p.notebook_id, p.placement_id, p.parent_id, 0 AS depth,
+           (d.deleted_at IS NULL OR include_trashed_target)
+             AND d.purge_started_at IS NULL AND NOT d.purge_completed AS eligible
+    FROM content.knowledge_document d
+    JOIN content.knowledge_placement p
+      ON p.route=d.route AND p.notebook_id=d.notebook_id AND p.document_id=d.document_id
+    WHERE d.route=selected_route AND d.document_id=selected_document
+    UNION ALL
+    SELECT p.notebook_id, p.placement_id, p.parent_id, child.depth+1,
+           d.deleted_at IS NULL AND d.purge_started_at IS NULL AND NOT d.purge_completed
+    FROM path child
+    JOIN content.knowledge_placement p
+      ON p.route=selected_route AND p.notebook_id=child.notebook_id AND p.placement_id=child.parent_id
+    JOIN content.knowledge_document d
+      ON d.route=p.route AND d.notebook_id=p.notebook_id AND d.document_id=p.document_id
+    WHERE child.depth<31
+  )
+  SELECT COALESCE(bool_and(eligible) AND bool_or(parent_id IS NULL), false) FROM path;
+$$;
+
+
+--
 -- Name: mark_hosted_locator_pending(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -1604,8 +1633,16 @@ CREATE TABLE content.knowledge_document (
     current_publication_id uuid,
     created_transaction_id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
+    lifecycle_generation bigint DEFAULT 0 NOT NULL,
+    deleted_at timestamp with time zone,
+    purge_started_at timestamp with time zone,
+    purge_completed boolean DEFAULT false NOT NULL,
+    legal_hold boolean DEFAULT false NOT NULL,
     CONSTRAINT knowledge_document_check CHECK ((route = ((get_byte(uuid_send(document_id), 10) * 256) + get_byte(uuid_send(document_id), 11)))),
     CONSTRAINT knowledge_document_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT knowledge_document_deleted_at_check CHECK (((deleted_at IS NULL) OR isfinite(deleted_at))),
+    CONSTRAINT knowledge_document_lifecycle_generation_check CHECK ((lifecycle_generation >= 0)),
+    CONSTRAINT knowledge_document_purge_started_at_check CHECK (((purge_started_at IS NULL) OR isfinite(purge_started_at))),
     CONSTRAINT knowledge_document_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
@@ -1665,9 +1702,11 @@ CREATE TABLE content.knowledge_publication (
     body_sha256 bytea NOT NULL,
     recorded_transaction_id uuid NOT NULL,
     published_at timestamp with time zone NOT NULL,
+    lifecycle_generation bigint DEFAULT 0 NOT NULL,
     CONSTRAINT knowledge_publication_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
     CONSTRAINT knowledge_publication_check CHECK ((route = ((get_byte(uuid_send(document_id), 10) * 256) + get_byte(uuid_send(document_id), 11)))),
     CONSTRAINT knowledge_publication_check1 CHECK ((route = ((get_byte(uuid_send(publication_id), 10) * 256) + get_byte(uuid_send(publication_id), 11)))),
+    CONSTRAINT knowledge_publication_lifecycle_generation_check CHECK ((lifecycle_generation >= 0)),
     CONSTRAINT knowledge_publication_published_at_check CHECK (isfinite(published_at)),
     CONSTRAINT knowledge_publication_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
