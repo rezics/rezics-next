@@ -182,6 +182,7 @@ export declare function CONTENT_EVENTS(): {
         watchId: Type.TString;
     }>;
     readonly 'com.rezics.content.own-drafts.repaired.v1': Type.TObject<{}>;
+    readonly 'com.rezics.content.hosted-catalogue.locator-repaired.v1': Type.TObject<{}>;
     readonly 'com.rezics.content.board.slow-mode.changed.v1': Type.TObject<{
         boardId: Type.TString;
         intervalSeconds: Type.TInteger;

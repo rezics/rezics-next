@@ -75,12 +75,12 @@ export type HostedReadSelection = Readonly<{
     revisionId?: string;
     kind?: 'structure' | 'publication';
 }>;
-/** Inventory covers only the acting account's route. A complete cross-home
- * catalogue locator is not installed; an empty home page proves nothing abroad. */
+/** Same-home retains its original identity; all-homes states whether the native
+ * locator census and this author's outstanding source projections are complete. */
 export type HostedOwnerInventoryScope = Readonly<{
-    kind: 'same-home';
+    kind: 'same-home' | 'all-homes';
     route: number;
-    crossHome: 'unavailable';
+    crossHome: 'unavailable' | 'partial' | 'complete';
 }>;
 export type HostedOwnerInventoryInput = Readonly<{
     scope?: 'same-home' | 'all-homes';

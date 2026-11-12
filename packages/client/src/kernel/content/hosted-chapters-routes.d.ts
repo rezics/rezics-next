@@ -18502,9 +18502,9 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                         response: {
                             200: {
                                 scope: {
-                                    kind: "same-home";
+                                    kind: "all-homes" | "same-home";
                                     route: number;
-                                    crossHome: "unavailable";
+                                    crossHome: "complete" | "partial" | "unavailable";
                                 };
                                 viewer: {
                                     accountId: string;
@@ -18655,9 +18655,9 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                             response: {
                                 200: {
                                     scope: {
-                                        kind: "same-home";
+                                        kind: "all-homes" | "same-home";
                                         route: number;
-                                        crossHome: "unavailable";
+                                        crossHome: "complete" | "partial" | "unavailable";
                                     };
                                     viewer: {
                                         accountId: string;

@@ -182,6 +182,7 @@ export declare function contentDeclaredEvents(): Readonly<{
         watchId: import("typebox").TString;
     }>;
     'com.rezics.content.own-drafts.repaired.v1': import("typebox").TObject<{}>;
+    'com.rezics.content.hosted-catalogue.locator-repaired.v1': import("typebox").TObject<{}>;
     'com.rezics.content.board.slow-mode.changed.v1': import("typebox").TObject<{
         boardId: import("typebox").TString;
         intervalSeconds: import("typebox").TInteger;

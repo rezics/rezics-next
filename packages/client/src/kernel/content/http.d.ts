@@ -18518,9 +18518,9 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                             response: {
                                 200: {
                                     scope: {
-                                        kind: "same-home";
+                                        kind: "all-homes" | "same-home";
                                         route: number;
-                                        crossHome: "unavailable";
+                                        crossHome: "complete" | "partial" | "unavailable";
                                     };
                                     viewer: {
                                         accountId: string;
@@ -18671,9 +18671,9 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                                 response: {
                                     200: {
                                         scope: {
-                                            kind: "same-home";
+                                            kind: "all-homes" | "same-home";
                                             route: number;
-                                            crossHome: "unavailable";
+                                            crossHome: "complete" | "partial" | "unavailable";
                                         };
                                         viewer: {
                                             accountId: string;

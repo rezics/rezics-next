@@ -8448,11 +8448,18 @@
                       "additionalProperties": false,
                       "properties": {
                         "crossHome": {
-                          "const": "unavailable",
+                          "enum": [
+                            "unavailable",
+                            "partial",
+                            "complete"
+                          ],
                           "type": "string"
                         },
                         "kind": {
-                          "const": "same-home",
+                          "enum": [
+                            "same-home",
+                            "all-homes"
+                          ],
                           "type": "string"
                         },
                         "route": {
@@ -9531,11 +9538,18 @@
                       "additionalProperties": false,
                       "properties": {
                         "crossHome": {
-                          "const": "unavailable",
+                          "enum": [
+                            "unavailable",
+                            "partial",
+                            "complete"
+                          ],
                           "type": "string"
                         },
                         "kind": {
-                          "const": "same-home",
+                          "enum": [
+                            "same-home",
+                            "all-homes"
+                          ],
                           "type": "string"
                         },
                         "route": {

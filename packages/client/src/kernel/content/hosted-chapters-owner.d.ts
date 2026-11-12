@@ -1,7 +1,7 @@
 import type { ReadContext } from './model.ts';
 import { type HostedDependencies, type HostedOwnerInventoryInput, type HostedOwnerInventoryEntry, type HostedOwnerInventoryScope } from './hosted-chapters-model.ts';
-/** <=21 actual owned catalogue records from one source route, <=20 native
- * disclosures. Denied or changed records consume their slots; never refill. */
+/** <=21 indexed raw candidates, <=20 native disclosures. Hidden or changed
+ * sources consume their slots. The raw encrypted boundary continues sparse pages. */
 export declare function listOwnHostedCatalogues(deps: HostedDependencies, accountId: string, context: ReadContext, input?: HostedOwnerInventoryInput): Promise<{
     value: Readonly<{
         scope: HostedOwnerInventoryScope;
@@ -18,15 +18,14 @@ export declare function listOwnHostedCatalogues(deps: HostedDependencies, accoun
         position: bigint;
     }>[];
 }>;
-/** Resolve one inventory entry within its declared scope, without a supplied
- * thread or ownership claim. Existing hosted reads still accept known remote IDs;
- * this directory never infers cross-home coverage from those exact reads. */
+/** An exact owner selection needs no locator coverage claim. Native membership,
+ * author and revise authority are proved in the catalogue's own current home. */
 export declare function readOwnHostedCatalogue(deps: HostedDependencies, accountId: string, catalogueId: string, context: ReadContext): Promise<{
     value: {
         scope: Readonly<{
-            kind: 'same-home';
+            kind: 'same-home' | 'all-homes';
             route: number;
-            crossHome: 'unavailable';
+            crossHome: 'unavailable' | 'partial' | 'complete';
         }>;
         viewer: {
             accountId: string;
