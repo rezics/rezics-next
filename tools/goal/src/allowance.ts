@@ -273,11 +273,7 @@ export function choosePool(
 }
 
 /** Apply the same freshness, reserve, pacing and occupancy rules to one already selected pool. */
-export function poolAllowed(
-  pool: Pool,
-  readings: readonly PoolReading[],
-  options: PoolSelectionOptions = {},
-): boolean {
+export function poolAllowed(pool: Pool, readings: readonly PoolReading[], options: PoolSelectionOptions = {}): boolean {
   const now = options.now ?? Date.now();
   const spanMs = options.spanMs ?? defaultPolicy.pacing.burnSpanMs;
   return (
@@ -290,6 +286,20 @@ export function poolAllowed(
       options.running ?? {},
       options.ignoreBurnCeiling === true,
     ) !== null
+  );
+}
+
+/** A mailbox wake can use the manager reserve and is independent of worker pacing and slots. */
+export function managerWakePoolAllowed(
+  pool: Pool,
+  readings: readonly PoolReading[],
+  policy?: ControlPolicy['provider'],
+): boolean {
+  const { maxConcurrent: _workerSlots, ...rest } = pool.policy;
+  return poolAllowed(
+    { ...pool, policy: { ...rest, reservePercent: 0, reservePerHour: 0, allowUnknown: true } },
+    readings,
+    { policy, ignoreBurnCeiling: true },
   );
 }
 

@@ -249,23 +249,29 @@ Dispatch waits without a model for the child to exit, records its tokens and quo
 enqueues its landing request, and starts the train. Requests targeting `main` use the `train-main.lease`; other
 requests use `train.lease`. The two lanes select and order their own requests. Existing dev backlog drains first. An ordinary control-plane
 release, while holding the main lane, borrows the existing dev lane only when its queue is empty, before capturing
-refs or forming its candidate. With no new dev work it retains both leases through all required checks and the final
-atomic main/dev/stabilize compare-and-swap, including verification of the accepted source ref.
+refs or forming its candidate. It releases its positively owned dev lease before the long proof commands. The main
+proof then runs independently while the normal dev train can acquire that same native lease and drain queued product
+work, even if the initial idle dev drain has already returned. If no independent pump is live, the release owner gives
+the ordinary dev drain a turn after the proof settles. Queue arrival alone does not interrupt the proof. Its source,
+loaded code, captured refs, candidate and final atomic main/dev/stabilize compare-and-swap remain fenced; a changed
+capture cannot make old evidence approve a different publication.
+
+Decision: once an ordinary Main proof releases its Dev lease, queued Dev work proceeds through the existing native
+train without aborting that proof; source, code, candidate, ref and final compare-and-swap fencing remain mandatory.
 
 Proof admission and integration routing use the same committed source diff from its fork from `main`. A release brief
 whose source also changes files outside `tools/goal/` follows the existing dev integration and conflict resolver path;
 it does not create an ordinary control-plane proof attempt. Recovery of an already published release retains its exact
 source and original main fork rather than reclassifying an empty diff after publication.
 
-While that proof is running, its controller observes the native dev queue every 50 ms and checks custody before each
-proof command and publication. A newly queued dev request interrupts the controller's own proof. Per-invocation
-`GateRunner` cancellation kills only that proof's command groups and awaits the complete runner, including terminal
-cleanup supplied by the receiving tree; parallel proof commands all settle before the controller releases its
-positively owned dev lease. The same existing dev drain then takes a turn,
-even if the initial idle dev drain returned or found another live owner. No manager signal or extra enqueue is needed.
-The main request stays pending and unpublished; it is not retried again in that drain. Another live dev owner is never
-removed or replaced. Stale code lets the proof command already running finish, then stops at the next command boundary,
-before any publication, and uses the existing current-code handoff; the successor reruns the proof with current code.
+While that proof is running, its controller checks custody before each proof command and publication. Queue arrival
+does not cancel proof commands; the normal dev drain uses the durable queue and existing native lease, with no extra
+enqueue or queue watcher. Per-invocation `GateRunner` cancellation still kills only that proof's command groups and
+awaits the complete runner, including terminal cleanup supplied by the receiving tree. Parallel proof commands all
+settle before the proof exits and the main train releases its lease. If captured refs move, mandatory checks run again
+on the new capture; old evidence never approves it. Another live dev owner is never removed or replaced. Stale code
+lets the proof command already running finish, then stops at the next command boundary, before any publication, and
+uses the existing current-code handoff; the successor reruns the proof with current code.
 
 `control-plane-proof-<queue-id>.json` retains each ordinary attempt's exact source, candidate, captured refs, status and
 separate log. An interrupted or crashed proof remains non-green, with no reusable proof or release record. A later
@@ -1144,8 +1150,11 @@ Its `chain` section counts offers, chained and unchained
 tasks (integrated, landed lines, worker-hours and lines per worker-hour) and declined offers by reason; see
 [Chained briefs](#chained-briefs). Decision: after one stable sort, `flowReport`
 builds one in-memory next-boundary and integration index; no per-request history rescan or second event store. It
-reports stage/Goal totals, efficiency, attempts per integrated task, and live queue length and age from each task's
-current attempt when available. Post-integration promotion requests retain their own attempt. Alarm examples come
+reports stage/Goal totals, efficiency, distinct task/attempt generations per integrated task, separate worker process
+launches (including resumes), and live queue length and age from each task's current attempt when available. An
+integration event proves its own generation when the worker start is outside the bounded event read; recorded attempt
+zero remains a distinct legacy generation identity; urgent tasks remain excluded from the ratio. Post-integration
+promotion requests retain their own attempt. Alarm examples come
 from the breached queue and name distinct tasks; broader alarms use distinct tasks from the oldest queues. A later
 worker start settles a legacy start request for the same attempt, but does not supply a synthetic start-stage
 duration. Its guard ledger prices registered attempt endings and landing refusals over seven days by firings,
@@ -1298,8 +1307,13 @@ another alarm; the same task entering a waiting queue again still rearms it. Act
 alarms keep their configured periodic escalation, and hourly flow reports continue to record the same metrics. Flow
 alarms, daily audit notices, check-result reuse alerts and shared environment incidents go to the configured
 supermanager; priority grants and scope decisions remain with the supermanager.
-The historical attempts-per-integrated ratio rearms only when its displayed value changes or it recovers and breaches
-again. Waiting task rotation does not change that history; actual queue age keeps its own alert.
+The worker retry alarm uses integrations from the trailing seven days and names that window, integrated-task sample,
+and attempt-generation sample. It rearms when the sampled ratio changes or recovers and breaches again; older history,
+waiting-task rotation, and same-attempt resumes do not rearm it. Actual queue age keeps its own alert.
+
+Decision: Flow attempt ratios count distinct task/generation pairs and add each integrated generation from its
+authoritative integration event; process launches stay separate, while retry alarms use the named trailing-seven-day
+integration cohort.
 
 Once per UTC day the manager host dispatches the research brief at
 [`templates/daily-step-audit.md`](templates/daily-step-audit.md), unless a daily audit task is already open. It
@@ -1680,6 +1694,19 @@ starter or capacity). It also reports a `stabilize` branch that has stayed out o
 thirty minutes. Failure signatures from attempts ended in the previous thirty minutes are grouped: three matching
 failures across at least two tasks produce one incident with the attempt and task counts, affected Goal names and one
 example. The incident repeats after two hours while the signature remains present.
+
+The existing reminder sweep also recognizes a same-generation false-ready retry when the current attempt is stopped
+for missing compiler evidence, a pending retry exists for that exact attempt, and the job sweep records that the
+existing typing-evidence reconciler could not establish a terminal result. It reports only after the ordinary
+no-worker deadline, when dependencies, backoff, check-host outage and capacity-ticket waits are absent and the live
+route/allowance observation finds an admitted provider pool. The one-line alert names the task, attempt, eligible age,
+available supply and next action. The authenticated task owner, or configured operations manager, runs
+`bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <attempt>` and follows the existing recovery
+result. The alert routes to the active managed `control-plane` owner, falling back to the configured supermanager;
+the existing per-generation watchdog state prevents a second wake. Scheduling flow alarms use the same owner and
+fallback. Other watchdog alerts keep their existing routing.
+
+Decision: The watchdog reports a same-generation stopped typing-evidence retry only after its eligible no-worker deadline and positive live pool supply; it routes that alert and flow alarms to the active control-plane manager, falling back to the supermanager, and directs the authenticated task owner to run the existing `typing-recover` command.
 
 A running attempt that exceeds its routed time limit (two hours by default) sends its owning manager one event. The
 event includes elapsed time, commits in the task worktree, time recorded waiting for check slots and the last ten shell
@@ -2334,9 +2361,12 @@ long tools and old-turn completions never establish idleness. Unsupported provid
 The two-second token-free loop sends a fixed short mailbox notification only when actionable personally unread mail
 is at least 60 seconds old and the session has been explicitly idle for ten seconds. All event bodies remain in the
 native inbox. Worker info and successful manager renewal notices stay quiet. There are no periodic model turns.
-The transcript identifies the Codex account directory. The resident watcher uses the same retained allowance and
-pool policy as managed wakes before starting a turn. While admission is held, unread mail coalesces and stays durable;
-the hourly report sender and direct operator messages are independent of the wake gate.
+The transcript identifies the Codex account directory. Resident and managed mailbox wakes may use the manager
+reserve and do not apply worker hourly pacing or worker concurrency. A currently reported exhausted provider still
+cannot start a turn. Unread mail coalesces and stays durable; the hourly report sender and direct operator messages
+are independent of the wake gate.
+Decision: mailbox wake admission skips worker reserve, burn ceiling and concurrency checks; fresh provider exhaustion
+still blocks a model start.
 The atomic `--cursor <file>` and transport journal retain one outstanding notification until personal read progress across
 retries and restarts. Consuming its triggering event rearms notification for remaining unread pages once explicitly
 idle; new mail without owner consumption coalesces. Waking never consumes messages. Global read, acknowledgement
@@ -3151,11 +3181,17 @@ does not establish a delivery or allowance saving. This uses the existing verifi
 
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to replace
 `.temp/goal/<manager>/CONTINUATION.md` with at most 8,000 characters (live task IDs, decisions in force as links to
-owner documents, and next actions), without appending to the old file, then message its supermanager with
-`continuation written`. A confirmation or a `budgetLimited` Goal
-automatically pauses and renews the manager with a fresh thread. If the continuation file exists, the new thread's first
-prompt names it; the supermanager receives one environment event with the old token count and new thread. A manual
-`manager renew` also accepts Codex Goals in `budgetLimited` or `blocked` status without a separate stop.
+owner documents, and next actions), without appending to the old file. Include one concrete progress bullet:
+`- Decision: ...`, `- Next action: ...`, or `- Result: ...`, then message its supermanager with `continuation written`.
+Automatic renewal requires that handshake from the current thread, a changed continuation file within the character
+limit, and one of those concrete progress bullets. If the Goal reaches `budgetLimited` without that evidence, the host
+pauses the same thread and sends the supermanager one actionable blocker with the explicit renew command. After a
+valid handshake, the new thread's first prompt names the continuation file; the supermanager receives one environment
+event with the old token count and new thread. A manual `manager renew` also accepts Codex Goals in `budgetLimited` or
+`blocked` status without a separate stop.
+
+Decision: Automatic renewal requires a fresh, bounded continuation from the current manager thread with concrete progress; unchanged exhaustion parks that thread and requires explicit operator renewal.
+
 When an automatic renewal fails, the host delivers a `blocker` to the supermanager with the manager id and the error's
 first line, keeps that manager in `renewal-failed` (distinct from a pause), records each attempt on the manager, and
 retries every `policy.manager.renewalRetryMs` (ten minutes by default) until the renewal succeeds. A manual
@@ -3248,8 +3284,10 @@ bun tools/goal/scripts/cp-sync.ts
 bun tools/goal/scripts/cp-sync.ts --rollback
 ```
 
-Run it from any checkout; it finds the main checkout by its checked-out `main`, and requires `main` to be inside
-`dev`. It adds a temporary worktree of the current `main` head in `../worktrees` beside the main checkout, replaces
+Run it from any checkout; it finds the main checkout by its checked-out `main`. It normally requires `main` inside
+`dev`; a verified fast-snapshot checkpoint permits the exact published `main` when its full tree equals the recorded
+source tree and that recorded source is an ancestor of captured `dev`. It adds a temporary worktree of the current
+`main` head in `../worktrees` beside the main checkout, replaces
 its `tools/goal` with dev's (`git checkout --no-overlay`, so dev's deletions apply) and checks it there: root and
 `tools/goal` installs, the `tools/goal` type check, a config smoke, and a CLI smoke. The config smoke runs
 `bun tools/goal/scripts/cp-config-smoke.ts` with `GOAL_MAIN_CHECKOUT` and `GOAL_LOCAL_CONFIG` naming the live checkout
@@ -3289,8 +3327,7 @@ Only when the gate passes does cp-sync publish. It first moves the main checkout
 captured values: `main` to the sync commit, `stabilize` (when present) to a merge of it that takes main's
 control-plane paths, and `dev` to a merge that keeps dev's tree. Main stays inside stabilize and dev, so promotion
 still fast-forwards and the next sync finds main inside dev. A failed transaction moves the files back.
-Decision: Sync, forward rollback and resident-host recovery share the same ref planner and publisher; stale compares
-re-plan from current branch heads, and failed publication restores the main checkout's files. Validation lives in `scripts/cp-sync-checks.ts`; `cp-sync.ts` coordinates publication, re-exports it, and stops the owned check there. Tests keep public-entry assertions and pin coordinator interruption of that child.
+Decision: Sync accepts a diverged `main` only when it exactly matches the explicit fast-publication checkpoint, its full tree matches the recorded source, and that source is an ancestor of captured `dev`; the existing ref planner and CAS retain both histories and preserve the `dev` tree while replacing only configured paths. Sync, forward rollback and resident-host recovery share the same ref planner and publisher; stale compares re-plan from current branch heads, and failed publication restores the main checkout's files. Validation lives in `scripts/cp-sync-checks.ts`; `cp-sync.ts` coordinates publication, re-exports it, and stops the owned check there. Tests keep public-entry assertions and pin coordinator interruption of that child.
 Processes hand over on the new `main:tools/goal`. If
 `tools/goal/package.json` or its lockfile changed, cp-sync reinstalls in the main checkout. Each sync appends the
 previous and new main, stabilize and dev heads to `.temp/goal/cp-sync-history.log`.
@@ -3557,6 +3594,8 @@ host loop. Git, tmux and worker launch run through `runHostProcess`; start, retr
 `_host-start` children. The host logs an event-loop stall over ten seconds with the operation that caused it, at most
 once a minute.
 Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
+Decision: `verify` and `promote` accept no arguments; a sole `--help` or `-h` prints usage before runtime hooks, and other trailing arguments fail before either hook.
+Decision: the verify/promote argv proof stays in `integration-cli-help.test.ts`, separate from integration and recovery tests, so its acceptance can run independently.
 An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
 
 The maintenance timer starts a bounded oneshot every minute. `goal maintenance reap` reaps recorded worker groups
@@ -3581,24 +3620,28 @@ Decision: keep the minute sweep to 45 seconds by default and run regeneration se
 budget; both bounds are configurable under `policy.maintenance` and applied when installing services.
 
 Decision: cp-sync takes one instant reading before publication and a three-minute post-publication window of four
-readings. Only failed host or verifier readiness, a unit whose process did not start after publication, live workers
-falling by more than half, or no landing merged in the window while landings already in flight before publication
-restores the previous tree in a forward commit. Lower counts within half and quiet windows are normal.
+readings. Only failed readiness for a unit it is meant to run, a unit whose process did not start after publication,
+live workers falling by more than half, or no landing merged in the window while landings already in flight before
+publication restores the previous tree in a forward commit. Lower counts within half and quiet windows are normal.
 Decision: after publication a stale train lets its running control-plane command finish and hands off at the next command
 boundary instead of cancelling it, so the release does not restart a running check; the successor runs the published code.
 Decision: a resident host retires once main publishes another tools/goal, at most once per restartIntervalMs. A retiring
 host starts no new attempt, finishes its active requests and exits; systemd starts it on the published code.
-After publishing, a missing environment file or resident code unit triggers `goal service install` from the newly published
-main. Installation enables the resident units, stops the legacy transient `rezics-goal-supervisor`
-unit and any recorded supervisor and host by birth identity, then starts the units and waits for host readiness. It signals individual
-recorded processes, never worker groups or name patterns. cp-sync also completes migration when legacy state remains.
+Before publication, cp-sync checks whether it needs `goal service install`; if the verifier is explicitly paused and
+installation would activate it, cp-sync refuses without moving refs. Otherwise, a missing environment file or resident
+code unit triggers installation from the newly published main. Installation enables the resident units, stops the
+legacy transient `rezics-goal-supervisor` unit and any recorded supervisor and host by birth identity, then starts the
+units and waits for host readiness. It signals individual recorded processes, never worker groups or name patterns.
+cp-sync also completes migration when legacy state remains.
 Decision: the resident services that execute tools/goal continuously are the manager host and the dev verifier, listed
 once as `RESIDENT_CODE_UNITS`; maintenance and regenerate stay timer-driven oneshots. After publication and rollback,
 cp-sync restarts each of those units through systemd and checks that each unit's `ExecMainStartTimestamp` is at or
 after the restart. A unit that cannot restart or does not come back fails the sync by name. If rollback cannot install
 or activate its resident services, it restores the published code in another forward commit and restarts those services
 before exiting with failure; a rollback refusal also triggers activation on the current main. Dependency installation
-failures follow this same recovery path.
+failures follow this same recovery path. Recovery also refuses any service installation that would activate an
+explicitly paused verifier.
+Decision: cp-sync treats only a loaded verifier with `ActiveState=inactive` and `UnitFileState=disabled` as explicitly paused; it skips that verifier's restart and readiness check, and preflights any service installation that would enable and start it before publication. Active or enabled verifier configurations retain normal restart and readiness checks, while a missing unit still uses installer recovery.
 No ref rewinding is needed. Status, restart and
 logs show each unit's systemd state and result, including watchdog failure and timer health. Diagnostics live in the
 user journal; consult `systemd.service(5)` and `systemd.exec(5)` for service and environment semantics.

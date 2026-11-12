@@ -3308,7 +3308,6 @@ export class MergeTrain {
         if (o.codeIsCurrent && !o.codeIsCurrent()) return;
         return await this.runOrdinaryProof(
           entry,
-          devPending,
           () => {
             yielded = true;
           },
@@ -3316,16 +3315,15 @@ export class MergeTrain {
         );
       } finally {
         releaseDevLease();
-        // Cancellation has settled every owned command before this point. Drain actual product requests even when
-        // the original idle dev drain has already returned, and even if no other controller was spawned on enqueue.
-        if (yielded) await drainDev();
+        // The initial idle dev drain may have returned before a request arrived. Once proof commands settle, give
+        // queued product work its normal native-lane turn even when queue arrival did not interrupt the proof.
+        if (yielded || devPending()) await drainDev();
       }
     }
   }
 
   private async runOrdinaryProof(
     entry: LandingEntry,
-    devPending: () => boolean,
     onYield: () => void,
     releaseDevLease: () => void,
   ): Promise<GateOutcome | DevLandingTranspileHandoff | undefined> {
@@ -3383,13 +3381,10 @@ export class MergeTrain {
     let failure: (GateResult & { failedCommand: readonly string[] }) | undefined;
     const observe = () => {
       if (controller.signal.aborted) return;
-      if (devPending()) controller.abort(new ControlPlaneProofInterrupted('Product dev request needs the dev lane'));
-      else {
-        try {
-          o.fence.assertCurrent(entry.request);
-        } catch (error) {
-          controller.abort(error);
-        }
+      try {
+        o.fence.assertCurrent(entry.request);
+      } catch (error) {
+        controller.abort(error);
       }
     };
     const checkpoint = () => {

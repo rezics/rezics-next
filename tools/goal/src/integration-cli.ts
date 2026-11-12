@@ -209,12 +209,15 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     store.reconcileFalseIntegratedLanding(ref, { publishedCommit, candidate, request, outcome });
     return 0;
   }
-  if (command === 'promote') {
-    await runtime.promote?.();
-    return 0;
-  }
-  if (command === 'verify') {
-    await runtime.verify?.();
+  if (command === 'promote' || command === 'verify') {
+    const usage = `usage: ${command}`;
+    if (argv.length === 2 && (argv[1] === '--help' || argv[1] === '-h')) {
+      console.log(usage);
+      return 0;
+    }
+    if (argv.length > 1) throw new Error(usage);
+    if (command === 'promote') await runtime.promote?.();
+    else await runtime.verify?.();
     return 0;
   }
   if (command === 'backlog') {

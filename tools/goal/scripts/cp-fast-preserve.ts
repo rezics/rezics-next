@@ -38,6 +38,42 @@ function verifyPublication(checkout: string, publication: Anchor): void {
   if (tree(checkout, publication.main) !== tree(checkout, publication.source))
     throw new Error('Fast publication does not have its recorded dev source tree.');
 }
+
+/** Read only an explicit checkpoint whose recorded commits still resolve and whose complete trees still match. */
+export function readFastPublicationCheckpoint(checkout: string, stateFile: string): Anchor | undefined {
+  if (!existsSync(stateFile)) return undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(stateFile, 'utf8'));
+  } catch (error) {
+    const missing = typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
+    if (error instanceof SyntaxError || missing) return undefined;
+    throw error;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const state = value as Partial<State>;
+  const publication = state.publication;
+  const commitId = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
+  if (
+    !publication ||
+    !commitId.test(publication.main) ||
+    !commitId.test(publication.source) ||
+    !state.adoptedMain ||
+    !commitId.test(state.adoptedMain)
+  )
+    return undefined;
+
+  const resolveStoredCommit = (value: string): string | undefined => {
+    const result = run(checkout, ['rev-parse', '--verify', `${value}^{commit}`]);
+    if (result.error) throw result.error;
+    return result.status === 0 ? result.stdout.trim() : undefined;
+  };
+  const main = resolveStoredCommit(publication.main);
+  const source = resolveStoredCommit(publication.source);
+  if (!main || !source || tree(checkout, main) !== tree(checkout, source)) return undefined;
+  return { main, source };
+}
+
 /** Bootstrap only from the existing publisher's commit metadata and an exact full-tree match. */
 function bootstrap(checkout: string): State {
   const history = git(checkout, 'log', 'main', '--first-parent', '-100', '--format=%H %s');
@@ -72,14 +108,23 @@ export async function preserveMainHotfixes(options: PreservationOptions): Promis
       return { status: 'ready', main, dev };
     // An explicit merge into dev already received main, including any manual conflict resolution.
     if (run(checkout, ['merge-base', '--is-ancestor', main, dev]).status === 0) {
-      const verified = run(checkout, ['update-ref', '--stdin'],
-        `update refs/heads/main ${main} ${main}\nupdate refs/heads/dev ${dev} ${dev}\n`);
+      const verified = run(
+        checkout,
+        ['update-ref', '--stdin'],
+        `update refs/heads/main ${main} ${main}\nupdate refs/heads/dev ${dev} ${dev}\n`,
+      );
       if (verified.status !== 0) continue;
       writeState(options.stateFile, { publication: state.publication, adoptedMain: main });
       return { status: 'ready', main, dev };
     }
     const merged = run(checkout, [
-      'merge-tree', '--write-tree', '--name-only', '-z', `--merge-base=${state.adoptedMain}`, dev, main,
+      'merge-tree',
+      '--write-tree',
+      '--name-only',
+      '-z',
+      `--merge-base=${state.adoptedMain}`,
+      dev,
+      main,
     ]);
     if (merged.status === 1) {
       // With -z the tree is followed by conflict paths, an empty field, then informational messages.
@@ -95,12 +140,26 @@ export async function preserveMainHotfixes(options: PreservationOptions): Promis
     }
     if (merged.status !== 0) throw new Error(`git merge-tree: ${merged.stderr || merged.error?.message}`);
     const mergedTree = merged.stdout.split('\0')[0]!.trim();
-    const next = mergedTree === tree(checkout, dev) ? dev : git(checkout,
-      'commit-tree', mergedTree, '-p', dev, '-p', main,
-      '-m', 'control-plane: preserve main hotfixes on dev before fast publication');
-    const transaction = run(checkout, ['update-ref', '-m', 'cp-fast preserve main hotfixes', '--stdin'],
+    const next =
+      mergedTree === tree(checkout, dev)
+        ? dev
+        : git(
+            checkout,
+            'commit-tree',
+            mergedTree,
+            '-p',
+            dev,
+            '-p',
+            main,
+            '-m',
+            'control-plane: preserve main hotfixes on dev before fast publication',
+          );
+    const transaction = run(
+      checkout,
+      ['update-ref', '-m', 'cp-fast preserve main hotfixes', '--stdin'],
       // A no-op update keeps the main CAS while its history hook can distinguish it from deletion.
-      `update refs/heads/main ${main} ${main}\nupdate refs/heads/dev ${next} ${dev}\n`);
+      `update refs/heads/main ${main} ${main}\nupdate refs/heads/dev ${next} ${dev}\n`,
+    );
     if (transaction.status !== 0) continue;
     // Repeating after a crash before this write produces the same tree and no duplicate adoption commit.
     writeState(options.stateFile, { publication: state.publication, adoptedMain: main });
@@ -128,23 +187,33 @@ if (import.meta.main) {
       checkpointFastPublication(checkout, stateFile, args[0]!, args[1]!);
     } else if (command === 'prepare' && args.length === 1) {
       const owner = args[0]!;
-      const result = await preserveMainHotfixes({ checkout, stateFile, async notify(conflict) {
-        const evidencePath = join(stateDirectory, 'watch/cp-fast-conflict.json');
-        mkdirSync(dirname(evidencePath), { recursive: true });
-        writeFileSync(evidencePath, `${JSON.stringify(conflict, null, 2)}\n`);
-        const databasePath = join(stateDirectory, 'goal.sqlite');
-        if (!existsSync(databasePath)) throw new Error(`Native inbox database is missing: ${databasePath}`);
-        const [{ openDb }, { SqliteManagerInbox }] = await Promise.all([
-          import('../src/db.ts'), import('../src/inbox.ts'),
-        ]);
-        const db = openDb(databasePath);
-        try {
-          new SqliteManagerInbox(db, stateDirectory).deliver({
-            managerId: owner, from: 'cp-fast', kind: 'question', evidencePath,
-            summary: `Fast publication waits: main ${conflict.main.slice(0, 10)} overlaps dev in ${conflict.paths.slice(0, 5).join(', ')}. Reconcile these main hotfixes onto dev, then retry; main retains its hotfix and product work continues.`,
-          });
-        } finally { db.close(); }
-      } });
+      const result = await preserveMainHotfixes({
+        checkout,
+        stateFile,
+        async notify(conflict) {
+          const evidencePath = join(stateDirectory, 'watch/cp-fast-conflict.json');
+          mkdirSync(dirname(evidencePath), { recursive: true });
+          writeFileSync(evidencePath, `${JSON.stringify(conflict, null, 2)}\n`);
+          const databasePath = join(stateDirectory, 'goal.sqlite');
+          if (!existsSync(databasePath)) throw new Error(`Native inbox database is missing: ${databasePath}`);
+          const [{ openDb }, { SqliteManagerInbox }] = await Promise.all([
+            import('../src/db.ts'),
+            import('../src/inbox.ts'),
+          ]);
+          const db = openDb(databasePath);
+          try {
+            new SqliteManagerInbox(db, stateDirectory).deliver({
+              managerId: owner,
+              from: 'cp-fast',
+              kind: 'question',
+              evidencePath,
+              summary: `Fast publication waits: main ${conflict.main.slice(0, 10)} overlaps dev in ${conflict.paths.slice(0, 5).join(', ')}. Reconcile these main hotfixes onto dev, then retry; main retains its hotfix and product work continues.`,
+            });
+          } finally {
+            db.close();
+          }
+        },
+      });
       if (result.status === 'conflict') process.exitCode = 2;
       else console.log(`${result.main} ${result.dev}`);
     } else throw new Error('usage: cp-fast-preserve.ts prepare <owner> | checkpoint <published-main> <source-dev>');

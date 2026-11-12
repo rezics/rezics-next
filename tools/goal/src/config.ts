@@ -61,9 +61,10 @@ import { completionChecker } from './completion.ts';
 import { TermspacesWindows } from './windows.ts';
 import { offloadHostTask, runHostOperation } from './service.ts';
 import type { IntegrationRuntime } from './integration-cli.ts';
-import type { ManagerServices, ManagerSpec } from './managers.ts';
+import { resolveGoalManager, type ManagerServices, type ManagerSpec } from './managers.ts';
 import {
   DEFAULT_FLOW_THRESHOLDS,
+  FLOW_RETRY_ALARM_WINDOW_MS,
   checkFlowAlarms,
   dispatchDailyStepAudit,
   flowReport,
@@ -411,6 +412,10 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
               task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>
             ].maxMs,
           settings.policy,
+          {
+            schedulingOwner: resolveGoalManager(store.db, 'control-plane', settings.integration.supermanager),
+            runnableSupply: (task, intent) => job.hasRunnableRetrySupply(task, intent),
+          },
         );
       // A oneshot CLI exits after this method: persist every bounded probe before closing the runtime.
       await Promise.all(probes);
@@ -478,17 +483,23 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         settings.policy?.inbox,
       );
       const now = new Date();
+      const flowHistoryMs = (settings.policy ?? defaults.policy).flowHistoryMs;
+      const reportSince = new Date(now.getTime() - flowHistoryMs).toISOString();
+      const flowEventsSince = new Date(
+        now.getTime() - Math.max(flowHistoryMs, FLOW_RETRY_ALARM_WINDOW_MS),
+      ).toISOString();
       const metrics = await lifecycleMetricsAsync(db, now, settings.policy);
-      const flow = flowReport(
-        readFlow(db, new Date(now.getTime() - (settings.policy ?? defaults.policy).flowHistoryMs).toISOString()),
-        readFlowTasks(db),
-        now.getTime(),
-      );
+      const flow = flowReport(readFlow(db, flowEventsSince), readFlowTasks(db), now.getTime(), { reportSince });
       emitHourlyLifecycleMetrics(db, metrics, now);
       checkFlowAlarms(
         db,
         flow,
-        (summary) => flowInbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
+        (summary) =>
+          flowInbox.deliver({
+            managerId: resolveGoalManager(db, 'control-plane', settings.integration.supermanager),
+            kind: 'environment',
+            summary,
+          }),
         now,
         flowThresholds,
         settings.policy,
