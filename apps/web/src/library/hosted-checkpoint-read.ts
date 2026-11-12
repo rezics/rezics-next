@@ -17,7 +17,7 @@ import {
 const input = v.strictObject({
   viewer: hostedCheckpointViewerSchema,
   locale: v.picklist(locales),
-  cursor: v.optional(hostedCheckpointCursorSchema),
+  cursor: v.exactOptional(hostedCheckpointCursorSchema),
 });
 
 /** Owner-private BFF only. Entry progress keeps its existing endpoint and independent cursor. */

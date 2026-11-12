@@ -70,7 +70,9 @@ export type HostedCheckpointItem =
     };
 export type HostedCheckpointResult =
   | { state: 'loaded'; items: HostedCheckpointItem[]; nextCursor: string | null }
-  | { state: 'signed-out' | 'denied' | 'stale' }
+  | { state: 'signed-out' }
+  | { state: 'denied' }
+  | { state: 'stale' }
   | { state: 'unavailable'; reason?: 'client-pending' };
 export type HostedCheckpointRequest = { viewer: string; locale: Locale; cursor?: string };
 export type HostedCheckpointRead = (
