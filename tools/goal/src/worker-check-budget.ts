@@ -1575,6 +1575,27 @@ export type WorkerCheckHostTypingSettlement =
   | { ok: true }
   | { ok: false; kind: 'typing-failure' | 'evidence-unavailable'; result: string; command?: string[] };
 
+/** A source retry may supersede pending compiler evidence only after the exact current failure and every check settle. */
+export function workerCheckHostTerminalTypingFailure(input: {
+  directory?: string;
+  worktree: string;
+  limit?: string | number | null;
+  taskId: string;
+  attempt: number;
+  checkIds: readonly string[];
+  pendingCommand?: readonly string[];
+}): Extract<WorkerCheckHostTypingSettlement, { ok: false; kind: 'typing-failure' }> | undefined {
+  const settled = workerCheckHostTypingSettlement(input);
+  if (
+    settled.ok ||
+    settled.kind !== 'typing-failure' ||
+    (input.pendingCommand !== undefined && JSON.stringify(input.pendingCommand) !== JSON.stringify(settled.command)) ||
+    workerCheckHostAttemptCheckCustody(input.worktree, input.taskId, input.attempt, input.checkIds) !== 'terminal'
+  )
+    return;
+  return settled;
+}
+
 const TYPING_SETTLEMENT_FAILED = 'Last check-host run failed its typecheck.';
 const TYPING_SETTLEMENT_CHANGED = 'Worktree content changed after the last check-host typecheck.';
 const TYPING_SETTLEMENT_UNAVAILABLE = 'Compiler input closure is unavailable for the last check-host typecheck.';

@@ -2864,6 +2864,8 @@ commits and check IDs instead of creating a source-writing retry.
 
 Decision: at the existing stopped-task expiry, the sweep reconciles compiler-only pending source under its current task lease, lands matching evidence, or records one per-attempt actionable event naming the authenticated `typing-recover` action; the stop remains visible to width reporting, no check is minted or compiler started, and explicit stop/cancel, real compiler failures and ordinary stale stops keep their current outcomes.
 
+Decision: an explicit retry queued after a completed stop supersedes pending compiler evidence only when current compiler inputs prove a terminal failure, all same-attempt check custody is terminal, and no successor, later worker start or live capacity ticket exists; otherwise the retry remains pending. A same-generation `started` intent is reconciled only under that same proof.
+
 Authenticated owning or operations managers reconcile that same attempt without starting a model:
 
 Decision: when local `integration.operationsManager` is absent, typing-recovery event checks admit the owning task manager only; the nonempty actor session and retained source checks remain required.

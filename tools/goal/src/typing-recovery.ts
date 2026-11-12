@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { isKnownTypingCompiler, resolveTypingCompilerCommand } from './worker-check-typing-inputs.ts';
 import type { AttemptRef, LandingQueue } from './contracts.ts';
+import { capacityWaiters } from './launch-capacity.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { sameProcess } from './process.ts';
 import { backlogManagerActor, type AuthenticatedManager } from './priority-authority.ts';
@@ -27,9 +28,108 @@ import {
   workerCheckHostBudgetRefusalReport,
   workerCheckHostWithdrawnLegacyTypingCheckMatchesAttempt,
   workerCheckHostWithdrawnRetryIsRecoverable,
+  workerCheckHostTerminalTypingFailure,
 } from './worker-check-budget.ts';
 
 const WITHDRAWN_WEB_COMPILER = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+
+/**
+ * Reconcile a same-generation ready retry only when a completed stop was explicitly followed by a retry and the
+ * retained compiler failure plus all same-attempt check custody are authoritative. A successful result also clears
+ * the obsolete pending-evidence classification; every uncertain or held state remains untouched.
+ */
+export function reconcileStoppedTypingFailureRetry(tasks: WorkerTasks, ref: AttemptRef): boolean {
+  const { store, settings } = tasks;
+  const lease = acquireDirectoryLease(join(settings.stateDirectory, 'leases', ref.taskId), settings.policy?.leases);
+  try {
+    const task = store.task(ref.taskId);
+    if (task.currentAttempt !== ref.attempt || task.state !== 'ready' || task.brief.kind === 'verification') return false;
+    const attempt = store.attempt(ref);
+    const retry = store.retryIntent(ref);
+    const pendingEvidence = attempt.typingEvidencePending !== undefined || isTypingEvidenceUnavailableResult(attempt.result);
+    if (
+      attempt.state !== 'stopped' ||
+      !pendingEvidence ||
+      !retry ||
+      (retry.status !== 'pending' && retry.status !== 'started') ||
+      (retry.status === 'pending' ? retry.nextAttempt !== undefined : retry.nextAttempt !== ref.attempt)
+    )
+      return false;
+
+    const stop = attempt.terminationIntent;
+    if (
+      !stop ||
+      stop.operation !== 'stop' ||
+      stop.state !== 'complete' ||
+      stop.processIdentity !== 'known' ||
+      !stop.settledAt ||
+      !attempt.endedAt ||
+      !stop.process ||
+      !attempt.process ||
+      JSON.stringify(stop.process) !== JSON.stringify(attempt.process) ||
+      JSON.stringify(stop.auxiliaryProcesses) !== JSON.stringify(attempt.auxiliaryProcesses ?? [])
+    )
+      return false;
+
+    const endedAt = Date.parse(attempt.endedAt);
+    const stopRequestedAt = Date.parse(stop.requestedAt);
+    const stopSettledAt = Date.parse(stop.settledAt);
+    const retryQueuedAt = Date.parse(retry.queuedAt ?? '');
+    if (
+      ![endedAt, stopRequestedAt, stopSettledAt, retryQueuedAt].every(Number.isFinite) ||
+      stopRequestedAt <= endedAt ||
+      stopSettledAt < stopRequestedAt ||
+      retryQueuedAt <= stopSettledAt ||
+      sameProcess(stop.process) ||
+      (attempt.driver !== null && sameProcess(attempt.driver)) ||
+      [...(attempt.auxiliaryProcesses ?? []), ...stop.auxiliaryProcesses].some(sameProcess)
+    )
+      return false;
+
+    const events = store.events(task.id);
+    if (
+      events.some((event) => event.attempt === ref.attempt && event.kind === 'landing-requested') ||
+      events.some((event) => {
+        if (event.kind !== 'worker-run-started') return false;
+        const at = Date.parse(event.at);
+        return !Number.isFinite(at) || at >= retryQueuedAt;
+      }) ||
+      store.attempts(task.id).some((candidate) => candidate.attempt > ref.attempt) ||
+      capacityWaiters(settings.stateDirectory, store).has(task.id)
+    )
+      return false;
+
+    const proof = workerCheckHostTerminalTypingFailure({
+      directory: workerCheckBudgetDirectory(settings.stateDirectory, task.id, ref.attempt),
+      worktree: task.worktree,
+      limit: workerCheckHostBudgetLimit(task, ref.attempt),
+      taskId: task.id,
+      attempt: ref.attempt,
+      checkIds: attempt.checks ?? [],
+      ...(attempt.typingEvidencePending?.command ? { pendingCommand: attempt.typingEvidencePending.command } : {}),
+    });
+    if (!proof) return false;
+
+    if (retry.status === 'started')
+      store.updateRetryIntent(ref, (current) => {
+        current.status = 'pending';
+        delete current.nextAttempt;
+      });
+    store.updateAttempt(ref, (current) => {
+      delete current.typingEvidencePending;
+      current.failureKind = 'tool';
+      current.result = proof.result;
+    });
+    store.event(ref, 'typing-evidence-reclassified-for-source-retry', {
+      retryQueuedAt: retry.queuedAt,
+      command: proof.command ?? null,
+      result: proof.result,
+    });
+    return true;
+  } finally {
+    lease.release();
+  }
+}
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
