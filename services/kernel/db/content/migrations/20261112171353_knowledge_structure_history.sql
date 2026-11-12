@@ -75,7 +75,7 @@ WITH RECURSIVE descendants(route, notebook_id, ancestor_id, descendant_id, depth
 ), heights AS (
   SELECT route, notebook_id, ancestor_id AS placement_id, max(depth)::smallint AS subtree_height
   FROM descendants
-  GROUP BY route, notebook_id, descendant_id
+  GROUP BY route, notebook_id, ancestor_id
 )
 UPDATE content.knowledge_placement placement
 SET subtree_height = heights.subtree_height
