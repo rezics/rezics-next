@@ -22,6 +22,11 @@ import {
   workerCheckHostTypingSettlement,
 } from './worker-check-budget.ts';
 import { KERNEL_CLIENT_OUTPUT, outputTreeDigest, restoreOutputTree } from '../../../scripts/check-output-tree.ts';
+import {
+  CHECK_CUSTODY_RECORD_MAX_CHARACTERS,
+  CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
+  custodyJsonCharacters,
+} from '../../../scripts/check-custody.ts';
 
 const roots: string[] = [];
 const physical = 'a1a1a1a1-1111-4111-8111-111111111111';
@@ -173,6 +178,28 @@ test.each(['local', 'remote-return'] as const)(
     };
     const captureCommand = typingInputCommand(workspaceCommand);
     expect(captureCommand.every((argument) => argument.length <= 4096)).toBe(true);
+    const remoteCommand = [
+      'env',
+      `REZICS_TYPING_INPUTS_PHYSICAL=${physical}`,
+      `REZICS_TYPING_INPUTS_COMMAND=${Buffer.from(JSON.stringify(workspaceCommand)).toString('base64')}`,
+      ...captureCommand,
+    ];
+    const custody = {
+      version: 1,
+      physicalRunId: physical,
+      binding: {
+        checkId: physical,
+        ownership: { taskId: physical, attempt: 1 },
+        argv: workspaceCommand,
+        remoteArgv: remoteCommand,
+      },
+      status: 'running',
+      attempts: [],
+      updatedAt: '2026-11-12T00:00:00.000Z',
+    };
+    expect(custodyJsonCharacters(custody)).toBeLessThanOrEqual(
+      CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS - 4096,
+    );
     // The exact old entrypoint succeeds without producing the artifact demanded by the wrapper.
     expect(Bun.spawnSync(workspaceCommand, { cwd: root, env: { ...process.env, ...request } }).exitCode).toBe(0);
     expect(readTypingInputReceipt(root, physical, workspaceCommand)).toBeUndefined();

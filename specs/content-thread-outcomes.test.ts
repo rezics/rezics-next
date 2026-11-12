@@ -85,6 +85,30 @@ async function hidden(result: ApiResult<unknown>, effect: 'not_applicable' | 'no
 async function unchanged(before: Awaited<ReturnType<ContentThreadDriver['inspect']>>) {
   expect(await driver.inspect()).toEqual(before);
 }
+function authorizedReceiptQuery(trace: Awaited<ReturnType<ContentThreadDriver['commandTrace']>>, boardId: string) {
+  const receipt = [...trace.queries].reverse().find((query) => query.statement.includes('FROM core.receipt'));
+  expect(receipt).toBeDefined();
+  if (!receipt) throw new Error('The command receipt query was not observed');
+  const begin = [...trace.queries]
+    .reverse()
+    .find(
+      (query) =>
+        query.connectionId === receipt.connectionId &&
+        query.index < receipt.index &&
+        query.statement === 'BEGIN ISOLATION LEVEL SERIALIZABLE',
+    );
+  const authorization = trace.checks.find(
+    (check) =>
+      check.connectionId === receipt.connectionId &&
+      check.statement > (begin?.index ?? Number.POSITIVE_INFINITY) &&
+      check.statement < receipt.index &&
+      check.action === 'thread:create' &&
+      check.resourceId === boardId,
+  );
+  expect(begin).toBeDefined();
+  expect(authorization).toBeDefined();
+  return receipt;
+}
 async function append(thread: ThreadView, key = 'post') {
   return ok(
     await driver.createPost(
@@ -379,7 +403,7 @@ test('invalid subject IDs licences and conflicting item boards reject atomically
   await unchanged(before);
 });
 
-test('identical idempotency payload replays IDs with one revision receipt and outbox effect', async () => {
+test('identical idempotency payload replays IDs with one creation and publication event', async () => {
   const before = await driver.inspect();
   const request = input();
   const first = await driver.create(request, options('same'));
@@ -387,8 +411,29 @@ test('identical idempotency payload replays IDs with one revision receipt and ou
   const committed = await driver.inspect();
   expect(committed.revisions.length - before.revisions.length).toBe(1);
   expect(committed.receipts.length - before.receipts.length).toBe(1);
-  expect(committed.outbox.length - before.outbox.length).toBe(1);
+  const creation = committed.outbox.filter(
+    (row) => row.command === 'content.thread.create' && row.envelope.threadId === thread.id,
+  );
+  expect(creation.map((row) => row.eventType).sort()).toEqual(
+    ['com.rezics.content.thread.created.v1', 'com.rezics.content.post.published.v1'].sort(),
+  );
+  expect(Object.fromEntries(creation.map((row) => [row.eventType, row.eventSequence]))).toEqual({
+    'com.rezics.content.thread.created.v1': 0,
+    'com.rezics.content.post.published.v1': 1,
+  });
+  expect(new Set(creation.map((row) => row.idempotencyKey)).size).toBe(1);
   expect(ok(await driver.create(request, options('same')))).toEqual(thread);
+  const replayTrace = await driver.commandTrace();
+  const replayReceipt = authorizedReceiptQuery(replayTrace, fixture.board.id);
+  expect(
+    replayTrace.queries.some(
+      (query) =>
+        query.connectionId === replayReceipt.connectionId &&
+        query.index > replayReceipt.index &&
+        /INSERT INTO content\.(thread|post|revision)/.test(query.statement),
+    ),
+  ).toBe(false);
+  expect(replayTrace.fences).toEqual([]);
   await unchanged(committed);
   const conflict = await driver.create({ ...request, title: 'Changed payload' }, options('same'));
   expect(await problem(conflict, 422)).toMatchObject({ code: 'idempotency_conflict', effect_status: 'not_applied' });
@@ -674,15 +719,25 @@ test('parent create grant authorizes before receipt and body with no new-ID gran
   const response = await driver.create(input(), options('parent-grant'));
   const thread = ok(response);
   const trace = await driver.commandTrace();
-  expect(trace.throughRunCommand).toBe(true);
-  expect(trace.stages).toEqual(['authorize', 'receipt', 'body', 'write']);
+  const receipt = authorizedReceiptQuery(trace, fixture.board.id);
+  const body = trace.queries.find(
+    (query) =>
+      query.connectionId === receipt.connectionId &&
+      query.index > receipt.index &&
+      query.statement.startsWith('INSERT INTO content.thread'),
+  );
+  const fence = trace.fences.find((query) => query.connectionId === receipt.connectionId);
+  expect(body).toBeDefined();
+  expect(fence).toBeDefined();
+  expect(receipt.index).toBeLessThan(body!.index);
+  expect(body!.index).toBeLessThan(fence!.statement);
   const check = trace.checks.find((entry) => entry.action === 'thread:create');
   expect(check).toMatchObject({ resourceId: fixture.board.id, partition: fixture.board.route >>> 4 });
   expect(Number.isFinite(Date.parse(check!.at))).toBe(true);
   expect(Number.isInteger(check!.statement)).toBe(true);
   expect(check!.statement).toBeGreaterThan(0);
   expect(trace.checks.some((entry) => entry.resourceId === thread.id)).toBe(false);
-  expect(trace.writePartitions).toEqual([thread.route >>> 4]);
+  expect(trace.fences.map((entry) => entry.partition)).toEqual([thread.route >>> 4]);
   const session = await driver.session(response.response, fixture.owner);
   expect(session.token.length).toBeGreaterThan(0);
   expect(response.response.headers.get('rezics-session-token')).toBe(session.token);
@@ -697,7 +752,12 @@ test('revoked parent grant denies identical replay before receipt without stored
   const request = input();
   const thread = ok(await driver.create(request, options('revoke-replay')));
   const before = await driver.inspect();
-  expect(before.outbox.filter((row) => row.envelope.threadId === thread.id)).toHaveLength(1);
+  expect(
+    before.outbox
+      .filter((row) => row.command === 'content.thread.create' && row.envelope.threadId === thread.id)
+      .map((row) => row.eventType)
+      .sort(),
+  ).toEqual(['com.rezics.content.thread.created.v1', 'com.rezics.content.post.published.v1'].sort());
   await driver.fixtures.revokeParentCreate(fixture.owner.id, fixture.board.id);
   const denied = await driver.create(request, options('revoke-replay'));
   expect(await problem(denied, 403)).toMatchObject({ code: 'forbidden', effect_status: 'not_applied' });
@@ -709,8 +769,11 @@ test('revoked parent grant denies identical replay before receipt without stored
     expect(raw).not.toContain(secret);
   }
   const trace = await driver.commandTrace();
-  expect(trace.stages).toEqual(['authorize']);
-  expect(trace.writePartitions).toEqual([]);
+  expect(trace.queries.some((query) => query.statement.includes('FROM core.receipt'))).toBe(false);
+  expect(trace.queries.some((query) => /INSERT INTO content\.(thread|post|revision)/.test(query.statement))).toBe(
+    false,
+  );
+  expect(trace.fences).toEqual([]);
   await unchanged(before);
   expect(ok(await driver.readThread(thread.id, fixture.owner), 200)).toEqual(thread);
   expect(ok(await driver.create(request, options('still-authorized', fixture.other))).authorId).toBe(fixture.other.id);
@@ -752,9 +815,26 @@ test('commands carry session headers and transactional outbox envelopes and inje
   }
   const after = await driver.inspect();
   const effects = after.outbox.filter((row) => !before.outbox.some((old) => old.id === row.id));
-  expect(effects).toHaveLength(4);
-  for (const item of [thread.firstPost, post, child, edited]) {
-    const effect = effects.find((row) => row.envelope.revisionId === item.revisionId)!;
+  const publicationType = 'com.rezics.content.post.published.v1';
+  const publications = effects.filter((row) => row.eventType === publicationType);
+  const nativeEvents = effects.filter((row) => row.eventType !== publicationType);
+  expect(publications).toHaveLength(3);
+  expect(nativeEvents).toHaveLength(4);
+  const expected = [
+    [thread.firstPost, 'content.thread.create', 'com.rezics.content.thread.created.v1', true],
+    [post, 'content.post.create', 'com.rezics.content.post.created.v1', true],
+    [child, 'content.post.create', 'com.rezics.content.post.created.v1', true],
+    [edited, 'content.post.revise', 'com.rezics.content.revision.created.v1', false],
+  ] as const;
+  for (const [item, command, eventType, wasPublished] of expected) {
+    const effect = nativeEvents.find(
+      (row) =>
+        row.command === command &&
+        row.eventType === eventType &&
+        row.envelope.threadId === thread.id &&
+        row.envelope.revisionId === item.revisionId,
+    );
+    expect(effect).toBeDefined();
     expect(effect).toMatchObject({
       partition: thread.route >>> 4,
       envelope: {
@@ -764,9 +844,13 @@ test('commands carry session headers and transactional outbox envelopes and inje
         actorId: fixture.owner.id,
       },
     });
-    expect(after.receipts.some((row) => row.command === effect.command && row.partition === effect.partition)).toBe(
-      true,
-    );
+    expect(after.receipts.some((row) => row.key === effect!.idempotencyKey && row.command === command)).toBe(true);
+    const publication = publications.find((row) => row.envelope.revisionId === item.revisionId);
+    if (wasPublished) {
+      expect(publication).toMatchObject({ command, idempotencyKey: effect!.idempotencyKey });
+    } else {
+      expect(publication).toBeUndefined();
+    }
   }
   const retryInput = input();
   await driver.fixtures.failBeforeOutbox();
