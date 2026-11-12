@@ -25,14 +25,14 @@ full inventory, duplicated registries and raw measurements remain outside the re
 
 ## Initial disposition
 
-| Finding family | Intake decision |
-| --- | --- |
-| M15, dense table map before admission | Current Document validation still calls the dense map before its work is bounded. Verify the exact current write path and add a structural preflight before allocation. Use small deterministic cases; do not derive a hardware capacity from the source probe. |
-| O04, encoder and decoder size mismatch | Current legacy cursor encoder still delegates to a seal without the decoder's size bound. Align admission using the existing encoded-token limit, keep valid tokens and callers compatible, and distinguish codec behavior from a route-level incident. |
-| Q30–Q31, exact quantities and incomplete text | Verify current native predicate and HTTP behavior with adversarial-but-small exactness cases. Pin coverage, proof and index migration semantics before a broader rewrite. |
-| Q07, Q14 and R09, accumulated preparation and reconciliation | Work out durable rows, a bounded frontier, crash/replay and complete consumption. Checkout requires a separate money-safe staged proof; no decisions from partial provider evidence. |
-| M16, revision responses | Determine metadata-first versus byte-budgeted body paging on the actual route; derive bytes and peak allocations rather than using item count as a response budget. |
-| Q02–Q03 and R13, physical routing and hot authority | Compare unchanged legacy IDs, search generation migration and real gate/transaction/fence throughput. Do not remove authority serialization based on shard counts. |
+| Finding family                                               | Intake decision                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M15, dense table map before admission                        | Current Document validation still calls the dense map before its work is bounded. Verify the exact current write path and add a structural preflight before allocation. Use small deterministic cases; do not derive a hardware capacity from the source probe. |
+| O04, encoder and decoder size mismatch                       | Current legacy cursor encoder still delegates to a seal without the decoder's size bound. Align admission using the existing encoded-token limit, keep valid tokens and callers compatible, and distinguish codec behavior from a route-level incident.         |
+| Q30–Q31, exact quantities and incomplete text                | Verify current native predicate and HTTP behavior with adversarial-but-small exactness cases. Pin coverage, proof and index migration semantics before a broader rewrite.                                                                                       |
+| Q07, Q14 and R09, accumulated preparation and reconciliation | Work out durable rows, a bounded frontier, crash/replay and complete consumption. Checkout requires a separate money-safe staged proof; no decisions from partial provider evidence.                                                                            |
+| M16, revision responses                                      | Determine metadata-first versus byte-budgeted body paging on the actual route; derive bytes and peak allocations rather than using item count as a response budget.                                                                                             |
+| Q02–Q03 and R13, physical routing and hot authority          | Compare unchanged legacy IDs, search generation migration and real gate/transaction/fence throughput. Do not remove authority serialization based on shard counts.                                                                                              |
 
 Treat other families as a queue for owner review. Adopt stable requirements in the appropriate architecture, product or
 verification owner document and link back here for evidence. A passed portable probe does not close a native outcome.
