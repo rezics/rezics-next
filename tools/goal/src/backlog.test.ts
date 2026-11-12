@@ -125,14 +125,11 @@ async function backlogDisposition(
   delete process.env.GOAL_ATTEMPT;
   console.log = (line?: unknown) => lines.push(String(line));
   try {
-    await runIntegration(
-      ['backlog', 'disposition', goal, action],
-      {
-        db: f.db,
-        stateDirectory: f.state,
-        managerServices: { policy: undefined },
-      } as unknown as Parameters<typeof runIntegration>[1],
-    );
+    await runIntegration(['backlog', 'disposition', goal, action], {
+      db: f.db,
+      stateDirectory: f.state,
+      managerServices: { policy: undefined },
+    } as unknown as Parameters<typeof runIntegration>[1]);
     return lines[0]!;
   } finally {
     console.log = previousLog;

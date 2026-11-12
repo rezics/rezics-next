@@ -218,8 +218,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     return 0;
   }
   if (command === 'backlog') {
-    const usage =
-      'usage: backlog status [--json] | backlog dispatch | backlog disposition <goal> no-work|clear';
+    const usage = 'usage: backlog status [--json] | backlog dispatch | backlog disposition <goal> no-work|clear';
     if (subcommand === 'dispatch') {
       if (id !== undefined || flags.length) throw new Error(usage);
       if (process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT)
@@ -229,12 +228,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       return 0;
     }
     if (subcommand === 'disposition') {
-      if (
-        !id ||
-        !/^[a-z][a-z0-9-]*$/.test(id) ||
-        flags.length !== 1 ||
-        !['no-work', 'clear'].includes(flags[0]!)
-      )
+      if (!id || !/^[a-z][a-z0-9-]*$/.test(id) || flags.length !== 1 || !['no-work', 'clear'].includes(flags[0]!))
         throw new Error(usage);
       if (process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT)
         throw new Error('Workers cannot set a backlog disposition');
