@@ -39,13 +39,13 @@ events contain only catalogue/revision identities; no private target selections 
 
 ## Reading
 
-| Operation ID                | Method and path                                                       | Query                                             |
-| --------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- |
-| `hosted_catalogue.get`      | `GET /v1/hostedCatalogues/{id}`                                       | selection                                         |
-| `hosted_catalogue.children` | `GET /v1/hostedCatalogues/{id}/children`                              | selection, optional `parentId`, `limit`, `cursor` |
-| `hosted_catalogue.resolve`  | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}`            | selection                                         |
-| `hosted_catalogue.navigate` | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}/navigation` | selection, `direction`, `limit`, `cursor`         |
-| `hosted_catalogue.for_subject` | `GET /v1/subjects/{subjectId}/hostedCatalogues`                    | optional `limit`, `cursor`                        |
+| Operation ID                   | Method and path                                                       | Query                                             |
+| ------------------------------ | --------------------------------------------------------------------- | ------------------------------------------------- |
+| `hosted_catalogue.get`         | `GET /v1/hostedCatalogues/{id}`                                       | selection                                         |
+| `hosted_catalogue.children`    | `GET /v1/hostedCatalogues/{id}/children`                              | selection, optional `parentId`, `limit`, `cursor` |
+| `hosted_catalogue.resolve`     | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}`            | selection                                         |
+| `hosted_catalogue.navigate`    | `GET /v1/hostedCatalogues/{id}/occurrences/{occurrenceId}/navigation` | selection, `direction`, `limit`, `cursor`         |
+| `hosted_catalogue.for_subject` | `GET /v1/subjects/{id}/hostedCatalogues`                              | optional `limit`, `cursor`                        |
 
 Selection accepts optional `revisionId` and `kind` (`structure` or `publication`). Without either, it chooses the
 current release. `kind=structure` chooses the current draft head, including a catalogue that has never released.

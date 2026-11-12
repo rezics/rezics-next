@@ -32,5 +32,3 @@ export const HostedSubjectCataloguePageSchema = t.Object(
   },
   closed,
 );
-
-export const HostedSubjectParamsSchema = t.Object({ subjectId: HostedIdSchema }, closed);

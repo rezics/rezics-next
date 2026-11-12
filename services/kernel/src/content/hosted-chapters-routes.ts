@@ -39,7 +39,6 @@ import { listHostedCataloguesForSubject } from './hosted-catalogue-subject.ts';
 import {
   HostedSubjectCataloguePageSchema,
   HostedSubjectCatalogueQuerySchema,
-  HostedSubjectParamsSchema,
 } from './hosted-catalogue-subject-schemas.ts';
 import {
   HostedIdSchema,
@@ -73,9 +72,6 @@ function ownerReadParams() {
   return memoizedValue(ownerReadParams, () =>
     t.Object({ accountId: HostedIdSchema, id: HostedIdSchema }, { additionalProperties: false }),
   );
-}
-function subjectParams() {
-  return memoizedValue(subjectParams, () => HostedSubjectParamsSchema);
 }
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const responseHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
@@ -361,9 +357,9 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
       },
     )
     .get(
-      '/v1/subjects/:subjectId/hostedCatalogues',
+      '/v1/subjects/:id/hostedCatalogues',
       {
-        params: subjectParams(),
+        params: params(),
         query: strictContentSchema(HostedSubjectCatalogueQuerySchema),
         response: {
           200: withHeaders(strictContentSchema(HostedSubjectCataloguePageSchema), responseHeaders),
@@ -371,13 +367,13 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
         },
         detail: { ...readDetail, operationId: 'hosted_catalogue.for_subject' },
       },
-      async ({ actor, params: { subjectId }, query, admission, job, session, set }) => {
+      async ({ actor, params: { id }, query, admission, job, session, set }) => {
         const { limit, ...rest } = query;
         const result = await operation(() =>
           admission.run('normal', job, () =>
             listHostedCataloguesForSubject(
               deps,
-              subjectId,
+              id,
               { ...rest, ...(limit === undefined ? {} : { limit: Number(limit) }) },
               { actor, deadline: job.deadline },
             ),
