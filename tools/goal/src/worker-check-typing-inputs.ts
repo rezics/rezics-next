@@ -115,7 +115,7 @@ type CompilerGraph = { workspaces: Set<string>; executables: Set<string> };
 function directKernelOwnerCommand(argv: readonly string[]): boolean {
   return (
     argv.length === 2 &&
-    (argv[0] === 'bun' || argv[0]?.endsWith('/bun')) &&
+    (argv[0] === 'bun' || (argv[0]?.endsWith('/bun') ?? false)) &&
     argv[1] === 'services/kernel/scripts/typecheck.ts'
   );
 }
@@ -218,7 +218,7 @@ export function isDirectKernelTypingCompiler(root: string, command: readonly str
 function misorderedWorkspaceTypecheckIntent(command: readonly string[]): boolean {
   return (
     command.length === 5 &&
-    (command[0] === 'bun' || command[0]?.endsWith('/bun')) &&
+    (command[0] === 'bun' || (command[0]?.endsWith('/bun') ?? false)) &&
     command[1] === '--cwd' &&
     command[3] === 'run' &&
     command[4] === 'typecheck'
@@ -471,7 +471,7 @@ export function typingInputCommand(command: readonly string[]): string[] {
   // Keep each transferred argument under remote custody's 4096-character bound.
   const payload = Buffer.from(
     JSON.stringify({
-      captureModule: readFileSync(import.meta.path).toString('base64'),
+      captureModuleSource: readFileSync(import.meta.path, 'utf8'),
       command,
     }),
   ).toString('base64');
@@ -481,10 +481,11 @@ export function typingInputCommand(command: readonly string[]): string[] {
     '-e',
     `
 const payload = process.argv.slice(1).join('');
-const { captureModule, command } = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
+const { captureModuleSource, command } = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
 let complete;
 let readReceipt;
 try {
+  const captureModule = Buffer.from(captureModuleSource, 'utf8').toString('base64');
   const inputs = await import('data:text/typescript;base64,' + captureModule);
   readReceipt = inputs.readTypingInputReceipt;
   complete = inputs.beginTypingInputReceipt(process.cwd(), process.env, command);
