@@ -12,6 +12,8 @@ unavailable descriptors remain visible without an actionable catalogue or shelf 
 reload the same three choices. Supplied labels and descriptions retain their language. An absent label uses the
 exact type reference.
 
+Decision: the production Book catalogue is a search-first reading surface. Search is the first interactive group; released Types follow as one compact separator list with title, concise descriptor context and a single Browse action; personal shelves and Continue sit after that list with the new-tab return note, so rows never carry an action bar.
+
 ## Discovery and reading
 
 The installed discovery seam is the canonical Search address. Browse uses `discoverySearchHref`; the search form
