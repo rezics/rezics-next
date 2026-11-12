@@ -610,7 +610,7 @@ test('daily audit validation and dispatch failures are durable and reported once
   }
 }, 15_000);
 
-function extractedHostScript(path: string, extras = '', serveOptions = '') {
+function extractedHostScript(path: string, extras = '', serveOptions = '', afterServe = '') {
   const source = (name: string) => JSON.stringify(join(import.meta.dir, name));
   writeFileSync(
     path,
@@ -621,6 +621,7 @@ function extractedHostScript(path: string, extras = '', serveOptions = '') {
       const runtime = createIntegrationRuntime();
       ${extras}
       await serveManagers(runtime${serveOptions ? `, ${serveOptions}` : ''});
+      ${afterServe}
       runtime.db.close();
     `,
   );
@@ -697,7 +698,10 @@ test('host serves socket requests while a chunked terminal process inventory is 
   const f = fixture({ FAKE_GOAL_HOST_SWEEP_MS: '25' });
   const script = join(f.path, 'resource-host.ts');
   const inventoryStarted = join(f.path, 'inventory-started');
+  const inventoryBlocked = join(f.path, 'inventory-blocked');
   const inventoryRelease = join(f.path, 'inventory-release');
+  const signalReceived = join(f.path, 'signal-received');
+  const hostFinished = join(f.path, 'host-finished');
   extractedHostScript(
     script,
     `
@@ -716,13 +720,16 @@ test('host serves socket requests while a chunked terminal process inventory is 
         inventory: async owners => {
           writeFileSync(${JSON.stringify(inventoryStarted)}, String(owners.length));
           for (let index = 0; index < 128; index++) await new Promise(resolve => setImmediate(resolve));
+          writeFileSync(${JSON.stringify(inventoryBlocked)}, '1');
           while (!existsSync(${JSON.stringify(inventoryRelease)})) await new Promise(resolve => setImmediate(resolve));
           return [];
         },
         stop: async () => [],
       };
+      process.on('SIGTERM', () => writeFileSync(${JSON.stringify(signalReceived)}, '1'));
     `,
     '{ terminalProcessSweep }',
+    `writeFileSync(${JSON.stringify(hostFinished)}, '1');`,
   );
   let child: ChildProcess | undefined;
   let exited: Promise<void> | undefined;
@@ -739,10 +746,12 @@ test('host serves socket requests while a chunked terminal process inventory is 
     });
     await waitForFlag(inventoryStarted, child, 'terminal process inventory');
     expect(readFileSync(inventoryStarted, 'utf8')).toBe('1');
+    await waitForFlag(inventoryBlocked, child, 'blocked terminal process inventory');
     await expect(
       hostRequest(join(f.path, 'manager.sock'), { command: 'decision', manager: 'absent' }, 1000),
     ).rejects.toThrow('Unknown manager');
     child!.kill('SIGTERM');
+    await waitForFlag(signalReceived, child, 'host shutdown signal handler');
     const exitedBeforeReaper = await Promise.race([
       exited!.then(() => true),
       new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 50)),
@@ -750,6 +759,7 @@ test('host serves socket requests while a chunked terminal process inventory is 
     expect(exitedBeforeReaper).toBe(false);
     writeFileSync(inventoryRelease, '1');
     await exited!;
+    expect(existsSync(hostFinished)).toBe(true);
   } finally {
     writeFileSync(inventoryRelease, '1');
     if (child && child.exitCode === null && child.signalCode === null) {
