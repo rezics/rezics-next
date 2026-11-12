@@ -1,15 +1,18 @@
 import type { Pool } from 'pg';
-import type { KernelClock } from '../clock.ts';
+import { type KernelClock } from '../clock.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { type HostedReadingAddress, type HostedReadingClearInput, type HostedReadingPort, type HostedReadingSaveInput, type HostedReadingView } from './contract/hosted-reading.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import { type HostedReadingAddress, type HostedReadingListQuery, type HostedReadingListView, type HostedReadingClearInput, type HostedReadingPort, type HostedReadingSaveInput, type HostedReadingView } from './contract/hosted-reading.ts';
 export { addressFromRow, hostedReadingPositionFromRow, parseHostedReadingPosition, validateHostedReadingClear, validateHostedReadingSave, type HostedReadingRow, } from './hosted-reading-validate.ts';
 export type HostedReadingDependencies = {
     pool: Pool;
+    tokens: KeyRing;
     access?: Access;
     clock?: KernelClock;
     content: HostedReadingPort;
 };
 export declare function createHostedReadingReads(dependencies: HostedReadingDependencies): {
+    list(actor: Actor, query: HostedReadingListQuery, deadline: number, signal?: AbortSignal): Promise<HostedReadingListView>;
     get(actor: Actor, subjectId: string, deadline: number, signal?: AbortSignal): Promise<HostedReadingView>;
 };
 export declare function createHostedReadingCommands(dependencies: HostedReadingDependencies): {

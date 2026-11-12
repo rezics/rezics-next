@@ -103,6 +103,16 @@ export type NativeDraftMetadata = Readonly<{
         realmId: string | null;
     };
 }>;
+/** Exact Post identity under ordinary current disclosure, with no revision body selected. */
+export type NativePostMetadata = Readonly<{
+    id: string;
+    threadId: string;
+    revisionId: string;
+    authorId: string;
+    licence: string;
+    sha256: string;
+    visibility: Visibility;
+}>;
 export type { Actor };
 type Kind = 'board' | 'thread' | 'post' | 'revision';
 type Row = {
@@ -275,6 +285,9 @@ export declare function readPost(dependencies: ContentReadDependencies, threadId
  * requests revision bytes; account ownership does not replace container Access.
  */
 export declare function readOwnDraftMetadata(dependencies: ContentReadDependencies, threadId: string, postId: string, context: ReadContext, retain?: RetainContentRead<NativeDraftMetadata>): Promise<Anchored<NativeDraftMetadata | null>>;
+/** Exact Post metadata follows the same native chain and current Access checks as
+ * ordinary reads, while keeping canonical revision bytes out of the selected row. */
+export declare function readPostMetadata(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, revisionId?: RevisionId, retain?: RetainContentRead<NativePostMetadata>): Promise<Anchored<NativePostMetadata | null>>;
 /** `beforeFinal` receives the disclosed entries and runs once, before the thread's final disclosure. */
 export declare function listThreadPosts(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext, cursor?: string, limit?: number, beforeFinal?: (entries: readonly PostEntry[]) => Promise<void>): Promise<Page<PostEntry>>;
 export declare function listPostRevisions(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, cursor?: string, limit?: number): Promise<NativePostRevisionPage>;
