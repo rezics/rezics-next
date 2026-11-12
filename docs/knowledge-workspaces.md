@@ -157,6 +157,8 @@ existing notebook from the private creation visit: explicit inventory selection 
 Open/More/Retry reads one replacing outline page at root or a chosen parent, and at most 32 visited breadcrumbs are
 kept without reconstructing ancestry. Creation sends the observed structure revision and an explicit parent placement.
 Later move and reorder remain Content-owned native work.
+The shared typed authoring/navigation readers and their React components use distinct file basenames so each
+has a unique JavaScript output during landing compilation.
 
 The subject API may compose both areas in one bounded viewer-aware response. This design requires no separate URL,
 service or HTTP request for private content. The response identifies the audience and independent continuation of

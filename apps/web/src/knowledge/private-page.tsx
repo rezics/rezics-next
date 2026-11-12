@@ -29,7 +29,7 @@ import {
   KnowledgePlacementChoiceBar,
   KnowledgeTemplatePicker,
   knowledgeTemplateCopy,
-} from './authoring.tsx';
+} from './authoring-controls';
 import {
   popKnowledgeBreadcrumb,
   pushKnowledgeBreadcrumb,
@@ -39,7 +39,7 @@ import {
   type KnowledgeOwnedNotebook,
   type KnowledgeOwnedNotebooksPage,
 } from './navigation.ts';
-import { KnowledgeOutlineList, KnowledgeOwnedNotebookList } from './navigation.tsx';
+import { KnowledgeOutlineList, KnowledgeOwnedNotebookList } from './navigation-lists';
 import {
   createKnowledgePrivateDocumentRequest,
   createKnowledgePrivateNotebookRequest,
