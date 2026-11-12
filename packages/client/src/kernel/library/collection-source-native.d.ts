@@ -81,7 +81,7 @@ type Header = Ref & {
     revision: number;
     createdAt: string;
     sourceGeneration: string;
-    builtinKind: 'everything' | 'state' | null;
+    builtinKind: 'everything' | 'state' | 'liked' | null;
     releaseDigest: string | null;
     profileId: string | null;
     stateSetId: string | null;
@@ -100,6 +100,21 @@ export type NativeCollectionMetadata = Readonly<Header & {
     /** Selected explicit COMPLETE membership only; never a private working generation. */
     outputGeneration: string | null;
     outputPublication: CollectionOutputPublication | null;
+}>;
+/** Current owner/source evidence selected by a logical ID. It is not Collection metadata or reader authority. */
+export type NativeLogicalBuiltinBinding = Readonly<{
+    route: number;
+    collectionId: string;
+    accountId: string;
+    key: BuiltinCollectionKey;
+    sourceVersion: string;
+    sourceFence: string | null;
+    ownerIndexReady: boolean;
+    stateSupported: boolean;
+    ready: boolean;
+    partition: number;
+    epoch: number;
+    position: bigint;
 }>;
 export type NativeCollectionWitness = Readonly<{
     incarnation: string;
@@ -126,6 +141,7 @@ export type NativeCollectionProbe = ProbeEvidence & {
     work: WorkReceipt;
 };
 import type { CollectionOutputPublication } from './collection-source-output.ts';
+import { type BuiltinCollectionKey } from './builtin-identity.ts';
 export type { NativeCollectionOrdinalPageBound } from './contract/index.ts';
 import type { NativeCollectionOrdinalPageBound } from './contract/index.ts';
 /** The single native ordinal statement's literal and schema-width bounds. */
@@ -142,7 +158,7 @@ export declare function readNativeCollectionWorkingMetadata(pool: Pool, ref: Ref
         revision: number;
         createdAt: string;
         sourceGeneration: string;
-        builtinKind: 'everything' | 'state' | null;
+        builtinKind: 'everything' | 'state' | 'liked' | null;
         releaseDigest: string | null;
         profileId: string | null;
         stateSetId: string | null;
@@ -174,7 +190,7 @@ export declare function readNativeCollectionMetadata(pool: Pool, ref: Ref, optio
         revision: number;
         createdAt: string;
         sourceGeneration: string;
-        builtinKind: 'everything' | 'state' | null;
+        builtinKind: 'everything' | 'state' | 'liked' | null;
         releaseDigest: string | null;
         profileId: string | null;
         stateSetId: string | null;
@@ -204,7 +220,7 @@ export declare function readNativeCollectionMetadataWithWork(pool: Pool, ref: Re
         revision: number;
         createdAt: string;
         sourceGeneration: string;
-        builtinKind: 'everything' | 'state' | null;
+        builtinKind: 'everything' | 'state' | 'liked' | null;
         releaseDigest: string | null;
         profileId: string | null;
         stateSetId: string | null;
@@ -223,6 +239,32 @@ export declare function readNativeCollectionMetadataWithWork(pool: Pool, ref: Re
         outputPublication: CollectionOutputPublication | null;
     }> | null;
 } & {
+    work: WorkReceipt;
+}>;
+/** Resolve a logical key against current owner/access/source rows without manufacturing Collection metadata. */
+export declare function readNativeLogicalBuiltinBinding(pool: Pool, input: Options & {
+    access: Access;
+    actor: Actor;
+    at: AuthoritativeTime;
+    collectionId: string;
+}): Promise<({
+    binding: null;
+} | {
+    binding: Readonly<{
+        route: number;
+        collectionId: string;
+        accountId: string;
+        key: BuiltinCollectionKey;
+        sourceVersion: string;
+        sourceFence: string | null;
+        ownerIndexReady: boolean;
+        stateSupported: boolean;
+        ready: boolean;
+        partition: number;
+        epoch: number;
+        position: bigint;
+    }>;
+}) & {
     work: WorkReceipt;
 }>;
 /** Selected Source adapter: exact metadata statements and multiplicity, with no allowance or work ledger. */
