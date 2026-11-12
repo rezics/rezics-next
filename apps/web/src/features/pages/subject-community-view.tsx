@@ -129,6 +129,7 @@ export function SubjectCommunityRegion({
   currentHref,
   preparedTransport,
   preparedWatch,
+  previewLimit,
 }: {
   id: string;
   kind: CommunityKind;
@@ -143,6 +144,8 @@ export function SubjectCommunityRegion({
   currentHref?: string;
   preparedTransport?: ThreadReactionsProps['preparedTransport'];
   preparedWatch?: ThreadWatchProps['native'];
+  /** Presentation bound after admission; full routes retain their ordinary native window. */
+  previewLimit?: number;
 }) {
   const options = { locale: locale as never };
   const community = useContext(SubjectCommunityContext);
@@ -227,7 +230,9 @@ export function SubjectCommunityRegion({
   const retryHref = links.retry;
   const nextHref = links.next;
   const occurrences = new Map<string, number>();
-  const rows = threads.map((thread) => {
+  const compact = !paged && previewLimit !== undefined;
+  const visibleThreads = compact ? threads.slice(0, previewLimit) : threads;
+  const rows = visibleThreads.map((thread) => {
     const occurrence = occurrences.get(thread.id) ?? 0;
     occurrences.set(thread.id, occurrence + 1);
     return { thread, key: thread.rowKey ?? `${thread.id}:${occurrence}` };
@@ -310,7 +315,13 @@ export function SubjectCommunityRegion({
         </div>
       )}
       {empty && (
-        <div className="space-y-2 rounded-lg border p-5 text-sm text-muted-foreground">
+        <div
+          className={
+            !compact
+              ? 'space-y-2 rounded-lg border p-5 text-sm text-muted-foreground'
+              : 'space-y-2 text-sm text-muted-foreground'
+          }
+        >
           <p>
             {next
               ? m.subject_community_continue({}, options)
@@ -321,7 +332,7 @@ export function SubjectCommunityRegion({
         </div>
       )}
       {threads.length > 0 && (
-        <ul key={reading.key} className="min-w-0">
+        <ul key={reading.key} className={!compact ? 'min-w-0' : 'min-w-0 divide-y divide-border'}>
           {rows.map(({ thread, key }) => {
             const threadHref = threadLocation(locale, thread);
             const reader = community?.reader ?? null;
@@ -388,28 +399,32 @@ export function SubjectCommunityRegion({
                     reader={viewerActionsCurrent ? reader : null}
                     reactionsAsOf={reactionsAsOf}
                   />
-                  <SubjectCommunityInteractions
-                    thread={thread}
-                    subject={subject}
-                    locale={locale}
-                    href={threadHref}
-                    contextId={community?.contextId ?? null}
-                    reader={viewerActionsCurrent ? reader : null}
-                    source={community?.sourceKey ?? community?.now ?? ''}
-                    reactionsAsOf={reactionsAsOf}
-                    {...(refreshAdvice ? { refreshAdvice } : {})}
-                    {...(verification ? { verification } : {})}
-                    {...(preparedTransport ? { preparedTransport } : {})}
-                    {...(preparedWatch ? { preparedWatch } : {})}
-                  />
-                  <ListRowControl
-                    data-content-item-slot="actions"
-                    className="flex flex-wrap gap-x-4 gap-y-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:items-center [&_a]:rounded-sm [&_a]:px-2 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
-                  >
-                    <a className={actionClass} href={communityBoardHref(locale, thread.boardId, returnTo)}>
-                      {m.subject_community_board({}, options)}
-                    </a>
-                  </ListRowControl>
+                  {!compact && (
+                    <SubjectCommunityInteractions
+                      thread={thread}
+                      subject={subject}
+                      locale={locale}
+                      href={threadHref}
+                      contextId={community?.contextId ?? null}
+                      reader={viewerActionsCurrent ? reader : null}
+                      source={community?.sourceKey ?? community?.now ?? ''}
+                      reactionsAsOf={reactionsAsOf}
+                      {...(refreshAdvice ? { refreshAdvice } : {})}
+                      {...(verification ? { verification } : {})}
+                      {...(preparedTransport ? { preparedTransport } : {})}
+                      {...(preparedWatch ? { preparedWatch } : {})}
+                    />
+                  )}
+                  {!compact && (
+                    <ListRowControl
+                      data-content-item-slot="actions"
+                      className="flex flex-wrap gap-x-4 gap-y-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:items-center [&_a]:rounded-sm [&_a]:px-2 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
+                    >
+                      <a className={actionClass} href={communityBoardHref(locale, thread.boardId, returnTo)}>
+                        {m.subject_community_board({}, options)}
+                      </a>
+                    </ListRowControl>
+                  )}
                 </ContentItemFrame>
               </li>
             );
@@ -426,7 +441,7 @@ export function SubjectCommunityRegion({
           retryHref={retryHref}
         />
       )}
-      {next && (
+      {next && !compact && (
         <a data-slot="community-next" className={actionClass} href={nextHref}>
           {m.subject_community_more({}, options)}
         </a>

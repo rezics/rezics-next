@@ -54,3 +54,16 @@ product document. A research recommendation or attractive mockup is not an accep
 Before briefing an adopted design, apply the [brief preflight](delivery.md#brief-preflight) to every concrete
 repository premise, including paths, counts and package ownership. Design evidence does not substitute for checking
 the current base.
+
+## Place common journeys first
+
+The default Overview should serve roughly 90% of readers' common needs. Give a recurring roughly 70% journey a
+prominent tab; a plain link or accessible disclosure is enough for less frequent tasks. These percentages are
+qualitative design heuristics, not claims from telemetry. Apply the same principle to global sidebars: keep
+essential destinations and explicitly followed spaces, rather than exposing every available area or membership.
+
+Keep identity, the main personal action and the information needed to choose that action together. Use open
+sections and simple separators for reading; move detailed relationships, versions and full feeds to their canonical
+routes. Short text stays fully visible. Long text uses real keyboard-accessible progressive disclosure. Recompose
+existing admitted readers rather than duplicating access, request or route logic, and never fill missing data with
+invented counts or content.

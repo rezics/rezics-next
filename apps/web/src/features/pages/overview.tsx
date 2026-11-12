@@ -1,3 +1,4 @@
+import { BookOverviewContext, BOOK_REVIEW_PREVIEW_LIMIT } from './book-overview';
 import * as SharedSelect from '@rezics/ui/shadcn/select';
 import type { MemberPageTarget } from './member-list-query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
@@ -21,7 +22,6 @@ import { MetaLine } from '@rezics/ui/meta-line';
 import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
 import { ListRowControl } from '@rezics/ui/list-row';
 import { CoverViewer } from '@rezics/ui/cover-viewer';
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { useContext, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
@@ -66,7 +66,7 @@ import {
 } from './shared';
 import { statementDocument } from './documents';
 import { readPublicSubjectDocument } from './subject-queries';
-import { DocumentValue, LanguageTag, readableDocument, SpoilerGate, type ValueLabels } from './values';
+import { DocumentValue, LanguageTag, SpoilerGate, type ValueLabels } from './values';
 import { DescriptionPassage, SubjectPassage } from './subject-passage';
 import {
   createSubjectTextRetryController,
@@ -312,21 +312,6 @@ function linkItems(
 }
 
 export { holderItems } from './overview-holder-items';
-
-/** What a qualifier shows in the reading view: an item as its label, text as itself; anything else stays out. */
-function noteOf(qualifier: Stmt['qualifiers'][number], related: Related, locale: string): string | null {
-  const { value, property } = qualifier;
-  if (value.type !== 'value') return null;
-  const content = value.content;
-  if (property.data_type === 'wikibase-item' && typeof content === 'string') {
-    const entry = Object.hasOwn(related, content) ? related[content] : undefined;
-    return pageText(entry?.labels, locale).text || null;
-  }
-  if (property.data_type === 'monolingualtext' && isRecord(content) && typeof content.language === 'string')
-    return pageText({ [content.language]: content.text }, locale).text || null;
-  if (property.data_type === 'string' && typeof content === 'string' && content !== '') return content;
-  return null;
-}
 
 /** The statements the page subject holds for one property, shown as items with their qualifiers. */
 export function statementItems(
@@ -1763,6 +1748,7 @@ export function RatingSummary(props: Record<string, unknown>) {
 const emptyCommunityAuthors = {};
 
 function CommunityList({ kind, ...props }: Record<string, unknown> & { kind: 'review' | 'discussion' }) {
+  const bookOverview = useContext(BookOverviewContext);
   const state = useOverview(props.id);
   const node = String(props.id);
   const data = useSubjectCommunity(kind, node);
@@ -1796,6 +1782,7 @@ function CommunityList({ kind, ...props }: Record<string, unknown> & { kind: 're
         href={href}
         {...(value.currentHref !== undefined ? { currentHref: value.currentHref } : {})}
         paged={props.paged === true}
+        {...(bookOverview && kind === 'review' ? { previewLimit: BOOK_REVIEW_PREVIEW_LIMIT } : {})}
       />
     </div>
   );

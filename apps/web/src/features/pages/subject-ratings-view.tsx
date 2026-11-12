@@ -563,3 +563,73 @@ function RatingComparisons({ data, id, locale }: { data: Ratings; id: string; lo
     </details>
   );
 }
+
+/** The admitted public measurement beside Book identity; detailed populations stay in the full review journey. */
+export function BookOverviewRating({ subject, locale }: { subject: string; locale: string }) {
+  const routeData = useContext(RatingsContext);
+  const previewData = useContext(RatingsPreviewContext);
+  const page = useContext(OverviewContext);
+  const control = useContext(RatingControlContext);
+  const recovery = useContext(RatingsRecoveryContext);
+  const data = previewData === undefined ? routeData : previewData;
+  const options = { locale: locale as never };
+  // Realm aggregate admission is still owned by the existing Ratings page, not by Book presentation.
+  if (page?.context?.population.kind === 'realm') return null;
+  if (data === undefined) return null;
+  if (data === null) return <RatingsFailure id="book-identity-ratings" subject={subject} locale={locale} />;
+  const sources = 'figures' in data ? suppliedRatingSources(data) : data;
+  const question = sources.question.kind === 'ready' ? sources.question.value : undefined;
+  const figure = sources.figure.kind === 'ready' ? sources.figure.value : undefined;
+  const retry = (source: RatingSource) =>
+    recovery
+      ? () => {
+          const outcome = sources[source];
+          if (admitRatingRetry(outcome.kind === 'failed' ? outcome.retryAt : undefined)) recovery(source);
+        }
+      : undefined;
+  return (
+    <section data-slot="book-identity-ratings" aria-labelledby="book-identity-ratings-title" className="space-y-3 pt-2">
+      <h2 id="book-identity-ratings-title" className="sr-only">
+        {m.subject_ratings({}, options)}
+      </h2>
+      <RatingSourceStatus
+        outcome={sources.figure}
+        source="figure"
+        locale={locale}
+        retry={retry('figure')}
+        owner={{ subject }}
+      >
+        {figure && (
+          <div className="[&_strong]:text-2xl [&_strong]:font-semibold sm:[&_strong]:text-3xl">
+            <PublicRatingFigure figure={figure} locale={locale} />
+            {figure.count === 0 && figure.state !== 'updating' && (
+              <p className="text-sm text-muted-foreground">{m.subject_ratings_empty({}, options)}</p>
+            )}
+          </div>
+        )}
+      </RatingSourceStatus>
+      {control && (
+        <RatingSourceStatus
+          outcome={sources.question}
+          source="question"
+          locale={locale}
+          retry={retry('question')}
+          owner={{ subject }}
+        >
+          {question && (
+            <SubjectRatingControl
+              {...(control.failure !== undefined ? { initialFailure: control.failure } : {})}
+              question={question}
+              locale={control.locale}
+              own={control.own}
+              {...(control.binding ? { binding: control.binding } : {})}
+              returnTo={control.returnTo}
+              session={control.session}
+              subjectId={control.subjectId}
+            />
+          )}
+        </RatingSourceStatus>
+      )}
+    </section>
+  );
+}

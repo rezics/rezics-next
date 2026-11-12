@@ -247,10 +247,19 @@ test('Subject composition joins the VN, anime and book with localized, disclosed
   expect(animeHtml).toContain('出演者');
   expect(animeHtml).toContain('第一話');
   const bookHtml = await render(book);
-  expect(bookHtml).toContain('data-slot="literary-reader"');
-  expect(bookHtml).toContain('原作ビジュアルノベル');
+  expect(bookHtml).toContain('data-slot="book-overview"');
+  expect(bookHtml).not.toContain('data-slot="literary-reader"');
+  expect(bookHtml).not.toContain('data-slot="work-franchise"');
+  expect(link(bookHtml, vnId)).toBeNull();
   expect(bookHtml).toContain('作家');
-  expect(bookHtml).toContain('第一巻');
+  expect(bookHtml).not.toContain('第一巻');
+  // The canonical Relations reader still owns the same selected native window and return.
+  const bookRelations = await render(book, pageFor(book), undefined, {
+    node: 'adaptations',
+    property: 'wdt:P144',
+    direction: 'inverse',
+  });
+  expect(bookRelations).not.toContain('data-slot="book-overview"');
 
   const replacement = await render(
     read('wd:Q689445', '別のビジュアルノベル', vnId, 'schema:TVSeries', '別のアニメ', id(20)),

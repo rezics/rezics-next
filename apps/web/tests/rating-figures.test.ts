@@ -12,7 +12,8 @@ import type { PublicFigure, RatingQuestion } from '../src/features/pages/subject
 import type { SubjectPersonalLease, SubjectRatingWriteOperation } from '../src/features/pages/subject-personal-reader';
 
 const { RatingControlView, applyOptimisticRatingChange } = await import('../src/features/pages/rating-control');
-const { RatingsView } = await import('../src/features/pages/subject-ratings-view');
+const { RatingsView, BookOverviewRating, RatingsPreviewContext } =
+  await import('../src/features/pages/subject-ratings-view');
 const { subjectHead } = await import('../src/features/pages/subject-head');
 const { subjectOwnRatingQuery, subjectRatingQuery } = await import('../src/features/pages/subject-queries');
 const { GLOBAL, QUESTION, preparedRatingReader, readRatings, readOwnRating, writeOwnRating } =
@@ -373,4 +374,27 @@ test('unpublished, ineligible, stale, threshold and absent distributions render 
     const html = renderToStaticMarkup(createElement(RatingDistribution, { ...item, question, locale: 'en' }));
     expect(html).toBe('');
   }
+});
+
+test('Book identity preserves absent, unavailable and unpublished public ratings instead of inventing a score', () => {
+  const render = (data: import('../src/features/pages/subject-ratings').RatingSources | null | undefined) =>
+    renderToStaticMarkup(
+      createElement(
+        RatingsPreviewContext.Provider,
+        { value: data },
+        createElement(BookOverviewRating, { subject: subjectId, locale: 'en' }),
+      ),
+    );
+  expect(render(undefined)).toBe('');
+  expect(render(null)).toContain('data-state="failed"');
+  const sources = { question: { kind: 'absent' }, global: { kind: 'absent' }, statistics: { kind: 'absent' } } as const;
+  const unavailable = render({ ...sources, figure: { kind: 'unavailable' } });
+  expect(unavailable).toContain('data-state="unavailable"');
+  expect(unavailable).not.toContain('data-slot="public-rating-figure"');
+  const unpublished = render({
+    ...sources,
+    figure: { kind: 'ready', value: { ...ready, count: 3, mean: null, score: null, state: 'insufficient_data' } },
+  });
+  expect(unpublished).toContain('data-slot="public-rating-figure"');
+  expect(unpublished).not.toContain('<strong');
 });
