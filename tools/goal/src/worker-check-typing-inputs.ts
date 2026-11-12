@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { deflateSync } from 'node:zlib';
 import {
   existsSync,
   lstatSync,
@@ -469,19 +470,22 @@ function stableSource(started: TypingInputs, completed: TypingInputs, outputs: r
 export function typingInputCommand(command: readonly string[]): string[] {
   // Carry the current standalone capture implementation through argv: old frozen worktrees need no source rewrite.
   // Keep each transferred argument under remote custody's 4096-character bound.
-  const payload = Buffer.from(
-    JSON.stringify({
-      captureModule: readFileSync(import.meta.path).toString('base64'),
-      command,
-    }),
+  const payload = deflateSync(
+    Buffer.from(
+      JSON.stringify({
+        captureModule: readFileSync(import.meta.path).toString('base64'),
+        command,
+      }),
+    ),
   ).toString('base64');
   const payloadChunks = payload.match(/.{1,3000}/g) ?? [];
   return [
     'bun',
     '-e',
     `
+const { inflateSync } = await import('node:zlib');
 const payload = process.argv.slice(1).join('');
-const { captureModule, command } = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
+const { captureModule, command } = JSON.parse(inflateSync(Buffer.from(payload, 'base64')).toString('utf8'));
 let complete;
 let readReceipt;
 try {
