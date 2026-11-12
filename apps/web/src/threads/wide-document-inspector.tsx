@@ -63,7 +63,19 @@ type PendingCopy = { text: string; operation: number };
 const noDisclosures: ReadonlySet<number> = new Set();
 
 /** One current-visit registry and one active inspector for the published document. */
-export function WideDocumentReading({
+export function WideDocumentReading(props: Props) {
+  const visit = useRef({ document: props.document, visitKey: props.visitKey, generation: 0 });
+  if (visit.current.document !== props.document || visit.current.visitKey !== props.visitKey) {
+    visit.current = {
+      document: props.document,
+      visitKey: props.visitKey,
+      generation: visit.current.generation + 1,
+    };
+  }
+  return <WideDocumentReadingVisit key={visit.current.generation} {...props} />;
+}
+
+function WideDocumentReadingVisit({
   document,
   visitKey,
   focusBoundaryRef,
@@ -78,10 +90,13 @@ export function WideDocumentReading({
     () => registerWideDocumentBlocks(document, disclosedSpoilers),
     [document, visitKey, disclosedSpoilers],
   );
-  const descriptorsByNode = useMemo(() => {
-    const result = new WeakMap<DocumentNode, WideDocumentDescriptor>();
-    for (const descriptor of descriptors) result.set(descriptor.node, descriptor);
-    return result;
+  const descriptorsByOccurrence = useMemo(() => {
+    const code = new Map<number, WideDocumentDescriptor>();
+    const table = new Map<number, WideDocumentDescriptor>();
+    for (const descriptor of descriptors) {
+      (descriptor.kind === 'code' ? code : table).set(descriptor.occurrence, descriptor);
+    }
+    return { code, table };
   }, [descriptors]);
   const [active, setActive] = useState<WideDocumentInspection | null>(null);
   const activeRef = useRef<WideDocumentInspection | null>(null);
@@ -127,9 +142,12 @@ export function WideDocumentReading({
 
   useLayoutEffect(() => {
     if (!active) return;
-    const current = descriptorsByNode.get(active.descriptor.node);
-    if (!current || current.kind !== active.kind) close();
-  }, [active, close, descriptorsByNode]);
+    const current =
+      active.kind === 'code'
+        ? descriptorsByOccurrence.code.get(active.descriptor.occurrence)
+        : descriptorsByOccurrence.table.get(active.descriptor.occurrence);
+    if (!current || current.node !== active.descriptor.node) close();
+  }, [active, close, descriptorsByOccurrence]);
 
   const copy = useCallback(
     async (descriptor: WideDocumentDescriptor) => {
@@ -196,10 +214,10 @@ export function WideDocumentReading({
   );
 
   const renderCodeBlock = useCallback(
-    (node: DocumentNode, children: ReactNode, defaultContent: ReactNode) => {
-      const descriptor = descriptorsByNode.get(node);
-      if (!descriptor || descriptor.kind !== 'code') {
-        return callerCodeBlock ? callerCodeBlock(node, children, defaultContent) : defaultContent;
+    (node: DocumentNode, children: ReactNode, defaultContent: ReactNode, occurrence: number) => {
+      const descriptor = descriptorsByOccurrence.code.get(occurrence);
+      if (!descriptor) {
+        return callerCodeBlock ? callerCodeBlock(node, children, defaultContent, occurrence) : defaultContent;
       }
       return (
         <WideDocumentCode
@@ -216,14 +234,14 @@ export function WideDocumentReading({
         />
       );
     },
-    [callerCodeBlock, copy, copyState, descriptorsByNode, inspect, readingLocale],
+    [callerCodeBlock, copy, copyState, descriptorsByOccurrence, inspect, readingLocale],
   );
 
   const renderTable = useCallback(
-    (node: DocumentNode, children: ReactNode, defaultContent: ReactNode) => {
-      const descriptor = descriptorsByNode.get(node);
-      if (!descriptor || descriptor.kind !== 'table') {
-        return callerTable ? callerTable(node, children, defaultContent) : defaultContent;
+    (node: DocumentNode, children: ReactNode, defaultContent: ReactNode, occurrence: number) => {
+      const descriptor = descriptorsByOccurrence.table.get(occurrence);
+      if (!descriptor) {
+        return callerTable ? callerTable(node, children, defaultContent, occurrence) : defaultContent;
       }
       return (
         <WideDocumentTable
@@ -238,7 +256,7 @@ export function WideDocumentReading({
         />
       );
     },
-    [callerTable, descriptorsByNode, inspect, readingLocale],
+    [callerTable, descriptorsByOccurrence, inspect, readingLocale],
   );
 
   return (

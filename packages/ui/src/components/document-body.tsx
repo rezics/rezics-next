@@ -96,9 +96,14 @@ type Props = {
   visitKey?: string;
   /** A reader without current native derivative summaries must render explicit unavailability, never guess a URL. */
   renderImage?: (image: { mediaId: string; alt: string }) => ReactNode;
-  /** Optional published-reader ports. Other DocumentBody consumers retain their existing plain rendering. */
-  renderCodeBlock?: (node: DocumentNode, children: ReactNode, defaultContent: ReactNode) => ReactNode;
-  renderTable?: (node: DocumentNode, children: ReactNode, defaultContent: ReactNode) => ReactNode;
+  /** Optional published-reader ports. Occurrence is zero-based among authored nodes of the same type. */
+  renderCodeBlock?: (
+    node: DocumentNode,
+    children: ReactNode,
+    defaultContent: ReactNode,
+    occurrence: number,
+  ) => ReactNode;
+  renderTable?: (node: DocumentNode, children: ReactNode, defaultContent: ReactNode, occurrence: number) => ReactNode;
 };
 
 /** Render a document snapshot without creating an editor or requiring a browser DOM. */
@@ -158,6 +163,10 @@ export function DocumentBody({
   };
   let linkOccurrence = 0;
   let mentionOccurrence = 0;
+  const codeBlockOccurrences = new WeakMap<object, number>();
+  const tableOccurrences = new WeakMap<object, number>();
+  let codeBlockOccurrence = 0;
+  let tableOccurrence = 0;
   const content = renderToReactElement({
     extensions: documentExtensions,
     content: document.doc,
@@ -227,14 +236,24 @@ export function DocumentBody({
           </li>
         ),
         codeBlock: ({ node, children }: any) => {
+          let occurrence = codeBlockOccurrences.get(node);
+          if (occurrence === undefined) {
+            occurrence = codeBlockOccurrence++;
+            codeBlockOccurrences.set(node, occurrence);
+          }
           const defaultContent = (
             <pre>
               <code data-language={node.attrs?.language ?? undefined}>{children}</code>
             </pre>
           );
-          return renderCodeBlock ? renderCodeBlock(node, children, defaultContent) : defaultContent;
+          return renderCodeBlock ? renderCodeBlock(node, children, defaultContent, occurrence) : defaultContent;
         },
         table: ({ node, children }: any) => {
+          let occurrence = tableOccurrences.get(node);
+          if (occurrence === undefined) {
+            occurrence = tableOccurrence++;
+            tableOccurrences.set(node, occurrence);
+          }
           const caption = typeof node.attrs?.caption === 'string' ? node.attrs.caption : undefined;
           const defaultContent = (
             <div className="document-table-scroll">
@@ -244,7 +263,7 @@ export function DocumentBody({
               </table>
             </div>
           );
-          return renderTable ? renderTable(node, children, defaultContent) : defaultContent;
+          return renderTable ? renderTable(node, children, defaultContent, occurrence) : defaultContent;
         },
         tableHeader: ({ node, children }: any) => (
           <th

@@ -16,7 +16,7 @@ export function createNativeSourceCaptureAdapter(dependencies: {
   const full = createCollectionSource(dependencies);
   const ordinary = createOrdinaryCollectionPageSource(dependencies);
   return {
-    prepare(input) {
+    async prepare(input) {
       const at = input.at;
       if (at === undefined) throw new TypeError('Collection Source prepare requires authoritative time');
       if (input.logical && !input.source)
@@ -24,7 +24,7 @@ export function createNativeSourceCaptureAdapter(dependencies: {
           detail: 'Logical built-ins require the caller’s registered Collection Source.',
         });
       const source = input.source ?? ((input.ordinaryPage ?? dependencies.ordinaryPage) ? ordinary : full);
-      return source.prepare({
+      const prepared = await source.prepare({
         actor: input.actor as Actor,
         collectionId: input.collectionId,
         deadline: input.deadline,
@@ -32,6 +32,18 @@ export function createNativeSourceCaptureAdapter(dependencies: {
         allowance: input.allowance,
         ...(input.logical !== undefined ? { logical: input.logical } : {}),
       });
+      const actorAccountId = input.actor.kind === 'account' ? input.actor.accountId : undefined;
+      if (
+        input.logical &&
+        (actorAccountId === undefined ||
+          prepared.source.observation.collectionId !== input.collectionId ||
+          prepared.source.observation.authority.kind !== 'private_builtin' ||
+          prepared.source.observation.authority.curatorAccountId !== actorAccountId)
+      )
+        throw new ProblemError('dependency_unavailable', {
+          detail: 'The caller’s Collection Source has no current owner-bound logical built-in observation.',
+        });
+      return prepared;
     },
   };
 }

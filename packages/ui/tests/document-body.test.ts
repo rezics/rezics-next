@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { DocumentSnapshot } from '@rezics/document';
+import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { DocumentBody } from '../src/components/document-body.tsx';
 
 const root = join(import.meta.dir, '..');
@@ -56,6 +56,58 @@ const snapshot = (content: DocumentSnapshot['doc']['content']): DocumentSnapshot
   version: 'rezics-document-v1',
   profile: 'blocks',
   doc: { type: 'doc', content },
+});
+
+test('JSON wide-block callbacks receive authored occurrence ordinals for duplicate ProseMirror nodes', () => {
+  const code = (language: string) =>
+    ({
+      type: 'codeBlock',
+      attrs: { language },
+      content: [{ type: 'text', text: 'same code' }],
+    }) satisfies DocumentNode;
+  const table = (caption: string) =>
+    ({
+      type: 'table',
+      attrs: { caption },
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableHeader',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'same cell' }] }],
+            },
+          ],
+        },
+      ],
+    }) satisfies DocumentNode;
+  const document = snapshot([code('typescript'), code('typescript'), table('First table'), table('Second table')]);
+  const codeOccurrences: { occurrence: number; language: unknown }[] = [];
+  const tableOccurrences: { occurrence: number; caption: unknown }[] = [];
+  const plain = renderToStaticMarkup(createElement(DocumentBody, { document }));
+  const withCallbacks = renderToStaticMarkup(
+    createElement(DocumentBody, {
+      document,
+      renderCodeBlock: (node, _children, defaultContent, occurrence) => {
+        codeOccurrences.push({ occurrence, language: node.attrs?.language });
+        return defaultContent;
+      },
+      renderTable: (node, _children, defaultContent, occurrence) => {
+        tableOccurrences.push({ occurrence, caption: node.attrs?.caption });
+        return defaultContent;
+      },
+    }),
+  );
+
+  expect(codeOccurrences).toEqual([
+    { occurrence: 0, language: 'typescript' },
+    { occurrence: 1, language: 'typescript' },
+  ]);
+  expect(tableOccurrences).toEqual([
+    { occurrence: 0, caption: 'First table' },
+    { occurrence: 1, caption: 'Second table' },
+  ]);
+  expect(withCallbacks).toBe(plain);
 });
 
 test('an image without an authorized renderer stays unavailable and document affordances use supplied locale labels', () => {

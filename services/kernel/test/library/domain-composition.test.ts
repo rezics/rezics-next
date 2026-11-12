@@ -328,19 +328,19 @@ test('native Source observations preserve the identity for each authority varian
 test('native Source capture forwards logical intent through the exact caller Source instance', async () => {
   let received: Parameters<CollectionSource['prepare']>[0] | undefined;
   let receiver: unknown;
+  const expectedSource = source({ kind: 'private_builtin', curatorAccountId: accountId });
+  const expectedWork = receipt('logical-source');
+  const expected = { source: expectedSource, work: expectedWork };
   const callerSource: Pick<CollectionSource, 'prepare'> = {
     async prepare(this: unknown, input) {
       received = input;
       receiver = this;
-      return {
-        source: source({ kind: 'private_builtin', curatorAccountId: accountId }),
-        work: receipt(input.allowance.reservationId),
-      };
+      return expected;
     },
   };
   const capture = createNativeSourceCaptureAdapter({ pool: {} as Pool, access: {} as Access });
-
-  await capture.prepare({
+  const domain = createLibraryApplications(fakeCapabilities({ sourceCapture: capture }));
+  const input = {
     actor,
     collectionId,
     deadline: Date.now() + 1_000,
@@ -348,10 +348,35 @@ test('native Source capture forwards logical intent through the exact caller Sou
     allowance: workAllowance(8, 'logical-source'),
     source: callerSource,
     logical: true,
-  });
+  } as const;
+
+  const captured = await domain.sourceCapture.capture(input);
 
   expect(receiver).toBe(callerSource);
+  expect(received?.actor).toBe(actor);
   expect(received?.logical).toBe(true);
+  expect(captured.source).toBe(expected.source);
+  expect(captured.work).toBe(expected.work);
+  expect(captured.privateWorking).toBe(true);
+
+  const wrongCurator = source({ kind: 'private_builtin', curatorAccountId: subjectId });
+  const wrongCollection = {
+    ...source({ kind: 'private_builtin', curatorAccountId: accountId }),
+    observation: { ...observation({ kind: 'private_builtin', curatorAccountId: accountId }), collectionId: subjectId },
+  };
+  for (const prepared of [wrongCurator, wrongCollection]) {
+    const mismatchedSource: Pick<CollectionSource, 'prepare'> = {
+      async prepare() {
+        return { source: prepared, work: expectedWork };
+      },
+    };
+    await expect(capture.prepare({ ...input, source: mismatchedSource })).rejects.toMatchObject({
+      code: 'dependency_unavailable',
+    });
+  }
+  await expect(capture.prepare({ ...input, actor: { kind: 'anonymous' } })).rejects.toMatchObject({
+    code: 'dependency_unavailable',
+  });
 });
 
 test('Library applications run with fake capabilities through Source, members, publication and Entry/progress', async () => {
@@ -388,8 +413,12 @@ test('Library applications run with fake capabilities through Source, members, p
   expect(captured.privateWorking).toBe(true);
   expect(captured.source[preparedSource]).toBe(true);
 
+  const nativeSourceCapture = createNativeSourceCaptureAdapter({ pool: {} as Pool, access: {} as Access });
   const publicDomain = createLibraryApplications(
-    fakeCapabilities({ sourceAuthority: { kind: 'activated_output', generation: activeOutputGeneration } }),
+    fakeCapabilities({
+      sourceAuthority: { kind: 'activated_output', generation: activeOutputGeneration },
+      sourceCapture: nativeSourceCapture,
+    }),
   );
   const activated = await publicDomain.sourceCapture.capture({
     actor,
@@ -411,7 +440,9 @@ test('Library applications run with fake capabilities through Source, members, p
     }),
   ).rejects.toMatchObject({ code: 'dependency_unavailable' });
 
-  const curatedDomain = createLibraryApplications(fakeCapabilities({ sourceAuthority: { kind: 'curated' } }));
+  const curatedDomain = createLibraryApplications(
+    fakeCapabilities({ sourceAuthority: { kind: 'curated' }, sourceCapture: nativeSourceCapture }),
+  );
   const curatedCaller: Pick<CollectionSource, 'prepare'> = {
     async prepare(input) {
       return { source: source({ kind: 'curated' }), work: receipt(input.allowance.reservationId) };

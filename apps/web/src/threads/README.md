@@ -384,6 +384,9 @@ without a separate horizontal-scroll focus target.
 Decision: Wide reading shares one post-scoped inspector; plain tables with no media or interactive descendants are
 eligible, spoiler content becomes eligible only after disclosure, and code copying is capped at 128 KiB.
 
+Decision: Shared-renderer callbacks bridge JSON snapshots to the wide reader by per-kind authored occurrence;
+ordinary `DocumentBody` output remains unchanged.
+
 Published current-post and immutable-revision readers register at most 64 disclosed code/table blocks once per visit.
 Inspection keeps the same rendered block in authored order; table overflow stays keyboard-scrollable, and code copy
 reports only a completed clipboard write or offers the same selected code for manual copying. Concealed spoiler content,
