@@ -2869,6 +2869,15 @@ Decision: recover recognized workspace compiler intent with `bun run --cwd <work
 recovery grant only after the previous exact check proves terminal SIGTERM before command start, preserving its stamp
 and physical custody.
 
+Decision: recognize only the installed direct Kernel argv `bun services/kernel/scripts/typecheck.ts` and bind it to
+the same configured Kernel dependency graph as its manifest typecheck script. A retained conservative Kernel receipt
+qualifies only when every current source input and prepared dependency identity matches; projection omits only
+unconsumed documents and operational files the configured owner already excludes. Reuse an earlier Kernel pass across
+later stamps only after every same-attempt check has terminal physical custody. A cancellation tombstone must bind the
+exact result bytes and referenced Root authorization bytes/row, and its physical history must prove terminality;
+unknown or living custody keeps the existing grant fenced and authorizes no replacement. A newer real compiler failure
+remains authoritative. Web recovery is unchanged.
+
 Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
 environment retry was withdrawn by stop, but only with authenticated authority, unchanged final source, a completed
 known stop, terminal custody for every same-attempt check and one exact installed Web compiler grant. Permit one
