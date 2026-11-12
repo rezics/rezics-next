@@ -2,9 +2,18 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { beginTypingInputReceipt } from './worker-check-typing-inputs.ts';
 import type { LandingRequest } from './contracts.ts';
 import { newestWorktreeMtime, WorkerJob } from './job.ts';
+import { processIdentity, type ProcessIdentity } from './process.ts';
 import { harness, reading, tempDirectory } from './test-support.ts';
+import {
+  admitWorkerCheckHostRun,
+  recordWorkerCheckTypingInputs,
+  settleWorkerCheckHostBudget,
+  workerCheckBudgetDirectory,
+} from './worker-check-budget.ts';
+import type { Attempt } from './types.ts';
 
 function waitingResumeCli(checkId: string): string {
   const waiting = JSON.stringify({ status: 'waiting', summary: 'check is running', checks: [checkId] });
@@ -45,6 +54,145 @@ function poolReading(pool: ReturnType<typeof harness>['settings']['pools'][numbe
   return value;
 }
 
+function stoppedTypingRetryFixture(
+  h: ReturnType<typeof harness>,
+  options: { unknownCustody?: boolean; misclassified?: boolean; auxiliaryProcesses?: ProcessIdentity[] } = {},
+) {
+  const task = h.tasks.dispatch(h.briefFile);
+  h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
+    current.brief.goal = 'web';
+    current.brief.kind = 'interface';
+  });
+  const ref = { taskId: task.id, attempt: 1 };
+  const now = Date.now();
+  const process: ProcessIdentity = { pid: 2_000_000_000, start: '1', boot: 'fixture', group: 2_000_000_000 };
+  const endedAt = new Date(now - 5_000).toISOString();
+  const stopRequestedAt = new Date(now - 3_000).toISOString();
+  const stopSettledAt = new Date(now - 2_000).toISOString();
+  const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (number): Attempt => ({
+    taskId: task.id,
+    attempt: number,
+    state: 'pending',
+    profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' },
+    pool: 'fixture',
+    tableVersion: 'fixture',
+    experiment: null,
+    startedAt: new Date(now - 10_000).toISOString(),
+    endedAt: null,
+    process,
+    driver: null,
+    logPath: join(h.settings.stateDirectory, 'runs', task.id, '1.jsonl'),
+    evidencePath: join(h.settings.stateDirectory, 'evidence', task.id, '1'),
+    auxiliaryProcesses: options.auxiliaryProcesses ?? [],
+    session: 'reader-session',
+    fixRound: 0,
+    consulted: false,
+    previousFailure: null,
+    failure: null,
+    escalation: null,
+    before: null,
+    after: null,
+    exitCode: null,
+    result: '',
+    blocker: null,
+    approaches: [],
+  }));
+  const compiler = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+  const checkId = randomUUID();
+  const physicalRunId = randomUUID();
+  const worktree = task.worktree;
+  mkdirSync(join(worktree, 'apps/web/scripts'), { recursive: true });
+  mkdirSync(join(worktree, 'apps/web/src'), { recursive: true });
+  writeFileSync(
+    join(worktree, 'apps/web/package.json'),
+    JSON.stringify({ name: '@rezics/web', scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
+  );
+  writeFileSync(join(worktree, 'apps/web/tsconfig.json'), '{"include":["src/**/*.ts"]}');
+  writeFileSync(join(worktree, 'apps/web/scripts/typecheck.ts'), 'export {};\n');
+  writeFileSync(join(worktree, 'apps/web/src/reader.ts'), 'export const mounted = false;\n');
+
+  const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, task.id, ref.attempt);
+  const admitted = admitWorkerCheckHostRun({ directory: budget, worktree, limit: 2 });
+  if (!admitted.ok) throw new Error(admitted.message);
+  if (!('stamp' in admitted)) throw new Error('Compiler fixture requires a stamped budget admission');
+  const env: NodeJS.ProcessEnv = {
+    GOAL_WORKER_CHECK_BUDGET: '2',
+    GOAL_WORKER_CHECK_BUDGET_DIR: budget,
+    GOAL_WORKER_CHECK_BUDGET_STAMP: admitted.stamp,
+    REZICS_TYPING_INPUTS_PHYSICAL: physicalRunId,
+    REZICS_TYPING_INPUTS_COMMAND: Buffer.from(JSON.stringify(compiler)).toString('base64'),
+  };
+  recordWorkerCheckTypingInputs(env, worktree, physicalRunId, compiler);
+  const complete = beginTypingInputReceipt(worktree, env, compiler);
+  if (!complete) throw new Error('Web compiler fixture did not capture its inputs');
+  complete(1);
+  const log = join(h.settings.stateDirectory, `${task.id}.typecheck.log`);
+  writeFileSync(log, 'apps/web/src/reader.ts(1,1): error TS2322: required optional prop is missing\n');
+  settleWorkerCheckHostBudget(env, 1, true, { argv: compiler, log, worktree, physicalRunId });
+
+  const checks = join(worktree, '.temp/goal/checks');
+  mkdirSync(join(checks, 'results'), { recursive: true });
+  const result = {
+    id: checkId,
+    cwd: worktree,
+    argv: compiler,
+    ownership: { taskId: task.id, attempt: ref.attempt },
+    status: options.unknownCustody ? 'running' : 'finished',
+    ...(options.unknownCustody ? {} : { exitCode: 1 }),
+    physicalRunId,
+  };
+  writeFileSync(join(checks, 'results', `${checkId}.json`), JSON.stringify(result));
+  if (!options.unknownCustody) {
+    mkdirSync(join(checks, 'custody/history'), { recursive: true });
+    writeFileSync(
+      join(checks, 'custody/history', `${checkId}.${physicalRunId}.json`),
+      JSON.stringify({
+        version: 1,
+        id: checkId,
+        cwd: worktree,
+        physicalRunId,
+        status: 'finished',
+        remoteExpected: false,
+        exitCode: 1,
+        terminalProof: { local: true, remote: null, resultKnown: true, observedAt: new Date().toISOString() },
+      }),
+    );
+  }
+  h.store.updateTask(ref, (current) => {
+    current.state = 'stopped';
+  });
+  h.store.updateAttempt(ref, (current) => {
+    current.state = 'stopped';
+    current.endedAt = endedAt;
+    current.exitCode = 0;
+    current.result = 'Compiler evidence is pending.';
+    current.typingEvidencePending = { result: current.result, command: compiler };
+    current.checks = [checkId];
+    current.terminationIntent = {
+      operation: 'stop',
+      requestedAt: stopRequestedAt,
+      state: 'complete',
+      processIdentity: 'known',
+      process,
+      auxiliaryProcesses: options.auxiliaryProcesses ?? [],
+      settledAt: stopSettledAt,
+    };
+  });
+  h.store.recordExplicitRetry(
+    ref,
+    (current) => {
+      current.state = 'ready';
+    },
+    { freshSession: true },
+  );
+  if (options.misclassified)
+    h.store.updateRetryIntent(ref, (current) => {
+      current.status = 'started';
+      current.nextAttempt = ref.attempt;
+    });
+  return { task: h.store.task(task.id), ref, checkId };
+}
+
 test('newest worktree mtime ignores node_modules and .temp', async () => {
   const root = tempDirectory();
   mkdirSync(join(root, 'src'), { recursive: true });
@@ -63,6 +211,43 @@ test('newest worktree mtime ignores node_modules and .temp', async () => {
   utimesSync(join(root, '.temp/scratch'), future, future);
   expect(await newestWorktreeMtime(root)).toBe(lstatSync(kept).mtimeMs);
 });
+
+test('an explicit stopped-to-ready retry supersedes current terminal compiler failure only after physical check custody settles', async () => {
+  const h = harness();
+  try {
+    const parked = stoppedTypingRetryFixture(h, { unknownCustody: true });
+    const recoverable = stoppedTypingRetryFixture(h, { misclassified: true });
+    const liveAuxiliaryIdentity = processIdentity();
+    if (!liveAuxiliaryIdentity) throw new Error('Could not identify the test process');
+    const liveAuxiliary = stoppedTypingRetryFixture(h, { auxiliaryProcesses: [liveAuxiliaryIdentity] });
+    const landings: LandingRequest[] = [];
+    const job = new WorkerJob(h.tasks, { enqueue: (request) => landings.push(request) }, { deliver() {} });
+
+    job.resumePendingRetries();
+    await job.drain();
+
+    expect(h.store.task(parked.task.id).currentAttempt).toBe(1);
+    expect(h.store.task(parked.task.id).state).toBe('ready');
+    expect(h.store.retryIntent(parked.ref)?.status).toBe('pending');
+    expect(h.store.retryIntent(parked.ref)?.nextAttempt).toBeUndefined();
+    expect(h.store.attempt(parked.ref).typingEvidencePending).toBeDefined();
+    expect(
+      h.store.events(parked.task.id).some((event) => event.kind === 'worker-run-started' && event.attempt > 1),
+    ).toBe(false);
+
+    expect(h.store.task(recoverable.task.id).currentAttempt).toBe(2);
+    expect(h.store.retryIntent(recoverable.ref)).toMatchObject({ status: 'started', nextAttempt: 2 });
+    expect(h.store.attempt(recoverable.ref).state).toBe('superseded');
+    expect(h.store.attempt({ taskId: recoverable.task.id, attempt: 2 }).state).toBe('exited');
+    expect(h.store.attempt({ taskId: recoverable.task.id, attempt: 2 }).typingEvidencePending).toBeUndefined();
+    expect(h.store.task(liveAuxiliary.task.id).currentAttempt).toBe(1);
+    expect(h.store.retryIntent(liveAuxiliary.ref)?.status).toBe('pending');
+    expect(h.store.attempt(liveAuxiliary.ref).state).toBe('stopped');
+    expect(landings).toHaveLength(1);
+  } finally {
+    await h.disposeAsync();
+  }
+}, 30_000);
 
 const fileActiveEmptyLogCli = `#!/usr/bin/env bun
 import { writeFileSync } from 'node:fs';

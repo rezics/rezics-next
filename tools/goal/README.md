@@ -2864,6 +2864,8 @@ commits and check IDs instead of creating a source-writing retry.
 
 Decision: at the existing stopped-task expiry, the sweep reconciles compiler-only pending source under its current task lease, lands matching evidence, or records one per-attempt actionable event naming the authenticated `typing-recover` action; the stop remains visible to width reporting, no check is minted or compiler started, and explicit stop/cancel, real compiler failures and ordinary stale stops keep their current outcomes.
 
+Decision: an explicit retry queued after a completed stop supersedes pending compiler evidence only when current compiler inputs prove a terminal failure, all same-attempt check custody is terminal, and no successor, later worker start or live capacity ticket exists; otherwise the retry remains pending. A same-generation `started` intent is reconciled only under that same proof.
+
 Authenticated owning or operations managers reconcile that same attempt without starting a model:
 
 Decision: when local `integration.operationsManager` is absent, typing-recovery event checks admit the owning task manager only; the nonempty actor session and retained source checks remain required.
@@ -3542,6 +3544,7 @@ a background command or yields between bounded batches; a removal fallback on th
 from the current-attempt index; attempt-resource sweeps project only terminal task ids and worktrees from that index
 and run Docker asynchronously; the daily audit reads unsettled tasks and removal reads finished tasks through the
 state index; the worktree and CPU samples yield between entries; removal commands run asynchronously.
+Decision: the periodic resource sweep inventories `/proc` once in yielding batches, maps processes only to unique terminal isolated worktrees, and rechecks process birth, cwd and indexed task ownership before TERM/KILL; immediate task cleanup and Docker selection keep their existing paths. Focused worker acceptance covers terminal-history scaling, unique-owner matching and socket responsiveness during chunked inventory; unchanged host lifecycle cases remain release checks.
 Decision: an idle daily-audit tick checks the current flow schema, UTC run row and failure outbox with reads before
 taking any SQLite write transaction. It acquires the existing transaction only for a pending migration, new audit
 claim or unreported failure, so a completed audit with an empty outbox cannot wait on another process's writer lock

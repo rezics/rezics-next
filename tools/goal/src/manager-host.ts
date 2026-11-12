@@ -5,7 +5,12 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { reapContainersAsync } from './containers.ts';
-import { readTerminalTaskOwners, sweepAbandonedResources } from './attempt-resources.ts';
+import {
+  readTerminalTaskOwners,
+  sweepAbandonedResources,
+  TERMINAL_TASK_STATES,
+  type TerminalProcessSweep,
+} from './attempt-resources.ts';
 import { completedUtcHour } from './efficiency-report-time.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { HostRequest, IntegrationRuntime } from './integration-runtime.ts';
@@ -64,6 +69,8 @@ export function startOrphanRecoveryTimer(
 }
 
 const appServerRegistryName = 'manager-app-servers.json';
+
+export type ManagerHostOptions = { terminalProcessSweep?: TerminalProcessSweep };
 
 function isProcessIdentity(value: unknown): value is ProcessIdentity {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -138,7 +145,7 @@ export async function stopRecordedAppServers(path: string, policy: typeof defaul
   rmSync(path, { force: true });
 }
 
-export async function serveManagers(runtime: IntegrationRuntime): Promise<void> {
+export async function serveManagers(runtime: IntegrationRuntime, options: ManagerHostOptions = {}): Promise<void> {
   const policy = runtime.managerServices.policy ?? defaultPolicy;
   const stateSweepIntervalMs = runtime.hostSweepIntervalMs ?? policy.host.stateSweepIntervalMs;
   if (!Number.isSafeInteger(stateSweepIntervalMs) || stateSweepIntervalMs <= 0)
@@ -146,6 +153,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
   const lease = acquireDirectoryLease(`${runtime.managerSocket}.lease`, policy.leases);
   let activeRequests = 0,
     stopServer: (() => void) | undefined;
+  let reaping: Promise<unknown> | undefined;
   let stopRequested = false;
   let registrySafe = false;
   let managers!: ManagerSessions;
@@ -358,7 +366,6 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     };
     // Ended-attempt resources and opted-in stale containers are reaped every five minutes.
     let reapedAt = 0;
-    let reaping: Promise<unknown> | undefined;
     const reap = () => {
       if (reaping || Date.now() - reapedAt < policy.containers.cleanupIntervalMs) return;
       reapedAt = Date.now();
@@ -371,6 +378,20 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
               stateDirectory: runtime.stateDirectory,
               containers: policy.containers,
               graceMs: 1000,
+              ...(options.terminalProcessSweep ? { terminalProcessSweep: options.terminalProcessSweep } : {}),
+              currentTerminalOwner(owner, worktree) {
+                const task = runtime.db
+                  .query(
+                    `SELECT json_extract(body, '$.state') AS state, json_extract(body, '$.worktree') AS worktree, json_extract(body, '$.workspace') AS workspace FROM worker_tasks WHERE id=?`,
+                  )
+                  .get(owner) as { state: string; worktree: string; workspace: unknown } | null;
+                return Boolean(
+                  task &&
+                  (TERMINAL_TASK_STATES as readonly string[]).includes(task.state) &&
+                  task.worktree === worktree &&
+                  !task.workspace,
+                );
+              },
             });
             await reapContainersAsync(
               runtime.db,
@@ -424,6 +445,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
       codePoll.unref();
     });
   } finally {
+    if (reaping) await reaping;
     stopHeartbeat?.();
     if (recoveryTimer) clearInterval(recoveryTimer);
     if (stateTimer) clearInterval(stateTimer);

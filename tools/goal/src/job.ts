@@ -5,7 +5,7 @@ import {
   recordedWorkerBootCustody,
 } from './worker-host-custody.ts';
 import defaults from '../defaults.json';
-import { recoverWorkerTyping } from './typing-recovery.ts';
+import { reconcileStoppedTypingFailureRetry, recoverWorkerTyping } from './typing-recovery.ts';
 import { isTypingEvidenceUnavailableResult } from './worker-check-budget.ts';
 import { defaultPolicy } from './policy.ts';
 import {
@@ -307,23 +307,6 @@ export class WorkerJob implements GateOutcomeSink {
     if (!this.startsAllowed()) return;
     const key = `${ref.taskId}:${ref.attempt}`;
     if (this.retryIntentsInProgress.has(key)) return;
-    if (this.offloadStart) {
-      this.retryIntentsInProgress.add(key);
-      try {
-        try {
-          await this.offloadStart(ref.taskId, 'retry');
-        } catch (error) {
-          if (error instanceof PoolUnavailableError) {
-            this.deferPoolRefusal(ref);
-            return;
-          }
-          throw error;
-        }
-      } finally {
-        this.retryIntentsInProgress.delete(key);
-      }
-      return;
-    }
     this.retryIntentsInProgress.add(key);
     const store = this.tasks.store;
     try {
@@ -340,6 +323,7 @@ export class WorkerJob implements GateOutcomeSink {
         return;
       }
       if (task.currentAttempt !== ref.attempt) return;
+      if (task.state === 'held' || task.state === 'cancelled') return;
       if (ref.attempt > 0) {
         const completed = store.attempt(ref);
         if (completed.result.startsWith(HOST_INTERRUPTION_RETAINED)) {
@@ -347,11 +331,26 @@ export class WorkerJob implements GateOutcomeSink {
           return;
         }
         if (completed.typingEvidencePending || isTypingEvidenceUnavailableResult(completed.result)) {
-          await recoverWorkerTyping(this.tasks, this.landing, ref, undefined, this.afterSettle);
-          return;
+          if (!reconcileStoppedTypingFailureRetry(this.tasks, ref)) {
+            // Stopped source stays parked until current compiler inputs and physical checks prove its terminal failure.
+            if (completed.state === 'stopped') return;
+            await recoverWorkerTyping(this.tasks, this.landing, ref, undefined, this.afterSettle);
+            return;
+          }
         }
       }
-      if (task.state === 'held') return;
+      if (this.offloadStart) {
+        try {
+          await this.offloadStart(ref.taskId, 'retry');
+        } catch (error) {
+          if (error instanceof PoolUnavailableError) {
+            this.deferPoolRefusal(ref);
+            return;
+          }
+          throw error;
+        }
+        return;
+      }
       const incident = toolIncidentForRetry(store, ref);
       const incidentProbe = incident !== null;
       if (incident && !toolIncidentRetryAllowed(store, ref)) return;
@@ -378,10 +377,6 @@ export class WorkerJob implements GateOutcomeSink {
         if (!store.proofCapacityAvailable(task.brief.goal, task.id)) return;
       }
       if (!['landing', 'ready', 'running', 'stopped'].includes(task.state)) {
-        store.updateRetryIntent(ref, (value) => {
-          value.status = 'started';
-          value.nextAttempt = task.currentAttempt;
-        });
         return;
       }
       if (intent.options.escalation === 'repeated-assertion' && !intent.options.consulted) {
@@ -418,10 +413,7 @@ export class WorkerJob implements GateOutcomeSink {
       )
         return;
       if (error instanceof TaskHeldForDependenciesError || error instanceof StaleAttemptError) {
-        store.updateRetryIntent(ref, (value) => {
-          value.status = 'started';
-          value.nextAttempt = store.task(ref.taskId).currentAttempt;
-        });
+        if (error instanceof StaleAttemptError) this.markRetryIntentStarted(ref);
         return;
       }
       // Capacity refusal is an admission wait: leave the durable intent pending for the next existing recovery pass.
@@ -445,6 +437,16 @@ export class WorkerJob implements GateOutcomeSink {
       )
         this.tasks.store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
     }
+    if (this.startsAllowed())
+      for (const intent of this.tasks.store
+        .retryIntents()
+        .filter((value) => value.status === 'started' && value.nextAttempt === value.attempt)) {
+        try {
+          reconcileStoppedTypingFailureRetry(this.tasks, { taskId: intent.taskId, attempt: intent.attempt });
+        } catch (error) {
+          if (!(error instanceof LeaseHeldError)) throw error;
+        }
+      }
     for (const intent of this.tasks.store.retryIntents().filter((value) => value.status === 'pending'))
       this.track(this.runRetryIntent({ taskId: intent.taskId, attempt: intent.attempt }));
   }
