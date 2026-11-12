@@ -38,9 +38,12 @@ test('proof metadata requires explicit originals and a captured commit instead o
 });
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { harness, brief } from './test-support.ts';
 import { git } from './tasks.ts';
+import { backlogDirectory, sweepBacklog } from './backlog.ts';
+import { SqliteManagerInbox } from './inbox.ts';
 import {
   authorizeProof,
   newProofBinding,
@@ -84,8 +87,8 @@ function attempt(taskId: string, n: number, directory: string): Attempt {
     approaches: [],
   };
 }
-function registeredFixture(withoutDependencies = false) {
-  const h = harness();
+function registeredFixture(withoutDependencies = false, workerScript?: string) {
+  const h = harness(workerScript);
   // Lifecycle-only cases have no dependency manifest, installer or provider to execute.
   if (withoutDependencies) rmSync(join(h.root, 'package.json'));
   // These are the current delivered reader exports and record layout, without launching any native check.
@@ -97,7 +100,9 @@ export function readWorkerCheckRecord(id, cwd) { return JSON.parse(readFileSync(
 export function readWorkerCheckHistory(id, physical, cwd) { return JSON.parse(readFileSync(join(cwd,'.temp/goal/checks/history',id,physical+'.json'),'utf8')); }
 `,
   );
-  git(h.root, ['add', 'scripts/worker-check.ts', 'package.json']);
+  writeFileSync(join(h.root, 'fixture.test.ts'), 'export {}\n');
+  writeFileSync(join(h.root, 'other.test.ts'), 'export {}\n');
+  git(h.root, ['add', 'scripts/worker-check.ts', 'fixture.test.ts', 'other.test.ts', 'package.json']);
   git(h.root, ['commit', '-m', 'Fixture managed check reader']);
   const commit = git(h.root, ['rev-parse', 'HEAD']);
   git(h.root, ['branch', 'dev', commit]);
@@ -440,6 +445,81 @@ test('source advancement invalidates passing evidence and unregistered product j
   }
 });
 
+test('an admitted exact proof resumes after Dev moves but cannot verify the new head', async () => {
+  const h = registeredFixture(true, '#!/usr/bin/env bun\n');
+  try {
+    const task = h.store.task(h.proof.id);
+    const advanced = git(h.root, ['commit-tree', 'HEAD^{tree}', '-p', h.binding.sourceCommit, '-m', 'Move Dev only']);
+    git(h.root, ['update-ref', 'refs/heads/dev', advanced]);
+    expect(proofSourceUnchanged(task, 'dev')).toBe(false);
+    const resume = (captured = task) =>
+      launch(
+        h.store,
+        captured,
+        h.current,
+        h.settings.pools[0]!,
+        'Observe the original fixture proof.',
+        h.settings.codex,
+        h.current.session!,
+      );
+    const worker = await resume();
+    expect(await worker.exited).toMatchObject({ code: 0 });
+    const dirt = join(h.root, 'dirty-captured-proof');
+    writeFileSync(dirt, 'unexpected input');
+    await expect(resume()).rejects.toThrow('captured worktree');
+    rmSync(dirt);
+    await expect(
+      resume({ ...task, proofAuthorization: { ...task.proofAuthorization!, sourceTree: 'f'.repeat(40) } }),
+    ).rejects.toThrow('captured worktree');
+    expect(h.store.events(h.proof.id).filter((event) => event.kind === 'worker-run-started')).toHaveLength(1);
+
+    const { record, physical } = records(h.binding);
+    const directory = join(h.root, '.temp/goal/checks');
+    mkdirSync(join(directory, 'results'), { recursive: true });
+    mkdirSync(join(directory, 'history', h.binding.checkId), { recursive: true });
+    writeFileSync(join(directory, 'results', `${h.binding.checkId}.json`), JSON.stringify(record));
+    writeFileSync(
+      join(directory, 'history', h.binding.checkId, `${record.physicalRunId}.json`),
+      JSON.stringify(physical),
+    );
+    writeFileSync(
+      h.current.logPath,
+      JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'agent_message',
+          text: JSON.stringify({
+            status: 'success',
+            summary: 'Original fixture observation',
+            blocker: null,
+            checks: [],
+            approaches: [],
+          }),
+        },
+      }) + '\n',
+    );
+    await settle(h.tasks, worker, {
+      enqueue: () => {
+        throw new Error('proof must not land');
+      },
+    });
+    expect(h.store.record(h.current)?.proof).toMatchObject({ status: 'terminal', passed: true });
+    expect(h.store.task(h.proof.id).state).toBe('stopped');
+    expect(h.store.attempt(h.current)).toMatchObject({
+      failureKind: null,
+      result: expect.stringContaining('capture is not current integration'),
+    });
+    expect(h.store.events(h.proof.id).some((event) => event.kind === 'proof-capture-not-current')).toBe(true);
+    expect(h.store.events(h.proof.id).some((event) => event.kind === 'proof-verified')).toBe(false);
+    const events: ManagerEvent[] = [];
+    new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => events.push(event) }).onAttemptExit(h.current);
+    expect(events.map(({ summary }) => summary)).toEqual([expect.stringContaining('passed on its captured source')]);
+    expect(h.store.retryIntent(h.current)).toBeUndefined();
+  } finally {
+    await h.disposeAsync();
+  }
+});
+
 test('authoritative custody after model cancellation releases its owned permit without reviving the task', () => {
   const h = registeredFixture();
   try {
@@ -638,7 +718,7 @@ test('historical detached UUIDs consume proof capacity without acquiring source 
   }
 });
 
-import { workerCheckProtocol, workerPrompt, launchCommand } from './launch.ts';
+import { workerCheckProtocol, workerPrompt, launchCommand, launch } from './launch.ts';
 import { fixturePool } from './test-support.ts';
 import { requireOriginalProofProfile } from './agents.ts';
 import { readRouting, routeTask } from './routing.ts';
@@ -792,6 +872,136 @@ function submittedProof(h: ReturnType<typeof registeredFixture>, changes: Partia
   return { path, brief: parseBrief(markdown, readRiskOwnership(h.settings.riskAreasFile)) };
 }
 
+test('backlog verification registers only for its confirmed Goal owner and retains the exact original gate', async () => {
+  const h = registeredFixture(true);
+  try {
+    h.store.db.query('UPDATE manager_sessions SET state=? WHERE id=?').run(
+      JSON.stringify({
+        kind: 'managed',
+        engine: 'claude',
+        status: 'running',
+        threadId: h.actor.sessionId,
+        goals: [h.proofBrief.goal, 'other'],
+      }),
+      h.actor.id,
+    );
+    const root = backlogDirectory(h.settings.stateDirectory);
+    const ready = (goal: string, name: string, path: string) => {
+      const directory = join(root, goal);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, name), readFileSync(path, 'utf8'));
+    };
+    const exact = submittedProof(h).path;
+    const exactMarkdown = readFileSync(exact, 'utf8');
+    ready(h.proofBrief.goal, 'exact.md', exact);
+    ready('other', 'wrong-directory.md', exact);
+    ready(
+      h.proofBrief.goal,
+      'changed-argv.md',
+      submittedProof(h, {
+        acceptance: { ...h.proofBrief.acceptance, command: ['bun', 'test', 'different.test.ts'] },
+      }).path,
+    );
+    const sweep = await sweepBacklog({
+      db: h.store.db,
+      stateDirectory: h.settings.stateDirectory,
+      inbox: new SqliteManagerInbox(h.store.db, h.settings.stateDirectory),
+      workerCap: 16,
+      perSweep: 3,
+      now: () => Date.now() + 60_000,
+      async dispatch(path, actor, proposal) {
+        return h.tasks.dispatch(path, actor ?? null, false, undefined, proposal).id;
+      },
+      async continueTask() {},
+      async cancel() {},
+    });
+    expect(
+      sweep.dispatched.map(({ brief }) => brief),
+      JSON.stringify(sweep.refused),
+    ).toEqual(['exact.md']);
+    const registered = h.store.task(sweep.dispatched[0]!.taskId);
+    expect(registered.proofAuthorization).toMatchObject({ manager: h.actor.id, sessionId: h.actor.sessionId });
+    expect(registered.brief.proof?.sourceCommit).toBe(h.proofBrief.proof?.sourceCommit);
+    expect(registered.proofAuthorization?.backlogProposal).toEqual({
+      proposalSha256: createHash('sha256').update(exactMarkdown).digest('hex'),
+      sourceCommit: h.proofBrief.proof?.sourceCommit,
+      sourceTasks: h.proofBrief.proof?.sourceTasks,
+    });
+    expect(readFileSync(join(root, h.proofBrief.goal, 'dispatched', `${registered.id}-exact.md`), 'utf8')).toBe(
+      exactMarkdown,
+    );
+    expect(registered.currentAttempt).toBe(0);
+    expect(sweep.refused).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ goal: 'other', reason: expect.stringContaining('authenticated owning') }),
+        expect.objectContaining({ goal: h.proofBrief.goal, reason: expect.stringContaining('whole original argv') }),
+      ]),
+    );
+  } finally {
+    h.dispose();
+  }
+});
+
+test('an admitted queued proof captures one Dev advance and archives the unchanged proposal', async () => {
+  const h = registeredFixture(true);
+  try {
+    h.store.db.query('UPDATE manager_sessions SET state=? WHERE id=?').run(
+      JSON.stringify({
+        kind: 'managed',
+        engine: 'claude',
+        status: 'running',
+        threadId: h.actor.sessionId,
+        goals: [h.proofBrief.goal],
+      }),
+      h.actor.id,
+    );
+    const original = submittedProof(h);
+    const originalMarkdown = readFileSync(original.path, 'utf8');
+    const directory = join(backlogDirectory(h.settings.stateDirectory), h.proofBrief.goal);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'queued.md'), originalMarkdown);
+    const originalHead = h.proofBrief.proof!.sourceCommit;
+    writeFileSync(join(h.root, 'advance-before-registration.txt'), 'Dev advanced while this proposal waited.\n');
+    git(h.root, ['add', 'advance-before-registration.txt']);
+    git(h.root, ['commit', '-m', 'Advance Dev before proof registration']);
+    const capturedHead = git(h.root, ['rev-parse', 'HEAD']);
+    git(h.root, ['update-ref', 'refs/heads/dev', capturedHead]);
+
+    const sweep = await sweepBacklog({
+      db: h.store.db,
+      stateDirectory: h.settings.stateDirectory,
+      inbox: new SqliteManagerInbox(h.store.db, h.settings.stateDirectory),
+      workerCap: 16,
+      perSweep: 1,
+      now: () => Date.now() + 60_000,
+      async dispatch(path, actor, proposal) {
+        return h.tasks.dispatch(path, actor ?? null, false, undefined, proposal).id;
+      },
+      async continueTask() {},
+      async cancel() {},
+    });
+
+    expect(sweep.refused).toEqual([]);
+    const task = h.store.task(sweep.dispatched[0]!.taskId);
+    expect(task.base).toBe(capturedHead);
+    expect(task.brief.proof).toEqual({
+      ...h.proofBrief.proof,
+      sourceCommit: capturedHead,
+    });
+    expect(task.proofAuthorization).toMatchObject({
+      sourceTree: git(h.root, ['rev-parse', `${capturedHead}^{tree}`]),
+      backlogProposal: {
+        proposalSha256: createHash('sha256').update(originalMarkdown).digest('hex'),
+        sourceCommit: originalHead,
+        sourceTasks: h.proofBrief.proof!.sourceTasks,
+      },
+    });
+    expect(readFileSync(join(directory, 'dispatched', `${task.id}-queued.md`), 'utf8')).toBe(originalMarkdown);
+  } finally {
+    h.dispose();
+  }
+});
+
 test('Exact whole original Auth workspace check and complete homogeneous helper-plus-test file union authorize without relaxing root/gate prohibition', () => {
   const h = registeredFixture();
   try {
@@ -944,6 +1154,88 @@ test('Exact whole original Auth workspace check and complete homogeneous helper-
   }
 });
 
+test('the exact finite membership Auth-then-Kernel original preflights per service and refuses shell expansion', () => {
+  const h = registeredFixture();
+  try {
+    const authFiles = ['test/membership-workflows.test.ts'];
+    const kernelFiles = [
+      'test/access/realm-membership-transition.test.ts',
+      'test/access/growth-realm-membership-transition.test.ts',
+      'test/access/membership-work.test.ts',
+      'test/community/membership.test.ts',
+    ];
+    for (const [service, files] of [
+      ['auth', authFiles],
+      ['kernel', kernelFiles],
+    ] as const) {
+      for (const file of files) {
+        const path = join(h.root, `services/${service}`, file);
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, 'export {}\n');
+      }
+    }
+    git(h.root, ['add', 'services/auth', 'services/kernel']);
+    git(h.root, ['commit', '-m', 'Fixture original membership checks']);
+    const sourceCommit = git(h.root, ['rev-parse', 'HEAD']);
+    git(h.root, ['update-ref', 'refs/heads/dev', sourceCommit]);
+    const authCommand = ['bun', 'run', '--cwd', 'services/auth', 'check', ...authFiles];
+    const kernelCommand = ['bun', 'run', '--cwd', 'services/kernel', 'check', ...kernelFiles];
+    const membershipCommand = ['sh', '-c', `${authCommand.join(' ')} && ${kernelCommand.join(' ')}`];
+    h.store.updateTask({ taskId: h.source.id, attempt: 0 }, (task) => {
+      task.brief.acceptance = { ...task.brief.acceptance, command: membershipCommand };
+      task.integratedCommit = sourceCommit;
+    });
+    const proof = {
+      ...h.proofBrief,
+      proof: { ...h.proofBrief.proof!, sourceCommit },
+      acceptance: { ...h.proofBrief.acceptance, command: membershipCommand },
+    };
+
+    expect(authorizeProof(h.store, h.root, proof, h.actor, 'operations', 'dev').originals).toEqual([
+      { taskId: h.source.id, commit: sourceCommit, argv: membershipCommand },
+    ]);
+    expect(preflightProof(h.root, proof)).toEqual([]);
+    expect(ordinaryProofCommand(membershipCommand).recordedArgv).toEqual(membershipCommand);
+    for (const script of [
+      `${authCommand.join(' ')} && ${kernelCommand.join(' ')}; bun test fixture.test.ts`,
+      `${authCommand.join(' ')} && ${kernelCommand.join(' ')} || bun test fixture.test.ts`,
+      `${authCommand.join(' ')} && ${kernelCommand.join(' ')} && bun test fixture.test.ts`,
+      `${authCommand.join(' ')} && ${kernelCommand.join(' ')} $(touch injected.test.ts)`,
+    ])
+      expect(() =>
+        authorizeProof(
+          h.store,
+          h.root,
+          { ...proof, acceptance: { ...proof.acceptance, command: ['sh', '-c', script] } },
+          h.actor,
+          'operations',
+          'dev',
+        ),
+      ).toThrow('broad root or gate campaign');
+
+    const missingCommand = [
+      'sh',
+      '-c',
+      `${authCommand.slice(0, -1).join(' ')} test/missing-membership.test.ts && ${kernelCommand.join(' ')}`,
+    ];
+    h.store.updateTask({ taskId: h.source.id, attempt: 0 }, (task) => {
+      task.brief.acceptance = { ...task.brief.acceptance, command: missingCommand };
+    });
+    expect(() =>
+      authorizeProof(
+        h.store,
+        h.root,
+        { ...proof, acceptance: { ...proof.acceptance, command: missingCommand } },
+        h.actor,
+        'operations',
+        'dev',
+      ),
+    ).toThrow('services/auth/test/missing-membership.test.ts');
+  } finally {
+    h.dispose();
+  }
+});
+
 test('stopped same-generation and never-started held proof conversion persists authentic registration/start once without fabricated source/token', async () => {
   const h = registeredFixture();
   try {
@@ -965,6 +1257,7 @@ test('stopped same-generation and never-started held proof conversion persists a
     expect(() => h.tasks.queueRetry(legacy.id, { brief: submitted.path, expectedAttempt: 27 }, h.actor)).toThrow(
       'stale',
     );
+    expect(h.store.newestPendingBriefProposal(legacy.id)).toBeUndefined();
     expect(h.store.task(legacy.id).brief.kind).toBe('claim');
     expect(h.store.task(legacy.id).proofAuthorization).toBeUndefined();
     h.tasks.queueRetry(legacy.id, { brief: submitted.path, expectedAttempt: 28 }, h.actor);
@@ -1213,7 +1506,14 @@ test('first-start cap waits and old captures keep one durable intent; authentica
     git(h.root, ['commit', '-m', 'Advance integration fixture']);
     const sourceCommit = git(h.root, ['rev-parse', 'HEAD']);
     git(h.root, ['update-ref', 'refs/heads/dev', sourceCommit]);
-    await expect(job.start(task.id, { expectedAttempt: 0 })).rejects.toThrow('integration source advanced');
+    expect(() => h.tasks.assertProofStart(h.store.task(task.id))).not.toThrow();
+    expect(() => h.tasks.queueProofStart(task.id, { expectedAttempt: 0 }, h.actor)).toThrow(
+      'proof source must be the captured integration head',
+    );
+    const unrelated = git(h.root, ['commit-tree', `${sourceCommit}^{tree}`, '-m', 'Replace integration history']);
+    git(h.root, ['update-ref', 'refs/heads/dev', unrelated]);
+    expect(() => h.tasks.assertProofStart(h.store.task(task.id))).toThrow('no longer an ancestor');
+    git(h.root, ['update-ref', 'refs/heads/dev', sourceCommit]);
     job.resumePendingRetries();
     await job.drain();
     expect(h.store.task(task.id).brief.proof?.sourceCommit).toBe(h.binding.sourceCommit);
@@ -1704,7 +2004,11 @@ test('historical reader validates the complete captured closure before importing
   const directory = temporaryDirectory();
   try {
     // Only structural read APIs are installed. No native product/remote module or execution capability is imported.
-    git(directory.path, ['clone', '--shared', '--no-checkout', resolve(import.meta.dir, '../../..'), '.']);
+    const producerRoot = resolve(import.meta.dir, '../../..');
+    git(directory.path, ['clone', '--shared', '--no-checkout', producerRoot, '.']);
+    const producerHead = git(producerRoot, ['rev-parse', 'HEAD']);
+    git(directory.path, ['fetch', '--no-tags', producerRoot, producerHead]);
+    git(directory.path, ['fetch', '--no-tags', producerRoot, PROOF_PRODUCER_COMMIT]);
     git(directory.path, ['config', 'user.name', 'Fixture']);
     git(directory.path, ['config', 'user.email', 'fixture@example.invalid']);
     mkdirSync(join(directory.path, 'scripts'));
@@ -1731,14 +2035,8 @@ export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'hi
     );
     git(directory.path, ['add', '.']);
     const tree = git(directory.path, ['write-tree']);
-    const commit = git(directory.path, [
-      'commit-tree',
-      tree,
-      '-p',
-      PROOF_PRODUCER_COMMIT,
-      '-m',
-      'Readonly reader fixture',
-    ]);
+    const producer = PROOF_PRODUCER_COMMIT;
+    const commit = git(directory.path, ['commit-tree', tree, '-p', producer, '-m', 'Readonly reader fixture']);
     git(directory.path, ['update-ref', 'refs/heads/reader-fixture', commit]);
     git(directory.path, ['symbolic-ref', 'HEAD', 'refs/heads/reader-fixture']);
     git(directory.path, ['reset', '--hard', commit]);
@@ -1748,7 +2046,8 @@ export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'hi
     await expect(validateHistoricalProofReaderSource({ ...source, root: `${directory.path}/.` })).rejects.toThrow(
       'canonical Git',
     );
-    git(directory.path, ['update-ref', 'refs/heads/fixture-integration', PROOF_PRODUCER_COMMIT]);
+    const unrelated = git(directory.path, ['commit-tree', tree, '-m', 'Unrelated integration history']);
+    git(directory.path, ['update-ref', 'refs/heads/fixture-integration', unrelated]);
     await expect(loadHistoricalProofReader(join(directory.path, '.temp/registry'), source)).rejects.toThrow(
       'integration ancestor',
     );
@@ -1814,7 +2113,7 @@ export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'hi
   } finally {
     directory.close();
   }
-});
+}, 30_000);
 
 test('unavailable optional historical reader records one diagnostic while ordinary admission and orphan/retry recovery continue', async () => {
   const h = registeredFixture();
@@ -2328,12 +2627,19 @@ test('authenticated stopped UNKNOWN proof retry captures fresh SAME-ID source wi
       proofRun: retainedRun,
     });
     const oldRecord = h.store.record(h.current);
+    const queuedAt = h.store.retryIntent(h.current)?.queuedAt;
+    expect(queuedAt).toBeString();
     h.tasks.queueProofStart(h.proof.id, { expectedAttempt: 1 }, h.actor);
     expect(h.store.retryIntents().filter((intent) => intent.taskId === h.proof.id)).toEqual([
-      { taskId: h.proof.id, attempt: 1, options: {}, status: 'pending' },
+      { taskId: h.proof.id, attempt: 1, options: {}, status: 'pending', queuedAt: queuedAt! },
     ]);
     expect(h.store.record(h.current)).toEqual(oldRecord);
     expect(h.store.events(h.proof.id).filter((event) => event.kind === 'proof-registration-replaced')).toHaveLength(1);
+    writeFileSync(join(integrated, 'next-source'), 'Unrelated work lands while the proof waits');
+    git(integrated, ['add', 'next-source']);
+    git(integrated, ['commit', '-m', 'Advance integration while the proof is queued']);
+    const newerSource = git(integrated, ['rev-parse', 'HEAD']);
+    git(h.root, ['update-ref', 'refs/heads/dev', newerSource]);
     let launches = 0;
     const futureCheck = crypto.randomUUID();
     const tasks = new WorkerTasks(
@@ -2383,10 +2689,11 @@ test('authenticated stopped UNKNOWN proof retry captures fresh SAME-ID source wi
       h.store.events(h.proof.id).some((event) => ['proof-verified', 'historical-proof-terminal'].includes(event.kind)),
     ).toBe(false);
     // The new current wait consumes one logical slot; released UNKNOWN history consumes none.
+    const latest = submittedProof(h, { proof: { ...h.proofBrief.proof, sourceCommit: newerSource } });
     for (let index = 0; index < 2; index++) {
       const task = h.store.createTask(
-        fresh.brief,
-        { briefPath: fresh.path, worktree: integrated, branch: 'new-integration', base: sourceCommit },
+        latest.brief,
+        { briefPath: latest.path, worktree: integrated, branch: 'new-integration', base: newerSource },
         'implementation',
       );
       h.tasks.queueProofStart(task.id, { expectedAttempt: 0 }, h.actor);
@@ -2455,11 +2762,26 @@ test('ordinary exited command-ready proof retries without reconciliation and ref
       driver: processIdentity(),
     }));
     h.store.event(liveRef, 'proof-command-ready', { argv: submitted.brief.acceptance.command });
-    h.store.close(liveRef, 'stopped');
+    h.store.updateAttempt(liveRef, (value) => {
+      value.state = 'exited';
+      value.endedAt = new Date().toISOString();
+    });
+    h.store.updateTask(liveRef, (value) => {
+      value.state = 'stopped';
+    });
     expect(() => h.tasks.releaseProof(live.id, 1, h.actor)).toThrow('live or uncertain');
     expect(h.store.releaseExitedProofReservations(liveRef)).toEqual([]);
     expect(h.store.events(live.id, 1).some((event) => event.kind === 'proof-logical-reconciled')).toBe(false);
     expect(() => h.tasks.queueProofStart(live.id, { expectedAttempt: 1 }, h.actor)).toThrow('stale');
+    h.store.updateAttempt(liveRef, (value) => {
+      value.process = processIdentity();
+    });
+    h.store.event(liveRef, 'proof-failure-routed', {});
+    expect(() => h.tasks.queueProofStart(live.id, { expectedAttempt: 1 }, h.actor)).toThrow('stale');
+    h.store.updateAttempt(liveRef, (value) => {
+      value.process = null;
+    });
+    expect(h.tasks.queueProofStart(live.id, { expectedAttempt: 1 }, h.actor).status).toBe('created');
   } finally {
     h.dispose();
   }

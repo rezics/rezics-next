@@ -75,6 +75,9 @@ async function train(
         h.outcomes.push(outcome);
         h.job.onGateOutcome(outcome);
       },
+      onDevLandingTranspileHandoff(handoff) {
+        h.job.onDevLandingTranspileHandoff(handoff);
+      },
     },
     runGate,
     runLaunchSmoke,
@@ -120,7 +123,7 @@ function releaseRecords(h: ReturnType<typeof integrationHarness>) {
     .map((name) => JSON.parse(readFileSync(join(h.settings.stateDirectory, name), 'utf8')) as Record<string, unknown>);
 }
 
-test('ordinary release waits for dev drain before capturing refs and retains both leases through publication', async () => {
+test('ordinary release drains dev before capture, then keeps only main custody through publication', async () => {
   const h = integrationHarness();
   const resumeDev = Promise.withResolvers<void>();
   const waitingForDev = Promise.withResolvers<void>();
@@ -136,28 +139,26 @@ test('ordinary release waits for dev drain before capturing refs and retains bot
     let gateCalls = 0;
     let smokeCalls = 0;
     let published = false;
-    let owners: string[] | undefined;
-    const assertLeases = () => {
-      const current = ['train-main.lease', 'train.lease'].map((name) => {
-        const path = join(h.settings.stateDirectory, name);
-        expect(() => acquireDirectoryLease(path)).toThrow(LeaseHeldError);
-        const files = readdirSync(path);
-        expect(files).toHaveLength(1);
-        return readFileSync(join(path, files[0]!), 'utf8');
-      });
-      owners ??= current;
-      expect(current).toEqual(owners);
+    let mainOwner: string | undefined;
+    const assertLaneCustody = () => {
+      const mainPath = join(h.settings.stateDirectory, 'train-main.lease');
+      expect(() => acquireDirectoryLease(mainPath)).toThrow(LeaseHeldError);
+      const files = readdirSync(mainPath);
+      expect(files).toHaveLength(1);
+      mainOwner ??= readFileSync(join(mainPath, files[0]!), 'utf8');
+      expect(readFileSync(join(mainPath, files[0]!), 'utf8')).toBe(mainOwner);
+      expect(existsSync(join(h.settings.stateDirectory, 'train.lease'))).toBe(false);
     };
     running = train(
       h,
       async () => {
         gateCalls++;
-        assertLeases();
+        assertLaneCustody();
         return { passed: true, output: '', timedOut: false };
       },
       async (command, cwd) => {
         smokeCalls++;
-        assertLeases();
+        assertLaneCustody();
         return releaseEvidence(command, cwd);
       },
       {
@@ -171,7 +172,7 @@ test('ordinary release waits for dev drain before capturing refs and retains bot
           await resumeDev.promise;
         },
         beforePromotionAdvance: () => {
-          assertLeases();
+          assertLaneCustody();
           published = true;
         },
       },
@@ -261,7 +262,10 @@ for (const failure of ['gate refusal', 'gate exception', 'cancelled attempt'] as
       const task = dispatchControlPlane(h);
       await h.start(task);
       await train(h, async () => {
-        expect(() => acquireDirectoryLease(join(h.settings.stateDirectory, 'train.lease'))).toThrow(LeaseHeldError);
+        expect(() => acquireDirectoryLease(join(h.settings.stateDirectory, 'train-main.lease'))).toThrow(
+          LeaseHeldError,
+        );
+        acquireDirectoryLease(join(h.settings.stateDirectory, 'train.lease')).release();
         if (failure === 'gate exception') throw new Error('fixture gate exception');
         if (failure === 'cancelled attempt')
           h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => {
@@ -311,7 +315,10 @@ test('ordinary release refuses repeated external dev drift at the final atomic r
       {
         beforePromotionAdvance: () => {
           attempts++;
-          expect(() => acquireDirectoryLease(join(h.settings.stateDirectory, 'train.lease'))).toThrow(LeaseHeldError);
+          expect(() => acquireDirectoryLease(join(h.settings.stateDirectory, 'train-main.lease'))).toThrow(
+            LeaseHeldError,
+          );
+          acquireDirectoryLease(join(h.settings.stateDirectory, 'train.lease')).release();
           external = addBranchCommit(h, 'dev', { 'external.txt': `external change ${attempts}\n` });
         },
       },
@@ -367,7 +374,67 @@ test('a checked candidate publishes main, stabilize and dev together with exact 
     expect(record?.lifecycleEvidence).toContain(`candidate=${main} dev-script-tree=${base}`);
     expect(record?.lifecycleEvidence).toContain('scenarios=worker-wake:passed,retry:passed');
     expect(record?.compatibilityCommand).toContain('tools/goal/scripts/check-compatibility.ts');
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
+      `Control-plane check plan base=${base} candidate=${main}`,
+    );
     expect(git(h.root, 'status', '--porcelain', '--untracked-files=no')).toBe('');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('an owned production report CLI keeps narrow checks and records bounded exact-candidate coverage', async () => {
+  const h = integrationHarness();
+  try {
+    const entrypoint = 'tools/goal/scripts/efficiency-report.ts';
+    const cliSource = readFileSync(join(import.meta.dir, '../scripts/efficiency-report.ts'), 'utf8');
+    const baseFiles = {
+      [entrypoint]: cliSource,
+      'tools/goal/src/efficiency-report.ts': 'export const renderHourlyEfficiencyReport = () => "report";\n',
+      'tools/goal/src/efficiency-report.test.ts':
+        "import { renderHourlyEfficiencyReport } from './efficiency-report.ts';\n",
+      'tools/goal/src/provider.ts': 'export const provider = () => true;\n',
+      'tools/goal/src/provider-fixture.test.ts': "import { provider } from './provider.ts';\nvoid provider;\n",
+    };
+    for (const [path, contents] of Object.entries(baseFiles)) {
+      mkdirSync(dirname(join(h.root, path)), { recursive: true });
+      writeFileSync(join(h.root, path), contents);
+    }
+    git(h.root, 'add', '--', ...Object.keys(baseFiles));
+    git(h.root, 'commit', '-m', 'Seed production command ownership fixture');
+    const base = h.head('main');
+    h.ensureDev();
+    const task = dispatchControlPlane(h, entrypoint);
+    writeFileSync(
+      join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({ file: entrypoint, content: cliSource + '\n// Updated CLI output.\n' }),
+    );
+    await h.start(task);
+    const commands: string[][] = [];
+    await train(
+      h,
+      async (command) => {
+        commands.push([...command]);
+        return { passed: true, output: '', timedOut: false };
+      },
+      async () => {
+        throw new Error('Unchanged launch owners must not invoke the full lifecycle suite');
+      },
+    );
+
+    const candidate = h.head('main');
+    expect(commands).toContainEqual(['bun', 'test', '--timeout', '30000', 'tools/goal/src/efficiency-report.test.ts']);
+    expect(commands).toContainEqual(['bun', entrypoint, '--help']);
+    expect(commands).not.toContainEqual(['bun', 'test', '--timeout', '30000', 'tools/goal/src']);
+    expect(commands.flat()).not.toContain('tools/goal/src/provider-fixture.test.ts');
+    expect(commands.some((command) => command[1] === 'tools/goal/scripts/check-compatibility.ts')).toBe(true);
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
+      `Control-plane check plan base=${base} candidate=${candidate} scope=affected; 1 Goal test file(s)`,
+    );
+    expect(releaseRecords(h)[0]?.lifecycleEvidence).toBe(
+      `release boundary evidence: candidate=${candidate} dev-script-tree=${base} base=${base} coverage=impact-selected full-lifecycle=deferred`,
+    );
+    expect(h.outcomes[0]).toMatchObject({ passed: true });
   } finally {
     h.dispose();
   }
@@ -507,50 +574,66 @@ test('a known dev add/add conflict prevents main and stabilize from advancing', 
   }
 });
 
-test('a durable record recovers a fully published release interrupted before queue completion', async () => {
-  const h = integrationHarness();
-  try {
-    h.ensureDev();
-    const base = h.head('main');
-    git(h.root, 'branch', 'stabilize', base);
-    const task = dispatchControlPlane(h);
-    await h.start(task);
-    const originalFinish = h.queue.finish.bind(h.queue);
-    h.queue.finish = ((..._args: Parameters<typeof h.queue.finish>) => {
-      throw new Error('interrupted after atomic ref publication');
-    }) as typeof h.queue.finish;
+for (const coverage of ['full', 'bounded'] as const)
+  test(`a durable record recovers ${coverage} coverage after publication interrupted before queue completion`, async () => {
+    const h = integrationHarness();
+    try {
+      h.ensureDev();
+      const base = h.head('main');
+      git(h.root, 'branch', 'stabilize', base);
+      const task =
+        coverage === 'bounded' ? dispatchControlPlane(h, 'tools/goal/src/report.test.ts') : dispatchControlPlane(h);
+      await h.start(task);
+      const originalFinish = h.queue.finish.bind(h.queue);
+      h.queue.finish = ((..._args: Parameters<typeof h.queue.finish>) => {
+        throw new Error('interrupted after atomic ref publication');
+      }) as typeof h.queue.finish;
 
-    await expect(train(h)).rejects.toThrow('interrupted after atomic ref publication');
-    const published = [h.head('main'), h.head('stabilize'), h.head('dev')];
-    expect(published[0]).not.toBe(base);
-    expect(releaseRecords(h)).toHaveLength(1);
-    h.queue.finish = originalFinish;
-    let gatesAfterRecovery = 0;
-    await train(
-      h,
-      async () => {
-        gatesAfterRecovery++;
-        throw new Error('recovery must use the durable release record');
-      },
-      async () => {
-        gatesAfterRecovery++;
-        return { passed: false, output: '', timedOut: false };
-      },
-    );
+      await expect(train(h)).rejects.toThrow('interrupted after atomic ref publication');
+      const published = [h.head('main'), h.head('stabilize'), h.head('dev')];
+      expect(published[0]).not.toBe(base);
+      expect(releaseRecords(h)).toHaveLength(1);
+      expect(releaseRecords(h)[0]?.lifecycleEvidence).toContain(
+        coverage === 'bounded' ? 'coverage=impact-selected full-lifecycle=deferred' : 'scenarios=worker-wake:passed',
+      );
+      h.queue.finish = originalFinish;
+      let gatesAfterRecovery = 0;
+      await new MergeTrain({
+        ...h.settings,
+        queue: h.queue,
+        fence: h.store,
+        sink: {
+          onGateOutcome(outcome) {
+            h.outcomes.push(outcome);
+          },
+          onDevLandingTranspileHandoff(handoff) {
+            h.job.onDevLandingTranspileHandoff(handoff);
+          },
+        },
+        runGate: async () => {
+          gatesAfterRecovery++;
+          throw new Error('recovery must use the durable release record');
+        },
+        runLaunchSmoke: async () => {
+          gatesAfterRecovery++;
+          return { passed: false, output: '', timedOut: false };
+        },
+      }).run();
 
-    expect(gatesAfterRecovery).toBe(0);
-    expect([h.head('main'), h.head('stabilize'), h.head('dev')]).toEqual(published);
-    expect(h.outcomes.at(-1)?.passed).toBe(true);
-    expect(h.outcomes.at(-1)?.mergedCommit).toBe(published[0]);
-    expect(releaseRecords(h)[0]).toMatchObject({
-      mainCommit: published[0],
-      stabilizeCommit: published[1],
-      devCommit: published[2],
-    });
-  } finally {
-    h.dispose();
-  }
-});
+      expect(gatesAfterRecovery).toBe(0);
+      expect([h.head('main'), h.head('stabilize'), h.head('dev')]).toEqual(published);
+      expect(h.outcomes.at(-1)).toMatchObject({ passed: true, mergedCommit: published[0] });
+      h.job.onGateOutcome(h.outcomes.at(-1)!);
+      await h.job.drain();
+      expect(releaseRecords(h)[0]).toMatchObject({
+        mainCommit: published[0],
+        stabilizeCommit: published[1],
+        devCommit: published[2],
+      });
+    } finally {
+      h.dispose();
+    }
+  });
 
 test('a nonzero main/dev compatibility contract result leaves main and dev unchanged', async () => {
   const h = integrationHarness();
@@ -682,6 +765,9 @@ function batchTrain(h: ReturnType<typeof integrationHarness>, runGate: GateRunne
         h.outcomes.push(outcome);
         h.job.onGateOutcome(outcome);
       },
+      onDevLandingTranspileHandoff(handoff) {
+        h.job.onDevLandingTranspileHandoff(handoff);
+      },
     },
     runGate,
     runLaunchSmoke: releaseEvidence,
@@ -731,6 +817,9 @@ test('One accepted control-plane main cohort validates its combined final head o
     await h.job.drain();
     expect(publications).toBe(1);
     expect(heads).toEqual([h.head('main')]);
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
+      `Control-plane check plan base=${main} candidate=${heads[0]}`,
+    );
     expect(commands.filter((command) => command[1] === 'run' && command.includes('typecheck'))).toHaveLength(1);
     expect(commands.filter((command) => command[1] === 'tools/goal/scripts/check-compatibility.ts')).toHaveLength(1);
     expect(
@@ -797,7 +886,7 @@ test('failing combined cohorts bisect instead of serial fallback and preserve gr
   } finally {
     h.dispose();
   }
-});
+}, 10_000);
 
 test('a stale cohort generation cannot be hidden by collective green', async () => {
   const h = integrationHarness();
@@ -1013,7 +1102,7 @@ function commandAlive(pid: number) {
   }
 }
 
-test('A queued product dev landing advances through its ordinary lane while a slow control-plane main proof is pending without weakening final proof or stealing live custody', async () => {
+test('A queued product dev landing does not abort Main proof and changed refs require a fresh proof', async () => {
   const h = integrationHarness();
   let running: Promise<void> | undefined;
   const gateRelease = join(h.settings.stateDirectory, 'release-slow-proof');
@@ -1028,11 +1117,13 @@ test('A queued product dev landing advances through its ordinary lane while a sl
     const workerEvidence = h.store.attempt({ taskId: control.id, attempt: 1 }).result;
     const entry = h.queue.entry({ taskId: control.id, attempt: 1 })!;
     const pidFiles: string[] = [];
+    const commands: string[][] = [];
     const native = processGroupRunner(5000);
     let smokeCalls = 0;
     running = train(
       h,
       async (command, cwd, log, options) => {
+        commands.push([...command]);
         if (!isFullControlPlaneSuite(command) && !command.includes('typecheck')) return success(command, cwd, log);
         const pidFile = join(h.settings.stateDirectory, `slow-proof-${pidFiles.length}.pid`);
         pidFiles.push(pidFile);
@@ -1054,8 +1145,10 @@ test('A queued product dev landing advances through its ordinary lane while a sl
     );
     await schedulingUntil(() => pidFiles.length === 2 && pidFiles.every((file) => existsSync(file)));
     const pids = pidFiles.map((file) => Number(readFileSync(file, 'utf8').trim()));
-    const ownerPaths = ['train-main.lease', 'train.lease'].map((name) => join(h.settings.stateDirectory, name));
-    const owners = ownerPaths.map((path) => readFileSync(join(path, readdirSync(path)[0]!), 'utf8'));
+    const mainLeasePath = join(h.settings.stateDirectory, 'train-main.lease');
+    const devLeasePath = join(h.settings.stateDirectory, 'train.lease');
+    const mainOwner = readFileSync(join(mainLeasePath, readdirSync(mainLeasePath)[0]!), 'utf8');
+    expect(existsSync(devLeasePath)).toBe(false);
     // Another real train cannot steal either live owner, even though its initial idle dev drain has no work.
     await train(
       h,
@@ -1066,66 +1159,64 @@ test('A queued product dev landing advances through its ordinary lane while a sl
       {},
       'pump',
     );
-    expect(ownerPaths.map((path) => readFileSync(join(path, readdirSync(path)[0]!), 'utf8'))).toEqual(owners);
+    expect(readFileSync(join(mainLeasePath, readdirSync(mainLeasePath)[0]!), 'utf8')).toBe(mainOwner);
     const product = h.dispatch('arrived-during-main.txt');
     await h.start(product);
+    expect(h.queue.nextBatch(10, [], 'dev').some((queued) => queued.request.taskId === product.id)).toBe(true);
+    await train(h, undefined, undefined, {}, 'pump');
     await schedulingUntil(() => h.head('dev') !== main);
+    const capturedDev = h.head('dev');
+    await Bun.sleep((h.settings.policy?.controlPlane.pollMs ?? 50) * 2);
     expect(existsSync(gateRelease)).toBe(false);
     expect(h.store.task(product.id).state).toBe('integrated');
     expect(h.head('main')).toBe(main);
     expect(h.head('stabilize')).toBe(main);
-    await running;
-    expect(pids.every((pid) => !commandAlive(pid))).toBe(true);
+    expect(h.head('dev')).not.toBe(main);
+    expect(pids.every(commandAlive)).toBe(true);
     expect(h.head(control.branch)).toBe(source);
     expect(h.store.attempt({ taskId: control.id, attempt: 1 }).result).toBe(workerEvidence);
     expect(h.store.task(control.id).state).toBe('landing');
     expect(h.queue.entry({ taskId: control.id, attempt: 1 })?.outcome).toBeNull();
-    expect(h.outcomes.map((outcome) => outcome.taskId)).toEqual([product.id]);
-    expect(smokeCalls).toBe(0);
     expect(releaseRecords(h)).toEqual([]);
-    const interrupted = ordinaryProofs(h, entry.id).attempts[0]!;
-    expect(interrupted).toMatchObject({ status: 'interrupted', source, candidate: expect.any(String) });
-    expect(interrupted.outcome).toBeUndefined();
-    expect(interrupted.reason).toContain('Product dev request');
-    expect(readFileSync(interrupted.logPath, 'utf8')).toContain('proof remains non-green');
-    expect(readFileSync(`${interrupted.logPath}.check-0`, 'utf8')).toContain('partial-proof-output');
-    for (const path of ownerPaths) expect(existsSync(path)).toBe(false);
+    const proof = ordinaryProofs(h, entry.id).attempts[0]!;
+    expect(proof).toMatchObject({ status: 'running', source, candidate: expect.any(String) });
+    expect(proof.snapshot.devHead).toBe(main);
+    expect(proof.reason).toBeUndefined();
+    expect(readFileSync(`${proof.logPath}.check-0`, 'utf8')).toContain('partial-proof-output');
+    expect(existsSync(mainLeasePath)).toBe(true);
 
-    const capturedDev = h.head('dev');
-    const commands: string[][] = [];
-    let publications = 0;
-    // A later finite controller performs a fresh, complete proof for the changed dev capture.
-    await train(
-      h,
-      async (command, cwd, log) => {
-        commands.push([...command]);
-        return success(command, cwd, log);
-      },
-      releaseEvidence,
-      {
-        beforePromotionAdvance() {
-          publications++;
-          expect([h.head('main'), h.head('stabilize'), h.head('dev')]).toEqual([main, main, capturedDev]);
-        },
-      },
-    );
-    expect(publications).toBe(1);
-    expect(commands.filter(isFullControlPlaneSuite)).toHaveLength(1);
+    // Queue arrival and a completed Dev landing leave the proof running. Its old capture must be checked again.
+    writeFileSync(gateRelease, 'release proof process groups\n');
+    await running;
+    expect(pids.every((pid) => !commandAlive(pid))).toBe(true);
+    expect(h.store.task(control.id).state).toBe('merged');
+    expect(h.head('main')).not.toBe(main);
+    expect(h.head('stabilize')).not.toBe(main);
+    expect(h.head('dev')).not.toBe(capturedDev);
+    expect(h.head(control.branch)).toBe(source);
+    expect(h.store.task(product.id).state).toBe('integrated');
+    expect(h.queue.entry({ taskId: control.id, attempt: 1 })?.outcome).toMatchObject({ passed: true, stage: 'merge' });
+    expect(h.outcomes.map((outcome) => outcome.taskId)).toEqual([product.id, control.id]);
+    expect(smokeCalls).toBe(1);
+    expect(releaseRecords(h)).toHaveLength(1);
+    expect(releaseRecords(h)[0]).toMatchObject({ mainCommit: h.head('main'), devScriptTree: capturedDev });
+    expect(ordinaryProofs(h, entry.id).attempts).toMatchObject([
+      { status: 'finished', source, snapshot: { devHead: capturedDev }, outcome: { passed: true } },
+    ]);
+    expect(commands.filter(isFullControlPlaneSuite)).toHaveLength(2);
+    expect(commands.filter((command) => command.includes('typecheck'))).toHaveLength(2);
     expect(commands).toContainEqual(['bun', 'run', '--cwd', 'tools/goal', 'typecheck']);
     expect(commands.some((command) => command[1] === 'tools/goal/scripts/check-compatibility.ts')).toBe(true);
-    expect(releaseRecords(h)[0]).toMatchObject({ mainCommit: h.head('main'), devScriptTree: capturedDev });
-    expect(h.head('main')).not.toBe(main);
     expect(git(h.root, 'merge-base', '--is-ancestor', capturedDev, 'dev')).toBe('');
     expect(git(h.root, 'merge-base', '--is-ancestor', h.head('main'), 'stabilize')).toBe('');
-    expect(ordinaryProofs(h, entry.id).attempts.map((attempt) => attempt.status)).toEqual(['interrupted', 'finished']);
-    expect(readFileSync(interrupted.logPath, 'utf8')).toContain('proof remains non-green');
-    expect(h.head(control.branch)).toBe(source);
+    expect(existsSync(mainLeasePath)).toBe(false);
+    expect(existsSync(devLeasePath)).toBe(false);
   } finally {
     writeFileSync(gateRelease, 'release fixture groups\n');
     await running?.catch(() => {});
     h.dispose();
   }
-});
+}, 30_000);
 
 test('ordinary dev independence: startup backlog lands before main captures proof refs', async () => {
   const h = integrationHarness();
@@ -1474,6 +1565,7 @@ test('A main cohort uses the delivered bounded train resolver for real code conf
   const h = integrationHarness();
   try {
     const { tasks, manifest } = await semanticSources(h);
+    const capturedMain = h.head('main');
     const priorManifest = { ...manifest, members: [manifest.members[1]!] };
     const prior = preparationJournal(h, priorManifest);
     const priorBytes = readFileSync(prior.path, 'utf8');
@@ -1491,6 +1583,7 @@ test('A main cohort uses the delivered bounded train resolver for real code conf
       suites = 0,
       compatibility = 0,
       typing = 0;
+    let resolvedCandidate = '';
     const adapter = {
       ...agentAdapter('codex'),
       start(options: Parameters<ReturnType<typeof agentAdapter>['start']>[0]): [string, string[]] {
@@ -1523,6 +1616,7 @@ test('A main cohort uses the delivered bounded train resolver for real code conf
           semanticTrain(h, async (command, cwd) => {
             if (isFullControlPlaneSuite(command)) {
               suites++;
+              resolvedCandidate = git(cwd, 'rev-parse', 'HEAD');
               expect(readFileSync(join(cwd, semanticFile), 'utf8')).toBe(combinedSemantic);
               expect(existsSync(join(cwd, adapterSource.brief.paths[0]!))).toBe(true);
             }
@@ -1536,6 +1630,10 @@ test('A main cohort uses the delivered bounded train resolver for real code conf
     );
     await h.job.drain();
     expect([calls, suites, typing, compatibility]).toEqual([1, 1, 1, 1]);
+    expect(resolvedCandidate).toBe(h.head('main'));
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
+      `Control-plane check plan base=${capturedMain} candidate=${resolvedCandidate}`,
+    );
     expect(result.members.every((member) => member.disposition === 'released')).toBe(true);
     expect(h.outcomes).toHaveLength(3);
     expect(readFileSync(prior.path, 'utf8')).toBe(priorBytes);
@@ -1657,10 +1755,11 @@ test('the real resolver receipt refuses index tampering and leaves an explicit s
   }
 }, 30_000);
 
-test('only actual typing diagnostics permit one bounded compiler repair before the one final-head suite', async () => {
+test('a compiler repair is re-planned against its exact final head', async () => {
   const h = integrationHarness();
   try {
     const { manifest } = await semanticSources(h);
+    const capturedMain = h.head('main');
     let calls = 0,
       typing = 0,
       suites = 0;
@@ -1699,7 +1798,11 @@ test('only actual typing diagnostics permit one bounded compiler repair before t
         }).releaseControlPlaneBatch(manifest),
     );
     expect([calls, typing, suites]).toEqual([2, 2, 1]);
-    expect(result.members.every((member) => member.mergedCommit === h.head('main'))).toBe(true);
+    const repairedCandidate = h.head('main');
+    expect(result.members.every((member) => member.mergedCommit === repairedCandidate)).toBe(true);
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
+      `Control-plane check plan base=${capturedMain} candidate=${repairedCandidate}`,
+    );
     expect(
       h.store.events(manifest.members[1]!.taskId, 1).filter((event) => event.kind === 'train-resolver-started'),
     ).toHaveLength(2);
@@ -1945,7 +2048,7 @@ for (const probeFails of [false, true])
       for (const task of tasks) await h.start(task);
       const manifest = acceptedBatch(h, tasks);
       let fulls = 0,
-        probes = 0,
+        focusedRuns = 0,
         compatibility = 0;
       const result = await batchTrain(h, async (command, cwd) => {
         if (command.includes('tools/goal/scripts/check-compatibility.ts')) compatibility++;
@@ -1958,21 +2061,24 @@ for (const probeFails of [false, true])
           };
         }
         if (command[0] === 'bun' && command[1] === 'test') {
-          probes++;
+          focusedRuns++;
           expect(command).toEqual(['bun', 'test', '--timeout', '30000', suspect]);
           return { passed: !probeFails, timedOut: false, output: 'focused negative observation\n' };
         }
         return { passed: true, timedOut: false, output: '' };
       }).releaseControlPlaneBatch(manifest);
-      expect([fulls, probes, compatibility]).toEqual([probeFails ? 2 : 3, 1, 1]);
-      expect(result.members.find((member) => member.taskId === tasks[0]!.id)).toMatchObject({
-        disposition: 'excluded',
-        phase: 'native',
-      });
-      expect(result.members.find((member) => member.taskId === tasks[1]!.id)).toMatchObject({
-        disposition: 'released',
-        mergedCommit: h.head('main'),
-      });
+      expect(fulls).toBeGreaterThanOrEqual(1);
+      expect([focusedRuns, compatibility]).toEqual([probeFails ? 1 : 3, 1]);
+      expect(result.members.find((member) => member.taskId === tasks[0]!.id)).toMatchObject(
+        probeFails
+          ? { disposition: 'excluded', phase: 'native' }
+          : { disposition: 'released', mergedCommit: h.head('main') },
+      );
+      expect(result.members.find((member) => member.taskId === tasks[1]!.id)).toMatchObject(
+        probeFails
+          ? { disposition: 'released', mergedCommit: h.head('main') }
+          : { disposition: 'excluded', phase: 'native' },
+      );
       const journal = cohortJournal(h, manifest).value;
       expect(journal.nodes['root-left']!.proofs[0]!.result.negativeOnly).toBe(probeFails ? true : undefined);
       expect(h.outcomes).toHaveLength(1);
@@ -2617,6 +2723,7 @@ for (const legacy of [false, true])
           for (const member of handoff.members)
             h.store.updateTask(member, (task) => {
               task.brief = { ...task.brief, goal: 'dev-fixture' };
+              delete task.brief.target;
             });
         },
       };

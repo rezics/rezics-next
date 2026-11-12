@@ -1,9 +1,11 @@
 import {
   ProofCapacityQueuedError,
+  ProofCaptureMovedError,
   ProofUnavailableError,
   type ProofAuthorization,
   authorizeProof,
   authenticateProofManager,
+  parseProofMetadata,
   proofFingerprint,
   preflightProof,
   productionProofProducer,
@@ -31,8 +33,9 @@ import {
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError } from './lease.ts';
 import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.ts';
+import { managerWakePoolAllowed, poolAllowed } from './allowance.ts';
 import { choosePoolWithFallback, PoolPolicyReloader, withRetainedHistory } from './pools.ts';
-import { pace, readCodexSchedule, retainPoolReadings } from './pacing.ts';
+import { pace, readCodexSchedule, readRetainedPoolReadings, retainPoolReadings } from './pacing.ts';
 import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
 import { applyRenderedPrompt, launch, renderWorkerPrompt, type RunningWorker } from './launch.ts';
 import { awaitHostCapacity, startsFirst } from './launch-capacity.ts';
@@ -50,7 +53,7 @@ import {
 import { attemptSession, readMeasurement, makeRecord } from './records.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerStore } from './store.ts';
-import type { Attempt, Brief, Profile, Settings, Task } from './types.ts';
+import type { Attempt, Brief, Pool, Profile, Settings, Task } from './types.ts';
 import { parseFrozenFiles } from './frozen.ts';
 import {
   branchHead,
@@ -78,6 +81,7 @@ import {
   requireUrgentDispatch,
   setUrgentGrant,
   authenticatedManager,
+  backlogManagerActor,
   applyPriorityTransition,
   criticalPriority,
   grantCriticalPriority,
@@ -90,6 +94,14 @@ import { reapAttemptResources } from './attempt-resources.ts';
 import { resolveGoalManager } from './manager-ownership.ts';
 
 export { git };
+
+type BacklogProofProposal = { proposalSha256: string; sourceCommit: string; sourceTasks: string[] };
+type BacklogDispatchProposal = { goal: string; markdown: string };
+type DispatchProofCapture = {
+  expectedIntegrationHead: string;
+  backlogProposal: BacklogProofProposal;
+};
+type DispatchBriefOverride = { markdown: string; proofCapture?: DispatchProofCapture };
 
 export class PageDataSessionUnavailableError extends Error {
   constructor(message: string) {
@@ -104,6 +116,32 @@ function normalizedBriefText(markdown: string): string {
 
 function briefHash(markdown: string): string {
   return createHash('sha256').update(normalizedBriefText(markdown)).digest('hex');
+}
+
+function capturedProofMarkdown(markdown: string, sourceCommit: string): string {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(markdown);
+  if (!match) throw new Error('backlog proof proposal has no front matter');
+  const contract = Bun.YAML.parse(match[1]!);
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract))
+    throw new Error('backlog proof proposal front matter must be an object');
+  const value = contract as Record<string, unknown>;
+  if (!value.proof || typeof value.proof !== 'object' || Array.isArray(value.proof))
+    throw new Error('backlog proof proposal metadata unavailable');
+  return `---\n${JSON.stringify(
+    { ...value, proof: { ...(value.proof as Record<string, unknown>), sourceCommit } },
+    null,
+    2,
+  )}\n---${markdown.slice(match[0].length)}`;
+}
+
+function retainBacklogProposal(
+  authorization: ProofAuthorization,
+  previous: ProofAuthorization | undefined,
+): ProofAuthorization {
+  const proposal = previous?.backlogProposal;
+  const authorizedSources = authorization.originals.map((item) => item.taskId);
+  if (!proposal || JSON.stringify(proposal.sourceTasks) !== JSON.stringify(authorizedSources)) return authorization;
+  return { ...authorization, backlogProposal: { ...proposal, sourceTasks: [...proposal.sourceTasks] } };
 }
 
 function priorRebaseConflict(store: WorkerStore, taskId: string, attempt: number) {
@@ -293,7 +331,7 @@ export type RetryOptions = {
   conflictFiles?: string[];
   /** A backed-off retry starts no earlier than this ISO time. */
   notBefore?: string;
-  /** A check-host transport failure retries only while no check host is in a probed outage. */
+  /** A check-host transport retry waits only while every eligible performance host is in a probed outage. */
   awaitCheckHosts?: boolean;
   /** Start only while this is still the current attempt: a retry another process already started is not repeated. */
   expectedAttempt?: number;
@@ -365,6 +403,37 @@ export class WorkerTasks {
       running: this.store.runningAttemptsByPool(),
     };
   }
+  /** A retained wake may use only its original configured pool, after current allowance and occupancy admission. */
+  resumePool(attempt: Pick<Attempt, 'pool' | 'profile' | 'before'>): Pool | undefined {
+    const current = this.resolverPools();
+    const pool = current.pools.find((candidate) => candidate.name === attempt.pool);
+    if (
+      !pool ||
+      pool.cli !== attempt.profile.cli ||
+      !pool.classes.includes(attempt.profile.poolClass) ||
+      (attempt.before && attempt.before.allowanceKey !== pool.allowanceKey)
+    )
+      return undefined;
+    return poolAllowed(pool, current.readings, {
+      now: current.now,
+      spanMs: current.spanMs,
+      history: current.history,
+      policy: this.settings.policy?.provider,
+      running: current.running,
+    })
+      ? pool
+      : undefined;
+  }
+  /** Manager mailbox turns do not compete with worker pacing, slots or reserves. */
+  managerTurnAllowed(poolName: string, engine: 'codex' | 'claude'): boolean {
+    const pool = this.poolPolicies.read().find((candidate) => candidate.name === poolName);
+    if (!pool || pool.cli !== engine) return false;
+    return managerWakePoolAllowed(
+      pool,
+      readRetainedPoolReadings(this.settings.stateDirectory),
+      this.settings.policy?.provider,
+    );
+  }
   /**
    * A task's dependencies are met once each integrated and its commit is on the branch the task bases on. A stopped
    * or cancelled predecessor without a landing is dropped. A stabilize dependency of a dev task counts only after
@@ -402,8 +471,13 @@ export class WorkerTasks {
     excludingTask?: string,
     actor?: AuthenticatedManager | null,
     urgent = false,
-  ): { brief: ReturnType<typeof parseBrief>; taskClass: Task['taskClass'] } {
-    let markdown = readFileSync(briefFile, 'utf8');
+    override?: DispatchBriefOverride,
+  ): {
+    brief: ReturnType<typeof parseBrief>;
+    taskClass: Task['taskClass'];
+    authorization?: ProofAuthorization;
+  } {
+    let markdown = override?.markdown ?? readFileSync(briefFile, 'utf8');
     if (urgent)
       markdown = markdown.replace(
         /^---\r?\n([\s\S]*?)\r?\n---/,
@@ -430,16 +504,22 @@ export class WorkerTasks {
           `control-plane tasks may declare only tools/goal paths; split outside paths into a dev task: ${outside.join(', ')}`,
         );
     }
+    let authorization: ProofAuthorization | undefined;
     if (brief.kind === 'verification') {
       const prior = excludingTask ? this.store.task(excludingTask).proofAuthorization : undefined;
-      if (prior?.fingerprint !== proofFingerprint(brief))
-        authorizeProof(
-          this.store,
-          this.settings.mainCheckout,
-          brief,
-          actor === undefined ? authenticatedManager(this.store.db) : actor,
-          this.settings.integration.operationsManager,
-          this.settings.integrationBranch,
+      authorization = prior?.fingerprint === proofFingerprint(brief) ? prior : undefined;
+      if (!authorization)
+        authorization = retainBacklogProposal(
+          authorizeProof(
+            this.store,
+            this.settings.mainCheckout,
+            brief,
+            actor === undefined ? authenticatedManager(this.store.db) : actor,
+            this.settings.integration.operationsManager,
+            this.settings.integrationBranch,
+            override?.proofCapture,
+          ),
+          prior,
         );
     }
     const taskClass = classifyTask(brief);
@@ -449,7 +529,7 @@ export class WorkerTasks {
     for (const dependency of brief.after)
       if (!known.has(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
     this.assertEnvironmentWalkAdmission(brief, excludingTask);
-    return { brief, taskClass };
+    return { brief, taskClass, ...(authorization ? { authorization } : {}) };
   }
   private assertEnvironmentWalkAdmission(brief: Brief, excludingTask?: string): void {
     assertEnvironmentWalkAdmission(brief, this.store.tasksInStates(ENVIRONMENT_WALK_STATES), excludingTask);
@@ -529,8 +609,79 @@ export class WorkerTasks {
   setUrgentGrant(managerId: string, enabled: boolean, actor: AuthenticatedManager): void {
     setUrgentGrant(this.store.db, this.settings.integration.supermanager, managerId, enabled, actor);
   }
-  dispatch(briefFile: string, actor?: AuthenticatedManager | null, urgent = false, from?: 'verifier'): Task {
-    const { brief: submittedBrief, taskClass } = this.validateBrief(briefFile, undefined, actor, urgent);
+  dispatch(
+    briefFile: string,
+    actor?: AuthenticatedManager | null,
+    urgent = false,
+    from?: 'verifier',
+    backlogProposal?: BacklogDispatchProposal,
+  ): Task {
+    if (!backlogProposal) return this.dispatchPrepared(briefFile, actor, urgent, from);
+    const markdown = this.readBacklogProposal(briefFile, backlogProposal);
+    const proposal = parseBrief(
+      markdown,
+      readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
+      this.settings.policy?.brief,
+    );
+    if (proposal.kind !== 'verification') return this.dispatchPrepared(briefFile, actor, urgent, from, { markdown });
+    proposal.manager = resolveGoalManager(this.store.db, proposal.goal, proposal.manager);
+    authenticateProofManager(
+      this.store,
+      proposal.manager,
+      actor === undefined ? authenticatedManager(this.store.db) : actor,
+      this.settings.integration.operationsManager,
+    );
+    const source = parseProofMetadata(proposal.proof);
+    const identity = {
+      proposalSha256: createHash('sha256').update(markdown).digest('hex'),
+      sourceCommit: source.sourceCommit,
+      sourceTasks: [...source.sourceTasks],
+    };
+    const trainLease = acquireDirectoryLeaseWaiting(
+      join(this.settings.stateDirectory, 'train.lease'),
+      (this.settings.policy ?? defaultPolicy).leases.dispatchWaitMs,
+      this.settings.policy?.leases,
+    );
+    try {
+      for (let capture = 0; capture < 3; capture++) {
+        const head = branchHead(this.settings, this.settings.integrationBranch, false);
+        try {
+          return this.dispatchPrepared(briefFile, actor, urgent, from, {
+            markdown: capturedProofMarkdown(markdown, head),
+            proofCapture: { expectedIntegrationHead: head, backlogProposal: identity },
+          });
+        } catch (error) {
+          if (!(error instanceof ProofCaptureMovedError)) throw error;
+        }
+      }
+      throw new ProofUnavailableError(
+        'Proof registration could not capture a stable integration head after three attempts',
+      );
+    } finally {
+      trainLease.release();
+    }
+  }
+  private readBacklogProposal(briefFile: string, proposal: BacklogDispatchProposal): string {
+    const markdown = readFileSync(briefFile, 'utf8');
+    if (markdown !== proposal.markdown) throw new Error('backlog claim changed before registration');
+    if (!/^[a-z][a-z0-9-]*$/.test(proposal.goal)) throw new Error('invalid declared backlog Goal');
+    const expectedDirectory = resolve(join(this.settings.stateDirectory, 'backlog', proposal.goal, '.dispatching'));
+    if (resolve(dirname(briefFile)) !== expectedDirectory || !lstatSync(briefFile).isFile())
+      throw new Error('backlog registration requires the claimed file from its declared Goal backlog');
+    return markdown;
+  }
+  private dispatchPrepared(
+    briefFile: string,
+    actor?: AuthenticatedManager | null,
+    urgent = false,
+    from?: 'verifier',
+    override?: DispatchBriefOverride,
+  ): Task {
+    const {
+      brief: submittedBrief,
+      taskClass,
+      authorization,
+    } = this.validateBrief(briefFile, undefined, actor, urgent, override);
     if (submittedBrief.urgent && from !== 'verifier')
       requireUrgentDispatch(
         this.store.db,
@@ -539,18 +690,6 @@ export class WorkerTasks {
       );
     if (submittedBrief.continuation)
       throw new Error('continuation briefs must go through the backlog controller, not new-task dispatch');
-    const authorization =
-      submittedBrief.kind === 'verification'
-        ? authorizeProof(
-            this.store,
-            this.settings.mainCheckout,
-            submittedBrief,
-            actor === undefined ? authenticatedManager(this.store.db) : actor,
-            this.settings.integration.operationsManager,
-            this.settings.integrationBranch,
-          )
-        : undefined;
-    if (authorization) authorization.integrationBranch = this.settings.integrationBranch;
     requireNormalDispatch(submittedBrief, taskClass);
     const id = crypto.randomUUID();
     const branch = `${this.settings.branchPrefix}${id}`;
@@ -577,6 +716,7 @@ export class WorkerTasks {
           { branch: workspace.branch, worktree: workspace.worktree, briefPath, base: workspace.base },
           taskClass,
           id,
+          authorization,
         );
         this.store.updateTask({ taskId: id, attempt: 0 }, (current) => {
           current.workspace = { module, taskName: basename(briefFile, '.md') };
@@ -610,10 +750,18 @@ export class WorkerTasks {
           git(this.settings.mainCheckout, ['worktree', 'remove', '--force', worktree], this.settings.policy?.merge),
         deleteBranch: () => git(this.settings.mainCheckout, ['branch', '-D', branch], this.settings.policy?.merge),
       });
-      const created = this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
+      if (override?.proofCapture) {
+        const observedHead = branchHead(this.settings, this.settings.integrationBranch, false);
+        if (observedHead !== override.proofCapture.expectedIntegrationHead) {
+          git(this.settings.mainCheckout, ['worktree', 'remove', '--force', worktree], this.settings.policy?.merge);
+          git(this.settings.mainCheckout, ['branch', '-D', branch], this.settings.policy?.merge);
+          rmSync(briefPath, { force: true });
+          throw new ProofCaptureMovedError(override.proofCapture.expectedIntegrationHead, observedHead);
+        }
+      }
+      const created = this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id, authorization);
       const held = created.state === 'ready' && brief.after.length > 0 && !this.dependenciesMet(created);
       this.store.updateTask({ taskId: id, attempt: 0 }, (current) => {
-        if (authorization) current.proofAuthorization = authorization;
         (current as FrozenTask).frozenFiles = frozen.files.map(({ path, hash }) => ({ path, hash }));
         if (held) current.state = 'held';
       });
@@ -757,12 +905,12 @@ export class WorkerTasks {
       }
     }
   }
-  /** Replace ordinary input before its first start, without scheduling or touching its capacity ticket. */
+  /** Replace ordinary input without scheduling, restarting the current attempt or touching its checks. */
   amend(
     taskId: string,
-    options: { expectedAttempt: number; brief: string },
+    options: { expectedAttempt: number; brief: string; active?: boolean },
     actor?: AuthenticatedManager | null,
-  ): { taskId: string; attempt: 0; status: 'amended' | 'unchanged'; contractSha256: string } {
+  ): { taskId: string; attempt: number; status: 'amended' | 'unchanged'; contractSha256: string } {
     const lease = acquireDirectoryLease(
       join(this.settings.stateDirectory, 'leases', taskId),
       this.settings.policy?.leases,
@@ -772,7 +920,23 @@ export class WorkerTasks {
       return this.store.write({ taskId, attempt: options.expectedAttempt }, () => {
         const task = this.store.task(taskId);
         const attempts = this.store.attempts(taskId);
-        if (
+        const active = options.active === true;
+        const ref = { taskId, attempt: options.expectedAttempt };
+        if (active) {
+          const attempt = attempts.at(-1);
+          if (
+            options.expectedAttempt < 1 ||
+            task.state !== 'running' ||
+            !devProductBrief(task.brief) ||
+            task.proofAuthorization ||
+            task.proofRun ||
+            !attempt ||
+            !['pending', 'running', 'waiting', 'exited'].includes(attempt.state) ||
+            attempt.terminationIntent ||
+            this.store.events(taskId, task.currentAttempt).some((event) => event.kind === 'landing-requested')
+          )
+            throw new Error('active amendment requires a current ordinary dev task before landing');
+        } else if (
           options.expectedAttempt !== 0 ||
           task.currentAttempt !== 0 ||
           !['ready', 'held', 'stopped'].includes(task.state) ||
@@ -810,12 +974,21 @@ export class WorkerTasks {
         });
         if (!authenticated || authenticated.id !== owner.id || authenticated.sessionId !== owner.sessionId)
           throw new Error('prelaunch amendment requires a live unambiguous authenticated manager session');
-        if (task.state === 'stopped') this.assertStoppedPrelaunchEvidenceAbsent(task);
+        if (!active && task.state === 'stopped') this.assertStoppedPrelaunchEvidenceAbsent(task);
         const submitted = this.validateBrief(options.brief, taskId, owner);
         if (submitted.brief.kind === 'verification')
           throw new Error('use proof registration for verification contracts');
         if (submitted.brief.goal !== task.brief.goal || submitted.brief.manager !== task.brief.manager)
           throw new Error('an amended brief must keep the same goal and manager');
+        if (
+          active &&
+          (!devProductBrief(submitted.brief) ||
+            submitted.brief.kind !== task.brief.kind ||
+            submitted.brief.target !== task.brief.target ||
+            submitted.brief.model !== task.brief.model ||
+            submitted.brief.effort !== task.brief.effort)
+        )
+          throw new Error('active amendment must preserve the ordinary source, kind and model contract');
         if (task.workspace && webModule(submitted.brief, this.settings) !== task.workspace.module)
           throw new Error('amendment outside a shared module requires a new isolated task');
         if (criticalPriority(task.brief, task.taskClass) || criticalPriority(submitted.brief, submitted.taskClass))
@@ -833,28 +1006,28 @@ export class WorkerTasks {
           throw new Error('prelaunch amendment must preserve frozen acceptance files');
         const contractSha256 = briefHash(submitted.brief.markdown);
         if (sameBriefText(task.brief.markdown, submitted.brief.markdown))
-          return { taskId, attempt: 0, status: 'unchanged', contractSha256 };
+          return { ...ref, status: 'unchanged', contractSha256 };
         briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-amended-${crypto.randomUUID()}.md`);
         mkdirSync(dirname(briefPath), { recursive: true });
         writeFileSync(briefPath, submitted.brief.markdown, { flag: 'wx' });
         const acceptedPath = briefPath;
-        this.store.updateTask({ taskId, attempt: 0 }, (current) => {
+        this.store.updateTask(ref, (current) => {
           current.brief = submitted.brief;
           current.briefPath = acceptedPath;
           current.taskClass = submitted.taskClass;
-          current.state = this.dependenciesMet(current) ? 'ready' : 'held';
+          if (!active) current.state = this.dependenciesMet(current) ? 'ready' : 'held';
         });
-        this.store.event({ taskId, attempt: 0 }, 'prelaunch-contract-amended', {
+        this.store.event(ref, active ? 'active-contract-amended' : 'prelaunch-contract-amended', {
           actor: owner,
           ...(task.state === 'stopped' ? { previousState: task.state } : {}),
           previous: { path: task.briefPath, sha256: briefHash(task.brief.markdown), markdown: task.brief.markdown },
           current: { path: acceptedPath, sha256: contractSha256, markdown: submitted.brief.markdown },
         });
-        return { taskId, attempt: 0, status: 'amended', contractSha256 };
+        return { ...ref, status: 'amended', contractSha256 };
       });
     } catch (error) {
       if (briefPath) rmSync(briefPath, { force: true });
-      if (error instanceof StaleAttemptError) {
+      if (error instanceof StaleAttemptError && !options.active) {
         const current = this.store.task(taskId);
         const attempt = this.store.attempts(taskId).at(-1);
         throw new Error(
@@ -939,13 +1112,16 @@ export class WorkerTasks {
         approved.some((id) => !removed.includes(id))
       )
         throw new Error('removed after lanes must exactly match explicit removeAfter approval');
-      const authorization = authorizeProof(
-        this.store,
-        this.settings.mainCheckout,
-        nextBrief,
-        actor === undefined ? authenticatedManager(this.store.db) : actor,
-        this.settings.integration.operationsManager,
-        this.settings.integrationBranch,
+      const authorization = retainBacklogProposal(
+        authorizeProof(
+          this.store,
+          this.settings.mainCheckout,
+          nextBrief,
+          actor === undefined ? authenticatedManager(this.store.db) : actor,
+          this.settings.integration.operationsManager,
+          this.settings.integrationBranch,
+        ),
+        task.proofAuthorization,
       );
       const missing = preflightProof(this.settings.mainCheckout, nextBrief, this.settings.policy?.proof);
       if (missing.length)
@@ -1009,19 +1185,31 @@ export class WorkerTasks {
     options: RetryOptions = {},
     actor: AuthenticatedManager | null | undefined = undefined,
   ): void {
-    const task = this.store.task(taskId);
-    const expectedAttempt = options.expectedAttempt ?? task.currentAttempt;
+    const initial = this.store.task(taskId);
+    const expectedAttempt = options.expectedAttempt ?? initial.currentAttempt;
+    if (initial.currentAttempt !== expectedAttempt)
+      throw new StaleAttemptError({ taskId, attempt: expectedAttempt }, initial.currentAttempt);
     if (options.brief) {
       const submitted = this.validateBrief(options.brief, taskId, actor).brief;
-      if (submitted.goal !== task.brief.goal || submitted.manager !== task.brief.manager)
+      if (submitted.goal !== initial.brief.goal || submitted.manager !== initial.brief.manager)
         throw new Error('a reshaped brief must keep the same goal and manager');
-      recordReplacementBrief(this.store, task, submitted.markdown, expectedAttempt);
+      this.store.db
+        .transaction(() => {
+          const current = this.store.task(taskId);
+          if (current.currentAttempt !== expectedAttempt)
+            throw new StaleAttemptError({ taskId, attempt: expectedAttempt }, current.currentAttempt);
+          recordReplacementBrief(this.store, current, submitted.markdown, expectedAttempt);
+        })
+        .immediate();
     }
     const lease = acquireDirectoryLease(
       join(this.settings.stateDirectory, 'leases', taskId),
       this.settings.policy?.leases,
     );
     try {
+      const task = this.store.task(taskId);
+      if (task.currentAttempt !== expectedAttempt)
+        throw new StaleAttemptError({ taskId, attempt: expectedAttempt }, task.currentAttempt);
       this.queueRetryLeased(taskId, { ...options, expectedAttempt }, actor);
     } finally {
       lease.release();
@@ -1082,14 +1270,8 @@ export class WorkerTasks {
   }
   private queueRetryLeased(taskId: string, options: RetryOptions, actor?: AuthenticatedManager | null): void {
     const task = this.store.task(taskId);
-    if (task.currentAttempt !== options.expectedAttempt) {
-      if (
-        options.brief === undefined ||
-        options.expectedAttempt === undefined ||
-        options.expectedAttempt > task.currentAttempt
-      )
-        throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt! }, task.currentAttempt);
-    }
+    if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
+      throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
     const nextBrief = options.brief === undefined ? task.brief : this.validateBrief(options.brief, taskId, actor).brief;
@@ -1102,13 +1284,16 @@ export class WorkerTasks {
     let authorization: ProofAuthorization | undefined;
     if (nextBrief.kind === 'verification') {
       this.store.assertProofRegistration({ taskId, attempt: task.currentAttempt }, nextBrief);
-      authorization = authorizeProof(
-        this.store,
-        this.settings.mainCheckout,
-        nextBrief,
-        actor === undefined ? authenticatedManager(this.store.db) : actor,
-        this.settings.integration.operationsManager,
-        this.settings.integrationBranch,
+      authorization = retainBacklogProposal(
+        authorizeProof(
+          this.store,
+          this.settings.mainCheckout,
+          nextBrief,
+          actor === undefined ? authenticatedManager(this.store.db) : actor,
+          this.settings.integration.operationsManager,
+          this.settings.integrationBranch,
+        ),
+        task.proofAuthorization,
       );
       const missing = preflightProof(this.settings.mainCheckout, nextBrief, this.settings.policy?.proof);
       if (missing.length)
@@ -1256,6 +1441,18 @@ export class WorkerTasks {
     authorization?: ProofAuthorization,
   ): boolean {
     if (!authorization) {
+      if (
+        actor &&
+        actor.id === this.settings.integration.operationsManager &&
+        !previousCritical &&
+        !criticalPriority(task.brief, task.taskClass) &&
+        task.brief.kind !== 'verification'
+      ) {
+        const live = backlogManagerActor(this.store.db, actor.id);
+        if (!live || live.id !== actor.id || live.sessionId !== actor.sessionId)
+          throw new Error('priority changes require an authenticated manager session');
+        return false; // Normal-to-normal operations repair changes neither priority history nor grants.
+      }
       return applyRetryPriorityTransition(
         this.store.db,
         task,
@@ -1451,16 +1648,25 @@ export class WorkerTasks {
       return { hold: false, first: startsFirst(this.store.task(taskId)) };
     }
   }
-  /** Refuse stale captures and missing original inputs before creating an ordinary proof attempt. */
+  /** Keep the authorized snapshot when ordinary integration advances while a proof is queued. */
+  private assertProofCaptureReachable(task: Task): void {
+    const source = task.brief.proof!.sourceCommit;
+    const head = branchHead(this.settings, this.settings.integrationBranch, false);
+    if (head === source) return;
+    try {
+      git(this.settings.mainCheckout, ['merge-base', '--is-ancestor', source, head], this.settings.policy?.merge);
+    } catch {
+      throw new ProofUnavailableError(
+        `Proof pending/unavailable: registered snapshot ${source} is no longer an ancestor of ${head}; register current integration with retry ${task.id} --proof-start --expected-attempt ${task.currentAttempt} --brief <fresh-brief>`,
+      );
+    }
+  }
+  /** Require an authenticated capture and its original inputs before creating a proof attempt. */
   assertProofStart(task: Task): void {
     if (task.brief.kind !== 'verification') return;
     if (!task.brief.proof || task.proofAuthorization?.fingerprint !== proofFingerprint(task.brief))
       throw new ProofUnavailableError('Proof pending/unavailable: authenticated registration required');
-    const head = branchHead(this.settings, this.settings.integrationBranch, false);
-    if (head !== task.brief.proof.sourceCommit)
-      throw new ProofUnavailableError(
-        `Proof pending/unavailable: integration source advanced from ${task.brief.proof.sourceCommit} to ${head}; authenticated owner or operations must register the exact unchanged contract with sourceCommit ${head} through retry ${task.id} --proof-start --expected-attempt ${task.currentAttempt} --brief <fresh-brief> for a stopped/exited attempt before its new invocation; no separate logical release is required and every old binding/source remains evidence`,
-      );
+    this.assertProofCaptureReachable(task);
     if (
       spawnSync('git', ['cat-file', '-e', `${task.brief.proof.sourceCommit}:scripts/worker-check.ts`], {
         cwd: this.settings.mainCheckout,
@@ -1878,10 +2084,7 @@ export class WorkerTasks {
               'Proof dependency preparation did not provide node_modules/.bin/bun; no system Bun fallback is allowed',
             );
           // Ordinary shared/pinned preparation is outside SQLite, before any worker can invoke its command.
-          if (branchHead(this.settings, this.settings.integrationBranch, false) !== task.brief.proof!.sourceCommit)
-            throw new ProofUnavailableError(
-              'Proof pending/unavailable: integration source advanced; authenticated fresh registration required',
-            );
+          this.assertProofCaptureReachable(task);
           this.store.event(next, 'proof-command-ready', {
             sourceCommit: task.brief.proof!.sourceCommit,
             argv: task.brief.acceptance.command,

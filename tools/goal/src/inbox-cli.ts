@@ -212,8 +212,15 @@ export async function runInboxCommand(argv: string[], runtime: InboxCommandRunti
       const settle = at < 0 ? 0 : Number(flags[at + 1]);
       if (!Number.isFinite(settle) || settle < 0) throw new Error('usage: inbox wait <manager> [--settle <seconds>]');
       console.log(JSON.stringify(await inbox.wait(id, undefined, settle * 1000)));
-    } else if (subcommand === 'read') console.log(JSON.stringify(inbox.readPage(id, parseInboxReadOptions(flags))));
-    else if (subcommand === 'ack') inbox.acknowledge(id, flags.length ? flags.map(Number) : undefined);
+    } else if (subcommand === 'read') {
+      const owner = !hasWorkerIdentityMarkers(process.env) ? authenticatedCallingManager(runtime) : undefined;
+      const options = parseInboxReadOptions(flags);
+      const page =
+        owner?.id === id && isResidentSupermanagerRecord(runtime, id)
+          ? inbox.readResidentPage(id, owner.sessionId, options)
+          : inbox.readPage(id, options);
+      console.log(JSON.stringify(page));
+    } else if (subcommand === 'ack') inbox.acknowledge(id, flags.length ? flags.map(Number) : undefined);
     else throw new Error(`unknown inbox command: ${subcommand ?? '(missing)'}`);
   }
   return 0;

@@ -12,6 +12,7 @@ const workerCommands = [
   'dispatch',
   'urgent',
   'amend',
+  'typing-recover',
   'status',
   'retry',
   'priority',
@@ -44,8 +45,11 @@ export const SWEEP_FREE_COMMANDS = new Set([
   'train',
   'inbox',
   'backlog',
+  'manager',
   'publication',
+  'urgent',
   'amend',
+  'typing-recover',
   'event',
   '_manager-host',
   '_host-start',
@@ -123,7 +127,10 @@ export async function run(
   let parsedWorkerArguments: ParsedWorkerCommandArguments | undefined;
   try {
     if (workerCommands.includes(command)) parsedWorkerArguments = parseWorkerCommandArguments(command, args);
-    runtime = await factory({ trainMode, hostLoop: command === '_manager-host' });
+    runtime = await factory({
+      trainMode,
+      ...(command === '_manager-host' ? { hostLoop: true } : {}),
+    });
     if (command === 'service') {
       if (args.length !== 1) throw new Error('usage: goal service run-verifier');
       return await runResidentVerifier(runtime);

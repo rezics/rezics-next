@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { Settings, Task } from './types.ts';
 import { siblingTestCommand, siblingTestFiles } from './affected-tests.ts';
 import { defaultPolicy } from './policy.ts';
@@ -39,27 +40,468 @@ function bunWorkspace(path: string, tracked: ReadonlySet<string>): string | unde
   return path !== workspace && tracked.has(`${workspace}/bunfig.toml`) ? workspace : undefined;
 }
 
-/** Place a test command in its workspace so Bun loads that workspace's bunfig.toml. */
-export function placeInWorkspace(check: DevVerifierCheck, tracked: ReadonlySet<string>): DevVerifierCheck {
-  let index = 0;
-  if (check.command[0] === 'env') {
-    index++;
-    while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(check.command[index] ?? '')) index++;
+const WEB_ROOT = 'apps/web';
+const AUTH_ROOT = 'services/auth';
+const KERNEL_ROOT = 'services/kernel';
+const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/iu;
+const HOST_TEST_FILE = /\.host\.test\.[cm]?[jt]sx?$/iu;
+const webLaneEnvironment = new Set([
+  'WEB_BROWSER_CHECK_CONCURRENCY',
+  'WEB_UNIT_CHECK_CONCURRENCY',
+  'WEB_CHECK_SERIAL_LANES',
+]);
+const bunTestFlagsWithValue = new Set([
+  '--timeout',
+  '--preload',
+  '--rerun-each',
+  '--retry',
+  '--coverage-reporter',
+  '--coverage-dir',
+  '--test-name-pattern',
+  '--reporter',
+  '--reporter-outfile',
+  '--max-concurrency',
+  '--path-ignore-patterns',
+  '--changed',
+  '--seed',
+  '--shard',
+  '--timings',
+  '--parallel-delay',
+  '--parallel',
+  '-t',
+]);
+const envOptionsWithValue = new Set(['-u', '--unset', '-C', '--chdir']);
+
+type CommandPrefix = { commandIndex: number; prefix: string[]; cwd?: string };
+type BunTestInvocation = {
+  prefix: CommandPrefix;
+  argumentIndex: number;
+  testFlags: string[];
+  selectors: string[];
+  programArgs: string[];
+  commandCwd?: string;
+};
+type Placement = { check: DevVerifierCheck; webEntries?: { file: string; prefix: string[] }[] };
+
+function commandPrefix(command: readonly string[]): CommandPrefix {
+  if (command[0] !== 'env') return { commandIndex: 0, prefix: [] };
+  let index = 1;
+  let cwd: string | undefined;
+  while (index < command.length) {
+    const argument = command[index]!;
+    if (argument === '--') return { commandIndex: index + 1, prefix: command.slice(0, index), ...(cwd ? { cwd } : {}) };
+    if (envOptionsWithValue.has(argument)) {
+      const value = command[index + 1];
+      if (argument === '-C' || argument === '--chdir') cwd = value;
+      index += 2;
+      continue;
+    }
+    if (/^(?:--unset=|--chdir=)/u.test(argument)) {
+      if (argument.startsWith('--chdir=')) cwd = argument.slice('--chdir='.length);
+      index++;
+      continue;
+    }
+    if (argument === '-i' || argument === '--ignore-environment' || /^-u.+$/u.test(argument)) {
+      index++;
+      continue;
+    }
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(argument)) {
+      index++;
+      continue;
+    }
+    break;
   }
-  if (check.command[index] !== 'bun' || check.command[index + 1] !== 'test') return check;
-  const files = check.command
-    .slice(index + 2)
-    .filter((argument) => !argument.startsWith('-') && argument.includes('/'));
+  return { commandIndex: index, prefix: command.slice(0, index), ...(cwd ? { cwd } : {}) };
+}
+
+function bunTestInvocation(command: readonly string[], prefix: CommandPrefix): BunTestInvocation | undefined {
+  const index = prefix.commandIndex;
+  if (command[index] !== 'bun') return undefined;
+  let argumentIndex: number;
+  let commandCwd: string | undefined;
+  if (command[index + 1] === 'test') argumentIndex = index + 2;
+  else if (command[index + 1] === 'run') {
+    let script = index + 2;
+    while (script < command.length && command[script]!.startsWith('-')) {
+      if (command[script] === '--cwd') {
+        commandCwd = command[script + 1];
+        script += 2;
+      } else if (command[script] === '--if-present' || command[script] === '--filter') script += 2;
+      else script++;
+    }
+    if (command[script] !== 'test') return undefined;
+    argumentIndex = script + 1;
+  } else return undefined;
+
+  const testFlags: string[] = [];
+  const selectors: string[] = [];
+  let programArgs: string[] = [];
+  for (let cursor = argumentIndex; cursor < command.length; cursor++) {
+    const argument = command[cursor]!;
+    if (argument === '--') {
+      programArgs = command.slice(cursor + 1);
+      break;
+    }
+    const name = argument.split('=', 1)[0]!;
+    if (argument.startsWith('-')) {
+      testFlags.push(argument);
+      if (!argument.includes('=') && bunTestFlagsWithValue.has(name) && cursor + 1 < command.length)
+        testFlags.push(command[++cursor]!);
+      continue;
+    }
+    selectors.push(argument);
+  }
+  return { prefix, argumentIndex, testFlags, selectors, programArgs, ...(commandCwd ? { commandCwd } : {}) };
+}
+
+function resolveWorkspaceDirectory(path: string, base: string, checkout?: string): string {
+  if (isAbsolute(path)) {
+    if (!checkout) return path.replaceAll('\\', '/');
+    const inside = relative(resolve(checkout), resolve(path));
+    return inside === '' ? '.' : inside.split(sep).join('/');
+  }
+  if (checkout) {
+    const inside = relative(resolve(checkout), resolve(checkout, base, path));
+    return inside === '' ? '.' : inside.split(sep).join('/');
+  }
+  const joined = [base, path].filter((part) => part && part !== '.').join('/');
+  const parts: string[] = [];
+  for (const part of joined.replaceAll('\\', '/').split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') parts.pop();
+    else parts.push(part);
+  }
+  return parts.join('/') || '.';
+}
+
+function workspaceCwd(check: DevVerifierCheck, prefix: CommandPrefix, checkout?: string, commandCwd?: string): string {
+  let cwd = check.cwd?.replaceAll('\\', '/').replace(/^\.\//u, '') || '.';
+  if (prefix.cwd !== undefined) cwd = resolveWorkspaceDirectory(prefix.cwd, cwd, checkout);
+  if (commandCwd !== undefined) cwd = resolveWorkspaceDirectory(commandCwd, cwd, checkout);
+  return cwd;
+}
+
+function repositoryPath(argument: string, cwd: string, checkout?: string): string {
+  const normalized = argument.replaceAll('\\', '/');
+  if (normalized.startsWith(WEB_ROOT + '/')) return normalized;
+  if (isAbsolute(argument) && checkout) {
+    const inside = relative(resolve(checkout), resolve(argument));
+    return inside === '' ? '.' : inside.split(sep).join('/');
+  }
+  if (checkout) {
+    const base = isAbsolute(cwd) ? cwd : resolve(checkout, cwd);
+    return relative(resolve(checkout), resolve(base, argument)).split(sep).join('/') || '.';
+  }
+  const joined = [cwd === '.' ? '' : cwd, normalized].filter(Boolean).join('/');
+  const parts: string[] = [];
+  for (const part of joined.split('/')) {
+    if (part === '' || part === '.') continue;
+    if (part === '..') parts.pop();
+    else parts.push(part);
+  }
+  return parts.join('/');
+}
+
+function isWebWorkspacePath(path: string): boolean {
+  return path === WEB_ROOT || path.startsWith(WEB_ROOT + '/');
+}
+
+function globExpression(pattern: string): RegExp {
+  let expression = '^';
+  for (let index = 0; index < pattern.length; index++) {
+    const character = pattern[index]!;
+    if (character === '*' && pattern[index + 1] === '*') {
+      if (pattern[index + 2] === '/') {
+        expression += '(?:.*/)?';
+        index += 2;
+      } else {
+        expression += '.*';
+        index++;
+      }
+    } else if (character === '*') expression += '[^/]*';
+    else if (character === '?') expression += '[^/]';
+    else if ('\\^$+?.()|{}[]'.includes(character)) expression += '\\' + character;
+    else expression += character;
+  }
+  return new RegExp(expression + '$', 'u');
+}
+
+function expandWebSelectors(selectors: readonly string[], files: readonly string[]): string[] {
+  if (!selectors.length) return files.filter((file) => !HOST_TEST_FILE.test(file)).sort();
+  const selected: string[] = [];
+  for (const selector of selectors) {
+    const pattern = selector.replaceAll('\\', '/').replace(/^\.\//u, '');
+    let matches: string[];
+    if (pattern.includes('*') || pattern.includes('?')) {
+      const expression = globExpression(pattern);
+      matches = files.filter(
+        (file) => expression.test(file) || (!pattern.includes('/') && expression.test(file.split('/').at(-1) ?? '')),
+      );
+    } else if (files.includes(pattern)) matches = [pattern];
+    else if (files.some((file) => file.startsWith(pattern.replace(/\/$/u, '') + '/')))
+      matches = files.filter((file) => file.startsWith(pattern.replace(/\/$/u, '') + '/'));
+    else if (pattern.includes('/')) matches = files.filter((file) => file.includes(pattern));
+    else matches = files.filter((file) => file.split('/').at(-1)?.includes(pattern));
+    if (!HOST_TEST_FILE.test(pattern)) matches = matches.filter((file) => !HOST_TEST_FILE.test(file));
+    selected.push(...(matches.length ? matches : [pattern]));
+  }
+  return [...new Set(selected)];
+}
+
+function routedEnvironmentPrefix(prefix: readonly string[]): string[] {
+  if (!prefix.length) return ['env'];
+  const result = prefix.slice(0, 1);
+  for (let index = 1; index < prefix.length; index++) {
+    const argument = prefix[index]!;
+    if (argument === '--') continue;
+    if (argument === '-C' || argument === '--chdir') {
+      index++;
+      continue;
+    }
+    if (argument.startsWith('--chdir=')) continue;
+    const assignment = argument.indexOf('=');
+    if (assignment > 0 && webLaneEnvironment.has(argument.slice(0, assignment))) continue;
+    result.push(argument);
+  }
+  return result;
+}
+
+function preparePlacement(check: DevVerifierCheck, tracked: ReadonlySet<string>, checkout?: string): Placement {
+  const prefix = commandPrefix(check.command);
+  const invocation = bunTestInvocation(check.command, prefix);
+  if (!invocation) return { check: placeNonWebInWorkspace(check, tracked, prefix, checkout) };
+  const currentCwd = workspaceCwd(check, prefix, checkout, invocation.commandCwd);
+  const repoSelectors = invocation.selectors.map((selector) => repositoryPath(selector, currentCwd, checkout));
+  const inAuthWorkspace = currentCwd === AUTH_ROOT || currentCwd.startsWith(AUTH_ROOT + '/');
+  const authOnlyClosure =
+    check.closure.length > 0 && check.closure.every((path) => path === AUTH_ROOT || path.startsWith(AUTH_ROOT + '/'));
+  if (!repoSelectors.length && (inAuthWorkspace || authOnlyClosure)) {
+    const authScope = inAuthWorkspace ? [AUTH_ROOT + '/**'] : check.closure;
+    const files = [...tracked].filter((path) => isAuthLaneTest(path) && matchesPath(path, authScope));
+    return { check: databaseRunnerCheck(check, invocation, files, AUTH_ROOT) };
+  }
+  if (repoSelectors.length && repoSelectors.every(isAuthLaneTest))
+    return { check: databaseRunnerCheck(check, invocation, [...new Set(repoSelectors)], AUTH_ROOT) };
+  const selectedWorkspace = new Set(repoSelectors.map((path) => bunWorkspace(path, tracked)));
+  const hasWebSelector = repoSelectors.some(isWebWorkspacePath);
+  const allSelectorsAreWeb = repoSelectors.every(isWebWorkspacePath);
+  const webContext =
+    currentCwd === WEB_ROOT ||
+    currentCwd.startsWith(WEB_ROOT + '/') ||
+    (check.closure.some(isWebWorkspacePath) && (repoSelectors.length === 0 || hasWebSelector)) ||
+    hasWebSelector;
+  if (
+    !webContext ||
+    (repoSelectors.length > 0 && !allSelectorsAreWeb) ||
+    (selectedWorkspace.size > 1 && !hasWebSelector)
+  )
+    return { check: placeNonWebInWorkspace(check, tracked, prefix) };
+
+  const webFiles = [...tracked]
+    .filter((path) => path.startsWith(WEB_ROOT + '/') && TEST_FILE.test(path))
+    .map((path) => path.slice(WEB_ROOT.length + 1))
+    .sort();
+  const normalizedSelectors = repoSelectors.map((path) =>
+    isWebWorkspacePath(path) ? path.slice(WEB_ROOT.length + 1) : path,
+  );
+  const selectedFiles = expandWebSelectors(normalizedSelectors, webFiles);
+  const envPrefix = [
+    ...routedEnvironmentPrefix(invocation.prefix.prefix),
+    'WEB_BROWSER_CHECK_CONCURRENCY=1',
+    'WEB_UNIT_CHECK_CONCURRENCY=1',
+    'WEB_CHECK_SERIAL_LANES=1',
+    'bun',
+    'scripts/check.ts',
+  ];
+  const webEntries = selectedFiles.map((file) => ({
+    file,
+    prefix: HOST_TEST_FILE.test(file)
+      ? [
+          ...envPrefix,
+          '--host',
+          file,
+          ...invocation.testFlags,
+          ...(invocation.programArgs.length ? ['--', ...invocation.programArgs] : []),
+        ]
+      : [
+          ...envPrefix,
+          '--skip-format',
+          ...invocation.testFlags,
+          file,
+          ...(invocation.programArgs.length ? ['--', ...invocation.programArgs] : []),
+        ],
+  }));
+  const webPrefix = [...envPrefix, '--skip-format', ...invocation.testFlags];
+  const routed: DevVerifierCheck = {
+    ...check,
+    cwd: WEB_ROOT,
+    command: webEntries.length ? [...webEntries[0]!.prefix] : webPrefix,
+  };
+  return { check: routed, webEntries };
+}
+
+function placeNonWebInWorkspace(
+  check: DevVerifierCheck,
+  tracked: ReadonlySet<string>,
+  prefix: CommandPrefix,
+  checkout?: string,
+): DevVerifierCheck {
+  const invocation = bunTestInvocation(check.command, prefix);
+  if (!invocation) return check;
+  const currentCwd = workspaceCwd(check, prefix, checkout, invocation.commandCwd);
+  const files = invocation.selectors.map((file) => repositoryPath(file, currentCwd, checkout));
   const workspaces = new Set(files.map((file) => bunWorkspace(file, tracked)));
   const [workspace] = workspaces;
   if (!files.length || workspaces.size !== 1 || !workspace) return check;
+  const normalized = new Map(
+    invocation.selectors.map((source, index) => [source, files[index]!.slice(workspace.length + 1)]),
+  );
+  const command = check.command.map((argument, position) =>
+    position >= invocation.argumentIndex && normalized.has(argument) ? normalized.get(argument)! : argument,
+  );
+  return { ...check, cwd: workspace, command };
+}
+
+function isAuthLaneTest(path: string): boolean {
+  return path.startsWith(AUTH_ROOT + '/test/') && /\.test\.ts$/.test(path);
+}
+
+function databaseRunnerCheck(
+  check: DevVerifierCheck,
+  invocation: BunTestInvocation,
+  files: readonly string[],
+  workspace: string,
+): DevVerifierCheck {
+  const { cwd: _cwd, ...base } = check;
   return {
-    ...check,
-    cwd: workspace,
-    command: check.command.map((argument, position) =>
-      position > index + 1 && files.includes(argument) ? argument.slice(workspace.length + 1) : argument,
-    ),
+    ...base,
+    command: [
+      ...routedEnvironmentPrefix(invocation.prefix.prefix),
+      'bun',
+      'run',
+      '--cwd',
+      workspace,
+      'check',
+      ...files.map((file) => file.slice(workspace.length + 1)),
+      ...(workspace === KERNEL_ROOT && (invocation.testFlags.length || invocation.programArgs.length) ? ['--'] : []),
+      ...invocation.testFlags,
+      ...(invocation.programArgs.length ? ['--', ...invocation.programArgs] : []),
+    ],
   };
+}
+
+function directWorkspaceChecks(
+  check: DevVerifierCheck,
+  invocation: BunTestInvocation,
+  paths: readonly string[],
+  tracked: ReadonlySet<string>,
+  checkout?: string,
+): DevVerifierCheck[] {
+  const grouped = new Map<string, string[]>();
+  for (const path of paths) {
+    const workspace = bunWorkspace(path, tracked) ?? '';
+    grouped.set(workspace, [...(grouped.get(workspace) ?? []), path]);
+  }
+  const checks: DevVerifierCheck[] = [];
+  for (const [workspace, files] of grouped) {
+    const { cwd: _cwd, ...base } = check;
+    const localFiles = files.map((file) => (workspace ? file.slice(workspace.length + 1) : file));
+    const subset: DevVerifierCheck = {
+      ...base,
+      ...(workspace ? { cwd: workspace } : {}),
+      command: [
+        ...routedEnvironmentPrefix(invocation.prefix.prefix),
+        'bun',
+        'test',
+        ...invocation.testFlags,
+        ...localFiles,
+        ...(invocation.programArgs.length ? ['--', ...invocation.programArgs] : []),
+      ],
+    };
+    checks.push(...splitWebPlacement(preparePlacement(subset, tracked, checkout)));
+  }
+  return checks;
+}
+
+function splitWebPlacement(placement: Placement): DevVerifierCheck[] {
+  if (!placement.webEntries?.length) return [placement.check];
+  return placement.webEntries.map(({ prefix }) => ({
+    ...placement.check,
+    command: prefix,
+  }));
+}
+
+/** Place a test command in its owning workspace; Web tests go through Web's routed, isolated check entrypoint. */
+export function placeInWorkspace(
+  check: DevVerifierCheck,
+  tracked: ReadonlySet<string>,
+  checkout?: string,
+): DevVerifierCheck {
+  return preparePlacement(check, tracked, checkout).check;
+}
+
+/** Split selected Web files into independently attributable, deadline-carryable checks. */
+export function placeInWorkspaceChecks(
+  check: DevVerifierCheck,
+  tracked: ReadonlySet<string>,
+  checkout?: string,
+): DevVerifierCheck[] {
+  const prefix = commandPrefix(check.command);
+  const invocation = bunTestInvocation(check.command, prefix);
+  if (invocation) {
+    const currentCwd = workspaceCwd(check, prefix, checkout, invocation.commandCwd);
+    const repoSelectors = [
+      ...new Set(invocation.selectors.map((selector) => repositoryPath(selector, currentCwd, checkout))),
+    ];
+    const authFiles = repoSelectors.filter(isAuthLaneTest);
+    const kernelFiles = tracked.has(`${KERNEL_ROOT}/scripts/check.ts`)
+      ? repoSelectors.filter((path) => path.startsWith(`${KERNEL_ROOT}/test/`) && TEST_FILE.test(path))
+      : [];
+    if (authFiles.length || kernelFiles.length) {
+      const ownedFiles = new Set([...authFiles, ...kernelFiles]);
+      const otherFiles = repoSelectors.filter((path) => !ownedFiles.has(path));
+      return [
+        ...(authFiles.length ? [databaseRunnerCheck(check, invocation, authFiles, AUTH_ROOT)] : []),
+        ...(kernelFiles.length ? [databaseRunnerCheck(check, invocation, kernelFiles, KERNEL_ROOT)] : []),
+        ...directWorkspaceChecks(check, invocation, otherFiles, tracked, checkout),
+      ];
+    }
+  }
+  return splitWebPlacement(preparePlacement(check, tracked, checkout));
+}
+
+/** Boot smoke uses the documented focused Web runner and avoids the full Web check preparation. */
+export function placeBootSmokeCheck(
+  check: DevVerifierCheck,
+  tracked: ReadonlySet<string>,
+  checkout?: string,
+): DevVerifierCheck[] {
+  const prefix = commandPrefix(check.command);
+  const invocation = bunTestInvocation(check.command, prefix);
+  if (!invocation) return placeInWorkspaceChecks(check, tracked, checkout);
+  const cwd = workspaceCwd(check, prefix, checkout, invocation.commandCwd);
+  const repoSelectors = invocation.selectors.map((file) => repositoryPath(file, cwd, checkout));
+  if (!repoSelectors.some(isWebWorkspacePath)) return placeInWorkspaceChecks(check, tracked, checkout);
+  const envPrefix = invocation.prefix.prefix.length ? routedEnvironmentPrefix(invocation.prefix.prefix) : [];
+  return repoSelectors.map((path) => {
+    const file = isWebWorkspacePath(path) ? path.slice(WEB_ROOT.length + 1) : path;
+    return {
+      ...check,
+      cwd: WEB_ROOT,
+      command: [
+        ...envPrefix,
+        'bun',
+        'scripts/focused.ts',
+        '--private-network',
+        '--',
+        'bun',
+        'test',
+        ...invocation.testFlags,
+        file,
+        ...(invocation.programArgs.length ? ['--', ...invocation.programArgs] : []),
+      ],
+    };
+  });
 }
 
 function siblingTestFilesAtCommit(changedPaths: readonly string[], tracked: ReadonlySet<string>): string[] {
@@ -259,7 +701,7 @@ export function createVerifierChecks(
     if (task.brief.acceptance.workerOwned && !task.brief.acceptance.command.length) continue;
     checks.push({ command: [...task.brief.acceptance.command], closure: [...task.brief.paths], taskId: task.id });
   }
-  return checks.map((check) => placeInWorkspace(check, tracked));
+  return checks.flatMap((check) => placeInWorkspaceChecks(check, tracked, checkout));
 }
 
 /** Plan a bounded complete test set for the first round or a change range too large to select from. */
@@ -297,5 +739,5 @@ export function createFullVerifierChecks(
   const tracked = trackedFilesAt(settings.mainCheckout, candidate);
   const unique = new Map<string, Check>();
   for (const check of checks) unique.set(JSON.stringify(check), check);
-  return [...unique.values()].map((check) => placeInWorkspace(check, tracked));
+  return [...unique.values()].flatMap((check) => placeInWorkspaceChecks(check, tracked, settings.mainCheckout));
 }

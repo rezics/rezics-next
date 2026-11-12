@@ -10,9 +10,48 @@ export const WORKER_SLICE = 'rezics-workers.slice';
 export const WORKER_SLICE_PREPARATION_TIMEOUT_MS = defaultPolicy.workerResources.preparationTimeoutMs;
 // Binary unit conversion, independent of admission policy.
 const GIB = 1024 ** 3;
-const CHECK_SLICE = 'rezics-check.slice';
+export const CHECK_SLICE = 'rezics-check.slice';
 /** One attempt's scope: a runaway test (22 GB on 2026-11-06) is killed inside its own scope instead of filling the host. */
 export const WORKER_SCOPE_MEMORY_MAX = '12G';
+
+export type WorkerScopeOptions = {
+  slice?: string;
+  properties?: readonly string[];
+};
+
+/** Build an owned user-manager scope command. The child inherits stdio; --pipe is for service units. */
+export function workerScopeArguments(
+  unit: string,
+  command: string,
+  args: readonly string[],
+  options: WorkerScopeOptions = {},
+): string[] {
+  return [
+    '--user',
+    '--scope',
+    '--collect',
+    '--quiet',
+    `--slice=${options.slice ?? WORKER_SLICE}`,
+    `--property=MemoryMax=${WORKER_SCOPE_MEMORY_MAX}`,
+    ...(options.properties ?? []).map((property) => `--property=${property}`),
+    `--unit=${unit}`,
+    command,
+    ...args,
+  ];
+}
+
+/** Existing operator limits outrank adaptive tuning; an explicit launch override may only tighten them. */
+export function workerMemoryHigh(desiredGiB: number, limits: string, explicit = false): string {
+  const read = (name: string) => {
+    const value = limits.match(new RegExp('^' + name + '=(\\d+)$', 'm'))?.[1];
+    return value ? Number(value) : Infinity;
+  };
+  const high = read('MemoryHigh'),
+    max = read('MemoryMax');
+  const requested = Number.isFinite(high) && !explicit ? high : Math.min(desiredGiB * GIB, high);
+  const bytes = Math.min(requested, max);
+  return bytes % GIB === 0 ? `${bytes / GIB}G` : String(bytes);
+}
 
 type Run = (command: string, args: string[], options: SpawnSyncOptions) => SpawnSyncReturns<Buffer>;
 type ReadMeminfo = () => string;
@@ -69,21 +108,7 @@ export class WorkerSlice {
       );
     }
 
-    const scoped = this.run(
-      'systemd-run',
-      [
-        '--user',
-        '--scope',
-        '--collect',
-        '--quiet',
-        `--slice=${WORKER_SLICE}`,
-        `--property=MemoryMax=${WORKER_SCOPE_MEMORY_MAX}`,
-        `--unit=${workerUnit(taskId, attempt)}`,
-        command,
-        ...args,
-      ],
-      options,
-    );
+    const scoped = this.run('systemd-run', workerScopeArguments(workerUnit(taskId, attempt), command, args), options);
     const scopedError = failure(scoped);
     if (!scopedError) return scoped;
     if (hasStarted()) {
@@ -130,6 +155,13 @@ export class WorkerSlice {
         totalGiB - checkGiB - this.policy.memoryReserveGiB,
       );
     }
+    const existing = this.run(
+      'systemctl',
+      ['--user', 'show', WORKER_SLICE, '--property=MemoryHigh', '--property=MemoryMax'],
+      configuration,
+    );
+    if (existing.error || existing.status !== 0) return `Could not read existing worker limits: ${failure(existing)}`;
+    const boundedHigh = workerMemoryHigh(memoryHigh, existing.stdout?.toString() ?? '', override !== undefined);
     const result = this.run(
       'systemctl',
       [
@@ -139,7 +171,7 @@ export class WorkerSlice {
         WORKER_SLICE,
         `CPUWeight=${this.policy.cpuWeight}`,
         `IOWeight=${this.policy.ioWeight}`,
-        `MemoryHigh=${memoryHigh}G`,
+        `MemoryHigh=${boundedHigh}`,
       ],
       configuration,
     );

@@ -6,6 +6,7 @@ import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { createHash } from 'node:crypto';
 import {
   type Dirent,
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -30,7 +31,7 @@ import {
 import { classifyTask } from './routing.ts';
 import type { WorkerStore } from './store.ts';
 import type { Settings, Task } from './types.ts';
-import { git } from './merge.ts';
+import { policyGit } from './merge.ts';
 
 /** Where a worker writes the rest of an outcome that does not fit its attempt, inside its own worktree. */
 export const CONTINUATION_DIRECTORY = '.temp/continuation';
@@ -523,6 +524,7 @@ function preserveFailedContinuation(
   ref: AttemptRef,
   name: string,
   reason: string,
+  keepSource = false,
 ): string {
   const failedDirectory = join(target, 'failed');
   mkdirSync(failedDirectory, { recursive: true });
@@ -540,22 +542,100 @@ function preserveFailedContinuation(
   const reasonPath = `${destination}.reason`;
   writeFileSync(reasonPath, `${reason}\n`, { flag: 'wx' });
   try {
-    renameSync(source, destination);
+    if (keepSource) copyFileSync(source, destination);
+    else renameSync(source, destination);
   } catch (error) {
     rmSync(reasonPath, { force: true });
+    rmSync(destination, { force: true });
     throw error;
   }
   return destination;
 }
 
+const GIT_COMMIT_ID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i;
+
+function continuationRootName(path: string): string | undefined {
+  const prefix = `${CONTINUATION_DIRECTORY}/`;
+  return path.startsWith(prefix) ? path.slice(prefix.length).split('/')[0] : undefined;
+}
+
+function continuationRootNames(paths: string): Set<string> {
+  const names = new Set<string>();
+  for (const path of paths.split('\0')) {
+    const name = continuationRootName(path);
+    if (name) names.add(name);
+  }
+  return names;
+}
+
+function attemptContinuationSources(store: WorkerStore, task: Task, ref: AttemptRef): Set<string> {
+  const sources = new Set<string>();
+  const add = (value: unknown) => {
+    if (typeof value === 'string' && GIT_COMMIT_ID.test(value)) sources.add(value.toLowerCase());
+  };
+  add(task.base);
+  for (const event of store.events(ref.taskId, ref.attempt)) {
+    if (!['worker-run-started', 'worker-source-baseline'].includes(event.kind)) continue;
+    try {
+      const body = JSON.parse(event.body) as { branchHead?: unknown; workerCommit?: unknown; controllerHead?: unknown };
+      if (event.kind === 'worker-run-started') add(body.branchHead);
+      else {
+        add(body.workerCommit);
+        add(body.controllerHead);
+      }
+    } catch {
+      // Older imported records may not contain a JSON object.
+    }
+  }
+  return sources;
+}
+
+function directMergeParents(worktree: string, commit: string, policy: ControlPolicy['merge'] | undefined): string[] {
+  const parents = policyGit(worktree, ['rev-list', '--parents', '-n', '1', commit], policy)
+    .trim()
+    .split(/\s+/)
+    .slice(1);
+  return parents.length > 1
+    ? parents.filter((parent) => GIT_COMMIT_ID.test(parent)).map((parent) => parent.toLowerCase())
+    : [];
+}
+
+function continuationNamesInTree(worktree: string, commit: string, policy: ControlPolicy['merge'] | undefined) {
+  return continuationRootNames(
+    policyGit(worktree, ['ls-tree', '-r', '--name-only', '-z', commit, '--', CONTINUATION_DIRECTORY], policy),
+  );
+}
+
+/** Historical path-only evidence from the task base, recorded source trees, and direct merge parents. */
+function inheritedContinuationNames(
+  store: WorkerStore,
+  task: Task,
+  ref: AttemptRef,
+  policy: ControlPolicy['merge'] | undefined,
+): Set<string> {
+  const names = new Set<string>();
+  const sources = attemptContinuationSources(store, task, ref);
+  const trees = new Set(sources);
+  // Merge-conflict preparation records the exact worker and admitted controller source commits.
+  for (const source of sources)
+    for (const parent of directMergeParents(task.worktree, source, policy)) trees.add(parent);
+  for (const tree of trees) for (const name of continuationNamesInTree(task.worktree, tree, policy)) names.add(name);
+  return names;
+}
+
+/** Current index entries are candidates for this attempt; only captured source trees establish inheritance. */
+function trackedContinuationNames(task: Task, policy: ControlPolicy['merge'] | undefined): Set<string> {
+  return continuationRootNames(policyGit(task.worktree, ['ls-files', '-z', '--', CONTINUATION_DIRECTORY], policy));
+}
+
 /**
  * Move the continuation briefs an attempt left under `.temp/continuation/` into its Goal's backlog, where they are
  * dispatched like any other brief. A brief must parse with the ordinary brief parser and keep the task's goal and
- * manager. Rejected regular Markdown is moved to the Goal's failed directory with a reason and a manager notice;
- * other untracked files are removed. Tracked sources remain untouched, including inherited briefs belonging to
- * other outcomes. A backlog name that already holds the same brief is left untouched. A different brief is published
- * under the next stable distinct name. The source is removed only after that publication, so an interrupted harvest
- * neither drops nor overwrites a wanted continuation.
+ * manager. Rejected regular Markdown is copied or moved to the Goal's failed directory with a reason and a manager
+ * notice; other untracked files are removed. Tracked sources remain untouched, including inherited briefs belonging
+ * to other outcomes. A backlog name that already holds the same brief is left untouched. A different brief is
+ * published under the next stable distinct name. An untracked source is removed only after publication, so an
+ * interrupted harvest neither drops nor overwrites a wanted continuation.
  */
 export function harvestContinuations(
   store: WorkerStore,
@@ -575,14 +655,9 @@ export function harvestContinuations(
   } catch {
     return result;
   }
-  // Settlement must not turn a clean source dirty by harvesting inherited repository files. Protect containing
-  // directories too: dropping a non-Markdown directory recursively must not remove a tracked descendant.
-  const trackedNames = new Set(
-    git(task.worktree, 'ls-files', '-z', '--', CONTINUATION_DIRECTORY)
-      .split('\0')
-      .filter(Boolean)
-      .map((path) => path.slice(CONTINUATION_DIRECTORY.length + 1).split('/')[0]),
-  );
+  // Historical names stay in the source; newly tracked files still enter the existing backlog custody.
+  const inheritedNames = inheritedContinuationNames(store, task, ref, settings.policy?.merge);
+  const trackedNames = trackedContinuationNames(task, settings.policy?.merge);
   const known = new Set(store.taskIds());
   let ownership: RiskOwnership | undefined;
   try {
@@ -592,11 +667,20 @@ export function harvestContinuations(
   }
   // A retried attempt restates the remainder its predecessor already queued: on 2026-11-02 one task's attempts queued
   // eight copies, and the copies' own retries fanned one outcome out to 28 workers. The first queued remainder stands.
-  const queuedBy = store
-    .events(task.id)
-    .find(
-      (event) => ['continuation-queued', 'continuation-proposed'].includes(event.kind) && event.attempt < ref.attempt,
-    )?.attempt;
+  const taskEvents = store.events(task.id);
+  const queuedBy = taskEvents.find(
+    (event) => ['continuation-queued', 'continuation-proposed'].includes(event.kind) && event.attempt < ref.attempt,
+  )?.attempt;
+  const handledNames = new Set<string>();
+  for (const event of taskEvents) {
+    if (event.attempt !== ref.attempt || !event.kind.startsWith('continuation-')) continue;
+    try {
+      const body = JSON.parse(event.body) as { file?: unknown };
+      if (typeof body.file === 'string') handledNames.add(body.file);
+    } catch {
+      // An older event without a file name cannot establish per-file custody.
+    }
+  }
   const target = backlogDirectory(settings.stateDirectory, task.brief.goal);
   const lease = acquireDirectoryLeaseWaiting(
     join(settings.stateDirectory, 'leases', 'backlog'),
@@ -607,13 +691,18 @@ export function harvestContinuations(
     // One task's output is one admission plan. A later harvest builds a fresh projection after this lease ends.
     const admission = continuationAdmissionProjection(settings.stateDirectory, task.brief.goal, settings.policy);
     for (const name of names) {
-      if (trackedNames.has(name)) continue;
+      if (inheritedNames.has(name)) continue;
+      const keepSource = trackedNames.has(name);
+      if (keepSource && handledNames.has(name)) continue;
       const path = join(source, name);
       const drop = (reason: string, keepMarkdown = false) => {
-        const failedPath = keepMarkdown ? preserveFailedContinuation(path, target, task, ref, name, reason) : undefined;
-        if (!keepMarkdown) rmSync(path, { recursive: true, force: true });
+        const failedPath = keepMarkdown
+          ? preserveFailedContinuation(path, target, task, ref, name, reason, keepSource)
+          : undefined;
+        if (!keepMarkdown && !keepSource) rmSync(path, { recursive: true, force: true });
         result.dropped.push({ file: name, reason });
         store.event(ref, 'continuation-dropped', { file: name, reason });
+        handledNames.add(name);
         if (failedPath) {
           const summary = `Continuation ${name} kept at failed/${basename(failedPath)}: ${reason}`.replace(/\s+/g, ' ');
           new SqliteManagerInbox(store.db, settings.stateDirectory).deliver({
@@ -631,12 +720,15 @@ export function harvestContinuations(
       };
       const stat = lstatSync(path, { throwIfNoEntry: false });
       if (!stat) continue;
+      // A tracked non-Markdown entry is source data, not disposable continuation output.
+      if (keepSource && (!stat.isFile() || !name.endsWith('.md'))) continue;
       if (!stat.isFile() || !name.endsWith('.md')) {
         drop('a continuation must be a regular Markdown file');
         continue;
       }
       // Creation time, rather than mtime, prevents a touched inherited file being attributed to this attempt.
       if (!Number.isFinite(startedAt) || stat.birthtimeMs < startedAt) {
+        if (keepSource) continue;
         drop('file was not created during this attempt', true);
         continue;
       }
@@ -696,6 +788,7 @@ export function harvestContinuations(
         const reason = `kept at ${name}; ${basenames[0]} already holds a different brief and every distinct name is occupied`;
         result.retained.push({ file: name, reason });
         store.event(ref, 'continuation-retained', { file: name, reason });
+        handledNames.add(name);
         console.error(`Continuation ${name} from task ${task.id} attempt ${ref.attempt} kept: ${reason}`);
         continue;
       }
@@ -704,9 +797,10 @@ export function harvestContinuations(
         proposeContinuation(destination, settings.stateDirectory, task.brief.goal, proposalReason);
         const proposed = join(target, 'proposed', basename(destination));
         if (proposed !== destination) movePublishedContinuation(admission, destination, proposed);
-        rmSync(path, { force: true });
+        if (!keepSource) rmSync(path, { force: true });
         result.proposed.push({ file: destination, reason: proposalReason });
         store.event(ref, 'continuation-proposed', { file: name, path: destination, reason: proposalReason });
+        handledNames.add(name);
         new SqliteManagerInbox(store.db, settings.stateDirectory).deliver({
           managerId: task.brief.manager,
           goalId: task.brief.goal,
@@ -716,9 +810,10 @@ export function harvestContinuations(
         continue;
       }
       recordPublishedContinuation(admission, destination, admitted);
-      rmSync(path, { force: true });
+      if (!keepSource) rmSync(path, { force: true });
       result.queued.push(destination);
       store.event(ref, 'continuation-queued', { file: name, path: destination });
+      handledNames.add(name);
     }
   } finally {
     lease.release();

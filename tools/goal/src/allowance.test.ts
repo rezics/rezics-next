@@ -6,6 +6,9 @@ import {
   countAllowanceWaiting,
   countRunningByPool,
   countWaitingByPool,
+  managerWakePoolAllowed,
+  PoolUnavailableError,
+  poolAllowed,
   poolBurnStatus,
 } from './allowance.ts';
 import { fixturePool, reading } from './test-support.ts';
@@ -16,6 +19,28 @@ const span = 90 * 60 * 1000;
 const now = Date.parse('2026-11-05T12:00:00.000Z');
 const profile: Profile = { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' };
 const cursorProfile: Profile = { cli: 'cursor', model: 'gpt-5.6-luna', effort: 'high', poolClass: 'cursor' };
+
+test('only a configured but currently refused pool is a typed admission wait', () => {
+  const pool = { ...fixturePool(), policy: { ...fixturePool().policy, allowUnknown: false } };
+  let refused: unknown;
+  try {
+    choosePool(profile, [pool], [observed(pool, 100, now)], { now });
+  } catch (error) {
+    refused = error;
+  }
+  expect(refused).toBeInstanceOf(PoolUnavailableError);
+  expect((refused as Error).message).toBe('no allowed pool available for codex/codex');
+
+  let misconfigured: unknown;
+  try {
+    choosePool(profile, [{ ...pool, cli: 'cursor' as const, classes: ['cursor'] }], [], { now });
+  } catch (error) {
+    misconfigured = error;
+  }
+  expect(misconfigured).toBeInstanceOf(Error);
+  expect(misconfigured).not.toBeInstanceOf(PoolUnavailableError);
+  expect((misconfigured as Error).message).toBe('no allowed pool available for codex/codex');
+});
 
 function observed(pool: Pool, usedPercent: number, at: number, resetsAt = now + 8 * hour): PoolReading {
   const result = reading(pool, usedPercent);
@@ -43,6 +68,7 @@ test('A pool whose window used percent rose 2 points over the last 90 minutes, w
   const cursorReading = observed(cursor, 5, now);
   expect(burnPerHour(current, history, { now, spanMs: span })).toBeCloseTo(2 / 1.5, 5);
   expect(() => choosePool(profile, [codex], [current], { now, history, spanMs: span })).toThrow('no allowed pool');
+  expect(poolAllowed(codex, [current], { now, history, spanMs: span })).toBe(false);
   const chosen = choosePoolWithFallback(profile, [cursorProfile], [codex, cursor], [current, cursorReading], {
     now,
     history,
@@ -57,6 +83,29 @@ test('A pool whose window used percent rose 2 points over the last 90 minutes, w
     { name: 'fixture', allowanceKey: 'fixture', burnPerHour: 2 / 1.5, maxBurnPerHour: 0.8 },
     { name: 'cursor', allowanceKey: 'cursor', burnPerHour: 0 },
   ]);
+});
+
+test('Manager mailbox admission bypasses worker reserve, pacing and concurrency, while confirmed provider exhaustion still refuses it', () => {
+  const base = fixturePool();
+  const pool = {
+    ...base,
+    policy: {
+      ...base.policy,
+      reservePercent: 20,
+      reservePerHour: 10,
+      maxBurnPerHour: 0.1,
+      maxConcurrent: 1,
+      allowUnknown: false,
+    },
+  };
+  const currentNow = Date.now();
+  const resetsAt = currentNow + 8 * hour;
+  const history = [observed(pool, 10, currentNow - span, resetsAt)];
+  const current = observed(pool, 95, currentNow, resetsAt);
+  expect(poolAllowed(pool, [current], { now: currentNow, history, spanMs: span, running: { fixture: 1 } })).toBe(false);
+  expect(managerWakePoolAllowed(pool, [current])).toBe(true);
+  current.exhausted = true;
+  expect(managerWakePoolAllowed(pool, [current])).toBe(false);
 });
 
 test('Integer percent readings taken every few minutes, where most consecutive readings are equal, still yield the true rate over the measurement span', () => {

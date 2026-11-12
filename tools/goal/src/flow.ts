@@ -1,4 +1,5 @@
 import defaults from '../defaults.json';
+import { createHash } from 'node:crypto';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import { migrate } from './db.ts';
@@ -15,6 +16,8 @@ export const FLOW_STAGES = [
   'integration',
   'promotion',
 ] as const;
+export const FLOW_RETRY_ALARM_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+export const FLOW_RETRY_ALARM_WINDOW = 'trailing 7 days';
 type LifecycleStage = (typeof FLOW_STAGES)[number];
 export type FlowStage = LifecycleStage | 'manager' | 'chain';
 export type FlowEvent = {
@@ -24,6 +27,7 @@ export type FlowEvent = {
   action: string;
   at: string;
   detail?: string;
+  operationId?: string;
 };
 export const flowMigrations = [
   {
@@ -56,27 +60,87 @@ export const flowMigrations = [
     version: 6,
     sql: `CREATE TABLE page_data_repairs (repair_key TEXT PRIMARY KEY, created_at TEXT NOT NULL, status TEXT NOT NULL, detail TEXT NOT NULL); CREATE INDEX page_data_repairs_status ON page_data_repairs(status, created_at);`,
   },
+  {
+    module: 'flow',
+    version: 7,
+    sql: `ALTER TABLE flow_alarm_sends ADD COLUMN fingerprint TEXT; ALTER TABLE flow_alarm_sends ADD COLUMN active INTEGER NOT NULL DEFAULT 1;`,
+  },
+  {
+    module: 'flow',
+    version: 8,
+    sql: `ALTER TABLE flow_events ADD COLUMN operation_id TEXT;
+      CREATE INDEX flow_events_operation_window ON flow_events(operation_id, at, sequence);
+      CREATE TABLE landing_operations (
+        operation_id TEXT PRIMARY KEY,
+        queue_id INTEGER NOT NULL,
+        task_id TEXT NOT NULL,
+        attempt INTEGER NOT NULL,
+        enqueued_at TEXT NOT NULL,
+        started_at TEXT,
+        terminal_at TEXT,
+        terminal_action TEXT,
+        terminal_outcome TEXT
+      );
+      CREATE INDEX landing_operations_terminal_window ON landing_operations(terminal_at, operation_id);`,
+  },
+  {
+    module: 'flow',
+    version: 9,
+    sql: `CREATE UNIQUE INDEX flow_verifier_command_completion ON flow_events(operation_id)
+      WHERE operation_id IS NOT NULL AND stage='check' AND action='command-completed';`,
+  },
 ];
 export function ensureFlow(db: Database): void {
   migrate(db, flowMigrations);
 }
-export function recordFlow(db: Database, event: FlowEvent): void {
-  ensureFlow(db);
-  db.query('INSERT INTO flow_events(task_id,attempt,stage,action,at,detail) VALUES (?,?,?,?,?,?)').run(
+/** Insert into an already-migrated flow table while the caller owns the enclosing SQLite transaction. */
+export function recordFlowInTransaction(db: Database, event: FlowEvent): void {
+  db.query('INSERT INTO flow_events(task_id,attempt,stage,action,at,detail,operation_id) VALUES (?,?,?,?,?,?,?)').run(
     event.taskId,
     event.attempt,
     event.stage,
     event.action,
     event.at,
     event.detail ?? null,
+    event.operationId ?? null,
   );
 }
-export function readFlow(db: Database, since = '0000-01-01T00:00:00.000Z'): FlowEvent[] {
+export function recordFlow(db: Database, event: FlowEvent): void {
   ensureFlow(db);
+  recordFlowInTransaction(db, event);
+}
+
+function canonicalUtc(value: string): string {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) throw new Error('flow window requires valid timestamps');
+  return new Date(timestamp).toISOString();
+}
+
+export function readFlow(db: Database, since = '0000-01-01T00:00:00.000Z', until?: string): FlowEvent[] {
+  ensureFlow(db);
+  const start = canonicalUtc(since);
+  const end = until === undefined ? undefined : canonicalUtc(until);
+  const rows = end
+    ? db
+        .query(
+          'SELECT task_id,attempt,stage,action,at,detail,operation_id FROM flow_events WHERE at >= ? AND at < ? ORDER BY at,sequence',
+        )
+        .all(start, end)
+    : db
+        .query(
+          'SELECT task_id,attempt,stage,action,at,detail,operation_id FROM flow_events WHERE at >= ? ORDER BY at,sequence',
+        )
+        .all(start);
   return (
-    db
-      .query('SELECT task_id,attempt,stage,action,at,detail FROM flow_events WHERE at >= ? ORDER BY at,sequence')
-      .all(since) as any[]
+    rows as {
+      task_id: string;
+      attempt: number;
+      stage: FlowStage;
+      action: string;
+      at: string;
+      detail: string | null;
+      operation_id: string | null;
+    }[]
   ).map((r) => ({
     taskId: r.task_id,
     attempt: r.attempt,
@@ -84,7 +148,185 @@ export function readFlow(db: Database, since = '0000-01-01T00:00:00.000Z'): Flow
     action: r.action,
     at: r.at,
     ...(r.detail === null ? {} : { detail: r.detail }),
+    ...(r.operation_id === null ? {} : { operationId: r.operation_id }),
   }));
+}
+
+export type LandingOperation = {
+  operationId: string | null;
+  taskId: string;
+  attempt: number;
+  enqueuedAt: string | null;
+  startedAt: string | null;
+  terminalAt: string;
+  terminalAction: string;
+  terminalOutcome: string | null;
+};
+
+export type LandingOperationSummary = {
+  terminalCount: number | null;
+  measuredCount: number | null;
+  unknownDurationCount: number | null;
+  totalDurationMs: number | null;
+  p50DurationMs: number | null;
+  p90DurationMs: number | null;
+  outcomes: Record<string, number> | null;
+};
+
+/** Read terminal operations in the fixed half-open window; legacy flow rows remain visible without invented joins. */
+export function readLandingOperations(db: Database, since: string, until: string): LandingOperation[] {
+  ensureFlow(db);
+  const start = canonicalUtc(since);
+  const end = canonicalUtc(until);
+  const operations = db
+    .query(
+      `SELECT operation_id AS operationId, task_id AS taskId, attempt,
+              enqueued_at AS enqueuedAt, started_at AS startedAt, terminal_at AS terminalAt,
+              terminal_action AS terminalAction, terminal_outcome AS terminalOutcome
+       FROM landing_operations
+       WHERE terminal_at >= ? AND terminal_at < ?
+       ORDER BY terminal_at, operation_id`,
+    )
+    .all(start, end) as Array<Omit<LandingOperation, 'operationId'> & { operationId: string }>;
+  const legacy = db
+    .query(
+      `SELECT NULL AS operationId, task_id AS taskId, attempt, NULL AS enqueuedAt,
+              NULL AS startedAt, at AS terminalAt, action AS terminalAction, detail AS terminalOutcome
+       FROM flow_events INDEXED BY flow_events_at_window
+       WHERE stage='landing' AND action IN ('finished','resolver-requeued','acknowledged')
+         AND operation_id IS NULL AND at >= ? AND at < ?
+       ORDER BY at, sequence`,
+    )
+    .all(start, end) as LandingOperation[];
+  return [...(operations as LandingOperation[]), ...legacy].sort(
+    (a, b) => a.terminalAt.localeCompare(b.terminalAt) || (a.operationId ?? '').localeCompare(b.operationId ?? ''),
+  );
+}
+
+export function summarizeLandingOperations(operations: readonly LandingOperation[]): LandingOperationSummary {
+  const durations: number[] = [];
+  const outcomes: Record<string, number> = {};
+  for (const operation of operations) {
+    outcomes[operation.terminalAction] = (outcomes[operation.terminalAction] ?? 0) + 1;
+    if (!operation.operationId || !operation.startedAt) continue;
+    const start = Date.parse(operation.startedAt);
+    const end = Date.parse(operation.terminalAt);
+    if (Number.isFinite(start) && Number.isFinite(end) && end >= start) durations.push(end - start);
+  }
+  const sample = summarize(durations);
+  return {
+    terminalCount: operations.length,
+    measuredCount: durations.length,
+    unknownDurationCount: operations.length - durations.length,
+    totalDurationMs: sample.totalMs,
+    p50DurationMs: sample.p50Ms,
+    p90DurationMs: sample.p90Ms,
+    outcomes,
+  };
+}
+
+export function unavailableLandingOperationSummary(): LandingOperationSummary {
+  return {
+    terminalCount: null,
+    measuredCount: null,
+    unknownDurationCount: null,
+    totalDurationMs: null,
+    p50DurationMs: null,
+    p90DurationMs: null,
+    outcomes: null,
+  };
+}
+
+/** Persist a queue-created operation and its enqueue event from the caller's transaction. */
+export function recordLandingOperationEnqueued(
+  db: Database,
+  operation: { operationId: string; queueId: number; taskId: string; attempt: number; at: string },
+): void {
+  db.query('INSERT INTO landing_operations(operation_id,queue_id,task_id,attempt,enqueued_at) VALUES (?,?,?,?,?)').run(
+    operation.operationId,
+    operation.queueId,
+    operation.taskId,
+    operation.attempt,
+    operation.at,
+  );
+  recordFlow(db, {
+    taskId: operation.taskId,
+    attempt: operation.attempt,
+    stage: 'landing',
+    action: 'enqueued',
+    at: operation.at,
+    operationId: operation.operationId,
+  });
+}
+
+/** Persist the first queue selection as the operation start and emit its event once. */
+export function recordLandingOperationStarted(db: Database, operationId: string, at: string): boolean {
+  const operation = db
+    .query('SELECT task_id,attempt,started_at,terminal_at FROM landing_operations WHERE operation_id=?')
+    .get(operationId) as {
+    task_id: string;
+    attempt: number;
+    started_at: string | null;
+    terminal_at: string | null;
+  } | null;
+  if (!operation) throw new Error(`Landing operation ${operationId} is missing`);
+  if (operation.started_at !== null || operation.terminal_at !== null) return false;
+  const changed = db
+    .query(
+      'UPDATE landing_operations SET started_at=? WHERE operation_id=? AND started_at IS NULL AND terminal_at IS NULL',
+    )
+    .run(at, operationId);
+  if (changed.changes !== 1) return false;
+  recordFlow(db, {
+    taskId: operation.task_id,
+    attempt: operation.attempt,
+    stage: 'landing',
+    action: 'started',
+    at,
+    operationId,
+  });
+  return true;
+}
+
+/** Persist one terminal queue transition and its flow event from the caller's transaction. */
+export function recordLandingOperationTerminal(
+  db: Database,
+  operationId: string,
+  at: string,
+  action: string,
+  outcome: string | null,
+  detail?: string,
+): boolean {
+  const operation = db
+    .query(
+      'SELECT task_id,attempt,terminal_at,terminal_action,terminal_outcome FROM landing_operations WHERE operation_id=?',
+    )
+    .get(operationId) as {
+    task_id: string;
+    attempt: number;
+    terminal_at: string | null;
+    terminal_action: string | null;
+    terminal_outcome: string | null;
+  } | null;
+  if (!operation) throw new Error(`Landing operation ${operationId} is missing`);
+  if (operation.terminal_at !== null) {
+    if (operation.terminal_action !== action || operation.terminal_outcome !== outcome || operation.terminal_at !== at)
+      throw new Error(`Landing operation ${operationId} already has a different terminal outcome`);
+    return false;
+  }
+  db.query(
+    'UPDATE landing_operations SET terminal_at=?,terminal_action=?,terminal_outcome=? WHERE operation_id=? AND terminal_at IS NULL',
+  ).run(at, action, outcome, operationId);
+  recordFlow(db, {
+    taskId: operation.task_id,
+    attempt: operation.attempt,
+    stage: 'landing',
+    action,
+    at,
+    operationId,
+    ...(detail === undefined ? {} : { detail }),
+  });
+  return true;
 }
 
 const percentile = (values: number[], p: number): number | null =>
@@ -109,12 +351,21 @@ type PageDataReportSection = {
   class: PageDataClass;
   firstErrorLine?: string;
 };
+type PageDataRepairReport = {
+  repairKey: string;
+  route: 'resumed' | 'dispatched' | 'refused';
+  reason?: string;
+  section: PageDataReportSection & { goal: string; files: string[]; [key: string]: unknown };
+};
 export type PageDataFlowRun = {
   runId: number;
   at: string;
   head: string;
   classes: Partial<Record<PageDataClass, number>>;
   sections: Partial<Record<PageDataClass, PageDataReportSection[]>>;
+  repairs?: PageDataRepairReport[];
+  coverage?: { status: 'incomplete' };
+  seed?: { status: 'publication-incomplete'; omissions: number } | { status: 'admission-deferred' };
   failure?: { phase: 'boot' | 'check'; firstErrorLine: string };
 };
 
@@ -128,6 +379,8 @@ export function pageDataFlowRuns(
     const metadata = JSON.parse(event.detail ?? '{}') as {
       head?: string;
       classes?: Partial<Record<PageDataClass, number>>;
+      coverage?: { status: 'incomplete' };
+      seed?: { status: 'publication-incomplete'; omissions: number } | { status: 'admission-deferred' };
     };
     const sections: Partial<Record<PageDataClass, PageDataReportSection[]>> = {};
     for (const row of pageEvents.filter(
@@ -136,12 +389,33 @@ export function pageDataFlowRuns(
       const section = JSON.parse(row.detail ?? '{}') as PageDataReportSection;
       (sections[section.class] ??= []).push(section);
     }
+    const repairs = pageEvents.flatMap((candidate) => {
+      if (candidate.attempt !== event.attempt || candidate.action !== 'page-data-repair') return [];
+      const detail = JSON.parse(candidate.detail ?? '{}') as {
+        repairKey?: string;
+        route?: PageDataRepairReport['route'];
+        reason?: string;
+        section?: unknown;
+      };
+      if (!detail.section || typeof detail.section !== 'object' || !detail.route) return [];
+      return [
+        {
+          repairKey: detail.repairKey ?? '',
+          route: detail.route,
+          ...(detail.reason ? { reason: detail.reason } : {}),
+          section: detail.section as PageDataRepairReport['section'],
+        },
+      ];
+    });
     return {
       runId: event.attempt,
       at: event.at,
       head: metadata.head ?? '',
       classes: metadata.classes ?? {},
       sections,
+      ...(repairs.length ? { repairs } : {}),
+      ...(metadata.seed ? { seed: metadata.seed } : {}),
+      ...(metadata.coverage ? { coverage: metadata.coverage } : {}),
     };
   });
   for (const event of pageEvents.filter(
@@ -169,8 +443,16 @@ export function formatPageDataFlowRuns(runs: readonly PageDataFlowRun[]): string
     if (run.failure)
       return [`Page-data ${run.failure.phase} failure at ${run.at} (${run.head}): ${run.failure.firstErrorLine}`];
     const counts = PAGE_DATA_CLASSES.map((className) => `${className}=${run.classes[className] ?? 0}`).join(' ');
+    const coverage = run.coverage ? '; coverage=incomplete' : '';
+    const seed = run.seed
+      ? `; seed=${run.seed.status}${'omissions' in run.seed ? ` omissions=${run.seed.omissions}` : ''}`
+      : '';
     return [
-      `Page-data run at ${run.at} (${run.head}): ${counts}.`,
+      `Page-data run at ${run.at} (${run.head}): ${counts}${coverage}${seed}.`,
+      ...(run.repairs ?? []).map(
+        (repair) =>
+          `  Repair ${repair.route} for ${repair.section.page}/${repair.section.persona}/${repair.section.section} (${repair.section.class})${repair.reason ? `: ${repair.reason}` : ''}.`,
+      ),
       ...PAGE_DATA_CLASSES.map((className) => {
         const sections =
           run.sections[className]?.map((section) => `${section.page}/${section.persona}/${section.section}`) ?? [];
@@ -255,17 +537,21 @@ const waitEnds: Record<QueueStage, string[]> = {
 const requestActions = ['requested', 'enqueued'];
 const isQueueStage = (stage: FlowStage): stage is QueueStage => queueStages.includes(stage as QueueStage);
 
-function projectFlow(ordered: FlowEvent[]) {
+function projectFlow(ordered: FlowEvent[], currentAttempts: ReadonlyMap<string, number>) {
   const n = ordered.length;
   const byTask = new Map<string, FlowEvent[]>();
   const groups = new Map<string, number[]>();
   const nextQueueAt = new Int32Array(n).fill(-1);
   const nextWaitAt = new Int32Array(n).fill(-1);
+  const nextWorkerStartAt = new Int32Array(n).fill(-1);
+  const currentAttemptEvent = new Uint8Array(n).fill(1);
   const integrationCloses = new Uint8Array(n);
   const integrationsByTask = new Map<string, { attempt: number; at: string }[]>();
   const requestsByTask = new Map<string, number[]>();
   for (let i = 0; i < n; i++) {
     const event = ordered[i]!;
+    const currentAttempt = currentAttempts.get(event.taskId);
+    if (currentAttempt !== undefined && event.attempt !== currentAttempt) currentAttemptEvent[i] = 0;
     const taskEvents = byTask.get(event.taskId);
     if (taskEvents) taskEvents.push(event);
     else byTask.set(event.taskId, [event]);
@@ -283,6 +569,13 @@ function projectFlow(ordered: FlowEvent[]) {
       if (requests) requests.push(i);
       else requestsByTask.set(event.taskId, [i]);
     }
+  }
+  const nextWorkerStartByAttempt = new Map<string, number>();
+  for (let i = n - 1; i >= 0; i--) {
+    const event = ordered[i]!;
+    const key = `${event.taskId}\t${event.attempt}`;
+    nextWorkerStartAt[i] = nextWorkerStartByAttempt.get(key) ?? -1;
+    if (event.stage === 'worker' && event.action === 'started') nextWorkerStartByAttempt.set(key, i);
   }
   for (const indexes of groups.values()) {
     let queue = -1;
@@ -304,6 +597,15 @@ function projectFlow(ordered: FlowEvent[]) {
         wait = i;
     }
   }
+  // Older launches did not close a resumed start request. A later worker start is real start evidence,
+  // but it must not become a synthetic start-stage duration.
+  for (let i = 0; i < n; i++) {
+    if (ordered[i]!.stage !== 'start' || ordered[i]!.action !== 'requested' || nextQueueAt[i] !== -1) continue;
+    const started = nextWorkerStartAt[i]!;
+    if (started === -1) continue;
+    nextQueueAt[i] = started;
+    if (nextWaitAt[i] === -1) nextWaitAt[i] = started;
+  }
   for (const [taskId, requests] of requestsByTask) {
     const integrations = integrationsByTask.get(taskId) ?? [];
     let maxAttempt = Number.NEGATIVE_INFINITY;
@@ -318,7 +620,7 @@ function projectFlow(ordered: FlowEvent[]) {
       if (maxAttempt >= event.attempt) integrationCloses[i] = 1;
     }
   }
-  return { byTask, nextQueueAt, nextWaitAt, integrationCloses };
+  return { byTask, nextQueueAt, nextWaitAt, integrationCloses, currentAttemptEvent };
 }
 
 function stageDurations(events: FlowEvent[], stage: LifecycleStage): number[] {
@@ -341,6 +643,8 @@ function stageDurations(events: FlowEvent[], stage: LifecycleStage): number[] {
 
 export type FlowTask = Pick<Task, 'id'> & {
   brief: Pick<Task['brief'], 'goal' | 'urgent'>;
+  /** Current task generation, absent only for callers with no authoritative task snapshot. */
+  currentAttempt?: number;
   /** Authoritative store snapshot, also covering terminal tasks predating closure events. */
   terminalState?: Task['state'];
   /** Whether the task continues a landed task's warm session. */
@@ -385,10 +689,11 @@ export function readFlowTasks(db: Database): FlowTask[] {
   return (
     db
       .query(
-        "SELECT id, json_extract(body, '$.brief.goal') AS goal, json_extract(body, '$.brief.urgent') AS urgent, json_extract(body, '$.state') AS state, json_extract(body, '$.chain') IS NOT NULL AS chained FROM worker_tasks ORDER BY sequence",
+        "SELECT id, current_attempt AS currentAttempt, json_extract(body, '$.brief.goal') AS goal, json_extract(body, '$.brief.urgent') AS urgent, json_extract(body, '$.state') AS state, json_extract(body, '$.chain') IS NOT NULL AS chained FROM worker_tasks ORDER BY sequence",
       )
       .all() as {
       id: string;
+      currentAttempt: number;
       goal: string | null;
       urgent: number | null;
       state: Task['state'];
@@ -398,23 +703,56 @@ export function readFlowTasks(db: Database): FlowTask[] {
     .filter((row) => typeof row.goal === 'string')
     .map((row) => ({
       id: row.id,
+      currentAttempt: row.currentAttempt,
       brief: { goal: row.goal!, ...(row.urgent === 1 ? { urgent: true } : {}) },
       terminalState: row.state,
       chained: row.chained === 1,
     }));
 }
 
-export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.now()) {
-  const ordered = [...events].sort((a, b) => a.at.localeCompare(b.at));
-  const { byTask, nextQueueAt, nextWaitAt, integrationCloses } = projectFlow(ordered);
-  const stageSummaries = FLOW_STAGES.map((stage) => ({
-    stage,
-    ...summarize(
+export type FlowReportOptions = {
+  /** Historical windows may describe only observations inside their bounds, never today's live queue state. */
+  historical?: boolean;
+  landingOperations?: readonly LandingOperation[];
+  window?: { since: string; until: string };
+  /** Keep live flow metrics on their configured history while loading enough events for the retry alarm sample. */
+  reportSince?: string;
+};
+
+export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.now(), options: FlowReportOptions = {}) {
+  const historical = options.historical === true;
+  const allOrdered = [...events].sort((a, b) => a.at.localeCompare(b.at));
+  const reportSince = options.reportSince === undefined ? undefined : Date.parse(options.reportSince);
+  const ordered =
+    reportSince === undefined ? allOrdered : allOrdered.filter((event) => Date.parse(event.at) >= reportSince);
+  const currentAttempts = new Map<string, number>();
+  for (const task of historical ? [] : tasks)
+    if (typeof task.currentAttempt === 'number' && Number.isSafeInteger(task.currentAttempt))
+      currentAttempts.set(task.id, task.currentAttempt);
+  const { byTask, nextQueueAt, nextWaitAt, integrationCloses, currentAttemptEvent } = projectFlow(
+    ordered,
+    currentAttempts,
+  );
+  const landingOperations =
+    options.landingOperations === undefined ? undefined : summarizeLandingOperations(options.landingOperations);
+  const stageSummaries = FLOW_STAGES.map((stage) => {
+    const summary = summarize(
       [...new Set(ordered.filter((e) => e.stage === stage).map((e) => e.taskId))].flatMap((id) =>
         stageDurations(byTask.get(id) ?? [], stage),
       ),
-    ),
-  }));
+    );
+    return {
+      stage,
+      ...(stage === 'landing' && landingOperations
+        ? {
+            count: landingOperations.measuredCount ?? 0,
+            totalMs: landingOperations.totalDurationMs ?? 0,
+            p50Ms: landingOperations.p50DurationMs,
+            p90Ms: landingOperations.p90DurationMs,
+          }
+        : summary),
+    };
+  });
   const taskRows = tasks.map((task) => {
     const es = byTask.get(task.id) ?? [];
     const dispatch = es.find((e) => e.stage === 'dispatch' && e.action === 'dispatched');
@@ -442,37 +780,92 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
   const terminalByStage = Object.fromEntries(
     queueStages.map((stage) => [
       stage,
-      new Set(tasks.filter((task) => terminalCloses(task.terminalState, stage)).map((task) => task.id)),
+      new Set(
+        historical ? [] : tasks.filter((task) => terminalCloses(task.terminalState, stage)).map((task) => task.id),
+      ),
     ]),
   ) as Record<QueueStage, Set<string>>;
-  const queues = queueStages.map((stage) => {
-    const terminal = terminalByStage[stage];
-    const pending: FlowEvent[] = [];
-    for (let i = 0; i < ordered.length; i++) {
-      const event = ordered[i]!;
-      if (event.stage !== stage || !requestActions.includes(event.action)) continue;
-      if (terminal.has(event.taskId)) continue;
-      if (stage !== 'promotion' && integrationCloses[i]) continue;
-      if (nextQueueAt[i] !== -1) continue;
-      pending.push(event);
-    }
-    return {
-      stage,
-      length: pending.length,
-      oldestAgeMs: pending.length ? Math.max(0, now - Date.parse(pending[0]!.at)) : 0,
-      tasks: pending.map((e) => e.taskId),
-    };
-  });
+  const queues = historical
+    ? []
+    : queueStages.map((stage) => {
+        const terminal = terminalByStage[stage];
+        const pending: FlowEvent[] = [];
+        for (let i = 0; i < ordered.length; i++) {
+          const event = ordered[i]!;
+          if (event.stage !== stage || !requestActions.includes(event.action)) continue;
+          if (!currentAttemptEvent[i] && stage !== 'promotion') continue;
+          if (terminal.has(event.taskId)) continue;
+          if (stage !== 'promotion' && integrationCloses[i]) continue;
+          if (nextQueueAt[i] !== -1) continue;
+          pending.push(event);
+        }
+        return {
+          stage,
+          length: pending.length,
+          oldestAgeMs: pending.length ? Math.max(0, now - Date.parse(pending[0]!.at)) : 0,
+          tasks: pending.map((e) => e.taskId),
+        };
+      });
   const urgent = new Set(tasks.filter((t) => t.brief.urgent).map((t) => t.id));
-  const integrated = new Set(
-    ordered
-      .filter((e) => e.stage === 'integration' && e.action === 'integrated' && !urgent.has(e.taskId))
-      .map((e) => e.taskId),
+  const integrationAttempts = (cohort: readonly FlowEvent[]) => {
+    const integrated = new Map<string, { attempt: number; at: string }>();
+    for (const event of cohort) {
+      if (event.stage !== 'integration' || event.action !== 'integrated' || urgent.has(event.taskId)) continue;
+      // Preserve the last authoritative integration generation when a legacy task has repeated records.
+      integrated.set(event.taskId, { attempt: event.attempt, at: event.at });
+    }
+    return integrated;
+  };
+  const generationTotals = (
+    cohort: readonly FlowEvent[],
+    integrations: ReadonlyMap<string, { attempt: number; at: string }>,
+  ) => {
+    const generations = new Map<string, Set<number>>();
+    for (const event of cohort) {
+      const integration = integrations.get(event.taskId);
+      if (
+        event.stage !== 'worker' ||
+        event.action !== 'started' ||
+        !integration ||
+        Date.parse(event.at) > Date.parse(integration.at) ||
+        event.attempt > integration.attempt
+      )
+        continue;
+      let taskGenerations = generations.get(event.taskId);
+      if (!taskGenerations) generations.set(event.taskId, (taskGenerations = new Set()));
+      taskGenerations.add(event.attempt);
+    }
+    for (const [taskId, integration] of integrations) {
+      let taskGenerations = generations.get(taskId);
+      if (!taskGenerations) generations.set(taskId, (taskGenerations = new Set()));
+      // Integration proves its generation even when its worker start predates the bounded event read.
+      taskGenerations.add(integration.attempt);
+    }
+    const attemptGenerations = [...generations.values()].reduce((total, attempts) => total + attempts.size, 0);
+    return {
+      integratedTasks: integrations.size,
+      attemptGenerations,
+      attemptsPerIntegrated: integrations.size ? attemptGenerations / integrations.size : null,
+    };
+  };
+  const integrated = integrationAttempts(ordered);
+  const attempts = generationTotals(ordered, integrated);
+  const recentStart = now - FLOW_RETRY_ALARM_WINDOW_MS;
+  const recentIntegrations = integrationAttempts(
+    allOrdered.filter((event) => {
+      if (event.stage !== 'integration' || event.action !== 'integrated') return false;
+      const at = Date.parse(event.at);
+      return at >= recentStart && at < now;
+    }),
   );
-  const attemptCounts = new Map<string, number>();
-  for (const e of ordered)
-    if (e.stage === 'worker' && e.action === 'started')
-      attemptCounts.set(e.taskId, (attemptCounts.get(e.taskId) ?? 0) + 1);
+  const attemptsPerIntegratedSample = {
+    window: FLOW_RETRY_ALARM_WINDOW,
+    windowMs: FLOW_RETRY_ALARM_WINDOW_MS,
+    ...generationTotals(allOrdered, recentIntegrations),
+  };
+  const workerProcessLaunches = ordered.filter(
+    (event) => event.stage === 'worker' && event.action === 'started',
+  ).length;
   const overBudgetLaunchesByLayer: Record<string, number> = {};
   for (const event of ordered) {
     if (!['worker', 'manager'].includes(event.stage) || event.action !== 'started' || !event.detail) continue;
@@ -575,27 +968,30 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       })),
     };
   });
-  const bottleneck =
-    [...queues]
-      .map((q) => {
-        const terminal = terminalByStage[q.stage];
-        let ms = 0;
-        for (let i = 0; i < ordered.length; i++) {
-          const event = ordered[i]!;
-          if (event.stage !== q.stage || !requestActions.includes(event.action)) continue;
-          const boundaryIndex = nextWaitAt[i]!;
-          const boundary = boundaryIndex === -1 ? undefined : ordered[boundaryIndex];
-          const end = boundary && waitEnds[q.stage].includes(boundary.action) ? boundary : undefined;
-          // Closed or legacy terminal requests have no observed wait end. Keep their duration unknown.
-          ms += end
-            ? Math.max(0, Date.parse(end.at) - Date.parse(event.at))
-            : boundary || terminal.has(event.taskId)
-              ? 0
-              : Math.max(0, now - Date.parse(event.at));
-        }
-        return { stage: q.stage, ms };
-      })
-      .sort((a, b) => b.ms - a.ms)[0]?.stage ?? null;
+  const bottleneck = historical
+    ? null
+    : ([...queues]
+        .map((q) => {
+          const terminal = terminalByStage[q.stage];
+          let ms = 0;
+          for (let i = 0; i < ordered.length; i++) {
+            const event = ordered[i]!;
+            if (event.stage !== q.stage || !requestActions.includes(event.action)) continue;
+            const boundaryIndex = nextWaitAt[i]!;
+            const boundary = boundaryIndex === -1 ? undefined : ordered[boundaryIndex];
+            const end = boundary && waitEnds[q.stage].includes(boundary.action) ? boundary : undefined;
+            // Closed or legacy terminal requests have no observed wait end. Keep their duration unknown.
+            ms += end
+              ? Math.max(0, Date.parse(end.at) - Date.parse(event.at))
+              : boundary || terminal.has(event.taskId)
+                ? 0
+                : q.stage === 'promotion' || currentAttemptEvent[i]
+                  ? Math.max(0, now - Date.parse(event.at))
+                  : 0;
+          }
+          return { stage: q.stage, ms };
+        })
+        .sort((a, b) => b.ms - a.ms)[0]?.stage ?? null);
   // Chained and unchained tasks are measured on the same terms: landed lines over the worker time those tasks spent.
   const chainGroup = (chained: boolean) => {
     const members = tasks.filter((t) => !t.brief.urgent && (t.chained === true) === chained);
@@ -621,6 +1017,8 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       declined[key] = (declined[key] ?? 0) + 1;
     }
   return {
+    ...(options.window ? { window: { ...options.window, startInclusive: true, endExclusive: true } } : {}),
+    ...(landingOperations ? { landingOperations } : {}),
     chain: {
       offered: ordered.filter((e) => e.stage === 'chain' && e.action === 'offered').length,
       chained: chainGroup(true),
@@ -643,9 +1041,9 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     flowEfficiency: eligible.length
       ? eligible.reduce((n, t) => n + (t.workingMs ?? 0), 0) / eligible.reduce((n, t) => n + (t.elapsedMs ?? 0), 0)
       : null,
-    attemptsPerIntegrated: integrated.size
-      ? [...integrated].reduce((n, id) => n + (attemptCounts.get(id) ?? 0), 0) / integrated.size
-      : null,
+    attemptsPerIntegrated: attempts.attemptsPerIntegrated,
+    workerProcessLaunches,
+    attemptsPerIntegratedSample,
     overBudgetLaunchesByLayer,
     pageDataRuns: pageDataFlowRuns(ordered),
     devTranspile: {
@@ -678,6 +1076,24 @@ export type FlowThresholds = {
   attemptsPerIntegrated: number;
 };
 export const DEFAULT_FLOW_THRESHOLDS: FlowThresholds = defaults.flow;
+
+function waitingQueueFingerprint(queues: ReturnType<typeof flowReport>['queues']): string {
+  const hash = createHash('sha256');
+  const add = (value: string) => hash.update(`${value.length}:`).update(value).update('\0');
+  for (const queue of queues) {
+    add(queue.stage);
+    add(String(queue.length));
+    for (const task of queue.tasks) add(task);
+  }
+  return hash.digest('hex');
+}
+
+function flowAlarmMeasurementFingerprint(key: string, measurement: string): string {
+  const hash = createHash('sha256');
+  for (const value of [key, measurement]) hash.update(`${value.length}:`).update(value).update('\0');
+  return `v2:${hash.digest('hex')}`;
+}
+
 export function checkFlowAlarms(
   db: Database,
   report: ReturnType<typeof flowReport>,
@@ -696,24 +1112,90 @@ export function checkFlowAlarms(
   const landing = report.stages.find((s) => s.stage === 'landing');
   if (landing?.p90Ms !== null && landing?.p90Ms !== undefined && landing.p90Ms > thresholds.landingP90Ms)
     breaches.push(['landing-p90', 'landing', `p90 ${Math.round(landing.p90Ms / 60000)} min`]);
-  if (report.attemptsPerIntegrated !== null && report.attemptsPerIntegrated > thresholds.attemptsPerIntegrated)
+  const retrySample = report.attemptsPerIntegratedSample;
+  if (
+    retrySample.attemptsPerIntegrated !== null &&
+    retrySample.attemptsPerIntegrated > thresholds.attemptsPerIntegrated
+  )
     breaches.push([
       'attempts-per-integrated',
       'worker',
-      `attempts per integrated task ${report.attemptsPerIntegrated.toFixed(2)}`,
+      `attempts per integrated task ${retrySample.attemptsPerIntegrated.toFixed(2)} over ${retrySample.window} ` +
+        `(${retrySample.integratedTasks} integrated tasks; ${retrySample.attemptGenerations} attempt generations)`,
     ]);
   const sent: string[] = [];
+  const activeThresholds = new Set(breaches.map(([key]) => key));
+  const previouslyActive = db.query('SELECT threshold FROM flow_alarm_sends WHERE active=1').all() as {
+    threshold: string;
+  }[];
+  for (const row of previouslyActive)
+    if (!activeThresholds.has(row.threshold))
+      db.query('UPDATE flow_alarm_sends SET active=0 WHERE threshold=?').run(row.threshold);
+  const queueFingerprint = waitingQueueFingerprint(report.queues);
+  const hasWaitingTasks = report.queues.some((queue) => queue.length > 0 || queue.tasks.length > 0);
   for (const [key, stage, measurement] of breaches) {
-    const old = db.query('SELECT sent_at FROM flow_alarm_sends WHERE threshold=?').get(key) as {
+    const old = db.query('SELECT sent_at, fingerprint, active FROM flow_alarm_sends WHERE threshold=?').get(key) as {
       sent_at: string;
+      fingerprint: string | null;
+      active: number;
     } | null;
-    if (old && now.getTime() - Date.parse(old.sent_at) < policy.flow.alertEveryMs) continue;
-    const top = [...report.queues]
-      .sort((a, b) => b.oldestAgeMs - a.oldestAgeMs)
-      .flatMap((q) => q.tasks)
-      .slice(0, policy.flow.waitingTaskExamples);
+    const fingerprintMeasurement =
+      key === 'attempts-per-integrated' && retrySample.attemptsPerIntegrated !== null
+        ? `attempts per integrated task ${retrySample.attemptsPerIntegrated.toFixed(2)}`
+        : measurement;
+    const measurementFingerprint = flowAlarmMeasurementFingerprint(key, fingerprintMeasurement);
+    const retryCohort = key === 'attempts-per-integrated';
+    const fingerprint = `${measurementFingerprint}:${retryCohort ? retrySample.window : queueFingerprint}`;
+    const isRecent = old !== null && now.getTime() - Date.parse(old.sent_at) < policy.flow.alertEveryMs;
+    const legacyCooldown = isRecent && (old?.fingerprint === null || old?.fingerprint?.startsWith('v1:'));
+    const globalMetric = !key.startsWith('queue-');
+    const changedGlobal = globalMetric && old !== null && old.fingerprint !== null && old.fingerprint !== fingerprint;
+    const recovered = old?.active === 0;
+    const unchangedGlobal =
+      globalMetric &&
+      (retryCohort || !hasWaitingTasks) &&
+      old?.active === 1 &&
+      old.fingerprint?.startsWith(`${measurementFingerprint}:`);
+    if (unchangedGlobal) {
+      // Remember a drained queue for live metrics; the retry cohort ignores queue churn.
+      if (old.fingerprint !== fingerprint)
+        db.query('UPDATE flow_alarm_sends SET fingerprint=? WHERE threshold=?').run(fingerprint, key);
+      continue;
+    }
+    if (legacyCooldown && !recovered) {
+      // Seed the new bounded fingerprint without breaking a legacy row's existing cooldown.
+      db.query('UPDATE flow_alarm_sends SET fingerprint=?, active=1 WHERE threshold=?').run(fingerprint, key);
+      continue;
+    }
+    if (isRecent && !changedGlobal && !recovered) {
+      db.query('UPDATE flow_alarm_sends SET active=1 WHERE threshold=?').run(key);
+      continue;
+    }
+    const stageQueue = report.queues.find((queue) => queue.stage === stage);
+    const exampleQueues = stageQueue
+      ? [stageQueue]
+      : key.startsWith('queue-')
+        ? []
+        : [...report.queues].sort((a, b) => b.oldestAgeMs - a.oldestAgeMs);
+    const seenTasks = new Set<string>();
+    const top: string[] = [];
+    const exampleLimit = Math.max(0, policy.flow.waitingTaskExamples);
+    for (const queue of exampleQueues) {
+      if (top.length >= exampleLimit) break;
+      for (const taskId of queue.tasks) {
+        if (seenTasks.has(taskId)) continue;
+        seenTasks.add(taskId);
+        top.push(taskId);
+        if (top.length >= exampleLimit) break;
+      }
+      if (top.length >= exampleLimit) break;
+    }
     inbox(`Flow alarm: stage ${stage}; measurement ${measurement}; top waiting tasks ${top.join(', ') || 'none'}`);
-    db.query('INSERT OR REPLACE INTO flow_alarm_sends(threshold,sent_at) VALUES (?,?)').run(key, now.toISOString());
+    db.query('INSERT OR REPLACE INTO flow_alarm_sends(threshold,sent_at,fingerprint,active) VALUES (?,?,?,1)').run(
+      key,
+      now.toISOString(),
+      fingerprint,
+    );
     sent.push(key);
   }
   return sent;
@@ -725,11 +1207,20 @@ export function dispatchDailyStepAudit(
   now = new Date(),
   reportFailure: (summary: string) => void = (summary) => console.error(summary),
 ): Task | null {
-  ensureFlow(db);
+  // Host ticks call this repeatedly. Avoid taking SQLite's writer lock just to recheck an unchanged schema.
+  const latest = flowMigrations[flowMigrations.length - 1]!.version;
+  const current = db.query('SELECT MAX(version) AS version FROM schema_migrations WHERE module = ?').get('flow') as {
+    version: number | null;
+  };
+  if ((current.version ?? 0) < latest) ensureFlow(db);
   const day = now.toISOString().slice(0, 10);
   // A synchronous outbox delivery and its acknowledgement share the inbox's SQLite transaction.
   const report = () => {
     try {
+      const pending = db
+        .query('SELECT day, cause FROM flow_audit_failures WHERE reported_at IS NULL ORDER BY day')
+        .all() as { day: string; cause: string }[];
+      if (!pending.length) return;
       db.transaction(() => {
         const failures = db
           .query('SELECT day, cause FROM flow_audit_failures WHERE reported_at IS NULL ORDER BY day')

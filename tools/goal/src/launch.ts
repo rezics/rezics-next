@@ -1,6 +1,7 @@
+import { localWorkerHost } from './worker-host-custody.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import {
-  proofSourceUnchanged,
+  proofCaptureUnchanged,
   registeredProof,
   type ProofAuthorization,
   type ProofReservation,
@@ -292,12 +293,12 @@ export async function launch(
       policy.pacing.burnSpanMs,
     );
   }
-  if (
-    task.brief.kind === 'verification' &&
-    (!registeredProof(task.brief, task.proofAuthorization) ||
-      !proofSourceUnchanged(task, task.proofAuthorization?.integrationBranch ?? '', policy.proof))
-  )
-    throw new Error('Proof execution unavailable: authenticated exact read-only source registration required');
+  if (task.brief.kind === 'verification') {
+    if (!registeredProof(task.brief, task.proofAuthorization))
+      throw new Error('Proof execution unavailable: authenticated exact read-only source registration required');
+    if (!proofCaptureUnchanged(task, policy.proof))
+      throw new Error('Proof execution unavailable: captured worktree HEAD, tree or contents changed');
+  }
   recordFlow(store.db, {
     taskId: attempt.taskId,
     attempt: attempt.attempt,
@@ -310,28 +311,12 @@ export async function launch(
     pidPath = `${attempt.logPath}.pid`;
   const ownership = getProcessOwnershipAdapter();
   ownership.assertWorkerLaunchAllowed(attempt.logPath);
-  for (const path of [exitPath, `${exitPath}.tmp`, pidPath]) rmSync(path, { force: true });
   const resuming = Boolean(resumeSession);
   // The branch head at this prompt; the first prompt's head tells whether the attempt made a new commit.
   const startHead = branchHead(task);
-  const ownerDecisionPrompt = prepareOwnerDecisionPrompt(store, task, attempt, prompt, policy);
-  if (ownerDecisionPrompt.file) writeOwnerDecisionFile(task.worktree, ownerDecisionPrompt.file);
   const logStartOffset = resuming ? (statSync(attempt.logPath, { throwIfNoEntry: false })?.size ?? 0) : 0;
   const out = openSync(attempt.logPath, resumeSession ? 'a' : 'w'),
     err = openSync(`${attempt.logPath}.err`, 'w');
-  const [program, args] = launchCommand({
-    profile: attempt.profile,
-    pool,
-    worktree: task.worktree,
-    prompt: ownerDecisionPrompt.prompt,
-    mcpServers: storybookServers(task.worktree, task.brief),
-    ...(resumeSession ? { resumeSession } : {}),
-    logPath: attempt.logPath,
-    ...(codex ? { codex } : {}),
-    // Research clones and reads reference projects and lands its report, so it needs the same access as other work.
-    // Keyed on the brief's kind: a research brief that declares a risk area or cites sources routes as a claim.
-    ...(task.brief.kind === 'research' ? { research: true } : {}),
-  });
   const env = workerEnvironment(
     pool,
     attemptEnvironment(task, attempt, dirname(dirname(dirname(attempt.logPath)))),
@@ -344,6 +329,7 @@ export async function launch(
     // Publication and spawn share the fence's write lock. A retry cannot miss a just-started process.
     store.write(attempt, () => {
       store.event(attempt, 'worker-run-started', {
+        workerHost: localWorkerHost(),
         logStartOffset,
         resuming,
         checkWaitBaseline: checkWaitMs(attempt.logPath),
@@ -351,6 +337,22 @@ export async function launch(
       });
       const driver = processIdentity();
       if (!driver) throw new Error('Cannot identify driver process');
+      // Select pending intent under the same write fence as spawn and delivery acknowledgement.
+      const ownerDecisionPrompt = prepareOwnerDecisionPrompt(store, store.task(task.id), attempt, prompt, policy);
+      if (ownerDecisionPrompt.file) writeOwnerDecisionFile(task.worktree, ownerDecisionPrompt.file);
+      const [program, args] = launchCommand({
+        profile: attempt.profile,
+        pool,
+        worktree: task.worktree,
+        prompt: ownerDecisionPrompt.prompt,
+        mcpServers: storybookServers(task.worktree, task.brief),
+        ...(resumeSession ? { resumeSession } : {}),
+        logPath: attempt.logPath,
+        ...(codex ? { codex } : {}),
+        // Research clones and reads reference projects and lands its report, so it needs the same access as other work.
+        // Keyed on the brief's kind: a research brief that declares a risk area or cites sources routes as a claim.
+        ...(task.brief.kind === 'research' ? { research: true } : {}),
+      });
       // The wrapper cannot report a missing program to the launcher, so refuse it here.
       if (!Bun.which(program, { PATH: env.PATH ?? '', cwd: task.worktree }))
         throw new Error(`Worker CLI not found: ${program}`);
@@ -360,6 +362,8 @@ export async function launch(
         stdio: ['ignore', out, err],
         env,
       };
+      // Retain the preceding run's termination evidence until preparation succeeds.
+      for (const path of [exitPath, `${exitPath}.tmp`, pidPath]) rmSync(path, { force: true });
       const started = launchWorkerProcess(
         task.id,
         attempt.attempt,
@@ -391,6 +395,19 @@ export async function launch(
       store.updateTask(attempt, (current) => {
         current.state = 'running';
       });
+      const latestStart = store.db
+        .query("SELECT action FROM flow_events WHERE task_id=? AND attempt=? AND stage='start' ORDER BY sequence DESC LIMIT 1")
+        .get(attempt.taskId, attempt.attempt) as { action: string } | null;
+      // A fresh launch gets this event from the task's transition to running. A resumed launch may already be
+      // running, so close its new request explicitly after the worker wrapper has started successfully.
+      if (latestStart?.action !== 'started')
+        recordFlow(store.db, {
+          taskId: attempt.taskId,
+          attempt: attempt.attempt,
+          stage: 'start',
+          action: 'started',
+          at: new Date().toISOString(),
+        });
       if (ownerDecisionPrompt.delivery) store.recordOwnerDecisionDelivery(attempt, ownerDecisionPrompt.delivery);
     });
   } catch (error) {

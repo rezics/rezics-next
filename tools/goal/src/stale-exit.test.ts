@@ -6,6 +6,7 @@ import { launch } from './launch.ts';
 import { settle } from './settle.ts';
 import type { Attempt } from './types.ts';
 import { harness } from './test-support.ts';
+import { readFlow } from './flow.ts';
 
 const launchError = "unexpected argument '-C'";
 
@@ -162,6 +163,9 @@ test('a resumed run with a new exit object settles from that object', async () =
   const h = harness(successOnResumeCli());
   try {
     const { ref } = await waitingAttempt(h);
+    h.store.updateTask(ref, (current) => {
+      current.state = 'running';
+    });
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
     await job.recoverOrphans();
 
@@ -171,6 +175,12 @@ test('a resumed run with a new exit object settles from that object', async () =
     expect(
       h.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === 'waiting-resume-launch-failed'),
     ).toEqual([]);
+    const startEvents = readFlow(h.store.db).filter(
+      (event) => event.taskId === ref.taskId && event.attempt === ref.attempt && event.stage === 'start',
+    );
+    expect(startEvents.findLastIndex((event) => event.action === 'started')).toBeGreaterThan(
+      startEvents.findLastIndex((event) => event.action === 'requested'),
+    );
   } finally {
     h.dispose();
   }

@@ -1,9 +1,11 @@
+import { isActionableStop, stoppedActionHint, type StoppedActionHint } from './stopped-action.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import { Buffer } from 'node:buffer';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import type { ManagerEvent, ManagerInbox } from './contracts.ts';
+import type { AttemptRef, ManagerEvent, ManagerInbox } from './contracts.ts';
 import { migrate } from './db.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import {
@@ -57,15 +59,18 @@ import {
 import { fail, recordGoalDispatch, recoverClaims } from './backlog-claims.ts';
 import { deliverResearchCompletions, dispatchResearchClaim, recoverResearchClaims } from './backlog-research.ts';
 import { ownedGoals, resolveGoalManager } from './manager-ownership.ts';
+import { currentGoalManagerAuthority } from './managers.ts';
 import { confirmedBacklogOwner, requireUrgentDispatch, type AuthenticatedManager } from './priority-authority.ts';
 
 export { backlogDirectory };
 
 /** A manager is woken when its Goal has fewer ready briefs than this. */
 export const BACKLOG_LOW_WATER = defaultPolicy.backlog.lowWater;
-/** At most one low-backlog wake per Goal in this interval. */
+/** Ordinary low-backlog repeats wait this long unless scoped evidence changes or the owner clears its disposition. */
 export const BACKLOG_WAKE_INTERVAL_MS = defaultPolicy.backlog.wakeIntervalMs;
-/** A product task stopped this long without a manager action is cancelled into its Goal's failed backlog. */
+/** Stable inbox sender for administrative low-backlog reminders; excluded from scoped no-work evidence. */
+const BACKLOG_LOW_WATER_SOURCE = 'system:backlog-low-water';
+/** Ordinary product stops expire after this interval; compiler-only stops first reconcile their same attempt. */
 export const STOPPED_TASK_LIMIT_MS = defaultPolicy.backlog.stoppedTaskLimitMs;
 /** At most this many stopped tasks per Goal are cancelled in one run, oldest first, so owners get them in batches. */
 export const STOPPED_TASKS_PER_GOAL_PER_RUN = defaultPolicy.backlog.stoppedTasksPerGoalPerRun;
@@ -97,6 +102,13 @@ export const backlogMigrations = [
       notified_at INTEGER
     );`,
   },
+  {
+    module: 'backlog',
+    version: 3,
+    sql: `ALTER TABLE backlog_goals ADD COLUMN low_work_manager TEXT;
+ALTER TABLE backlog_goals ADD COLUMN low_work_session TEXT;
+ALTER TABLE backlog_goals ADD COLUMN low_work_scope TEXT;`,
+  },
 ] as const;
 
 export type BacklogGoalCounts = {
@@ -116,13 +128,22 @@ export type BacklogRuntime = {
   stateDirectory: string;
   inbox: ManagerInbox;
   /** The `goal dispatch` path: create the task and request its first attempt. Returns the new task ID. */
-  dispatch(briefFile: string, actor?: AuthenticatedManager | null): Promise<BacklogDispatchResult>;
+  dispatch(
+    briefFile: string,
+    actor?: AuthenticatedManager | null,
+    proposal?: { goal: string; markdown: string },
+  ): Promise<BacklogDispatchResult>;
   /** Queue a continuation through the existing task retry path. */
   continueTask(goal: string, continuation: BriefContinuation, briefFile: string): Promise<void>;
   /** The `goal cancel` path. */
   cancel(taskId: string): Promise<void>;
   /** Chained dispatch of landed sessions; omitted runtimes never chain. */
   chain?: ChainRuntime;
+  /** Controller-only reconciliation of an expired compiler-evidence stop under the current task lease. */
+  recoverTyping?: (ref: AttemptRef) => Promise<{
+    status: 'landing' | 'pending' | 'typing-failure';
+    result?: string;
+  }>;
   now?: () => number;
   policy?: ControlPolicy | undefined;
   /** Configured supermanager; when set, the sweep honours that manager's urgent grants. */
@@ -472,16 +493,18 @@ function returnUrgentBrief(
   return entry;
 }
 
-function urgentBacklogActor(
+function backlogDispatchActor(
   runtime: BacklogRuntime,
   goal: string,
   markdown: string,
 ): { urgent: boolean; actor: AuthenticatedManager | null; manager: string } {
   const snapshot = readBriefSizeSnapshot(markdown);
-  if (!snapshot?.urgent) return { urgent: false, actor: null, manager: snapshot?.manager ?? goal };
+  if (!snapshot) return { urgent: false, actor: null, manager: goal };
+  // A proof may use only the live owner of its declared Goal's backlog, never the host or an operations fallback.
+  const authenticate = snapshot.kind === 'verification' ? snapshot.goal === goal : snapshot.urgent;
   return {
-    urgent: true,
-    actor: confirmedBacklogOwner(runtime.db, goal, snapshot.manager) ?? null,
+    urgent: snapshot.urgent,
+    actor: authenticate ? (confirmedBacklogOwner(runtime.db, goal, snapshot.manager) ?? null) : null,
     manager: snapshot.manager,
   };
 }
@@ -956,7 +979,7 @@ async function dispatchReady(
           if (group.complete) recordGoalDispatch(runtime, pick.goal, group.writtenMs);
           continue;
         }
-        const provenance = urgentBacklogActor(runtime, pick.goal, markdown);
+        const provenance = backlogDispatchActor(runtime, pick.goal, markdown);
         if (provenance.urgent && runtime.supermanager) {
           try {
             requireUrgentDispatch(runtime.db, runtime.supermanager, provenance.actor);
@@ -977,7 +1000,9 @@ async function dispatchReady(
             continue;
           }
         }
-        const dispatchedTask = dispatchResult(await runtime.dispatch(claimed, provenance.actor));
+        const dispatchedTask = dispatchResult(
+          await runtime.dispatch(claimed, provenance.actor, { goal: pick.goal, markdown }),
+        );
         taskId = dispatchedTask.taskId;
         lintWarnings = dispatchedTask.lintWarnings.length
           ? dispatchedTask.lintWarnings
@@ -1021,7 +1046,7 @@ async function dispatchReady(
   return { dispatched, continued, refused, returned, chained };
 }
 
-type StoppedRow = { id: string; current_attempt: number; body: string };
+type StoppedRow = { id: string; current_attempt: number; body: string; stopped_action: StoppedActionHint | null };
 type StoppedTask = {
   id: string;
   state?: string;
@@ -1079,22 +1104,72 @@ function blocker(db: Database, taskId: string, attempt: number): string {
   return 'The stopped attempt recorded no blocker.';
 }
 
+function hasTypingRecoveryAction(db: Database, taskId: string, attempt: number): boolean {
+  return Boolean(
+    db
+      .query("SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-actionable'")
+      .get(taskId, attempt),
+  );
+}
+
+function recordTypingRecoveryAction(
+  runtime: BacklogRuntime,
+  task: StoppedTask,
+  attempt: number,
+  result: string | undefined,
+  now: number,
+): void {
+  const command = `bun tools/goal/src/cli.ts typing-recover ${task.id} --expected-attempt ${attempt}`;
+  const event: ManagerEvent = {
+    managerId: task.brief!.manager!,
+    goalId: task.brief!.goal!,
+    taskId: task.id,
+    kind: 'instruction',
+    summary:
+      `Completed source task ${task.id} (attempt ${attempt}) is waiting only for compiler evidence. ` +
+      `Run \`${command}\` from the authenticated owning or operations manager session; it will reconcile evidence ` +
+      'or return the exact typing-only check. The controller does not start a source writer.',
+  };
+  runtime.db
+    .transaction(() => {
+      if (hasTypingRecoveryAction(runtime.db, task.id, attempt)) return;
+      runtime.db
+        .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+        .run(
+          task.id,
+          attempt,
+          'typing-recovery-actionable',
+          new Date(now).toISOString(),
+          JSON.stringify({ command, result }),
+        );
+      runtime.inbox.deliver(event);
+    })
+    .immediate();
+}
+
 /**
- * A product task stopped for more than an hour without a manager action is cancelled; its brief and blocker go to
- * `backlog/<goal>/failed/`, and its owner receives one event per run. At most 20 per Goal go per run, longest stopped
- * first; control-plane and stabilize work is exempt.
+ * Ordinary product stops past this limit are cancelled into `backlog/<goal>/failed/`. Compiler-only stops first
+ * reconcile their same attempt; pending evidence stays actionable with one authenticated recovery instruction. At
+ * most 20 cancellations per Goal run, longest stopped first; control-plane and stabilize work is exempt.
  */
 async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise<BacklogSweep['expired']> {
   const { db } = runtime;
   if (!tableExists(db, 'worker_tasks') || !tableExists(db, 'worker_events')) return [];
   const rows = db
     .query(
-      "SELECT id, current_attempt, body FROM worker_tasks WHERE json_extract(body, '$.state')='stopped' ORDER BY sequence",
+      `SELECT t.id, t.current_attempt, t.body, ${stoppedActionHint('t.id', 't.current_attempt')} AS stopped_action
+       FROM worker_tasks t WHERE json_extract(t.body, '$.state')='stopped' ORDER BY t.sequence`,
     )
     .all() as StoppedRow[];
   const expired: BacklogSweep['expired'] = [];
   const byOwner = new Map<string, { goal: string; tasks: string[] }>();
-  const candidates: { row: StoppedRow; task: StoppedTask; goal: string; manager: string; since: number }[] = [];
+  const candidates: {
+    row: StoppedRow;
+    task: StoppedTask;
+    goal: string;
+    manager: string;
+    since: number;
+  }[] = [];
   for (const row of rows) {
     let task: StoppedTask;
     try {
@@ -1107,13 +1182,29 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
     if (!goal || !manager || goal === 'control-plane' || task.brief?.target === 'stabilize') continue;
     // Original proofs hold check custody that cancellation does not release; their owner decides.
     if (task.brief?.kind === 'verification') continue;
+    if (!isActionableStop(db, task.id, row.current_attempt, row.stopped_action, runtime.policy ?? defaultPolicy))
+      continue;
     if (hasPendingRetry(db, task.id, row.current_attempt)) continue;
     const since = lastActivity(db, task, row.current_attempt);
     if (since === null || now - since <= (runtime.policy ?? defaultPolicy).backlog.stoppedTaskLimitMs) continue;
     candidates.push({ row, task, goal, manager, since });
   }
   const perGoal = new Map<string, number>();
+  const typingPerGoal = new Map<string, number>();
   for (const { row, task, goal, manager, since } of candidates.sort((a, b) => a.since - b.since)) {
+    if (row.stopped_action === 'typing-recovery') {
+      if (hasTypingRecoveryAction(db, task.id, row.current_attempt)) continue;
+      const count = typingPerGoal.get(goal) ?? 0;
+      if (count >= (runtime.policy ?? defaultPolicy).backlog.stoppedTasksPerGoalPerRun) continue;
+      typingPerGoal.set(goal, count + 1);
+      const recovered = await runtime.recoverTyping?.({ taskId: task.id, attempt: row.current_attempt });
+      if (!recovered || recovered.status === 'pending') {
+        recordTypingRecoveryAction(runtime, task, row.current_attempt, recovered?.result, now);
+        continue;
+      }
+      if (recovered.status === 'landing') continue;
+      // A matching stamp can reveal a real compiler failure. It leaves typing-only custody and keeps ordinary expiry.
+    }
     const count = perGoal.get(goal) ?? 0;
     if (count >= (runtime.policy ?? defaultPolicy).backlog.stoppedTasksPerGoalPerRun) continue;
     perGoal.set(goal, count + 1);
@@ -1162,9 +1253,138 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
   return expired;
 }
 
-type ManagerRow = { id: string; state: string };
+/** A fixed-size fingerprint of the current owner, ready source briefs, Goal tasks, and typed receiving evidence. */
+function backlogNoWorkScope(
+  db: Database,
+  stateDirectory: string,
+  goal: string,
+  authority: NonNullable<ReturnType<typeof currentGoalManagerAuthority>>,
+): string {
+  const ready = briefs(backlogDirectory(stateDirectory, goal))
+    .map((path) => {
+      try {
+        return {
+          name: basename(path),
+          digest: createHash('sha256').update(readFileSync(path)).digest('hex'),
+          modified: statSync(path).mtimeMs,
+        };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+        throw error;
+      }
+    })
+    .filter((entry): entry is { name: string; digest: string; modified: number } => entry !== undefined)
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const hasTasks = tableExists(db, 'worker_tasks');
+  const tasks = hasTasks
+    ? db
+        .query(
+          `SELECT COUNT(*) AS count, COALESCE(MAX(sequence), 0) AS latestSequence,
+                  COALESCE(SUM(current_attempt), 0) AS attempts, COALESCE(MAX(current_attempt), 0) AS latestAttempt
+           FROM worker_tasks WHERE json_extract(body, '$.brief.goal') = ?`,
+        )
+        .get(goal)
+    : { count: 0, latestSequence: 0, attempts: 0, latestAttempt: 0 };
+  let inbox = { count: 0, latestId: 0 };
+  if (tableExists(db, 'manager_inbox')) {
+    const predicate = hasTasks
+      ? `(goal_id = ? OR task_id IN (
+           SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal') = ?
+         ))`
+      : '(goal_id = ?)';
+    const values = hasTasks ? [goal, goal, BACKLOG_LOW_WATER_SOURCE] : [goal, BACKLOG_LOW_WATER_SOURCE];
+    inbox = db
+      .query(
+        `SELECT COUNT(*) AS count, COALESCE(MAX(id), 0) AS latestId
+         FROM manager_inbox
+         WHERE ${predicate}
+           AND (kind IS NULL OR kind <> 'width')
+           AND (sender IS NULL OR sender <> ?)`,
+      )
+      .get(...values) as typeof inbox;
+  }
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        goal,
+        authority: {
+          id: authority.id,
+          sessionId: authority.sessionId,
+          kind: authority.kind,
+          engine: authority.engine,
+          explicitGoalOwnership: authority.goals.includes(goal),
+          supermanager: authority.supermanager,
+          goalStatus: authority.goalStatus,
+        },
+        ready,
+        tasks,
+        inbox,
+      }),
+    )
+    .digest('hex');
+}
 
-/** Wake each running Goal manager below the low-water mark, at most once an hour. */
+function requireBacklogNoWorkOwner(
+  db: Database,
+  goal: string,
+  actor: AuthenticatedManager,
+): NonNullable<ReturnType<typeof currentGoalManagerAuthority>> {
+  const authority = currentGoalManagerAuthority(db, goal);
+  if (!authority || authority.id !== actor.id || authority.sessionId !== actor.sessionId)
+    throw new Error(`Backlog disposition requires the authenticated unique running owner of Goal ${goal}`);
+  if (['paused', 'budgetLimited', 'complete'].includes(authority.goalStatus ?? ''))
+    throw new Error(`Goal ${goal} is not active`);
+  return authority;
+}
+
+/** Record the owner's bounded no-additional-work disposition for the exact scoped evidence now visible. */
+export function recordBacklogNoWorkDisposition(
+  db: Database,
+  stateDirectory: string,
+  goal: string,
+  actor: AuthenticatedManager,
+): { goal: string; manager: string; scope: string } {
+  migrate(db, backlogMigrations);
+  const authority = requireBacklogNoWorkOwner(db, goal, actor);
+  const scope = backlogNoWorkScope(db, stateDirectory, goal, authority);
+  db.query(
+    `INSERT INTO backlog_goals(goal, low_work_manager, low_work_session, low_work_scope)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(goal) DO UPDATE SET
+       low_work_manager = excluded.low_work_manager,
+       low_work_session = excluded.low_work_session,
+       low_work_scope = excluded.low_work_scope`,
+  ).run(goal, actor.id, actor.sessionId, scope);
+  return { goal, manager: actor.id, scope };
+}
+
+/** Clear the current owner's disposition and reset the hourly gate so the next sweep can wake immediately. */
+export function clearBacklogNoWorkDisposition(
+  db: Database,
+  goal: string,
+  actor: AuthenticatedManager,
+): { goal: string; manager: string; cleared: boolean } {
+  migrate(db, backlogMigrations);
+  requireBacklogNoWorkOwner(db, goal, actor);
+  const result = db
+    .query(
+      `UPDATE backlog_goals
+       SET low_work_manager = NULL, low_work_session = NULL, low_work_scope = NULL, low_wake_at = NULL
+       WHERE goal = ? AND low_work_scope IS NOT NULL`,
+    )
+    .run(goal);
+  return { goal, manager: actor.id, cleared: result.changes > 0 };
+}
+
+type ManagerRow = { id: string; state: string };
+type LowWorkDispositionRow = {
+  low_wake_at: number | null;
+  low_work_manager: string | null;
+  low_work_session: string | null;
+  low_work_scope: string | null;
+};
+
+/** Wake each running Goal manager below the low-water mark, at most once an hour unless its scope changed. */
 function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
   const { db } = runtime;
   if (!tableExists(db, 'manager_sessions')) return [];
@@ -1185,8 +1405,44 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
       const directory = backlogDirectory(runtime.stateDirectory, goal);
       const ready = briefs(directory).length;
       if (ready >= (runtime.policy ?? defaultPolicy).backlog.lowWater) continue;
+      const previous = db
+        .query(
+          `SELECT low_wake_at, low_work_manager, low_work_session, low_work_scope
+           FROM backlog_goals WHERE goal = ?`,
+        )
+        .get(goal) as LowWorkDispositionRow | null;
+      if (previous?.low_work_scope) {
+        const authority = currentGoalManagerAuthority(db, goal);
+        const scope = authority ? backlogNoWorkScope(db, runtime.stateDirectory, goal, authority) : undefined;
+        if (
+          authority &&
+          authority.id === row.id &&
+          previous.low_work_manager === authority.id &&
+          previous.low_work_session === authority.sessionId &&
+          previous.low_work_scope === scope
+        )
+          continue;
+      }
       const woke = db
         .transaction(() => {
+          const current = db
+            .query(
+              `SELECT low_wake_at, low_work_manager, low_work_session, low_work_scope
+               FROM backlog_goals WHERE goal = ?`,
+            )
+            .get(goal) as LowWorkDispositionRow | null;
+          if (current?.low_work_scope) {
+            const sameObservedDisposition =
+              previous?.low_work_manager === current.low_work_manager &&
+              previous.low_work_session === current.low_work_session &&
+              previous.low_work_scope === current.low_work_scope;
+            if (!sameObservedDisposition) return false;
+            db.query(
+              `UPDATE backlog_goals
+               SET low_work_manager = NULL, low_work_session = NULL, low_work_scope = NULL, low_wake_at = NULL
+               WHERE goal = ? AND low_work_scope = ?`,
+            ).run(goal, current.low_work_scope);
+          }
           const last = db.query('SELECT low_wake_at FROM backlog_goals WHERE goal=?').get(goal) as {
             low_wake_at: number | null;
           } | null;
@@ -1201,6 +1457,7 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
           ).run(goal, now);
           runtime.inbox.deliver({
             managerId: row.id,
+            from: BACKLOG_LOW_WATER_SOURCE,
             goalId: goal,
             kind: 'instruction',
             summary:
@@ -1219,9 +1476,10 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
 }
 
 /**
- * One controller run, in a child process the manager host starts each minute: cancel stopped tasks past their
- * limit, chain landed sessions into overlapping briefs, dispatch briefs that have an allowed pool now (then others)
- * round-robin across Goals while active tasks are below the cap, and wake managers with a low backlog.
+ * One controller run, in a child process the manager host starts each minute: reconcile expired compiler-only stops,
+ * cancel ordinary stopped tasks past their limit, chain landed sessions into overlapping briefs, dispatch briefs that
+ * have an allowed pool now (then others) round-robin across Goals while active tasks are below the cap, and wake managers
+ * with a low backlog.
  */
 export async function sweepBacklog(runtime: BacklogRuntime): Promise<BacklogSweep> {
   // One run at a time, across host restarts too: claim recovery assumes no other run holds a claim.

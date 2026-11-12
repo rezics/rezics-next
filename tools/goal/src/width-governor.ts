@@ -4,6 +4,7 @@ import { agentReportingEvidence } from './agents.ts';
 import { migrate } from './db.ts';
 import { sameProcess, type ProcessIdentity } from './process.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
+import { isActionableStop, stoppedActionHint, type StoppedActionHint } from './stopped-action.ts';
 
 // Compatibility exports for synthetic callers; production reads its own loaded policy.
 export const WIDTH_WORKER_THRESHOLD = defaultPolicy.width.workerThreshold;
@@ -35,9 +36,12 @@ export type WidthCounts = {
   /** Current running attempts whose profile does not identify a recognized CLI. */
   unknownCodexClassification: number;
   ready: number;
+  actionableReady: number;
   pendingStarts: number;
   held: number;
+  actionableHeld: number;
   stopped: number;
+  actionableStopped: number;
   waiting: number;
 };
 
@@ -66,6 +70,8 @@ type AsyncWidthSnapshotOptions = Omit<WidthSnapshotOptions, 'yieldBetweenPages'>
 
 type WidthRow = {
   sequence: number;
+  task_id: string;
+  stopped_action: StoppedActionHint | null;
   current_attempt: number;
   task_state: string;
   goal: string | null;
@@ -77,6 +83,7 @@ type WidthRow = {
   process_group: number | null;
   cli: string | null;
   pending_start: number;
+  progressing_dependencies: number;
 };
 
 type MutableCounts = WidthCounts;
@@ -90,9 +97,12 @@ function emptyCounts(): MutableCounts {
     unknownCodexRunning: 0,
     unknownCodexClassification: 0,
     ready: 0,
+    actionableReady: 0,
     pendingStarts: 0,
     held: 0,
+    actionableHeld: 0,
     stopped: 0,
+    actionableStopped: 0,
     waiting: 0,
   };
 }
@@ -118,7 +128,13 @@ function tableExists(db: Database, name: string): boolean {
   return Boolean(db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
 }
 
-function pageQuery(db: Database, afterSequence: number, limit: number, hasRetryIntents: boolean): WidthRow[] {
+function pageQuery(
+  db: Database,
+  afterSequence: number,
+  limit: number,
+  hasRetryIntents: boolean,
+  hasWorkerEvents: boolean,
+): WidthRow[] {
   const pendingStart = hasRetryIntents
     ? `EXISTS (
         SELECT 1 FROM worker_retry_intents AS i
@@ -128,7 +144,12 @@ function pageQuery(db: Database, afterSequence: number, limit: number, hasRetryI
     : '0';
   return db
     .query(
-      `SELECT c.sequence, c.current_attempt,
+      `SELECT c.sequence, c.task_id, c.current_attempt,
+        CASE WHEN c.task_state='stopped' THEN ${stoppedActionHint(
+          'c.task_id',
+          'c.current_attempt',
+          hasWorkerEvents,
+        )} END AS stopped_action,
         c.task_state,
         c.goal,
         c.manager,
@@ -138,7 +159,17 @@ function pageQuery(db: Database, afterSequence: number, limit: number, hasRetryI
         c.process_boot,
         c.process_group,
         c.cli,
-        CASE WHEN ${pendingStart} THEN 1 ELSE 0 END AS pending_start
+        CASE WHEN ${pendingStart} THEN 1 ELSE 0 END AS pending_start,
+        CASE WHEN c.task_state='held' THEN (
+          SELECT count(*) FILTER (WHERE d.task_state IN ('ready','running','landing')) > 0
+            AND count(*) FILTER (WHERE d.task_state IS NULL OR d.task_state NOT IN (
+              'ready','running','landing','integrated','merged','stopped','cancelled'
+            )) = 0
+          FROM worker_tasks AS held
+          JOIN json_each(held.body, '$.brief.after') AS dependency
+          LEFT JOIN worker_current_attempts AS d ON d.task_id=dependency.value
+          WHERE held.id=c.task_id
+        ) ELSE 0 END AS progressing_dependencies
       FROM worker_current_attempts AS c
       WHERE c.sequence > ?
         AND c.task_state IN ('ready', 'held', 'running', 'stopped')
@@ -153,6 +184,8 @@ function addRow(
   system: MutableCounts,
   goals: Map<string, MutableGoal>,
   processIsLive: (identity: ProcessIdentity) => boolean,
+  db: Database,
+  policy: ControlPolicy,
 ): void {
   let goal: MutableGoal | undefined;
   if (typeof row.goal === 'string' && row.goal.length > 0) {
@@ -186,9 +219,17 @@ function addRow(
     }
   }
 
-  if (taskState === 'ready') increment('ready');
-  else if (taskState === 'held') increment('held');
-  else if (taskState === 'stopped') increment('stopped');
+  if (taskState === 'ready') {
+    increment('ready');
+    if (row.pending_start !== 1) increment('actionableReady');
+  } else if (taskState === 'held') {
+    increment('held');
+    if (row.progressing_dependencies !== 1) increment('actionableHeld');
+  } else if (taskState === 'stopped') {
+    increment('stopped');
+    if (isActionableStop(db, row.task_id, row.current_attempt, row.stopped_action, policy))
+      increment('actionableStopped');
+  }
   if (row.pending_start === 1) increment('pendingStarts');
   if (row.attempt_state === 'waiting') increment('waiting');
 }
@@ -212,16 +253,18 @@ function readSnapshotSync(
   at: Date | number,
   options: SyncWidthSnapshotOptions,
   hasRetryIntents: boolean,
+  hasWorkerEvents: boolean,
 ): WidthSnapshot {
   const system = emptyCounts();
   const goals = new Map<string, MutableGoal>();
   const processIsLive = options.processIsLive ?? sameProcess;
-  const pageSize = (options.policy ?? defaultPolicy).width.pageSize;
+  const policy = options.policy ?? defaultPolicy;
+  const pageSize = policy.width.pageSize;
   // The cursor precedes every persisted sequence; it is not a page-size policy.
   let cursor = -1;
   for (;;) {
-    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents);
-    for (const row of rows) addRow(row, system, goals, processIsLive);
+    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents, hasWorkerEvents);
+    for (const row of rows) addRow(row, system, goals, processIsLive, db, policy);
     if (rows.length < pageSize) break;
     cursor = rows[rows.length - 1]!.sequence;
   }
@@ -234,16 +277,18 @@ async function readSnapshotAsync(
   at: Date | number,
   options: AsyncWidthSnapshotOptions,
   hasRetryIntents: boolean,
+  hasWorkerEvents: boolean,
 ): Promise<WidthSnapshot> {
   const system = emptyCounts();
   const goals = new Map<string, MutableGoal>();
   const processIsLive = options.processIsLive ?? sameProcess;
-  const pageSize = (options.policy ?? defaultPolicy).width.pageSize;
+  const policy = options.policy ?? defaultPolicy;
+  const pageSize = policy.width.pageSize;
   // The cursor precedes every persisted sequence; it is not a page-size policy.
   let cursor = -1;
   for (;;) {
-    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents);
-    for (const row of rows) addRow(row, system, goals, processIsLive);
+    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents, hasWorkerEvents);
+    for (const row of rows) addRow(row, system, goals, processIsLive, db, policy);
     if (rows.length < pageSize) break;
     cursor = rows[rows.length - 1]!.sequence;
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -265,9 +310,10 @@ export function readWidthSnapshot(
   options: WidthSnapshotOptions = {},
 ): WidthSnapshot | Promise<WidthSnapshot> {
   const hasRetryIntents = tableExists(db, 'worker_retry_intents');
+  const hasWorkerEvents = tableExists(db, 'worker_events');
   return options.yieldBetweenPages
-    ? readSnapshotAsync(db, at, options as AsyncWidthSnapshotOptions, hasRetryIntents)
-    : readSnapshotSync(db, at, options as SyncWidthSnapshotOptions, hasRetryIntents);
+    ? readSnapshotAsync(db, at, options as AsyncWidthSnapshotOptions, hasRetryIntents, hasWorkerEvents)
+    : readSnapshotSync(db, at, options as SyncWidthSnapshotOptions, hasRetryIntents, hasWorkerEvents);
 }
 
 function noLongerActiveManager(db: Database, managerId: string): boolean {
@@ -291,7 +337,7 @@ function noLongerActiveManager(db: Database, managerId: string): boolean {
 }
 
 function hasUndispatchedWork(goal: WidthGoalSnapshot): boolean {
-  return goal.ready > 0 || goal.pendingStarts > 0 || goal.held > 0 || goal.stopped > 0;
+  return goal.actionableReady > 0 || goal.actionableHeld > 0 || goal.actionableStopped > 0;
 }
 
 function widthEventSummary(goal: WidthGoalSnapshot, policy: ControlPolicy): string {
@@ -304,8 +350,12 @@ function widthEventSummary(goal: WidthGoalSnapshot, policy: ControlPolicy): stri
   return (
     `Width governor: this Goal has ${goal.running} confirmed live workers (${goal.unknownRunning} current running attempts have unknown process identity); ` +
     `Codex subset ${goal.codexRunning} confirmed live (${codexUnknown} Codex evidence unknown); ` +
-    `current work counts: ready ${goal.ready}, durable pending starts ${goal.pendingStarts}, held ${goal.held}, stopped ${goal.stopped}, waiting ${goal.waiting}. ` +
-    `Recover, reshape, or dispatch real work. Act on each stopped task within ${stoppedAge}: retry with a rewritten brief, split it, or cancel it. Keep at least ${policy.backlog.lowWater} ready briefs in your backlog. ` +
+    `current work counts: ready ${goal.ready}, durable pending starts ${goal.pendingStarts}, held ${goal.held}, stopped ${goal.stopped}, waiting ${goal.waiting}; actionable stops ${goal.actionableStopped}. ` +
+    'Recover, reshape, or dispatch real work. ' +
+    (goal.actionableStopped
+      ? `Act within ${stoppedAge}: recover completed source waiting only for compiler typing evidence first; then handle actual stopped source as before: retry with a rewritten brief, split it, or cancel it. `
+      : '') +
+    `Keep at least ${policy.backlog.lowWater} ready briefs in your backlog. ` +
     'Unsubmitted work is not observable from runtime metadata.'
   );
 }
@@ -334,6 +384,8 @@ export async function sweepWidthGovernor(
       await new Promise<void>((resolve) => setImmediate(resolve));
     const goal = snapshot.goals[index]!;
     if (
+      // The host schedules a single daily audit; it has no manager backlog to refill.
+      goal.goal === 'daily-step-audit' ||
       !goal.managerId ||
       goal.managerConflict ||
       goal.running >= policy.width.workerThreshold ||

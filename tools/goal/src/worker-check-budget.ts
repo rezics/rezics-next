@@ -1,7 +1,43 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { hostname, tmpdir } from 'node:os';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import { Database } from 'bun:sqlite';
+import { acquireDirectoryLeaseWaiting } from './lease.ts';
+import { identityLive, sameProcess } from './process.ts';
+import {
+  isCheckId,
+  isPhysicalRunId,
+  remoteRunCustodyPath,
+  validateRunnerIdentity,
+  writeAtomicJson,
+  type RunnerIdentity,
+} from '../../../scripts/check-custody.ts';
+import { parseRemotePhysicalRunReceipt } from '../../../scripts/remote-check.ts';
+import type { AuthenticatedManager } from './priority-authority.ts';
+import { readMeasurement } from './records.ts';
+import type { Task, Attempt, RetryIntent } from './types.ts';
+import {
+  captureTypingInputs,
+  isDirectKernelTypingCompiler,
+  isKnownTypingCompiler,
+  readTypingInputReceipt,
+  qualifyTypingInputs,
+  type TypingInput,
+  type TypingInputReceipt,
+} from './worker-check-typing-inputs.ts';
 
 /** One combined check plus one rerun after that check failed. */
 export const WORKER_CHECK_HOST_RUN_LIMIT = 2;
@@ -13,7 +49,7 @@ export const WORKER_CHECK_HOST_TYPECHECK_REFUSAL =
 export const WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT = 75;
 export const WORKER_CHECK_TESTS_AFTER_LANDING = 'Tests run after landing in the dev verifier.';
 const STAMP_NAME = /^[1-9]\d*$/;
-const TYPECHECK_COMMAND = /\btypecheck\b|scripts\/typecheck\.ts/;
+const TYPECHECK_COMMAND = /(?:^|[\s;|&])(?:[^\s;|&]*\/)?typecheck(?:\.ts|:root)?(?=$|[\s;|&])/;
 const TYPECHECK_FAILURE =
   /error TS\d+|error: script "typecheck" exited|error:\s*"typecheck" exited|error: Failed to run .*typecheck/;
 const TYPING_LOG_CHARACTERS = 8192;
@@ -52,6 +88,15 @@ export type WorkerCheckHostStampRecord = {
   typecheckFailed?: boolean;
   includedTypecheck?: boolean;
   log?: string;
+  typingRequest?: {
+    physicalRunId: string;
+    command: string[];
+    localPrepared: TypingInput[];
+    capture?: 'physical-command';
+  };
+  typingInputs?: TypingInputReceipt;
+  typingInputsUnavailable?: string;
+  typingRecovery?: { token: string; checkId: string; physicalRunId: string };
 };
 
 /** Controller-owned stamp directory beside the attempt's check-wait file. */
@@ -154,14 +199,1198 @@ function boundedLog(path: string | undefined): string {
   }
 }
 
+type TypingStampEvidence = {
+  receipt?: TypingInputReceipt;
+  rejected: boolean;
+  reason?: string;
+};
+
+function typingStampEvidence(worktree: string, source: WorkerCheckHostStampRecord): TypingStampEvidence {
+  let receipt = source.typingInputs;
+  let rejected = false;
+  let reason = source.typingInputsUnavailable;
+  if (!receipt && source.typingRequest) {
+    try {
+      receipt = readTypingInputReceipt(worktree, source.typingRequest.physicalRunId, source.typingRequest.command);
+    } catch (error) {
+      reason = String(error);
+      rejected = true;
+    }
+  }
+  if (
+    receipt &&
+    (!source.typingRequest ||
+      receipt.physicalRunId !== source.typingRequest.physicalRunId ||
+      JSON.stringify(receipt.command) !== JSON.stringify(source.typingRequest.command))
+  ) {
+    receipt = undefined;
+    rejected = true;
+    reason ??= 'Retained compiler receipt does not match the exact physical invocation identity.';
+  }
+  return { ...(receipt ? { receipt } : {}), rejected, ...(reason ? { reason } : {}) };
+}
+
+function typingFailureResult(source: WorkerCheckHostStampRecord, reason?: string): string {
+  const log = source.log ? boundedLog(source.log) : '(check log unavailable)';
+  const summary =
+    `${TYPING_SETTLEMENT_FAILED} Settlement records a typing failure with that run's log, ` +
+    'so this attempt is retried instead of landing.';
+  return `${summary}\n${reason ?? ''}\n${log}`;
+}
+
+/** A failure receipt is current only when its stable compiler inputs still match the retained source. */
+function typingFailureInputsMatch(
+  worktree: string,
+  receipt: TypingInputReceipt,
+  localPrepared: readonly TypingInput[] = [],
+): boolean {
+  if (!receipt.sourceStable) return false;
+  const current = captureTypingInputs(worktree, receipt.compilerCommand);
+  if (
+    current.runtime !== receipt.completed.runtime ||
+    current.profile !== receipt.completed.profile ||
+    JSON.stringify(current.excludedDocuments) !== JSON.stringify(receipt.completed.excludedDocuments) ||
+    JSON.stringify(current.source) !== JSON.stringify(receipt.completed.source)
+  )
+    return false;
+  const baseline = new Map(localPrepared.map((entry) => [entry.path, entry.digest]));
+  const compiled = new Map(receipt.completed.prepared.map((entry) => [entry.path, entry.digest]));
+  if (
+    current.prepared.some(
+      (entry) => compiled.get(entry.path) !== entry.digest && baseline.get(entry.path) !== entry.digest,
+    )
+  )
+    return false;
+  return localPrepared.every(
+    (entry) => current.prepared.some((currentEntry) => currentEntry.path === entry.path) || entry.digest === 'missing',
+  );
+}
+
+export const TYPING_RECOVERY_ENV = 'GOAL_WORKER_CHECK_TYPING_RECOVERY';
+type TypingRecoveryGrant = {
+  version: 1;
+  token: string;
+  taskId: string;
+  attempt: number;
+  worktree: string;
+  stateDirectory: string;
+  database: string;
+  command: string[];
+  identity: string;
+  actor: AuthenticatedManager;
+  checkId: string;
+  physicalRunId: string;
+  stamp?: string;
+  replacementOf?: string;
+  recoveryKind?: 'withdrawn-budget-stop';
+};
+const recoveryPath = (directory: string, token: string) => {
+  if (!/^[0-9a-f-]{36}$/.test(token)) throw new Error('Invalid typing recovery token');
+  return join(directory, 'typing-recovery', `${token}.json`);
+};
+function recoveryIdentity(worktree: string, command: readonly string[]): string {
+  if (!isKnownTypingCompiler(worktree, command))
+    throw new Error('Typing recovery requires an installed owning compiler command');
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        head: git(worktree, ['rev-parse', 'HEAD']).trim(),
+        inputs: captureTypingInputs(worktree, command),
+      }),
+    )
+    .digest('hex');
+}
+
+type CheckEvidence = {
+  [key: string]: unknown;
+  version?: unknown;
+  id?: unknown;
+  checkId?: unknown;
+  cwd?: unknown;
+  argv?: unknown;
+  remoteArgv?: unknown;
+  status?: unknown;
+  exitCode?: unknown;
+  physicalRunId?: unknown;
+  runnerHost?: unknown;
+  runnerPid?: unknown;
+  runnerIdentity?: unknown;
+  disposition?: unknown;
+  recordSha256?: unknown;
+  receiptReference?: unknown;
+  receiptSha256?: unknown;
+  ownership?: { taskId?: unknown; attempt?: unknown };
+  physicalRun?: {
+    exitCode?: unknown;
+    resources?: { commandStartedMonoMs?: unknown } | null;
+  };
+  binding?: {
+    checkId?: unknown;
+    ownership?: { taskId?: unknown; attempt?: unknown };
+    argv?: unknown;
+    remoteArgv?: unknown;
+  };
+  attempts?: unknown;
+  host?: unknown;
+  native?: unknown;
+  remoteExpected?: unknown;
+  terminalProof?: { local?: unknown; resultKnown?: unknown; remote?: unknown };
+};
+
+function readCheckEvidence(path: string): CheckEvidence | undefined {
+  try {
+    const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as CheckEvidence) : undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) return undefined;
+    throw error;
+  }
+}
+
+type OptionalCheckEvidence = { state: 'absent' } | { state: 'invalid' } | { state: 'present'; value: CheckEvidence };
+
+/** Distinguish a missing legacy file from a present but unreadable newer record. */
+function readOptionalCheckEvidence(path: string): OptionalCheckEvidence {
+  try {
+    if (!lstatSync(path).isFile()) return { state: 'invalid' };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return { state: 'absent' };
+    if (code === 'EACCES' || code === 'EPERM' || code === 'ENOTDIR' || code === 'ELOOP') return { state: 'invalid' };
+    throw error;
+  }
+
+  try {
+    const value = readCheckEvidence(path);
+    return value ? { state: 'present', value } : { state: 'invalid' };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (
+      code === 'ENOENT' ||
+      code === 'EACCES' ||
+      code === 'EPERM' ||
+      code === 'EISDIR' ||
+      code === 'ENOTDIR' ||
+      code === 'ELOOP'
+    )
+      return { state: 'invalid' };
+    throw error;
+  }
+}
+
+function terminalPhysicalHistory(worktree: string, checkId: string, physicalRunId: string, exitCode?: number): boolean {
+  const history = readCheckEvidence(
+    join(worktree, '.temp', 'goal', 'checks', 'custody', 'history', `${checkId}.${physicalRunId}.json`),
+  );
+  return Boolean(
+    history?.version === 1 &&
+    history.id === checkId &&
+    history.cwd === worktree &&
+    history.physicalRunId === physicalRunId &&
+    history.status === 'finished' &&
+    Number.isInteger(history.exitCode) &&
+    (exitCode === undefined || history.exitCode === exitCode) &&
+    history.terminalProof?.local === true &&
+    history.terminalProof?.resultKnown === true &&
+    (history.remoteExpected === true
+      ? history.terminalProof?.remote === true
+      : history.remoteExpected === false && history.terminalProof?.remote === null),
+  );
+}
+
+function ownedRunnerIdentity(value: unknown): RunnerIdentity | undefined {
+  try {
+    const identity = validateRunnerIdentity(value);
+    return identity.group === identity.pid ? identity : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function checkEvidenceArgv(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= 1024 &&
+    value.every((part) => typeof part === 'string' && part.length <= 4096 && !part.includes('\0')) &&
+    Buffer.byteLength(JSON.stringify(value)) <= 56 * 1024
+  );
+}
+
+/** Legacy finished checks may use a native result receipt when newer remote custody is genuinely absent. */
+function retainedNativeExitReceiptTerminal(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  record: CheckEvidence,
+): boolean {
+  if (
+    record.status !== 'finished' ||
+    typeof record.id !== 'string' ||
+    !isCheckId(record.id) ||
+    typeof record.physicalRunId !== 'string' ||
+    !isPhysicalRunId(record.physicalRunId) ||
+    record.cwd !== worktree ||
+    record.ownership?.taskId !== taskId ||
+    record.ownership.attempt !== attempt ||
+    !checkEvidenceArgv(record.argv) ||
+    !Number.isInteger(record.exitCode)
+  )
+    return false;
+
+  const root = join(worktree, '.temp', 'goal', 'checks');
+  const physical = readCheckEvidence(join(root, 'custody', 'history', `${record.id}.${record.physicalRunId}.json`));
+  if (
+    !physical ||
+    physical.version !== 1 ||
+    physical.id !== record.id ||
+    physical.cwd !== worktree ||
+    physical.physicalRunId !== record.physicalRunId ||
+    physical.status !== 'finished' ||
+    physical.terminalProof !== undefined ||
+    physical.remoteExpected !== true ||
+    physical.ownership?.taskId !== taskId ||
+    physical.ownership.attempt !== attempt ||
+    physical.exitCode !== record.exitCode ||
+    !checkEvidenceArgv(physical.argv) ||
+    !isDeepStrictEqual(physical.argv, record.argv)
+  )
+    return false;
+
+  const runner = ownedRunnerIdentity(record.runnerIdentity);
+  const physicalRunner = ownedRunnerIdentity(physical.runnerIdentity);
+  if (
+    !runner ||
+    !physicalRunner ||
+    !isDeepStrictEqual(runner, physicalRunner) ||
+    record.runnerPid !== runner.pid ||
+    record.runnerHost !== hostname() ||
+    physical.runnerHost !== record.runnerHost ||
+    identityLive(runner)
+  )
+    return false;
+
+  if (
+    existsSync(join(root, 'cancellations', `${record.id}.json`)) ||
+    existsSync(join(root, 'custody', 'cancelled', `${record.id}.json`)) ||
+    existsSync(join(root, 'custody', 'stopping', `${record.id}.${record.physicalRunId}.json`))
+  )
+    return false;
+
+  const resultReceipt = parseRemotePhysicalRunReceipt(record.physicalRun);
+  const custodyState = readOptionalCheckEvidence(remoteRunCustodyPath(worktree, record.physicalRunId));
+  if (custodyState.state === 'invalid' || !resultReceipt) return false;
+
+  let receipt = resultReceipt;
+  if (custodyState.state === 'present') {
+    const custody = custodyState.value;
+    const binding = custody.binding;
+    const attempts = custody.attempts;
+    if (
+      custody.version !== 1 ||
+      custody.physicalRunId !== record.physicalRunId ||
+      custody.status !== 'terminal' ||
+      !binding ||
+      binding.checkId !== record.id ||
+      binding.ownership?.taskId !== taskId ||
+      binding.ownership.attempt !== attempt ||
+      !checkEvidenceArgv(binding.argv) ||
+      !isDeepStrictEqual(binding.argv, record.argv) ||
+      !checkEvidenceArgv(physical.remoteArgv) ||
+      !checkEvidenceArgv(binding.remoteArgv) ||
+      !isDeepStrictEqual(binding.remoteArgv, physical.remoteArgv) ||
+      !Array.isArray(attempts) ||
+      attempts.some(
+        (item) =>
+          !item ||
+          typeof item !== 'object' ||
+          Array.isArray(item) ||
+          !['terminal', 'not-started'].includes(String((item as CheckEvidence).status)),
+      )
+    )
+      return false;
+
+    const managedAttempts = attempts as CheckEvidence[];
+    const completed = managedAttempts.filter((item) => item.status === 'terminal');
+    if (completed.length !== 1) return false;
+    const managed = completed[0]!;
+    if (
+      typeof managed.host !== 'string' ||
+      !/^[a-z][a-z0-9-]{0,62}$/.test(managed.host) ||
+      typeof managed.id !== 'string' ||
+      !/^[a-zA-Z0-9-]{1,96}$/.test(managed.id)
+    )
+      return false;
+    const managedReceipt = parseRemotePhysicalRunReceipt(managed.native);
+    if (!managedReceipt || managed.host !== managedReceipt.host || managed.id !== managedReceipt.run) return false;
+    receipt = managedReceipt;
+  }
+
+  const historyReceipt =
+    physical.physicalRun === undefined ? undefined : parseRemotePhysicalRunReceipt(physical.physicalRun);
+  if (
+    !isDeepStrictEqual(receipt, resultReceipt) ||
+    (physical.physicalRun !== undefined && (!historyReceipt || !isDeepStrictEqual(receipt, historyReceipt))) ||
+    receipt.exitCode !== record.exitCode ||
+    receipt.lifetimeFailure !== null ||
+    !receipt.resources ||
+    receipt.resources.commandStartedMonoMs === null ||
+    receipt.resources.commandStartedMonoMs <= 0 ||
+    receipt.resources.terminalMonoMs <= 0
+  )
+    return false;
+
+  return true;
+}
+
+/** Exact structured worker outcome needed to recover completed source after its retry was withdrawn. */
+export function workerCheckHostBudgetRefusalReport(result: string | null | undefined): boolean {
+  if (!result) return false;
+  let value: unknown;
+  try {
+    value = JSON.parse(result);
+  } catch {
+    return false;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const report = value as {
+    status?: unknown;
+    checks?: unknown;
+    blocker?: { kind?: unknown; detail?: unknown } | null;
+  };
+  return (
+    report.status === 'blocked' &&
+    report.blocker?.kind === 'tool' &&
+    typeof report.blocker.detail === 'string' &&
+    report.blocker.detail.startsWith(WORKER_CHECK_HOST_BUDGET_REFUSAL) &&
+    Array.isArray(report.checks) &&
+    report.checks.length === 0
+  );
+}
+
+/** Recover the original report only from the native authorization event that retained its validated origin. */
+function retainedWithdrawnBudgetOriginReport(input: {
+  db: Database;
+  grant: TypingRecoveryGrant;
+  task: Task;
+  attempt: Attempt;
+  progress?: { endHead?: unknown };
+  directory: string;
+}): string | undefined {
+  const { db, grant, task, attempt, progress, directory } = input;
+  const sourceHead = progress?.endHead;
+  if (
+    grant.recoveryKind !== 'withdrawn-budget-stop' ||
+    JSON.stringify(grant.command) !== JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) ||
+    attempt.state !== 'stopped' ||
+    JSON.stringify(attempt.typingEvidencePending?.command) !== JSON.stringify(grant.command) ||
+    typeof attempt.result !== 'string' ||
+    typeof sourceHead !== 'string'
+  )
+    return;
+
+  const row = db
+    .query(
+      "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized' ORDER BY sequence DESC LIMIT 1",
+    )
+    .get(grant.taskId, grant.attempt) as { body: string } | null;
+  if (!row) return;
+  let body: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(row.body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+    body = parsed as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  if (
+    Object.keys(body).sort().join(',') !== 'actor,checkId,command,identity,recoveryKind,token,withdrawnBudgetOrigin' ||
+    body.recoveryKind !== grant.recoveryKind ||
+    body.token !== grant.token ||
+    body.identity !== grant.identity ||
+    body.checkId !== grant.checkId ||
+    JSON.stringify(body.command) !== JSON.stringify(grant.command)
+  )
+    return;
+  const actor = body.actor as { id?: unknown; sessionId?: unknown } | null;
+  if (
+    !actor ||
+    typeof actor.id !== 'string' ||
+    typeof actor.sessionId !== 'string' ||
+    actor.id !== grant.actor.id ||
+    actor.sessionId !== grant.actor.sessionId
+  )
+    return;
+  const failureRow = db
+    .query(
+      "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-evidence-failed' ORDER BY sequence DESC LIMIT 1",
+    )
+    .get(grant.taskId, grant.attempt) as { body: string } | null;
+  if (!failureRow) return;
+  let failureBody: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(failureRow.body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+    failureBody = parsed as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  const failureActor = failureBody.actor as { id?: unknown; sessionId?: unknown } | null;
+  if (
+    Object.keys(failureBody).sort().join(',') !== 'actor,recoveryKind' ||
+    failureBody.recoveryKind !== grant.recoveryKind ||
+    !failureActor ||
+    failureActor.id !== grant.actor.id ||
+    failureActor.sessionId !== grant.actor.sessionId
+  )
+    return;
+  const origin = body.withdrawnBudgetOrigin as
+    | {
+        version?: unknown;
+        sourceCommit?: unknown;
+        reportSha256?: unknown;
+        failureSha256?: unknown;
+        failureStamp?: unknown;
+      }
+    | undefined;
+  if (
+    !origin ||
+    origin.version !== 1 ||
+    typeof origin.sourceCommit !== 'string' ||
+    !/^[0-9a-f]{40}$/.test(origin.sourceCommit) ||
+    origin.sourceCommit !== sourceHead ||
+    typeof origin.reportSha256 !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(origin.reportSha256) ||
+    typeof origin.failureSha256 !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(origin.failureSha256) ||
+    origin.failureSha256 !== createHash('sha256').update(attempt.result).digest('hex') ||
+    typeof origin.failureStamp !== 'string' ||
+    !STAMP_NAME.test(origin.failureStamp)
+  )
+    return;
+  const sourceCommit = origin.sourceCommit;
+
+  const report = readMeasurement(attempt).result;
+  if (
+    !workerCheckHostBudgetRefusalReport(report) ||
+    createHash('sha256').update(report).digest('hex') !== origin.reportSha256 ||
+    !(report.match(/[0-9a-f]{10,40}/gi) ?? []).some((reference) => sourceCommit.startsWith(reference.toLowerCase()))
+  )
+    return;
+
+  const selection = workerCheckHostStaleTypingFailureSelection({
+    directory,
+    worktree: task.worktree,
+    result: attempt.result,
+    stamp: origin.failureStamp,
+  });
+  if (
+    !selection ||
+    JSON.stringify(selection.command) !== JSON.stringify(grant.command) ||
+    !workerCheckHostWithdrawnLegacyTypingCheckMatchesAttempt(
+      task.worktree,
+      task.id,
+      attempt.attempt,
+      selection.physicalRunId,
+      selection.command,
+      selection.exitCode,
+    )
+  )
+    return;
+  return report;
+}
+
+/** A withdrawn Web retry requires each listed result to agree with the terminal custody that settles it. */
+function withdrawnRetryChecksHaveBoundTerminalResults(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  checkIds: readonly string[],
+  currentCheck?: { id: string; physicalRunId: string },
+): boolean {
+  const root = join(worktree, '.temp', 'goal', 'checks');
+  const resultDirectory = join(root, 'results');
+  let files: string[];
+  try {
+    files = readdirSync(resultDirectory).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return checkIds.length === 0;
+    throw error;
+  }
+
+  const found = new Set<string>();
+  for (const file of files) {
+    const record = readCheckEvidence(join(resultDirectory, file));
+    if (!record) return false;
+    if (record.ownership?.taskId !== taskId || record.ownership.attempt !== attempt) continue;
+    if (typeof record.id !== 'string' || typeof record.physicalRunId !== 'string') return false;
+    found.add(record.id);
+    if (
+      file !== `${record.id}.json` ||
+      record.cwd !== worktree ||
+      existsSync(join(root, 'cancellations', `${record.id}.json`))
+    )
+      return false;
+    if (
+      record.status === 'running' &&
+      currentCheck?.id === record.id &&
+      currentCheck.physicalRunId === record.physicalRunId
+    )
+      continue;
+    if (
+      record.status !== 'finished' ||
+      typeof record.exitCode !== 'number' ||
+      !Number.isInteger(record.exitCode) ||
+      (!terminalPhysicalHistory(worktree, record.id, record.physicalRunId, record.exitCode) &&
+        !retainedNativeExitReceiptTerminal(worktree, taskId, attempt, record))
+    )
+      return false;
+  }
+  return checkIds.every((id) => found.has(id));
+}
+
+/**
+ * A completed, clean Web source attempt whose environment retry was withdrawn by an explicit post-exit stop.
+ * Every recorded check must be physically terminal; the optional current check is only accepted as an idempotent
+ * replay of the exact already-authorized recovery check.
+ */
+export function workerCheckHostWithdrawnRetryIsRecoverable(input: {
+  task: Task;
+  attempt: Attempt;
+  retry?: RetryIntent;
+  progress?: { endHead?: unknown; uncommitted?: unknown };
+  currentCheck?: { id: string; physicalRunId: string };
+}): boolean {
+  const { task, attempt, retry, progress } = input;
+  const stop = attempt.terminationIntent;
+  if (
+    task.state !== 'stopped' ||
+    task.currentAttempt !== attempt.attempt ||
+    task.brief.goal !== 'web' ||
+    task.brief.kind !== 'interface' ||
+    workerCheckHostBudgetLimit(task, attempt.attempt) === 'off' ||
+    !isKnownTypingCompiler(task.worktree, ['bun', 'run', '--cwd', 'apps/web', 'typecheck']) ||
+    (attempt.state !== 'stopped' &&
+      !(
+        attempt.state === 'exited' &&
+        JSON.stringify(attempt.typingEvidencePending?.command) ===
+          JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck'])
+      )) ||
+    attempt.exitCode !== 0 ||
+    attempt.failureKind !== 'tool' ||
+    !workerCheckHostBudgetRefusalReport(attempt.result) ||
+    retry?.status !== 'abandoned' ||
+    retry.taskId !== task.id ||
+    retry.attempt !== attempt.attempt ||
+    retry.abandonedBy !== 'stop' ||
+    retry.nextAttempt !== undefined ||
+    retry.options.escalation !== 'environment' ||
+    !stop ||
+    stop.operation !== 'stop' ||
+    stop.state !== 'complete' ||
+    stop.processIdentity !== 'known' ||
+    !stop.settledAt ||
+    !attempt.endedAt ||
+    Date.parse(stop.requestedAt) <= Date.parse(attempt.endedAt) ||
+    Date.parse(stop.settledAt) < Date.parse(stop.requestedAt) ||
+    !stop.process ||
+    !attempt.process ||
+    JSON.stringify(stop.process) !== JSON.stringify(attempt.process) ||
+    JSON.stringify(stop.auxiliaryProcesses) !== JSON.stringify(attempt.auxiliaryProcesses ?? [])
+  )
+    return false;
+
+  const ended = Date.parse(attempt.endedAt);
+  const requested = Date.parse(stop.requestedAt);
+  const settled = Date.parse(stop.settledAt);
+  if (![ended, requested, settled].every(Number.isFinite) || requested <= ended || settled < requested) return false;
+  if (identityLive(stop.process)) return false;
+  if (attempt.driver && identityLive(attempt.driver)) return false;
+  for (const process of [...(attempt.auxiliaryProcesses ?? []), ...stop.auxiliaryProcesses])
+    if (identityLive(process)) return false;
+
+  if (progress?.uncommitted !== false || typeof progress.endHead !== 'string') return false;
+  try {
+    if (git(task.worktree, ['rev-parse', 'HEAD']).trim() !== progress.endHead) return false;
+    if (git(task.worktree, ['status', '--porcelain', '--untracked-files=all']).trim() !== '') return false;
+  } catch {
+    return false;
+  }
+  return withdrawnRetryChecksHaveBoundTerminalResults(
+    task.worktree,
+    task.id,
+    attempt.attempt,
+    attempt.checks ?? [],
+    input.currentCheck,
+  );
+}
+
+/** No competing check is inferred from a missing, unreadable or non-terminal owned result. */
+export function workerCheckHostAttemptChecksTerminal(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  checkIds: readonly string[],
+  currentCheck?: { id: string; physicalRunId: string },
+  allowRetainedNativeExitReceipt = false,
+): boolean {
+  const root = join(worktree, '.temp', 'goal', 'checks');
+  const recordDirectory = join(root, 'results');
+  let files: string[];
+  try {
+    files = readdirSync(recordDirectory).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return checkIds.length === 0;
+    throw error;
+  }
+  const found = new Set<string>();
+  for (const file of files) {
+    const record = readCheckEvidence(join(recordDirectory, file));
+    if (!record) return false;
+    if (record.ownership?.taskId !== taskId || record.ownership.attempt !== attempt) continue;
+    if (typeof record.id !== 'string' || typeof record.physicalRunId !== 'string') return false;
+    found.add(record.id);
+    const expectedCurrent = currentCheck?.id === record.id && currentCheck.physicalRunId === record.physicalRunId;
+    if (
+      record.cwd !== worktree ||
+      file !== `${record.id}.json` ||
+      existsSync(join(root, 'cancellations', `${record.id}.json`))
+    )
+      return false;
+    if (expectedCurrent && record.status === 'running') continue;
+    const currentTerminal =
+      record.status === 'finished' && terminalPhysicalHistory(worktree, record.id, record.physicalRunId);
+    if (
+      !currentTerminal &&
+      !(allowRetainedNativeExitReceipt && retainedNativeExitReceiptTerminal(worktree, taskId, attempt, record))
+    )
+      return false;
+  }
+  return checkIds.every((id) => found.has(id));
+}
+
+/** Match a withdrawn-Web failure by its retained physical run when legacy custody omitted it from attempt.checks. */
+export function workerCheckHostWithdrawnLegacyTypingCheckMatchesAttempt(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  physicalRunId: string,
+  command: readonly string[],
+  exitCode: number,
+): boolean {
+  if (!isPhysicalRunId(physicalRunId) || !Number.isInteger(exitCode)) return false;
+  const results = join(worktree, '.temp', 'goal', 'checks', 'results');
+  let files: string[];
+  try {
+    files = readdirSync(results).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+  let matched = false;
+  for (const file of files) {
+    const record = readCheckEvidence(join(results, file));
+    if (!record) return false;
+    if (record.physicalRunId !== physicalRunId) continue;
+    if (matched || record.ownership?.taskId !== taskId || record.ownership.attempt !== attempt) return false;
+    matched = true;
+    if (
+      typeof record.id !== 'string' ||
+      !isCheckId(record.id) ||
+      file !== `${record.id}.json` ||
+      record.cwd !== worktree ||
+      JSON.stringify(record.argv) !== JSON.stringify(command) ||
+      record.status !== 'finished' ||
+      record.exitCode !== exitCode ||
+      !retainedNativeExitReceiptTerminal(worktree, taskId, attempt, record)
+    )
+      return false;
+  }
+  return matched;
+}
+
+function terminalCancelledPhysicalCheck(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  resultPath: string,
+  record: CheckEvidence,
+): boolean {
+  if (
+    record.status !== 'running' ||
+    typeof record.id !== 'string' ||
+    typeof record.physicalRunId !== 'string' ||
+    record.ownership?.taskId !== taskId ||
+    record.ownership.attempt !== attempt
+  )
+    return false;
+
+  const cancellation = readCheckEvidence(
+    join(worktree, '.temp', 'goal', 'checks', 'custody', 'cancelled', `${record.id}.json`),
+  );
+  const history = readCheckEvidence(
+    join(worktree, '.temp', 'goal', 'checks', 'custody', 'history', `${record.id}.${record.physicalRunId}.json`),
+  );
+  if (!cancellation || !history) return false;
+  if (
+    typeof cancellation.receiptReference !== 'string' ||
+    !isAbsolute(cancellation.receiptReference) ||
+    resolve(cancellation.receiptReference) !== cancellation.receiptReference ||
+    cancellation.receiptReference.length > 2048 ||
+    /[\0\r\n]/.test(cancellation.receiptReference) ||
+    typeof cancellation.receiptSha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(cancellation.receiptSha256)
+  )
+    return false;
+  const receiptLocation = cancellation.receiptReference;
+  const receiptRelative = relative(worktree, receiptLocation);
+  if (
+    receiptRelative === '' ||
+    (receiptRelative !== '..' && !receiptRelative.startsWith(`..${sep}`) && !isAbsolute(receiptRelative))
+  )
+    return false;
+
+  let receiptBytes: Buffer;
+  let result: Buffer;
+  try {
+    const receiptStats = lstatSync(receiptLocation);
+    const resultStats = lstatSync(resultPath);
+    if (
+      receiptStats.isSymbolicLink() ||
+      !receiptStats.isFile() ||
+      receiptStats.size > 256 * 1024 ||
+      resultStats.isSymbolicLink() ||
+      !resultStats.isFile()
+    )
+      return false;
+    receiptBytes = readFileSync(receiptLocation);
+    result = readFileSync(resultPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+  if (receiptBytes.length > 256 * 1024) return false;
+  if (createHash('sha256').update(receiptBytes).digest('hex') !== cancellation.receiptSha256) return false;
+  let authorizedRecords: unknown;
+  try {
+    authorizedRecords = (JSON.parse(receiptBytes.toString('utf8')) as { records?: unknown }).records;
+  } catch {
+    return false;
+  }
+  if (
+    !Array.isArray(authorizedRecords) ||
+    !authorizedRecords.some(
+      (item) =>
+        item !== null &&
+        typeof item === 'object' &&
+        !Array.isArray(item) &&
+        (item as Record<string, unknown>).id === record.id &&
+        ((item as Record<string, unknown>).task ?? (item as Record<string, unknown>).taskId) === taskId &&
+        ((item as Record<string, unknown>).attempt === undefined ||
+          (item as Record<string, unknown>).attempt === attempt) &&
+        JSON.stringify((item as Record<string, unknown>).argv) === JSON.stringify(record.argv),
+    )
+  )
+    return false;
+  const proof = history.terminalProof;
+  const physicalResultKnown =
+    (history.status === 'finished' && Number.isInteger(history.exitCode) && proof?.resultKnown === true) ||
+    (history.status === 'unknown' && history.exitCode === undefined && proof?.resultKnown === false);
+  return Boolean(
+    cancellation.version === 1 &&
+    cancellation.checkId === record.id &&
+    cancellation.physicalRunId === record.physicalRunId &&
+    cancellation.ownership?.taskId === taskId &&
+    cancellation.ownership.attempt === attempt &&
+    cancellation.disposition === 'logically-cancelled-physical-cleanup-unknown' &&
+    cancellation.recordSha256 === createHash('sha256').update(result).digest('hex') &&
+    history.version === 1 &&
+    history.id === record.id &&
+    history.cwd === worktree &&
+    history.physicalRunId === record.physicalRunId &&
+    JSON.stringify(history.argv) === JSON.stringify(record.argv) &&
+    history.ownership?.taskId === taskId &&
+    history.ownership.attempt === attempt &&
+    typeof history.remoteExpected === 'boolean' &&
+    proof?.local === true &&
+    proof.remote === (history.remoteExpected ? true : null) &&
+    physicalResultKnown,
+  );
+}
+
+/** Terminal custody for compiler recovery accepts a retained cancellation only with its exact physical proof. */
+export function workerCheckHostAttemptCheckCustody(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  checkIds: readonly string[],
+): 'terminal' | 'unknown' {
+  const root = join(worktree, '.temp', 'goal', 'checks');
+  const recordDirectory = join(root, 'results');
+  let files: string[];
+  try {
+    files = readdirSync(recordDirectory).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return checkIds.length === 0 ? 'terminal' : 'unknown';
+    throw error;
+  }
+  const found = new Set<string>();
+  for (const file of files) {
+    const resultPath = join(recordDirectory, file);
+    const record = readCheckEvidence(resultPath);
+    if (!record) return 'unknown';
+    if (record.ownership?.taskId !== taskId || record.ownership.attempt !== attempt) continue;
+    if (typeof record.id !== 'string' || typeof record.physicalRunId !== 'string') return 'unknown';
+    found.add(record.id);
+    const cancelled = existsSync(join(root, 'custody', 'cancelled', `${record.id}.json`));
+    if (
+      record.cwd !== worktree ||
+      file !== `${record.id}.json` ||
+      existsSync(join(root, 'cancellations', `${record.id}.json`)) ||
+      (cancelled
+        ? !terminalCancelledPhysicalCheck(worktree, taskId, attempt, resultPath, record)
+        : record.status !== 'finished' || !terminalPhysicalHistory(worktree, record.id, record.physicalRunId))
+    )
+      return 'unknown';
+  }
+  return checkIds.every((id) => found.has(id)) ? 'terminal' : 'unknown';
+}
+
+/** A direct Kernel receipt can be earlier than the last stamp when later recovery checks were abandoned. */
+export function workerCheckHostHasDirectKernelTypingRun(directory: string, worktree: string): boolean {
+  try {
+    return stampNames(directory).some((name) => {
+      const stamp = readWorkerCheckHostStamp(directory, name);
+      return [stamp.typingRequest?.command, stamp.typingInputs?.compilerCommand].some(
+        (command) => command !== undefined && isDirectKernelTypingCompiler(worktree, command),
+      );
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+/** Recovery stamps keep exact check identities even when their separate result records were never returned. */
+export function workerCheckHostTypingCheckIds(directory: string, checkIds: readonly string[]): string[] {
+  const ids = new Set(checkIds);
+  try {
+    for (const name of stampNames(directory)) {
+      const recovery = readWorkerCheckHostStamp(directory, name).typingRecovery;
+      if (recovery) ids.add(recovery.checkId);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  return [...ids];
+}
+
+export function workerCheckHostTypingReceiptMatches(directory: string, command: readonly string[]): boolean {
+  const source = stampNames(directory)
+    .map((name) => readWorkerCheckHostStamp(directory, name))
+    .findLast((stamp) => stamp.includedTypecheck || stamp.typingRequest);
+  return Boolean(
+    source?.typingRequest &&
+    JSON.stringify(source.typingRequest.command) === JSON.stringify(command) &&
+    source.typingInputs?.exitCode === 0 &&
+    source.exitCode === 0 &&
+    source.includedTypecheck === true,
+  );
+}
+
+/** A replacement is safe only when the consumed exact check is terminal and its remote command never began. */
+function provenPreCompilerRecoveryCancellation(grant: TypingRecoveryGrant, directory: string): boolean {
+  if (!grant.stamp || !STAMP_NAME.test(grant.stamp)) return false;
+  if (stampNames(directory).some((stamp) => Number(stamp) > Number(grant.stamp))) return false;
+  const stamp = readWorkerCheckHostStamp(directory, grant.stamp);
+  const recovery = stamp.typingRecovery;
+  if (
+    !recovery ||
+    recovery.token !== grant.token ||
+    recovery.checkId !== grant.checkId ||
+    recovery.physicalRunId !== grant.physicalRunId
+  )
+    return false;
+
+  const root = grant.worktree;
+  const recordDirectory = join(root, '.temp', 'goal', 'checks', 'results');
+  const record = readCheckEvidence(join(recordDirectory, `${grant.checkId}.json`));
+  if (
+    !record ||
+    record.id !== grant.checkId ||
+    record.cwd !== root ||
+    JSON.stringify(record.argv) !== JSON.stringify(grant.command) ||
+    record.status !== 'finished' ||
+    record.physicalRunId !== grant.physicalRunId ||
+    record.exitCode !== 143 ||
+    record.physicalRun?.exitCode !== 143 ||
+    record.physicalRun?.resources?.commandStartedMonoMs !== null ||
+    existsSync(join(root, '.temp', 'goal', 'checks', 'cancellations', `${grant.checkId}.json`)) ||
+    !terminalPhysicalHistory(root, grant.checkId, grant.physicalRunId, 143)
+  )
+    return false;
+
+  let files: string[];
+  try {
+    files = readdirSync(recordDirectory).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+  let currentFound = false;
+  for (const file of files) {
+    const candidate = readCheckEvidence(join(recordDirectory, file));
+    if (!candidate) return false;
+    if (candidate.ownership?.taskId !== grant.taskId || candidate.ownership?.attempt !== grant.attempt) continue;
+    if (candidate.id === grant.checkId && candidate.physicalRunId === grant.physicalRunId) {
+      currentFound = true;
+      continue;
+    }
+    if (
+      candidate.status !== 'finished' ||
+      typeof candidate.id !== 'string' ||
+      typeof candidate.physicalRunId !== 'string' ||
+      !terminalPhysicalHistory(root, candidate.id, candidate.physicalRunId)
+    )
+      return false;
+  }
+  return currentFound;
+}
+
+/** Called only after typing-recover authenticates the owner/operations manager under the current task lease. */
+export function grantWorkerTypingRecovery(
+  input: Omit<
+    TypingRecoveryGrant,
+    'version' | 'token' | 'identity' | 'checkId' | 'physicalRunId' | 'stamp' | 'replacementOf'
+  >,
+): TypingRecoveryGrant {
+  const directory = workerCheckBudgetDirectory(input.stateDirectory, input.taskId, input.attempt);
+  mkdirSync(directory, { recursive: true });
+  const lease = acquireDirectoryLeaseWaiting(join(directory, 'admission.lease'));
+  try {
+    const identity = recoveryIdentity(input.worktree, input.command);
+    const grants = join(directory, 'typing-recovery');
+    mkdirSync(grants, { recursive: true });
+    const matching: TypingRecoveryGrant[] = [];
+    const sameAttempt: TypingRecoveryGrant[] = [];
+    for (const file of readdirSync(grants)) {
+      if (!/^[0-9a-f-]{36}\.json$/.test(file)) continue;
+      const prior = JSON.parse(readFileSync(join(grants, file), 'utf8')) as TypingRecoveryGrant;
+      if (prior.version === 1 && prior.taskId === input.taskId && prior.attempt === input.attempt)
+        sameAttempt.push(prior);
+      if (
+        prior.version === 1 &&
+        prior.taskId === input.taskId &&
+        prior.attempt === input.attempt &&
+        prior.worktree === input.worktree &&
+        prior.identity === identity &&
+        JSON.stringify(prior.command) === JSON.stringify(input.command)
+      )
+        matching.push(prior);
+    }
+    if (input.recoveryKind === 'withdrawn-budget-stop') {
+      if (
+        sameAttempt.some(
+          (prior) =>
+            prior.recoveryKind !== 'withdrawn-budget-stop' ||
+            prior.identity !== identity ||
+            JSON.stringify(prior.command) !== JSON.stringify(input.command),
+        )
+      )
+        throw new Error('Withdrawn retry recovery already has a different compiler authority for this attempt');
+      const withdrawn = sameAttempt;
+      if (withdrawn.length > 0) {
+        const original = withdrawn.find((prior) => !prior.replacementOf);
+        if (!original || withdrawn.some((prior) => prior.replacementOf && prior.replacementOf !== original.token))
+          throw new Error('Withdrawn retry recovery has conflicting compiler grant history');
+        const replacement = withdrawn.find((prior) => prior.replacementOf === original.token);
+        if (replacement) return replacement;
+        if (withdrawn.length !== 1 || !provenPreCompilerRecoveryCancellation(original, directory)) return original;
+        const grant: TypingRecoveryGrant = {
+          ...input,
+          version: 1,
+          token: randomUUID(),
+          identity,
+          checkId: randomUUID(),
+          physicalRunId: randomUUID(),
+          replacementOf: original.token,
+        };
+        writeAtomicJson(recoveryPath(directory, grant.token), grant);
+        return grant;
+      }
+      const grant: TypingRecoveryGrant = {
+        ...input,
+        version: 1,
+        token: randomUUID(),
+        identity,
+        checkId: randomUUID(),
+        physicalRunId: randomUUID(),
+      };
+      writeAtomicJson(recoveryPath(directory, grant.token), grant);
+      return grant;
+    }
+    const original = matching.find((prior) => !prior.replacementOf);
+    if (matching.length > 0 && !original) return matching[0]!;
+    if (original) {
+      const replacement = matching.find((prior) => prior.replacementOf === original.token);
+      if (replacement) return replacement;
+      if (matching.length !== 1 || !provenPreCompilerRecoveryCancellation(original, directory)) return original;
+      const grant: TypingRecoveryGrant = {
+        ...input,
+        version: 1,
+        token: randomUUID(),
+        identity,
+        checkId: randomUUID(),
+        physicalRunId: randomUUID(),
+        replacementOf: original.token,
+      };
+      writeAtomicJson(recoveryPath(directory, grant.token), grant);
+      return grant;
+    }
+    const grant: TypingRecoveryGrant = {
+      ...input,
+      version: 1,
+      token: randomUUID(),
+      identity,
+      checkId: randomUUID(),
+      physicalRunId: randomUUID(),
+    };
+    writeAtomicJson(recoveryPath(directory, grant.token), grant);
+    return grant;
+  } finally {
+    lease.release();
+  }
+}
+
+function admitTypingRecovery(input: WorkerCheckHostAdmit, directory: string): WorkerCheckHostAdmitResult {
+  const grant = JSON.parse(readFileSync(recoveryPath(directory, input.recovery!.token), 'utf8')) as TypingRecoveryGrant;
+  const request = input.recovery!;
+  if (
+    grant.version !== 1 ||
+    grant.token !== request.token ||
+    grant.taskId !== request.taskId ||
+    String(grant.attempt) !== request.attempt ||
+    resolve(input.worktree ?? '') !== grant.worktree ||
+    directory !== workerCheckBudgetDirectory(grant.stateDirectory, grant.taskId, grant.attempt) ||
+    JSON.stringify(input.command) !== JSON.stringify(grant.command)
+  )
+    throw new Error('Typing recovery authority does not match task, attempt, source or exact compiler command');
+  const taskLease = acquireDirectoryLeaseWaiting(join(grant.stateDirectory, 'leases', grant.taskId));
+  try {
+    const db = new Database(grant.database, { readonly: true, strict: true });
+    try {
+      const taskRow = db.query('SELECT body FROM worker_tasks WHERE id=?').get(grant.taskId) as { body: string } | null;
+      const attemptRow = db
+        .query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?')
+        .get(grant.taskId, grant.attempt) as { body: string } | null;
+      const retryRow = db
+        .query('SELECT body FROM worker_retry_intents WHERE task_id=? AND attempt=?')
+        .get(grant.taskId, grant.attempt) as { body: string } | null;
+      const progressRow = db
+        .query(
+          "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='attempt-progress' ORDER BY sequence DESC LIMIT 1",
+        )
+        .get(grant.taskId, grant.attempt) as { body: string } | null;
+      const task = taskRow && (JSON.parse(taskRow.body) as Task | null);
+      const attempt = attemptRow && (JSON.parse(attemptRow.body) as Attempt | null);
+      const retry = retryRow && (JSON.parse(retryRow.body) as RetryIntent | null);
+      let progress: { endHead?: unknown; uncommitted?: unknown } | undefined;
+      try {
+        progress = progressRow ? (JSON.parse(progressRow.body) as typeof progress) : undefined;
+      } catch {
+        progress = undefined;
+      }
+      const retainedReport =
+        task && attempt
+          ? retainedWithdrawnBudgetOriginReport({
+              db,
+              grant,
+              task,
+              attempt,
+              ...(progress ? { progress: { endHead: progress.endHead } } : {}),
+              directory,
+            })
+          : undefined;
+      const eligibilityAttempt = retainedReport && attempt ? { ...attempt, result: retainedReport } : attempt;
+      const withdrawnRetry =
+        grant.recoveryKind === 'withdrawn-budget-stop' &&
+        task !== null &&
+        eligibilityAttempt !== null &&
+        JSON.stringify(grant.command) === JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) &&
+        workerCheckHostWithdrawnRetryIsRecoverable({
+          task,
+          attempt: eligibilityAttempt,
+          ...(retry ? { retry } : {}),
+          ...(progress ? { progress } : {}),
+          currentCheck: { id: grant.checkId, physicalRunId: grant.physicalRunId },
+        });
+      const ordinaryPending =
+        attempt?.state === 'exited' &&
+        (Boolean(attempt.typingEvidencePending) || isTypingEvidenceUnavailableResult(attempt.result));
+      if (
+        !task ||
+        task.currentAttempt !== grant.attempt ||
+        task.worktree !== grant.worktree ||
+        task.state !== 'stopped' ||
+        task.brief.kind === 'verification' ||
+        !attempt ||
+        (!ordinaryPending && !withdrawnRetry)
+      )
+        throw new Error('Typing recovery authority is stale or source is no longer pending compiler evidence');
+    } finally {
+      db.close();
+    }
+    if (recoveryIdentity(grant.worktree, grant.command) !== grant.identity)
+      throw new Error('Typing recovery compiler inputs changed; obtain fresh authenticated authority');
+    const lease = acquireDirectoryLeaseWaiting(join(directory, 'admission.lease'));
+    try {
+      const current = JSON.parse(readFileSync(recoveryPath(directory, grant.token), 'utf8')) as TypingRecoveryGrant;
+      const used = workerCheckHostRunsUsed(directory);
+      const prior = stampNames(directory).find(
+        (stamp) => readWorkerCheckHostStamp(directory, stamp).typingRecovery?.token === grant.token,
+      );
+      if (current.stamp || prior)
+        return {
+          ok: true,
+          used,
+          stamp: current.stamp ?? prior!,
+          recovery: { checkId: grant.checkId, physicalRunId: grant.physicalRunId, replayed: true },
+        };
+      const stamp = nextWorkerCheckHostStamp(directory);
+      writeStamp(
+        directory,
+        stamp,
+        {
+          content: workerCheckHostContentTree(grant.worktree),
+          typingRecovery: { token: grant.token, checkId: grant.checkId, physicalRunId: grant.physicalRunId },
+        },
+        'wx',
+      );
+      writeAtomicJson(recoveryPath(directory, grant.token), { ...grant, stamp });
+      return {
+        ok: true,
+        used: used + 1,
+        stamp,
+        recovery: { checkId: grant.checkId, physicalRunId: grant.physicalRunId, replayed: false },
+      };
+    } finally {
+      lease.release();
+    }
+  } finally {
+    taskLease.release();
+  }
+}
+
 export type WorkerCheckHostAdmit = {
   directory?: string | undefined;
   limit?: string | number | null | undefined;
   worktree?: string | undefined;
+  command?: readonly string[] | undefined;
+  recovery?: { token: string; taskId: string | undefined; attempt: string | undefined } | undefined;
 };
 
 export type WorkerCheckHostAdmitResult =
-  | { ok: true; used: number; stamp: string }
+  | { ok: true; used: number; stamp: string; recovery?: { checkId: string; physicalRunId: string; replayed: boolean } }
   | { ok: true; used: 0 }
   | { ok: false; used: number; message: string };
 
@@ -193,25 +1422,34 @@ function admitsFinalVerification(last: WorkerCheckHostStampRecord | undefined, w
  */
 export function admitWorkerCheckHostRun(input: WorkerCheckHostAdmit): WorkerCheckHostAdmitResult {
   const directory = input.directory?.trim();
-  if (!directory) return { ok: true, used: 0 };
+  if (!directory) {
+    if (input.recovery) throw new Error('Typing recovery requires its original controller budget');
+    return { ok: true, used: 0 };
+  }
+  if (input.recovery) return admitTypingRecovery(input, directory);
   const exempt = input.limit === 'off' || input.limit === null;
   mkdirSync(directory, { recursive: true });
-  for (;;) {
-    const used = workerCheckHostRunsUsed(directory);
-    const last = used > 0 ? lastStamp(directory) : undefined;
-    const final = !exempt && used >= WORKER_CHECK_HOST_RUN_LIMIT;
-    if (final && !admitsFinalVerification(last?.record, input.worktree)) return budgetRefused(last?.record, used);
-    const stamp = nextWorkerCheckHostStamp(directory);
-    const record: WorkerCheckHostStampRecord = {
-      ...(input.worktree ? { content: workerCheckHostContentTree(input.worktree) } : {}),
-      ...(final ? { final: true } : {}),
-    };
-    try {
-      writeStamp(directory, stamp, record, 'wx');
-      return { ok: true, used: used + 1, stamp };
-    } catch (error) {
-      if ((error as { code?: string }).code !== 'EEXIST') throw error;
+  const lease = acquireDirectoryLeaseWaiting(join(directory, 'admission.lease'));
+  try {
+    for (;;) {
+      const used = workerCheckHostRunsUsed(directory);
+      const last = used > 0 ? lastStamp(directory) : undefined;
+      const final = !exempt && used >= WORKER_CHECK_HOST_RUN_LIMIT;
+      if (final && !admitsFinalVerification(last?.record, input.worktree)) return budgetRefused(last?.record, used);
+      const stamp = nextWorkerCheckHostStamp(directory);
+      const record: WorkerCheckHostStampRecord = {
+        ...(input.worktree ? { content: workerCheckHostContentTree(input.worktree) } : {}),
+        ...(final ? { final: true } : {}),
+      };
+      try {
+        writeStamp(directory, stamp, record, 'wx');
+        return { ok: true, used: used + 1, stamp };
+      } catch (error) {
+        if ((error as { code?: string }).code !== 'EEXIST') throw error;
+      }
     }
+  } finally {
+    lease.release();
   }
 }
 
@@ -220,15 +1458,20 @@ export function refuseExcessWorkerCheckHostRun(
   env: NodeJS.ProcessEnv,
   placesOnCheckHost: boolean,
   worktree?: string,
-): void {
-  if (!placesOnCheckHost) return;
+  command?: readonly string[],
+): WorkerCheckHostAdmitResult | undefined {
+  const token = env[TYPING_RECOVERY_ENV];
+  if (!placesOnCheckHost && !token) return;
   const admitted = admitWorkerCheckHostRun({
     directory: env.GOAL_WORKER_CHECK_BUDGET_DIR,
     limit: env.GOAL_WORKER_CHECK_BUDGET,
     worktree,
+    command,
+    ...(token ? { recovery: { token, taskId: env.GOAL_TASK_ID, attempt: env.GOAL_ATTEMPT } } : {}),
   });
   if (!admitted.ok) throw new Error(admitted.message);
   if ('stamp' in admitted) env.GOAL_WORKER_CHECK_BUDGET_STAMP = admitted.stamp;
+  return admitted;
 }
 
 export function workerCheckHostCommandReached(receipt: WorkerCheckHostCommandReceipt | null | undefined): boolean {
@@ -238,7 +1481,38 @@ export function workerCheckHostCommandReached(receipt: WorkerCheckHostCommandRec
 export type WorkerCheckHostSettle = {
   log?: string;
   argv?: readonly string[];
+  worktree?: string;
+  physicalRunId?: string;
 };
+
+/** Called before handoff. It records the caller's generated inputs without changing admission or source custody. */
+export function recordWorkerCheckTypingInputs(
+  env: NodeJS.ProcessEnv,
+  worktree: string,
+  physicalRunId: string,
+  command: readonly string[],
+): void {
+  const directory = env.GOAL_WORKER_CHECK_BUDGET_DIR?.trim();
+  const stamp = env.GOAL_WORKER_CHECK_BUDGET_STAMP?.trim();
+  if (!directory || !stamp || !STAMP_NAME.test(stamp)) return;
+  const record = readWorkerCheckHostStamp(directory, stamp);
+  delete record.typingInputs;
+  delete record.typingInputsUnavailable;
+  const typingRequest = {
+    physicalRunId,
+    command: [...command],
+    localPrepared: [] as TypingInput[],
+    capture: 'physical-command' as const,
+  };
+  writeStamp(directory, stamp, { ...record, typingRequest });
+  writeStamp(directory, stamp, {
+    ...record,
+    typingRequest: {
+      ...typingRequest,
+      localPrepared: captureTypingInputs(worktree, ['bun', 'scripts/typecheck.ts']).prepared,
+    },
+  });
+}
 
 /**
  * Give this wrapper run's stamp back when it died with infrastructure exit 75 before the check command ran.
@@ -270,28 +1544,142 @@ export function settleWorkerCheckHostBudget(
     throw error;
   }
   const log = details.log ? boundedLog(details.log) : '';
+  let typingInputs: TypingInputReceipt | undefined;
+  let typingInputsUnavailable: string | undefined;
+  if (current.typingRequest) {
+    if (!details.worktree || details.physicalRunId !== current.typingRequest.physicalRunId) {
+      typingInputsUnavailable = 'Compiler input receipt has no matching physical run.';
+    } else {
+      try {
+        typingInputs = readTypingInputReceipt(details.worktree, details.physicalRunId, current.typingRequest.command);
+        if (!typingInputs) typingInputsUnavailable = 'Compiler input closure was not returned by the owning compiler.';
+      } catch (error) {
+        typingInputsUnavailable = String(error);
+      }
+    }
+  }
+  delete current.typingInputs;
+  delete current.typingInputsUnavailable;
   writeStamp(directory, stamp, {
     ...current,
     exitCode,
     includedTypecheck: checkCommandIncludesTypecheck(details.argv, log),
     typecheckFailed: workerCheckHostTypecheckFailed(log, details.argv),
     ...(details.log ? { log: details.log } : {}),
+    ...(typingInputs ? { typingInputs } : {}),
+    ...(typingInputsUnavailable ? { typingInputsUnavailable } : {}),
   });
 }
 
-export type WorkerCheckHostTypingSettlement = { ok: true } | { ok: false; result: string };
+export type WorkerCheckHostTypingSettlement =
+  | { ok: true }
+  | { ok: false; kind: 'typing-failure'; result: string; command?: string[] }
+  | { ok: false; kind: 'evidence-unavailable'; result: string; command?: string[] };
+
+/** A source retry may supersede pending compiler evidence only after the exact current failure and every check settle. */
+export function workerCheckHostTerminalTypingFailure(input: {
+  directory?: string;
+  worktree: string;
+  limit?: string | number | null;
+  taskId: string;
+  attempt: number;
+  checkIds: readonly string[];
+  pendingCommand?: readonly string[];
+}): Extract<WorkerCheckHostTypingSettlement, { ok: false; kind: 'typing-failure' }> | undefined {
+  const settled = workerCheckHostTypingSettlement(input);
+  if (
+    settled.ok ||
+    settled.kind !== 'typing-failure' ||
+    (input.pendingCommand !== undefined && JSON.stringify(input.pendingCommand) !== JSON.stringify(settled.command)) ||
+    workerCheckHostAttemptCheckCustody(input.worktree, input.taskId, input.attempt, input.checkIds) !== 'terminal'
+  )
+    return;
+  return settled;
+}
 
 const TYPING_SETTLEMENT_FAILED = 'Last check-host run failed its typecheck.';
 const TYPING_SETTLEMENT_CHANGED = 'Worktree content changed after the last check-host typecheck.';
+const TYPING_SETTLEMENT_UNAVAILABLE = 'Compiler input closure is unavailable for the last check-host typecheck.';
 
-/** A typing settlement is the attempt's own failure, never a shared environment fault. */
+export function workerCheckHostHasTypecheckRun(directory: string): boolean {
+  let names: string[];
+  try {
+    names = stampNames(directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+  return names.some((name) => {
+    const stamp = readWorkerCheckHostStamp(directory, name);
+    return stamp.includedTypecheck === true || stamp.typingRequest !== undefined;
+  });
+}
+
+/** Controller typing settlements do not establish a shared tool incident. */
 export function isTypingSettlementResult(result: string | null | undefined): boolean {
-  return Boolean(result?.startsWith(TYPING_SETTLEMENT_FAILED) || result?.startsWith(TYPING_SETTLEMENT_CHANGED));
+  return Boolean(result?.startsWith(TYPING_SETTLEMENT_FAILED) || isTypingEvidenceUnavailableResult(result));
+}
+
+/** Historical controller output has this exact prefix; provider/CLI failures never enter this recovery path. */
+export function isTypingEvidenceUnavailableResult(result: string | null | undefined): boolean {
+  return Boolean(result?.startsWith(TYPING_SETTLEMENT_UNAVAILABLE) || result?.startsWith(TYPING_SETTLEMENT_CHANGED));
+}
+
+/** Return the exact old failed stamp only when its retained Web inputs are proven different from current source. */
+export function workerCheckHostStaleTypingFailureSelection(input: {
+  directory: string;
+  worktree: string;
+  result: string;
+  stamp?: string;
+}): { stamp: string; command: string[]; physicalRunId: string; exitCode: number } | undefined {
+  let names: string[];
+  try {
+    names = stampNames(input.directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  const typechecks = names.filter((name) => {
+    const stamp = readWorkerCheckHostStamp(input.directory, name);
+    return stamp.includedTypecheck || stamp.typingRequest;
+  });
+  const selectedIndex = input.stamp === undefined ? -1 : typechecks.indexOf(input.stamp);
+  if (input.stamp !== undefined && selectedIndex < 0) return;
+  const candidates = input.stamp === undefined ? typechecks.slice().reverse() : [input.stamp];
+  for (const name of candidates) {
+    const source = readWorkerCheckHostStamp(input.directory, name);
+    const failed =
+      source.typecheckFailed === true || (source.typingInputs !== undefined && source.typingInputs.exitCode !== 0);
+    if (!failed) continue;
+    const evidence = typingStampEvidence(input.worktree, source);
+    const receipt = evidence.receipt;
+    if (!receipt || evidence.rejected || !source.typingRequest || !source.log) return;
+    if (typingFailureInputsMatch(input.worktree, receipt, source.typingRequest.localPrepared)) return;
+    const log = boundedLog(source.log);
+    if (log.startsWith('(check log unavailable')) return;
+    if (typingFailureResult(source, evidence.reason) !== input.result) return;
+    if (
+      input.stamp !== undefined &&
+      typechecks.slice(selectedIndex + 1).some((later) => {
+        const stamp = readWorkerCheckHostStamp(input.directory, later);
+        return (
+          stamp.typecheckFailed === true || (stamp.typingInputs !== undefined && stamp.typingInputs.exitCode !== 0)
+        );
+      })
+    )
+      return;
+    return {
+      stamp: name,
+      command: [...source.typingRequest.command],
+      physicalRunId: source.typingRequest.physicalRunId,
+      exitCode: receipt.exitCode,
+    };
+  }
 }
 
 /**
- * Product outcomes land when they type-check. A success report after a failed last host typecheck, or after the
- * worktree changed since that typecheck, is recorded as a typing failure so the attempt is retried instead of landing.
+ * A recorded compiler failure requires source repair. Missing or drifted compiler evidence retains the completed
+ * source pending typing-only proof, without authorizing landing or a source-writing retry.
  * Failing tests alone keep today's handling. Exempt briefs skip this guard.
  */
 export function workerCheckHostTypingSettlement(input: {
@@ -299,28 +1687,107 @@ export function workerCheckHostTypingSettlement(input: {
   worktree: string;
   limit?: string | number | null | undefined;
 }): WorkerCheckHostTypingSettlement {
-  const directory = input.directory?.trim();
-  if (!directory || input.limit === 'off' || input.limit === null) return { ok: true };
-  let names: string[];
   try {
-    names = stampNames(directory);
-  } catch {
-    return { ok: true };
+    const directory = input.directory?.trim();
+    if (!directory || input.limit === 'off' || input.limit === null) return { ok: true };
+    let names: string[];
+    try {
+      names = stampNames(directory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { ok: true };
+      throw error;
+    }
+    if (names.length === 0) return { ok: true };
+    const records = names.map((name) => readWorkerCheckHostStamp(directory, name));
+    const typechecks = records.filter((record) => record.includedTypecheck || record.typingRequest);
+    if (typechecks.length === 0) return { ok: true };
+    let unavailableReason: string | undefined;
+    const newestIndex = typechecks.length - 1;
+    const newest = typechecks[newestIndex]!;
+    for (let index = newestIndex; index >= 0; index -= 1) {
+      const source = typechecks[index]!;
+      const evidence = typingStampEvidence(input.worktree, source);
+      const receipt = evidence.receipt;
+      let sourceReason = evidence.reason;
+      const rejected = evidence.rejected;
+      const failed = source.typecheckFailed === true || (receipt !== undefined && receipt.exitCode !== 0);
+      const fullTreeMatches =
+        source.content !== undefined && workerCheckHostContentTree(input.worktree) === source.content;
+      const failureInputsMatch = receipt
+        ? typingFailureInputsMatch(input.worktree, receipt, source.typingRequest?.localPrepared)
+        : !source.typingRequest && fullTreeMatches;
+      if (failed && failureInputsMatch) {
+        return {
+          ok: false,
+          kind: 'typing-failure',
+          ...(source.typingRequest ? { command: source.typingRequest.command } : {}),
+          result: typingFailureResult(source, sourceReason),
+        };
+      }
+      if (failed) {
+        if (receipt)
+          sourceReason ??=
+            'Retained compiler input identity differs from current inputs; typing-only proof is required.';
+        else if (!receipt && source.typingRequest)
+          sourceReason ??= 'Compiler input closure was not returned by the owning compiler.';
+        else if (!fullTreeMatches)
+          sourceReason ??=
+            'Legacy evidence has no retained compiler-input closure; its original full content identity is required.';
+        unavailableReason ??= sourceReason;
+        continue;
+      }
+
+      const retainedKernelPass =
+        index !== newestIndex &&
+        receipt !== undefined &&
+        isDirectKernelTypingCompiler(input.worktree, receipt.compilerCommand);
+      if (index !== newestIndex && !retainedKernelPass) continue;
+
+      const qualification = receipt
+        ? qualifyTypingInputs(input.worktree, receipt, source.typingRequest?.localPrepared)
+        : undefined;
+
+      const legacyCompatible =
+        !rejected &&
+        !source.typingRequest?.capture &&
+        source.exitCode === 0 &&
+        fullTreeMatches &&
+        (!source.typingRequest ||
+          JSON.stringify(captureTypingInputs(input.worktree, ['bun', 'scripts/typecheck.ts']).prepared) ===
+            JSON.stringify(source.typingRequest.localPrepared));
+      const unavailable =
+        rejected ||
+        qualification === 'evidence-unavailable' ||
+        Boolean(source.typingRequest && !receipt && !legacyCompatible);
+      const changed = receipt ? qualification !== 'matched' : !fullTreeMatches;
+      if (!failed && (legacyCompatible || (!changed && !unavailable))) return { ok: true };
+
+      if (receipt) {
+        if (qualification !== 'matched')
+          sourceReason ??= `Retained compiler evidence does not match current inputs (${qualification}); typing-only proof is required.`;
+      } else if (source.typingRequest) {
+        sourceReason ??= 'Compiler input closure was not returned by the owning compiler.';
+      } else if (!fullTreeMatches) {
+        sourceReason ??=
+          'Legacy evidence has no retained compiler-input closure; its original full content identity is required.';
+      }
+      unavailableReason ??= sourceReason;
+    }
+
+    const reason = TYPING_SETTLEMENT_UNAVAILABLE;
+    return {
+      ok: false,
+      kind: 'evidence-unavailable',
+      ...(newest.typingRequest ? { command: newest.typingRequest.command } : {}),
+      result: `${reason} The completed source is retained pending only compiler evidence; no source-writing retry is required.\n${unavailableReason ?? newest.typingInputsUnavailable ?? ''}\n${newest.log ? boundedLog(newest.log) : '(check log unavailable)'}`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      kind: 'evidence-unavailable',
+      result: `${TYPING_SETTLEMENT_UNAVAILABLE} The completed source is retained pending only compiler evidence.\n${String(error)}`,
+    };
   }
-  if (names.length === 0) return { ok: true };
-  const records = names.map((name) => readWorkerCheckHostStamp(directory, name));
-  const last = records.at(-1);
-  const lastTypecheck = records.findLast((record) => record.includedTypecheck);
-  const failed = last?.includedTypecheck === true && last.typecheckFailed === true;
-  const changed =
-    lastTypecheck?.content !== undefined && workerCheckHostContentTree(input.worktree) !== lastTypecheck.content;
-  if (!failed && !changed) return { ok: true };
-  const source = failed ? last : lastTypecheck;
-  const reason = failed ? TYPING_SETTLEMENT_FAILED : TYPING_SETTLEMENT_CHANGED;
-  return {
-    ok: false,
-    result: `${reason} Settlement records a typing failure with that run's log, so this attempt is retried instead of landing.\n${source?.log ? boundedLog(source.log) : '(check log unavailable)'}`,
-  };
 }
 
 export function isMoneyPath(path: string): boolean {

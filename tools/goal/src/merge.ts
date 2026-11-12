@@ -1,8 +1,10 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { processIdentity } from '../../../scripts/check-custody.ts';
+import { readCompilerSettlement, compilerSettlementFailure } from '../../../scripts/compiler-settlement.ts';
 import { ownedTemporaryDirectory } from '../../../scripts/tmp-janitor.ts';
 import type { FirstFailure } from './contracts.ts';
 import {
@@ -93,7 +95,13 @@ export function gateEnvironment(parent: NodeJS.ProcessEnv = process.env, stateDi
   };
 }
 
-export type GateResult = { passed: boolean; output: string; timedOut: boolean };
+export type GateResult = {
+  passed: boolean;
+  output: string;
+  timedOut: boolean;
+  commandExitCode?: number | null;
+  wrapperExitCode?: number | null;
+};
 /** Cancellation belongs to one invocation, never to all commands in a controller process. */
 export type GateRunOptions = { signal?: AbortSignal };
 export type GateRunner = (
@@ -168,6 +176,8 @@ export function processGroupRunner(
   const run: GateRunner = async (argv, cwd, logPath, options) => {
     if (!argv.length) throw new Error('A gate command is required');
     const temporary = ownedTemporaryDirectory(join(cwd, '.temp'), 'gate-tmp-');
+    const compilerInvocation = randomUUID();
+    const compilerSettlementFile = join(temporary.path, 'compiler-settlement.json');
     return await new Promise<GateResult>((resolve, reject) => {
       let finishCleanup!: () => void;
       const cleanupComplete = new Promise<void>((done) => (finishCleanup = done));
@@ -178,12 +188,20 @@ export function processGroupRunner(
             ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent, policy))
             : parent),
           ...temporary.env,
+          ...(isRootTypecheck(argv)
+            ? {
+                REZICS_COMPILER_SETTLEMENT_FILE: compilerSettlementFile,
+                REZICS_COMPILER_SETTLEMENT_ID: compilerInvocation,
+              }
+            : {}),
         },
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       const pid = child.pid;
+      const localIdentity = pid === undefined ? null : processIdentity(pid);
       let output = '';
+      let compilerExitCode: number | undefined;
       let timedOut = false;
       let settled = false;
       let stopPromise: Promise<boolean> | undefined;
@@ -244,18 +262,36 @@ export function processGroupRunner(
         try {
           if (timer !== undefined) clearTimeout(timer);
           const groupStopped = await stopGroup();
-          if (groupStopped) temporary.close();
+          let remoteCompiler: ReturnType<typeof readCompilerSettlement>;
+          try {
+            remoteCompiler = isRootTypecheck(argv)
+              ? readCompilerSettlement(compilerSettlementFile, compilerInvocation)
+              : undefined;
+          } finally {
+            if (groupStopped) temporary.close();
+          }
+          if (remoteCompiler) {
+            compilerExitCode = remoteCompiler.settlement.native?.exitCode;
+            const failure = compilerSettlementFailure(remoteCompiler);
+            if (failure) output += `${failure}\n`;
+          }
           if (!groupStopped) output += `Command process group cleanup could not be proven for PID ${pid}\n`;
           if (
+            !remoteCompiler &&
             groupStopped &&
             pid !== undefined &&
             isRootTypecheck(argv) &&
             output.includes('Compiler database owner PID=')
           ) {
-            const owner = output.match(/^Compiler database owner PID=(\d+)\s*$/m);
+            const owner = output.match(
+              /^Compiler database owner PID=(\d+)(?: PPID=(\d+) PGID=(\d+) START=(\d+))?\s*$/m,
+            );
             if (!owner) {
               output += `Compiler database cleanup could not be proven for PID ${pid}: owner identity was malformed\n`;
-            } else if (Number(owner[1]) !== pid) {
+            } else if (
+              Number(owner[1]) !== pid ||
+              (owner[4] && (owner[4] !== localIdentity?.start || Number(owner[3]) !== localIdentity?.group))
+            ) {
               output += `Compiler database cleanup could not be proven for PID ${pid}: producer reported owner PID ${owner[1]}\n`;
             } else {
               const failure = compilerContainerCleanup(pid, policy);
@@ -288,18 +324,23 @@ export function processGroupRunner(
             resolve({
               passed:
                 code === 0 &&
+                (compilerExitCode === undefined || compilerExitCode === 0) &&
                 !timedOut &&
                 !/Compiler database cleanup (?:could not be proven|failed)|Command process group cleanup could not be proven/.test(
                   output,
                 ),
               output,
               timedOut,
+              commandExitCode: compilerExitCode ?? code,
+              wrapperExitCode: code,
             }),
           (error) =>
             resolve({
               passed: false,
               output: `${output}\nCommand cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
               timedOut,
+              commandExitCode: compilerExitCode ?? code,
+              wrapperExitCode: code,
             }),
         );
       });

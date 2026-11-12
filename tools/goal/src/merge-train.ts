@@ -5,6 +5,7 @@ import { TrainResolver, TrainResolverInfrastructureError, type TrainConflict } f
 import { policyOwnerConflictGit } from './owner-conflict.ts';
 import { groupMembers, processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager } from './priority-authority.ts';
+import { CONTINUATION_DIRECTORY } from './continuation.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -133,6 +134,7 @@ import {
   parseControlPlaneBatchManifest,
   parseControlPlaneBatchRefContinuation,
 } from './control-plane-batch.ts';
+import { planControlPlaneChecks, type ControlPlaneCheckPlan } from './control-plane-check-plan.ts';
 import { openTrainWorkspace, type TrainWorkspace, type TrainWorkspaceProfile } from './train-workspace.ts';
 
 export { captureTrainWorktreeRemoval } from './train-workspace.ts';
@@ -601,15 +603,30 @@ function localBranchSettings(mainCheckout: string): { stabilizeBranch?: string; 
 const CONTROL_PLANE_PATH = 'tools/goal/';
 // A train worktree lies outside the main checkout with nothing installed: the first control-plane landing on main
 // failed its typecheck with exit 127. The root tests' preloads need the root packages, tsc needs tools/goal's own.
-export function controlPlaneChecks(policy = defaultPolicy.controlPlane): readonly (readonly string[])[] {
-  return [
+export function controlPlaneChecks(
+  policy = defaultPolicy.controlPlane,
+  plan?: ControlPlaneCheckPlan,
+): readonly (readonly string[])[] {
+  const checks: string[][] = [
     ['bun', 'install', '--frozen-lockfile'],
     ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
     ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
-    // Under check-host load (60-75 on 2026-10-29) git-heavy tests took over bun's 5 s default and refused unrelated
-    // landings; 30 s per test keeps a real hang visible.
-    ['bun', 'test', '--timeout', String(policy.testTimeoutMs), 'tools/goal/src'],
   ];
+  if (!plan || plan.scope === 'all') {
+    // Preserve the public synthetic default; live releases pass their captured candidate plan below.
+    checks.push([
+      'bun',
+      'test',
+      '--timeout',
+      String(policy.testTimeoutMs),
+      'tools/goal/src',
+      ...(plan?.tests.filter((path) => !path.startsWith('tools/goal/src/')) ?? []),
+    ]);
+  } else if (plan.scope === 'affected' && plan.tests.length) {
+    checks.push(['bun', 'test', '--timeout', String(policy.testTimeoutMs), ...plan.tests]);
+  }
+  for (const entrypoint of plan?.entrypoints ?? []) checks.push(['bun', entrypoint, '--help']);
+  return checks;
 }
 /** Defaults for synthetic callers; the production train creates commands from its startup policy. */
 export const CONTROL_PLANE_CHECKS = controlPlaneChecks();
@@ -1386,11 +1403,24 @@ export function rebaseOnto(
   // Files the worker's own commits touched: a squash may change these outside the allowed paths, never a file only
   // the target's history changed, which a wrong upstream would replay or revert.
   const own = new Set(git(cwd, 'log', '--name-only', '--format=', `${base}..${head}`).split('\n').filter(Boolean));
+  const trackedContinuations = [...own].filter(
+    (path) => path === CONTINUATION_DIRECTORY || path.startsWith(`${CONTINUATION_DIRECTORY}/`),
+  );
   const originalSubjects = git(cwd, 'log', '--format=%s', '--reverse', `${upstream}..HEAD`).split('\n').filter(Boolean);
-  const initialConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files, policy, mergePolicy);
-  if (typeof initialConflict === 'boolean') return initialConflict;
+  if (trackedContinuations.length) {
+    // This train tree is disposable. Remove tracked continuation bytes before reparenting product changes so no
+    // commit that contains worker-local state enters the published candidate's ancestry.
+    git(cwd, 'rm', '-r', '-f', '--ignore-unmatch', '--', CONTINUATION_DIRECTORY);
+    appendFileSync(
+      logPath,
+      `Clean-source squash omitted tracked continuations from published history: ${trackedContinuations.join(', ')}\n`,
+    );
+  } else {
+    const initialConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files, policy, mergePolicy);
+    if (typeof initialConflict === 'boolean') return initialConflict;
+    git(cwd, 'rebase', '--abort');
+  }
 
-  git(cwd, 'rebase', '--abort');
   git(cwd, 'reset', '--soft', upstream);
   const message = [
     'Squash worker branch changes',
@@ -2486,15 +2516,6 @@ export class MergeTrain {
               const context = makeRebaseConflictContext(previous, request.workerCommit ?? tip, conflicts);
               if (context) result.rebaseConflict = context;
             }
-            if (error instanceof WorkerConflictError && previous !== base) {
-              appendFileSync(
-                logPath,
-                `Deferred until a later batch round; conflict with an earlier member: ${error.path}\n`,
-              );
-              deferred.add(entry.id);
-              resetTo(trainTree, previous);
-              continue;
-            }
             if (error instanceof WorkerConflictError) {
               if (o.trainResolver) {
                 result.firstFailure = firstFailure(error.message, this.options.policy?.merge);
@@ -2507,7 +2528,7 @@ export class MergeTrain {
                   resolution,
                 };
               }
-              if (error.detail) refuseRebaseConflict(result, error.path, error.message, logPath);
+              if (error.detail || previous !== base) refuseRebaseConflict(result, error.path, error.message, logPath);
               else acceptAlreadyPresent(result, previous, [error.path], logPath);
               result.conflictResolution = {
                 method: 'worker',
@@ -3197,6 +3218,27 @@ export class MergeTrain {
   }
 
   /** Main may borrow idle dev custody, but product work always gets the next turn. */
+  private controlPlaneSourceFork(request: LandingRequest, sourceTip: string): string | undefined {
+    const o = this.options;
+    const mainBranch = o.mainBranch ?? 'main';
+    const published = this.readControlPlaneRecord(request);
+    const exactPublishedSource =
+      published?.mainBranch === mainBranch &&
+      published.source?.branch === request.branch &&
+      published.source?.commit === sourceTip;
+    // Recovery must retain the original fork even after the source is already represented on main.
+    const fork = this.git(
+      o.mainCheckout,
+      'merge-base',
+      sourceTip,
+      exactPublishedSource ? published.mainExpected : `refs/heads/${mainBranch}`,
+    );
+    const changes = changedPathsBetween(o.mainCheckout, fork, sourceTip, o.policy?.merge);
+    return exactPublishedSource || (changes.length > 0 && changes.every((path) => path.startsWith(CONTROL_PLANE_PATH)))
+      ? fork
+      : undefined;
+  }
+
   private async integrateOrdinary(
     entry: LandingEntry,
     lane: 'main' | 'dev',
@@ -3210,6 +3252,10 @@ export class MergeTrain {
       !controlPlaneReleaseBrief(taskIntegrationTarget(o.stateDirectory, entry.request.taskId, o.policy?.storage))
     )
       return this.integrate(entry);
+    const source = this.git(o.mainCheckout, 'rev-parse', `${entry.request.branch}^{commit}`);
+    // A release brief may retain an authorized product repair. Its actual source follows the normal dev route,
+    // including resolver handoffs, rather than entering custody that only permits a control-plane main release.
+    if (this.controlPlaneSourceFork(entry.request, source) === undefined) return this.integrate(entry);
 
     const devPending = () => o.queue.nextBatch(1, [], 'dev').length > 0;
     const policy = o.policy ?? defaultPolicy;
@@ -3251,25 +3297,35 @@ export class MergeTrain {
         continue;
       }
       let yielded = false;
+      let devLeaseReleased = false;
+      const releaseDevLease = () => {
+        if (devLeaseReleased) return;
+        devLeaseReleased = true;
+        lease.release();
+      };
       try {
         o.fence.assertCurrent(entry.request);
         if (o.codeIsCurrent && !o.codeIsCurrent()) return;
-        return await this.runOrdinaryProof(entry, devPending, () => {
-          yielded = true;
-        });
+        return await this.runOrdinaryProof(
+          entry,
+          () => {
+            yielded = true;
+          },
+          releaseDevLease,
+        );
       } finally {
-        lease.release();
-        // Cancellation has settled every owned command before this point. Drain actual product requests even when
-        // the original idle dev drain has already returned, and even if no other controller was spawned on enqueue.
-        if (yielded) await drainDev();
+        releaseDevLease();
+        // The initial idle dev drain may have returned before a request arrived. Once proof commands settle, give
+        // queued product work its normal native-lane turn even when queue arrival did not interrupt the proof.
+        if (yielded || devPending()) await drainDev();
       }
     }
   }
 
   private async runOrdinaryProof(
     entry: LandingEntry,
-    devPending: () => boolean,
     onYield: () => void,
+    releaseDevLease: () => void,
   ): Promise<GateOutcome | DevLandingTranspileHandoff | undefined> {
     const o = this.options;
     const path = join(o.stateDirectory, `control-plane-proof-${entry.id}.json`);
@@ -3318,17 +3374,17 @@ export class MergeTrain {
     const attempt: OrdinaryProofAttempt = { source, snapshot, logPath, status: 'running' };
     history.attempts.push(attempt);
     save();
+    // The dev lane protects the captured refs only. Main proof has its own lane and must not hold
+    // product landing custody for the duration of a slow native command.
+    releaseDevLease();
     const controller = new AbortController();
     let failure: (GateResult & { failedCommand: readonly string[] }) | undefined;
     const observe = () => {
       if (controller.signal.aborted) return;
-      if (devPending()) controller.abort(new ControlPlaneProofInterrupted('Product dev request needs the dev lane'));
-      else {
-        try {
-          o.fence.assertCurrent(entry.request);
-        } catch (error) {
-          controller.abort(error);
-        }
+      try {
+        o.fence.assertCurrent(entry.request);
+      } catch (error) {
+        controller.abort(error);
       }
     };
     const checkpoint = () => {
@@ -3365,7 +3421,9 @@ export class MergeTrain {
       run: (runner) => async (argv, cwd, log) => {
         checkpoint();
         const result = await runner(argv, cwd, log, { signal: controller.signal });
-        if (!result.passed) failure ??= { ...result, failedCommand: [...argv] };
+        // Preserve an assertion that completed before cancellation. A runner terminated by the
+        // controller's signal is only cancellation evidence and is not retained as a proof failure.
+        if (!result.passed && !controller.signal.aborted) failure ??= { ...result, failedCommand: [...argv] };
         checkpoint();
         return result;
       },
@@ -3806,6 +3864,7 @@ export class MergeTrain {
     };
     let workerCommit: string | undefined;
     let activeTargetHead: string | undefined;
+    let sourceTip = '';
     const runOwnedAffected = (command: readonly string[], cwd: string, log: string, env: NodeJS.ProcessEnv) =>
       runAffectedTest(command, cwd, log, env, custody ? { signal: custody.signal } : undefined, o.policy);
     const runGate = custody
@@ -3851,15 +3910,23 @@ export class MergeTrain {
         throw new Error('Control-plane release refs kept moving during five validation attempts');
     };
     const recoverAlreadyIntegrated = async (): Promise<boolean> => {
-      if (!entry.candidate) return false;
+      const release = controlPlane ? this.readControlPlaneRecord(request) : undefined;
+      const candidate = entry.candidate ?? release?.mainCommit;
+      if (!candidate) return false;
       try {
-        this.git(o.mainCheckout, 'merge-base', '--is-ancestor', entry.candidate, targetBranch);
+        this.git(o.mainCheckout, 'merge-base', '--is-ancestor', candidate, targetBranch);
       } catch {
         return false;
       }
       if (controlPlane) {
-        const release = this.readControlPlaneRecord(request);
-        if (!release || release.mainCommit !== entry.candidate || !this.controlPlaneRecordPublished(release)) {
+        if (
+          !release ||
+          release.mainCommit !== candidate ||
+          release.mainBranch !== mainBranch ||
+          release.source?.branch !== request.branch ||
+          release.source?.commit !== sourceTip ||
+          !this.controlPlaneRecordPublished(release)
+        ) {
           result.stage = 'merge';
           result.firstFailure = firstFailure(
             `Control-plane candidate ${entry.candidate} is on ${mainBranch} without complete verified propagation; refusing to report the landing complete`,
@@ -3876,18 +3943,17 @@ export class MergeTrain {
         );
         result.passed = true;
         result.stage = 'merge';
-        result.mergedCommit = entry.candidate;
+        result.mergedCommit = release.mainCommit;
         return true;
       }
       result.passed = true;
       result.stage = 'merge';
-      result.mergedCommit = entry.candidate;
+      result.mergedCommit = candidate;
       if (workspace) workspace.integrated(recorded.workspace!.module, target());
-      if (controlPlane)
-        await this.propagateControlPlaneCommit(entry.candidate, request.taskId, recorded.manager, logPath);
+      if (controlPlane) await this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
       else if (stabilize) {
-        candidateWorkspace = this.trainWorkspace(trainTree, entry.candidate, trainCandidateCleanup);
-        await this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
+        candidateWorkspace = this.trainWorkspace(trainTree, candidate, trainCandidateCleanup);
+        await this.mergeStabilizedCommitIntoDev(candidate, trainTree, request.taskId, recorded.manager, logPath);
       }
       return true;
     };
@@ -3899,7 +3965,7 @@ export class MergeTrain {
       }
       if (this.git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
         throw new Error('The main checkout must already have main checked out');
-      let sourceTip = this.git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+      sourceTip = this.git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
       let tip = request.devResolution?.commit ?? sourceTip;
       workerCommit = request.workerCommit ?? sourceTip;
       if (workspace && sharedStore) {
@@ -3938,10 +4004,8 @@ export class MergeTrain {
       // diff. Only the commits after the main fork are considered for the main landing.
       let controlPlaneFork: string | undefined;
       if (!workspace && controlPlaneReleaseBrief(recorded) && o.integrationBranch !== undefined) {
-        const fork = this.git(o.mainCheckout, 'merge-base', sourceTip, `refs/heads/${mainBranch}`);
-        const taskChanges = changedPathsBetween(o.mainCheckout, fork, sourceTip, this.options.policy?.merge);
-        controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
-        if (controlPlane) controlPlaneFork = fork;
+        controlPlaneFork = this.controlPlaneSourceFork(request, sourceTip);
+        controlPlane = controlPlaneFork !== undefined;
       }
       if (controlPlane) {
         integrationTarget = 'main';
@@ -4001,10 +4065,8 @@ export class MergeTrain {
             request.workerCommit = prepared.tip;
           }
           if (prepared.committed && controlPlaneReleaseBrief(recorded) && o.integrationBranch !== undefined) {
-            const fork = this.git(o.mainCheckout, 'merge-base', sourceTip, `refs/heads/${mainBranch}`);
-            const taskChanges = changedPathsBetween(o.mainCheckout, fork, sourceTip, this.options.policy?.merge);
-            controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
-            controlPlaneFork = controlPlane ? fork : undefined;
+            controlPlaneFork = this.controlPlaneSourceFork(request, sourceTip);
+            controlPlane = controlPlaneFork !== undefined;
             if (controlPlane) {
               integrationTarget = 'main';
               targetBranch = mainBranch;
@@ -5048,7 +5110,8 @@ export class MergeTrain {
         }
         result.passed = true;
         result.stage = 'merge';
-        result.mergedCommit = candidate;
+        // Surface the durable release identity recorded for this publication.
+        result.mergedCommit = preparedControlPlaneRelease?.record.mainCommit ?? candidate;
         this.notifyOwnersOfOutsideChanges(
           request,
           [
@@ -5561,6 +5624,8 @@ export class MergeTrain {
 
   /** Combined main cohorts need separate exact-source owner authority for every additional file. */
   private checkControlPlaneScope(files: readonly string[], request: LandingRequest, logPath: string): void {
+    const outside = outsideScope(files, request.declaredPaths);
+    if (outside.length) throw new Error(`Changed files require an exact native scope approval: ${outside.join(', ')}`);
     this.checkScope(files, request, logPath);
   }
 
@@ -6128,7 +6193,7 @@ export class MergeTrain {
                     base: task.base,
                     frozen: frozenFilesForTask(o.stateDirectory, task.id),
                   })) ||
-              (!previous.identities && !isDeepStrictEqual(JSON.parse(historicalIdentity).brief, task.brief))
+              (!previous.identities && JSON.parse(historicalIdentity).brief.markdown !== task.brief.markdown)
             )
               throw new Error('Deferred request/contract generation changed');
             if (!previous.identities)
@@ -6350,7 +6415,7 @@ export class MergeTrain {
                   base: task.base,
                   frozen: frozenFilesForTask(o.stateDirectory, task.id),
                 })) ||
-            (!receipt.previous.identities && !isDeepStrictEqual(JSON.parse(identity).brief, task.brief))
+            (!receipt.previous.identities && JSON.parse(identity).brief.markdown !== task.brief.markdown)
           )
             throw new Error('Deferred current request/contract identity changed before migration');
           if (!receipt.previous.identities)
@@ -7282,27 +7347,35 @@ export class MergeTrain {
             const frozen = node.indices.flatMap((index) =>
               frozenFilesForTask(o.stateDirectory, manifest.members[index]!.taskId),
             );
+            const preFormatChanged = changedPathsBetween(
+              tree,
+              snapshot.mainHead,
+              this.git(tree, 'rev-parse', 'HEAD'),
+              this.options.policy?.merge,
+            );
+            this.formatControlPlaneCandidate(tree, preFormatChanged, node.logPath);
             const changed = changedPathsBetween(
               tree,
               snapshot.mainHead,
               this.git(tree, 'rev-parse', 'HEAD'),
               this.options.policy?.merge,
             );
-            this.formatControlPlaneCandidate(tree, changed, node.logPath);
-            const allowed = preparedMembers.flatMap((member) => [
+            const approvedPaths = new Map<string, string[]>();
+            for (const member of preparedMembers) {
+              const source = manifest.members.find((candidate) => candidate.taskId === member.request.taskId)!;
+              const approval = controlPlaneScopeApproval(source, scopeRuntime) ?? null;
+              if (!isDeepStrictEqual(journal.scopeApprovals![member.request.taskId], approval))
+                throw new Error(`Batch member native scope approval changed for ${member.request.taskId}`);
+              approvedPaths.set(
+                member.request.taskId,
+                approval?.additionalPaths.map((addition) => addition.path) ?? [],
+              );
+            }
+            const declared = preparedMembers.flatMap((member) => [
               ...member.request.declaredPaths,
-              ...(journal.scopeApprovals![member.request.taskId]?.additionalPaths.map((addition) => addition.path) ??
-                []),
+              ...(approvedPaths.get(member.request.taskId) ?? []),
             ]);
-            const outside = outsideScope(
-              changedPathsBetween(
-                tree,
-                snapshot.mainHead,
-                this.git(tree, 'rev-parse', 'HEAD'),
-                this.options.policy?.merge,
-              ),
-              allowed,
-            );
+            const outside = changed.filter((path) => outsideScope([path], declared).length > 0);
             if (outside.length) throw new Error(`Combined candidate changed unapproved files: ${outside.join(', ')}`);
             const frozenChanges = changedFrozenFiles(tree, frozen);
             if (frozenChanges.length)
@@ -7548,11 +7621,21 @@ export class MergeTrain {
       record?.(candidate, result);
       return { ...result, ...(moved() ? { moved: true } : {}) };
     };
+    const capturePlan = (): ControlPlaneCheckPlan => {
+      const plan = planControlPlaneChecks(tree, snapshot.mainHead, candidate);
+      appendFileSync(
+        logPath,
+        `\nControl-plane check plan base=${plan.base} candidate=${plan.candidate} scope=${plan.scope}; ` +
+          `${plan.tests.length} Goal test file(s)\n` +
+          plan.reasons.map((reason) => `Check plan reason: ${reason}\n`).join(''),
+      );
+      return plan;
+    };
     appendFileSync(logPath, `\nControl-plane checks on ${candidate}, main ${snapshot.mainHead}\n`);
     const installs = await runIntegrationChecks(checks.slice(0, 2), tree, logPath, run);
     integrity(tree, candidate, 'control-plane dependency installs');
     if (!installs.passed) return finish(installs);
-    // Operator-bounded file probes inherited from the failed parent's actual full-suite output.
+    // Operator-bounded file probes inherited from the failed parent's actual selected-test output.
     // A green or inconclusive probe always falls through to every mandatory full-head check.
     for (const command of negativeProbes.slice(0, (o.policy ?? defaultPolicy).controlPlane.negativeProbeCommands)) {
       const files = command.slice(4);
@@ -7574,22 +7657,45 @@ export class MergeTrain {
       integrity(tree, candidate, 'negative-only bisection probe');
       if (!probe.passed && !probe.timedOut) return finish({ ...probe, negativeOnly: true });
     }
+    let plan = capturePlan();
     let validation: Awaited<ReturnType<typeof runIntegrationChecks>>;
     if (repairTyping) {
-      let typing = await runIntegrationChecks(checks.slice(2, 3), tree, logPath, run);
+      let typing = await runIntegrationChecks([checks[2]!], tree, logPath, run);
       integrity(tree, candidate, 'control-plane typecheck');
       if (installs.passed && !typing.passed && !typing.timedOut && !moved()) {
         const repaired = await repairTyping(typing.output);
         if (repaired) {
           candidate = repaired;
-          typing = await runIntegrationChecks(checks.slice(2, 3), tree, logPath, run);
+          typing = await runIntegrationChecks([checks[2]!], tree, logPath, run);
           integrity(tree, candidate, 'control-plane repaired typecheck');
+          plan = capturePlan();
         }
       }
-      validation =
-        typing.passed && installs.passed ? await runIntegrationChecks(checks.slice(3), tree, logPath, run) : typing;
-    } else validation = await runIntegrationChecks(checks.slice(2), tree, logPath, run);
-    integrity(tree, candidate, 'control-plane typecheck and test suite');
+      if (typing.passed && installs.passed) {
+        const selectedTests = await runIntegrationChecks(
+          controlPlaneChecks(o.policy?.controlPlane, plan).slice(3),
+          tree,
+          logPath,
+          run,
+        );
+        validation = {
+          passed: typing.passed && selectedTests.passed,
+          output: typing.output + selectedTests.output,
+          timedOut: typing.timedOut || selectedTests.timedOut,
+          ...((typing.failedCommand ?? selectedTests.failedCommand)
+            ? { failedCommand: typing.failedCommand ?? selectedTests.failedCommand }
+            : {}),
+        };
+      } else validation = typing;
+    } else {
+      validation = await runIntegrationChecks(
+        [checks[2]!, ...controlPlaneChecks(o.policy?.controlPlane, plan).slice(3)],
+        tree,
+        logPath,
+        run,
+      );
+    }
+    integrity(tree, candidate, 'control-plane typecheck and impact-selected tests');
     const checked = {
       passed: installs.passed && validation.passed,
       output: installs.output + validation.output,
@@ -7615,6 +7721,21 @@ export class MergeTrain {
       if (!compatibility.passed || moved()) return finish(compatibility);
     } finally {
       compatibilityWorkspace.release();
+    }
+    if (plan.lifecycle === 'unchanged') {
+      // This describes the coverage actually obtained above; it is not a native lifecycle success or a cache hit.
+      const lifecycleEvidence =
+        `release boundary evidence: candidate=${candidate} dev-script-tree=${snapshot.devHead} ` +
+        `base=${snapshot.mainHead} coverage=impact-selected full-lifecycle=deferred`;
+      appendFileSync(logPath, `${lifecycleEvidence}\n`);
+      integrity(tree, candidate, 'bounded launch boundary coverage');
+      return finish({
+        passed: true,
+        timedOut: false,
+        output: lifecycleEvidence,
+        lifecycleEvidence,
+        compatibilityCommand,
+      });
     }
     appendFileSync(logPath, '\nComplete real-boundary lifecycle suite on control-plane candidate\n');
     const smokeCommand = ['bun', 'tools/goal/scripts/launch-smoke.ts', '--expected-dev-script-tree', snapshot.devHead];
@@ -7745,8 +7866,13 @@ export class MergeTrain {
       return false;
     if (record.stabilizeCommit && !this.commitIsAncestor(record.stabilizeCommit, record.stabilizeBranch)) return false;
     if (!record.stabilizeCommit && this.refHead(record.stabilizeBranch) !== undefined) return false;
-    return record.lifecycleEvidence.includes(
-      `release evidence: candidate=${record.mainCommit} dev-script-tree=${record.devScriptTree}`,
+    return (
+      record.lifecycleEvidence.startsWith(
+        `release evidence: candidate=${record.mainCommit} dev-script-tree=${record.devScriptTree} `,
+      ) ||
+      record.lifecycleEvidence ===
+        `release boundary evidence: candidate=${record.mainCommit} dev-script-tree=${record.devScriptTree} ` +
+          `base=${record.mainExpected} coverage=impact-selected full-lifecycle=deferred`
     );
   }
 

@@ -228,7 +228,7 @@ test('a worker render over its budgets launches with layer sizes, budgets and ov
   expect(rendered.manifest.overBudget).toEqual(['role', 'conditions', 'brief', 'total']);
 });
 
-test('manager role templates keep their budget and oversized manager renders launch with measurements', () => {
+test('manager and worker roles apply operating discipline within their prompt budgets', () => {
   const input = {
     spec: { id: 'manager', goal: 'fixture', brief: 'Manage the fixture.', cwd: '/missing', engine: 'codex' as const },
     backlogPath: '/backlog',
@@ -236,6 +236,13 @@ test('manager role templates keep their budget and oversized manager renders lau
   };
   const standard = renderManagerOpening(input);
   expect(standard.roleBytes).toBeLessThanOrEqual(defaultPolicy.prompt.managerRoleBytes);
+  const workerPrompt = renderWorkerPrompt({ task: worker(contract()), mainCheckout: MAIN }).prompt;
+  expect(standard.prompt).toMatch(
+    /one concrete user outcome[\s\S]*worker-owned write boundary[\s\S]*smallest\s+required check[\s\S]*efficiency.md#operating-discipline[\s\S]*choose repair\s+order[\s\S]*next independent\s+writable slice ready/,
+  );
+  expect(workerPrompt).toMatch(
+    /source-writing attempts[\s\S]*efficiency.md#operating-discipline[\s\S]*Checkpoint coherent source[\s\S]*next evidenced fix within your owned paths[\s\S]*park that part and hand off any remainder once/,
+  );
   const rendered = renderManagerOpening({
     ...input,
     policy: {
@@ -246,6 +253,31 @@ test('manager role templates keep their budget and oversized manager renders lau
   expect(rendered.manifest.layers).toEqual({ role: rendered.roleBytes, opening: rendered.openingBytes });
   expect(rendered.manifest.budgets).toEqual({ role: 1, opening: 1 });
   expect(rendered.manifest.overBudget).toEqual(['role', 'opening']);
+});
+
+test('the native check budget defers ordinary tests even without the local minimal-mode file', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'prompt-check-admission-'));
+  const worktree = resolve(import.meta.dir, '../../..');
+  try {
+    const ordinary = renderWorkerPrompt({
+      task: worker(contract(), { worktree }),
+      mainCheckout: MAIN,
+      stateDirectory: directory,
+    });
+    expect(Object.keys(ordinary.manifest.conditions)).toContain('minimal-verification');
+    expect(ordinary.prompt).toContain('Tests run after landing in the dev verifier.');
+    expect(ordinary.prompt).not.toContain('After your last edit, run the test files you created or changed');
+
+    const exempt = renderWorkerPrompt({
+      task: worker(contract({ urgent: true }), { worktree }),
+      mainCheckout: MAIN,
+      stateDirectory: directory,
+    });
+    expect(Object.keys(exempt.manifest.conditions)).toContain('wrapper');
+    expect(exempt.prompt).not.toContain('Tests run after landing in the dev verifier.');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('a minimal-verification launch of a brief that requires browser checks records deferredAcceptance and names that item', () => {
@@ -314,6 +346,91 @@ test('a control-plane worker runs its declared acceptance command even under min
     );
     expect(rendered.prompt).not.toContain('they run after landing in the dev verifier');
     expect(rendered.deferredAcceptance).toEqual([]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('minimal dev infrastructure failures remain unverified source success while main and proof paths stay strict', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'prompt-infrastructure-outcome-'));
+  const repositoryRoot = resolve(import.meta.dir, '../../..');
+  writeFileSync(join(directory, 'verification-mode'), 'minimal\n');
+  try {
+    const minimalDev = renderWorkerPrompt({
+      task: worker(contract(), { worktree: repositoryRoot }),
+      mainCheckout: MAIN,
+      stateDirectory: directory,
+    });
+    expect(minimalDev.prompt).toContain('only missing passes are shared transport or infrastructure failures');
+    expect(minimalDev.prompt).toContain('source success is allowed only when every remaining check failure');
+    expect(minimalDev.prompt).toContain('each failed check and its exact error');
+    expect(minimalDev.prompt).toContain('each skipped or unreached check as unverified');
+    expect(minimalDev.prompt).toContain('never label any of them passed');
+    expect(minimalDev.prompt).toContain('Do not retry source solely for infrastructure.');
+    expect(minimalDev.prompt).toContain('Type, test and product failures remain non-success');
+    expect(minimalDev.prompt).toContain('the dev verifier completes deferred checks after merge');
+    expect(minimalDev.prompt).not.toContain('is final: a `tool` blocker');
+
+    const wrappedDev = renderWorkerPrompt({
+      task: worker(contract(), { worktree: repositoryRoot }),
+      mainCheckout: MAIN,
+    });
+    expect(wrappedDev.prompt).toContain('A wrapper-classified shared infrastructure-only failure uses the dev product');
+    expect(wrappedDev.prompt).not.toContain('is final: a `tool` blocker');
+
+    const mainRelease = renderWorkerPrompt({
+      task: worker(contract({ goal: 'control-plane', target: 'main' }), { worktree: repositoryRoot }),
+      mainCheckout: MAIN,
+      stateDirectory: directory,
+    });
+    expect(mainRelease.prompt).toContain('is final: a `tool` blocker');
+    expect(mainRelease.prompt).not.toContain('dev product source-success rule above');
+
+    const localMainRelease = renderWorkerPrompt({
+      task: worker(
+        contract({
+          goal: 'control-plane',
+          target: 'main',
+          acceptance: { command: ['bun', 'test'], tests: ['x'], failing: true, placement: 'local' },
+        }),
+        { worktree: repositoryRoot },
+      ),
+      mainCheckout: MAIN,
+    });
+    expect(localMainRelease.prompt).not.toMatch(/\{\{task\./);
+    expect(localMainRelease.prompt).toContain('is final: a `tool` blocker');
+
+    const proofRun: ProofReservation = {
+      status: 'bound',
+      binding: {
+        version: 1,
+        reservationToken: 'token',
+        checkId: '11111111-1111-4111-8111-111111111111',
+        goal: 'web',
+        taskId: 'task',
+        attempt: 1,
+        sourceCommit: SOURCE,
+        sourceTree: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        argv: ['bun', 'test'],
+        cwd: repositoryRoot,
+      },
+    };
+    const proof = renderWorkerPrompt({
+      task: worker(
+        contract({
+          kind: 'verification',
+          paths: [],
+          proof: { journey: 'Original', sourceTasks: ['original'], sourceCommit: SOURCE },
+        }),
+        { worktree: repositoryRoot, proofRun, currentAttempt: 1 },
+      ),
+      mainCheckout: MAIN,
+      proofRun,
+    });
+    expect(proof.prompt).toContain('Missing, unknown, timed out or nonzero wrapper results stay non-green.');
+    expect(proof.prompt).not.toContain('dev product source-success rule above');
+    for (const rendered of [minimalDev, wrappedDev, mainRelease, localMainRelease, proof])
+      expect(rendered.manifest.overBudget).toEqual([]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

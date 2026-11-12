@@ -3,7 +3,13 @@ import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
-import { WORKER_CPU_WEIGHT, WORKER_IO_WEIGHT, WORKER_SCOPE_MEMORY_MAX, WORKER_SLICE, WorkerSlice } from './worker-slice.ts';
+import {
+  WORKER_CPU_WEIGHT,
+  WORKER_IO_WEIGHT,
+  WORKER_SCOPE_MEMORY_MAX,
+  WORKER_SLICE,
+  WorkerSlice,
+} from './worker-slice.ts';
 import { readControlPolicy, type ControlPolicy } from './policy.ts';
 
 const temporary: string[] = [];
@@ -72,14 +78,14 @@ test('worker resource overrides tune weights, memory reserve, fractional floor a
   ]) {
     const policy = memoryPolicy(62 * 1024 ** 2, String(checkGiB! * 1024 ** 3), 0, configured);
     policy.launch();
-    expect(policy.calls[1]!.args.slice(-3)).toEqual(['CPUWeight=20', 'IOWeight=30', `MemoryHigh=${expectedGiB}G`]);
+    expect(policy.calls[2]!.args.slice(-3)).toEqual(['CPUWeight=20', 'IOWeight=30', `MemoryHigh=${expectedGiB}G`]);
     expect(policy.timeouts.slice(0, 2)).toEqual([75, 75]);
     policy.launch({ REZICS_WORKER_MEMORY_HIGH_GIB: '9' }); // Cached configuration retains the first launch's tuning.
-    expect(policy.calls.filter(({ command }) => command === 'systemctl')).toHaveLength(2);
+    expect(policy.calls.filter(({ command }) => command === 'systemctl')).toHaveLength(3);
   }
   const explicit = memoryPolicy(62 * 1024 ** 2, '0', 0, configured);
   explicit.launch({ REZICS_WORKER_MEMORY_HIGH_GIB: '9' });
-  expect(explicit.calls[0]!.args.at(-1)).toBe('MemoryHigh=9G');
+  expect(explicit.calls[1]!.args.at(-1)).toBe('MemoryHigh=9G');
 });
 
 test("configuring the worker slice sets MemoryHigh to total memory minus the local check slice's MemoryMax minus a 14 GiB reserve, never below a quarter of total memory, in the same call as the CPU and IO weights", () => {
@@ -93,6 +99,7 @@ test("configuring the worker slice sets MemoryHigh to total memory minus the loc
     policy.launch();
     expect(policy.calls.filter(({ command }) => command === 'systemctl')).toEqual([
       { command: 'systemctl', args: ['show', 'rezics-check.slice', '-p', 'MemoryMax', '--value'] },
+      { command: 'systemctl', args: ['--user', 'show', WORKER_SLICE, '--property=MemoryHigh', '--property=MemoryMax'] },
       {
         command: 'systemctl',
         args: [
@@ -121,7 +128,7 @@ test('a host without a local check slice, or whose check slice has no MemoryMax,
   ] as const) {
     const policy = memoryPolicy(62 * 1024 ** 2, value, status);
     policy.launch();
-    expect(policy.calls[1]!.args.at(-1)).toBe('MemoryHigh=48G');
+    expect(policy.calls[2]!.args.at(-1)).toBe('MemoryHigh=48G');
     expect(policy.reports).toEqual([]);
   }
 });
@@ -163,7 +170,7 @@ test('Launch a worker truthfully when host memory discovery is unavailable.', ()
 test('REZICS_WORKER_MEMORY_HIGH_GIB overrides the derived value, and a value that is not a positive integer fails configuration with a message naming the variable', () => {
   const override = memoryPolicy(62 * 1024 ** 2);
   override.launch({ REZICS_WORKER_MEMORY_HIGH_GIB: '31' });
-  expect(override.calls[0]!.args.at(-1)).toBe('MemoryHigh=31G');
+  expect(override.calls[1]!.args.at(-1)).toBe('MemoryHigh=31G');
   expect(override.reads()).toBe(0);
   expect(override.reports).toEqual([]);
 
@@ -470,6 +477,7 @@ describe('worker systemd slice', () => {
     expect(startedReports).toHaveLength(1);
     expect(startedReports[0]).toContain('retaining the published worker start');
     expect(calls).toEqual([
+      { command: 'systemctl', timeout: bound },
       { command: 'systemctl', timeout: bound },
       { command: 'systemctl', timeout: bound },
       { command: 'systemd-run', timeout: 60_000 },

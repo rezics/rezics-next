@@ -239,8 +239,23 @@ function selectPool(
   return ranked[0]?.pool;
 }
 
-function noAllowedPool(profile: Profile): Error {
-  return new Error(`no allowed pool available for ${profile.cli}/${profile.poolClass}`);
+export class PoolUnavailableError extends Error {
+  constructor(profile: Profile) {
+    super(`no allowed pool available for ${profile.cli}/${profile.poolClass}`);
+  }
+}
+
+function poolMatches(profile: Profile, pools: readonly Pool[]): boolean {
+  return pools.some((pool) => pool.cli === profile.cli && pool.classes.includes(profile.poolClass));
+}
+
+function noAllowedPool(profile: Profile, pools: readonly Pool[], fallbacks: readonly Profile[] = []): Error {
+  const message = `no allowed pool available for ${profile.cli}/${profile.poolClass}`;
+  // Missing configured routes remain configuration errors. A typed refusal only means a compatible configured pool
+  // existed but current allowance, burn or concurrency rules admitted none of the requested profiles.
+  return [profile, ...fallbacks].some((candidate) => poolMatches(candidate, pools))
+    ? new PoolUnavailableError(profile)
+    : new Error(message);
 }
 
 export function choosePool(
@@ -253,8 +268,39 @@ export function choosePool(
   const spanMs = options.spanMs ?? defaultPolicy.pacing.burnSpanMs;
   const indexedReadings = indexAllowanceReadings(readings, options.history ?? []);
   const selected = selectPool(profile, pools, indexedReadings, options, now, spanMs, new Map());
-  if (!selected) throw noAllowedPool(profile);
+  if (!selected) throw noAllowedPool(profile, pools);
   return selected;
+}
+
+/** Apply the same freshness, reserve, pacing and occupancy rules to one already selected pool. */
+export function poolAllowed(pool: Pool, readings: readonly PoolReading[], options: PoolSelectionOptions = {}): boolean {
+  const now = options.now ?? Date.now();
+  const spanMs = options.spanMs ?? defaultPolicy.pacing.burnSpanMs;
+  return (
+    assessPool(
+      pool,
+      indexAllowanceReadings(readings, options.history ?? []),
+      now,
+      options.policy,
+      spanMs,
+      options.running ?? {},
+      options.ignoreBurnCeiling === true,
+    ) !== null
+  );
+}
+
+/** A mailbox wake can use the manager reserve and is independent of worker pacing and slots. */
+export function managerWakePoolAllowed(
+  pool: Pool,
+  readings: readonly PoolReading[],
+  policy?: ControlPolicy['provider'],
+): boolean {
+  const { maxConcurrent: _workerSlots, ...rest } = pool.policy;
+  return poolAllowed(
+    { ...pool, policy: { ...rest, reservePercent: 0, reservePerHour: 0, allowUnknown: true } },
+    readings,
+    { policy, ignoreBurnCeiling: true },
+  );
 }
 
 /** The routed profile's pool, or the first fallback that has one; `undefined` when every candidate is refused. */
@@ -304,7 +350,7 @@ export function choosePoolWithFallback(
   urgency?: (pool: Pool) => number | undefined,
 ): { profile: Profile; pool: Pool } {
   const selected = findAllowedPool(profile, fallbacks, pools, readings, options, urgency);
-  if (!selected) throw noAllowedPool(profile);
+  if (!selected) throw noAllowedPool(profile, pools, fallbacks);
   return selected;
 }
 

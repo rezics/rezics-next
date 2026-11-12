@@ -6,7 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import type { AppServer, CodexPool, Notification } from './app-server.ts';
 import { connectPool, textInput } from './app-server.ts';
 import { agentEnvironmentKeys } from './agents.ts';
-import type { ManagerServices, ManagerSpec, GoalState } from './managers.ts';
+import type { ManagerServices, ManagerSpec, GoalState, ManagerTurnDisposition } from './managers.ts';
 import type { ProcessIdentity } from './process.ts';
 
 // Managers run with full access, like workers; the maintainer is not there to answer approval requests.
@@ -134,9 +134,21 @@ export class ManagerSessionTransport {
     client: AppServer,
     spec: Pick<ManagerSpec, 'effort' | 'compactTokens'>,
     threadId: string,
-  ): Promise<{ activeTurnId: string | null }> {
+  ): Promise<{
+    activeTurnId: string | null;
+    latestTurn?: { id: string; status: ManagerTurnDisposition['status'] };
+  }> {
     const resumed = await client.request('thread/resume', threadAccess(spec, threadId));
-    return { activeTurnId: activeTurnId(resumed) };
+    const latest = resumed.thread.turns?.at(-1);
+    const status = latest?.status;
+    const latestTurn =
+      latest && (status === 'inProgress' || status === 'completed' || status === 'interrupted' || status === 'failed')
+        ? { id: latest.id as string, status: status as ManagerTurnDisposition['status'] }
+        : undefined;
+    return {
+      activeTurnId: activeTurnId(resumed),
+      ...(latestTurn ? { latestTurn } : {}),
+    };
   }
   private async steer(client: AppServer, threadId: string, expectedTurnId: string, summary: string): Promise<void> {
     await client.request('turn/steer', {
@@ -197,12 +209,17 @@ export class ManagerSessionTransport {
     spec: Pick<ManagerSpec, 'effort' | 'compactTokens'>,
     threadId: string,
     turnId: string,
+    beforeInterrupt: (turnId: string) => void,
   ): Promise<void> {
+    beforeInterrupt(turnId);
     try {
       await client.request('turn/interrupt', { threadId, turnId });
     } catch {
       const { activeTurnId } = await this.resumeThread(client, spec, threadId);
-      if (activeTurnId) await client.request('turn/interrupt', { threadId, turnId: activeTurnId });
+      if (activeTurnId) {
+        beforeInterrupt(activeTurnId);
+        await client.request('turn/interrupt', { threadId, turnId: activeTurnId });
+      }
     }
   }
   async registerCodexViewer(

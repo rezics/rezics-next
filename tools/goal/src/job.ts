@@ -1,4 +1,12 @@
+import {
+  HOST_INTERRUPTION_RETAINED,
+  HOST_INTERRUPTION_RESUME_PROMPT,
+  pendingHostInterruption,
+  recordedWorkerBootCustody,
+} from './worker-host-custody.ts';
 import defaults from '../defaults.json';
+import { reconcileStoppedTypingFailureRetry, recoverWorkerTyping } from './typing-recovery.ts';
+import { isTypingEvidenceUnavailableResult } from './worker-check-budget.ts';
 import { defaultPolicy } from './policy.ts';
 import {
   ProofCapacityQueuedError,
@@ -39,13 +47,14 @@ import {
   type HostStartKind,
 } from './process.ts';
 import { assessUsageLimitRefusal, markExhausted } from './usage.ts';
+import { findAllowedPool, PoolUnavailableError } from './allowance.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure, estimateOverrun } from './failures.ts';
 import { ensureGateOutcomeRefusal, guardIdsForFailure, isDevLandingRepairGuard, type GuardId } from './guards.ts';
 import { controlPlaneReleaseBrief, devProductBrief, matchesPath } from './briefs.ts';
 import { blockerFingerprint, noProgressTwice, toolRetryDelay } from './attempt-progress.ts';
-import { checkHostsInOutage } from './watchdog.ts';
+import { checkHostsBlockingRetry } from './watchdog.ts';
 import { evidenceBundle } from './evidence.ts';
 import { consult } from './consult.ts';
 import {
@@ -57,8 +66,14 @@ import {
   CHECK_HOST_TRANSPORT,
   reportsSuccess,
 } from './records.ts';
-import { readRouting } from './routing.ts';
-import { FINAL_REPORT_PROMPT, finalReportPending, isSqliteContention, settle } from './settle.ts';
+import { admissionProfiles, readRouting } from './routing.ts';
+import {
+  FINAL_REPORT_PROMPT,
+  finalReportPending,
+  isSqliteContention,
+  retrySettlementPersistence,
+  settle,
+} from './settle.ts';
 import { CURSOR_FRESH_SESSION_EVENT, CURSOR_FRESH_SESSION_PROMPT } from './agents/shared.ts';
 import { firstFailure } from './merge.ts';
 import {
@@ -77,8 +92,8 @@ import {
   type RetryOptions,
 } from './tasks.ts';
 import type { ManagerEventKind } from './contracts.ts';
-import type { Attempt, Task } from './types.ts';
-import type { PageDataRepair } from './page-data.ts';
+import type { Attempt, RetryIntent, Task } from './types.ts';
+import { pageDataRepairEvidence, type PageDataRepair } from './page-data.ts';
 import type { RunningWorker } from './launch.ts';
 import { applyRenderedPrompt, checkWaitMs, launch, renderWorkerPrompt, workerActivityBaseline } from './launch.ts';
 import { awaitHostCapacity, capacityWaiters, startsFirst } from './launch-capacity.ts';
@@ -239,17 +254,43 @@ export class WorkerJob implements GateOutcomeSink {
     // The manager host sets this so git, bun install and follow run in a child, not on the host event loop.
     private readonly offloadStart?: (taskId: string, kind: HostStartKind) => Promise<void>,
   ) {}
+  /** Whether the current scheduler would admit a retry using the task's live route, allowance and pool limits. */
+  hasRunnableRetrySupply(task: Task, intent: RetryIntent): boolean {
+    const admission = this.tasks.resolverPools();
+    const routing = readRouting(this.tasks.settings.routingFile, this.tasks.settings.policy?.routing);
+    const routed = admissionProfiles(task.brief, routing, task.sequence);
+    const profiles = intent.options.profile ? { first: intent.options.profile, fallbacks: [] } : routed;
+    return Boolean(
+      findAllowedPool(profiles.first, profiles.fallbacks, admission.pools, admission.readings, {
+        now: admission.now,
+        spanMs: admission.spanMs,
+        history: admission.history,
+        running: admission.running,
+        policy: this.policy.provider,
+        ...(intent.options.excludePools ? { exclude: intent.options.excludePools } : {}),
+      }),
+    );
+  }
   async runHostTask(kind: HostStartKind, taskId: string): Promise<void> {
-    if (kind === 'retry') {
-      const task = this.tasks.store.task(taskId);
-      await this.runRetryIntent({ taskId, attempt: task.currentAttempt });
-      return;
+    try {
+      if (kind === 'retry') {
+        const task = this.tasks.store.task(taskId);
+        await this.runRetryIntent({ taskId, attempt: task.currentAttempt });
+        return;
+      }
+      if (kind === 'released') {
+        await this.startReleased(taskId);
+        return;
+      }
+      await this.start(taskId, kind === 'first' ? { expectedAttempt: 0 } : {});
+    } catch (error) {
+      if (error instanceof PoolUnavailableError) {
+        const current = this.tasks.store.task(taskId);
+        this.deferPoolRefusal({ taskId, attempt: current.currentAttempt });
+        return;
+      }
+      throw error;
     }
-    if (kind === 'released') {
-      await this.startReleased(taskId);
-      return;
-    }
-    await this.start(taskId, kind === 'first' ? { expectedAttempt: 0 } : {});
   }
   private track(work: Promise<void>): void {
     const handled = work.catch((error) => {
@@ -283,15 +324,6 @@ export class WorkerJob implements GateOutcomeSink {
     if (!this.startsAllowed()) return;
     const key = `${ref.taskId}:${ref.attempt}`;
     if (this.retryIntentsInProgress.has(key)) return;
-    if (this.offloadStart) {
-      this.retryIntentsInProgress.add(key);
-      try {
-        await this.offloadStart(ref.taskId, 'retry');
-      } finally {
-        this.retryIntentsInProgress.delete(key);
-      }
-      return;
-    }
     this.retryIntentsInProgress.add(key);
     const store = this.tasks.store;
     try {
@@ -308,13 +340,42 @@ export class WorkerJob implements GateOutcomeSink {
         return;
       }
       if (task.currentAttempt !== ref.attempt) return;
-      if (task.state === 'held') return;
+      if (task.state === 'held' || task.state === 'cancelled') return;
+      if (ref.attempt > 0) {
+        const completed = store.attempt(ref);
+        if (completed.result.startsWith(HOST_INTERRUPTION_RETAINED)) {
+          this.onAttemptExit(ref);
+          return;
+        }
+        if (completed.typingEvidencePending || isTypingEvidenceUnavailableResult(completed.result)) {
+          if (!reconcileStoppedTypingFailureRetry(this.tasks, ref)) {
+            // Keep the unresolved same-generation retry visible to the existing watchdog without waking a second owner.
+            if (completed.state === 'stopped') {
+              store.recordUnreconciledTypingRetry(ref);
+              return;
+            }
+            await recoverWorkerTyping(this.tasks, this.landing, ref, undefined, this.afterSettle);
+            return;
+          }
+        }
+      }
+      if (this.offloadStart) {
+        try {
+          await this.offloadStart(ref.taskId, 'retry');
+        } catch (error) {
+          if (error instanceof PoolUnavailableError) {
+            this.deferPoolRefusal(ref);
+            return;
+          }
+          throw error;
+        }
+        return;
+      }
       const incident = toolIncidentForRetry(store, ref);
       const incidentProbe = incident !== null;
       if (incident && !toolIncidentRetryAllowed(store, ref)) return;
-      // A backed-off retry waits for its time, and a check-host transport failure until the watchdog's probes see
-      // every check host answer again: relaunching into a broken host repeats the failure. The intent stays pending,
-      // and the host's recovery sweep tries it again every minute.
+      // A backed-off retry waits for its time, and a check-host transport failure only when every eligible host is in
+      // outage. The intent stays pending, and the host's recovery sweep tries it again every minute.
       if (
         !incidentProbe &&
         intent.options.notBefore &&
@@ -322,7 +383,7 @@ export class WorkerJob implements GateOutcomeSink {
       )
         return;
       if (intent.options.awaitCheckHosts) {
-        const hosts = checkHostsInOutage(this.tasks.settings.stateDirectory, this.policy);
+        const hosts = checkHostsBlockingRetry(this.tasks.settings.stateDirectory, this.policy);
         if (hosts.length) {
           if (!store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'retry-awaits-check-hosts'))
             store.event(ref, 'retry-awaits-check-hosts', { hosts });
@@ -336,10 +397,6 @@ export class WorkerJob implements GateOutcomeSink {
         if (!store.proofCapacityAvailable(task.brief.goal, task.id)) return;
       }
       if (!['landing', 'ready', 'running', 'stopped'].includes(task.state)) {
-        store.updateRetryIntent(ref, (value) => {
-          value.status = 'started';
-          value.nextAttempt = task.currentAttempt;
-        });
         return;
       }
       if (intent.options.escalation === 'repeated-assertion' && !intent.options.consulted) {
@@ -365,11 +422,7 @@ export class WorkerJob implements GateOutcomeSink {
         }
       }
       const worker = await this.tasks.retry(task.id, { ...intent.options, expectedAttempt: ref.attempt });
-      task = store.task(task.id);
-      store.updateRetryIntent(ref, (value) => {
-        value.status = 'started';
-        value.nextAttempt = task.currentAttempt;
-      });
+      this.markRetryIntentStarted(ref);
       if (worker) await this.follow(worker);
     } catch (error) {
       // Another process holds the task: the intent stays pending for the next sweep.
@@ -380,10 +433,12 @@ export class WorkerJob implements GateOutcomeSink {
       )
         return;
       if (error instanceof TaskHeldForDependenciesError || error instanceof StaleAttemptError) {
-        store.updateRetryIntent(ref, (value) => {
-          value.status = 'started';
-          value.nextAttempt = store.task(ref.taskId).currentAttempt;
-        });
+        if (error instanceof StaleAttemptError) this.markRetryIntentStarted(ref);
+        return;
+      }
+      // Capacity refusal is an admission wait: leave the durable intent pending for the next existing recovery pass.
+      if (error instanceof PoolUnavailableError) {
+        this.deferPoolRefusal(ref);
         return;
       }
       throw error;
@@ -402,24 +457,76 @@ export class WorkerJob implements GateOutcomeSink {
       )
         this.tasks.store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
     }
+    if (this.startsAllowed())
+      for (const intent of this.tasks.store
+        .retryIntents()
+        .filter((value) => value.status === 'started' && value.nextAttempt === value.attempt)) {
+        try {
+          reconcileStoppedTypingFailureRetry(this.tasks, { taskId: intent.taskId, attempt: intent.attempt });
+        } catch (error) {
+          if (!(error instanceof LeaseHeldError)) throw error;
+        }
+      }
     for (const intent of this.tasks.store.retryIntents().filter((value) => value.status === 'pending'))
       this.track(this.runRetryIntent({ taskId: intent.taskId, attempt: intent.attempt }));
   }
+  private markRetryIntentStarted(ref: AttemptRef): void {
+    const task = this.tasks.store.task(ref.taskId);
+    if (task.currentAttempt <= ref.attempt) return;
+    if (this.tasks.store.retryIntent(ref)?.status !== 'pending') return;
+    this.tasks.store.updateRetryIntent(ref, (value) => {
+      value.status = 'started';
+      value.nextAttempt = task.currentAttempt;
+    });
+  }
+  private deferPoolRefusal(ref: AttemptRef): void {
+    const intent = this.tasks.store.retryIntent(ref);
+    if (!intent || intent.status !== 'pending') return;
+    const previous = intent.options.notBefore;
+    const previousAt = previous === undefined ? undefined : Date.parse(previous);
+    if (previous !== undefined && !Number.isFinite(previousAt))
+      throw new Error('pending retry intent has an invalid notBefore value');
+    // Leave the wait visible through one scheduled recovery pass; the existing lead lets that pass retry on time.
+    const now = Date.now();
+    const recoveryWindowMs = this.policy.host.recoveryIntervalMs + this.policy.worker.retryIntentLeadMs;
+    const deferredUntil = Math.max(now + this.policy.worker.capacityPauseMs, now + recoveryWindowMs, previousAt ?? 0);
+    this.tasks.store.updateRetryIntent(ref, (value) => {
+      value.options.notBefore = new Date(deferredUntil).toISOString();
+    });
+  }
   async start(taskId: string, options: RetryOptions = {}): Promise<void> {
     if (!this.startsAllowed()) return;
+    const task = this.tasks.store.task(taskId);
+    const ref = { taskId, attempt: task.currentAttempt };
+    // READY0 has no attempt record yet to carry a capacity wait; keep its source and generation in the normal
+    // retry-intent store before handing work to a child or asking the pool selector.
+    if (task.currentAttempt === 0 && task.state === 'ready') this.tasks.store.saveRetryIntent(ref, {});
     if (this.offloadStart) {
-      await this.offloadStart(taskId, options.expectedAttempt === 0 ? 'first' : 'start');
+      try {
+        await this.offloadStart(taskId, options.expectedAttempt === 0 ? 'first' : 'start');
+      } catch (error) {
+        if (error instanceof PoolUnavailableError) {
+          this.deferPoolRefusal(ref);
+          return;
+        }
+        throw error;
+      }
       return;
     }
-    const task = this.tasks.store.task(taskId);
     if (
       task.currentAttempt > 0 &&
       holdRetryForToolIncident(this.tasks.store, { taskId, attempt: task.currentAttempt }, options)
     )
       return;
     try {
-      await this.follow(await this.tasks.retry(taskId, options));
+      const worker = await this.tasks.retry(taskId, options);
+      this.markRetryIntentStarted(ref);
+      await this.follow(worker);
     } catch (error) {
+      if (error instanceof PoolUnavailableError) {
+        this.deferPoolRefusal(ref);
+        return;
+      }
       if (error instanceof TaskHeldForDependenciesError || error instanceof ProofCapacityQueuedError) return;
       // Another process already started the attempt this start expected to create.
       if (options.expectedAttempt !== undefined && error instanceof StaleAttemptError) return;
@@ -446,16 +553,7 @@ export class WorkerJob implements GateOutcomeSink {
     )
       return false;
     const evidencePath = join(this.tasks.settings.stateDirectory, 'page-data-repairs', `${repair.repairKey}.md`);
-    const evidence = [
-      `page-data-repair-key: ${repair.repairKey}`,
-      `Integrated head: ${repair.head}`,
-      `Section: ${repair.section.page}/${repair.section.persona}/${repair.section.section}`,
-      `Class: ${repair.section.class} (previously ${repair.previousClass})`,
-      `First error line: ${repair.section.firstErrorLine ?? 'unavailable'}`,
-      '',
-      'Repair this section in the same task and continue the retained provider session.',
-      '',
-    ].join('\n');
+    const evidence = pageDataRepairEvidence(repair);
     mkdirSync(join(this.tasks.settings.stateDirectory, 'page-data-repairs'), { recursive: true });
     if (existsSync(evidencePath)) {
       if (readFileSync(evidencePath, 'utf8') !== evidence)
@@ -503,6 +601,11 @@ export class WorkerJob implements GateOutcomeSink {
       } catch (error) {
         // Another process is starting it.
         if (error instanceof LeaseHeldError) return;
+        if (error instanceof PoolUnavailableError) {
+          const task = this.tasks.store.task(taskId);
+          this.deferPoolRefusal({ taskId, attempt: task.currentAttempt });
+          return;
+        }
         if (!(error instanceof HeldTaskConflictError)) throw error;
         const task = this.tasks.store.task(taskId),
           ref = { taskId, attempt: task.currentAttempt };
@@ -545,7 +648,13 @@ export class WorkerJob implements GateOutcomeSink {
     if (freshSessionRequest && (!lastRun || freshSessionRequest.sequence > lastRun.sequence))
       return CURSOR_FRESH_SESSION_PROMPT;
     if (finalReportPending(this.tasks.store, attempt)) return FINAL_REPORT_PROMPT;
-    const transport = lastTransportFailure(this.tasks.store, attempt);
+    const hostInterruption = pendingHostInterruption(this.tasks.store, attempt);
+    if (
+      hostInterruption &&
+      Date.parse(hostInterruption.nextResumeAt) - Date.now() > this.policy.worker.retryIntentLeadMs
+    )
+      return null;
+    const transport = hostInterruption ? null : lastTransportFailure(this.tasks.store, attempt);
     if (transport) {
       if (Date.parse(transport.nextResumeAt) - Date.now() > this.policy.worker.retryIntentLeadMs) return null;
       if (!transportIncidentResumeAllowed(this.tasks.store, attempt)) return null;
@@ -554,6 +663,7 @@ export class WorkerJob implements GateOutcomeSink {
       const observed = observeWorkerChecks(task, attempt.checks, this.policy.worker);
       return observed.status === 'pending' ? null : observed.resumeText;
     }
+    if (hostInterruption) return HOST_INTERRUPTION_RESUME_PROMPT;
     if (transport) return TRANSPORT_RESUME_PROMPT;
     const observed = observeWorkerChecks(task, attempt.checks ?? [], this.policy.worker);
     return observed.status === 'pending' ? null : observed.resumeText;
@@ -594,6 +704,7 @@ export class WorkerJob implements GateOutcomeSink {
           leasePolicy: this.tasks.settings.policy?.leases,
           urgent: task.brief.urgent,
           goal: task.brief.goal,
+          resume: true,
           // A parked attempt resuming is already in flight: the Goal cap limits new starts only. Applying it here
           // deadlocked every Goal at or over its cap, since none of its parked attempts could resume (2026-11-06).
           goalMaxInFlight: Number.POSITIVE_INFINITY,
@@ -618,8 +729,6 @@ export class WorkerJob implements GateOutcomeSink {
           currentAttempt.state !== 'waiting'
         )
           return;
-        const pool = this.tasks.settings.pools.find((candidate) => candidate.name === currentAttempt.pool);
-        if (!pool) throw new Error(`Waiting attempt refers to missing pool ${currentAttempt.pool}`);
         const canResume = agentAdapter(currentAttempt.profile.cli).canResume && !!currentAttempt.session;
         if (currentTask.brief.kind === 'verification' && !canResume) {
           await this.endAsEnvironment(
@@ -657,11 +766,18 @@ export class WorkerJob implements GateOutcomeSink {
                 `The checks you started have finished or could not be found. ${message}`,
                 'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
               ].join('\n\n');
+        const resumePool = this.tasks.resumePool(currentAttempt);
+        if (!resumePool) {
+          this.tasks.store.updateAttempt(ref, (current) => {
+            if (current.driver && sameProcess(current.driver)) current.driver = null;
+          });
+          return;
+        }
         worker = await launch(
           this.tasks.store,
           currentTask,
           currentAttempt,
-          pool,
+          resumePool,
           prompt,
           this.tasks.settings.codex,
           canResume ? currentAttempt.session! : undefined,
@@ -728,9 +844,39 @@ export class WorkerJob implements GateOutcomeSink {
     let silenceStopping: Promise<void> | undefined;
     const activity = workerActivityBaseline(store, ref);
     noteToolIncidentProbeStarted(store, ref);
-    const releaseOnProviderProgress = () => {
-      const resolved = resolveToolIncidentsAfterProviderProgress(store, ref, task, store.attempt(ref));
-      if (resolved.length) this.resumePendingRetries();
+    let providerProgress: Promise<void> | undefined;
+    let providerProgressRequested = false;
+    let providerProgressFailed = false;
+    let providerProgressFailure: unknown;
+    const releaseOnProviderProgress = (): void => {
+      providerProgressRequested = true;
+      if (providerProgress || providerProgressFailed) return;
+      providerProgress = (async () => {
+        do {
+          providerProgressRequested = false;
+          const resolved = await retrySettlementPersistence(
+            () => resolveToolIncidentsAfterProviderProgress(store, ref, task, store.attempt(ref)),
+            this.policy.worker.settlementBackoffMs,
+          );
+          if (resolved.length)
+            await retrySettlementPersistence(() => this.resumePendingRetries(), this.policy.worker.settlementBackoffMs);
+        } while (providerProgressRequested);
+      })()
+        .catch((error) => {
+          providerProgressFailed = true;
+          providerProgressFailure = error;
+        })
+        .finally(() => {
+          providerProgress = undefined;
+          if (providerProgressRequested && !providerProgressFailed) releaseOnProviderProgress();
+        });
+    };
+    const waitForProviderProgress = async (): Promise<void> => {
+      while (providerProgress || providerProgressRequested) {
+        if (!providerProgress) releaseOnProviderProgress();
+        await providerProgress;
+      }
+      if (providerProgressFailed) throw providerProgressFailure;
     };
     releaseOnProviderProgress();
     let { lastLogSize, lastLogMtime, lastLogActivityAt, checkWaitAtLastLogActivity } = activity;
@@ -937,6 +1083,7 @@ export class WorkerJob implements GateOutcomeSink {
       } catch (error) {
         if (!stopping || !(error instanceof StaleAttemptError)) throw error;
       }
+      await waitForProviderProgress();
       if (stopping) await stopping;
       if (silenceStopping) await silenceStopping;
       if (!stopping) {
@@ -1519,7 +1666,7 @@ export class WorkerJob implements GateOutcomeSink {
       const graceMs =
         this.policy.worker.orphanStartGraceMultiplier *
         (this.tasks.settings.startGraceMs ?? this.policy.worker.startGraceMs);
-      const waiting = capacityWaiters(this.tasks.settings.stateDirectory);
+      const waiting = capacityWaiters(this.tasks.settings.stateDirectory, store);
       for (const task of store.activeTasks()) {
         await yieldSweep();
         if (
@@ -1628,7 +1775,9 @@ export class WorkerJob implements GateOutcomeSink {
             try {
               // Follow at once, so the stall and start checks watch an adopted worker too; only its exit waits.
               const exited = (
-                attempt.process ? waitForProcessGroup(attempt.process, this.policy.process) : Promise.resolve()
+                attempt.process && recordedWorkerBootCustody(store, attempt) === 'current-boot'
+                  ? waitForProcessGroup(attempt.process, this.policy.process)
+                  : Promise.resolve()
               ).then(() => readWorkerExit(attempt.logPath));
               await this.follow({ attempt, exited });
             } catch (error) {
@@ -1703,6 +1852,39 @@ export class WorkerJob implements GateOutcomeSink {
   /** Launch/exit facts do not fabricate a gate outcome. */
   onAttemptExit(ref: AttemptRef): void {
     const store = this.tasks.store;
+    const completed = store.attempt(ref);
+    if (completed.result.startsWith(HOST_INTERRUPTION_RETAINED)) {
+      if (store.retryIntent(ref)?.status === 'pending')
+        store.updateRetryIntent(ref, (intent) => {
+          intent.status = 'abandoned';
+        });
+      if (!store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'worker-host-interruption-notified')) {
+        const task = store.task(ref.taskId);
+        store.event(ref, 'worker-host-interruption-notified', {});
+        this.inbox.deliver({
+          managerId: task.brief.manager,
+          taskId: task.id,
+          kind: 'environment',
+          summary: completed.result,
+          evidencePath: completed.evidencePath,
+        });
+      }
+      return;
+    }
+    if (completed.typingEvidencePending || isTypingEvidenceUnavailableResult(completed.result)) {
+      if (!store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'typing-evidence-notified')) {
+        const task = store.task(ref.taskId);
+        store.event(ref, 'typing-evidence-notified', { command: 'typing-recover' });
+        this.inbox.deliver({
+          managerId: task.brief.manager,
+          taskId: task.id,
+          kind: 'environment',
+          summary: `Completed source retained pending only compiler evidence. Run bun tools/goal/src/cli.ts typing-recover ${task.id} --expected-attempt ${ref.attempt}; no source-writing retry.`,
+          evidencePath: completed.evidencePath,
+        });
+      }
+      return;
+    }
     let retry = false,
       capacity = false,
       retryDelayMs = 0;
@@ -1730,18 +1912,22 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (task.brief.kind === 'verification') {
         if (store.events(task.id, ref.attempt).some((event) => event.kind === 'proof-failure-routed')) return;
+        const proof = store.record(ref)?.proof;
+        const captureOnly = task.state === 'stopped' && kind === null && proof?.status === 'terminal' && proof.passed;
         store.updateTask(ref, (current) => {
           current.state = 'stopped';
+        });
+        store.updateAttempt(ref, (current) => {
+          current.driver = null;
         });
         const event = {
           managerId: task.brief.manager,
           taskId: task.id,
           kind: 'instruction' as const,
-          summary:
-            `Original proof stopped; create a separate minimal product fix. ${attempt.result} ${attempt.blocker ?? ''}`.slice(
-              0,
-              1000,
-            ),
+          summary: (captureOnly
+            ? `Original proof passed on its captured source; current integration requires a fresh authenticated proof registration. ${attempt.result}`
+            : `Original proof stopped; create a separate minimal product fix. ${attempt.result} ${attempt.blocker ?? ''}`
+          ).slice(0, 1000),
           evidencePath: attempt.evidencePath,
         };
         store.event(ref, 'proof-failure-routed', event);
@@ -1875,7 +2061,9 @@ export class WorkerJob implements GateOutcomeSink {
             previous?.failureKind === 'tool' &&
             !reranFailingCommand(task, attempt, previous, this.policy.worker);
           const idle = !repeated && !unrerun && devProductBrief(task.brief) && noProgressTwice(store, task, ref);
-          if ((repeated || unrerun || idle) && !hasSharedIncident) {
+          // A shared incident deduplicates and holds peers, but it must not reset the same-task blocker limit.
+          // Otherwise its one probe can fail, advance to a new task attempt, and repeat its transport budget forever.
+          if (repeated || ((unrerun || idle) && !hasSharedIncident)) {
             const firstLine = (
               silence
                 ? attempt.result
@@ -1893,6 +2081,12 @@ export class WorkerJob implements GateOutcomeSink {
             store.updateAttempt(ref, (a) => {
               a.escalation = 'stalled';
             });
+            const pendingRetry = store.retryIntent(ref);
+            if (pendingRetry?.status === 'pending')
+              store.updateRetryIntent(ref, (intent) => {
+                intent.status = 'abandoned';
+                delete intent.nextAttempt;
+              });
             record.escalation = 'stalled';
             store.putRecord(record);
             const event =

@@ -44,7 +44,6 @@ export function observeSqliteWork(db: Database, directory: string) {
   const rows: SqliteWork[] = [];
   db.query = ((sql: string) => {
     const statement = query(sql);
-    if (!/^\s*(?:\/\*[\s\S]*?\*\/\s*)?(?:SELECT|PRAGMA)\b/i.test(sql)) return statement;
     return new Proxy(statement, {
       get(target, key) {
         const method = Reflect.get(target, key, target);

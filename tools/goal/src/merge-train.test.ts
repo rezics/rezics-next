@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { openDb } from './db.ts';
+import { readFlow, readLandingOperations, summarizeLandingOperations } from './flow.ts';
 import type { AttemptFence, GateOutcome } from './contracts.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { SqliteLandingQueue } from './land.ts';
@@ -11,7 +12,10 @@ import { failingTestFiles, MergeTrain, devPushScript, rebaseOnto, resolveMechani
 import { firstFailure, gateRunner, git } from './merge.ts';
 import { parseBrief, protectedRiskAreasForBrief, readRiskOwnership } from './briefs.ts';
 import { WorkerStore } from './store.ts';
-import { repository } from './test-support.ts';
+import { TrainResolver } from './train-resolver.ts';
+import { completeContinuation, harvestContinuations } from './continuation.ts';
+import { readControlPolicy } from './policy.ts';
+import { integrationHarness, markdown, repository } from './test-support.ts';
 
 function setup() {
   const repo = repository();
@@ -59,6 +63,78 @@ function setup() {
     },
   };
 }
+
+test('tracked continuation custody leaves one clean product landing', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const base = h.head(),
+      task = h.dispatch('result.txt');
+    const continuation = completeContinuation(
+      markdown
+        .replace('goal: fixture\n', `goal: fixture\nmanager: ${JSON.stringify(task.brief.manager)}\n`)
+        .replace(
+          'paths: [result.txt]\nwaiting: []',
+          `paths: [follow-up.txt]\nwaiting: []\nafter: ${JSON.stringify([task.id])}`,
+        )
+        .replace('Write the requested result and commit it.', 'Finish the follow-up slice.'),
+      task,
+      undefined,
+    );
+    const ordinary = completeContinuation(
+      continuation
+        .replace('follow-up.txt', 'ordinary.txt')
+        .replace('Finish the follow-up slice.', 'Finish the ordinary slice.'),
+      task,
+      undefined,
+    );
+    const planned = join(task.worktree, '.temp/goal/expected-continuation.md');
+    mkdirSync(dirname(planned), { recursive: true });
+    writeFileSync(planned, continuation);
+    writeFileSync(join(dirname(planned), 'expected-ordinary.md'), ordinary);
+    writeFileSync(
+      h.settings.pools[0]!.command,
+      `#!/usr/bin/env bun
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+const p=JSON.parse(readFileSync('.temp/worker-plan.json','utf8')); mkdirSync('.temp/continuation',{recursive:true}); writeFileSync(p.file,p.content);
+for(const [name,expected] of [['follow-up','continuation'],['ordinary','ordinary']]) writeFileSync('.temp/continuation/'+name+'.md',readFileSync('.temp/goal/expected-'+expected+'.md'));
+for(const args of [['add','--',p.file],['add','-f','--','.temp/continuation/follow-up.md'],['commit','-qm','Complete fixture']]) execFileSync('git',args);
+for(const item of [{type:'thread.started',thread_id:'tracked-continuation'},{type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}},{type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}]) console.log(JSON.stringify(item));
+`,
+    );
+    h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
+    h.settings.formatCommand = ['sh', '-c', 'for f do case "$f" in .temp/continuation/*) exit 1;; esac; done', 'guard'];
+
+    await h.start(task);
+    const source = git(task.worktree, 'rev-parse', task.branch),
+      backlog = join(h.settings.stateDirectory, 'backlog', 'fixture');
+    const backlogBriefs = readdirSync(backlog)
+      .filter((name) => name.endsWith('.md'))
+      .map((name) => readFileSync(join(backlog, name), 'utf8'))
+      .sort();
+    expect(backlogBriefs).toEqual([continuation, ordinary].sort());
+    expect(
+      harvestContinuations(h.store, h.settings, h.store.task(task.id), { taskId: task.id, attempt: 1 }).queued,
+    ).toEqual([]);
+
+    await h.train(async () => ({ passed: true, output: '', timedOut: false }));
+    const candidate = h.head(),
+      introduced = git(h.root, 'rev-list', `${base}..${candidate}`).split('\n').filter(Boolean);
+    expect(
+      introduced.every((commit) => !git(h.root, 'ls-tree', '-r', '--name-only', commit, '--', '.temp/continuation')),
+    ).toBe(true);
+    expect(git(h.root, 'show', `${candidate}:result.txt`)).toBe('result.txt');
+    expect([
+      git(task.worktree, 'rev-parse', task.branch),
+      git(task.worktree, 'status', '--porcelain', '--untracked-files=all'),
+    ]).toEqual([source, '']);
+    expect(h.store.task(task.id)).toMatchObject({ state: 'integrated', currentAttempt: 1 });
+    expect(h.store.retryIntent({ taskId: task.id, attempt: 1 })).toBeUndefined();
+  } finally {
+    await h.disposeAsync();
+  }
+}, 30_000);
 
 test('dev origin pushes are shared across train instances, throttled for a minute, and nonfatal on failure', () => {
   const repo = repository();
@@ -124,9 +200,15 @@ describe('sequential integration', () => {
         ['alpha', true],
         ['beta', true],
       ]);
+      const landingEvents = readFlow(s.db).filter((event) => event.operationId);
+      for (const taskId of ['alpha', 'beta']) {
+        const events = landingEvents.filter((event) => event.taskId === taskId);
+        expect(events.map((event) => event.action)).toEqual(['enqueued', 'started', 'finished']);
+        expect(new Set(events.map((event) => event.operationId)).size).toBe(1);
+      }
       expect(git(second.worktree, 'rev-parse', 'HEAD')).toBe(original);
       expect(git(s.main, 'symbolic-ref', 'HEAD')).toBe('refs/heads/main');
-      expect(git(s.main, 'worktree', 'list', '--porcelain')).not.toMatch(/\/train-[0-9a-f-]{36}/);
+      expect(git(s.main, 'worktree', 'list', '--porcelain')).not.toContain(`worktree ${s.options.worktreeRoot}/`);
       expect(readFileSync(join(s.main, 'a'), 'utf8')).toBe('a');
       expect(readFileSync(join(s.main, 'b'), 'utf8')).toBe('b');
     } finally {
@@ -339,6 +421,62 @@ describe('sequential integration', () => {
       await new MergeTrain(s.options).run();
       expect(s.outcomes).toHaveLength(1);
       expect(s.queue.next()).toBeUndefined();
+    } finally {
+      s.close();
+    }
+  });
+
+  test('resolver continuation closes one operation and starts a distinct requeued operation', () => {
+    const s = setup();
+    try {
+      const request = s.branch('resolver', 'resolved-file');
+      s.queue.enqueue(request);
+      const original = s.queue.next()!;
+      const continued = {
+        ...request,
+        devResolution: {
+          attempts: 1,
+          commit: 'resolved-commit',
+          targetHead: 'dev-head',
+          method: 'resolver' as const,
+          tokens: { input: 0, output: 0, cached: 0, total: 0 },
+          paths: ['resolved-file'],
+        },
+      };
+      s.queue.requeueResolved(original.id, continued);
+      s.queue.requeueResolved(original.id, continued);
+
+      const retry = s.queue.next()!;
+      expect(retry.operationId).not.toBe(original.operationId);
+      const outcome: GateOutcome = {
+        taskId: request.taskId,
+        attempt: request.attempt,
+        passed: true,
+        stage: 'merge',
+        logPath: 'landing.log',
+        hostMs: 0,
+        changedFiles: [],
+        diffLines: 0,
+      };
+      s.queue.finish(retry.id, outcome);
+
+      const events = readFlow(s.db).filter((event) => event.taskId === request.taskId && event.operationId);
+      expect(events.filter((event) => event.operationId === original.operationId).map((event) => event.action)).toEqual(
+        ['enqueued', 'started', 'resolver-requeued'],
+      );
+      expect(events.filter((event) => event.operationId === retry.operationId).map((event) => event.action)).toEqual([
+        'enqueued',
+        'started',
+        'finished',
+      ]);
+      expect(
+        summarizeLandingOperations(readLandingOperations(s.db, '2000-01-01T00:00:00Z', '2100-01-01T00:00:00Z')),
+      ).toMatchObject({
+        terminalCount: 2,
+        measuredCount: 2,
+        unknownDurationCount: 0,
+        outcomes: { 'resolver-requeued': 1, finished: 1 },
+      });
     } finally {
       s.close();
     }
@@ -576,6 +714,67 @@ Update the control plane.
 }
 
 describe('control-plane launch smoke gate', () => {
+  test('mixed release source retains dev conflict resolution without admitting a main proof', async () => {
+    const s = controlPlaneLanding('tools/goal/src/mixed.ts');
+    try {
+      const task = new WorkerStore(s.goalDb).task(s.request.taskId);
+      new WorkerStore(s.db).createTask(
+        task.brief,
+        {
+          briefPath: task.briefPath,
+          worktree: s.request.worktree,
+          branch: s.request.branch,
+          base: git(s.main, 'rev-parse', 'main'),
+        },
+        'implementation',
+        s.request.taskId,
+      );
+      const product = 'scripts/product.ts';
+      writeFileSync(join(s.request.worktree, product), 'export const value = "worker";\n');
+      git(s.request.worktree, 'add', '--', product);
+      git(s.request.worktree, 'commit', '-m', 'Product repair');
+      const devTree = join(s.path, 'dev-conflict');
+      git(s.main, 'worktree', 'add', devTree, 'dev');
+      writeFileSync(join(devTree, product), 'export const value = "dev";\n');
+      git(devTree, 'add', '--', product);
+      git(devTree, 'commit', '-m', 'Concurrent product change');
+      const main = git(s.main, 'rev-parse', 'main');
+      const queued = s.queue.nextBatch(1, [], 'main')[0]!;
+      const resolver = new TrainResolver(new WorkerStore(s.goalDb));
+      resolver.devConflictStarted = () => {};
+      resolver.devConflictReturned = () => {};
+      let resolutions = 0;
+      resolver.compose = async () => {
+        resolutions++;
+        throw new Error('Original product conflict remains owned');
+      };
+      let smokeRuns = 0;
+      await new MergeTrain({
+        ...s.options,
+        integrationBranch: 'dev',
+        trainResolver: resolver,
+        runGate: async () => ({ passed: true, output: '', timedOut: false }),
+        runLaunchSmoke: async () => {
+          smokeRuns++;
+          return { passed: true, output: '', timedOut: false };
+        },
+      }).run();
+      expect(s.outcomes.map((outcome) => outcome.firstFailure?.assertion)).toEqual([
+        expect.stringContaining('Original product conflict remains owned'),
+      ]);
+      expect(resolutions).toBe(1);
+      expect(smokeRuns).toBe(0);
+      expect(s.outcomes[0]?.passed).toBe(false);
+      expect(s.outcomes[0]?.conflictedFiles).toContain(product);
+      expect(s.outcomes[0]?.firstFailure?.assertion).toContain('Original product conflict remains owned');
+      expect(git(s.main, 'rev-parse', 'main')).toBe(main);
+      expect(existsSync(join(s.options.stateDirectory, `control-plane-proof-${queued.id}.json`))).toBe(false);
+    } finally {
+      s.goalDb.close();
+      s.close();
+    }
+  });
+
   test('untargeted control-plane work lands on dev without the main release proof', async () => {
     const s = controlPlaneLanding('tools/goal/src/dev-change.ts', false);
     try {

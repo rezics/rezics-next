@@ -38,6 +38,7 @@ function addTask(
   currentAttempt: number,
   goal = 'goal-a',
   manager = goal,
+  after: string[] = [],
 ): void {
   db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(
     id,
@@ -48,7 +49,7 @@ function addTask(
       sequence,
       currentAttempt,
       state,
-      brief: { goal, manager, after: [] },
+      brief: { goal, manager, after },
     }),
   );
 }
@@ -131,7 +132,9 @@ test('a low-width active Goal receives accurate, durable wakeable counts once pe
   expect(pending[0]?.event.summary).toContain('Codex subset 1 confirmed live');
   expect(pending[0]?.event.summary).toContain('ready 2, durable pending starts 1, held 1, stopped 1, waiting 1');
   expect(pending[0]?.event.summary).toContain('Recover, reshape, or dispatch real work');
-  expect(pending[0]?.event.summary).toContain('Act on each stopped task within an hour');
+  expect(pending[0]?.event.summary).toContain(
+    'recover completed source waiting only for compiler typing evidence first',
+  );
   expect(pending[0]?.event.summary).not.toContain('do not restart stopped work');
   expect(pending[0]?.event.summary).toContain('Unsubmitted work is not observable');
 
@@ -163,6 +166,10 @@ test('concurrent and restarted sweeps deduplicate a bucket; high width and prote
   addManager(f.db, 'completed-goal', 'complete');
   addTask(f.db, 'budget-limited-ready', 14, 'ready', 0, 'budget-goal');
   addManager(f.db, 'budget-goal', 'running', 'budgetLimited');
+  addTask(f.db, 'audit', 15, 'ready', 0, 'daily-step-audit', 'supermanager');
+  addPendingStart(f.db, 'audit', 0);
+  addTask(f.db, 'queued-ready', 16, 'ready', 0, 'queued-goal');
+  addPendingStart(f.db, 'queued-ready', 0);
 
   const at = Date.UTC(2026, 9, 31, 13, 0);
   const options = { processIsLive: (process: ProcessIdentity) => live.has(process.pid) };
@@ -171,12 +178,20 @@ test('concurrent and restarted sweeps deduplicate a bucket; high width and prote
     sweepWidthGovernor(f.db, f.inbox, at, options),
   ]);
   expect(first.snapshot.goals.find((goal) => goal.goal === 'wide-goal')?.running).toBe(10);
+  expect(first.snapshot.goals.find((goal) => goal.goal === 'daily-step-audit')?.pendingStarts).toBe(1);
+  expect(first.snapshot.goals.find((goal) => goal.goal === 'queued-goal')).toMatchObject({
+    ready: 1,
+    pendingStarts: 1,
+    actionableReady: 0,
+  });
   expect(first.deliveredGoals).toEqual([]);
   expect(second.deliveredGoals).toEqual([]);
   expect(f.inbox.pending('wide-goal')).toHaveLength(0);
   expect(f.inbox.pending('paused-goal')).toHaveLength(0);
   expect(f.inbox.pending('completed-goal')).toHaveLength(0);
   expect(f.inbox.pending('budget-goal')).toHaveLength(0);
+  expect(f.inbox.pending('queued-goal')).toHaveLength(0);
+  expect(f.inbox.pending('supermanager')).toHaveLength(0);
 
   const low = fixture();
   addTask(low.db, 'stopped-low', 1, 'stopped', 0, 'low-goal');
@@ -233,6 +248,7 @@ test('width policy overrides preserve paged counts, threshold boundaries and buc
   addTask(f.db, 'live', 1, 'running', 1);
   addAttempt(f.db, 'live', 1, 'running', 'codex', identity(123));
   addTask(f.db, 'ready', 2, 'ready', 0);
+  addTask(f.db, 'ordinary-stop', 3, 'stopped', 0);
   const low = readControlPolicy({ width: { workerThreshold: 1, pageSize: 1, bucketMs: 100, sweepYieldItems: 1 } });
   const high = readControlPolicy({
     width: { ...low.width, workerThreshold: 2 },
@@ -251,4 +267,22 @@ test('width policy overrides preserve paged counts, threshold boundaries and buc
   expect((await run(200)).deliveredGoals).toEqual(['goal-a']);
   expect(delivered[0]).toContain('within 2 minutes');
   expect(delivered[0]).toContain('at least 3 ready briefs');
+});
+
+test('held work waiting on a progressing predecessor stays visible without waking its manager', async () => {
+  const f = fixture();
+  addTask(f.db, 'active-predecessor', 1, 'running', 1, 'goal-a');
+  addAttempt(f.db, 'active-predecessor', 1, 'running', 'codex', null);
+  addTask(f.db, 'held-successor', 2, 'held', 0, 'goal-a', 'goal-a', ['active-predecessor']);
+  addTask(f.db, 'held-missing', 3, 'held', 0, 'goal-b', 'goal-b', ['active-predecessor', 'missing-predecessor']);
+
+  const result = await sweepWidthGovernor(f.db, f.inbox, Date.UTC(2026, 9, 31, 12));
+  expect(result.snapshot.goals.find((goal) => goal.goal === 'goal-a')).toMatchObject({
+    held: 1,
+    actionableHeld: 0,
+    unknownRunning: 1,
+  });
+  expect(result.deliveredGoals).toEqual(['goal-b']);
+  expect(f.inbox.pending('goal-a')).toHaveLength(0);
+  expect(f.inbox.pending('goal-b')).toHaveLength(1);
 });

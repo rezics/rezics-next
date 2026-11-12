@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
+import { createHash } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -43,10 +44,10 @@ afterEach(() => {
 
 function fixture(options: { workerCap?: number; perSweep?: number; refuse?: RegExp } = {}) {
   const temporary = temporaryDirectory();
-  const db = openDb(join(temporary.path, 'goal.sqlite'));
+  let db = openDb(join(temporary.path, 'goal.sqlite'));
   new WorkerStore(db);
-  const inbox = new SqliteManagerInbox(db, temporary.path, () => clock.now);
   const clock = { now: NOW };
+  let inbox = new SqliteManagerInbox(db, temporary.path, () => clock.now);
   const dispatched: { file: string; text: string }[] = [];
   const continued: { goal: string; taskId: string; attempt: number; file: string }[] = [];
   const cancelled: string[] = [];
@@ -79,7 +80,70 @@ function fixture(options: { workerCap?: number; perSweep?: number; refuse?: RegE
     db.close();
     temporary.close();
   });
-  return { db, inbox, runtime, clock, dispatched, continued, cancelled, state: temporary.path };
+  return {
+    get db() {
+      return db;
+    },
+    get inbox() {
+      return inbox;
+    },
+    runtime,
+    clock,
+    dispatched,
+    continued,
+    cancelled,
+    state: temporary.path,
+    restart() {
+      db.close();
+      db = openDb(join(temporary.path, 'goal.sqlite'));
+      new WorkerStore(db);
+      inbox = new SqliteManagerInbox(db, temporary.path, () => clock.now);
+      runtime.db = db;
+      runtime.inbox = inbox;
+    },
+  };
+}
+
+async function backlogDisposition(
+  f: ReturnType<typeof fixture>,
+  goal: string,
+  action: 'no-work' | 'clear',
+  managerId: string,
+  sessionId: string,
+): Promise<string> {
+  const previousManager = process.env.GOAL_MANAGER;
+  const previousThread = process.env.CODEX_THREAD_ID;
+  const previousClaudeSession = process.env.CLAUDE_CODE_SESSION_ID;
+  const previousTask = process.env.GOAL_TASK_ID;
+  const previousAttempt = process.env.GOAL_ATTEMPT;
+  const previousLog = console.log;
+  const lines: string[] = [];
+  process.env.GOAL_MANAGER = managerId;
+  process.env.CODEX_THREAD_ID = sessionId;
+  delete process.env.CLAUDE_CODE_SESSION_ID;
+  delete process.env.GOAL_TASK_ID;
+  delete process.env.GOAL_ATTEMPT;
+  console.log = (line?: unknown) => lines.push(String(line));
+  try {
+    await runIntegration(['backlog', 'disposition', goal, action], {
+      db: f.db,
+      stateDirectory: f.state,
+      managerServices: { policy: undefined },
+    } as unknown as Parameters<typeof runIntegration>[1]);
+    return lines[0]!;
+  } finally {
+    console.log = previousLog;
+    if (previousManager === undefined) delete process.env.GOAL_MANAGER;
+    else process.env.GOAL_MANAGER = previousManager;
+    if (previousThread === undefined) delete process.env.CODEX_THREAD_ID;
+    else process.env.CODEX_THREAD_ID = previousThread;
+    if (previousClaudeSession === undefined) delete process.env.CLAUDE_CODE_SESSION_ID;
+    else process.env.CLAUDE_CODE_SESSION_ID = previousClaudeSession;
+    if (previousTask === undefined) delete process.env.GOAL_TASK_ID;
+    else process.env.GOAL_TASK_ID = previousTask;
+    if (previousAttempt === undefined) delete process.env.GOAL_ATTEMPT;
+    else process.env.GOAL_ATTEMPT = previousAttempt;
+  }
 }
 
 function existingTask(
@@ -353,6 +417,52 @@ test('an interrupted claim whose dispatch already committed archives onto the ex
   expect(f.dispatched).toEqual([]);
 });
 
+test('an interrupted proof claim archives once by durable proposal identity after capture changes', async () => {
+  const f = fixture();
+  const originalSource = '1'.repeat(40);
+  const capturedSource = '2'.repeat(40);
+  const proposal = `---\ngoal: accounts\nmanager: content\nkind: verification\nproof:\n  journey: Membership\n  sourceTasks: [membership-original]\n  sourceCommit: ${originalSource}\nacceptance:\n  command: [bun, test, membership.test.ts]\n---\nObserve membership.\n`;
+  const accepted = proposal.replace(originalSource, capturedSource);
+  const taskId = 'registered-proof';
+  task(
+    f.db,
+    taskId,
+    'ready',
+    {
+      goal: 'accounts',
+      manager: 'content',
+      kind: 'verification',
+      markdown: accepted,
+      proof: { journey: 'Membership', sourceTasks: ['membership-original'], sourceCommit: capturedSource },
+      lintWarnings: [],
+    },
+    1,
+  );
+  const row = f.db.query('SELECT body FROM worker_tasks WHERE id=?').get(taskId) as { body: string };
+  const registered = JSON.parse(row.body) as Record<string, unknown>;
+  registered.proofAuthorization = {
+    fingerprint: 'accepted-capture-fingerprint',
+    backlogProposal: {
+      proposalSha256: createHash('sha256').update(proposal).digest('hex'),
+      sourceCommit: originalSource,
+      sourceTasks: ['membership-original'],
+    },
+  };
+  f.db.query('UPDATE worker_tasks SET body=? WHERE id=?').run(JSON.stringify(registered), taskId);
+  const claimDirectory = join(f.state, 'backlog', 'accounts', '.dispatching');
+  mkdirSync(claimDirectory, { recursive: true });
+  const claim = join(claimDirectory, 'membership.md');
+  writeFileSync(claim, proposal);
+  utimesSync(claim, (NOW - 60_000) / 1000, (NOW - 60_000) / 1000);
+
+  const sweep = await sweepBacklog(f.runtime);
+  const archived = join(f.state, 'backlog', 'accounts', 'dispatched', `${taskId}-membership.md`);
+  expect(sweep.dispatched).toEqual([{ goal: 'accounts', taskId, brief: 'membership.md' }]);
+  expect(readFileSync(archived, 'utf8')).toBe(proposal);
+  expect((await sweepBacklog(f.runtime)).dispatched).toEqual([]);
+  expect(existsSync(claim)).toBe(false);
+});
+
 test('an interrupted claim that matches several unarchived tasks is refused with those ids', async () => {
   const f = fixture();
   const text = `${markdown}\n\nShared brief\n`;
@@ -480,11 +590,48 @@ test('a product task stopped for over an hour without action is cancelled into i
   f.db
     .query('INSERT INTO worker_retry_intents(task_id, attempt, body) VALUES (?, 1, ?)')
     .run('retrying', JSON.stringify({ status: 'pending', options: {} }));
+  task(f.db, 'typing', 'stopped', { goal: 'web', manager: 'web', markdown: 'Completed source' }, 8);
+  f.db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)').run(
+    'typing',
+    JSON.stringify({
+      state: 'exited',
+      endedAt: new Date(old).toISOString(),
+      exitCode: 0,
+      failureKind: null,
+      blocker: null,
+      typingEvidencePending: {
+        result: 'Compiler input closure is unavailable for the last check-host typecheck.',
+        command: ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'],
+      },
+    }),
+  );
+  event(f.db, 'typing', 'typing-evidence-pending', old);
+  task(f.db, 'compiler-failed', 'stopped', { goal: 'web', manager: 'web', markdown: 'Compiler failure' }, 9);
+  f.db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)').run(
+    'compiler-failed',
+    JSON.stringify({
+      state: 'exited',
+      endedAt: new Date(old).toISOString(),
+      exitCode: 0,
+      failureKind: 'tool',
+      result: 'Last check-host run failed its typecheck.',
+    }),
+  );
+  event(f.db, 'compiler-failed', 'worker-exited', old);
+  const typingRecoveryCalls: { taskId: string; attempt: number }[] = [];
+  f.runtime.recoverTyping = async (ref) => {
+    typingRecoveryCalls.push(ref);
+    return { status: 'pending', result: 'Compiler input closure is unavailable for the last check-host typecheck.' };
+  };
 
   const sweep = await sweepBacklog(f.runtime);
 
-  expect(sweep.expired.map((entry) => entry.taskId)).toEqual(['expired', 'second']);
-  expect(f.cancelled).toEqual(['expired', 'second']);
+  expect(sweep.expired.map((entry) => entry.taskId)).toEqual(['expired', 'second', 'compiler-failed']);
+  expect(f.cancelled).toEqual(['expired', 'second', 'compiler-failed']);
+  expect(typingRecoveryCalls).toEqual([{ taskId: 'typing', attempt: 1 }]);
+  expect(f.db.query('SELECT current_attempt FROM worker_tasks WHERE id=?').get('typing')).toMatchObject({
+    current_attempt: 1,
+  });
   const failed = join(f.state, 'backlog', 'web', 'failed');
   expect(readFileSync(join(failed, 'expired.md'), 'utf8')).toBe(markdown);
   const reason = readFileSync(join(failed, 'expired.reason'), 'utf8');
@@ -492,12 +639,16 @@ test('a product task stopped for over an hour without action is cancelled into i
   expect(reason).toContain('spec-conflict: two requirements disagree');
   expect(existsSync(join(f.state, 'backlog', 'control-plane'))).toBe(false);
   const events = f.inbox.pending('web');
-  expect(events).toHaveLength(1);
-  expect(events[0]!.event.summary).toContain('Stopped-task limit: 2 task(s)');
-  expect(events[0]!.event.summary).toContain('expired, second');
+  expect(
+    events.some(({ event: delivered }) => delivered.summary.includes('typing-recover typing --expected-attempt 1')),
+  ).toBe(true);
+  const expiryNotice = events.find(({ event: delivered }) => delivered.summary.includes('Stopped-task limit:'));
+  expect(expiryNotice?.event.summary).toContain('Stopped-task limit: 3 task(s)');
+  expect(expiryNotice?.event.summary).toContain('expired, second, compiler-failed');
 
   // A cancelled task is no longer stopped, so the next sweep does nothing more.
   expect((await sweepBacklog(f.runtime)).expired).toEqual([]);
+  expect(typingRecoveryCalls).toHaveLength(1);
 });
 
 test('a running manager below eight ready briefs is woken at most once an hour', async () => {
@@ -530,6 +681,119 @@ test('a running manager below eight ready briefs is woken at most once an hour',
   f.clock.now += BACKLOG_WAKE_INTERVAL_MS - 1;
   expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
   f.clock.now += 1;
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+});
+
+test('administrative notices preserve an authenticated no-work disposition while scoped receiving evidence rearms it', async () => {
+  const f = fixture({ workerCap: 0 });
+  manager(f.db, 'web', {
+    kind: 'managed',
+    status: 'running',
+    engine: 'codex',
+    threadId: 'web-session',
+    goal: 'web',
+    goals: ['web'],
+    goalState: { status: 'active' },
+  });
+  manager(f.db, 'foreign', {
+    kind: 'managed',
+    status: 'running',
+    engine: 'codex',
+    threadId: 'foreign-session',
+    goal: 'foreign',
+    goals: [],
+    goalState: { status: 'active' },
+  });
+
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  const lowBacklogReminder = f.inbox.pending('web').find(({ event }) => event.summary.startsWith('Backlog low:'));
+  expect(lowBacklogReminder?.event.from).toBe('system:backlog-low-water');
+  await expect(backlogDisposition(f, 'web', 'no-work', 'foreign', 'foreign-session')).rejects.toThrow(
+    'authenticated unique running owner',
+  );
+  f.db
+    .query(
+      `UPDATE backlog_goals
+       SET low_work_manager = ?, low_work_session = ?, low_work_scope = ? WHERE goal = ?`,
+    )
+    .run('foreign', 'foreign-session', 'foreign-scope', 'web');
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  const recorded = JSON.parse(await backlogDisposition(f, 'web', 'no-work', 'web', 'web-session'));
+  expect(recorded).toMatchObject({ goal: 'web', manager: 'web' });
+  expect(recorded.scope).toMatch(/^[a-f0-9]{64}$/);
+
+  f.inbox.deliver({ managerId: 'web', goalId: 'other', kind: 'info', summary: 'Other Goal received new evidence' });
+  task(f.db, 'global-dev-task', 'running', { goal: 'dev', manager: 'dev' }, 1);
+  f.inbox.deliver({ managerId: 'web', goalId: 'web', kind: 'width', summary: 'Same-Goal width notice' });
+  f.inbox.deliver({
+    managerId: 'web',
+    from: 'system:backlog-low-water',
+    goalId: 'web',
+    kind: 'instruction',
+    summary: 'Backlog low: repeated administrative reminder',
+  });
+  f.clock.now += BACKLOG_WAKE_INTERVAL_MS * 3;
+  expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
+
+  f.restart();
+  expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
+  const saved = f.db
+    .query('SELECT low_work_manager, low_work_session, low_work_scope FROM backlog_goals WHERE goal = ?')
+    .get('web');
+  expect(saved).toMatchObject({ low_work_manager: 'web', low_work_session: 'web-session' });
+  expect((saved as { low_work_scope: string }).low_work_scope).toBe(recorded.scope);
+
+  f.db
+    .query(`INSERT INTO manager_inbox(manager, event, wakeable, created_at, goal_id)
+            VALUES (?, ?, ?, ?, ?)`)
+    .run(
+      'web',
+      JSON.stringify({ managerId: 'web', goalId: 'web', kind: 'info', summary: 'Legacy scoped receiving evidence' }),
+      1,
+      f.clock.now,
+      'web',
+    );
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+});
+
+test('low-backlog no-work dispositions rearm on a brief, scoped source, receiving evidence, owner change, or clear', async () => {
+  const f = fixture({ workerCap: 0 });
+  const owner = (sessionId: string) => ({
+    id: 'web',
+    kind: 'managed',
+    status: 'running',
+    engine: 'codex',
+    threadId: sessionId,
+    goal: 'web',
+    goals: ['web'],
+    goalState: { status: 'active' },
+  });
+  manager(f.db, 'web', owner('web-session'));
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  await backlogDisposition(f, 'web', 'no-work', 'web', 'web-session');
+
+  brief(f.state, 'web', 'new-outcome.md', 60_000);
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  await backlogDisposition(f, 'web', 'no-work', 'web', 'web-session');
+
+  task(f.db, 'web-source-task', 'ready', { goal: 'web', manager: 'web' }, 1);
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  await backlogDisposition(f, 'web', 'no-work', 'web', 'web-session');
+
+  f.inbox.deliver({ managerId: 'web', goalId: 'web', kind: 'info', summary: 'New scoped receiving evidence' });
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  await backlogDisposition(f, 'web', 'no-work', 'web', 'web-session');
+
+  f.db
+    .query('UPDATE manager_sessions SET state = ? WHERE id = ?')
+    .run(JSON.stringify(owner('web-session-renewed')), 'web');
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  await backlogDisposition(f, 'web', 'no-work', 'web', 'web-session-renewed');
+  expect(JSON.parse(await backlogDisposition(f, 'web', 'clear', 'web', 'web-session-renewed'))).toMatchObject({
+    goal: 'web',
+    manager: 'web',
+    cleared: true,
+  });
   expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
 });
 

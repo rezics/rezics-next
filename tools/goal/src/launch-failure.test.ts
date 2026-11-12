@@ -7,6 +7,7 @@ import { WorkerJob } from './job.ts';
 import { harness, reading } from './test-support.ts';
 import { WorkerTasks } from './tasks.ts';
 import { readControlPolicy } from './policy.ts';
+import { readFlow } from './flow.ts';
 
 // The CLI fails while loading its configuration: no session starts, nothing is written to stdout, nothing is committed.
 const brokenCli = `#!/usr/bin/env bun
@@ -45,6 +46,8 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     expect(attempt.process).toBeNull();
     expect(existsSync(join(task.worktree, '.temp/unprotected-start'))).toBe(false);
     expect(h.store.task(task.id).state).toBe('stopped');
+    expect(readFlow(h.store.db).filter((event) => event.taskId === task.id && event.stage === 'start' && event.action === 'started'))
+      .toEqual([]);
   } finally {
     if (originalPath === undefined) delete process.env.PATH;
     else process.env.PATH = originalPath;
@@ -169,6 +172,11 @@ test('a successful attempt lands its whole worktree, committing what the worker 
     await job.start(task.id);
     await job.drain();
     expect(landings).toHaveLength(1);
+    expect(
+      readFlow(h.store.db)
+        .filter((event) => event.taskId === task.id && event.attempt === 1 && event.stage === 'start')
+        .map((event) => event.action),
+    ).toEqual(['requested', 'started']);
     const files = git(task.worktree, 'show', '--name-only', '--format=', 'HEAD');
     expect(files).toContain('left.txt');
     expect(git(task.worktree, 'status', '--porcelain')).toBe('');

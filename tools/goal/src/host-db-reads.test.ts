@@ -165,6 +165,30 @@ test('empty active sets stay bounded across settled histories and repeated sweep
   }
 }, 30_000);
 
+test('maintenance selection stays on fixed pages across settled task attempt and event histories', () => {
+  const traces: SqliteWork[][] = [];
+  for (const [tasks, attempts, events] of scales) {
+    const { db, store } = fixture(tasks, attempts, events, 0);
+    const native = observeSqliteWork(db, join(root, `maintenance-${tasks}`));
+    store.resetDecodedRows();
+    expect(store.bootstrapMaintenanceTasks(16)).toMatchObject({ examined: 16, complete: false });
+    expect(store.bootstrapMaintenanceProcesses(16)).toEqual({ examined: 16, complete: false });
+    expect(store.worktreeMaintenanceCandidates(8)).toHaveLength(8);
+    expect(store.reapMaintenanceCandidates(8)).toEqual([]);
+    expect(store.decodedRows()).toEqual({ tasks: 8, attempts: 0 });
+    const work = native.drain(`maintenance-page:${tasks}/${attempts}/${events}`);
+    bounded(work);
+    expect(work.some((row) => /worker_maintenance_candidates/.test(row.sql))).toBe(true);
+    expect(work.some((row) => /worker_maintenance_progress/.test(row.sql))).toBe(true);
+    expect(work.some((row) => /json_type\(body, '\$\.process'\)/.test(row.sql))).toBe(true);
+    expect(work.some((row) => /SELECT id, body FROM worker_tasks ORDER BY sequence/i.test(row.sql))).toBe(false);
+    traces.push(work);
+    native.restore();
+  }
+  expect(traces[1]).toEqual(traces[0]);
+  expect(traces[2]).toEqual(traces[0]);
+}, 30_000);
+
 test('manager request reads and inbox sends avoid decoding settled task bodies', () => {
   const { db, store } = fixture();
   store.resetDecodedRows();

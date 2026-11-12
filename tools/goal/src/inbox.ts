@@ -87,6 +87,16 @@ function dedupeKey(manager: string, fields: ReturnType<typeof sharedInboxFields>
     .digest('hex');
 }
 
+/** Personal consumption is independent of peer reads, acknowledgements and transport delivery. */
+export function residentInboxCursor(db: Database, manager: string): number | undefined {
+  if (!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_inbox_resident_cursor'").get())
+    return undefined;
+  const row = db.query('SELECT after_id FROM manager_inbox_resident_cursor WHERE manager = ?').get(manager) as {
+    after_id: number;
+  } | null;
+  return row?.after_id;
+}
+
 export class SqliteManagerInbox implements ManagerInbox {
   readonly signalDirectory: string;
   constructor(
@@ -351,6 +361,48 @@ export class SqliteManagerInbox implements ManagerInbox {
           hasMore,
           nextCursor: hasMore && entries.length ? entries[entries.length - 1]!.id : null,
         };
+      })
+      .immediate();
+  }
+  /** Only the authenticated resident owner uses this durable oldest-unread consumer. */
+  readResidentPage(manager: string, sessionId: string, options: InboxReadOptions = {}): InboxPage<InboxEntry> {
+    const limit = inboxReadLimit(options.limit, this.policy);
+    if (options.cursor !== undefined && (!Number.isSafeInteger(options.cursor) || options.cursor < 1))
+      throw new Error('inbox cursor must be a positive integer');
+    return this.db
+      .transaction(() => {
+        const state = this.sessionState(manager) as {
+          kind?: string;
+          status?: string;
+          threadId?: string;
+          provider?: string;
+        } | null;
+        if (state?.kind !== 'resident-supermanager' || state.status !== 'running' || state.threadId !== sessionId)
+          throw new Error('resident inbox read requires its registered owner session');
+        this.db.exec(`CREATE TABLE IF NOT EXISTS manager_inbox_resident_cursor (
+        manager TEXT PRIMARY KEY, after_id INTEGER NOT NULL, provider TEXT NOT NULL,
+        session_id TEXT NOT NULL, read_at INTEGER NOT NULL
+      )`);
+        // An explicit cursor bootstraps a genuinely consumed backlog once. Later requests always continue the receipt.
+        const after = residentInboxCursor(this.db, manager) ?? options.cursor ?? 0;
+        const rows = this.db
+          .query(`SELECT id, event, read_at, acknowledged_at, delivery_count FROM manager_inbox
+        WHERE manager = ? AND wakeable = 1 AND id > ? ORDER BY id LIMIT ?`)
+          .all(manager, after, limit + 1) as InboxRow[];
+        const hasMore = rows.length > limit;
+        const entries = (hasMore ? rows.slice(0, limit) : rows).map(inboxEntry);
+        const last = entries.at(-1)?.id ?? after;
+        this.db
+          .query(`INSERT INTO manager_inbox_resident_cursor VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(manager) DO UPDATE SET after_id = excluded.after_id, provider = excluded.provider,
+        session_id = excluded.session_id, read_at = excluded.read_at`)
+          .run(manager, last, state.provider!, sessionId, this.now());
+        if (entries.length)
+          this.db
+            .query(`UPDATE manager_inbox SET read_at = COALESCE(read_at, ?)
+        WHERE manager = ? AND id > ? AND id <= ? AND wakeable = 1`)
+            .run(this.now(), manager, after, last);
+        return { entries, limit, hasMore, nextCursor: hasMore ? last : null };
       })
       .immediate();
   }

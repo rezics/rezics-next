@@ -347,6 +347,80 @@ test('harvest attributes new files to the attempt and proposes overlapping Goal 
         .replace('Write the requested result and commit it.', '# Distinct outcome'),
     );
     expect(harvestContinuations(h.store, h.settings, task, ref).queued).toHaveLength(1);
+    const outside = join(task.worktree, 'outside.md');
+    const linked = join(source, 'linked.md');
+    const untracked = join(source, 'untracked');
+    const tracked = join(source, 'tracked', 'keep.md');
+    writeFileSync(outside, markdown);
+    fs.symlinkSync(outside, linked);
+    mkdirSync(untracked);
+    writeFileSync(join(untracked, 'nested.md'), markdown);
+    mkdirSync(join(source, 'tracked'));
+    writeFileSync(tracked, markdown);
+    git(task.worktree, 'add', '-f', '--', '.temp/continuation/tracked/keep.md');
+    git(task.worktree, 'commit', '-m', 'Preserve tracked continuation directory');
+    const protectedEntries = harvestContinuations(h.store, h.settings, task, ref);
+    expect(protectedEntries.dropped.map(({ file }) => file)).toEqual(['linked.md', 'untracked']);
+    expect(existsSync(linked)).toBe(false);
+    expect(existsSync(outside)).toBe(true);
+    expect(existsSync(untracked)).toBe(false);
+    expect(readFileSync(tracked, 'utf8')).toBe(markdown);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('harvest preserves recreated notes inherited from launch and merge-parent trees', () => {
+  const h = harness();
+  h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const attempt = beginAttempt(h, task);
+    const ref = { taskId: task.id, attempt: attempt.attempt };
+    const source = join(task.worktree, '.temp/continuation');
+    const note = join(source, 'launch-note.md');
+    const inherited = markdown.replace('Write the requested result and commit it.', 'Finish Bangumi Season.');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(note, inherited);
+    git(task.worktree, 'add', '-f', '--', '.temp/continuation/launch-note.md');
+    git(task.worktree, 'commit', '-m', 'Preserve inherited launch note');
+    const launch = git(task.worktree, 'rev-parse', 'HEAD');
+    h.store.event(ref, 'worker-run-started', { branchHead: launch });
+    const originalInode = statSync(note).ino;
+    git(task.worktree, 'rm', '--cached', '--', '.temp/continuation/launch-note.md');
+    writeFileSync(`${note}.replacement`, inherited);
+    rmSync(note);
+    fs.renameSync(`${note}.replacement`, note);
+    expect(statSync(note).ino).not.toBe(originalInode);
+    const first = harvestContinuations(h.store, h.settings, task, ref);
+    expect(first).toMatchObject({ queued: [], proposed: [], dropped: [] });
+    expect(readFileSync(note, 'utf8')).toBe(inherited);
+
+    const parentNote = join(source, 'merge-parent.md');
+    writeFileSync(parentNote, inherited);
+    git(task.worktree, 'add', '-f', '--', '.temp/continuation/merge-parent.md');
+    git(task.worktree, 'commit', '-m', 'Admit merge-parent note');
+    const upstream = git(task.worktree, 'rev-parse', 'HEAD');
+    rmSync(note);
+    git(task.worktree, 'reset', '--hard', task.base);
+    const merge = git(
+      task.worktree,
+      'commit-tree',
+      `${task.base}^{tree}`,
+      '-p',
+      task.base,
+      '-p',
+      upstream,
+      '-m',
+      'Merge upstream without its continuation path',
+    );
+    git(task.worktree, 'reset', '--hard', merge);
+    h.store.event(ref, 'worker-run-started', { branchHead: merge });
+    mkdirSync(source, { recursive: true });
+    writeFileSync(parentNote, inherited);
+    const second = harvestContinuations(h.store, h.settings, task, ref);
+    expect(second).toMatchObject({ queued: [], proposed: [], dropped: [] });
+    expect(readFileSync(parentNote, 'utf8')).toBe(inherited);
   } finally {
     h.dispose();
   }

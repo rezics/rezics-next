@@ -6,11 +6,12 @@ import { PassThrough } from 'node:stream';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { migrate, openDb } from './db.ts';
-import { checkHostsInOutage, sshProbe, violations, watch } from './watchdog.ts';
+import { checkHostsInOutage, retryWait, sshProbe, violations, watch, type WatchdogScheduling } from './watchdog.ts';
 import { readControlPolicy } from './policy.ts';
 import { processIdentity } from './process.ts';
 import { workerMigrations, WorkerStore } from './store.ts';
 import type { Attempt, RetryIntent, Task } from './types.ts';
+import { brief } from './test-support.ts';
 
 const now = Date.parse('2026-10-26T12:00:00.000Z');
 const minutesAgo = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
@@ -20,12 +21,18 @@ function temporaryDirectory(prefix: string): string {
   return mkdtempSync(join(directory, prefix));
 }
 
-function store(tasks: Partial<Task>[], attempts: Partial<Attempt>[], intents: Partial<RetryIntent>[] = []) {
+function store(
+  tasks: Partial<Task>[],
+  attempts: Partial<Attempt>[],
+  intents: Partial<RetryIntent>[] = [],
+  recordedEvents: { taskId: string; attempt: number; kind: string }[] = [],
+) {
   return {
     tasks: () => tasks.map((task) => ({ brief: { goal: 'accounts' }, ...task }) as Task),
     attempt: (ref: { taskId: string; attempt: number }) =>
       attempts.find((attempt) => attempt.taskId === ref.taskId && attempt.attempt === ref.attempt) as Attempt,
     retryIntents: () => intents as RetryIntent[],
+    events: () => recordedEvents.map((event) => event as never),
     attemptsEndedBetween: (start: string, end: string) =>
       attempts.filter(
         (attempt) =>
@@ -82,6 +89,88 @@ test('a pending retry held for dependencies or a backoff is waiting by design, n
   const states: Record<string, string> = { producer: 'running', done: 'integrated' };
   const found = violations({ ...store(tasks, attempts, intents), dependency: (id) => ({ state: states[id]! }) }, now);
   expect(found.map((violation) => violation.key)).toEqual(['no-worker:lost:1']);
+});
+
+test('the watchdog starts counting missing-starter time after a retry backoff expires', () => {
+  const tasks = [{ id: 'paced', state: 'ready' as const, currentAttempt: 1 }];
+  const attempts = [{ taskId: 'paced', attempt: 1, state: 'exited' as const, endedAt: minutesAgo(30) }];
+  const intents = [{ taskId: 'paced', attempt: 1, status: 'pending' as const, options: { notBefore: minutesAgo(2) } }];
+  const fixture = store(tasks, attempts, intents);
+  expect(violations(fixture, now)).toEqual([]);
+  const found = violations(fixture, now + 9 * 60_000);
+  expect(found.map((item) => item.key)).toEqual(['no-worker:paced:1']);
+  expect(found[0]?.summary).toContain('11 min of eligible time');
+});
+
+test('a newly queued retry does not inherit days of idle time from a stopped attempt', () => {
+  const tasks = [{ id: 'reopened', state: 'ready' as const, currentAttempt: 1 }];
+  const attempts = [{ taskId: 'reopened', attempt: 1, state: 'exited' as const, endedAt: minutesAgo(2700) }];
+  const intents = [{ taskId: 'reopened', attempt: 1, status: 'pending' as const, queuedAt: minutesAgo(2) }];
+  const fixture = store(tasks, attempts, intents);
+  expect(violations(fixture, now)).toEqual([]);
+  const found = violations(fixture, now + 9 * 60_000);
+  expect(found.map((item) => item.key)).toEqual(['no-worker:reopened:1']);
+  expect(found[0]?.summary).toContain('11 min of eligible time');
+});
+
+test('a stopped typing-evidence retry reports once only after the deadline and live supply check', () => {
+  const root = temporaryDirectory('goal-watchdog-stopped-typing-');
+  const taskId = 'typing-retry';
+  const task = {
+    id: taskId,
+    state: 'ready' as const,
+    currentAttempt: 1,
+    brief: { ...brief(), goal: 'web', manager: 'web-manager', after: [] },
+  } as Partial<Task>;
+  const attempt = {
+    taskId,
+    attempt: 1,
+    state: 'stopped' as const,
+    endedAt: minutesAgo(30),
+    typingEvidencePending: { result: 'compiler evidence pending' },
+  };
+  const intent = { taskId, attempt: 1, status: 'pending' as const, queuedAt: minutesAgo(11), options: {} };
+  const fixture = store([task], [attempt], [intent], [{ taskId, attempt: 1, kind: 'typing-retry-unreconciled' }]);
+  const policy = readControlPolicy({});
+  const scheduling = { schedulingOwner: 'control-plane-manager', runnableSupply: () => true };
+  const branches = { stabilize: 'missing-stabilize', integration: 'missing-dev' };
+  const report = (source = fixture, at = now, admission: WatchdogScheduling = scheduling) =>
+    violations(source, at, undefined, root, policy, admission);
+  try {
+    expect(report(store([task], [attempt], [intent]))).toEqual([]);
+    expect(report(fixture, now - 2 * 60_000)).toEqual([]);
+    expect(report(fixture, now, { ...scheduling, runnableSupply: () => false })).toEqual([]);
+
+    const identity = processIdentity();
+    expect(identity).not.toBeNull();
+    const capacityQueue = join(root, 'capacity-queue');
+    mkdirSync(capacityQueue);
+    writeFileSync(
+      join(capacityQueue, `000000000000001-${identity!.pid}-${taskId}`),
+      JSON.stringify({ ...identity, taskId }),
+    );
+    expect(report()).toEqual([]);
+    rmSync(capacityQueue, { recursive: true, force: true });
+
+    const found = report();
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ key: 'no-worker:typing-retry:1', managerId: 'control-plane-manager' });
+    expect(found[0]?.summary).toContain('11 min since');
+    expect(found[0]?.summary).toContain('compatible provider pool is available');
+    expect(found[0]?.summary).toContain('typing-recover typing-retry --expected-attempt 1');
+    expect(report(fixture, now, { runnableSupply: () => true })[0]).not.toHaveProperty('managerId');
+
+    const delivered: { summary: string; managerId: string | undefined }[] = [];
+    const deliver = (summary: string, managerId?: string) => delivered.push({ summary, managerId });
+    expect(watch(fixture, root, branches, root, deliver, now, undefined, undefined, policy, scheduling)).toBe(1);
+    expect(watch(fixture, root, branches, root, deliver, now + 60_000, undefined, undefined, policy, scheduling)).toBe(
+      0,
+    );
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]).toMatchObject({ managerId: 'control-plane-manager' });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('an exited attempt with a live driver is not reported while its driver settles it', () => {
@@ -541,7 +630,7 @@ test('the recent-attempt store query excludes attempts outside the requested win
   }
 });
 
-test('a long attempt whose last command spans lines is reported once, on one line', () => {
+test('a long attempt reports progress once per interval even when commands or commits change', () => {
   const root = mkdtempSync(join(tmpdir(), 'goal-watchdog-'));
   const git = (...args: string[]) => spawnSync('git', args, { cwd: root, encoding: 'utf8' }).stdout.trim();
   try {
@@ -560,6 +649,8 @@ test('a long attempt whose last command spans lines is reported once, on one lin
           id: 'long',
           state: 'running' as const,
           currentAttempt: 1,
+          worktree: root,
+          base: git('rev-parse', 'HEAD'),
           brief: { goal: 'web', manager: 'web' } as Task['brief'],
         },
       ],
@@ -581,6 +672,17 @@ test('a long attempt whose last command spans lines is reported once, on one lin
       async () => [],
       () => 60_000,
     );
+    git(
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=f@example.invalid',
+      'commit',
+      '-q',
+      '--allow-empty',
+      '-m',
+      'progress',
+    );
     watch(
       tasks,
       root,
@@ -594,6 +696,19 @@ test('a long attempt whose last command spans lines is reported once, on one lin
     const longAttempts = delivered.filter((summary) => summary.startsWith('Long attempt:'));
     expect(longAttempts).toHaveLength(1);
     expect(longAttempts[0]).toContain("zsh -lc 'set -e bun test'");
+    watch(
+      tasks,
+      root,
+      branches,
+      root,
+      deliver,
+      now + 3_600_000,
+      async () => [],
+      () => 60_000,
+    );
+    const after = delivered.filter((summary) => summary.startsWith('Long attempt:'));
+    expect(after).toHaveLength(2);
+    expect(after[1]).toContain('with 1 commits');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -673,6 +788,38 @@ test('watchdog overrides govern idle boundaries, alert repetition and host-outag
     expect(probes).toBe(2);
     expect(checkHostsInOutage(root, policy)).toEqual(['fixture']);
     expect(checkHostsInOutage(root)).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a retry waits for check hosts only when every performance-approved placement is in outage', () => {
+  const root = temporaryDirectory('goal-watchdog-eligible-hosts-');
+  const policy = readControlPolicy({ watchdog: { hostProbeFailures: 1 } });
+  const hosts = ['a', 'b', 'c'].map((name) => ({
+    name,
+    address: `check@${name}.test`,
+    identity: `/fixture/${name}`,
+    performance: true,
+  }));
+  hosts.push({ name: 'd', address: 'check@d.test', identity: '/fixture/d', performance: false });
+  const intent: RetryIntent = {
+    taskId: 'retry',
+    attempt: 1,
+    options: { awaitCheckHosts: true },
+    status: 'pending',
+  };
+  const task = { brief: { ...brief(), after: [] } };
+  try {
+    writeFileSync(join(root, 'remote-check-hosts.json'), JSON.stringify({ hosts }));
+    writeFileSync(join(root, 'watchdog.json'), JSON.stringify({ hostProbeFailures: { b: 1, d: 1 } }));
+    expect(checkHostsInOutage(root, policy)).toEqual(['b', 'd']);
+    expect(retryWait(intent, task, () => undefined, now, root, policy)).toBeNull();
+    writeFileSync(join(root, 'watchdog.json'), JSON.stringify({ hostProbeFailures: { a: 1, b: 1, c: 1, d: 1 } }));
+    expect(retryWait(intent, task, () => undefined, now, root, policy)).toEqual({
+      reason: 'check-hosts',
+      hosts: ['a', 'b', 'c'],
+    });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

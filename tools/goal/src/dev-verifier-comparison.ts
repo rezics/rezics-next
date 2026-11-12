@@ -2,7 +2,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
-import type { DevVerifierEvidence, DevVerifierFinding, DevVerifierResult, Settings } from './types.ts';
+import type {
+  DevVerifierCause,
+  DevVerifierDiagnostic,
+  DevVerifierEvidence,
+  DevVerifierFinding,
+  DevVerifierResult,
+  Settings,
+} from './types.ts';
 import { defaultPolicy } from './policy.ts';
 import { gateEnvironment, gateRunner, git } from './merge.ts';
 import { classifyRun } from './dev-verifier-classification.ts';
@@ -61,7 +68,7 @@ function toolchainIdentity(settings: Settings, commit?: string): unknown {
 
 export function checkSignature(check: Check, index: number): string {
   return hash({
-    version: 3,
+    version: 4,
     index,
     command: check.command,
     closure: [...check.closure].sort(),
@@ -76,7 +83,7 @@ export function selectionIdentity(checks: readonly IndexedCheck[]): string {
 
 export function dependencySetupKey(settings: Settings, commit: string): string {
   return hash({
-    version: 3,
+    version: 4,
     phase: 'dependency-setup',
     commit,
     command: ['bun', 'install', '--frozen-lockfile'],
@@ -88,7 +95,7 @@ export function dependencySetupKey(settings: Settings, commit: string): string {
 
 export function runCacheKey(settings: Settings, commit: string, check: IndexedCheck, selection: string): string {
   return hash({
-    version: 3,
+    version: 4,
     phase: 'head-check',
     commit,
     signature: check.signature,
@@ -104,14 +111,26 @@ export function makeFinding(
   check: IndexedCheck,
   base: string,
   target: string,
-  test: string,
+  test: string | undefined,
   assertion: string,
   status: DevVerifierFinding['status'],
   evidence: DevVerifierEvidence | null,
   reason: string,
   result: DevVerifierResult,
+  cause?: DevVerifierCause,
+  diagnostic?: DevVerifierDiagnostic,
+  diagnosticIdentity?: string,
 ): DevVerifierFinding {
-  const identity = hash({ test });
+  const identity = hash(
+    test
+      ? { test }
+      : {
+          cause: cause ?? 'unknown',
+          diagnostic: diagnosticIdentity ?? diagnostic,
+          command: check.command,
+          assertion,
+        },
+  );
   return {
     rangeKey: hash({ identity, target }),
     identity,
@@ -127,7 +146,9 @@ export function makeFinding(
       ...(check.cwd ? { cwd: check.cwd } : {}),
     },
     assertion,
-    test,
+    ...(test ? { test } : {}),
+    ...(cause ? { cause } : {}),
+    ...(diagnostic ? { diagnostic } : {}),
     baseline: null,
     head: evidence,
     reason,
@@ -139,8 +160,7 @@ export function makeFinding(
 function verifierExecution(options: DevVerifierOptions): DevVerifierExecution {
   return {
     settings: options.settings,
-    readRun: (key) => options.store.devVerifierRun?.(key)?.evidence,
-    saveRun: (run) => options.store.saveDevVerifierRun?.(run),
+    store: options.store,
   };
 }
 
@@ -153,6 +173,7 @@ export async function runChecksAtHead(
   deadline: number,
   signal: AbortSignal,
   bootSmokeCount = 0,
+  roundId: string = randomUUID(),
 ): Promise<RoundChecks> {
   const settings = options.settings;
   const execution = verifierExecution(options);
@@ -161,7 +182,7 @@ export async function runChecksAtHead(
     index,
     signature: checkSignature(check, index),
   }));
-  const selection = selectionIdentity(indexed) + ':' + randomUUID();
+  const selection = selectionIdentity(indexed);
   const bootRunner =
     options.runBootSmoke ??
     options.runGate ??
@@ -172,7 +193,7 @@ export async function runChecksAtHead(
 
   const runOne = async (check: IndexedCheck, gate: typeof runner) => {
     const key = runCacheKey(settings, head, check, selection);
-    const evidence = await executeCheck(execution, gate, check, head, tree, key, undefined, signal);
+    const evidence = await executeCheck(execution, gate, check, head, tree, key, undefined, signal, roundId);
     attempted.add(check.index);
     results.push({ check, evidence });
   };

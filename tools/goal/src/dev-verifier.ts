@@ -3,7 +3,10 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import type {
+  DevVerifierCause,
+  DevVerifierCommand,
   DevVerifierEvidence,
+  DevVerifierDiagnostic,
   DevVerifierFinding,
   DevVerifierRoundSummary,
   DevVerifierRun,
@@ -21,17 +24,22 @@ import {
   runChecksAtHead,
   type CheckRun,
 } from './dev-verifier-comparison.ts';
-import { classifyRun, stableAssertions } from './dev-verifier-classification.ts';
-import { installDependenciesCached } from './dev-verifier-execution.ts';
+import { classifyRun, fileFailureAssertions, truncatedOutput, verifierCauses } from './dev-verifier-classification.ts';
+import {
+  commandMetadata,
+  extractTestFileOutcomes,
+  extractVerifierDiagnostics,
+  isAuthDatabasePlacementFailure,
+  type DiagnosticWorkspaceContext,
+} from './dev-verifier-diagnostics.ts';
+import { installDependenciesCached, recordSkippedCommand } from './dev-verifier-execution.ts';
 import {
   countSourceIntervalCommits,
   createFullVerifierChecks,
   createVerifierChecks,
-  filesInCommits,
   matches,
-  placeInWorkspace,
+  placeBootSmokeCheck,
   projectVerifierLandings,
-  taskCommits,
   trackedFilesAt,
   type DevVerifierCheck,
   type VerifierLandings,
@@ -54,18 +62,32 @@ export { VERIFY_CONCURRENCY } from './dev-verifier-comparison.ts';
 type Check = DevVerifierCheck;
 const ref = (branch: string) => 'refs/heads/' + branch;
 const verifiedBranch = 'dev-verified';
-const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/i;
+const TEST_FILE = /^(?:[A-Za-z0-9_.@-]+\/)*[A-Za-z0-9_.@-]+\.(?:test|spec)\.[cm]?[jt]sx?$/i;
 const tick = String.fromCharCode(96);
+const ACTIVE_OWNER_STATES = new Set(['ready', 'held', 'running', 'landing', 'stopped']);
+const LANDED_OWNER_STATES = new Set(['integrated', 'merged']);
 
 function head(cwd: string, branch: string): string {
   return git(cwd, 'rev-parse', '--verify', ref(branch));
 }
 
 export type TestFailure = {
-  test: string;
+  test?: string;
   assertions: string[];
   error: string;
   owner: Task;
+  cause?: DevVerifierCause;
+  diagnostic?: DevVerifierDiagnostic;
+  command?: DevVerifierCommand;
+  sourceRevision?: string;
+  evidenceLogPath?: string;
+  evidence?: TestFailureEvidence[];
+};
+export type TestFailureEvidence = {
+  command?: DevVerifierCommand;
+  sourceRevision?: string;
+  evidenceLogPath?: string;
+  output: string;
 };
 export type TestFailureRepair = {
   goal: string;
@@ -76,6 +98,48 @@ export type TestFailureRepair = {
   paths: string[];
   existingTaskId?: string;
 };
+
+function failureEvidence(failure: TestFailure): TestFailureEvidence[] {
+  return (
+    failure.evidence ?? [
+      {
+        ...(failure.command ? { command: failure.command } : {}),
+        ...(failure.sourceRevision ? { sourceRevision: failure.sourceRevision } : {}),
+        ...(failure.evidenceLogPath ? { evidenceLogPath: failure.evidenceLogPath } : {}),
+        output: failure.error,
+      },
+    ]
+  );
+}
+
+function mergeRepeatedNamedTestFailures(failures: readonly TestFailure[]): TestFailure[] {
+  const result: TestFailure[] = [];
+  const byIdentity = new Map<string, number>();
+  for (const failure of failures) {
+    if (!failure.test || !TEST_FILE.test(failure.test)) {
+      result.push(failure);
+      continue;
+    }
+    const key = JSON.stringify([failure.owner.id, failure.cause ?? 'product-runtime', failure.test]);
+    const existingIndex = byIdentity.get(key);
+    if (existingIndex === undefined) {
+      byIdentity.set(key, result.length);
+      result.push(failure);
+      continue;
+    }
+    const existing = result[existingIndex]!;
+    const evidence = [...failureEvidence(existing), ...failureEvidence(failure)];
+    const uniqueEvidence = [...new Map(evidence.map((item) => [JSON.stringify(item), item])).values()];
+    const outputs = [...new Set(uniqueEvidence.map(({ output }) => output))];
+    result[existingIndex] = {
+      ...existing,
+      assertions: [...new Set([...existing.assertions, ...failure.assertions])],
+      error: outputs.join('\n\n--- separate verifier result ---\n\n'),
+      evidence: uniqueEvidence,
+    };
+  }
+  return result;
+}
 
 export type DevVerifierOptions = {
   settings: Settings;
@@ -98,21 +162,41 @@ function uniqueChecks(checks: readonly Check[]): Check[] {
   return [...result.values()];
 }
 
-function bootSmokeChecks(settings: Settings, commit: string): Check[] {
+function bootSmokePlan(settings: Settings, commit: string): { checks: Check[]; skipped: Check[] } {
   const tracked = trackedFilesAt(settings.mainCheckout, commit);
-  return (settings.bootSmoke?.tests ?? [])
-    .filter((test) => tracked.has(test))
-    .map((test) => placeInWorkspace({ command: ['bun', 'test', test], closure: ['**'] }, tracked));
+  const tests = [...new Set(settings.bootSmoke?.tests ?? [])];
+  return {
+    checks: tests
+      .filter((test) => tracked.has(test))
+      .flatMap((test) =>
+        placeBootSmokeCheck({ command: ['bun', 'test', test], closure: ['**'] }, tracked, settings.mainCheckout),
+      ),
+    skipped: tests
+      .filter((test) => !tracked.has(test))
+      .map((test) => ({ command: ['bun', 'test', test], closure: ['**'] })),
+  };
 }
 
 function isAncestor(cwd: string, base: string, target: string): boolean {
   return spawnSync('git', ['merge-base', '--is-ancestor', base, target], { cwd }).status === 0;
 }
 
-function shouldRunRound(previous: DevVerifierRun | undefined, now: number, intervalMs: number): boolean {
+const CHANGED_DEV_CHECK_INTERVAL_MS = 10 * 60_000;
+
+function shouldRunRound(
+  previous: DevVerifierRun | undefined,
+  target: string,
+  now: number,
+  intervalMs: number,
+): boolean {
   if (!previous?.round) return true;
-  const completedAt = Date.parse(previous.round.completedAt);
-  return !Number.isFinite(completedAt) || now - completedAt >= intervalMs;
+  const { completedAt, headCommit, pendingChecks, unknown } = previous.round;
+  const changed = headCommit !== target;
+  // A settled head has no new evidence to collect. Unreached and infrastructure results keep the normal retry cadence.
+  if (!changed && (pendingChecks?.length ?? 0) === 0 && unknown === 0) return false;
+  const completed = Date.parse(completedAt);
+  const interval = changed ? Math.min(intervalMs, CHANGED_DEV_CHECK_INTERVAL_MS) : intervalMs;
+  return !Number.isFinite(completed) || now - completed >= interval;
 }
 
 function advanceVerified(settings: Settings, target: string): void {
@@ -129,79 +213,216 @@ function advanceVerified(settings: Settings, target: string): void {
   }
 }
 
-function testFilesFor(check: CheckRun['check'], evidence: DevVerifierEvidence): string[] {
-  const normalize = (path: string) => {
-    const relative = path.replace(/^\.\//, '');
-    return check.cwd && !relative.startsWith(check.cwd + '/') ? check.cwd + '/' + relative : relative;
-  };
-  const found = new Set<string>();
-  const output = evidence.output.replaceAll('\\', '/');
-  const expression =
-    /(?:^|[\s([{"'])((?:[A-Za-z0-9_.@-]+\/)*[A-Za-z0-9_.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/g;
-  for (const match of output.matchAll(expression)) found.add(match[1]!);
-  if (found.size) return [...found].map(normalize);
-  const sourceFiles = check.command.filter((argument) => TEST_FILE.test(argument));
-  if (sourceFiles.length) return [...new Set(sourceFiles.map(normalize))];
-  const source = check.closure.find((path) => !path.includes('*') && TEST_FILE.test(path));
-  if (source) return [normalize(source)];
-  return [check.command.join(' ')];
+function matchingPathSpecificity(file: string, paths: readonly string[], options: DevVerifierOptions): number {
+  const matching = paths.filter((path) => matches(file, [path], options.settings.policy?.brief));
+  const score = (path: string) =>
+    path
+      .replaceAll('*', '')
+      .replaceAll('?', '')
+      .replaceAll('{', '')
+      .replaceAll('}', '')
+      .replaceAll('[', '')
+      .replaceAll(']', '').length;
+  return matching.length ? Math.max(...matching.map(score)) : -1;
 }
 
-function changedPaths(history: VerifierLandings | undefined, task: Task): string[] {
-  if (!history) return [];
-  return filesInCommits(history.interval, taskCommits(task, history.interval));
-}
-
-function ownerForFailure(
+function ownersForFile(
   options: DevVerifierOptions,
-  history: VerifierLandings | undefined,
+  file: string,
+  includeLanded: boolean,
+): { task: Task; specificity: number }[] {
+  return options.store
+    .tasks()
+    .filter((task) => ACTIVE_OWNER_STATES.has(task.state) || (includeLanded && LANDED_OWNER_STATES.has(task.state)))
+    .map((task) => ({ task, specificity: matchingPathSpecificity(file, task.brief.paths ?? [], options) }))
+    .filter(({ specificity }) => specificity >= 0);
+}
+
+function uniqueOwner(
+  candidates: { task: Task; specificity: number }[],
+  preferredTaskId: string | undefined,
+): { owner?: Task; ambiguous: Task[] } {
+  if (!candidates.length) return { ambiguous: [] };
+  const active = candidates.filter(({ task }) => ACTIVE_OWNER_STATES.has(task.state));
+  const eligible = active.length ? active : candidates;
+  const specificity = Math.max(...eligible.map(({ specificity: score }) => score));
+  const best = eligible.filter(({ specificity: score }) => score === specificity);
+  if (best.length > 1 && preferredTaskId) {
+    const preferred = best.find(({ task }) => task.id === preferredTaskId);
+    if (preferred) return { owner: preferred.task, ambiguous: [] };
+  }
+  return best.length === 1 ? { owner: best[0]!.task, ambiguous: [] } : { ambiguous: best.map(({ task }) => task) };
+}
+
+export type DiagnosticOwnerReconciliation = {
+  state: 'owned' | 'ambiguous' | 'stale' | 'unresolved';
+  owner?: Task;
+  currentRevision?: string;
+  reason: string;
+};
+
+function sourceUnchangedAtCurrentRevision(
+  checkout: string,
+  capturedRevision: string,
+  currentRevision: string,
+  file: string,
+): boolean | undefined {
+  const source = spawnSync('git', ['cat-file', '-e', `${currentRevision}:${file}`], { cwd: checkout });
+  if (source.error) throw source.error;
+  if (source.status === null) return undefined;
+  if (source.status !== 0) return false;
+  if (capturedRevision === currentRevision) return true;
+  const diff = spawnSync('git', ['diff', '--quiet', `${capturedRevision}..${currentRevision}`, '--', file], {
+    cwd: checkout,
+  });
+  if (diff.error) throw diff.error;
+  if (diff.status === null) return undefined;
+  if (diff.status === 0) return true;
+  return diff.status === 1 ? false : undefined;
+}
+
+export function reconcileDiagnosticOwner(
+  options: DevVerifierOptions,
+  check: CheckRun['check'],
+  diagnostic: DevVerifierDiagnostic,
+  capturedRevision: string,
+  currentRevision = head(options.settings.mainCheckout, options.settings.integrationBranch ?? 'dev'),
+): DiagnosticOwnerReconciliation {
+  const location = diagnostic.location;
+  if (!location?.file || !location.resolved)
+    return { state: 'unresolved', reason: 'The compiler operand could not be resolved to a repository source path.' };
+
+  return reconcileSourceOwner(options, check, location.file, capturedRevision, currentRevision);
+}
+
+function reconcileSourceOwner(
+  options: DevVerifierOptions,
+  check: CheckRun['check'],
+  file: string,
+  capturedRevision: string,
+  currentRevision: string,
+  includeLanded = false,
+): DiagnosticOwnerReconciliation {
+  const checkout = options.settings.mainCheckout;
+  const branch = options.settings.integrationBranch ?? 'dev';
+  if (!isAncestor(checkout, capturedRevision, currentRevision))
+    return {
+      state: 'unresolved',
+      currentRevision,
+      reason: `Captured revision ${capturedRevision} is not an ancestor of current ${branch} ${currentRevision}.`,
+    };
+  const unchanged = sourceUnchangedAtCurrentRevision(checkout, capturedRevision, currentRevision, file);
+  if (unchanged === false)
+    return {
+      state: 'stale',
+      currentRevision,
+      reason: `Current source ${file} changed after captured revision ${capturedRevision}; current revision is ${currentRevision}.`,
+    };
+  if (unchanged === undefined)
+    return {
+      state: 'unresolved',
+      currentRevision,
+      reason: `Could not compare ${file} between captured revision ${capturedRevision} and current revision ${currentRevision}.`,
+    };
+
+  const candidates = ownersForFile(options, file, includeLanded);
+  const chosen = uniqueOwner(candidates, check.taskId);
+  if (chosen.owner)
+    return {
+      state: 'owned',
+      owner: chosen.owner,
+      currentRevision,
+      reason: `Concrete failed source ${file} matches the owner's declared paths.`,
+    };
+  if (chosen.ambiguous.length)
+    return {
+      state: 'ambiguous',
+      currentRevision,
+      reason: `Concrete failed source ${file} matches multiple owners: ${chosen.ambiguous.map(({ id }) => id).join(', ')}.`,
+    };
+  return {
+    state: 'unresolved',
+    currentRevision,
+    reason: `No established owner declares concrete failed source ${file}.`,
+  };
+}
+
+function ownerForTest(
+  options: DevVerifierOptions,
   check: CheckRun['check'],
   test: string,
-): Task | undefined {
-  const tasks = options.store.tasks();
-  if (check.taskId) {
-    const direct = tasks.find((task) => task.id === check.taskId);
-    if (direct) return direct;
-  }
-  const testIsPath = TEST_FILE.test(test);
-  const eligible = tasks.filter((task) => ['integrated', 'merged'].includes(task.state));
-  const relevant = eligible.filter((task) => {
-    const paths = task.brief.paths ?? [];
-    if (testIsPath && matches(test, paths, options.settings.policy?.brief)) return true;
-    return changedPaths(history, task).some(
-      (file) =>
-        matches(file, paths, options.settings.policy?.brief) &&
-        matches(file, check.closure, options.settings.policy?.brief),
-    );
-  });
-  const interval = history?.interval;
-  relevant.sort((left, right) => {
-    const leftCommit = left.integratedCommit ?? left.mergedCommit;
-    const rightCommit = right.integratedCommit ?? right.mergedCommit;
-    const leftPosition = interval && leftCommit ? (interval.position.get(leftCommit) ?? -1) : -1;
-    const rightPosition = interval && rightCommit ? (interval.position.get(rightCommit) ?? -1) : -1;
-    return rightPosition - leftPosition || right.sequence - left.sequence;
-  });
-  return relevant[0];
+  capturedRevision: string,
+  currentRevision: string,
+): DiagnosticOwnerReconciliation {
+  return reconcileSourceOwner(options, check, test, capturedRevision, currentRevision, true);
 }
 
 export function testFailureRepairBrief(repair: TestFailureRepair, policy = defaultPolicy.verifier): string {
   const failures = repair.failures
     .map((failure) => {
       const assertions = failure.assertions.map((assertion) => '- ' + assertion).join('\n');
+      const isNamedTest = !!failure.test && TEST_FILE.test(failure.test);
+      const subject = isNamedTest
+        ? '- Test file: ' + tick + failure.test + tick
+        : failure.command || failure.test
+          ? '- Command: ' + tick + (failure.command ? JSON.stringify(failure.command.argv) : failure.test) + tick
+          : '- ' +
+            (failure.cause ?? 'Verifier') +
+            ' diagnostic: ' +
+            (failure.diagnostic?.message ?? 'unresolved failure');
+      const sources = failureEvidence(failure);
+      const provenance = [
+        ...sources.map((source, index) =>
+          [
+            sources.length > 1 ? '  Evidence ' + (index + 1) + ':' : '',
+            source.sourceRevision ? '  Source revision: ' + tick + source.sourceRevision + tick : '',
+            source.command
+              ? '  Command: ' +
+                tick +
+                JSON.stringify(source.command.argv) +
+                tick +
+                ' (cwd ' +
+                tick +
+                (source.command.cwd ?? '.') +
+                tick +
+                ')'
+              : '',
+            source.evidenceLogPath ? '  Original result: ' + tick + source.evidenceLogPath + tick : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        ),
+        failure.diagnostic?.location
+          ? '  Location: ' +
+            tick +
+            failure.diagnostic.location.file +
+            ':' +
+            (failure.diagnostic.location.line ?? '?') +
+            ':' +
+            (failure.diagnostic.location.column ?? '?') +
+            tick
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+      const output = sources
+        .map(
+          ({ output: evidenceOutput }, index) =>
+            (sources.length > 1 ? `  Evidence ${index + 1}:\n` : '') +
+            evidenceOutput
+              .slice(-policy.diagnosticCharacters)
+              .split('\n')
+              .map((line) => '  ' + line)
+              .join('\n'),
+        )
+        .join('\n\n');
       return (
-        '- Test file: ' +
-        tick +
-        failure.test +
-        tick +
+        subject +
+        (provenance ? '\n' + provenance : '') +
         '\n  Assertions:\n' +
         assertions +
         '\n\n  Output:\n\n  ' +
-        failure.error
-          .slice(-policy.diagnosticCharacters)
-          .split('\n')
-          .map((line) => '  ' + line)
-          .join('\n')
+        output
       );
     })
     .join('\n\n');
@@ -252,21 +473,21 @@ function dispatchTestRepairs(options: DevVerifierOptions, failures: readonly Tes
     const goal = failure.owner.brief.goal;
     const manager = failure.owner.brief.manager;
     if (!goal || !manager) continue;
-    const key = goal + '\0' + manager;
+    const key = goal + '\0' + manager + '\0' + (failure.cause ?? 'product-runtime');
     groups.set(key, [...(groups.get(key) ?? []), failure]);
   }
   for (const [key, items] of groups) {
-    const [goal, manager] = key.split('\0') as [string, string];
+    const [goal, manager, cause] = key.split('\0') as [string, string, DevVerifierCause | 'product-runtime'];
     const owner = items[0]!.owner;
-    const paths = [
-      ...new Set(
-        items.flatMap(({ owner: itemOwner, test }) => [
-          ...(itemOwner.brief.paths ?? []),
-          ...(TEST_FILE.test(test) ? [test] : []),
-        ]),
-      ),
-    ];
-    const existing = openTestRepair(options.store, goal);
+    const paths =
+      cause === 'compiler'
+        ? [
+            ...new Set(
+              items.flatMap(({ diagnostic }) => (diagnostic?.location?.file ? [diagnostic.location.file] : [])),
+            ),
+          ]
+        : [...new Set(items.flatMap(({ test }) => (test && TEST_FILE.test(test) ? [test] : [])))];
+    const existing = cause === 'compiler' ? undefined : openTestRepair(options.store, goal);
     try {
       options.dispatchTestRepair({
         goal,
@@ -283,83 +504,271 @@ function dispatchTestRepairs(options: DevVerifierOptions, failures: readonly Tes
   }
 }
 
-function recordResults(
+function findingProvenance(check: CheckRun['check'], revision: string): string {
+  const command = commandMetadata(check);
+  return `Captured revision ${revision}; argv ${JSON.stringify(command.argv)}; cwd ${command.cwd ?? '.'}. Original command output is retained in the finding evidence.`;
+}
+
+function saveDiagnosticFinding(
   options: DevVerifierOptions,
-  history: VerifierLandings | undefined,
+  check: CheckRun['check'],
+  base: string,
+  target: string,
+  diagnostic: DevVerifierDiagnostic,
+  status: DevVerifierFinding['status'],
+  evidence: DevVerifierEvidence,
+  reason: string,
+  result: DevVerifierFinding['result'],
+): void {
+  const location = diagnostic.location;
+  const assertion = [diagnostic.code, diagnostic.message].filter(Boolean).join(': ');
+  saveFinding(
+    options.store,
+    makeFinding(
+      check,
+      base,
+      target,
+      undefined,
+      assertion,
+      status,
+      evidence,
+      `${reason} ${findingProvenance(check, target)}`,
+      result,
+      diagnostic.cause,
+      diagnostic,
+      location ? `${location.file}:${location.line ?? '?'}:${location.column ?? '?'}` : undefined,
+    ),
+    options.settings.policy?.verifier,
+  );
+}
+
+export function recordVerifierResults(
+  options: DevVerifierOptions,
   base: string,
   target: string,
   runs: readonly CheckRun[],
-): { testsRun: number; passed: number; failed: number; unknown: number; repairs: TestFailure[] } {
+): { testsRun: number; passed: number; failed: number; unknown: number; skipped: number; repairs: TestFailure[] } {
   let passed = 0;
   let failed = 0;
   let unknown = 0;
+  let skipped = 0;
   const repairs: TestFailure[] = [];
-  const failedTests = new Map<
-    string,
-    { check: CheckRun['check']; assertions: Set<string>; evidence: DevVerifierEvidence }
-  >();
+  const currentRevision = head(options.settings.mainCheckout, options.settings.integrationBranch ?? 'dev');
   for (const { check, evidence } of runs) {
     const outcome = classifyRun(evidence, options.settings.policy?.verifier);
     if (outcome === 'pass') {
       passed++;
       continue;
     }
-    const testNames = testFilesFor(check, evidence);
-    if (outcome === 'fail') {
-      failed++;
-      const assertions = stableAssertions(evidence.output, options.settings.policy?.verifier);
-      for (const test of testNames) {
-        const previous = failedTests.get(test);
-        if (previous) assertions.forEach((assertion) => previous.assertions.add(assertion));
-        else failedTests.set(test, { check, assertions: new Set(assertions), evidence });
-      }
+    if (outcome === 'skipped') {
+      skipped++;
       continue;
     }
-    unknown++;
-    const test = testNames[0] ?? check.command.join(' ');
-    saveFinding(
-      options.store,
-      makeFinding(
+    if (outcome === 'fail') failed++;
+    else unknown++;
+
+    const workspace: DiagnosticWorkspaceContext = {
+      repositoryRoot: options.settings.mainCheckout,
+      workspace: check.cwd ?? '',
+    };
+    const command = commandMetadata(check);
+    const diagnostics = extractVerifierDiagnostics(evidence, workspace);
+    const compilerDiagnostics = diagnostics.filter(({ cause }) => cause === 'compiler');
+    const independentDiagnostics = diagnostics.filter(({ cause }) => cause !== 'compiler');
+    const testAttribution = extractTestFileOutcomes(check, evidence, workspace);
+    const causes = verifierCauses(evidence, options.settings.policy?.verifier);
+    const setupFailure = independentDiagnostics.some(({ cause }) => cause === 'setup');
+
+    for (const diagnostic of compilerDiagnostics) {
+      const ownerResult = reconcileDiagnosticOwner(options, check, diagnostic, target, currentRevision);
+      const owner = ownerResult.state === 'owned' ? ownerResult.owner : undefined;
+      saveDiagnosticFinding(
+        options,
         check,
         base,
         target,
-        test,
-        'Unknown verifier result: ' + evidence.output.slice(-1200),
-        'unknown',
+        diagnostic,
+        owner ? 'new' : 'unknown',
         evidence,
-        'The check did not produce a stable result.',
-        'infrastructure',
-      ),
-      options.settings.policy?.verifier,
-    );
-  }
-  for (const [test, failure] of failedTests) {
-    const assertions = [...failure.assertions];
-    saveFinding(
-      options.store,
-      makeFinding(
-        failure.check,
+        ownerResult.reason,
+        'fail',
+      );
+      if (owner) {
+        repairs.push({
+          assertions: [diagnostic.code ? `${diagnostic.code}: ${diagnostic.message}` : diagnostic.message],
+          error: evidence.output,
+          owner,
+          cause: 'compiler',
+          diagnostic,
+          command,
+          sourceRevision: target,
+          evidenceLogPath: evidence.logPath,
+        });
+      }
+    }
+
+    for (const diagnostic of independentDiagnostics) {
+      saveDiagnosticFinding(
+        options,
+        check,
         base,
         target,
-        test,
-        assertions.join('\n'),
-        'new',
-        failure.evidence,
-        'Failed at the current dev head during this verifier round.',
-        'fail',
-      ),
-      options.settings.policy?.verifier,
-    );
-    const owner = ownerForFailure(options, history, failure.check, test);
-    if (owner) repairs.push({ test, assertions, error: failure.evidence.output, owner });
+        diagnostic,
+        'unknown',
+        evidence,
+        'Independent ' + diagnostic.cause + ' evidence; it does not replace any compiler or product result.',
+        'infrastructure',
+      );
+    }
+
+    const attributionDiagnostics: DevVerifierDiagnostic[] = [
+      ...(truncatedOutput(evidence.output)
+        ? [{ cause: 'product-runtime' as const, message: 'Truncated output prevents complete file-local attribution.' }]
+        : []),
+      ...(testAttribution.ambiguous
+        ? [
+            {
+              cause: 'product-runtime' as const,
+              message: 'Failure output has no reporter-confirmed file-local attribution.',
+            },
+          ]
+        : []),
+      ...(testAttribution.unhandled
+        ? [{ cause: 'product-runtime' as const, message: 'The test runner reported an unhandled error between tests.' }]
+        : []),
+    ];
+    for (const diagnostic of attributionDiagnostics) {
+      saveDiagnosticFinding(
+        options,
+        check,
+        base,
+        target,
+        diagnostic,
+        'unknown',
+        evidence,
+        'Reporter evidence could not be assigned to a test file. ' + findingProvenance(check, target),
+        outcome,
+      );
+    }
+
+    const fileFailures = testAttribution.outcomes.filter((item) => item.result === 'fail');
+    let routedFileFailure = false;
+    if (!truncatedOutput(evidence.output)) {
+      for (const fileResult of fileFailures) {
+        const failureOutputs = fileResult.failureOutputs.filter((output) => !isAuthDatabasePlacementFailure(output));
+        const fileAssertions = [
+          ...new Set(
+            failureOutputs.flatMap((output) => fileFailureAssertions(output, options.settings.policy?.verifier)),
+          ),
+        ];
+        if (setupFailure && fileAssertions.length === 0) continue;
+        const fileOutput = failureOutputs.join('\n') || fileResult.output;
+        if (!fileResult.resolved || !fileAssertions.length) {
+          const diagnostic: DevVerifierDiagnostic = {
+            cause: 'product-runtime',
+            message:
+              fileAssertions.join('\n') || 'The reporter marked this file failed without stable assertion detail.',
+            location: { file: fileResult.file, resolved: fileResult.resolved },
+          };
+          saveDiagnosticFinding(
+            options,
+            check,
+            base,
+            target,
+            diagnostic,
+            'unknown',
+            evidence,
+            'A reporter outcome was observed but its file or assertion evidence is unresolved. ' +
+              findingProvenance(check, target),
+            outcome,
+          );
+          routedFileFailure = true;
+          continue;
+        }
+        if (failureOutputs.length === 0) continue;
+        routedFileFailure = true;
+        const ownerResult = ownerForTest(options, check, fileResult.file, target, currentRevision);
+        const owner = ownerResult.state === 'owned' ? ownerResult.owner : undefined;
+        saveFinding(
+          options.store,
+          makeFinding(
+            check,
+            base,
+            target,
+            fileResult.file,
+            fileAssertions.join('\n'),
+            owner ? 'new' : 'unknown',
+            evidence,
+            ownerResult.reason + ' ' + findingProvenance(check, target),
+            'fail',
+            'product-runtime',
+          ),
+          options.settings.policy?.verifier,
+        );
+        if (owner)
+          repairs.push({
+            test: fileResult.file,
+            assertions: fileAssertions,
+            error: fileOutput,
+            owner,
+            cause: 'product-runtime',
+            command,
+            sourceRevision: target,
+            evidenceLogPath: evidence.logPath,
+          });
+      }
+    }
+    const unattributedAssertions = fileFailureAssertions(evidence.output, options.settings.policy?.verifier);
+    if (!routedFileFailure && unattributedAssertions.length && !truncatedOutput(evidence.output)) {
+      const diagnostic: DevVerifierDiagnostic = {
+        cause: 'product-runtime',
+        message: unattributedAssertions.join('\n'),
+      };
+      saveDiagnosticFinding(
+        options,
+        check,
+        base,
+        target,
+        diagnostic,
+        'unknown',
+        evidence,
+        'The command contains failure text without a reporter-confirmed failed file; automatic implementation routing was withheld.',
+        outcome,
+      );
+    }
+
+    if (
+      !compilerDiagnostics.length &&
+      !independentDiagnostics.length &&
+      !attributionDiagnostics.length &&
+      !unattributedAssertions.length
+    ) {
+      const cause = causes[0];
+      saveFinding(
+        options.store,
+        makeFinding(
+          check,
+          base,
+          target,
+          undefined,
+          'The check did not produce a stable, attributable result.',
+          'unknown',
+          evidence,
+          `No concrete diagnostic operand was found. ${findingProvenance(check, target)}`,
+          'infrastructure',
+          cause,
+        ),
+        options.settings.policy?.verifier,
+      );
+    }
   }
-  return { testsRun: runs.length, passed, failed, unknown, repairs };
+  return { testsRun: runs.length, passed, failed, unknown, skipped, repairs: mergeRepeatedNamedTestFailures(repairs) };
 }
 
 function saveRoundRecord(options: DevVerifierOptions, summary: DevVerifierRoundSummary): void {
   const result = summary.failed ? 'fail' : summary.unknown ? 'infrastructure' : 'pass';
   const record: DevVerifierRun = {
-    key: 'dev-verifier-round:' + summary.startedAt + ':' + randomUUID(),
+    key: 'dev-verifier-round:' + summary.startedAt + ':' + (summary.roundId ?? randomUUID()),
     createdAt: summary.completedAt,
     evidence: {
       commit: summary.headCommit,
@@ -371,6 +780,7 @@ function saveRoundRecord(options: DevVerifierOptions, summary: DevVerifierRoundS
         passed: summary.passed,
         failed: summary.failed,
         unknown: summary.unknown,
+        skipped: summary.skipped ?? 0,
         durationMs: summary.durationMs,
       }),
       logPath: '',
@@ -381,12 +791,16 @@ function saveRoundRecord(options: DevVerifierOptions, summary: DevVerifierRoundS
   saveRun(options.store, record, options.settings.policy?.verifier);
 }
 
-async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | undefined): Promise<void> {
+async function runRound(
+  options: DevVerifierOptions,
+  previous: DevVerifierRun | undefined,
+  captured: string,
+): Promise<void> {
   const { settings } = options;
   const checkout = settings.mainCheckout;
+  const roundId = randomUUID();
   const startedMs = Date.now();
   const startedAt = new Date(startedMs).toISOString();
-  const captured = head(checkout, settings.integrationBranch);
   let verified: string;
   try {
     verified = head(checkout, verifiedBranch);
@@ -399,7 +813,8 @@ async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | 
   const firstRound = !previous?.round;
   let fullSuite = firstRound || !isAncestor(checkout, previousHead, captured);
   let freshChecks: Check[];
-  const bootChecks = bootSmokeChecks(settings, captured);
+  const bootPlan = bootSmokePlan(settings, captured);
+  const bootChecks = bootPlan.checks;
   const bootPaths = settings.bootSmoke?.tests ?? [];
   if (!fullSuite) {
     const changedCommits = countSourceIntervalCommits(checkout, previousHead, captured);
@@ -422,20 +837,50 @@ async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | 
   const tree = join(settings.worktreeRoot, 'dev-verify-round-' + randomUUID());
   mkdirSync(settings.worktreeRoot, { recursive: true });
   mkdirSync(settings.stateDirectory, { recursive: true });
+  const execution = {
+    settings,
+    store: options.store,
+    roundId,
+  };
+  const skippedCommandRunIds = bootPlan.skipped.map((check) =>
+    recordSkippedCommand(
+      execution,
+      captured,
+      roundId,
+      check,
+      'boot-smoke-skipped:' + captured + ':' + check.command.at(-1),
+      `Boot smoke file ${check.command.at(-1)} is not tracked at the captured head.`,
+    ),
+  );
+  let skippedCommandCount = skippedCommandRunIds.length;
+  let commandRunIds = [...skippedCommandRunIds];
   let treeAdded = false;
-  let counts = { testsRun: 0, passed: 0, failed: 0, unknown: 0, repairs: [] as TestFailure[] };
+  let counts = {
+    testsRun: 0,
+    passed: 0,
+    failed: 0,
+    unknown: 0,
+    skipped: skippedCommandCount,
+    repairs: [] as TestFailure[],
+  };
   let pendingChecks: Check[] = checks;
   try {
     git(checkout, 'worktree', 'add', '--detach', tree, captured);
     treeAdded = true;
-    const execution = {
-      settings,
-      readRun: (key: string) => options.store.devVerifierRun?.(key)?.evidence,
-      saveRun: (run: DevVerifierRun) => saveRun(options.store, run, settings.policy?.verifier),
-    };
     const installed = installDependenciesCached(execution, captured, tree, dependencySetupKey(settings, captured));
+    skippedCommandCount += installed.commandRunIds.filter(
+      (id) => options.store.devVerifierRun?.(id)?.execution?.outcome === 'skipped',
+    ).length;
+    commandRunIds = [...new Set([...commandRunIds, ...installed.commandRunIds])];
     if (!installed.passed) {
-      counts = { testsRun: checks.length, passed: 0, failed: 0, unknown: checks.length, repairs: [] };
+      counts = {
+        testsRun: checks.length,
+        passed: 0,
+        failed: 0,
+        unknown: checks.length,
+        skipped: skippedCommandCount,
+        repairs: [],
+      };
     } else if (checks.length) {
       const executionResult = await runChecksAtHead(
         options,
@@ -445,9 +890,17 @@ async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | 
         deadline,
         controller.signal,
         bootChecks.length,
+        roundId,
       );
       pendingChecks = executionResult.pending;
-      counts = recordResults(options, history, previousHead, captured, executionResult.results);
+      const results = recordVerifierResults(options, previousHead, captured, executionResult.results);
+      counts = { ...results, skipped: results.skipped + skippedCommandCount };
+      commandRunIds = [
+        ...new Set([
+          ...commandRunIds,
+          ...executionResult.results.flatMap((result) => result.evidence.commandRunIds ?? []),
+        ]),
+      ];
     } else pendingChecks = [];
   } finally {
     clearTimeout(deadlineTimer);
@@ -458,6 +911,7 @@ async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | 
   dispatchTestRepairs(options, counts.repairs, captured);
   const completedAt = new Date().toISOString();
   const summary: DevVerifierRoundSummary = {
+    roundId,
     baseCommit: previousHead,
     headCommit: captured,
     startedAt,
@@ -467,17 +921,17 @@ async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | 
     passed: counts.passed,
     failed: counts.failed,
     unknown: counts.unknown,
+    skipped: counts.skipped,
     fullSuite,
+    commandRunIds,
     pendingChecks,
   };
   saveRoundRecord(options, summary);
   advanceVerified(settings, captured);
 }
 
-/** Run one due round on the newest captured dev head; intermediate heads never queue. */
-export async function verifyDev(options: DevVerifierOptions): Promise<void> {
+async function verifyDueRound(options: DevVerifierOptions): Promise<void> {
   const { settings } = options;
-  await options.runPageData?.();
   let lock: ReturnType<typeof acquireDirectoryLease>;
   try {
     lock = acquireDirectoryLease(join(settings.stateDirectory, 'dev-verifier.lease'), settings.policy?.leases);
@@ -488,14 +942,26 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
   try {
     const previous = latestRound(options.store);
     const policy = (settings.policy ?? defaultPolicy).verifier;
-    if (!shouldRunRound(previous, Date.now(), policy.roundIntervalMs)) return;
-    await runRound(options, previous);
+    const captured = head(settings.mainCheckout, settings.integrationBranch);
+    if (!shouldRunRound(previous, captured, Date.now(), policy.roundIntervalMs)) return;
+    await runRound(options, previous, captured);
   } catch (error) {
     if (error instanceof LeaseHeldError) return;
     throw error;
   } finally {
     lock.release();
   }
+}
+
+/** Run native checks independently; an admission-yielded page-data seed does not hold the native round. */
+export async function verifyDev(options: DevVerifierOptions): Promise<void> {
+  const pageData = (async () => {
+    await options.runPageData?.();
+  })();
+  const outcomes = await Promise.allSettled([verifyDueRound(options), pageData]);
+  const failures = outcomes.flatMap((outcome) => (outcome.status === 'rejected' ? [outcome.reason] : []));
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, 'Dev verification and page-data both failed');
 }
 
 export function devVerificationState(

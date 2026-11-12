@@ -297,7 +297,22 @@ export type PriorityGrant = {
   revokedBy?: string;
 };
 export type IntegrationPlan = { taskId: string; attempt: number; base: string; commit: string; commits: string[] };
-export type DevVerifierResult = 'pass' | 'fail' | 'infrastructure';
+export type DevVerifierResult = 'pass' | 'fail' | 'infrastructure' | 'skipped' | 'unknown';
+export type DevVerifierCause = 'compiler' | 'product-runtime' | 'setup' | 'transport' | 'cleanup';
+export type DevVerifierCommand = { argv: string[]; cwd?: string };
+export type DevVerifierDiagnosticLocation = {
+  file: string;
+  line?: number;
+  column?: number;
+  workspace?: string;
+  resolved: boolean;
+};
+export type DevVerifierDiagnostic = {
+  cause: DevVerifierCause;
+  message: string;
+  code?: string;
+  location?: DevVerifierDiagnosticLocation;
+};
 export type DevVerifierEvidence = {
   commit: string;
   command: string[];
@@ -308,14 +323,29 @@ export type DevVerifierEvidence = {
   /** Classification of the executed check; older cached evidence may not have this field. */
   result?: DevVerifierResult;
   cwd?: string;
+  /** Ephemeral references consumed by the enclosing round summary. */
+  commandRunIds?: string[];
+};
+export type DevVerifierExecutionReceipt = {
+  id: string;
+  roundId: string;
+  cacheKey: string;
+  status: 'running' | 'terminal';
+  outcome: DevVerifierResult;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs: number | null;
 };
 export type DevVerifierRun = {
   key: string;
   createdAt: string;
   evidence: DevVerifierEvidence;
+  /** Command executions use their own round-scoped identity; older cache entries have no receipt. */
+  execution?: DevVerifierExecutionReceipt;
   round?: DevVerifierRoundSummary;
 };
 export type DevVerifierRoundSummary = {
+  roundId?: string;
   baseCommit: string;
   headCommit: string;
   startedAt: string;
@@ -325,7 +355,10 @@ export type DevVerifierRoundSummary = {
   passed: number;
   failed: number;
   unknown: number;
+  skipped?: number;
   fullSuite: boolean;
+  /** Durable command receipt keys used by this round, including reused prior receipts. */
+  commandRunIds?: string[];
   pendingChecks: { command: string[]; closure: string[]; taskId?: string; cwd?: string }[];
 };
 export type DevVerifierFinding = {
@@ -339,6 +372,8 @@ export type DevVerifierFinding = {
   check: { command: string[]; closure: string[]; taskId?: string; cwd?: string };
   assertion: string;
   test?: string;
+  cause?: DevVerifierCause;
+  diagnostic?: DevVerifierDiagnostic;
   baseline: DevVerifierEvidence | null;
   head: DevVerifierEvidence | null;
   reason: string;
@@ -346,6 +381,8 @@ export type DevVerifierFinding = {
   createdAt: string;
 };
 export type RetryIntent = AttemptRef & {
+  /** When this intent entered the queue. Older records may lack the timestamp. */
+  queuedAt?: string;
   options: {
     evidence?: string;
     escalation?: string;
@@ -358,7 +395,7 @@ export type RetryIntent = AttemptRef & {
     notBefore?: string;
     /** Start the next attempt in a new provider session while preserving its branch and worktree. */
     freshSession?: boolean;
-    /** A check-host transport failure retries only while no check host is in a probed outage. */
+    /** A check-host transport retry waits only while every eligible performance host is in a probed outage. */
     awaitCheckHosts?: boolean;
     profile?: Profile;
     /** Exact dev-landing compiler feedback for the same-session continuation. */
@@ -389,6 +426,28 @@ export type WorktreeCleanupDisposition = {
   detail: string;
   recordedAt: string;
 };
+export type MaintenanceCandidateRef = {
+  ticket: number;
+  kind: 'worktree' | 'reap';
+  taskId: string;
+  attempt: number;
+};
+export type WorktreeMaintenanceCandidate = MaintenanceCandidateRef & { kind: 'worktree'; task: Task };
+export type ProcessMaintenanceCandidate = MaintenanceCandidateRef & {
+  kind: 'reap';
+  worktree: string;
+  process: ProcessIdentity;
+};
+export type StrayWorktreeCandidate = { ticket: number; path: string };
+export type WorktreeScanDirectory = {
+  watch_ticket: number;
+  root: string;
+  path: string;
+  generation: string | null;
+  offset: number;
+  complete: boolean;
+};
+export type MaintenanceBackfillProgress = { examined: number; complete: boolean };
 export type PromotionGateResult = {
   commit: string;
   command: string[];
@@ -457,6 +516,8 @@ export type TerminationIntent = {
   settledAt?: string;
 };
 export type Attempt = AttemptRef & {
+  /** Completed source waiting only for compiler evidence, never a source-writing retry. */
+  typingEvidencePending?: { result: string; command?: string[] };
   state: 'pending' | 'running' | 'waiting' | 'exited' | 'superseded' | 'stopped' | 'cancelled';
   /** Detached check runs whose completion will resume this attempt's session. */
   checks?: string[];

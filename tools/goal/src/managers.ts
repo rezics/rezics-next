@@ -1,6 +1,6 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { join } from 'node:path';
@@ -8,7 +8,7 @@ import type { AppServer, CodexPool, Notification } from './app-server.ts';
 import { migrate } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { isPendingContinuationHandshake } from './manager-continuation.ts';
-import { ownedGoals } from './manager-ownership.ts';
+import { managerOwnership, ownedGoals } from './manager-ownership.ts';
 import { ManagerSessionTransport } from './manager-session-transport.ts';
 import { readGoalDocuments, renderManagerOpening } from './prompts.ts';
 import { recordFlow } from './flow.ts';
@@ -42,11 +42,25 @@ export type GoalState = {
   timeUsedSeconds: number;
   tokenBudget: number | null;
 };
+export type ManagerTurnDisposition = {
+  threadId: string;
+  turnId: string;
+  status: 'inProgress' | 'completed' | 'interrupted' | 'failed';
+  intent: 'work' | 'controller-park' | 'controller-stop';
+  at: number;
+  strandedReported?: boolean;
+};
 export type ManagerSessionSnapshot = ManagerSpec & {
   /** Existing persisted sessions without a kind remain managed sessions. */
   kind?: 'managed';
   threadId: string | null;
   activeTurnId: string | null;
+  /** This controller parked native Goal autonomy after a completed turn; only an admitted inbox wake resumes it. */
+  waitingForInbox?: boolean;
+  /** One current-session turn only; interrupt intent is persisted before signaling this exact identity. */
+  turnDisposition?: ManagerTurnDisposition;
+  /** Bounded replay fence for recently retired turns in this thread; discarded on renewal. */
+  retiredTurnIds?: string[];
   status: 'starting' | 'running' | 'paused' | 'complete' | 'renewal-failed';
   startedAt: number;
   turns: number;
@@ -59,6 +73,10 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   usage: unknown;
   promptManifest?: PromptBudgetManifest;
   continuationAsked?: boolean;
+  /** The identity and bounded file state captured when this thread receives its continuation request. */
+  continuationThreadId?: string;
+  continuationBaselineHash?: string | null;
+  continuationBaselineProgressHashes?: string[];
   continuationRenewed?: boolean;
   continuationTokensUsed?: number;
   pendingRenewal?: { tokensUsed: number; oldThreadId: string | null; ready: boolean };
@@ -79,10 +97,126 @@ export type ResidentSupermanagerState = Pick<ManagerSessionSnapshot, 'id' | 'sta
   registeredAt: string;
 } & { [Key in ResidentManagedFields]?: never } & { history?: never };
 export type ManagerState = ManagedManagerState | ResidentSupermanagerState;
+
+function continuationHash(markdown: string): string {
+  const normalized = markdown
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n');
+  return createHash('sha256').update(normalized).digest('hex');
+}
+
+function continuationProgressEntries(markdown: string): string[] {
+  return markdown.split(/\r?\n/).flatMap((line) => {
+    const match = /^[-*]\s+(?:decision|next action|result):\s+(.+)$/i.exec(line);
+    const entry = match?.[1]?.trim().replace(/\s+/g, ' ').toLowerCase();
+    return entry && entry.length >= 16 ? [entry] : [];
+  });
+}
+
+function continuationProgressHashes(markdown: string): string[] {
+  return continuationProgressEntries(markdown).map(continuationHash);
+}
+
+/** Observational projection shared by public status; native Goal state remains independent of lifecycle status. */
+export function readManagerOperationalStatus(db: Database) {
+  if (!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()) return [];
+  const states = (db.query('SELECT id, state FROM manager_sessions').all() as { id: string; state: string }[]).flatMap(
+    (row) => {
+      try {
+        const state = JSON.parse(row.state) as ManagerState;
+        return state && typeof state.status === 'string' ? [{ ...state, id: row.id }] : [];
+      } catch {
+        return [];
+      }
+    },
+  );
+  const byId = new Map(states.map((state) => [state.id, state]));
+  return managerOwnership(states).map((owner) => {
+    const state = byId.get(owner.id)!;
+    if (state.kind === 'resident-supermanager') return owner;
+    const turn = state.turnDisposition?.threadId === state.threadId ? state.turnDisposition : undefined;
+    const unexpected = unexpectedManagerTurn(state);
+    return {
+      ...owner,
+      operation:
+        state.status !== 'running'
+          ? state.status
+          : state.waitingForInbox
+            ? 'waiting-for-inbox'
+            : unexpected
+              ? `turn-${turn?.status}`
+              : state.activeTurnId
+                ? 'active-turn'
+                : 'idle',
+      threadId: state.threadId,
+      activeTurnId: state.activeTurnId,
+      waitingForInbox: state.waitingForInbox === true,
+      nativeGoalStatus: state.goalState?.status ?? null,
+      turnDisposition: turn ?? null,
+    };
+  });
+}
+
+export type GoalManagerAuthority = {
+  id: string;
+  sessionId: string;
+  kind: string;
+  engine: string | null;
+  goals: string[];
+  supermanager: string | null;
+  goalStatus: string | null;
+};
+
+/** The sole running managed owner of a Goal, including the persisted provider session that authenticates it. */
+export function currentGoalManagerAuthority(db: Database, goal: string): GoalManagerAuthority | undefined {
+  if (!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get())
+    return undefined;
+  const owners = (db.query('SELECT id, state FROM manager_sessions').all() as { id: string; state: string }[]).flatMap(
+    (row) => {
+      let state: ManagerState;
+      try {
+        state = JSON.parse(row.state) as ManagerState;
+      } catch {
+        return [];
+      }
+      if (
+        !state ||
+        typeof state !== 'object' ||
+        Array.isArray(state) ||
+        state.status !== 'running' ||
+        state.kind === 'resident-supermanager' ||
+        (state.kind !== undefined && state.kind !== 'managed')
+      )
+        return [];
+      const goals = ownedGoals(state);
+      if (!(goals.includes(goal) || (goals.length === 0 && row.id === goal))) return [];
+      return [{ id: row.id, state, goals }];
+    },
+  );
+  if (owners.length !== 1) return undefined;
+  const owner = owners[0]!;
+  const state = owner.state;
+  if (typeof state.threadId !== 'string' || !state.threadId) return undefined;
+  return {
+    id: owner.id,
+    sessionId: state.threadId,
+    kind: state.kind ?? 'managed',
+    engine: typeof state.engine === 'string' ? state.engine : null,
+    goals: [...owner.goals],
+    supermanager: typeof state.supermanager === 'string' ? state.supermanager : null,
+    goalStatus: state.goalState?.status ?? null,
+  };
+}
+
 export type CompletionEvidence = { passed: boolean; evidencePath: string; summary: string };
 export type ManagerServices = {
   policy?: ControlPolicy;
   connect?: (pool: CodexPool, onStart?: (identity: ProcessIdentity) => void) => Promise<AppServer>;
+  /** Read-only admission against the current retained pool allowance before an inbox wake starts a model turn. */
+  canStartTurn?: (spec: Pick<ManagerSpec, 'engine' | 'pool' | 'effort'>) => boolean;
   windows: ManagerWindows;
   checkCompletion(goal: string): Promise<CompletionEvidence>;
   /** The CLI prefix includes its runtime composition module, if any. */
@@ -105,6 +239,15 @@ function assertManagedManager(state: ManagerState): asserts state is ManagedMana
 
 function isManagedManager(state: ManagerState): state is ManagedManagerState {
   return !isResidentSupermanager(state);
+}
+
+function unexpectedManagerTurn(state: ManagedManagerState): boolean {
+  const turn = state.turnDisposition;
+  return (
+    turn?.threadId === state.threadId &&
+    turn?.intent === 'work' &&
+    (turn.status === 'interrupted' || turn.status === 'failed')
+  );
 }
 
 const managerDecisionMigration = {
@@ -366,15 +509,33 @@ export class ManagerSessions {
   private async handleNotification(id: string, { method, params }: Notification): Promise<void> {
     const state = this.get(id);
     assertManagedManager(state);
+    let completedCurrentTurn = false;
     // Notifications from a retired Codex thread can already be queued when renewal swaps sessions.
-    if (state.threadId && params?.threadId && state.threadId !== params.threadId) return;
+    if (!state.threadId || params?.threadId !== state.threadId) return;
     if (method === 'turn/started') {
-      this.turnStarted(state, params.turn.id);
-      if (state.status !== 'running') await this.pauseRemote(state);
+      if (!this.turnStarted(state, params.turn.id)) return;
+      if (state.status !== 'running' || state.waitingForInbox) await this.pauseRemote(state);
     } else if (method === 'turn/completed') {
-      this.turnEnded(state, params.turn.id);
+      const terminal = params?.turn?.status;
+      if (terminal !== 'completed' && terminal !== 'interrupted' && terminal !== 'failed') return;
+      if (!this.turnEnded(state, params.turn.id, terminal)) return;
+      completedCurrentTurn = terminal === 'completed' && state.turnDisposition?.intent === 'work';
+      if (!completedCurrentTurn) {
+        if (state.status === 'running' && state.turnDisposition?.intent === 'work') {
+          const client = await this.transport.client(state.pool);
+          state.goalState = await this.transport.getGoal(client, state.threadId);
+          this.save(state);
+          this.reportStrandedTurn(state);
+        }
+        return;
+      }
     } else if (method === 'thread/goal/updated') {
       state.goalState = params.goal;
+      if (
+        state.waitingForInbox &&
+        ['blocked', 'budgetLimited', 'usageLimited', 'complete'].includes(params.goal.status)
+      )
+        state.waitingForInbox = false;
     } else if (method === 'thread/goal/cleared') {
       state.goalState = null;
     } else if (method === 'thread/tokenUsage/updated') state.usage = params.tokenUsage;
@@ -384,10 +545,26 @@ export class ManagerSessions {
     } else return;
     this.save(state);
     if (state.status === 'running') {
+      if (method === 'thread/goal/updated' && state.waitingForInbox && state.goalState?.status === 'active') {
+        // An idle Goal should stay parked. This catches provider or external reactivation before another
+        // goal-generated continuation can replace the event-driven wait.
+        await this.pauseRemote(state);
+        return;
+      }
       if (method === 'thread/goal/updated' && (await this.handleGoalUpdate(state))) return;
       if (await this.checkLimits(state)) return;
       if (state.goalState?.status === 'complete') await this.completeInternal(state.id);
+      if (
+        state.status === 'running' &&
+        method === 'thread/goal/updated' &&
+        state.goalState?.status === 'active' &&
+        this.inbox.notifications(id).length > 0
+      ) {
+        await this.dispatch(id);
+        return;
+      }
     }
+    if (completedCurrentTurn) await this.markWaitingForInbox(id);
   }
   /** Event-driven managers sleep only by ending the turn: a `clock.sleep` loop re-reads the whole context each call. */
   private countSleep(state: ManagedManagerState): void {
@@ -517,9 +694,10 @@ export class ManagerSessions {
     const state: ManagedManagerState = {
       kind: 'managed',
       ...spec,
-      goals: ownedGoals(spec).length ? ownedGoals(spec) : [spec.goal],
+      goals: ownedGoals(spec),
       threadId: null,
       activeTurnId: null,
+      waitingForInbox: false,
       status: 'starting',
       startedAt: this.now(),
       turns: 0,
@@ -634,13 +812,16 @@ export class ManagerSessions {
     assertManagedManager(stopped);
     const { history: _history, renewalAttempts: _attempts, nextRenewalRetryAt: _retry, ...snapshot } = stopped;
     const history = retryingFailed ? (stopped.history ?? []) : [...(stopped.history ?? []), snapshot];
-    return this.startSession(spec, history, stopped.pendingRenewal);
+    return this.startSession({ ...spec, goals: ownedGoals(stopped) }, history, stopped.pendingRenewal);
   }
 
   private specFromState(state: ManagedManagerState): ManagerSpec {
     const {
       threadId: _threadId,
       activeTurnId: _activeTurnId,
+      waitingForInbox: _waitingForInbox,
+      turnDisposition: _turnDisposition,
+      retiredTurnIds: _retiredTurnIds,
       status: _status,
       startedAt: _startedAt,
       turns: _turns,
@@ -652,6 +833,9 @@ export class ManagerSessions {
       usage: _usage,
       history: _history,
       continuationAsked: _continuationAsked,
+      continuationThreadId: _continuationThreadId,
+      continuationBaselineHash: _continuationBaselineHash,
+      continuationBaselineProgressHashes: _continuationBaselineProgressHashes,
       continuationRenewed: _continuationRenewed,
       continuationTokensUsed: _continuationTokensUsed,
       pendingRenewal: _pendingRenewal,
@@ -686,27 +870,75 @@ export class ManagerSessions {
         )
           return;
         current.continuationAsked = true;
+        const previousContinuation = this.readContinuation(current);
+        if (current.threadId) current.continuationThreadId = current.threadId;
+        else delete current.continuationThreadId;
+        current.continuationBaselineHash =
+          previousContinuation === null ? null : continuationHash(previousContinuation);
+        current.continuationBaselineProgressHashes =
+          previousContinuation === null ? [] : continuationProgressHashes(previousContinuation);
         this.save(current);
         this.inbox.deliver({
           managerId: current.id,
           kind: 'instruction',
-          summary: `This Goal has used at least ${this.policy.manager.continuationBudgetPercent}% of its token budget. Replace .temp/goal/${current.id}/CONTINUATION.md with at most ${this.policy.manager.continuationCharacters.toLocaleString('en-US')} characters: live task IDs, decisions in force as links to owner documents, and next actions. Do not append to the old file. Then send ${current.supermanager} a message containing “continuation written”.`,
+          summary: `This Goal has used at least ${this.policy.manager.continuationBudgetPercent}% of its token budget. Replace .temp/goal/${current.id}/CONTINUATION.md with at most ${this.policy.manager.continuationCharacters.toLocaleString('en-US')} characters: live task IDs, decisions in force as links to owner documents, and next actions. Include one concrete progress bullet: “- Decision: …”, “- Next action: …”, or “- Result: …”. Do not append to the old file. Then send ${current.supermanager} a message containing “continuation written”.`,
         });
       })
       .immediate();
   }
   private async handleGoalUpdate(state: ManagedManagerState): Promise<boolean> {
     if (state.engine !== 'codex') return false;
-    await this.askForContinuation(state);
-    const current = this.get(state.id);
-    assertManagedManager(current);
-    if (current.status !== 'running' || current.goalState?.status !== 'budgetLimited') return false;
-    try {
-      await this.renewForContinuation(current.id, current.goalState.tokensUsed);
-    } catch (error) {
-      await this.failRenewal(current.id, error);
+    if (state.goalState?.status === 'budgetLimited') {
+      const current = this.get(state.id);
+      assertManagedManager(current);
+      if (current.status !== 'running') return false;
+      this.db
+        .transaction(() => {
+          const latest = this.get(current.id);
+          assertManagedManager(latest);
+          if (latest.status !== 'running' || latest.goalState?.status !== 'budgetLimited') return;
+          latest.status = 'paused';
+          latest.waitingForInbox = false;
+          this.save(latest);
+          this.inbox.deliver({
+            managerId: latest.supermanager,
+            kind: 'blocker',
+            summary: `Manager ${latest.id} reached its token budget on thread ${latest.threadId} without a fresh, bounded continuation decision or result. The thread is paused. Review .temp/goal/${latest.id}/CONTINUATION.md and renew explicitly with “bun tools/goal/src/cli.ts manager renew ${latest.id}” after confirming a checkpoint.`,
+          });
+        })
+        .immediate();
+      await this.stopInternal(current.id);
+      return true;
     }
-    return true;
+    await this.askForContinuation(state);
+    return false;
+  }
+  private readContinuation(state: ManagedManagerState): string | null {
+    const path = join(state.cwd, '.temp', 'goal', state.id, 'CONTINUATION.md');
+    if (!existsSync(path)) return null;
+    const maxCharacters = this.policy.manager.continuationCharacters;
+    const stat = statSync(path);
+    if (!stat.isFile() || stat.size > maxCharacters * 4) return null;
+    const markdown = readFileSync(path, 'utf8');
+    return markdown.length <= maxCharacters ? markdown : null;
+  }
+  private hasFreshContinuation(state: ManagedManagerState): boolean {
+    const baselineProgressHashes = state.continuationBaselineProgressHashes;
+    if (
+      !state.continuationAsked ||
+      !state.threadId ||
+      state.continuationThreadId !== state.threadId ||
+      typeof state.continuationBaselineHash === 'undefined' ||
+      !Array.isArray(baselineProgressHashes)
+    )
+      return false;
+    const markdown = this.readContinuation(state);
+    const progressHashes = markdown === null ? [] : continuationProgressHashes(markdown);
+    return (
+      markdown !== null &&
+      continuationHash(markdown) !== state.continuationBaselineHash &&
+      progressHashes.some((hash) => !baselineProgressHashes.includes(hash))
+    );
   }
   private async deliverRenewalNotice(id: string): Promise<void> {
     this.db
@@ -746,11 +978,30 @@ export class ManagerSessions {
   async outgoingMessage(id: string, recipient: string, summary: string): Promise<void> {
     return this.serial(id, async () => {
       const state = this.get(id);
-      if (!isPendingContinuationHandshake(summary, recipient, state)) return;
+      assertManagedManager(state);
+      if (
+        !isPendingContinuationHandshake(summary, recipient, state) ||
+        state.status !== 'running' ||
+        !this.hasFreshContinuation(state)
+      )
+        return;
       await this.renewForContinuation(id, state.goalState?.tokensUsed ?? 0);
     });
   }
-  private turnStarted(state: ManagedManagerState, turn: string): void {
+  private turnStarted(state: ManagedManagerState, turn: string): boolean {
+    // A start reply and its notification share an identity. A delayed replay must not resurrect an ended turn.
+    if (!turn || state.retiredTurnIds?.includes(turn)) return false;
+    if (state.activeTurnId && state.activeTurnId !== turn) return false;
+    if (state.turnDisposition?.threadId === state.threadId && state.turnDisposition.turnId === turn) return false;
+    if (state.countedTurn === turn && state.activeTurnId !== turn) return false;
+    const intent = state.status !== 'running' ? 'controller-stop' : state.waitingForInbox ? 'controller-park' : 'work';
+    if (state.threadId)
+      state.turnDisposition = { threadId: state.threadId, turnId: turn, status: 'inProgress', intent, at: this.now() };
+    if (intent !== 'work') {
+      state.activeTurnId = turn;
+      this.save(state);
+      return true;
+    }
     if (state.countedTurn !== turn) {
       state.turns++;
       state.decision = false;
@@ -772,11 +1023,40 @@ export class ManagerSessions {
         this.save(state);
       })
       .immediate();
+    return true;
   }
-  private turnEnded(state: ManagedManagerState, turn: string): void {
+  private retireTurn(state: ManagedManagerState, turn: string): void {
+    // Keep identities only, not turn history or provider payloads. The current disposition owns diagnostics.
+    state.retiredTurnIds = [...(state.retiredTurnIds ?? []).filter((id) => id !== turn), turn].slice(-32);
+  }
+  /** A resume reply is authoritative about the active turn, unlike queued start notifications. */
+  private adoptActiveTurn(state: ManagedManagerState, turn: string | null): void {
+    if (state.activeTurnId && state.activeTurnId !== turn) this.retireTurn(state, state.activeTurnId);
+    // Preserve the authoritative identity even for older snapshots whose counted turn has no disposition yet.
+    state.activeTurnId = turn;
+    if (turn) this.turnStarted(state, turn);
+    this.save(state);
+  }
+  private turnEnded(
+    state: ManagedManagerState,
+    turn: string,
+    status: 'completed' | 'interrupted' | 'failed' = 'completed',
+  ): boolean {
+    let ended = false;
     this.db
       .transaction(() => {
         if (state.activeTurnId !== turn) return;
+        ended = true;
+        this.retireTurn(state, turn);
+        const previous = state.turnDisposition;
+        const intent = previous?.threadId === state.threadId && previous.turnId === turn ? previous.intent : 'work';
+        if (state.threadId)
+          state.turnDisposition = { threadId: state.threadId, turnId: turn, status, intent, at: this.now() };
+        state.activeTurnId = null;
+        if (intent !== 'work' || status !== 'completed') {
+          this.save(state);
+          return;
+        }
         if (state.threadId && managerHasDecision(this.db, state.id, state.threadId, turn)) state.decision = true;
         // Ready briefs are a manager's main output; writing one is a decision even without a control-plane command.
         if (
@@ -785,9 +1065,36 @@ export class ManagerSessions {
           this.backlogWrittenSince(state, state.turnStartedAt)
         )
           state.decision = true;
-        if (!state.decision) state.turnsWithoutDecision++;
-        state.activeTurnId = null;
+        state.turnsWithoutDecision = state.decision ? 0 : state.turnsWithoutDecision + 1;
         this.save(state);
+      })
+      .immediate();
+    return ended;
+  }
+  private reportStrandedTurn(state: ManagedManagerState): void {
+    if (
+      state.status !== 'running' ||
+      state.waitingForInbox ||
+      state.activeTurnId ||
+      !unexpectedManagerTurn(state) ||
+      state.turnDisposition?.strandedReported ||
+      (state.goalState?.status !== 'active' && state.goalState?.status !== 'blocked') ||
+      (this.services.canStartTurn && !this.services.canStartTurn(state))
+    )
+      return;
+    const pending = this.inbox.notifications(state.id);
+    if (!pending.length) return;
+    const turn = state.turnDisposition!;
+    this.db
+      .transaction(() => {
+        turn.strandedReported = true;
+        this.save(state);
+        this.inbox.deliver({
+          managerId: state.supermanager,
+          kind: 'environment',
+          goalId: state.goal,
+          summary: `Manager ${state.id} turn ${turn.turnId} on thread ${turn.threadId} ${turn.status} unexpectedly; ${pending.length} undelivered waking inbox event(s) remain. Use the existing manager wake/recovery path on this thread; native Goal is ${state.goalState!.status}.`,
+        });
       })
       .immediate();
   }
@@ -914,19 +1221,75 @@ export class ManagerSessions {
       await this.failRenewal(id, error, attempts);
     }
   }
+  private async markWaitingForInbox(id: string): Promise<void> {
+    const state = this.get(id);
+    assertManagedManager(state);
+    if (
+      state.status !== 'running' ||
+      state.engine !== 'codex' ||
+      !state.threadId ||
+      unexpectedManagerTurn(state) ||
+      (state.activeTurnId !== null && !state.waitingForInbox)
+    )
+      return;
+
+    const wasWaitingForInbox = state.waitingForInbox === true;
+    // Persist the idle intent before consulting or pausing the provider. If this process exits
+    // between these operations, host recovery can park this same thread before resuming it.
+    state.waitingForInbox = true;
+    this.save(state);
+    const client = await this.transport.client(state.pool);
+    const goal = await this.transport.getGoal(client, state.threadId);
+    state.goalState = goal;
+    if (goal?.status === 'active') {
+      await this.pauseRemote(state);
+      return;
+    }
+    if (goal?.status === 'paused') {
+      if (!wasWaitingForInbox) state.waitingForInbox = false;
+      this.save(state);
+      return;
+    }
+    if (!goal) {
+      if (!wasWaitingForInbox) state.waitingForInbox = false;
+      this.save(state);
+      return;
+    }
+    // A user or guard status is not the controller's idle park and must not be reactivated on inbox wake.
+    state.waitingForInbox = false;
+    this.save(state);
+  }
   private async pauseRemote(state: ManagerState): Promise<void> {
     assertManagedManager(state);
     if (state.engine === 'codex' && state.threadId) {
       const client = await this.transport.client(state.pool);
+      const threadId = state.threadId;
+      const attributeInterrupt = (turnId: string) => {
+        if (state.threadId !== threadId) throw new Error('Manager thread changed before interrupt');
+        if (state.activeTurnId !== turnId) this.adoptActiveTurn(state, turnId);
+        state.activeTurnId = turnId;
+        state.turnDisposition = {
+          threadId,
+          turnId,
+          status: 'inProgress',
+          intent: state.status === 'running' && state.waitingForInbox ? 'controller-park' : 'controller-stop',
+          at: this.now(),
+        };
+        this.save(state);
+      };
+      // Pausing the Goal itself can end a turn, so attribution precedes both provider operations.
+      if (state.activeTurnId) attributeInterrupt(state.activeTurnId);
       state.goalState = await this.transport.setGoalStatus(client, state.threadId, 'paused');
       this.save(state);
-      if (state.activeTurnId) await this.transport.interruptTurn(client, state, state.threadId, state.activeTurnId);
+      if (state.activeTurnId)
+        await this.transport.interruptTurn(client, state, threadId, state.activeTurnId, attributeInterrupt);
     }
   }
   private async stopInternal(id: string): Promise<void> {
     const state = this.get(id);
     assertManagedManager(state);
     state.status = 'paused';
+    state.waitingForInbox = false;
     this.save(state);
     clearTimeout(this.timers.get(id));
     try {
@@ -951,27 +1314,57 @@ export class ManagerSessions {
     if (isResidentSupermanager(state)) return;
     if (state.status !== 'running') return;
     if (state.engine === 'claude') return await this.reviveClaude(state);
-    const client = await this.transport.client(state.pool);
-    let prefix = this.consumeGoalReadings(state);
-    for (const event of this.inbox.notifications(id)) {
+    const events = this.inbox.notifications(id);
+    // An empty inbox wake is bookkeeping only; a parked native Goal stays paused.
+    if (events.length === 0) return;
+    if (state.waitingForInbox) {
+      // Reconcile the persisted native Goal before an inbox event may reactivate it.
+      await this.markWaitingForInbox(id);
       state = this.get(id);
       assertManagedManager(state);
+    }
+    const idleWake = state.waitingForInbox === true;
+    if ((idleWake || state.activeTurnId === null) && this.services.canStartTurn && !this.services.canStartTurn(state))
+      return;
+    const client = await this.transport.client(state.pool);
+    state.goalState = await this.transport.getGoal(client, state.threadId!);
+    if (idleWake) {
+      if (state.goalState?.status === 'paused')
+        state.goalState = await this.transport.setGoalStatus(client, state.threadId!, 'active');
+      if (state.goalState?.status !== 'active') {
+        this.save(state);
+        return;
+      }
+      state.waitingForInbox = false;
+      this.save(state);
+    } else if (state.goalState?.status !== 'active' && state.goalState?.status !== 'blocked') {
+      // A running manager can still receive an admitted manual turn while its native Goal is blocked.
+      // Keep that native state intact; only a real inbox event may take the existing explicit turn path.
+      this.save(state);
+      return;
+    }
+    this.save(state);
+    this.reportStrandedTurn(state);
+    let prefix = this.consumeGoalReadings(state);
+    for (const event of events) {
+      state = this.get(id);
+      assertManagedManager(state);
+      const current: ManagedManagerState = state;
       const summary = prefix ? [prefix, event.event.summary].filter(Boolean).join('\n\n') : event.event.summary;
       prefix = '';
       const delivered = await this.transport.deliverToSession(
         client,
-        state,
-        state.threadId!,
-        state.activeTurnId,
+        current,
+        current.threadId!,
+        current.activeTurnId,
         summary,
         (turnId) => {
-          state.activeTurnId = turnId;
-          this.save(state);
+          this.adoptActiveTurn(current, turnId);
         },
       );
       if (delivered.kind === 'started') {
-        this.turnStarted(state, delivered.turnId);
-        this.save(state);
+        this.turnStarted(current, delivered.turnId);
+        this.save(current);
       }
       this.inbox.notified(event.id);
     }
@@ -1047,14 +1440,19 @@ export class ManagerSessions {
     );
     return next;
   }
-  private goalOwner(goal: string): ManagedManagerState | undefined {
-    const owners = this.list().filter(
+  private goalOwners(goal: string): ManagedManagerState[] {
+    return this.list().filter(
       (state): state is ManagedManagerState => isManagedManager(state) && ownedGoals(state).includes(goal),
     );
-    return owners.length === 1 ? owners[0] : undefined;
   }
   private reassignGoalTasks(goal: string, from: string, to: string): void {
     if (!this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'worker_tasks'").get()) return;
+    this.db
+      .query(`INSERT INTO worker_events(task_id,attempt,kind,at,body)
+        SELECT id,current_attempt,'owner-contract-decisions-superseded',?,? FROM worker_tasks AS task
+        WHERE json_extract(body, '$.brief.goal')=? AND json_extract(body, '$.brief.manager')=?
+        AND EXISTS (SELECT 1 FROM worker_events WHERE task_id=task.id AND kind='owner-contract-decision-accepted')`)
+      .run(new Date().toISOString(), JSON.stringify({ previousManager: from, manager: to }), goal, from);
     this.db
       .query(
         `UPDATE worker_tasks SET body = json_set(body, '$.brief.manager', ?)
@@ -1085,8 +1483,16 @@ export class ManagerSessions {
     }
     if (!isManagedManager(target) || target.status !== 'running')
       throw new Error(`Manager ${toId} is not a running managed manager`);
-    const source = this.goalOwner(goal);
-    if (!source) throw new Error(`No managed manager owns Goal ${goal}`);
+    const owners = this.goalOwners(goal);
+    const other = owners.find((owner) => owner.id !== toId);
+    // Older renewals could reclaim a transferred Goal from an explicitly empty ownership list.
+    // Only reconcile the exact running destination and one paused prior owner, never two live owners.
+    const restoringTransfer = owners.length === 2 && ownedGoals(target).includes(goal) && other?.status === 'paused';
+    const source = owners.length === 1 ? owners[0] : restoringTransfer ? other : undefined;
+    if (!source)
+      throw new Error(
+        owners.length ? `Ambiguous managed ownership for Goal ${goal}` : `No managed manager owns Goal ${goal}`,
+      );
     if (source.id === toId) throw new Error(`Goal ${goal} is already owned by manager ${toId}`);
     const remaining = ownedGoals(source).filter((owned) => owned !== goal);
     const nextGoals = [...ownedGoals(target), goal].filter((owned, index, all) => all.indexOf(owned) === index);
@@ -1175,12 +1581,43 @@ export class ManagerSessions {
             return;
           }
           if (current.engine === 'codex' && current.threadId) {
-            const client = await this.transport.client(current.pool);
-            const resume = this.transport.resumeThread(client, current, current.threadId);
-            reportProgress();
-            const resumed = await resume;
-            current.activeTurnId = resumed.activeTurnId;
-            current.goalState = await this.transport.getGoal(client, current.threadId);
+            const parkedIdle =
+              current.status === 'running' &&
+              (current.waitingForInbox ||
+                (current.activeTurnId === null && current.turns > 0 && !unexpectedManagerTurn(current)));
+            if (parkedIdle) {
+              // Resolve the native Goal before resuming its thread. A completed idle turn must stay parked
+              // across host recovery; resuming the thread could rearm provider autonomy.
+              await this.markWaitingForInbox(current.id);
+              current = this.get(current.id);
+              assertManagedManager(current);
+            } else if (
+              !unexpectedManagerTurn(current) &&
+              current.goalState?.status !== 'paused' &&
+              current.goalState?.status !== 'blocked' &&
+              current.goalState?.status !== 'budgetLimited' &&
+              current.goalState?.status !== 'usageLimited' &&
+              current.goalState?.status !== 'complete'
+            ) {
+              const client = await this.transport.client(current.pool);
+              const resumed = await this.transport.resumeThread(client, current, current.threadId);
+              reportProgress();
+              // Reconcile only the recorded current identity; historical terminal turns cannot diagnose this session.
+              if (resumed.latestTurn?.id === current.activeTurnId && resumed.latestTurn.status !== 'inProgress')
+                this.turnEnded(current, resumed.latestTurn.id, resumed.latestTurn.status);
+              this.adoptActiveTurn(current, resumed.activeTurnId);
+              current.goalState = await this.transport.getGoal(client, current.threadId);
+              if (
+                current.status === 'running' &&
+                current.activeTurnId === null &&
+                current.turns > 0 &&
+                !unexpectedManagerTurn(current)
+              ) {
+                await this.markWaitingForInbox(current.id);
+                current = this.get(current.id);
+                assertManagedManager(current);
+              }
+            }
           }
           reportProgress();
           if (current.status === 'starting') {
@@ -1190,7 +1627,14 @@ export class ManagerSessions {
             return;
           }
           this.save(current);
-          if (current.engine === 'codex' && current.threadId) {
+          if (
+            current.engine === 'codex' &&
+            current.threadId &&
+            current.status === 'running' &&
+            current.goalState?.status === 'active' &&
+            !current.waitingForInbox &&
+            !unexpectedManagerTurn(current)
+          ) {
             const client = await this.transport.client(current.pool);
             await this.services.windows.unregister(current.id);
             await this.transport.registerCodexViewer(current, current.threadId, client);

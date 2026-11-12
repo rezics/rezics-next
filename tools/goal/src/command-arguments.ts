@@ -18,10 +18,11 @@ export type ImportAttemptFlags = {
 export type ParsedWorkerCommandArguments =
   | { command: 'dispatch'; brief: string; urgent?: true }
   | { command: 'urgent'; action: 'grant' | 'revoke'; managerId: string }
-  | { command: 'amend'; taskId: string; expectedAttempt: 0; brief: string }
+  | { command: 'amend'; taskId: string; expectedAttempt: number; brief: string; active?: true }
+  | { command: 'typing-recover'; taskId: string; expectedAttempt: number }
   | { command: 'status'; taskId?: string }
   | ({ command: 'attempts' } & AttemptsArguments)
-  | { command: 'report'; flow: boolean; json: boolean; since?: string }
+  | { command: 'report'; flow: boolean; json: boolean; since?: string; until?: string }
   | {
       command: 'retry';
       taskId: string;
@@ -102,19 +103,42 @@ export function parseWorkerCommandArguments(command: string, argv: string[]): Pa
         throw new Error('usage: urgent grant|revoke <manager>');
       return { command, action: arg as 'grant' | 'revoke', managerId: argv[1] };
     case 'amend': {
+      const active = argv.includes('--active');
+      const args = argv.filter((value) => value !== '--active');
+      const usage = active
+        ? 'usage: amend <task> --active --expected-attempt <n> --brief <file>'
+        : 'usage: amend <task> --expected-attempt 0 --brief <file>';
       let brief: string | undefined;
-      let expectedAttempt: 0 | undefined;
-      for (let index = 1; index < argv.length; index += 2) {
-        const flag = argv[index],
-          value = argv[index + 1];
+      let expectedAttempt: number | undefined;
+      if (argv.length - args.length > 1) throw new Error(usage);
+      for (let index = 1; index < args.length; index += 2) {
+        const flag = args[index],
+          value = args[index + 1];
         if (flag === '--brief' && value && brief === undefined) brief = value;
-        else if (flag === '--expected-attempt' && value === '0' && expectedAttempt === undefined) expectedAttempt = 0;
-        else throw new Error('usage: amend <task> --expected-attempt 0 --brief <file>');
+        else if (
+          flag === '--expected-attempt' &&
+          value !== undefined &&
+          /^(0|[1-9]\d*)$/.test(value) &&
+          Number.isSafeInteger(Number(value)) &&
+          (active ? Number(value) > 0 : value === '0') &&
+          expectedAttempt === undefined
+        )
+          expectedAttempt = Number(value);
+        else throw new Error(usage);
       }
-      if (!arg || expectedAttempt !== 0 || !brief)
-        throw new Error('usage: amend <task> --expected-attempt 0 --brief <file>');
-      return { command, taskId: arg, expectedAttempt, brief };
+      if (!arg || arg.startsWith('--') || expectedAttempt === undefined || !brief) throw new Error(usage);
+      return { command, taskId: arg, expectedAttempt, brief, ...(active ? { active: true as const } : {}) };
     }
+    case 'typing-recover':
+      if (
+        !arg ||
+        argv.length !== 3 ||
+        argv[1] !== '--expected-attempt' ||
+        !/^[1-9]\d*$/.test(argv[2]!) ||
+        !Number.isSafeInteger(Number(argv[2]))
+      )
+        throw new Error('usage: typing-recover <task> --expected-attempt <n>');
+      return { command, taskId: arg, expectedAttempt: Number(argv[2]) };
     case 'status':
       if (argv.length > 1) throw new Error('usage: status [task]');
       return { command, ...(arg ? { taskId: arg } : {}) };
@@ -122,20 +146,37 @@ export function parseWorkerCommandArguments(command: string, argv: string[]): Pa
       return { command, ...parseAttemptsArguments(argv) };
     case 'report': {
       let since: string | undefined;
-      const accepted = new Set(['--json', '--flow', '--since']);
+      let until: string | undefined;
+      const accepted = new Set(['--json', '--flow', '--since', '--until']);
       for (let index = 0; index < argv.length; index++) {
         const flag = argv[index]!;
-        if (!accepted.has(flag)) throw new Error('usage: report [--flow] [--since <time>] [--json]');
-        if (flag === '--since') {
-          since = argv[++index];
-          if (!since || !Number.isFinite(Date.parse(since))) throw new Error('--since requires a valid time');
+        if (!accepted.has(flag)) throw new Error('usage: report [--flow] [--since <time>] [--until <time>] [--json]');
+        if (flag === '--since' || flag === '--until') {
+          const value = argv[++index];
+          if (!value || !Number.isFinite(Date.parse(value))) throw new Error(`${flag} requires a valid time`);
+          const normalized = new Date(Date.parse(value)).toISOString();
+          if (flag === '--since') {
+            if (since !== undefined)
+              throw new Error('usage: report [--flow] [--since <time>] [--until <time>] [--json]');
+            since = normalized;
+          } else {
+            if (until !== undefined)
+              throw new Error('usage: report [--flow] [--since <time>] [--until <time>] [--json]');
+            until = normalized;
+          }
         }
       }
+      const flow = argv.includes('--flow');
+      if (until !== undefined && !flow)
+        throw new Error('usage: report [--flow] [--since <time>] [--until <time>] [--json]');
+      if (since !== undefined && until !== undefined && Date.parse(since) > Date.parse(until))
+        throw new Error('--since must be at or before --until');
       return {
         command,
-        flow: argv.includes('--flow'),
+        flow,
         json: argv.includes('--json'),
         ...(since ? { since } : {}),
+        ...(until ? { until } : {}),
       };
     }
     case 'retry': {

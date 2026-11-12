@@ -1,4 +1,10 @@
-import { readProofObservation, proofSourceUnchanged, nativeCheckId } from './verification.ts';
+import {
+  workerBootCustody,
+  HOST_INTERRUPTION_EVENT,
+  HOST_INTERRUPTION_RETAINED,
+  primaryWorkerStderr,
+} from './worker-host-custody.ts';
+import { readProofObservation, proofSourceStatus, nativeCheckId, registeredProof } from './verification.ts';
 import { createHash } from 'node:crypto';
 import { parseAgentExit } from './agents.ts';
 import type { LandingQueue } from './contracts.ts';
@@ -17,7 +23,7 @@ import {
   transportRetryBackoffMs,
 } from './agents/shared.ts';
 import { evidenceBundle } from './evidence.ts';
-import { isEmptyProcessGroupUnconfirmed, terminateProcessGroup } from './process.ts';
+import { isEmptyProcessGroupUnconfirmed, terminateProcessGroup, processIdentity } from './process.ts';
 import { releaseWorkerTemporaryDirectory, type RunningWorker } from './launch.ts';
 import { removeAttemptContainers } from './worker-containers.ts';
 import { reapAttemptResources } from './attempt-resources.ts';
@@ -31,7 +37,10 @@ import { defaultPolicy } from './policy.ts';
 import {
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
+  workerCheckHostBudgetRefusalReport,
+  workerCheckHostTypingReceiptMatches,
   workerCheckHostTypingSettlement,
+  workerCheckHostWithdrawnRetryIsRecoverable,
 } from './worker-check-budget.ts';
 
 function readAttemptStderr(logPath: string): string {
@@ -49,6 +58,20 @@ function unchangedSource(task: Task, head: string): boolean {
     .some((path) => path && !frozen.has(path));
 }
 
+function proofObservationCheckId(
+  observation: Awaited<ReturnType<typeof readProofObservation>> | undefined,
+): string | undefined {
+  if (
+    !observation ||
+    !observation.record ||
+    typeof observation.record !== 'object' ||
+    Array.isArray(observation.record)
+  )
+    return undefined;
+  const id = (observation.record as { id?: unknown }).id;
+  return typeof id === 'string' && nativeCheckId.test(id) ? id : undefined;
+}
+
 const SQLITE_CONTENTION = /SQLITE_(?:BUSY|LOCKED)|database (?:table )?is locked/i;
 /** Another process held the store's write lock longer than the busy timeout. */
 export function isSqliteContention(error: unknown): boolean {
@@ -57,6 +80,17 @@ export function isSqliteContention(error: unknown): boolean {
     (typeof code === 'string' && SQLITE_CONTENTION.test(code)) ||
     (error instanceof Error && SQLITE_CONTENTION.test(error.message))
   );
+}
+/** Retry one persistence action with the same bounded schedule used by ordinary worker settlement. */
+export async function retrySettlementPersistence<T>(action: () => T, backoffMs: readonly number[]): Promise<T> {
+  for (let index = 0; ; index++) {
+    try {
+      return action();
+    } catch (error) {
+      if (!isSqliteContention(error) || index >= backoffMs.length) throw error;
+      await Bun.sleep(backoffMs[index]!);
+    }
+  }
 }
 /** The one same-session request for the exit object of a worker that exited 0 without it. */
 export const FINAL_REPORT_REQUESTED = 'final-report-requested';
@@ -84,31 +118,27 @@ export async function settle(
   worker: Pick<RunningWorker, 'attempt' | 'exited' | 'logStartOffset' | 'resuming'>,
   landing: LandingQueue,
   startTrain: () => Promise<void> = async () => {},
+  recovery?: { withdrawnBudgetRecovery: { previousResult: string; command: string[] } },
 ): Promise<void> {
   const ref = worker.attempt;
   const policy = tasks.settings.policy ?? defaultPolicy;
   let code: number | null;
+  let exitSignal: string | null = null;
   try {
-    code = (await worker.exited).code;
+    const exit = await worker.exited;
+    code = exit.code;
+    exitSignal = exit.signal;
   } catch {
     code = -1;
   }
   const store = tasks.store;
-  const write = async (action: () => void): Promise<void> => {
-    for (let index = 0; ; index++) {
-      try {
-        return store.write(ref, action);
-      } catch (error) {
-        if (!isSqliteContention(error) || index >= policy.worker.settlementBackoffMs.length) throw error;
-        await Bun.sleep(policy.worker.settlementBackoffMs[index]!);
-      }
-    }
-  };
+  const write = (action: () => void): Promise<void> =>
+    retrySettlementPersistence(() => store.write(ref, action), policy.worker.settlementBackoffMs);
   const runEvent = store
     .events(ref.taskId, ref.attempt)
     .filter((event) => event.kind === 'worker-run-started')
     .at(-1);
-  let runMetadata: { logStartOffset?: number; resuming?: boolean } = {};
+  let runMetadata: { logStartOffset?: number; resuming?: boolean; workerHost?: unknown } = {};
   try {
     runMetadata = runEvent ? (JSON.parse(runEvent.body) as typeof runMetadata) : {};
   } catch {
@@ -128,19 +158,104 @@ export async function settle(
     // Stopped or superseded attempts still need Docker cleanup even though they no longer settle records.
     const currentAttempt = store.attempt(ref);
     const poolForAttempt = tasks.settings.pools.find((p) => p.name === ref.pool);
-    const pendingChecks = readMeasurement(currentAttempt, {
+    const initialMeasurement = readMeasurement(currentAttempt, {
       policy,
       configDirectory: poolForAttempt?.configDirectory,
       maxLogBytes: policy.worker.logTailBytes,
       ...(logStartOffset !== undefined ? { logStartOffset } : {}),
-    }).waitingChecks;
-    const proofTask = store.task(ref.taskId).brief.kind === 'verification';
+    });
+    const pendingChecks = initialMeasurement.waitingChecks;
+    const proofTaskRecord = store.task(ref.taskId);
+    const proofTask = proofTaskRecord.brief.kind === 'verification';
     const proofObservation = proofTask
       ? await readProofObservation(
           store.task(ref.taskId),
           pendingChecks?.length ? pendingChecks : currentAttempt.checks,
         )
       : undefined;
+    const proofCheckId = proofObservationCheckId(proofObservation);
+    const ownedOrdinaryProofPass = Boolean(
+      proofTask &&
+      !proofTaskRecord.proofRun &&
+      registeredProof(proofTaskRecord.brief, proofTaskRecord.proofAuthorization) &&
+      proofObservation?.status === 'terminal' &&
+      proofObservation.passed,
+    );
+    const currentBoot = processIdentity()?.boot ?? null;
+    const bootCustody = currentAttempt.process
+      ? workerBootCustody(currentAttempt.process, runMetadata.workerHost, currentBoot)
+      : 'current-boot';
+    if (
+      code === null &&
+      exitSignal === null &&
+      bootCustody !== 'current-boot' &&
+      !proofTask &&
+      ['running', 'pending'].includes(currentAttempt.state) &&
+      (bootCustody !== 'previous-local-boot' ||
+        (!reportsSuccess(initialMeasurement.result, agentAdapter(currentAttempt.profile.cli)) &&
+          !initialMeasurement.failureKind &&
+          !initialMeasurement.blocker))
+    ) {
+      const adapter = agentAdapter(currentAttempt.profile.cli);
+      const session = initialMeasurement.session ?? currentAttempt.session;
+      const interruptions = store
+        .events(ref.taskId, ref.attempt)
+        .filter((event) => event.kind === HOST_INTERRUPTION_EVENT || event.kind === TRANSPORT_FAILURE_EVENT).length;
+      const canResume =
+        bootCustody === 'previous-local-boot' &&
+        adapter.canResume &&
+        Boolean(session) &&
+        interruptions < (policy.worker.transportRetryLimit ?? TRANSPORT_RETRY_LIMIT);
+      const line = canResume
+        ? 'Confirmed local host reboot interrupted this worker; CLI exit status is unobserved.'
+        : `${HOST_INTERRUPTION_RETAINED} ${bootCustody === 'unknown-host' ? 'host provenance is unavailable or foreign' : 'no resumable session or same-attempt interruption budget exhausted'}; CLI exit status is unobserved.`;
+      await write(() => {
+        store.assertCurrent(ref);
+        const task = store.task(ref.taskId);
+        const latest = store.attempt(ref);
+        const latestRun = store
+          .events(ref.taskId, ref.attempt)
+          .findLast((event) => event.kind === 'worker-run-started');
+        if (
+          !['running', 'ready'].includes(task.state) ||
+          !['running', 'pending'].includes(latest.state) ||
+          latest.terminationIntent ||
+          (latestRun?.sequence ?? 0) !== (runEvent?.sequence ?? 0) ||
+          JSON.stringify(latest.process) !== JSON.stringify(currentAttempt.process)
+        )
+          return;
+        store.updateAttempt(ref, (attempt) => {
+          attempt.state = canResume ? 'waiting' : 'exited';
+          attempt.driver = null;
+          if (bootCustody === 'previous-local-boot') attempt.process = null;
+          attempt.session = session;
+          attempt.exitCode = null;
+          attempt.result = line;
+          attempt.failureKind = canResume ? null : 'tool';
+          if (!canResume) attempt.endedAt = new Date().toISOString();
+          if (pendingChecks?.length) attempt.checks = [...new Set([...(attempt.checks ?? []), ...pendingChecks])];
+        });
+        store.updateTask(ref, (task) => {
+          task.state = canResume ? 'running' : 'stopped';
+        });
+        const delayMs = transportRetryBackoffMs(interruptions + 1, policy.worker.transportRetryBackoffMs);
+        store.event(ref, HOST_INTERRUPTION_EVENT, {
+          previousReport: initialMeasurement.result,
+          previousProcess: currentAttempt.process,
+          resume: canResume,
+          count: interruptions + 1,
+          custody: bootCustody,
+          previousBoot: currentAttempt.process?.boot,
+          currentBoot,
+          line,
+          nextResumeAt: new Date(
+            Date.now() + (process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1' ? 0 : delayMs),
+          ).toISOString(),
+          delayMs,
+        });
+      });
+      return;
+    }
     if (!proofTask && !pendingChecks?.length) {
       removeAttemptContainers(ref.taskId, ref.attempt, policy.containers);
       await reapAttemptResources({
@@ -152,11 +267,12 @@ export async function settle(
     }
     store.assertCurrent(ref);
     try {
-      await terminateProcessGroup(
-        store.attempt(ref).process,
-        tasks.settings.terminationGraceMs,
-        tasks.settings.policy?.process,
-      );
+      if (bootCustody !== 'previous-local-boot')
+        await terminateProcessGroup(
+          store.attempt(ref).process,
+          tasks.settings.terminationGraceMs,
+          tasks.settings.policy?.process,
+        );
     } catch (error) {
       // The wrapper already exited; a zombie linger must not hide the worker's real stderr as unconfirmed custody.
       const identity = store.attempt(ref).process;
@@ -174,11 +290,13 @@ export async function settle(
         });
     }
     // A check still pending may be running in this directory, so it outlives this settlement.
-    if (!pendingChecks?.length) releaseWorkerTemporaryDirectory(ref.taskId);
+    if (!pendingChecks?.length && !(proofObservation?.status === 'running' && proofCheckId))
+      releaseWorkerTemporaryDirectory(ref.taskId);
     let queued = false;
     let finished = false;
     let exited = false;
     let bundle = false;
+    let typingEvidencePending: { result: string; command?: string[] } | undefined;
     // Whether the branch has commits matters only for a nonzero exit without a session.
     let committed = false;
     if (code !== null && code !== 0)
@@ -207,7 +325,8 @@ export async function settle(
           ...(logStartOffset !== undefined ? { logStartOffset } : {}),
         },
       );
-      const stderr = readAttemptStderr(current.logPath);
+      const rawStderr = readAttemptStderr(current.logPath);
+      const stderr = primaryWorkerStderr(rawStderr);
       const adapter = agentAdapter(current.profile.cli);
       if (
         resuming &&
@@ -257,17 +376,19 @@ export async function settle(
         nativeCheckId.test(proofExit.checks[0])
           ? proofExit.checks[0]
           : undefined;
+      const lostReportWaitingId =
+        proofTask && proofExit === null && proofObservation?.status === 'running' ? proofCheckId : undefined;
+      const proofWaitingId = waitingId ?? lostReportWaitingId;
       if (
-        pendingChecks?.length &&
+        (pendingChecks?.length || lostReportWaitingId) &&
         (!proofTask ||
-          (waitingId &&
-            pendingChecks.length === 1 &&
-            pendingChecks[0] === waitingId &&
+          (proofWaitingId &&
+            (!pendingChecks?.length || (pendingChecks.length === 1 && pendingChecks[0] === proofWaitingId)) &&
             (proofObservation?.status === 'running' || proofObservation?.status === 'terminal')))
       ) {
         store.updateAttempt(ref, (attempt) => {
           attempt.state = 'waiting';
-          attempt.checks = pendingChecks;
+          attempt.checks = pendingChecks?.length ? pendingChecks : [proofWaitingId!];
           attempt.process = null;
           attempt.driver = null;
           attempt.exitCode = code;
@@ -334,7 +455,7 @@ export async function settle(
         : '';
       const transportFailures = store
         .events(ref.taskId, ref.attempt)
-        .filter((event) => event.kind === TRANSPORT_FAILURE_EVENT).length;
+        .filter((event) => event.kind === TRANSPORT_FAILURE_EVENT || event.kind === HOST_INTERRUPTION_EVENT).length;
       if (
         transport &&
         !proofTask &&
@@ -378,6 +499,58 @@ export async function settle(
         maxLogBytes: policy.worker.logTailBytes,
         ...(logStartOffset !== undefined ? { logStartOffset } : {}),
       });
+      if (recovery?.withdrawnBudgetRecovery) {
+        const { previousResult, command } = recovery.withdrawnBudgetRecovery;
+        const retry = store.retryIntent(ref);
+        const directory = workerCheckBudgetDirectory(tasks.settings.stateDirectory, ref.taskId, ref.attempt);
+        const progressEvent = store
+          .events(ref.taskId, ref.attempt)
+          .findLast((event) => event.kind === 'attempt-progress');
+        let progress: { endHead?: unknown; uncommitted?: unknown } | undefined;
+        try {
+          progress = progressEvent ? (JSON.parse(progressEvent.body) as typeof progress) : undefined;
+        } catch {
+          progress = undefined;
+        }
+        if (
+          task.brief.goal !== 'web' ||
+          task.brief.kind !== 'interface' ||
+          (current.state !== 'stopped' &&
+            !(
+              current.state === 'exited' &&
+              JSON.stringify(current.typingEvidencePending?.command) ===
+                JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck'])
+            )) ||
+          current.result !== previousResult ||
+          !workerCheckHostBudgetRefusalReport(current.result) ||
+          JSON.stringify(command) !== JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) ||
+          !workerCheckHostTypingReceiptMatches(directory, command) ||
+          !workerCheckHostTypingSettlement({
+            directory,
+            worktree: task.worktree,
+            limit: workerCheckHostBudgetLimit(task, ref.attempt),
+          }).ok ||
+          !workerCheckHostWithdrawnRetryIsRecoverable({
+            task,
+            attempt: current,
+            ...(retry ? { retry } : {}),
+            ...(progress ? { progress } : {}),
+          })
+        )
+          throw new Error('Withdrawn retry source no longer has exact terminal Web compiler evidence');
+        finalMeasurement.result = JSON.stringify({
+          status: 'success',
+          summary:
+            'Retained source passed the installed owning Web typecheck; remaining acceptance stays with integration.',
+          blocker: null,
+          checks: [],
+          approaches: [],
+        });
+        finalMeasurement.blocker = null;
+        finalMeasurement.failureKind = null;
+        finalMeasurement.waitingChecks = null;
+      }
+      const noReportProofPass = ownedOrdinaryProofPass && parseAgentExit(finalMeasurement.result, adapter) === null;
       if (pool)
         try {
           agentAdapter(pool.cli).afterExit(pool, readLogTail(attempt.logPath, policy.worker.logTailBytes));
@@ -386,7 +559,14 @@ export async function settle(
         }
       // A CLI can fail before opening a session, so there is no structured event in its JSONL log.
       // Preserve that launch failure on the attempt and keep it out of the landing queue.
-      if (!finalMeasurement.session && code !== null && code !== 0 && !finalMeasurement.failureKind && !committed) {
+      if (
+        !noReportProofPass &&
+        !finalMeasurement.session &&
+        code !== null &&
+        code !== 0 &&
+        !finalMeasurement.failureKind &&
+        !committed
+      ) {
         // Cursor refuses a spent model this way; the pool must be excluded, not the launch retried and stalled.
         finalMeasurement.failureKind = adapter.signals?.(stderr).allowance ? 'pool-exhausted' : 'tool';
         finalMeasurement.result =
@@ -397,7 +577,8 @@ export async function settle(
       if (
         !finalMeasurement.failureKind &&
         !finalMeasurement.blocker &&
-        !reportsSuccess(finalMeasurement.result, adapter)
+        !reportsSuccess(finalMeasurement.result, adapter) &&
+        !noReportProofPass
       ) {
         const parsed = parseAgentExit(finalMeasurement.result, adapter);
         const errorLine = lastNonemptyLine(stderr);
@@ -407,7 +588,7 @@ export async function settle(
             : finalMeasurement.result.slice(-policy.worker.failedResultCharacters);
         // Cursor also refuses a spent allowance mid-session ("You're out of usage"); it excludes the pool, not a tool fault.
         finalMeasurement.failureKind = adapter.signals?.(stderr).allowance ? 'pool-exhausted' : 'tool';
-        finalMeasurement.result = `Worker ended without a success report (${code === null ? 'killed' : `exit ${code}`}): ${detail}`;
+        finalMeasurement.result = `Worker ended without a success report (${code === null ? (exitSignal ? `signal ${exitSignal}` : 'exit unobserved') : `exit ${code}`}): ${detail}`;
         if (transportLine) finalMeasurement.blocker = transportLine;
       }
       if (
@@ -421,8 +602,12 @@ export async function settle(
           limit: workerCheckHostBudgetLimit(task, ref.attempt),
         });
         if (!typing.ok) {
-          finalMeasurement.failureKind = 'tool';
-          finalMeasurement.result = typing.result;
+          if (typing.kind === 'evidence-unavailable') {
+            typingEvidencePending = { result: typing.result, ...(typing.command ? { command: typing.command } : {}) };
+          } else {
+            finalMeasurement.failureKind = 'tool';
+            finalMeasurement.result = typing.result;
+          }
         }
       }
       store.updateAttempt(ref, (a) => {
@@ -430,12 +615,25 @@ export async function settle(
         a.result = finalMeasurement.result;
         a.blocker = finalMeasurement.blocker;
         a.failureKind = finalMeasurement.failureKind;
+        if (typingEvidencePending) a.typingEvidencePending = typingEvidencePending;
+        else delete a.typingEvidencePending;
         a.approaches.push(
           ...reportedApproaches(finalMeasurement.result, agentAdapter(attempt.profile.cli), policy.records),
         );
       });
       store.putRecord(makeRecord(task, attempt, finalMeasurement));
       bundle = true;
+      if (typingEvidencePending) {
+        store.updateTask(ref, (current) => {
+          current.state = 'stopped';
+        });
+        if (store.retryIntent(ref)?.status === 'pending')
+          store.updateRetryIntent(ref, (intent) => {
+            intent.status = 'abandoned';
+          });
+        store.event(ref, 'typing-evidence-pending', typingEvidencePending);
+        return;
+      }
       if (finalMeasurement.failureKind && !proofTask) return;
       if (proofTask && proofObservation) {
         const run = task.proofRun;
@@ -449,15 +647,24 @@ export async function settle(
           Array.isArray(exit.checks) &&
           exit.checks.length === 0,
         );
-        const unchanged = proofSourceUnchanged(task, tasks.settings.integrationBranch, tasks.settings.policy?.proof);
-        const verified =
+        const sourceStatus = proofSourceStatus(task, tasks.settings.integrationBranch, tasks.settings.policy?.proof);
+        const unchanged = sourceStatus === 'current';
+        const sourceDiagnostic =
+          sourceStatus === 'capture-changed'
+            ? '; captured source changed'
+            : sourceStatus === 'integration-not-current'
+              ? '; capture is not current integration'
+              : '';
+        const ordinaryNoReportPass =
+          noReportProofPass && proofObservation.status === 'terminal' && proofObservation.passed;
+        const observedPass =
           !finalMeasurement.failureKind &&
           !finalMeasurement.blocker &&
-          code === 0 &&
-          structured &&
-          unchanged &&
           proofObservation.status === 'terminal' &&
-          proofObservation.passed;
+          proofObservation.passed &&
+          (ordinaryNoReportPass || (code === 0 && structured));
+        const verified = observedPass && unchanged;
+        const captureOnly = observedPass && sourceStatus === 'integration-not-current';
         const proofRecord = makeRecord(task, attempt, finalMeasurement, verified ? 'verified' : 'stopped');
         proofRecord.proof = proofObservation;
         store.putRecord(proofRecord);
@@ -465,15 +672,17 @@ export async function settle(
           current.state = verified ? 'verified' : 'stopped';
         });
         store.updateAttempt(ref, (current) => {
-          current.failureKind = verified ? null : 'tool';
-          current.result = `${finalMeasurement.result}\n${proofObservation.cause}${unchanged ? '' : '; captured source changed'}`;
+          current.failureKind = verified || captureOnly ? null : 'tool';
+          current.result = `${finalMeasurement.result}\n${proofObservation.cause}${sourceDiagnostic}`;
         });
         store.releaseExitedProofReservations(ref);
-        store.event(ref, verified ? 'proof-verified' : 'proof-failed', {
+        store.event(ref, verified ? 'proof-verified' : captureOnly ? 'proof-capture-not-current' : 'proof-failed', {
           binding: run?.binding,
           observation: proofObservation,
+          sourceStatus,
           unchanged,
           structured,
+          ordinaryNoReportPass,
         });
         return;
       }
@@ -516,6 +725,8 @@ export async function settle(
         unchangedClaim && git(task.worktree, ['status', '--porcelain', '--untracked-files=all']) !== '';
       evidenceBundle(task, store.attempt(ref), undefined, store.policy.evidence);
       await write(() => {
+        // Contract amendment and landing publication share this fence: never enqueue an earlier scope or gate.
+        const contract = store.task(ref.taskId);
         store.updateTask(ref, (t) => {
           t.state = 'landing';
         });
@@ -529,13 +740,13 @@ export async function settle(
             ...(unchangedClaim
               ? {
                   unchangedClaim: true as const,
-                  contractHash: createHash('sha256').update(task.brief.markdown).digest('hex'),
+                  contractHash: createHash('sha256').update(contract.brief.markdown).digest('hex'),
                   ...(sourceDirtyAtSettlement ? { sourceDirtyAtSettlement: true as const } : {}),
                 }
               : {}),
-            declaredPaths: task.brief.paths,
-            protectedRiskAreas: tasks.protectedRiskAreas(task.brief),
-            gate: task.brief.acceptance.command,
+            declaredPaths: contract.brief.paths,
+            protectedRiskAreas: tasks.protectedRiskAreas(contract.brief),
+            gate: contract.brief.acceptance.command,
           },
           (request) => landing.enqueue(request),
         );

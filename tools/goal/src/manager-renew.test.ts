@@ -249,6 +249,9 @@ test('goal continuation renews with pinned model and effort and notifies the sup
   const s = await setup();
   try {
     const first = await s.managers.start(s.spec);
+    const continuationPath = join(s.path, '.temp', 'goal', first.id, 'CONTINUATION.md');
+    mkdirSync(join(s.path, '.temp', 'goal', first.id), { recursive: true });
+    writeFileSync(continuationPath, '- Next action: review the existing manager checkpoint before taking more work.\n');
     await s.notify({
       method: 'thread/goal/updated',
       params: {
@@ -258,9 +261,20 @@ test('goal continuation renews with pinned model and effort and notifies the sup
     });
     expect(s.managers.get(first.id)).toMatchObject({ continuationAsked: true, continuationRenewed: false });
 
-    const continuationPath = join(s.path, '.temp', 'goal', first.id, 'CONTINUATION.md');
-    mkdirSync(join(s.path, '.temp', 'goal', first.id), { recursive: true });
-    writeFileSync(continuationPath, 'Continue the approved work from the recorded task states.\n');
+    await s.managers.outgoingMessage(first.id, s.spec.supermanager, 'continuation written');
+    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(1);
+
+    writeFileSync(
+      continuationPath,
+      `- Result: the new bounded checkpoint records concrete progress.\n${'x'.repeat(8001)}`,
+    );
+    await s.managers.outgoingMessage(first.id, s.spec.supermanager, 'continuation written');
+    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(1);
+
+    writeFileSync(
+      continuationPath,
+      '- Result: the current-thread renewal now requires a fresh bounded continuation with concrete progress.\n',
+    );
     await s.managers.outgoingMessage(first.id, s.spec.supermanager, 'continuation written');
     await s.managers.flush();
 

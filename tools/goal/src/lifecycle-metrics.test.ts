@@ -158,6 +158,14 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
   const { db } = database('measures.sqlite');
   const now = Date.UTC(2026, 9, 30, 12, 0);
   const at = (offsetMs: number) => stamp(now, offsetMs);
+  db.query(
+    `INSERT INTO landing_operations(operation_id,queue_id,task_id,attempt,enqueued_at,started_at,terminal_at,terminal_action,terminal_outcome)
+     VALUES ('trailing-hour', 1, 'timed-landing', 1, ?, ?, ?, 'finished', '{}')`,
+  ).run(at(-35 * 60_000), at(-30 * 60_000), at(-10 * 60_000));
+  db.query(
+    `INSERT INTO landing_operations(operation_id,queue_id,task_id,attempt,enqueued_at,started_at,terminal_at,terminal_action,terminal_outcome)
+     VALUES ('at-cutoff', 2, 'cutoff-landing', 1, ?, ?, ?, 'finished', '{}')`,
+  ).run(at(-5 * 60_000), at(-2 * 60_000), at(0));
 
   insertTask(db, 'repeat', 1, 'running');
   insertAttempt(db, 'repeat', 1, 'running');
@@ -215,6 +223,13 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
   );
 
   const withoutLifecycleSchema = lifecycleMetrics(db, now);
+  expect(withoutLifecycleSchema.landingOperations).toMatchObject({
+    terminalCount: 1,
+    measuredCount: 1,
+    unknownDurationCount: 0,
+    totalDurationMs: 1_200_000,
+    p50DurationMs: 1_200_000,
+  });
   expect(withoutLifecycleSchema.attemptsPerTaskPerTrailingHour).toMatchObject({
     total: 3,
     taskCount: 2,
@@ -682,6 +697,27 @@ test('flow report JSON and text include lifecycle measures', async () => {
     });
     expect(text[0]).toContain('Launches in trailing hour: 0');
     expect(text[0]).toContain('Quarantines: current unknown; recent new unknown');
+
+    const start = '2026-10-30T11:00:00.000Z';
+    const end = '2026-10-30T12:00:00.000Z';
+    recordFlow(h.store.db, { taskId: 'bounded', attempt: 1, stage: 'landing', action: 'enqueued', at: start });
+    recordFlow(h.store.db, { taskId: 'future', attempt: 1, stage: 'integration', action: 'integrated', at: end });
+    recordFlow(h.store.db, { taskId: 'future', attempt: 1, stage: 'chain', action: 'offered', at: end });
+    const boundedJson: string[] = [];
+    await runWorkerCommand('report', ['--flow', '--since', start, '--until', end, '--json'], {
+      settings: h.settings,
+      store: h.store,
+      tasks: h.tasks,
+      print: (value) => boundedJson.push(value),
+      env: {},
+    });
+    const bounded = JSON.parse(boundedJson[0]!);
+    expect(bounded.window).toMatchObject({ since: start, until: end, startInclusive: true, endExclusive: true });
+    expect(bounded.chain.offered).toBe(0);
+    expect(bounded.urgent.integrated).toBe(0);
+    expect(bounded.queues).toEqual([]);
+    expect(bounded).not.toHaveProperty('lifecycle');
+    expect(bounded).not.toHaveProperty('guards');
   } finally {
     h.dispose();
   }
@@ -838,13 +874,20 @@ test('missing conflict sources and historical snapshots remain unavailable inste
   const metrics = lifecycleMetrics(db, now);
   expect(metrics.conflicts.totalCount).toBeNull();
   // This is the shape stored before conflict telemetry existed, not a backfilled current snapshot.
-  const { conflicts, ...historical } = metrics;
+  const historical = { ...metrics } as Partial<typeof metrics>;
+  delete historical.conflicts;
+  delete historical.landingOperations;
   expect(emitHourlyLifecycleMetrics(db, metrics, now)).toBe(true);
   db.query('UPDATE lifecycle_metric_emissions SET body=?').run(JSON.stringify(historical));
   const old = readHourlyLifecycleMetrics(db, now)!.metrics.conflicts;
   expect(old.reason).toContain('historical snapshot');
   expect(old.recordedOutcomes).toMatchObject({ available: false, observedCount: null, unclassifiedCount: null });
   expect(old.createdAttempts).toMatchObject({ available: false, observedCount: null, totalCount: null });
+  expect(readHourlyLifecycleMetrics(db, now)!.metrics.landingOperations).toMatchObject({
+    terminalCount: null,
+    measuredCount: null,
+    unknownDurationCount: null,
+  });
   insertTask(db, 'unknown-clock', 1, 'landing');
   metricEvent(db, 'unknown-clock', 1, '2026-10-30T11:xx:00.000Z', 'gate-outcome', {
     passed: false,

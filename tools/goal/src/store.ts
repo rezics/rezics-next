@@ -1,9 +1,13 @@
 import { nativeCheckId, proofFingerprint, ProofCapacityQueuedError } from './verification.ts';
 import type { Database } from 'bun:sqlite';
+import { createHash } from 'node:crypto';
 import { defaultPolicy } from './policy.ts';
 import { isDeepStrictEqual } from 'node:util';
+import { briefProposalHash, sameBriefProposalText } from './durable-follow-up.ts';
+import type { OwnerDecisionDelivery } from './owner-decisions.ts';
 import { CheckResults, checkResultsMigration } from './check-results.ts';
 import { groupMembers, runPidFilePresence, sameProcess } from './process.ts';
+import type { ProcessIdentity } from './process.ts';
 import { makeRecord, readMeasurement } from './records.ts';
 import { migrate } from './db.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -15,6 +19,8 @@ import type {
   DevVerifierFinding,
   DevVerifierRun,
   BriefProposalRecord,
+  MaintenanceBackfillProgress,
+  MaintenanceCandidateRef,
   IntegrationPlan,
   PendingBriefProposal,
   PoolReading,
@@ -24,6 +30,10 @@ import type {
   TaskState,
   TerminationIntent,
   WorktreeCleanupDisposition,
+  WorktreeMaintenanceCandidate,
+  ProcessMaintenanceCandidate,
+  StrayWorktreeCandidate,
+  WorktreeScanDirectory,
 } from './types.ts';
 import { recordFlow, ensureFlow, closePendingFlow } from './flow.ts';
 import type {
@@ -41,6 +51,14 @@ export const workerRecordEndedAtMigration = {
   version: 12,
   sql: `CREATE INDEX worker_records_ended_at ON worker_records (${workerRecordEndedAtExpression});`,
 } as const;
+
+export type WithdrawnTypingRecoveryOrigin = {
+  version: 1;
+  sourceCommit: string;
+  reportSha256: string;
+  failureSha256: string;
+  failureStamp: string;
+};
 
 export const workerMigrations = [
   {
@@ -237,6 +255,108 @@ END;`,
     );
     CREATE INDEX worker_brief_proposals_task ON worker_brief_proposals(task_id, id);`,
   },
+  {
+    module: 'worker',
+    version: 14,
+    sql: `CREATE TABLE worker_maintenance_candidates (
+      ticket INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL CHECK(kind IN ('worktree','reap')),
+      task_id TEXT NOT NULL REFERENCES worker_tasks(id),
+      attempt INTEGER NOT NULL,
+      UNIQUE(kind, task_id, attempt)
+    );
+    CREATE INDEX worker_maintenance_candidates_page ON worker_maintenance_candidates(kind, ticket);
+    CREATE INDEX worker_maintenance_candidates_task ON worker_maintenance_candidates(task_id);
+    CREATE TABLE worker_maintenance_progress (
+      id INTEGER PRIMARY KEY CHECK(id=1),
+      task_sequence INTEGER NOT NULL DEFAULT 0,
+      tasks_complete INTEGER NOT NULL DEFAULT 0,
+      process_task_id TEXT NOT NULL DEFAULT '',
+      process_attempt INTEGER NOT NULL DEFAULT 0,
+      processes_complete INTEGER NOT NULL DEFAULT 0,
+      worktree_ticket INTEGER NOT NULL DEFAULT 0,
+      reap_ticket INTEGER NOT NULL DEFAULT 0,
+      stray_ticket INTEGER NOT NULL DEFAULT 0,
+      scan_watch_ticket INTEGER NOT NULL DEFAULT 0,
+      prune_generation INTEGER NOT NULL DEFAULT 0,
+      prune_completed INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE worker_maintenance_strays (
+      ticket INTEGER PRIMARY KEY AUTOINCREMENT,
+      path TEXT NOT NULL UNIQUE
+    );
+    CREATE INDEX worker_maintenance_strays_page ON worker_maintenance_strays(ticket);
+    CREATE TABLE worker_maintenance_scan_directories (
+      watch_ticket INTEGER PRIMARY KEY AUTOINCREMENT,
+      root TEXT NOT NULL,
+      path TEXT NOT NULL,
+      generation TEXT,
+      offset INTEGER NOT NULL DEFAULT 0,
+      complete INTEGER NOT NULL DEFAULT 0,
+      monitor INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(root, path)
+    );
+    CREATE INDEX worker_maintenance_scan_pending
+      ON worker_maintenance_scan_directories(complete, root, path);
+    CREATE INDEX worker_maintenance_scan_monitor
+      ON worker_maintenance_scan_directories(monitor, watch_ticket);
+    CREATE TABLE worker_maintenance_task_paths (
+      path TEXT NOT NULL,
+      task_id TEXT NOT NULL REFERENCES worker_tasks(id),
+      sequence INTEGER NOT NULL,
+      PRIMARY KEY(path, task_id)
+    );
+    CREATE INDEX worker_maintenance_task_paths_lookup
+      ON worker_maintenance_task_paths(path, sequence DESC);
+    CREATE INDEX worker_maintenance_task_paths_task ON worker_maintenance_task_paths(task_id);
+    INSERT INTO worker_maintenance_progress(id) VALUES (1);
+    CREATE TRIGGER worker_maintenance_task_path_insert AFTER INSERT ON worker_tasks BEGIN
+      INSERT OR REPLACE INTO worker_maintenance_task_paths(path, task_id, sequence)
+      SELECT json_extract(NEW.body, '$.worktree'), NEW.id, NEW.sequence
+      WHERE json_type(NEW.body, '$.worktree')='text';
+    END;
+    CREATE TRIGGER worker_maintenance_task_path_update AFTER UPDATE OF sequence, body ON worker_tasks BEGIN
+      DELETE FROM worker_maintenance_task_paths WHERE task_id=OLD.id;
+      INSERT OR REPLACE INTO worker_maintenance_task_paths(path, task_id, sequence)
+      SELECT json_extract(NEW.body, '$.worktree'), NEW.id, NEW.sequence
+      WHERE json_type(NEW.body, '$.worktree')='text';
+    END;
+    CREATE TRIGGER worker_maintenance_task_path_delete AFTER DELETE ON worker_tasks BEGIN
+      DELETE FROM worker_maintenance_task_paths WHERE task_id=OLD.id;
+    END;
+    CREATE TRIGGER worker_maintenance_task_insert AFTER INSERT ON worker_tasks BEGIN
+      INSERT INTO worker_maintenance_candidates(kind, task_id, attempt)
+      VALUES ('worktree', NEW.id, 0)
+      ON CONFLICT(kind, task_id, attempt) DO UPDATE SET ticket=excluded.ticket;
+    END;
+    CREATE TRIGGER worker_maintenance_task_update AFTER UPDATE OF sequence, current_attempt, body ON worker_tasks BEGIN
+      INSERT INTO worker_maintenance_candidates(kind, task_id, attempt)
+      VALUES ('worktree', NEW.id, 0)
+      ON CONFLICT(kind, task_id, attempt) DO UPDATE SET ticket=excluded.ticket;
+    END;
+    CREATE TRIGGER worker_maintenance_task_delete AFTER DELETE ON worker_tasks BEGIN
+      DELETE FROM worker_maintenance_candidates WHERE task_id=OLD.id;
+    END;
+    CREATE TRIGGER worker_maintenance_attempt_insert AFTER INSERT ON worker_attempts BEGIN
+      INSERT INTO worker_maintenance_candidates(kind, task_id, attempt)
+      SELECT 'reap', NEW.task_id, NEW.attempt
+      WHERE json_type(NEW.body, '$.process')='object'
+      ON CONFLICT(kind, task_id, attempt) DO UPDATE SET ticket=excluded.ticket;
+    END;
+    CREATE TRIGGER worker_maintenance_attempt_update AFTER UPDATE ON worker_attempts BEGIN
+      DELETE FROM worker_maintenance_candidates
+      WHERE kind='reap' AND task_id=NEW.task_id AND attempt=NEW.attempt
+        AND json_type(NEW.body, '$.process') IS NOT 'object';
+      INSERT INTO worker_maintenance_candidates(kind, task_id, attempt)
+      SELECT 'reap', NEW.task_id, NEW.attempt
+      WHERE json_type(NEW.body, '$.process')='object'
+      ON CONFLICT(kind, task_id, attempt) DO UPDATE SET ticket=excluded.ticket;
+    END;
+    CREATE TRIGGER worker_maintenance_attempt_delete AFTER DELETE ON worker_attempts BEGIN
+      DELETE FROM worker_maintenance_candidates
+      WHERE kind='reap' AND task_id=OLD.task_id AND attempt=OLD.attempt;
+    END;`,
+  },
   checkResultsMigration(),
   {
     module: 'dev-verifier',
@@ -264,6 +384,8 @@ const decode = <T>(row: unknown): T | undefined => (row ? (JSON.parse((row as Bo
 export type AttemptPage<T> = { items: T[]; hasMore: boolean; nextAfter?: number };
 export type AttemptPageOptions = { afterAttempt?: number; limit: number };
 export const MAX_ATTEMPT_PAGE_SIZE = defaultPolicy.history.attemptPageSize;
+export const MAINTENANCE_BOOTSTRAP_PAGE_SIZE = 32;
+export const MAINTENANCE_CANDIDATE_BATCH_SIZE = 16;
 
 function attemptPageOptions(
   taskId: string,
@@ -342,6 +464,15 @@ export class WorkerStore implements AttemptFence {
     this.decodedAttemptBytes += Buffer.byteLength((row as Body).body);
     return decode<Attempt>(row);
   }
+  private cachedTask(id: string, body: string): Task {
+    const cached = this.taskSnapshot.get(id);
+    if (cached) return structuredClone(cached);
+    this.decodedTaskRows++;
+    this.decodedTaskBytes += Buffer.byteLength(body);
+    const task = JSON.parse(body) as Task;
+    this.taskSnapshot.set(id, task);
+    return structuredClone(task);
+  }
   task(id: string): Task {
     this.refreshSnapshot();
     const cached = this.taskSnapshot.get(id);
@@ -354,6 +485,348 @@ export class WorkerStore implements AttemptFence {
   worktreeCleanup(taskId: string): WorktreeCleanupDisposition | undefined {
     const row = this.db.query('SELECT body FROM worker_worktree_cleanup WHERE task_id=?').get(taskId);
     return decode<WorktreeCleanupDisposition>(row);
+  }
+  /** Backfill task cleanup candidates in durable sequence pages; inserts and updates are also trigger-enqueued. */
+  bootstrapMaintenanceTasks(limit = MAINTENANCE_BOOTSTRAP_PAGE_SIZE): MaintenanceBackfillProgress {
+    return this.db
+      .transaction(() => {
+        const progress = this.db
+          .query('SELECT task_sequence, tasks_complete FROM worker_maintenance_progress WHERE id=1')
+          .get() as { task_sequence: number; tasks_complete: number };
+        if (progress.tasks_complete) return { examined: 0, complete: true };
+        const rows = this.db
+          .query('SELECT sequence FROM worker_tasks WHERE sequence>? ORDER BY sequence LIMIT ?')
+          .all(progress.task_sequence, limit) as { sequence: number }[];
+        const last = rows.at(-1)?.sequence ?? progress.task_sequence;
+        if (rows.length)
+          this.db
+            .query(`INSERT INTO worker_maintenance_candidates(kind, task_id, attempt)
+              SELECT 'worktree', id, 0 FROM worker_tasks WHERE sequence>? AND sequence<=? ORDER BY sequence
+              ON CONFLICT(kind, task_id, attempt) DO NOTHING`)
+            .run(progress.task_sequence, last);
+        if (rows.length)
+          this.db
+            .query(`INSERT OR REPLACE INTO worker_maintenance_task_paths(path, task_id, sequence)
+              SELECT json_extract(body, '$.worktree'), id, sequence FROM worker_tasks
+              WHERE sequence>? AND sequence<=? AND json_type(body, '$.worktree')='text'
+              ORDER BY sequence`)
+            .run(progress.task_sequence, last);
+        const complete = rows.length < limit;
+        this.db
+          .query('UPDATE worker_maintenance_progress SET task_sequence=?, tasks_complete=? WHERE id=1')
+          .run(last, Number(complete));
+        return { examined: rows.length, complete };
+      })
+      .immediate();
+  }
+  /** Backfill attempt identities in primary-key pages; trigger-enqueued writes cover concurrent changes. */
+  bootstrapMaintenanceProcesses(limit = MAINTENANCE_BOOTSTRAP_PAGE_SIZE): MaintenanceBackfillProgress {
+    return this.db
+      .transaction(() => {
+        const progress = this.db
+          .query(
+            'SELECT process_task_id, process_attempt, processes_complete FROM worker_maintenance_progress WHERE id=1',
+          )
+          .get() as { process_task_id: string; process_attempt: number; processes_complete: number };
+        if (progress.processes_complete) return { examined: 0, complete: true };
+        const rows = this.db
+          .query(`SELECT task_id, attempt, json_type(body, '$.process') AS process_type FROM worker_attempts
+            WHERE (task_id, attempt)>(?, ?)
+            ORDER BY task_id, attempt LIMIT ?`)
+          .all(progress.process_task_id, progress.process_attempt, limit) as {
+          task_id: string;
+          attempt: number;
+          process_type: string | null;
+        }[];
+        const last = rows.at(-1) ?? { task_id: progress.process_task_id, attempt: progress.process_attempt };
+        const candidates = rows.filter((row) => row.process_type === 'object');
+        if (candidates.length)
+          this.db
+            .query(`INSERT INTO worker_maintenance_candidates(kind, task_id, attempt) VALUES
+              ${candidates.map(() => "('reap', ?, ?)").join(', ')}
+              ON CONFLICT(kind, task_id, attempt) DO UPDATE SET ticket=excluded.ticket`)
+            .run(...candidates.flatMap((row) => [row.task_id, row.attempt]));
+        const complete = rows.length < limit;
+        this.db
+          .query(`UPDATE worker_maintenance_progress
+            SET process_task_id=?, process_attempt=?, processes_complete=? WHERE id=1`)
+          .run(last.task_id, last.attempt, Number(complete));
+        return { examined: rows.length, complete };
+      })
+      .immediate();
+  }
+  /** Persist only actually visited owners when cleanup transport consumes the maintenance budget mid-page. */
+  advanceWorktreeMaintenance(candidate: WorktreeMaintenanceCandidate): void {
+    this.db.query('UPDATE worker_maintenance_progress SET worktree_ticket=? WHERE id=1').run(candidate.ticket);
+  }
+  /** Select a bounded, durable round-robin page of finished-task cleanup candidates. */
+  worktreeMaintenanceCandidates(
+    limit = MAINTENANCE_CANDIDATE_BATCH_SIZE,
+    advance = true,
+  ): WorktreeMaintenanceCandidate[] {
+    this.refreshSnapshot();
+    return this.db
+      .transaction(() => {
+        let cursor = (
+          this.db.query('SELECT worktree_ticket FROM worker_maintenance_progress WHERE id=1').get() as {
+            worktree_ticket: number;
+          }
+        ).worktree_ticket;
+        const page = (after: number) =>
+          this.db
+            .query(`SELECT q.ticket, q.task_id, q.attempt, t.body
+              FROM worker_maintenance_candidates AS q JOIN worker_tasks AS t ON t.id=q.task_id
+              WHERE q.kind='worktree' AND q.ticket>?
+              ORDER BY q.ticket LIMIT ?`)
+            .all(after, limit) as { ticket: number; task_id: string; attempt: number; body: string }[];
+        let rows = page(cursor);
+        if (!rows.length && cursor !== 0) {
+          this.db.query('UPDATE worker_maintenance_progress SET worktree_ticket=0 WHERE id=1').run();
+          return [];
+        }
+        if (rows.length && advance)
+          this.db.query('UPDATE worker_maintenance_progress SET worktree_ticket=? WHERE id=1').run(rows.at(-1)!.ticket);
+        return rows.map((row) => ({
+          ticket: row.ticket,
+          kind: 'worktree' as const,
+          taskId: row.task_id,
+          attempt: row.attempt,
+          task: this.cachedTask(row.task_id, row.body),
+        }));
+      })
+      .immediate();
+  }
+  /** Select a bounded, durable round-robin page without decoding attempt history. */
+  reapMaintenanceCandidates(limit = MAINTENANCE_CANDIDATE_BATCH_SIZE): ProcessMaintenanceCandidate[] {
+    return this.db
+      .transaction(() => {
+        let cursor = (
+          this.db.query('SELECT reap_ticket FROM worker_maintenance_progress WHERE id=1').get() as {
+            reap_ticket: number;
+          }
+        ).reap_ticket;
+        const page = (after: number) =>
+          this.db
+            .query(`SELECT q.ticket, q.task_id, q.attempt,
+                json_extract(t.body, '$.worktree') AS worktree,
+                json_extract(a.body, '$.process.pid') AS pid,
+                json_extract(a.body, '$.process.start') AS start,
+                json_extract(a.body, '$.process.boot') AS boot,
+                json_extract(a.body, '$.process.group') AS process_group
+              FROM worker_maintenance_candidates AS q
+              JOIN worker_tasks AS t ON t.id=q.task_id
+              JOIN worker_attempts AS a ON a.task_id=q.task_id AND a.attempt=q.attempt
+              WHERE q.kind='reap' AND q.ticket>?
+              ORDER BY q.ticket LIMIT ?`)
+            .all(after, limit) as {
+            ticket: number;
+            task_id: string;
+            attempt: number;
+            worktree: string;
+            pid: number;
+            start: string;
+            boot: string;
+            process_group: number;
+          }[];
+        let rows = page(cursor);
+        if (!rows.length && cursor !== 0) {
+          cursor = 0;
+          this.db.query('UPDATE worker_maintenance_progress SET reap_ticket=0 WHERE id=1').run();
+          rows = page(cursor);
+        }
+        if (rows.length)
+          this.db.query('UPDATE worker_maintenance_progress SET reap_ticket=? WHERE id=1').run(rows.at(-1)!.ticket);
+        return rows.map((row) => ({
+          ticket: row.ticket,
+          kind: 'reap' as const,
+          taskId: row.task_id,
+          attempt: row.attempt,
+          worktree: row.worktree,
+          process: {
+            pid: row.pid,
+            start: row.start,
+            boot: row.boot,
+            group: row.process_group,
+          } satisfies ProcessIdentity,
+        }));
+      })
+      .immediate();
+  }
+  /** Delete only tickets observed by the caller so a concurrent writer cannot lose a new obligation. */
+  completeMaintenanceCandidates(candidates: readonly MaintenanceCandidateRef[]): void {
+    if (!candidates.length) return;
+    const terms = candidates.map(() => '(ticket=? AND kind=? AND task_id=? AND attempt=?)').join(' OR ');
+    const orderedBindings = candidates.flatMap(({ kind, taskId, attempt, ticket }) => [ticket, kind, taskId, attempt]);
+    this.db.query(`DELETE FROM worker_maintenance_candidates WHERE ${terms}`).run(...orderedBindings);
+  }
+  /** A cheap existence check; it does not decode old blocked-worktree bodies. */
+  hasWorktreeCleanupDispositions(): boolean {
+    return Boolean(this.db.query('SELECT 1 FROM worker_worktree_cleanup LIMIT 1').get());
+  }
+  /** Return whether a root directory is still named by any task, without opening settled task bodies. */
+  hasTaskAtWorktree(path: string): boolean {
+    return Boolean(this.db.query('SELECT 1 FROM worker_maintenance_task_paths WHERE path=? LIMIT 1').get(path));
+  }
+  beginWorktreeCleanupScan(roots: readonly string[]): void {
+    if (!roots.length) return;
+    const values = roots.map(() => '(?, ?, NULL, 0, 0, 1)').join(', ');
+    const bindings = roots.flatMap((root) => [root, root]);
+    this.db
+      .query(`INSERT OR IGNORE INTO worker_maintenance_scan_directories(root, path, generation, offset, complete, monitor)
+        VALUES ${values}`)
+      .run(...bindings);
+  }
+  worktreeScanMonitors(limit = MAINTENANCE_CANDIDATE_BATCH_SIZE): WorktreeScanDirectory[] {
+    return this.db
+      .transaction(() => {
+        let cursor = (
+          this.db.query('SELECT scan_watch_ticket FROM worker_maintenance_progress WHERE id=1').get() as {
+            scan_watch_ticket: number;
+          }
+        ).scan_watch_ticket;
+        const page = (after: number) =>
+          this.db
+            .query(`SELECT watch_ticket, root, path, generation, offset, complete
+              FROM worker_maintenance_scan_directories
+              WHERE monitor=1 AND watch_ticket>? ORDER BY watch_ticket LIMIT ?`)
+            .all(after, limit) as {
+            watch_ticket: number;
+            root: string;
+            path: string;
+            generation: string | null;
+            offset: number;
+            complete: number;
+          }[];
+        let rows = page(cursor);
+        if (!rows.length && cursor !== 0) {
+          cursor = 0;
+          this.db.query('UPDATE worker_maintenance_progress SET scan_watch_ticket=0 WHERE id=1').run();
+          rows = page(cursor);
+        }
+        if (rows.length)
+          this.db
+            .query('UPDATE worker_maintenance_progress SET scan_watch_ticket=? WHERE id=1')
+            .run(rows.at(-1)!.watch_ticket);
+        return rows.map((row) => ({ ...row, complete: Boolean(row.complete) }));
+      })
+      .immediate();
+  }
+  worktreeScanComplete(): boolean {
+    return !this.db.query('SELECT 1 FROM worker_maintenance_scan_directories WHERE complete=0 LIMIT 1').get();
+  }
+  nextWorktreeScanDirectory(): WorktreeScanDirectory | undefined {
+    const row = this.db
+      .query(`SELECT watch_ticket, root, path, generation, offset, complete FROM worker_maintenance_scan_directories
+        WHERE complete=0 ORDER BY root, path LIMIT 1`)
+      .get() as {
+      watch_ticket: number;
+      root: string;
+      path: string;
+      generation: string | null;
+      offset: number;
+      complete: number;
+    } | null;
+    return row ? { ...row, complete: Boolean(row.complete) } : undefined;
+  }
+  enqueueWorktreeScanDirectory(root: string, path: string): void {
+    this.db
+      .query(`INSERT OR IGNORE INTO worker_maintenance_scan_directories(root, path, generation, offset, complete, monitor)
+        VALUES (?, ?, NULL, 0, 0, 1)`)
+      .run(root, path);
+  }
+  removeWorktreeScanDirectory(root: string, path: string): void {
+    this.db
+      .query('DELETE FROM worker_maintenance_scan_directories WHERE root=? AND path=? AND root<>path')
+      .run(root, path);
+  }
+  updateWorktreeScanDirectory(
+    root: string,
+    path: string,
+    generation: string | null,
+    offset: number,
+    complete: boolean,
+  ): void {
+    this.db
+      .query(`UPDATE worker_maintenance_scan_directories SET generation=?, offset=?, complete=?
+        WHERE root=? AND path=?`)
+      .run(generation, offset, Number(complete), root, path);
+  }
+  resetWorktreeScanRoot(root: string, generation: string | null): void {
+    this.db
+      .query(`UPDATE worker_maintenance_scan_directories SET generation=?, offset=0, complete=0
+        WHERE root=? AND path=?`)
+      .run(generation, root, root);
+  }
+  resetWorktreeScanDirectory(root: string, path: string, generation: string | null): void {
+    this.db
+      .query(`UPDATE worker_maintenance_scan_directories SET generation=?, offset=0, complete=0
+        WHERE root=? AND path=?`)
+      .run(generation, root, path);
+  }
+  enqueueStrayWorktree(path: string): void {
+    this.db
+      .query(`INSERT INTO worker_maintenance_strays(path) VALUES (?)
+        ON CONFLICT(path) DO UPDATE SET ticket=excluded.ticket`)
+      .run(path);
+  }
+  hasPendingStrayWorktrees(): boolean {
+    return Boolean(this.db.query('SELECT 1 FROM worker_maintenance_strays LIMIT 1').get());
+  }
+  strayWorktreeCandidates(limit = MAINTENANCE_CANDIDATE_BATCH_SIZE): StrayWorktreeCandidate[] {
+    return this.db
+      .transaction(() => {
+        let cursor = (
+          this.db.query('SELECT stray_ticket FROM worker_maintenance_progress WHERE id=1').get() as {
+            stray_ticket: number;
+          }
+        ).stray_ticket;
+        const page = (after: number) =>
+          this.db
+            .query(`SELECT ticket, path FROM worker_maintenance_strays WHERE ticket>? ORDER BY ticket LIMIT ?`)
+            .all(after, limit) as StrayWorktreeCandidate[];
+        let rows = page(cursor);
+        if (!rows.length && cursor !== 0) {
+          cursor = 0;
+          this.db.query('UPDATE worker_maintenance_progress SET stray_ticket=0 WHERE id=1').run();
+          rows = page(cursor);
+        }
+        if (rows.length)
+          this.db.query('UPDATE worker_maintenance_progress SET stray_ticket=? WHERE id=1').run(rows.at(-1)!.ticket);
+        return rows;
+      })
+      .immediate();
+  }
+  completeStrayWorktrees(candidates: readonly StrayWorktreeCandidate[]): void {
+    if (!candidates.length) return;
+    const terms = candidates.map(() => '(ticket=? AND path=?)').join(' OR ');
+    const bindings = candidates.flatMap(({ path, ticket }) => [ticket, path]);
+    this.db.query(`DELETE FROM worker_maintenance_strays WHERE ${terms}`).run(...bindings);
+  }
+  maintenanceTasksBootstrapped(): boolean {
+    return Boolean(
+      (
+        this.db.query('SELECT tasks_complete FROM worker_maintenance_progress WHERE id=1').get() as {
+          tasks_complete: number;
+        }
+      ).tasks_complete,
+    );
+  }
+  hasPendingWorktreeCandidates(): boolean {
+    return Boolean(this.db.query("SELECT 1 FROM worker_maintenance_candidates WHERE kind='worktree' LIMIT 1").get());
+  }
+  markWorktreePruneNeeded(): void {
+    this.db.query('UPDATE worker_maintenance_progress SET prune_generation=prune_generation+1 WHERE id=1').run();
+  }
+  worktreePruneProgress(): { generation: number; completed: number } {
+    const row = this.db
+      .query('SELECT prune_generation, prune_completed FROM worker_maintenance_progress WHERE id=1')
+      .get() as { prune_generation: number; prune_completed: number };
+    return { generation: row.prune_generation, completed: row.prune_completed };
+  }
+  completeWorktreePrune(generation: number): void {
+    this.db
+      .query('UPDATE worker_maintenance_progress SET prune_completed=? WHERE id=1 AND prune_generation=?')
+      .run(generation, generation);
   }
   /** Record a new filesystem generation once; repeated sweeps on the same generation stay suppressed. */
   recordWorktreeCleanup(disposition: WorktreeCleanupDisposition): boolean {
@@ -524,12 +997,17 @@ export class WorkerStore implements AttemptFence {
       ...(hasMore && pageRows.length ? { nextAfter: pageRows[pageRows.length - 1]!.attempt } : {}),
     };
   }
-  /** Pending, running, waiting and exited attempts are the only attempts needed for host recovery. */
+  /** Current process-bearing attempts are bounded by the active-task index and one attempt-key lookup each. */
   activeAttempts(): Attempt[] {
     this.refreshSnapshot();
     return this.db
       .query(
-        "SELECT task_id, attempt, body FROM worker_attempts WHERE json_extract(body, '$.state') IN ('pending','running','waiting','exited') ORDER BY task_id, attempt",
+        `SELECT a.task_id, a.attempt, a.body
+         FROM worker_tasks AS t INDEXED BY worker_tasks_state
+         JOIN worker_attempts AS a ON a.task_id=t.id AND a.attempt=t.current_attempt
+         WHERE json_extract(t.body, '$.state') IN ('held','ready','running','landing','stopped')
+           AND json_extract(a.body, '$.state') IN ('pending','running','waiting','exited')
+         ORDER BY a.task_id, a.attempt`,
       )
       .all()
       .map((row) => {
@@ -625,6 +1103,46 @@ export class WorkerStore implements AttemptFence {
       sequence: number;
     } | null;
     return row?.sequence;
+  }
+  /** Current task and attempt states let capacity reconcile old live tickets without reading their worktrees. */
+  capacityLifecycle(taskId: string):
+    | {
+        currentAttempt: number;
+        taskState: string;
+        attemptState?: string;
+        attemptStartedAt?: string;
+        priorityHeadStart?: boolean;
+      }
+    | undefined {
+    const row = this.db
+      .query(`
+        SELECT t.current_attempt AS current_attempt,
+               json_extract(t.body, '$.state') AS task_state,
+               json_extract(a.body, '$.state') AS attempt_state,
+               json_extract(a.body, '$.startedAt') AS attempt_started_at,
+               CASE WHEN json_extract(t.body, '$.taskClass') = 'critical-path'
+                          OR json_extract(t.body, '$.brief.criticalPath') = 1
+                          OR json_extract(t.body, '$.brief.target') = 'stabilize'
+                    THEN 1 ELSE 0 END AS priority_head_start
+        FROM worker_tasks AS t
+        LEFT JOIN worker_attempts AS a ON a.task_id=t.id AND a.attempt=t.current_attempt
+        WHERE t.id=?
+      `)
+      .get(taskId) as {
+      current_attempt: number;
+      task_state: string | null;
+      attempt_state: string | null;
+      attempt_started_at: string | null;
+      priority_head_start: number;
+    } | null;
+    if (!row || typeof row.task_state !== 'string') return undefined;
+    return {
+      currentAttempt: row.current_attempt,
+      taskState: row.task_state,
+      ...(typeof row.attempt_state === 'string' ? { attemptState: row.attempt_state } : {}),
+      ...(typeof row.attempt_started_at === 'string' ? { attemptStartedAt: row.attempt_started_at } : {}),
+      priorityHeadStart: row.priority_head_start === 1,
+    };
   }
   /** Ready, nonurgent tasks accepted earlier than one queued start for the same Goal. */
   goalReadyTaskIdsBefore(goal: string, sequence: number): string[] {
@@ -927,10 +1445,7 @@ export class WorkerStore implements AttemptFence {
         if (
           owners.some(
             (owner) =>
-              !['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state) ||
-              [owner.process, owner.driver, ...(owner.auxiliaryProcesses ?? [])].some(
-                (identity) => identity && sameProcess(identity),
-              ),
+              !['stopped', 'exited', 'cancelled', 'superseded'].includes(owner.state) || this.hasLiveProofOwner(owner),
           )
         ) {
           if (requireExitedOwners)
@@ -1346,11 +1861,11 @@ export class WorkerStore implements AttemptFence {
         }
         task.state = 'ready';
         this.saveTask(task);
-        const intent: RetryIntent = { ...ref, options, status: 'pending' };
+        const at = new Date().toISOString();
+        const intent: RetryIntent = { ...ref, options, status: 'pending', queuedAt: at };
         this.db
           .query('INSERT OR REPLACE INTO worker_retry_intents VALUES (?,?,?)')
           .run(ref.taskId, ref.attempt, JSON.stringify(intent));
-        const at = new Date().toISOString();
         this.db
           .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
           .run(ref.taskId, ref.attempt, 'orphaned-landing-recovered', at, JSON.stringify({ failure, options }));
@@ -1419,7 +1934,7 @@ export class WorkerStore implements AttemptFence {
       .transaction(() => {
         const existing = this.retryIntent(ref);
         if (!existing) {
-          const intent: RetryIntent = { ...ref, options, status: 'pending' };
+          const intent: RetryIntent = { ...ref, options, status: 'pending', queuedAt: new Date().toISOString() };
           this.db
             .query('INSERT INTO worker_retry_intents VALUES (?,?,?)')
             .run(ref.taskId, ref.attempt, JSON.stringify(intent));
@@ -1472,15 +1987,22 @@ export class WorkerStore implements AttemptFence {
       (['running', 'landing'].includes(task.state) && attempt?.state === 'exited');
     if (!retryable) throw new StaleAttemptError(ref, task.currentAttempt);
     if (attempt) {
-      if (
-        !['stopped', 'exited'].includes(attempt.state) ||
-        [attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some(
-          (identity) => identity && sameProcess(identity),
-        )
-      )
+      if (!['stopped', 'exited'].includes(attempt.state) || this.hasLiveProofOwner(attempt))
         throw new StaleAttemptError(ref, task.currentAttempt);
     }
     this.assertProofContract(task, brief);
+  }
+  private hasLiveProofOwner(attempt: Attempt): boolean {
+    if ([attempt.process, ...(attempt.auxiliaryProcesses ?? [])].some((identity) => identity && sameProcess(identity)))
+      return true;
+    if (!attempt.driver || !sameProcess(attempt.driver)) return false;
+    // An adopting resident driver remains alive after its per-attempt proof settlement is routed.
+    return !(
+      attempt.state === 'exited' &&
+      this.db
+        .query("SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind='proof-failure-routed' LIMIT 1")
+        .get(attempt.taskId, attempt.attempt)
+    );
   }
   private assertProofContract(task: Task, brief: Brief): void {
     if (
@@ -1544,7 +2066,7 @@ export class WorkerStore implements AttemptFence {
             .run(JSON.stringify(existing), ref.taskId, ref.attempt);
           return;
         }
-        const intent: RetryIntent = { ...ref, options, status: 'pending' };
+        const intent: RetryIntent = { ...ref, options, status: 'pending', queuedAt: new Date().toISOString() };
         this.db
           .query('INSERT OR REPLACE INTO worker_retry_intents VALUES (?,?,?)')
           .run(ref.taskId, ref.attempt, JSON.stringify(intent));
@@ -1640,6 +2162,7 @@ export class WorkerStore implements AttemptFence {
     paths: { briefPath: string; worktree: string; branch: string; base: string },
     taskClass: Task['taskClass'],
     id: string = crypto.randomUUID(),
+    proofAuthorization?: Task['proofAuthorization'],
   ): Task {
     const task = this.db
       .transaction(() => {
@@ -1664,6 +2187,7 @@ export class WorkerStore implements AttemptFence {
           state,
           currentAttempt: 0,
           createdAt: new Date().toISOString(),
+          ...(proofAuthorization ? { proofAuthorization } : {}),
         };
         this.db.query('INSERT INTO worker_tasks VALUES (?,?,?,?)').run(id, sequence, 0, JSON.stringify(task));
         recordFlow(this.db, { taskId: id, attempt: 0, stage: 'dispatch', action: 'dispatched', at: task.createdAt });
@@ -1677,6 +2201,29 @@ export class WorkerStore implements AttemptFence {
     if (task.brief.kind === 'verification' && ['landing', 'integrated', 'merged'].includes(task.state))
       throw new Error('proof tasks cannot land or publish source integration');
     if (['integrated', 'merged', 'cancelled', 'stopped'].includes(task.state)) closePendingFlow(this.db, task);
+    const previous = this.task(task.id);
+    if (
+      !sameBriefProposalText(previous.brief.markdown, task.brief.markdown) ||
+      previous.brief.manager !== task.brief.manager
+    ) {
+      // Canonical replacement supersedes existing intent atomically, including if an older brief is later restored.
+      this.db
+        .query(`INSERT INTO worker_events(task_id,attempt,kind,at,body)
+        SELECT ?,?,'owner-contract-decisions-superseded',?,?
+        WHERE EXISTS (SELECT 1 FROM worker_events WHERE task_id=? AND kind='owner-contract-decision-accepted')`)
+        .run(
+          task.id,
+          task.currentAttempt,
+          new Date().toISOString(),
+          JSON.stringify({
+            previousContractSha256: briefProposalHash(previous.brief.markdown),
+            contractSha256: briefProposalHash(task.brief.markdown),
+            previousManager: previous.brief.manager,
+            manager: task.brief.manager,
+          }),
+          task.id,
+        );
+    }
     this.db
       .query('UPDATE worker_tasks SET current_attempt=?, body=? WHERE id=?')
       .run(task.currentAttempt, JSON.stringify(task), task.id);
@@ -1886,6 +2433,228 @@ export class WorkerStore implements AttemptFence {
       return attempt;
     });
   }
+  /** Record the exact operator-authorized check while preserving a stopped attempt's stop tombstone. */
+  recordWithdrawnTypingRecoveryAuthorization(
+    ref: AttemptRef,
+    expectedResult: string,
+    pending: NonNullable<Attempt['typingEvidencePending']>,
+    eventBody: unknown,
+    origin?: WithdrawnTypingRecoveryOrigin,
+  ): void {
+    if (!eventBody || typeof eventBody !== 'object' || Array.isArray(eventBody) || 'withdrawnBudgetOrigin' in eventBody)
+      throw new Error('stopped attempt recovery authorization requires native event data');
+    if (
+      origin &&
+      (origin.version !== 1 ||
+        !/^[0-9a-f]{40}$/.test(origin.sourceCommit) ||
+        !/^[0-9a-f]{64}$/.test(origin.reportSha256) ||
+        !/^[0-9a-f]{64}$/.test(origin.failureSha256) ||
+        origin.failureSha256 !== createHash('sha256').update(expectedResult).digest('hex') ||
+        !/^[1-9]\d*$/.test(origin.failureStamp))
+    )
+      throw new Error('stopped attempt recovery authorization has invalid retained origin evidence');
+    const persistedEvent = {
+      ...(eventBody as Record<string, unknown>),
+      ...(origin ? { withdrawnBudgetOrigin: origin } : {}),
+    };
+    this.db
+      .transaction(() => {
+        const { attempt } = this.withdrawnTypingRecoveryRows(ref, expectedResult);
+        if (
+          attempt.state !== 'stopped' ||
+          JSON.stringify(pending.command) !== JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck'])
+        )
+          throw new Error('stopped attempt no longer accepts its exact Web typing recovery grant');
+        attempt.typingEvidencePending = pending;
+        this.saveAttempt(attempt);
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(
+            ref.taskId,
+            ref.attempt,
+            'typing-recovery-authorized',
+            new Date().toISOString(),
+            JSON.stringify(persistedEvent),
+          );
+      })
+      .immediate();
+    this.invalidateSnapshot();
+  }
+  /** Move a stopped attempt into ordinary settlement only after exact current Web compiler evidence exists. */
+  beginWithdrawnTypingRecoverySettlement(
+    ref: AttemptRef,
+    expectedResult: string,
+    command: readonly string[],
+    eventBody: unknown,
+    restoredBudgetReport?: string,
+  ): void {
+    this.db
+      .transaction(() => {
+        const { attempt } = this.withdrawnTypingRecoveryRows(ref, expectedResult);
+        if (
+          JSON.stringify(command) !== JSON.stringify(['bun', 'run', '--cwd', 'apps/web', 'typecheck']) ||
+          (attempt.state !== 'stopped' && attempt.state !== 'exited') ||
+          (attempt.typingEvidencePending?.command !== undefined &&
+            JSON.stringify(attempt.typingEvidencePending.command) !== JSON.stringify(command))
+        )
+          throw new Error('stopped attempt no longer accepts its exact Web typing receipt');
+        if (restoredBudgetReport !== undefined) {
+          const authorizationRow = this.db
+            .query(
+              "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized' ORDER BY sequence DESC LIMIT 1",
+            )
+            .get(ref.taskId, ref.attempt) as Body | null;
+          let authorization: Record<string, unknown> | undefined;
+          try {
+            const parsed: unknown = authorizationRow && JSON.parse(authorizationRow.body);
+            authorization =
+              parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? (parsed as Record<string, unknown>)
+                : undefined;
+          } catch {
+            authorization = undefined;
+          }
+          const failureRow = this.db
+            .query(
+              "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-evidence-failed' ORDER BY sequence DESC LIMIT 1",
+            )
+            .get(ref.taskId, ref.attempt) as Body | null;
+          let failureEvent: Record<string, unknown> | undefined;
+          try {
+            const parsed: unknown = failureRow && JSON.parse(failureRow.body);
+            failureEvent =
+              parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? (parsed as Record<string, unknown>)
+                : undefined;
+          } catch {
+            failureEvent = undefined;
+          }
+          const authorizationActor = authorization?.actor as { id?: unknown; sessionId?: unknown } | undefined;
+          const failureActor = failureEvent?.actor as { id?: unknown; sessionId?: unknown } | undefined;
+          const origin = authorization?.withdrawnBudgetOrigin as WithdrawnTypingRecoveryOrigin | undefined;
+          const trustedReport = readMeasurement(attempt, { policy: this.policy }).result;
+          const progressRow = this.db
+            .query(
+              "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='attempt-progress' ORDER BY sequence DESC LIMIT 1",
+            )
+            .get(ref.taskId, ref.attempt) as Body | null;
+          let sourceHead: unknown;
+          try {
+            sourceHead = progressRow ? (JSON.parse(progressRow.body) as { endHead?: unknown }).endHead : undefined;
+          } catch {
+            sourceHead = undefined;
+          }
+          if (
+            !authorization ||
+            authorization.recoveryKind !== 'withdrawn-budget-stop' ||
+            JSON.stringify(authorization.command) !== JSON.stringify(command) ||
+            Object.keys(failureEvent ?? {})
+              .sort()
+              .join(',') !== 'actor,recoveryKind' ||
+            failureEvent?.recoveryKind !== 'withdrawn-budget-stop' ||
+            !authorizationActor ||
+            !failureActor ||
+            typeof authorizationActor.id !== 'string' ||
+            typeof authorizationActor.sessionId !== 'string' ||
+            typeof failureActor.id !== 'string' ||
+            typeof failureActor.sessionId !== 'string' ||
+            failureActor.id !== authorizationActor.id ||
+            failureActor.sessionId !== authorizationActor.sessionId ||
+            !origin ||
+            origin.version !== 1 ||
+            typeof origin.sourceCommit !== 'string' ||
+            !/^[0-9a-f]{40}$/.test(origin.sourceCommit) ||
+            origin.sourceCommit !== sourceHead ||
+            typeof origin.reportSha256 !== 'string' ||
+            !/^[0-9a-f]{64}$/.test(origin.reportSha256) ||
+            typeof origin.failureSha256 !== 'string' ||
+            !/^[0-9a-f]{64}$/.test(origin.failureSha256) ||
+            origin.failureSha256 !== createHash('sha256').update(expectedResult).digest('hex') ||
+            typeof origin.failureStamp !== 'string' ||
+            !/^[1-9]\d*$/.test(origin.failureStamp) ||
+            typeof trustedReport !== 'string' ||
+            trustedReport !== restoredBudgetReport ||
+            createHash('sha256').update(trustedReport).digest('hex') !== origin.reportSha256 ||
+            !(trustedReport.match(/[0-9a-f]{10,40}/gi) ?? []).some((reference) =>
+              origin.sourceCommit.startsWith(reference.toLowerCase()),
+            )
+          )
+            throw new Error('stopped attempt recovery cannot restore an unvalidated originating budget report');
+          attempt.result = trustedReport;
+        }
+        attempt.state = 'exited';
+        attempt.typingEvidencePending ??= {
+          result: 'Compiler evidence for the retained Web source is being reconciled.',
+          command: [...command],
+        };
+        this.saveAttempt(attempt);
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(
+            ref.taskId,
+            ref.attempt,
+            'typing-evidence-recovery',
+            new Date().toISOString(),
+            JSON.stringify(eventBody),
+          );
+      })
+      .immediate();
+    this.invalidateSnapshot();
+  }
+  /** Preserve compiler diagnostics on a stopped source attempt without starting a source-writing retry. */
+  recordWithdrawnTypingRecoveryFailure(
+    ref: AttemptRef,
+    expectedResult: string,
+    result: string,
+    eventBody: unknown,
+  ): void {
+    this.db
+      .transaction(() => {
+        const { attempt } = this.withdrawnTypingRecoveryRows(ref, expectedResult);
+        if (attempt.state !== 'stopped') throw new Error('stopped attempt no longer accepts compiler failure evidence');
+        attempt.failureKind = 'tool';
+        attempt.result = result;
+        delete attempt.typingEvidencePending;
+        this.saveAttempt(attempt);
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(ref.taskId, ref.attempt, 'typing-evidence-failed', new Date().toISOString(), JSON.stringify(eventBody));
+      })
+      .immediate();
+    this.invalidateSnapshot();
+  }
+  private withdrawnTypingRecoveryRows(ref: AttemptRef, expectedResult: string): { attempt: Attempt } {
+    const task = decode<Task>(this.db.query('SELECT body FROM worker_tasks WHERE id=?').get(ref.taskId));
+    const attempt = decode<Attempt>(
+      this.db.query('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt),
+    );
+    const retry = decode<RetryIntent>(
+      this.db.query('SELECT body FROM worker_retry_intents WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt),
+    );
+    const stop = attempt?.terminationIntent;
+    if (
+      !task ||
+      task.currentAttempt !== ref.attempt ||
+      task.state !== 'stopped' ||
+      task.brief.goal !== 'web' ||
+      task.brief.kind !== 'interface' ||
+      !attempt ||
+      attempt.result !== expectedResult ||
+      attempt.exitCode !== 0 ||
+      attempt.failureKind !== 'tool' ||
+      !stop ||
+      stop.operation !== 'stop' ||
+      stop.state !== 'complete' ||
+      stop.processIdentity !== 'known' ||
+      !stop.settledAt ||
+      retry?.status !== 'abandoned' ||
+      retry.abandonedBy !== 'stop' ||
+      retry.nextAttempt !== undefined ||
+      retry.options.escalation !== 'environment'
+    )
+      throw new Error('stopped source or withdrawn retry changed before typing recovery persistence');
+    return { attempt };
+  }
   /** Do not publish a replacement while an accepted operator stop still owns this generation. */
   assertRetryAllowed(ref: AttemptRef, explicit = false): void {
     const task = this.task(ref.taskId);
@@ -2038,17 +2807,80 @@ export class WorkerStore implements AttemptFence {
         });
     });
   }
+  /** Record the failed-reconciliation witness for a current stopped retry without reopening its attempt. */
+  recordUnreconciledTypingRetry(ref: AttemptRef): void {
+    this.db
+      .transaction(() => {
+        const task = this.task(ref.taskId);
+        const attempt = this.attempt(ref);
+        const retry = this.retryIntent(ref);
+        if (
+          task.currentAttempt !== ref.attempt ||
+          task.state !== 'ready' ||
+          task.brief.kind === 'verification' ||
+          attempt.state !== 'stopped' ||
+          retry?.status !== 'pending'
+        )
+          return;
+        if (this.events(ref.taskId, ref.attempt).some((event) => event.kind === 'typing-retry-unreconciled')) return;
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(
+            ref.taskId,
+            ref.attempt,
+            'typing-retry-unreconciled',
+            new Date().toISOString(),
+            JSON.stringify({ action: 'typing-recover' }),
+          );
+      })
+      .immediate();
+    this.invalidateSnapshot();
+  }
   ownerDecisionEvents(ref: AttemptRef): WorkerEvent[] {
-    return this.db
+    const events = this.db
       .query(
         `SELECT sequence, task_id, attempt, kind, at, body FROM worker_events
-         WHERE task_id=? AND attempt=? AND kind IN ('owner-contract-decision-accepted', 'owner-contract-decision-delivery')
+         WHERE task_id=? AND attempt<=? AND kind IN ('owner-contract-decision-accepted', 'owner-contract-decision-delivery', 'owner-contract-decisions-superseded')
          ORDER BY sequence`,
       )
       .all(ref.taskId, ref.attempt) as WorkerEvent[];
+    // Older accepted events have no contract hash. Retained retry metadata still proves a later canonical rewrite.
+    const legacy = events.filter((event) => {
+      if (event.kind !== 'owner-contract-decision-accepted') return false;
+      try {
+        return !JSON.parse(event.body)?.contractSha256;
+      } catch {
+        return false;
+      }
+    });
+    if (!legacy.length) return events;
+    const changed = this.db
+      .query(`SELECT max(attempt) AS attempt FROM worker_attempts
+      WHERE task_id=? AND attempt<=? AND json_extract(body, '$.newBriefHash') IS NOT NULL`)
+      .get(ref.taskId, ref.attempt) as { attempt: number | null };
+    const pending = this.task(ref.taskId).pendingBriefChange;
+    const superseded = legacy.filter((event) => pending || event.attempt < (changed.attempt ?? 0));
+    if (superseded.length)
+      events.push({
+        task_id: ref.taskId,
+        attempt: ref.attempt,
+        kind: 'owner-contract-decisions-superseded',
+        at: '',
+        sequence: Math.max(...superseded.map((event) => event.sequence)),
+        body: '{}',
+      });
+    return events;
   }
-  recordOwnerDecisionDelivery(ref: AttemptRef, receipt: unknown): void {
-    this.event(ref, 'owner-contract-decision-delivery', receipt);
+  recordOwnerDecisionDelivery(ref: AttemptRef, receipt: OwnerDecisionDelivery): void {
+    const launched = this.db
+      .query(`SELECT max(sequence) AS sequence FROM worker_events
+      WHERE task_id=? AND attempt=? AND kind='worker-run-started'`)
+      .get(ref.taskId, ref.attempt) as { sequence: number | null };
+    this.event(ref, 'owner-contract-decision-delivery', {
+      ...receipt,
+      receivingAttempt: ref.attempt,
+      ...(launched.sequence !== null ? { launchSequence: launched.sequence } : {}),
+    });
   }
   events(taskId?: string, attempt?: number): WorkerEvent[] {
     return (

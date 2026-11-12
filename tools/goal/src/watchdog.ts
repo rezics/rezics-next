@@ -15,7 +15,7 @@ import { defaultPolicy, type ControlPolicy } from './policy.ts';
 // stopped, which nobody notices from the inside: on 2026-10-26 eight tasks sat in running without a worker for up to
 // three hours, and stabilize stopped reaching dev for over two hours, before anyone looked.
 
-type CheckHost = { name: string; address: string; identity: string };
+type CheckHost = { name: string; address: string; identity: string; performance?: boolean };
 export type CheckHostProbeResult = { status: number | null; stderr: string };
 export type CheckHostProbe = (host: CheckHost, complete: (result: CheckHostProbeResult) => void) => void;
 type State = {
@@ -24,6 +24,13 @@ type State = {
   stabilizeBehindSince?: string;
   lastHostProbeAt?: string;
   hostProbeFailures?: Record<string, number>;
+};
+
+export type WatchdogScheduling = {
+  /** The active managed owner of the scheduling Goal, if one is registered. */
+  schedulingOwner?: string;
+  /** The live route and pool admission observation used by WorkerJob. */
+  runnableSupply?: (task: Task, intent: RetryIntent) => boolean;
 };
 
 const SIGNATURES = [
@@ -352,6 +359,20 @@ export function checkHostsInOutage(stateDirectory: string, policy: ControlPolicy
   }
 }
 
+/** A retry waits only when every performance-approved host that can take it is in the watchdog's outage set. */
+export function checkHostsBlockingRetry(stateDirectory: string, policy: ControlPolicy = defaultPolicy): string[] {
+  const eligible = [
+    ...new Set(
+      checkHosts(stateDirectory)
+        .filter((host) => host.performance === true)
+        .map(({ name }) => name),
+    ),
+  ];
+  if (!eligible.length) return [];
+  const outages = new Set(checkHostsInOutage(stateDirectory, policy));
+  return eligible.every((name) => outages.has(name)) ? eligible : [];
+}
+
 function probeCheckHosts(
   state: State,
   stateDirectory: string,
@@ -459,20 +480,22 @@ export function retryWait(
   if (waitingFor.length) return { reason: 'dependencies', waitingFor };
   const until = intent.options?.notBefore;
   if (until && Date.parse(until) > now) return { reason: 'backoff', until };
-  const hosts = intent.options?.awaitCheckHosts && stateDirectory ? checkHostsInOutage(stateDirectory, policy) : [];
+  const hosts =
+    intent.options?.awaitCheckHosts && stateDirectory ? checkHostsBlockingRetry(stateDirectory, policy) : [];
   return hosts.length ? { reason: 'check-hosts', hosts } : null;
 }
 
 /** The violations present now, keyed so that one violation is reported once per period. */
 export function violations(
   store: Pick<WorkerStore, 'attempt' | 'retryIntents'> &
-    Partial<Pick<WorkerStore, 'tasks' | 'activeTasks' | 'dependency'>>,
+    Partial<Pick<WorkerStore, 'tasks' | 'activeTasks' | 'dependency' | 'events'>>,
   now: number,
   tasks = store.activeTasks?.() ?? store.tasks?.() ?? [],
   stateDirectory?: string,
   policy: ControlPolicy = defaultPolicy,
-): { key: string; summary: string }[] {
-  const found: { key: string; summary: string }[] = [];
+  scheduling: WatchdogScheduling = {},
+): { key: string; summary: string; managerId?: string }[] {
+  const found: { key: string; summary: string; managerId?: string }[] = [];
   const pending = new Map(
     store
       .retryIntents()
@@ -484,31 +507,51 @@ export function violations(
   for (const task of tasks) {
     if (!task.currentAttempt || !['running', 'ready'].includes(task.state)) continue;
     const attempt = store.attempt({ taskId: task.id, attempt: task.currentAttempt });
-    if (attempt.state !== 'exited' || !attempt.endedAt) continue;
+    if (!attempt.endedAt) continue;
     if (attempt.driver && sameProcess(attempt.driver)) continue;
-    const idle = now - Date.parse(attempt.endedAt);
-    if (idle < policy.watchdog.noWorkerMs) continue;
     const retry = pending.get(`${task.id}:${attempt.attempt}`);
+    const typingRetryUnreconciled =
+      task.state === 'ready' &&
+      attempt.state === 'stopped' &&
+      retry !== undefined &&
+      (store.events?.(task.id, attempt.attempt).some((event) => event.kind === 'typing-retry-unreconciled') ?? false);
+    if (attempt.state !== 'exited' && !typingRetryUnreconciled) continue;
+    const eligibleAt = Math.max(
+      ...[attempt.endedAt, retry?.queuedAt, retry?.options?.notBefore]
+        .map((time) => Date.parse(time ?? ''))
+        .filter(Number.isFinite),
+    );
+    if (!Number.isFinite(eligibleAt)) continue;
+    const idle = now - eligibleAt;
+    if (idle < policy.watchdog.noWorkerMs) continue;
     const intent = retry !== undefined;
     if (task.state === 'ready' && !intent) continue;
     if (task.state === 'ready' && intent && waiting.has(task.id)) continue;
     // A retry held for dependencies, a backoff or a host outage is waiting by design, not missing its starter.
     if (retry && retryWait(retry, task, dependencyState, now, stateDirectory, policy)) continue;
+    if (typingRetryUnreconciled && (!retry || !scheduling.runnableSupply || !scheduling.runnableSupply(task, retry)))
+      continue;
     const minutes = Math.round(idle / 60_000);
     found.push({
       key: `no-worker:${task.id}:${attempt.attempt}`,
-      summary: intent
-        ? `Task ${task.id} (${task.brief.goal}) has had a pending retry for ${minutes} min that no process started.`
-        : `Task ${task.id} (${task.brief.goal}) is ${task.state} but its attempt ${attempt.attempt} ended ${minutes} min ago and nothing will start another.`,
+      summary: typingRetryUnreconciled
+        ? `Task ${task.id} (${task.brief.goal}) is ready on attempt ${attempt.attempt} with unreconciled stopped compiler evidence; its pending retry has had no starter for ${minutes} min since ${new Date(eligibleAt).toISOString()}, and a compatible provider pool is available. Task owner ${task.brief.manager}: run bun tools/goal/src/cli.ts typing-recover ${task.id} --expected-attempt ${attempt.attempt}.`.slice(
+            0,
+            policy.worker.summaryCharacters,
+          )
+        : intent
+          ? `Task ${task.id} (${task.brief.goal}) has had a pending retry for ${minutes} min of eligible time that no process started.`
+          : `Task ${task.id} (${task.brief.goal}) is ${task.state} but its attempt ${attempt.attempt} ended ${minutes} min ago and nothing will start another.`,
+      ...(typingRetryUnreconciled && scheduling.schedulingOwner ? { managerId: scheduling.schedulingOwner } : {}),
     });
   }
   return found;
 }
 
-/** Report violations to the supermanager; returns how many were delivered. */
+/** Report violations through the existing inbox routing; returns how many were delivered. */
 export function watch(
   store: Pick<WorkerStore, 'attempt' | 'retryIntents' | 'attemptsEndedBetween'> &
-    Partial<Pick<WorkerStore, 'tasks' | 'activeTasks' | 'dependency'>>,
+    Partial<Pick<WorkerStore, 'tasks' | 'activeTasks' | 'dependency' | 'events'>>,
   checkout: string,
   branches: { stabilize: string; integration: string },
   stateDirectory: string,
@@ -517,6 +560,7 @@ export function watch(
   probe?: CheckHostProbe,
   limitFor?: (task: Task) => number,
   policy: ControlPolicy = defaultPolicy,
+  scheduling: WatchdogScheduling = {},
 ): number {
   // A manager event summary must be one line. A worker command holding a newline once made delivery throw before the
   // alert state was saved, so every alert went out again on each sweep.
@@ -541,7 +585,7 @@ export function watch(
     policy,
   );
   const found = [
-    ...violations(store, now, tasks, stateDirectory, policy),
+    ...violations(store, now, tasks, stateDirectory, policy, scheduling),
     ...failureIncidents(store, tasks, now, policy),
     ...longAttempts,
   ];
@@ -574,12 +618,9 @@ export function watch(
     if (isLongAttempt && attemptAlert) {
       const reports = (state.longAttemptReports ??= {});
       const previous = reports[violation.key];
-      // Only new commits are news: a worker alternating wait and tail commands changed the last command every minute
-      // and woke its manager 15 times for one attempt (2026-10-29).
-      const unchanged = previous !== undefined && previous.commits === attemptAlert.commits;
+      // Progress belongs in the next report, not in a new wake for the same long attempt.
       const lastReportAt = previous ? Date.parse(previous.at) : Number.NaN;
-      if (unchanged && Number.isFinite(lastReportAt) && now - lastReportAt < policy.watchdog.longAttemptReportMs)
-        continue;
+      if (Number.isFinite(lastReportAt) && now - lastReportAt < policy.watchdog.longAttemptReportMs) continue;
       reports[violation.key] = {
         at: new Date(now).toISOString(),
         command: attemptAlert.command ?? '(none recorded)',
@@ -593,7 +634,8 @@ export function watch(
         : violation.key.startsWith('failure-signature:')
           ? violation.summary
           : `Watchdog: ${violation.summary}`,
-      attemptAlert?.managerId,
+      attemptAlert?.managerId ??
+        ('managerId' in violation && typeof violation.managerId === 'string' ? violation.managerId : undefined),
       attemptAlert?.kind,
     );
     state.alerts[violation.key] = new Date(now).toISOString();

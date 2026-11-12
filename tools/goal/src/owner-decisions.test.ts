@@ -164,7 +164,13 @@ test('the decision shares the total prompt budget and omitted references remain 
       { taskId: 'task-a', attempt: 2 },
       prompt,
     );
-  const availableBudget = Math.min(MAX_WORKER_PROMPT_CHARACTERS, defaultPolicy.brief.bytes);
+  // A retained resume can legitimately be larger than the accepted brief.
+  const resumed = prepare('x'.repeat(15_961));
+  expect(resumed.prompt).toContain('Decision: Use the current rule.');
+  expect(resumed.file).toBeUndefined();
+  expect(resumed.delivery?.summaryDelivered).toBe(true);
+  expect(Buffer.byteLength(resumed.prompt)).toBeLessThanOrEqual(defaultPolicy.prompt.workerTotalBytes);
+  const availableBudget = Math.min(MAX_WORKER_PROMPT_CHARACTERS, defaultPolicy.prompt.workerTotalBytes);
   const prepared = prepare('x'.repeat(availableBudget - 400));
   expect(prepared.prompt.length).toBeLessThanOrEqual(MAX_WORKER_PROMPT_CHARACTERS);
   expect(prepared.prompt).toContain('1 document reference(s) remain pending');
@@ -176,13 +182,14 @@ test('a decision that does not fit the prompt is delivered as a pointer to its f
   try {
     const worktree = join(directory.path, 'worker');
     mkdirSync(worktree);
-    const body = decision('bounded', 'Use the current rule.', '2026-11-03T09:00:00.000Z');
-    const prepare = (events: WorkerEvent[]) =>
+    const body = decision('bounded', `Use the current rule. ${'x'.repeat(250)}`, '2026-11-03T09:00:00.000Z');
+    const nearLimit = 'é'.repeat((defaultPolicy.prompt.workerTotalBytes - 160) / 2);
+    const prepare = (events: WorkerEvent[], prompt = nearLimit) =>
       prepareOwnerDecisionPrompt(
         { ownerDecisionEvents: () => events },
         task(worktree),
         { taskId: 'task-a', attempt: 2 },
-        'x'.repeat(MAX_WORKER_PROMPT_CHARACTERS - 10),
+        prompt,
       );
     const accepted = event(1, body, body.createdAt);
     const prepared = prepare([accepted]);
@@ -197,7 +204,10 @@ test('a decision that does not fit the prompt is delivered as a pointer to its f
       body.createdAt,
       'owner-contract-decision-delivery',
     );
-    expect(prepare([accepted, delivery]).prompt).toBe('x'.repeat(MAX_WORKER_PROMPT_CHARACTERS - 10));
+    expect(prepare([accepted, delivery]).prompt).toBe(nearLimit);
+    expect(Buffer.byteLength(prepared.prompt)).toBeLessThanOrEqual(defaultPolicy.prompt.workerTotalBytes);
+    const full = 'é'.repeat(defaultPolicy.prompt.workerTotalBytes / 2);
+    expect(prepare([accepted], full)).toEqual({ prompt: full });
   } finally {
     directory.close();
   }
@@ -221,6 +231,44 @@ test('a reference escaping through a parent symlink stays named and pending', ()
     );
     expect(result.prompt).toContain('pending and unavailable in the worker worktree: docs/outside.md');
     expect(result.delivery?.documentRefs).toEqual([{ path: 'docs/outside.md', status: 'pending' }]);
+  } finally {
+    directory.close();
+  }
+});
+
+test('an omitted reference stays pending across attempts while delivered context and foreign events do not repeat', () => {
+  const directory = temporaryDirectory();
+  try {
+    const path = `docs/${'a'.repeat(80)}/${'b'.repeat(80)}/${'c'.repeat(80)}/contract.md`;
+    mkdirSync(join(directory.path, path, '..'), { recursive: true });
+    writeFileSync(join(directory.path, path), 'Canonical caller contract.');
+    const body = {
+      ...decision('partial', 'Apply the caller rule.', '2026-11-03T09:00:00.000Z'),
+      documentRefs: [{ path }],
+    };
+    const accepted = event(1, body, body.createdAt);
+    const first = prepareOwnerDecisionPrompt(
+      { ownerDecisionEvents: () => [accepted] },
+      task(directory.path),
+      { taskId: 'task-a', attempt: 2 },
+      'x'.repeat(Math.min(MAX_WORKER_PROMPT_CHARACTERS, defaultPolicy.prompt.workerTotalBytes) - 400),
+    );
+    expect(first.delivery?.documentRefs).toEqual([]);
+    const delivered = event(2, first.delivery, body.createdAt, 'owner-contract-decision-delivery');
+    const foreign = {
+      ...event(3, { ...body, summary: 'Use a foreign task rule.' }, body.createdAt),
+      task_id: 'other-task',
+    };
+    const current = { ...task(directory.path), currentAttempt: 3 };
+    const next = prepareOwnerDecisionPrompt(
+      { ownerDecisionEvents: () => [accepted, delivered, foreign] },
+      current,
+      { taskId: current.id, attempt: 3 },
+      'Continue.',
+    );
+    expect(next.prompt).not.toContain('Decision: Apply');
+    expect(next.prompt).not.toContain('foreign task rule');
+    expect(next.delivery).toMatchObject({ originatingAttempt: 2, documentRefs: [{ path, status: 'delivered' }] });
   } finally {
     directory.close();
   }

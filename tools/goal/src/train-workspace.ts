@@ -44,6 +44,10 @@ export type TrainWorkspace = {
   release(): void;
 };
 
+function isDisappearedEntry(error: unknown): boolean {
+  return error !== null && typeof error === 'object' && 'code' in error && error.code === 'ENOENT';
+}
+
 /** Capture only a newly added disposable train tree, before any check can leave immutable fixture directories. */
 export function captureTrainWorktreeRemoval(tree: string): () => void {
   const path = resolve(tree);
@@ -63,15 +67,31 @@ export function captureTrainWorktreeRemoval(tree: string): () => void {
     if ((stat.mode & 0o700) !== 0o700) fchmodSync(fd, (stat.mode & 0o7777) | 0o700);
     for (const name of readdirSync(descriptorPath(fd))) {
       const child = join(descriptorPath(fd), name);
-      const before = lstatSync(child);
+      let before: ReturnType<typeof lstatSync>;
+      try {
+        before = lstatSync(child);
+      } catch (error) {
+        if (isDisappearedEntry(error)) continue;
+        throw error;
+      }
       // Directory permissions govern deletion. Never chmod package files (which can be hardlinks), or follow links
       // to shared dependency stores, another worktree, or any other outside directory.
       if (!before.isDirectory()) continue;
-      const childFd = openSync(child, flags);
+      let childFd: number;
+      try {
+        childFd = openSync(child, flags);
+      } catch (error) {
+        if (isDisappearedEntry(error)) continue;
+        throw error;
+      }
       try {
         if (!sameInode(before, fstatSync(childFd))) throw refuse();
         prepare(childFd);
-        if (!sameInode(before, lstatSync(child))) throw refuse();
+        try {
+          if (!sameInode(before, lstatSync(child))) throw refuse();
+        } catch (error) {
+          if (!isDisappearedEntry(error)) throw error;
+        }
       } finally {
         closeSync(childFd);
       }

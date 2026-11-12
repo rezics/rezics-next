@@ -36,6 +36,7 @@ import { WorkerStore } from './store.ts';
 import { WorkerTasks } from './tasks.ts';
 import { TrainResolver } from './train-resolver.ts';
 import { WorkerJob } from './job.ts';
+import { recoverWorkerTyping } from './typing-recovery.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { requestManagerLanding } from './manager-landing.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -60,9 +61,10 @@ import { completionChecker } from './completion.ts';
 import { TermspacesWindows } from './windows.ts';
 import { offloadHostTask, runHostOperation } from './service.ts';
 import type { IntegrationRuntime } from './integration-cli.ts';
-import type { ManagerServices, ManagerSpec } from './managers.ts';
+import { resolveGoalManager, type ManagerServices, type ManagerSpec } from './managers.ts';
 import {
   DEFAULT_FLOW_THRESHOLDS,
+  FLOW_RETRY_ALARM_WINDOW_MS,
   checkFlowAlarms,
   dispatchDailyStepAudit,
   flowReport,
@@ -287,6 +289,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const managerServices: ManagerServices = {
     policy: settings.policy ?? defaults.policy,
     command,
+    canStartTurn: (spec) => tasks.managerTurnAllowed(spec.pool.id, spec.engine),
     backlogDirectory: backlogDirectory(settings.stateDirectory),
     checkCompletion,
     windows: new TermspacesWindows({
@@ -409,6 +412,10 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
               task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>
             ].maxMs,
           settings.policy,
+          {
+            schedulingOwner: resolveGoalManager(store.db, 'control-plane', settings.integration.supermanager),
+            runnableSupply: (task, intent) => job.hasRunnableRetrySupply(task, intent),
+          },
         );
       // A oneshot CLI exits after this method: persist every bounded probe before closing the runtime.
       await Promise.all(probes);
@@ -425,11 +432,11 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         policy: settings.policy,
         inbox,
         supermanager: settings.integration.supermanager,
-        async dispatch(brief, actor) {
+        async dispatch(brief, actor, proposal) {
           // The `goal dispatch` path. Its first start is a durable request that the host's sweep runs and follows,
           // so this short-lived process never waits for host capacity or a worker.
-          // Urgent briefs carry the Goal directory's confirmed manager so an active grant is honoured; others stay null.
-          const task = tasks.dispatch(brief, actor ?? null);
+          // Urgent and verification briefs may carry the confirmed Goal owner; ordinary product briefs stay null.
+          const task = tasks.dispatch(brief, actor ?? null, false, undefined, proposal);
           if (task.state !== 'held') store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
           return { taskId: task.id, lintWarnings: task.brief.lintWarnings ?? [] };
         },
@@ -442,6 +449,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
           tasks.queueBacklogContinuation(task.id, goal, continuation.expectedAttempt, briefFile, actor);
         },
         cancel: (taskId) => tasks.cancel(taskId),
+        recoverTyping: (ref) => recoverWorkerTyping(tasks, queue, ref),
         routing: {
           table: readRouting(settings.routingFile, settings.policy?.routing),
           ownership: readRiskOwnership(settings.riskAreasFile, settings.policy?.brief),
@@ -475,17 +483,23 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         settings.policy?.inbox,
       );
       const now = new Date();
+      const flowHistoryMs = (settings.policy ?? defaults.policy).flowHistoryMs;
+      const reportSince = new Date(now.getTime() - flowHistoryMs).toISOString();
+      const flowEventsSince = new Date(
+        now.getTime() - Math.max(flowHistoryMs, FLOW_RETRY_ALARM_WINDOW_MS),
+      ).toISOString();
       const metrics = await lifecycleMetricsAsync(db, now, settings.policy);
-      const flow = flowReport(
-        readFlow(db, new Date(now.getTime() - (settings.policy ?? defaults.policy).flowHistoryMs).toISOString()),
-        readFlowTasks(db),
-        now.getTime(),
-      );
+      const flow = flowReport(readFlow(db, flowEventsSince), readFlowTasks(db), now.getTime(), { reportSince });
       emitHourlyLifecycleMetrics(db, metrics, now);
       checkFlowAlarms(
         db,
         flow,
-        (summary) => flowInbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
+        (summary) =>
+          flowInbox.deliver({
+            managerId: resolveGoalManager(db, 'control-plane', settings.integration.supermanager),
+            kind: 'environment',
+            summary,
+          }),
         now,
         flowThresholds,
         settings.policy,

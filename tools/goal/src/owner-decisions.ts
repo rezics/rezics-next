@@ -6,6 +6,7 @@ import type { AttemptRef } from './contracts.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import type { WorkerEvent, WorkerStore } from './store.ts';
 import type { Task } from './types.ts';
+import { briefProposalHash } from './durable-follow-up.ts';
 
 const DECISION_EVENT = 'owner-contract-decision-accepted';
 const DELIVERY_EVENT = 'owner-contract-decision-delivery';
@@ -14,6 +15,8 @@ export const MAX_WORKER_PROMPT_CHARACTERS = defaultPolicy.workerPrompt.character
 type DocumentReference = { path: string; change?: string };
 type OwnerDecision = {
   id: string;
+  originatingAttempt: number;
+  contractSha256?: string;
   managerId: string;
   senderSessionId: string;
   decidedAt: number;
@@ -25,6 +28,9 @@ type OwnerDecision = {
 export type OwnerDecisionDelivery = {
   decisionId: string;
   decisionSequence: number;
+  originatingAttempt: number;
+  managerId: string;
+  senderSessionId: string;
   summaryDelivered: boolean;
   documentRefs: { path: string; status: 'delivered' | 'pending' }[];
 };
@@ -108,6 +114,7 @@ export function submitOwnerDecision(store: WorkerStore, ref: AttemptRef, input: 
       senderSessionId: actor.sessionId,
       taskId: task.id,
       attempt: ref.attempt,
+      contractSha256: briefProposalHash(task.brief.markdown),
     };
     if (Buffer.byteLength(JSON.stringify(accepted)) > policy.brief.bytes)
       throw new Error('owner decision exceeds the existing prompt input limit');
@@ -124,7 +131,8 @@ function decisionFromEvent(
   if (
     event.kind !== DECISION_EVENT ||
     event.task_id !== task.id ||
-    event.attempt !== ref.attempt ||
+    event.attempt < 1 ||
+    event.attempt > ref.attempt ||
     Buffer.byteLength(event.body) > policy.brief.bytes
   )
     return undefined;
@@ -149,7 +157,9 @@ function decisionFromEvent(
     (body.kind !== undefined && body.kind !== 'decision') ||
     body.senderProvenance !== undefined ||
     body.taskId !== task.id ||
-    body.attempt !== ref.attempt ||
+    body.attempt !== event.attempt ||
+    (body.contractSha256 !== undefined &&
+      (typeof body.contractSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(body.contractSha256))) ||
     typeof summary !== 'string' ||
     !summary.trim() ||
     summary.trim().length > policy.inbox.managerMessageCharacters ||
@@ -160,6 +170,8 @@ function decisionFromEvent(
   const decidedAt = Date.parse(event.at) || 0;
   return {
     id: stableId(body.decisionId.trim(), managerId),
+    originatingAttempt: event.attempt,
+    ...(typeof body.contractSha256 === 'string' ? { contractSha256: body.contractSha256 } : {}),
     managerId,
     senderSessionId: senderSessionId.trim(),
     decidedAt,
@@ -202,7 +214,13 @@ function projectOwnerDecision(
 ): OwnerDecisionProjection {
   const earliestById = new Map<string, OwnerDecision>();
   const deliveryByDecision = new Map<string, DecisionDeliveryState>();
+  let supersededThrough = 0;
   for (const event of events) {
+    if (event.task_id !== task.id || event.attempt < 0 || event.attempt > ref.attempt) continue;
+    if (event.kind === 'owner-contract-decisions-superseded') {
+      supersededThrough = Math.max(supersededThrough, event.sequence);
+      continue;
+    }
     if (event.kind === DECISION_EVENT) {
       const decision = decisionFromEvent(event, task, ref, policy);
       if (!decision) continue;
@@ -222,6 +240,8 @@ function projectOwnerDecision(
     const decisionSequence = body.decisionSequence;
     if (typeof decisionId !== 'string' || typeof decisionSequence !== 'number' || event.sequence <= decisionSequence)
       continue;
+    const accepted = earliestById.get(decisionId);
+    if (!accepted || accepted.sequence !== decisionSequence || event.attempt < accepted.originatingAttempt) continue;
     const key = decisionDeliveryKey(decisionId, decisionSequence);
     let delivery = deliveryByDecision.get(key);
     if (!delivery) {
@@ -239,7 +259,13 @@ function projectOwnerDecision(
   }
 
   let decision: OwnerDecision | undefined;
+  const contractHash = task.brief.markdown === undefined ? undefined : briefProposalHash(task.brief.markdown);
   for (const candidate of earliestById.values()) {
+    if (
+      candidate.sequence <= supersededThrough ||
+      (candidate.contractSha256 !== undefined && candidate.contractSha256 !== contractHash)
+    )
+      continue;
     if (
       !decision ||
       candidate.decidedAt > decision.decidedAt ||
@@ -252,6 +278,22 @@ function projectOwnerDecision(
     decision,
     delivery: delivery ?? { summaryDelivered: false, deliveredDocumentPaths: new Set<string>() },
   };
+}
+
+/** A current authenticated owner can preserve an already terminal proof without requesting another run. */
+export function preservesTerminalProof(
+  events: readonly WorkerEvent[],
+  task: Task,
+  ref: AttemptRef,
+  policy: ControlPolicy,
+): boolean {
+  const { decision } = projectOwnerDecision(events, task, ref, policy);
+  return Boolean(
+    decision &&
+    decision.originatingAttempt === ref.attempt &&
+    decision.contractSha256 &&
+    /^preserved-terminal-native-proof(?:-\d{8})?$/.test(decision.id.slice(decision.managerId.length + 1)),
+  );
 }
 
 export function prepareOwnerDecisionPrompt(
@@ -277,9 +319,10 @@ export function prepareOwnerDecisionPrompt(
   );
   if (delivered.summaryDelivered && pendingDocuments.length === 0) return { prompt };
 
-  const fits = (block: string) =>
-    `${prompt}\n\n${block}`.length <= policy.workerPrompt.characters &&
-    Buffer.byteLength(`${prompt}\n\n${block}`) <= policy.brief.bytes;
+  // The brief limit admits the decision event; the assembled worker input has its own budget.
+  const remainingCharacters = policy.workerPrompt.characters - prompt.length - 2;
+  const remainingBytes = policy.prompt.workerTotalBytes - Buffer.byteLength(prompt) - 2;
+  const fits = (block: string) => block.length <= remainingCharacters && Buffer.byteLength(block) <= remainingBytes;
   const header = `Owner decision ${decision.id} from authenticated manager ${decision.managerId}: this prompt carries the decision.`;
   const summary = `Decision: ${decision.summary}`;
   // A summary that does not fit becomes a pointer to the decision file, so no decision refuses a launch.
@@ -294,6 +337,8 @@ export function prepareOwnerDecisionPrompt(
     ];
     file = { path: pointer, content: decisionFileContent(decision) };
   }
+  // Do not acknowledge a decision the worker did not receive, or exceed either existing input limit.
+  if (!fits(lines.join('\n'))) return { prompt };
   const fixed = lines.length;
   const documentRefs: OwnerDecisionDelivery['documentRefs'] = [];
   let omitted = 0;
@@ -312,7 +357,6 @@ export function prepareOwnerDecisionPrompt(
     documentRefs.push({ path: reference.path, status });
   }
   if (omitted) {
-    // The notice is one bounded line; it may pass the limit where the fixed decision lines already filled it.
     const notice = () =>
       `- ${omitted} document reference(s) remain pending because this prompt reached its total input limit.`;
     while (lines.length > fixed && !fits([...lines, notice()].join('\n'))) {
@@ -320,11 +364,14 @@ export function prepareOwnerDecisionPrompt(
       documentRefs.pop();
       omitted++;
     }
-    lines.push(notice());
+    if (fits([...lines, notice()].join('\n'))) lines.push(notice());
   }
   const receipt: OwnerDecisionDelivery = {
     decisionId: decision.id,
     decisionSequence: decision.sequence,
+    originatingAttempt: decision.originatingAttempt,
+    managerId: decision.managerId,
+    senderSessionId: decision.senderSessionId,
     summaryDelivered: !delivered.summaryDelivered,
     documentRefs,
   };
