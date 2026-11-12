@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import type { Static } from 'typebox';
 import { status, t } from 'elysia';
 import type { createApp } from '../http/app.ts';
 import type { Access } from '../request/access.ts';
@@ -62,7 +63,12 @@ export function knowledgeDiscoveryRoutes<App>(app: App, options: {
         if (page.state === 'unavailable')
           throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
         if (page.state === 'preparing') return status(202, page);
-        return status(200, { ...page, documents: [...page.documents] });
+        const response: Static<ReturnType<typeof KnowledgeDiscoveryPageSchema>> = {
+          state: 'ready',
+          documents: Array.from(page.documents),
+          next: page.next,
+        };
+        return status(200, response);
       });
     });
   });
