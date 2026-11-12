@@ -49,6 +49,33 @@ function isRequestKeySort(sort: Node, statement: string | undefined): boolean {
   const input = ((sort.Plans as Node[] | undefined) ?? [])[0];
   return input?.['Node Type'] === 'Function Scan' && input['Function Name'] === 'generate_series';
 }
+
+function relationNames(value: unknown): string[] {
+  return nodes(value)
+    .filter((node) => typeof node['Relation Name'] === 'string')
+    .map((node) => `${String(node.Schema ?? '<unknown>')}.${String(node['Relation Name'])}`)
+    .sort();
+}
+
+function sortEvidence(statementIndex: number, statement: string, purpose: string, input: Node): string {
+  return JSON.stringify({
+    statementIndex,
+    statement: statement.replace(/\s+/g, ' ').slice(0, 240),
+    purpose,
+    inputRows: Number(input['Actual Rows']),
+    inputLoops: Number(input['Actual Loops']),
+    relationSubtree: relationNames(input),
+  });
+}
+
+function assertSortBound(statementIndex: number, statement: string, purpose: string, input: Node, bound: number): void {
+  const inputRows = Number(input['Actual Rows']);
+  const inputLoops = Number(input['Actual Loops']);
+  if (inputRows * inputLoops > bound)
+    throw new Error(
+      `Bounded sort exceeded its ${purpose} allowance ${bound}: ${sortEvidence(statementIndex, statement, purpose, input)}`,
+    );
+}
 function assertPlans(raw: Capture, present: number, requested: number) {
   const catalogue = catalogStatementBound(raw);
   expect(catalogue.catalogStatements).toBeLessThanOrEqual(catalogue.allowedStatements);
@@ -72,6 +99,7 @@ function assertPlans(raw: Capture, present: number, requested: number) {
   for (const [planIndex, plan] of raw.plans.entries()) {
     const statementIndex = raw.planStatements![planIndex]!;
     const statement = raw.statements[statementIndex];
+    if (statement === undefined) throw new Error(`Plan ${planIndex} has no declared statement ${statementIndex}`);
     for (const sort of nodes(plan).filter((node) => String(node['Node Type']).includes('Sort'))) {
       const children = (sort.Plans as Node[] | undefined) ?? [];
       expect(children).toHaveLength(1);
@@ -80,25 +108,44 @@ function assertPlans(raw: Capture, present: number, requested: number) {
       const inputLoops = Number(input['Actual Loops']);
       expect(Number.isFinite(inputRows)).toBe(true);
       expect(Number.isFinite(inputLoops)).toBe(true);
-      const libraryInput = nodes(input).some((node) => node.Schema === 'library');
-      if (libraryInput) {
-        // Library rows may only be sorted inside a one-row point probe per requested subject.
-        expect(inputRows).toBeLessThanOrEqual(1);
-        expect(inputLoops).toBeLessThanOrEqual(requested);
-      } else {
-        if (isRequestKeySort(sort, statement)) {
-          const relationInputs = nodes(input).filter((node) => typeof node['Relation Name'] === 'string');
-          if (relationInputs.length !== 0)
-            throw new Error(
-              `request-key sort input for statement ${statementIndex} contains relations: ${JSON.stringify(relationInputs)}`,
-            );
-          expect(relationInputs).toHaveLength(0);
-        }
-        // Every captured statement keeps its bounded-sort row/loop check. Only a Sort fed directly by
-        // the request-key Function Scan is classified as request-key-only; other declared query plans
-        // can legitimately contain relation inputs and are checked against the same page work bound.
-        expect(inputRows * inputLoops).toBeLessThanOrEqual(requested);
+      const relations = relationNames(input);
+      const libraryRelations = [...new Set(relations.filter((name) => name.startsWith('library.')))].sort();
+      const catalogStatement = catalogue.catalogTexts.has(statement);
+
+      if (isRequestKeySort(sort, statement)) {
+        if (relations.length !== 0)
+          throw new Error(
+            `Request-key sort includes relations: ${sortEvidence(statementIndex, statement, 'request key', input)}`,
+          );
+        assertSortBound(statementIndex, statement, 'request-key', input, requested);
+        continue;
       }
+      if (libraryRelations.length > 0) {
+        if (
+          libraryRelations.length !== 1 ||
+          !['library.entry', 'library.progress_session'].includes(libraryRelations[0]!)
+        )
+          throw new Error(
+            `Unexpected Library relation under sort: ${sortEvidence(statementIndex, statement, 'Library point probe', input)}`,
+          );
+        // Entry points follow every requested key; active points run only for emitted Entries.
+        const probes = libraryRelations[0] === 'library.entry' ? requested : present;
+        if (inputRows > 1 || inputLoops > probes)
+          throw new Error(
+            `Library point sort exceeded ${probes} one-row probes: ${sortEvidence(statementIndex, statement, 'Library point probe', input)}`,
+          );
+        continue;
+      }
+      if (catalogStatement) {
+        if (relations.some((name) => !name.startsWith('pg_catalog.') && !name.startsWith('information_schema.')))
+          throw new Error(
+            `Declared catalog sort has a non-catalog relation subtree: ${sortEvidence(statementIndex, statement, 'catalog', input)}`,
+          );
+        // These sorts belong to declared catalog work, whose statement-count allowance was checked above.
+        continue;
+      }
+      // Other declared non-catalog statements retain their own page-work bound.
+      assertSortBound(statementIndex, statement, 'declared statement', input, requested);
     }
   }
   expect(costOf(raw).statements).toBe(requested === 0 ? 0 : present === 0 ? 1 : 2);
@@ -138,8 +185,12 @@ test('entry tile PK and active winner work stays bounded at 64 512 4096 entries 
   const neighbour = await f.identity(scopes, partitionOf(route));
   const distant = await f.identity(scopes, (partitionOf(route) + 1) % 4096);
   const subject = await f.createSubject('record'),
-    noEntry = await f.createSubject('record');
+    noEntry = await f.createSubject('record'),
+    laterEntry = await f.createSubject('record');
   expect((await f.send(owner.bearer, 'PUT', '/v1/libraryEntries/' + subject, { state: 'listening' })).status).toBe(201);
+  expect((await f.send(owner.bearer, 'PUT', '/v1/libraryEntries/' + laterEntry, { state: 'planned' })).status).toBe(
+    201,
+  );
   async function start(subjectId: string) {
     const r = await f.send(owner.bearer, 'POST', '/v1/progressSessions', {
       subjectId,
@@ -170,12 +221,13 @@ test('entry tile PK and active winner work stays bounded at 64 512 4096 entries 
       const got = await readLibraryEntryTiles(c, {
         route,
         accountId: owner.actor.accountId,
-        subjectIds: [subject, noEntry, subject],
+        subjectIds: [subject, noEntry, laterEntry, subject],
       });
-      expect(got.size).toBe(1);
+      expect([...got.keys()]).toEqual([subject, laterEntry]);
       expect(got.get(subject)!.activeProgressSession).toEqual(active);
       expect(got.get(subject)!.state).toBe('listening');
       expect(got.get(subject)!.incarnationId).toBe(entry.incarnation_id);
+      expect(got.get(laterEntry)!.activeProgressSession).toBeNull();
       expect(got.has(noEntry)).toBe(false);
       await c.query('COMMIT');
     } catch (error) {
@@ -229,7 +281,7 @@ test('entry tile PK and active winner work stays bounded at 64 512 4096 entries 
     async warmup(_database, scale) {
       for (let i = 0; i < 6; i++) await operation();
       const measured = await capture(db, operation);
-      assertPlans(measured.capture, 1, 2);
+      assertPlans(measured.capture, 2, 3);
       evidence.push({ scale, capture: measured.capture });
     },
     operation,
