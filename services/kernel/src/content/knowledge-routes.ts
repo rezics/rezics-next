@@ -1,13 +1,13 @@
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '@rezics/operations/protocol';
+import { memoizedValue } from '../memoized.ts';
 import { AuthenticationError } from '../access/contract/authentication.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { problemSchema } from '../http/problem-schema.ts';
-import { defineRateLimit } from '../http/rate-limit.ts';
+import { customMethod, defineRateLimit } from '../http/route-metadata.ts';
 import { idempotencyKeyOf } from '../http/idempotency-key.ts';
-import { customMethod } from '../http/custom-method.ts';
 import { contentRequestId } from './adapters/bind.ts';
 import type { hostedChapterRoutes } from './hosted-chapters-routes.ts';
 import { strictContentSchema } from './schema-validation.ts';
@@ -37,11 +37,17 @@ import {
 
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const responseHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
-const idParams = t.Object({ id: KnowledgeIdSchema }, { additionalProperties: false });
-const privateParams = t.Object(
-  { accountId: KnowledgeIdSchema, notebookId: KnowledgeIdSchema, documentId: KnowledgeIdSchema },
-  { additionalProperties: false },
-);
+function idParams() {
+  return memoizedValue(idParams, () => t.Object({ id: KnowledgeIdSchema }, { additionalProperties: false }));
+}
+function privateParams() {
+  return memoizedValue(privateParams, () =>
+    t.Object(
+      { accountId: KnowledgeIdSchema, notebookId: KnowledgeIdSchema, documentId: KnowledgeIdSchema },
+      { additionalProperties: false },
+    ),
+  );
+}
 const readSecurity: Record<string, string[]>[] = [{}, { bearerAuth: [] }];
 const writeSecurity = [{ bearerAuth: [] }];
 const writeRate = () => defineRateLimit({ family: 'write', units: 1 });
@@ -50,25 +56,27 @@ const sessionComponent = (anchor: AnchoredPosition) => ({
   epoch: anchor.epoch,
   position: anchor.position,
 });
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden', 'platform_closed'),
-  404: problemSchema('not_found'),
-  412: problemSchema('precondition_failed'),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-  429: problemSchema('rate_limited'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-    'rate_limit_unavailable',
-  ),
-};
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden', 'platform_closed'),
+    404: problemSchema('not_found'),
+    412: problemSchema('precondition_failed'),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+    429: problemSchema('rate_limited'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
 
 async function operation<T>(run: () => Promise<T>): Promise<T> {
   try {
@@ -113,11 +121,11 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
     .get(
       '/v1/knowledge/documents/:id',
       {
-        params: idParams,
+        params: idParams(),
         query: strictContentSchema(KnowledgeExactReadQuerySchema),
         response: {
           200: withHeaders(strictContentSchema(KnowledgePublicDocumentSchema), responseHeaders),
-          ...failures,
+          ...failures(),
         },
         detail: {
           operationId: 'knowledge_document.public_read',
@@ -141,11 +149,11 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
     .get(
       '/v1/accounts/:accountId/knowledge/notebooks/:notebookId/documents/:documentId',
       {
-        params: privateParams,
+        params: privateParams(),
         query: strictContentSchema(t.Object({}, { additionalProperties: false })),
         response: {
           200: withHeaders(strictContentSchema(KnowledgePrivateDocumentSchema), responseHeaders),
-          ...failures,
+          ...failures(),
         },
         detail: {
           operationId: 'knowledge_document.private_read',
@@ -172,7 +180,7 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
         body: strictContentSchema(KnowledgeNotebookCreateSchema),
         response: {
           201: withHeaders(strictContentSchema(KnowledgeCommandResponseSchema), responseHeaders),
-          ...failures,
+          ...failures(),
         },
         detail: {
           operationId: 'knowledge_notebook.create',
@@ -198,12 +206,12 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
     .post(
       '/v1/knowledge/notebooks/:id/documents',
       {
-        params: idParams,
+        params: idParams(),
         headers,
         body: strictContentSchema(KnowledgeDocumentCreateSchema),
         response: {
           201: withHeaders(strictContentSchema(KnowledgeCommandResponseSchema), responseHeaders),
-          ...failures,
+          ...failures(),
         },
         detail: {
           operationId: 'knowledge_document.create',
@@ -229,12 +237,12 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
     .post(
       customMethod('/v1/knowledge/documents/:id/revisions', 'revise'),
       {
-        params: idParams,
+        params: idParams(),
         headers,
         body: strictContentSchema(KnowledgeDocumentReviseSchema),
         response: {
           200: withHeaders(strictContentSchema(KnowledgeCommandResponseSchema), responseHeaders),
-          ...failures,
+          ...failures(),
         },
         detail: {
           operationId: 'knowledge_document.revise',
@@ -259,12 +267,12 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
     .post(
       customMethod('/v1/knowledge/documents/:id/publication', 'select'),
       {
-        params: idParams,
+        params: idParams(),
         headers,
         body: strictContentSchema(KnowledgePublicationSchema),
         response: {
           200: withHeaders(strictContentSchema(KnowledgeCommandResponseSchema), responseHeaders),
-          ...failures,
+          ...failures(),
         },
         detail: {
           operationId: 'knowledge_document.select_publication',
