@@ -126,12 +126,18 @@ CREATE FUNCTION content.guard_author_item() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  IF ROW(NEW.route, NEW.author_account_id, NEW.item_kind, NEW.item_id, NEW.thread_id, NEW.thread_kind, NEW.created_at)
-       IS DISTINCT FROM ROW(OLD.route, OLD.author_account_id, OLD.item_kind, OLD.item_id, OLD.thread_id, OLD.thread_kind, OLD.created_at)
-     OR ROW(NEW.source_epoch, NEW.source_position) < ROW(OLD.source_epoch, OLD.source_position)
-     OR (ROW(NEW.source_epoch, NEW.source_position) = ROW(OLD.source_epoch, OLD.source_position)
-         AND NOT (OLD.draft_state = 'unknown' AND NEW.draft_state <> 'unknown')) THEN
-    RAISE EXCEPTION 'Author item identity, creation time and source watermark cannot regress' USING ERRCODE = '23514';
+  IF ROW(NEW.route,NEW.author_account_id,NEW.item_kind,NEW.item_id,NEW.thread_id,NEW.thread_kind,NEW.created_at)
+       IS DISTINCT FROM ROW(OLD.route,OLD.author_account_id,OLD.item_kind,OLD.item_id,OLD.thread_id,OLD.thread_kind,OLD.created_at)
+     OR (OLD.hosted_catalogue AND NOT NEW.hosted_catalogue)
+     OR ROW(NEW.source_epoch,NEW.source_position)<ROW(OLD.source_epoch,OLD.source_position)
+     OR (ROW(NEW.source_epoch,NEW.source_position)=ROW(OLD.source_epoch,OLD.source_position)
+         AND NOT (
+           (OLD.draft_state='unknown' AND NEW.draft_state<>'unknown')
+           OR (NOT OLD.hosted_catalogue AND NEW.hosted_catalogue
+             AND ROW(NEW.draft_state,NEW.draft_revision_id,NEW.draft_language)
+               IS NOT DISTINCT FROM ROW(OLD.draft_state,OLD.draft_revision_id,OLD.draft_language))
+         )) THEN
+    RAISE EXCEPTION 'Author item identity, creation time and source watermark cannot regress' USING ERRCODE='23514';
   END IF;
   RETURN NEW;
 END;
@@ -710,6 +716,39 @@ $$;
 
 
 --
+-- Name: mark_hosted_locator_pending(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.mark_hosted_locator_pending() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE content.post SET hosted_locator_pending=true
+    WHERE route=NEW.route AND thread_id=NEW.thread_id AND post_id=NEW.catalogue_id;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: mark_restored_hosted_locator_pending(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.mark_restored_hosted_locator_pending() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.availability='available' AND OLD.availability IS DISTINCT FROM NEW.availability
+    AND EXISTS (SELECT 1 FROM content.hosted_catalogue
+      WHERE route=NEW.route AND catalogue_id=NEW.post_id) THEN
+    NEW.hosted_locator_pending=true;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: media_routes_match(integer, uuid[]); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -878,6 +917,7 @@ CREATE TABLE content.author_item (
     draft_state text DEFAULT 'unknown'::text NOT NULL,
     draft_revision_id uuid,
     draft_language text,
+    hosted_catalogue boolean DEFAULT false NOT NULL,
     CONSTRAINT author_item_check CHECK ((route = ((get_byte(uuid_send(author_account_id), 10) * 256) + get_byte(uuid_send(author_account_id), 11)))),
     CONSTRAINT author_item_check1 CHECK ((((item_kind = 'thread'::text) AND (item_id = thread_id)) OR ((item_kind = 'post'::text) AND (item_id <> thread_id)))),
     CONSTRAINT author_item_check2 CHECK (((get_byte(uuid_send(item_id), 10) = get_byte(uuid_send(thread_id), 10)) AND (get_byte(uuid_send(item_id), 11) = get_byte(uuid_send(thread_id), 11)))),
@@ -1456,6 +1496,20 @@ CREATE TABLE content.hosted_occurrence (
     CONSTRAINT hosted_occurrence_check1 CHECK (((thread_id IS NULL) OR (((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)) = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11))))),
     CONSTRAINT hosted_occurrence_check2 CHECK ((route = ((get_byte(uuid_send(occurrence_id), 10) * 256) + get_byte(uuid_send(occurrence_id), 11)))),
     CONSTRAINT hosted_occurrence_kind_check CHECK ((kind = ANY (ARRAY['part'::text, 'chapter'::text])))
+);
+
+
+--
+-- Name: hosted_owned_progress; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.hosted_owned_progress (
+    singleton integer NOT NULL,
+    after_route integer NOT NULL,
+    after_catalogue uuid NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT hosted_owned_progress_after_route_check CHECK (((after_route >= 0) AND (after_route <= 65535))),
+    CONSTRAINT hosted_owned_progress_singleton_check CHECK ((singleton = 0))
 );
 
 
@@ -2141,6 +2195,7 @@ CREATE TABLE content.post (
     purge_completed boolean DEFAULT false NOT NULL,
     author_erased boolean DEFAULT false NOT NULL,
     draft_locator_pending boolean DEFAULT true NOT NULL,
+    hosted_locator_pending boolean DEFAULT false NOT NULL,
     CONSTRAINT post_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT post_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
     CONSTRAINT post_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
@@ -3217,6 +3272,14 @@ ALTER TABLE ONLY content.hosted_occurrence
 
 
 --
+-- Name: hosted_owned_progress hosted_owned_progress_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.hosted_owned_progress
+    ADD CONSTRAINT hosted_owned_progress_pkey PRIMARY KEY (singleton);
+
+
+--
 -- Name: hosted_placement hosted_placement_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -3904,6 +3967,13 @@ CREATE INDEX author_item_draft_page_idx ON content.author_item USING btree (rout
 
 
 --
+-- Name: author_item_hosted_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX author_item_hosted_page_idx ON content.author_item USING btree (route, author_account_id, created_at DESC, item_id) INCLUDE (thread_id) WHERE ((item_kind = 'post'::text) AND hosted_catalogue);
+
+
+--
 -- Name: author_item_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -4318,6 +4388,20 @@ CREATE INDEX post_deleted_page_idx ON content.post USING btree (route, deleted_a
 
 
 --
+-- Name: post_hosted_pending_author_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX post_hosted_pending_author_idx ON content.post USING btree (author_account_id, route, post_id) WHERE hosted_locator_pending;
+
+
+--
+-- Name: post_hosted_pending_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX post_hosted_pending_page_idx ON content.post USING btree (route, post_id) WHERE hosted_locator_pending;
+
+
+--
 -- Name: post_pending_draft_locator_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -4549,6 +4633,13 @@ CREATE TRIGGER edition_publication_identity BEFORE DELETE OR UPDATE ON content.e
 
 
 --
+-- Name: hosted_catalogue hosted_locator_pending; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER hosted_locator_pending AFTER INSERT ON content.hosted_catalogue FOR EACH ROW EXECUTE FUNCTION content.mark_hosted_locator_pending();
+
+
+--
 -- Name: hosted_occurrence hosted_occurrence_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -4665,6 +4756,13 @@ CREATE TRIGGER post_erasure_guard BEFORE DELETE OR UPDATE ON content.post FOR EA
 --
 
 CREATE TRIGGER post_identity BEFORE UPDATE ON content.post FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'post_id', 'reply_to_post_id', 'author_account_id', 'created_at');
+
+
+--
+-- Name: post post_restored_hosted_locator; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER post_restored_hosted_locator BEFORE UPDATE OF availability ON content.post FOR EACH ROW EXECUTE FUNCTION content.mark_restored_hosted_locator_pending();
 
 
 --
