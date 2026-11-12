@@ -4,12 +4,20 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
+  CHECK_CUSTODY_RECORD_MAX_CHARACTERS,
   CHECK_RECORD_CUSTODY_VERSION,
+  CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
   controllerProofReservationPath,
+  custodyJsonCharacters,
+  initializeRemoteRunCustody,
+  readJsonFile,
+  remoteRunCustodyPath,
   validateControllerProofBinding,
   validateControllerProofReservation,
   validControllerProofRegistration,
+  writeAtomicJson,
   type ControllerProofBindingV1,
+  type CheckRemoteRunCustody,
   ownershipFromEnvironment,
   processIdentity,
   detachedGroupTerminal,
@@ -26,6 +34,8 @@ import {
   stopWorkerCheck,
   waitWorkerCheck,
 } from './worker-check.ts';
+import { remoteCheckCustodyCallbacks } from './remote-check.ts';
+import { typingInputCommand } from '../tools/goal/src/worker-check-typing-inputs.ts';
 
 const roots: string[] = [];
 const inheritedEnvironment = { ...process.env };
@@ -45,6 +55,9 @@ function restoreEnvironment(): void {
     'REZICS_CHECK_MEMORY',
     'REZICS_CHECK_SCOPE',
     'REZICS_CHECK_LEDGER_DIR',
+    'REZICS_CHECK_REMOTE_CUSTODY_FILE',
+    'REZICS_CHECK_REMOTE_CUSTODY_ID',
+    'REZICS_CHECK_PHYSICAL_RUN_ID',
   ]) {
     const value = inheritedEnvironment[key];
     if (value === undefined) delete process.env[key];
@@ -95,6 +108,84 @@ function liveCommand(marker: string): string[] {
 function markerPid(path: string): number {
   return Number(readFileSync(path, 'utf8'));
 }
+
+test('remote custody bounds round-trip generated, escaped and transitioned records', async () => {
+  const root = rootFixture(),
+    checkId = randomUUID(),
+    physicalRunId = randomUUID();
+  const ownership = { taskId: randomUUID(), attempt: 4 },
+    argv = ['bun', 'scripts/typecheck.ts', '--root'];
+  const remoteArgv = typingInputCommand(argv),
+    binding = { checkId, ownership, argv, remoteArgv };
+  expect(remoteArgv).toHaveLength(21);
+  expect(Math.max(...remoteArgv.map((argument) => argument.length))).toBe(3000);
+  const file = remoteRunCustodyPath(root, physicalRunId);
+  initializeRemoteRunCustody(root, physicalRunId, binding);
+  expect(readJsonFile<CheckRemoteRunCustody>(file)?.binding?.remoteArgv).toEqual(remoteArgv);
+  expect(custodyJsonCharacters(readJsonFile<CheckRemoteRunCustody>(file))).toBeLessThanOrEqual(
+    CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
+  );
+  Object.assign(process.env, {
+    REZICS_CHECK_REMOTE_CUSTODY_FILE: file,
+    REZICS_CHECK_REMOTE_CUSTODY_ID: checkId,
+    REZICS_CHECK_PHYSICAL_RUN_ID: physicalRunId,
+  });
+  const callbacks = remoteCheckCustodyCallbacks(remoteArgv, [], join(root, 'hosts.json'));
+  await callbacks.allocated!({ host: 'check-a', run: 'first-run' });
+  await callbacks.notStarted!({ host: 'check-a', run: 'first-run' }, null, 'transport before start');
+  await callbacks.allocated!({ host: 'check-b', run: 'second-run' });
+  const run = { host: 'check-b', run: 'second-run' },
+    native = { schema: 1 as const, ...run, exitCode: 0, lifetimeFailure: null, resources: null };
+  await callbacks.completed!(native);
+  await callbacks.settled!({
+    schema: 1,
+    ...run,
+    native,
+    preparedInputs: null,
+    returns: { schema: 1, status: 'empty', entries: [], missing: [], failures: [] },
+    cleanup: {
+      schema: 1,
+      ...run,
+      status: 'verified',
+      supervisorStopped: true,
+      commandGroupTerminal: true,
+      containersRemoved: true,
+      runDirectoryRemoved: true,
+      failures: [],
+    },
+    transportChildReaped: true,
+  });
+  const record = readJsonFile<CheckRemoteRunCustody>(file);
+  expect([record?.physicalRunId, record?.binding?.checkId, record?.binding?.ownership]).toEqual([
+    physicalRunId,
+    checkId,
+    ownership,
+  ]);
+  expect(record?.status).toBe('terminal');
+  expect(record?.attempts.map(({ host, status }) => [host, status])).toEqual([
+    ['check-a', 'not-started'],
+    ['check-b', 'terminal'],
+  ]);
+  expect(record?.attempts[1]).toMatchObject({ id: 'second-run', native, settlement: expect.any(Object) });
+
+  const max = CHECK_CUSTODY_RECORD_MAX_CHARACTERS;
+  const boundary = { payload: 'x'.repeat(max - custodyJsonCharacters({ payload: '' })) };
+  const boundaryFile = join(root, 'boundary.json');
+  expect(custodyJsonCharacters(boundary)).toBe(max);
+  writeAtomicJson(boundaryFile, boundary, true, max);
+  expect(readJsonFile(boundaryFile)).toEqual(boundary);
+  const unicodeRunId = randomUUID(),
+    unicodeArgv = ['bun', '-e', 'console.log("line\nbreak")', '雪🌊', 'quote" and slash\\'];
+  initializeRemoteRunCustody(root, unicodeRunId, { checkId, argv, remoteArgv: unicodeArgv });
+  expect(readJsonFile<CheckRemoteRunCustody>(remoteRunCustodyPath(root, unicodeRunId))?.binding?.remoteArgv).toEqual(
+    unicodeArgv,
+  );
+  const oversizedRunId = randomUUID();
+  expect(() =>
+    initializeRemoteRunCustody(root, oversizedRunId, { checkId, argv, remoteArgv: ['bun', 'x'.repeat(64 * 1024)] }),
+  ).toThrow('serialized custody record exceeds');
+  expect(existsSync(remoteRunCustodyPath(root, oversizedRunId))).toBe(false);
+});
 
 afterEach(() => {
   restoreEnvironment();

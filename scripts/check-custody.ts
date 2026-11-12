@@ -15,6 +15,8 @@ import { randomUUID } from 'node:crypto';
 
 export const CHECK_RECORD_CUSTODY_VERSION = 1 as const;
 export const CHECK_HISTORY_VERSION = 1 as const;
+export const CHECK_CUSTODY_RECORD_MAX_CHARACTERS = 64 * 1024;
+export const CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS = 12 * 1024;
 
 export type ControllerProofBindingV1 = Readonly<{
   version: 1;
@@ -132,6 +134,21 @@ export type CheckRegistration = {
   registeredAt: string;
   controllerProof?: ControllerProofBindingV1;
 };
+
+function serializeCustodyJson(value: unknown): string {
+  return `${JSON.stringify(value)}\n`;
+}
+
+export function custodyJsonCharacters(value: unknown): number {
+  return serializeCustodyJson(value).length;
+}
+
+export function remoteRunCustodyUpdateLimit(record: CheckRemoteRunCustody): number {
+  return Math.min(
+    CHECK_CUSTODY_RECORD_MAX_CHARACTERS,
+    custodyJsonCharacters(record) + CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
+  );
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -693,36 +710,45 @@ export function initializeRemoteRunCustody(
   if (binding.ownership !== undefined) validateOwnership(binding.ownership);
   const file = remoteRunCustodyPath(root, physicalRunId);
   if (existsSync(file)) throw new Error('worker-check: remote custody already exists for physical run');
-  writeAtomicJson(file, {
-    version: 1,
-    physicalRunId,
-    binding: {
-      checkId: binding.checkId,
-      ...(binding.ownership === undefined ? {} : { ownership: validateOwnership(binding.ownership) }),
-      argv: [...binding.argv],
-      remoteArgv: [...binding.remoteArgv],
-    },
-    status: 'running',
-    attempts: [],
-    updatedAt: new Date().toISOString(),
-  } satisfies CheckRemoteRunCustody);
+  writeAtomicJson(
+    file,
+    {
+      version: 1,
+      physicalRunId,
+      binding: {
+        checkId: binding.checkId,
+        ...(binding.ownership === undefined ? {} : { ownership: validateOwnership(binding.ownership) }),
+        argv: [...binding.argv],
+        remoteArgv: [...binding.remoteArgv],
+      },
+      status: 'running',
+      attempts: [],
+      updatedAt: new Date().toISOString(),
+    } satisfies CheckRemoteRunCustody,
+    true,
+    CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_TRANSITION_RESERVE_CHARACTERS,
+  );
 }
 
 export function runnerReadyPath(root: string, checkId: string, physicalRunId: string): string {
   return join(custodyDirectory(root), 'ready', `${checkId}.${physicalRunId}.json`);
 }
 
-export function writeAtomicJson(file: string, value: unknown, createParent = true): void {
+export function writeAtomicJson(file: string, value: unknown, createParent = true, maxCharacters?: number): void {
+  const serialized = serializeCustodyJson(value);
+  if (maxCharacters !== undefined && serialized.length > maxCharacters) {
+    throw new Error(`worker-check: serialized custody record exceeds ${maxCharacters}-character bound`);
+  }
   if (createParent) mkdirSync(dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
-  writeFileSync(temporary, `${JSON.stringify(value)}\n`, { mode: 0o600, flag: 'wx' });
+  writeFileSync(temporary, serialized, { mode: 0o600, flag: 'wx' });
   renameSync(temporary, file);
 }
 
 export function readJsonFile<T>(file: string): T | undefined {
   try {
     const raw = readFileSync(file, 'utf8');
-    if (raw.length > 64 * 1024) return undefined;
+    if (raw.length > CHECK_CUSTODY_RECORD_MAX_CHARACTERS) return undefined;
     return JSON.parse(raw) as T;
   } catch {
     return undefined;

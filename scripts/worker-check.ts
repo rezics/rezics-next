@@ -71,6 +71,7 @@ import {
 import { acquireStackSlot } from './stack-lease.ts';
 import { KERNEL_CLIENT_OUTPUT } from './check-output-tree.ts';
 import {
+  CHECK_CUSTODY_RECORD_MAX_CHARACTERS,
   CHECK_RECORD_CUSTODY_VERSION,
   controllerProofReservationPath,
   controllerProofStatePath,
@@ -1592,6 +1593,7 @@ export async function runWorkerCheck(
       remoteArgv: [...handedOffCommand],
     };
     const initializeRemoteCustody = (): void => {
+      initializeRemoteRunCustody(root, physicalRunId, remoteCustodyBinding);
       if (recorded) {
         const current = readRecord(root, recorded.id);
         if (current.status !== 'running' || current.physicalRunId !== physicalRunId) {
@@ -1602,7 +1604,6 @@ export async function runWorkerCheck(
           remoteArgv: [...handedOffCommand],
         }));
       }
-      initializeRemoteRunCustody(root, physicalRunId, remoteCustodyBinding);
     };
     if (recorded) await withCheckFence(root, recorded.id, initializeRemoteCustody);
     else initializeRemoteCustody();
@@ -2707,12 +2708,21 @@ async function reconcileRetainedRemoteResult(record: CheckRecord, root: string, 
       };
       const terminal =
         attempts.length > 0 && attempts.every((item) => item.status === 'terminal' || item.status === 'not-started');
-      writeAtomicJson(custodyFile, {
-        ...latestCustody,
-        status: terminal ? 'terminal' : attempts.some((item) => item.status === 'uncertain') ? 'uncertain' : 'running',
-        attempts,
-        updatedAt: new Date().toISOString(),
-      });
+      writeAtomicJson(
+        custodyFile,
+        {
+          ...latestCustody,
+          status: terminal
+            ? 'terminal'
+            : attempts.some((item) => item.status === 'uncertain')
+              ? 'uncertain'
+              : 'running',
+          attempts,
+          updatedAt: new Date().toISOString(),
+        },
+        true,
+        CHECK_CUSTODY_RECORD_MAX_CHARACTERS,
+      );
     });
     return true;
   } catch (error) {
