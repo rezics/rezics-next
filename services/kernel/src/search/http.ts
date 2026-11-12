@@ -1,7 +1,6 @@
 import type { Pool } from 'pg';
 import type { Static } from 'typebox';
 import { status, t } from 'elysia';
-import type { createApp } from '../http/app.ts';
 import type { Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem-error.ts';
@@ -13,6 +12,7 @@ import { createKnowledgeDiscoverySource } from './native-bindings.ts';
 import { createKnowledgeDiscovery } from './knowledge-discovery.ts';
 import { createKnowledgeDiscoveryStore } from './knowledge-discovery-native.ts';
 import { searchHttpExecute, searchHttpPrincipal } from './http/search.ts';
+import type { SearchRouteTransport } from './http/routes.ts';
 import {
   KnowledgeDiscoveryId,
   KnowledgeDiscoveryQuerySchema,
@@ -31,7 +31,7 @@ export function knowledgeDiscoveryRoutes<App>(
   },
 ) {
   const store = createKnowledgeDiscoveryStore(options.pool, options.now);
-  const routed = (app as ReturnType<typeof createApp>).get(
+  const routed = (app as SearchRouteTransport).get(
     '/v1/subjects/:id/knowledgeDocuments',
     {
       params: t.Object({ id: KnowledgeDiscoveryId }, { additionalProperties: false }),

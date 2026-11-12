@@ -40,6 +40,7 @@ import { EmptyRecoveryActionsSchema, EmptyRecoverySchema } from './empty-recover
 import { searchHttpExecute, searchHttpPrincipal } from './search.ts';
 
 type SearchServiceImplementation = ReturnType<typeof createSearchService>;
+export type SearchRouteTransport = ReturnType<typeof createApp>;
 export type SearchService = Omit<SearchServiceImplementation, 'releaseGroups'> & {
   releaseGroups?: SearchServiceImplementation['releaseGroups'];
 };

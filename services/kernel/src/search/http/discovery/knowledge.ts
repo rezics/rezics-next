@@ -1,20 +1,18 @@
 import { t } from 'elysia';
 import { memoizedValue } from '../../../memoized.ts';
-import { LIST_CURSOR_BOUNDS } from '../../../tokens/list-cursor.ts';
+import { continuationToken } from './primitives.ts';
 
 const closed = { additionalProperties: false } as const;
 export const KnowledgeDiscoveryId = t.String({
   format: 'uuid',
   pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
 });
-const continuation = t.String({ minLength: 1, maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength });
-
 export function KnowledgeDiscoveryQuerySchema() {
   return memoizedValue(KnowledgeDiscoveryQuerySchema, () =>
     t.Object(
       {
         limit: t.Optional(t.IntegerString({ minimum: 1, maximum: 20 })),
-        cursor: t.Optional(continuation),
+        cursor: t.Optional(continuationToken()),
       },
       closed,
     ),
@@ -42,7 +40,7 @@ export function KnowledgeDiscoveryPageSchema() {
           ),
           { maxItems: 20 },
         ),
-        next: t.Union([continuation, t.Null()]),
+        next: t.Union([continuationToken(), t.Null()]),
       },
       closed,
     ),
@@ -53,7 +51,7 @@ export function KnowledgeDiscoveryPreparingSchema() {
     t.Object(
       {
         state: t.Literal('preparing'),
-        next: continuation,
+        next: continuationToken(),
       },
       closed,
     ),

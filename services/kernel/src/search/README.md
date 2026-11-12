@@ -2528,6 +2528,8 @@ Subject's deliberate current public Knowledge selections. It uses `gate:search`,
 anonymous Content publication/Subject checks even when the caller owns the notebook. It does not open general
 Search exposure or add a mixed-index kind, text query, count or document-transfer operation.
 
+Decision: Search's route composer owns the app transport type; Knowledge discovery reuses its lazy 4,864-character token schema while request cursors stay nonnullable and terminal `next` stays nullable.
+
 Search owns an append-only index of public selection identities, ordered by immutable publication time descending,
 then document and publication UUID ascending. The installation migration seeds already selected publications;
 `search_knowledge_publication` consumes the normal durable Content publication event and idempotently adds the
