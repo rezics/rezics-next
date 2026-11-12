@@ -224,6 +224,10 @@ command-support, session/progress and Entry/progress entries call those composed
 `zone-collection-adapter.ts` is the Library host for Zone membership work and mounted Collection reads; Zones own the
 port and composition binds it.
 
+Decision: Source capture stays contract/core-only; its native capability requires the supplied Source for logical
+selection and maps nonmatching private-owner observations to `dependency_unavailable` while returning the same
+prepared Source and work receipt.
+
 `account-grant.ts` remains a leaf: `grantCapable` takes account fields structurally. Owner-query Search preparation
 uses the Library `searchPreparation` capability through existing dependency objects; `CollectionWorkLedger` replaces
 Search `ScopeWork` subclassing. The Source adapter ABI keeps Search `ScopeWorkContext` so Search receiving type pins
