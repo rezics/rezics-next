@@ -8,6 +8,8 @@ import { viewerExposureLifetime, viewerExposureQuery, type ExposureReadState } f
 export const operationGroups = {
   'knowledge_notebook.owned_list': 'knowledge_notebook.owned_list',
   'knowledge_notebook.outline': 'knowledge_notebook.outline',
+  'knowledge_notebook.move_placement': 'knowledge_notebook.move_placement',
+  'knowledge_notebook.structure_history': 'knowledge_notebook.structure_history',
   'knowledge_document.private_read': 'knowledge_document.private_read',
   'knowledge_notebook.create': 'knowledge_notebook.create',
   'knowledge_document.create': 'knowledge_document.create',

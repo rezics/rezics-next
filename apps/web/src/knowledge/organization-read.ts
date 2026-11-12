@@ -3,7 +3,7 @@ import { isKnowledgeId } from './private-knowledge';
 import { admitKnowledgeNavigationPage, readKnowledgeNavigation, type KnowledgePlacementRow } from './navigation-read';
 
 export type OrganizationRequest = Readonly<
-  { notebookId: string; cursor?: string | undefined } & (
+  { notebookId: string; cursor?: string } & (
     | { kind: 'outline'; parentPlacementId: string | null }
     | { kind: 'historical'; parentPlacementId: string | null; revisionId: string }
     | { kind: 'history' }
@@ -153,7 +153,14 @@ export function admitOrganizationPage(
         return { state: 'unavailable' };
       changes.push(change as OrganizationChange);
     }
-    revisions.push({ ...row, changes } as OrganizationRevision);
+    revisions.push({
+      structureRevisionId: row.structureRevisionId,
+      revisionNumber: row.revisionNumber,
+      historyAvailable: row.historyAvailable,
+      changeKind: row.changeKind as OrganizationRevision['changeKind'],
+      createdAt: row.createdAt,
+      changes,
+    });
   }
   return { state: 'ready', page: { kind: 'history', notebookId: request.notebookId, revisions, next: value.next } };
 }
@@ -191,6 +198,7 @@ export async function moveOrganizationPlacement(
   client: KernelClient,
   input: Omit<OrganizationIntent, 'binding'> & { authorization: string },
 ): Promise<OrganizationMoveResult> {
+  const headers = { authorization: input.authorization, 'idempotency-key': JSON.stringify(input.idempotencyKey) };
   const result = await client.knowledge
     .notebooks({ id: input.notebookId })
     .placements({ placementId: input.placementId })
@@ -201,7 +209,7 @@ export async function moveOrganizationPlacement(
         beforePlacementId: input.beforePlacementId,
       },
       {
-        headers: { authorization: input.authorization, 'idempotency-key': JSON.stringify(input.idempotencyKey) },
+        headers,
         fetch: { cache: 'no-store', redirect: 'manual' },
       },
     );
