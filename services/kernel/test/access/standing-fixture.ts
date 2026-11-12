@@ -2,7 +2,7 @@ import { Pool } from 'pg';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { exportJWK, generateKeyPair, importJWK, SignJWT, decodeJwt } from 'jose';
 import { createAuthService } from '@rezics/auth';
-import { createInternalConsentHandler } from '../../../auth/src/internal-consent.ts';
+import { createInternalConsentHandler } from '@rezics/auth/internal-consent';
 import { createAuthConsentReader, type CurrentConsentReader } from '../../src/access/auth-consent.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';

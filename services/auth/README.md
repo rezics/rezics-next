@@ -85,6 +85,10 @@ global DBOS ownership.
 Host shutdown decision: close workflow admission before joining startup; retain owned pools until startup settles and
 workflow shutdown completes, then release them.
 
+Native producer leases retain the physical pg client identity used by driver caches and method return values.
+Each checkout renews its release hook; producer markers reset before that lease returns to the pool. Callback and
+promise checkouts share this boundary, including ordinary client registration after native credential provisioning.
+
 ### Current receiving closure provenance
 
 The private `auth.receiving-closure/v1` factory accepts an exact obligation key and rereads its original accepted

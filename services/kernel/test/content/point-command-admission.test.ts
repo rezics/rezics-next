@@ -20,7 +20,8 @@ import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Popula
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 let db: GrowthDatabase;
-const statements: { text: string; values?: unknown[] }[] = [];
+type Statement = { connection: PoolClient; text: string; values?: unknown[] };
+const statements: Statement[] = [];
 const actorRead = (text: string) => text.includes('minimum_authn_epoch::text AS "minimumAuthnEpoch"');
 const modes = ['takedown', 'post', 'media', 'author'] as const;
 type Mode = (typeof modes)[number];
@@ -78,7 +79,7 @@ beforeAll(async () => {
     client.query = ((...args: Parameters<PoolClient['query']>) => {
       const config = args[0] as unknown as string | { text: string; values?: unknown[] };
       const statement = typeof config === 'string' ? { text: config, values: args[1] as unknown[] } : config;
-      statements.push(statement);
+      statements.push({ ...statement, connection: client });
       if (
         retry &&
         (statement.text.includes('post_change AS') || statement.text.includes('INSERT INTO content.operation'))
@@ -192,6 +193,7 @@ async function fixture() {
   const actor = await access.authenticate(token, context);
   let commandTime = Date.now();
   const commandTimes: Date[] = [];
+  const clockStatements: number[] = [];
   const deps = {
     pool: db.pool,
     access,
@@ -199,6 +201,7 @@ async function fixture() {
     clock: () => {
       const time = new Date(++commandTime);
       commandTimes.push(time);
+      clockStatements.push(statements.length);
       return time;
     },
     workflows: {
@@ -218,36 +221,87 @@ async function fixture() {
     if (mode === 'post') return erasePost(deps, identity, { postId: point.postId, reason: 'fixture' }, ctx);
     return eraseStandaloneMedia(deps, identity, { mediaId: point.mediaId, reason: 'fixture' }, ctx);
   }
-  return { accountId, threadId, postId, upperPostId, mediaId, actor, token, context, commandTimes, execute };
+  return {
+    accountId,
+    threadId,
+    postId,
+    upperPostId,
+    mediaId,
+    actor,
+    token,
+    context,
+    commandTimes,
+    clockStatements,
+    execute,
+  };
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
+type TransactionScope = { connection: PoolClient; begin: number; end: number; command: boolean };
+function settledScopes(): TransactionScope[] {
+  const open = new Map<PoolClient, Omit<TransactionScope, 'end'>>();
+  const scopes: TransactionScope[] = [];
+  for (const [index, { connection, text }] of statements.entries()) {
+    if (text.startsWith('BEGIN')) {
+      expect(open.has(connection), `nested transaction at statement ${index}`).toBe(false);
+      expect(['BEGIN ISOLATION LEVEL SERIALIZABLE', 'BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY']).toContain(text);
+      open.set(connection, { connection, begin: index, command: text === 'BEGIN ISOLATION LEVEL SERIALIZABLE' });
+    } else if (text === 'COMMIT' || text === 'ROLLBACK') {
+      const scope = open.get(connection);
+      expect(scope, `unmatched ${text} at statement ${index}`).toBeDefined();
+      scopes.push({ ...scope!, end: index });
+      open.delete(connection);
+    }
+  }
+  expect(open.size, 'every read and command scope must settle').toBe(0);
+  return scopes.sort((left, right) => left.begin - right.begin);
+}
+
 function assertAttemptAdmission(f: Fixture, expected: number, clockOffset = 0) {
+  const scopes = settledScopes();
+  const commands = scopes.filter(({ command }) => command);
+  const reads = scopes.filter(({ command }) => !command);
   const readIndexes = statements.flatMap(({ text }, index) => (actorRead(text) ? [index] : []));
-  const beginIndexes = statements.flatMap(({ text }, index) =>
-    text.includes('BEGIN ISOLATION LEVEL SERIALIZABLE') ? [index] : [],
-  );
-  const endIndexes = statements.flatMap(({ text }, index) => (text === 'COMMIT' || text === 'ROLLBACK' ? [index] : []));
+  expect(commands).toHaveLength(expected);
   expect(readIndexes).toHaveLength(expected);
-  expect(beginIndexes).toHaveLength(expected);
-  expect(endIndexes).toHaveLength(expected);
   const commandTimes = f.commandTimes.slice(clockOffset);
+  const clockStatements = f.clockStatements.slice(clockOffset);
   expect(commandTimes).toHaveLength(expected);
   expect(new Set(commandTimes.map((time) => time.getTime())).size).toBe(expected);
   for (let attempt = 0; attempt < expected; attempt++) {
+    const { begin, end, connection } = commands[attempt]!;
     const readIndex = readIndexes[attempt]!;
-    const beginIndex = beginIndexes[attempt]!;
-    const endIndex = endIndexes[attempt]!;
+    const clockIndex = clockStatements[attempt]!;
+    const clockScope = reads.find((scope) => scope.begin < clockIndex && clockIndex < scope.end);
+    expect(clockScope, 'each attempt mints time in a settled read scope').toBeDefined();
+    expect(statements[clockIndex]!.connection).toBe(clockScope!.connection);
+    expect(statements[clockIndex]!.text).toContain('transaction_timestamp()');
+    expect(statements[clockIndex]!.values).toContain(commandTimes[attempt]!.toISOString());
+    expect(clockScope!.end).toBeLessThan(readIndex);
     expect(statements[readIndex]!.values).toEqual([actorRoute, f.accountId]);
-    if (attempt > 0) expect(endIndexes[attempt - 1]!).toBeLessThan(readIndex);
-    expect(readIndex).toBeLessThan(beginIndex);
+    if (attempt > 0) expect(commands[attempt - 1]!.end).toBeLessThan(clockScope!.begin);
+    expect(readIndex).toBeLessThan(begin);
     const targetOrReceipt = statements.findIndex(
-      ({ text }, index) =>
-        index > beginIndex && index < endIndex && (text.includes('content.') || text.includes('core.receipt')),
+      ({ text, connection: statementConnection }, index) =>
+        statementConnection === connection &&
+        index > begin &&
+        index < end &&
+        (text.includes('content.') || text.includes('core.receipt')),
     );
     expect(targetOrReceipt).toBeGreaterThan(readIndex);
   }
-  return { count: beginIndexes.length, begins: beginIndexes, ends: endIndexes };
+  for (const { begin, end, connection } of reads)
+    expect(
+      statements
+        .slice(begin + 1, end)
+        .some(
+          (statement) =>
+            statement.connection === connection &&
+            (statement.text.includes('content.') || statement.text.includes('core.receipt')),
+        ),
+      'bounded read scopes do not perform target or receipt work',
+    ).toBe(false);
+  return { count: commands.length, begins: commands.map(({ begin }) => begin), ends: commands.map(({ end }) => end) };
 }
 
 function assertNoEffectDiscoveryPreparation(firstAttempt: { begins: number[]; ends: number[] }) {
@@ -302,6 +356,7 @@ for (const mode of modes) {
         await expect(f.execute(mode, deniedKey)).rejects.toBeInstanceOf(
           mutation === "state='suspended'" ? AuthenticationError : GrantDeniedError,
         );
+        expect(settledScopes().filter(({ command }) => command)).toHaveLength(0);
         expect(statements.filter(({ text }) => actorRead(text))).toHaveLength(1);
         expect(
           statements.some(

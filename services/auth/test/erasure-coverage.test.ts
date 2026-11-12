@@ -74,3 +74,38 @@ test('native deployment EOF is independent of missing original creation/request 
     fixture.close();
   }
 }, 30000);
+
+test('native cached clients and pg method returns retain the current producer lease release', async () => {
+  const fixture = testDatabase();
+  const pool = new Pool({ connectionString: fixture.url, max: 1 });
+  installNativeRoleProducer(pool);
+  try {
+    let previous;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const client = await pool.connect();
+      try {
+        if (previous) expect(client).toBe(previous);
+        previous = client;
+        const notice = () => {};
+        // pg methods return the physical client. A separate facade lets a
+        // chained release bypass the marker reset and leaves its lease live.
+        expect(client.on('notice', notice).removeListener('notice', notice)).toBe(client);
+        await client.query('BEGIN');
+        expect(
+          (
+            await client.query(`SELECT current_setting('auth.native_role_producer') AS role,
+          current_setting('auth.native_phase_producer') AS phase`)
+          ).rows,
+        ).toEqual([{ role: '1', phase: '3' }]);
+        await client.query(attempt === 1 ? 'ROLLBACK' : 'COMMIT');
+      } finally {
+        await client.release();
+      }
+    }
+    // Pool.query uses pg's callback checkout and release path on this same client.
+    expect((await pool.query('SELECT 1 AS settled')).rows).toEqual([{ settled: 1 }]);
+  } finally {
+    await pool.end();
+    fixture.close();
+  }
+}, 30000);
