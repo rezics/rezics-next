@@ -8,8 +8,9 @@ import type {
   OrganizationRequest,
 } from './organization-read';
 
-function withoutCursor<T extends { cursor?: string }>(request: T): Omit<T, 'cursor'> {
-  const { cursor: _, ...address } = request;
+function withoutCursor<T extends OrganizationRequest>(request: T): T {
+  const address = { ...request };
+  delete address.cursor;
   return address;
 }
 
