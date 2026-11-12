@@ -2807,6 +2807,35 @@ export class WorkerStore implements AttemptFence {
         });
     });
   }
+  /** Record the failed-reconciliation witness for a current stopped retry without reopening its attempt. */
+  recordUnreconciledTypingRetry(ref: AttemptRef): void {
+    this.db
+      .transaction(() => {
+        const task = this.task(ref.taskId);
+        const attempt = this.attempt(ref);
+        const retry = this.retryIntent(ref);
+        if (
+          task.currentAttempt !== ref.attempt ||
+          task.state !== 'ready' ||
+          task.brief.kind === 'verification' ||
+          attempt.state !== 'stopped' ||
+          retry?.status !== 'pending'
+        )
+          return;
+        if (this.events(ref.taskId, ref.attempt).some((event) => event.kind === 'typing-retry-unreconciled')) return;
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(
+            ref.taskId,
+            ref.attempt,
+            'typing-retry-unreconciled',
+            new Date().toISOString(),
+            JSON.stringify({ action: 'typing-recover' }),
+          );
+      })
+      .immediate();
+    this.invalidateSnapshot();
+  }
   ownerDecisionEvents(ref: AttemptRef): WorkerEvent[] {
     const events = this.db
       .query(
