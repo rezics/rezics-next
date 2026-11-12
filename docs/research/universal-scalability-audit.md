@@ -23,6 +23,9 @@ full inventory, duplicated registries and raw measurements remain outside the re
 - A logical scale plan does not predict physical capacity. Show how stored state, expanded representations,
   index documents, visibility evidence and hot-key serialization grow; then measure the native bottleneck.
 
+See the [follow-up synthesis](universal-scalability-follow-up.md) for the later evidence, release
+order and unresolved native gates.
+
 ## Initial disposition
 
 | Finding family                                               | Intake decision                                                                                                                                                                                                                                                 |

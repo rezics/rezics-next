@@ -1762,6 +1762,12 @@
       "state": "open"
     },
     {
+      "path": "docs/research/universal-scalability-follow-up.md",
+      "topic": "universal-scalability-audit",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
       "path": "docs/research/universal-search.md",
       "topic": "universal-search",
       "researcher": "unknown",

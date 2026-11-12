@@ -27,6 +27,9 @@ Large jobs make bounded, resumable progress. Bound each step's examined work, ex
 bytes independently of the total logical set. A page limit must not become a lifetime ceiling or require rewriting
 the accumulated result. Partial evidence must not prove absence; an accelerator preserves the exact contract.
 
+Share coverage, progress and byte-limit contracts across owners. Each domain keeps authority over its state,
+transaction, completion and effects. Reuse execution machinery only when those invariants and lifecycle agree.
+
 Decision: use the [pinned universal scalability audit](research/universal-scalability-audit.md) as an owner-review
 queue and evidence index; promote stable requirements into their architecture, product or verification owner, with
 the report linked as evidence.
