@@ -62,14 +62,17 @@ contains one empty paragraph. Empty paragraph content can be omitted.
 
 Decision: Blocks tables have a static per-table expanded-map bound of 65,536
 cells, checked before ProseMirror node construction or `TableMap.get`. For a
-table with `R` rows and total cell column span `S`, `R × S` bounds the dense
-map: the map height is `R`, and its width cannot exceed the sum of every cell's
-column span, including cells active from earlier rows. Safe-integer addition
-and multiplication must prove that bound; otherwise the snapshot is invalid.
-The same bound limits span placement work because each cell can occupy at most
-`R` rows. Ordinary valid merged cells remain valid. The limit is a static
-contract choice, not a hardware maximum or a deployed-capacity measurement;
-validation of the supplied JSON remains proportional to its explicit input.
+table with `R` rows, each row width is the sum of the colspans in that row and
+the colspans of earlier cells whose rowspans still cover it. The dense map
+width is the largest such row width, so `R × max(row width)` is the exact map
+size used by ProseMirror. A bounded row-end ledger computes it without building
+a candidate grid. Safe-integer addition and multiplication must prove the
+bound; otherwise the snapshot is invalid. The same bound limits span placement
+work: the sum of per-row widths is no greater than `R × max(row width)`. This
+admits ordinary rectangular and merged tables whose real maps fit the limit,
+including a 200-row, two-column table. The limit is a static contract choice,
+not a hardware maximum or a deployed-capacity measurement; validation of the
+supplied JSON remains proportional to its explicit input.
 
 Every block, table row, table cell and opaque inline component has a nonempty
 `attrs.id`, unique within its snapshot. IDs remain on moved or edited units;

@@ -55,6 +55,28 @@ function tableNode(children?: DocumentNode[]): DocumentNode {
   };
 }
 
+function wideAuthoredTable(): DocumentNode {
+  return {
+    type: 'table',
+    attrs: { id: 'wide-table', caption: 'Two hundred rows' },
+    content: Array.from({ length: 200 }, (_, rowIndex) => ({
+      type: 'tableRow',
+      attrs: { id: `wide-row-${rowIndex}` },
+      content: Array.from({ length: 2 }, (_, columnIndex) => ({
+        type: 'tableCell',
+        attrs: { id: `wide-cell-${rowIndex}-${columnIndex}` },
+        content: [
+          {
+            type: 'paragraph',
+            attrs: { id: `wide-paragraph-${rowIndex}-${columnIndex}` },
+            content: [{ type: 'text', text: `row ${rowIndex}, column ${columnIndex}` }],
+          },
+        ],
+      })),
+    })),
+  };
+}
+
 function snapshot(content: DocumentNode[]): DocumentSnapshot {
   return { version: documentVersion, profile: 'blocks', doc: { type: 'doc', content } };
 }
@@ -275,6 +297,20 @@ test('published reader preserves exact code, table semantics, clipboard recovery
     expect(button(host, m.wide_document_code_copy())).toBeNull();
     expect(button(host, m.wide_document_code_inspect())).toBeNull();
     expect(network).not.toHaveBeenCalled();
+
+    const imported = admitWriting(JSON.stringify(snapshot([wideAuthoredTable()])), 'json');
+    const widePost = { ...replacement, body: imported.body };
+    await act(async () =>
+      root.render(<ThreadPostReadingBody post={widePost} mentions={{}} locale="en" readerIdentity="viewer-c" />),
+    );
+    const wideTableTrigger = button(host, m.wide_document_table_inspect());
+    expect(wideTableTrigger).not.toBeNull();
+    await act(async () => wideTableTrigger!.click());
+    const wideTableDialog = window.document.body.querySelector<HTMLElement>('[role="dialog"]');
+    const wideTableRegion = wideTableDialog?.querySelector<HTMLElement>('[role="region"]');
+    expect(wideTableDialog?.querySelector('caption')?.textContent).toBe('Two hundred rows');
+    expect(wideTableRegion?.querySelectorAll('tbody > tr')).toHaveLength(200);
+    expect(wideTableRegion?.querySelector('tbody > tr:last-child')?.textContent).toContain('row 199, column 1');
   } finally {
     await act(async () => root.unmount());
     host.remove();

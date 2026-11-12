@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { expect, test } from 'bun:test';
+import { TableMap } from 'prosemirror-tables';
 import {
   checkDocument,
   documentJsonSchema,
@@ -12,6 +13,7 @@ import {
   normalizeDocument,
   parseDocument,
   parseStoredDocument,
+  schemaForProfile,
   serializeDocument,
   withDocumentIds,
   type DocumentNode,
@@ -227,19 +229,64 @@ test('table map preflight bounds expanded grids and retains ordinary merged cell
 
   const merged = table([row('r1', [cell('a', 1, 2), cell('b')]), row('r2', [cell('c')])]);
   expect(checkDocument(snapshot([merged]))).toBe(true);
+  const normalizedMerged = normalizeDocument(snapshot([merged]));
+  expect(parseStoredDocument(serializeDocument(normalizedMerged))).toEqual(normalizedMerged);
+  expect(
+    normalizedMerged.doc.content?.[0]?.content?.map((row) =>
+      row.content?.map((cell) => [cell.attrs?.id, cell.content?.[0]?.attrs?.id]),
+    ),
+  ).toEqual([
+    [
+      ['a', 'a-p'],
+      ['b', 'b-p'],
+    ],
+    [['c', 'c-p']],
+  ]);
 
   const small = table([row('r1', [cell('a', 2)]), row('r2', [cell('b')])]);
   expect(tableMapFitsBudget(small, 6)).toBe(true);
-  expect(tableMapFitsBudget(small, 5)).toBe(false);
+  expect(tableMapFitsBudget(small, 5)).toBe(true);
+  expect(tableMapFitsBudget(small, 3)).toBe(false);
 
   const overflowingSum = table([row('r1', [cell('a', Number.MAX_SAFE_INTEGER), cell('b')])]);
   expect(tableMapFitsBudget(overflowingSum, Number.MAX_SAFE_INTEGER)).toBe(false);
-  const halfSafeInteger = Math.floor(Number.MAX_SAFE_INTEGER / 2);
+  const halfSafeInteger = Math.floor(Number.MAX_SAFE_INTEGER / 2) + 1;
   const overflowingProduct = table([row('r1', [cell('a', halfSafeInteger)]), row('r2', [cell('b', halfSafeInteger)])]);
   expect(tableMapFitsBudget(overflowingProduct, Number.MAX_SAFE_INTEGER)).toBe(false);
 
+  const atCap = table(Array.from({ length: 256 }, (_, index) => row(`cap-row-${index}`, [cell(`cap-${index}`, 256)])));
+  expect(tableMapFitsBudget(atCap, DOCUMENT_TABLE_MAP_CELL_BUDGET)).toBe(true);
+
+  const outOfTableRowspan = table([row('r1', [{ ...cell('a'), attrs: { id: 'a', rowspan: 2 } }])]);
+  expect(tableMapFitsBudget(outOfTableRowspan, DOCUMENT_TABLE_MAP_CELL_BUDGET)).toBe(false);
+  expect(checkDocument(snapshot([outOfTableRowspan]))).toBe(false);
+
   const beyondProfileBudget = table([row('r1', [cell('wide', DOCUMENT_TABLE_MAP_CELL_BUDGET + 1)])]);
   expect(checkDocument(snapshot([beyondProfileBudget]))).toBe(false);
+});
+
+test('200 by 2 authored table round-trips within the real map budget', () => {
+  const rows = Array.from({ length: 200 }, (_, rowIndex) => ({
+    type: 'tableRow',
+    attrs: { id: `row-${rowIndex}` },
+    content: Array.from({ length: 2 }, (_, columnIndex) => ({
+      type: 'tableCell',
+      attrs: { id: `cell-${rowIndex}-${columnIndex}` },
+      content: [paragraph(`paragraph-${rowIndex}-${columnIndex}`, `row ${rowIndex}, column ${columnIndex}`)],
+    })),
+  })) satisfies DocumentNode[];
+  const authored = snapshot([{ type: 'table', attrs: { id: 'wide-table' }, content: rows }]);
+
+  expect(parseDocument(authored)).toBe(authored);
+  const normalized = normalizeDocument(authored);
+  const roundTrip = parseStoredDocument(serializeDocument(normalized));
+  expect(roundTrip).toEqual(normalized);
+
+  const tableNode = schemaForProfile('blocks').nodeFromJSON(normalized.doc.content![0]);
+  const map = TableMap.get(tableNode);
+  expect(map.map).toHaveLength(400);
+  expect(map.problems).toBeNull();
+  expect(roundTrip?.doc.content?.[0]?.content?.[199]?.content?.[1]?.attrs?.id).toBe('cell-199-1');
 });
 
 test('normalization merges adjacent matching text and serialization is key-order independent', () => {
