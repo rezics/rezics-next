@@ -472,7 +472,9 @@ test.each(['nested', 'moved'] as const)(
     expect(result.page.address).toEqual(chapter);
     const exact = await api.resolve(ids.catalogue, ids.first, { kind: 'publication', revisionId: ids.release });
     if (exact.state !== 'ready' || !exact.value.document) throw new Error('Expected exact bytes');
-    expect(result.page.body.document).toEqual(JSON.parse(atob(exact.value.document.canonicalBytes)));
+    expect(result.page.body.document).toEqual(
+      JSON.parse(Buffer.from(exact.value.document.canonicalBytes, 'base64').toString('utf8')),
+    );
     expect(
       await decodeHostedBookDocument(
         { ...exact.value, document: { ...exact.value.document, canonicalBytes: btoa('{}') } },
