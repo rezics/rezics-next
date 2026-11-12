@@ -4,10 +4,15 @@ import { createShelfActiveReader } from '../../src/library/shelf-active.ts';
 import type { ShelfSession } from '../../src/library/shelf-contract.ts';
 import { readSession } from '../../src/library/progress-store.ts';
 import { newId } from '../../src/route/route.ts';
+import { withReadTransaction } from '../../src/semantic/read.ts';
 import { capture, checkGrowth, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 let db: GrowthDatabase;
 const reader = createShelfActiveReader();
+function backendPid(client: PoolClient): number {
+  return (client as PoolClient & { processID: number }).processID;
+}
+
 beforeAll(async () => {
   db = await openGrowthDatabase();
 });
@@ -178,7 +183,7 @@ test('active probes stay bounded behind private session history', async () => {
   async function read(limit: number, scale: number, repetition: number, stage: string) {
     phase('read.acquire.begin', { scale, repetition, stage, page: limit });
     const client = await db.pool.connect();
-    const backend = client.processID;
+    const backend = backendPid(client);
     const started = performance.now();
     phase('read.connection', { scale, repetition, stage, page: limit, backend });
     let transactionOpen = false;
@@ -245,7 +250,7 @@ test('active probes stay bounded behind private session history', async () => {
       const expectedRows = (scale - previous) * subjects.length * 3;
       phase('seed.acquire.begin', { scale, previous, expectedRows });
       const client = await database.admin.connect();
-      const backend = client.processID;
+      const backend = backendPid(client);
       const started = performance.now();
       let transactionOpen = false;
       let releaseError: Error | undefined;
