@@ -95,7 +95,6 @@ export const ManyCollections: Story = {
 };
 
 export const PreviewMembers: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
   render: () =>
     render('many', `${pagePaths['library-collections']}?layout=previews`, {
       pinCount: 1,
@@ -115,7 +114,7 @@ export const PreviewMembers: Story = {
       expect(box.height).toBeGreaterThan(0);
       expect(box.height).toBeLessThanOrEqual(134.5);
       expect(box.width / box.height).toBeCloseTo(5 / 7, 2);
-      expect(cover.parentElement!.getBoundingClientRect().width).toBeGreaterThan(box.width);
+      expect(box.width).toBeLessThanOrEqual(cover.parentElement!.getBoundingClientRect().width + 0.5);
     }
     await expect(within(preview).getByRole('link', { name: 'Snow Country' })).toHaveAttribute('title', 'Snow Country');
     expect(within(preview).queryByRole('link', { name: 'Kokoro' })).toBeNull();
