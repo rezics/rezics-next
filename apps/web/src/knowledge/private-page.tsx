@@ -275,7 +275,7 @@ function FailureNotice({ state, locale, retry }: { state: string; locale: string
   return (
     <section
       role={isUnavailable ? 'status' : 'alert'}
-      className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 text-foreground sm:p-6"
+      className="min-w-0 space-y-4 border-t border-border pt-4 text-foreground"
       aria-live="polite"
     >
       <p className="min-w-0 break-words">{statusText(state, locale)}</p>
@@ -302,7 +302,7 @@ function AccessNotice({
   const options = localeOptions(locale);
   if (state === 'signed-out')
     return (
-      <section className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 text-foreground sm:p-6">
+      <section className="min-w-0 space-y-4 border-t border-border pt-4 text-foreground">
         <p role="status" className="break-words">
           {m.knowledge_private_signed_out({}, options)}
         </p>
@@ -334,17 +334,7 @@ function IdentityValue({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PrivatePageFrame({
-  title,
-  kind,
-  locale,
-  children,
-}: {
-  title: string;
-  kind: string;
-  locale: string;
-  children: React.ReactNode;
-}) {
+function PrivatePageFrame({ title, locale, children }: { title: string; locale: string; children: React.ReactNode }) {
   const options = localeOptions(locale);
   return (
     <main
@@ -352,7 +342,6 @@ function PrivatePageFrame({
       data-private-knowledge-visit
     >
       <header className="min-w-0 space-y-3">
-        <p className="text-sm font-medium text-muted-foreground">{kind}</p>
         <PageHeading>{title}</PageHeading>
         <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
           {m.knowledge_private_intro({}, options)}
@@ -884,11 +873,7 @@ function PrivateKnowledgeEditor({
 
   if (retired || preparationState === 'retired' || readState === 'retired')
     return (
-      <PrivatePageFrame
-        title={m.knowledge_private_heading({}, options)}
-        kind={m.knowledge_private_heading({}, options)}
-        locale={locale}
-      >
+      <PrivatePageFrame title={m.knowledge_private_heading({}, options)} locale={locale}>
         {retirementState === 'signed-out' ? (
           <AccessNotice state="signed-out" locale={locale} returnPath={returnPath} retry={() => undefined} />
         ) : (
@@ -908,11 +893,7 @@ function PrivateKnowledgeEditor({
     const documentFailure = !['idle', 'pending', 'acknowledged'].includes(documentCreateState);
     const documentFrozen = !!documentIntent;
     return (
-      <PrivatePageFrame
-        title={m.knowledge_private_heading({}, options)}
-        kind={m.knowledge_private_create_kind({}, options)}
-        locale={locale}
-      >
+      <PrivatePageFrame title={m.knowledge_private_create_kind({}, options)} locale={locale}>
         {preparationState !== 'ready' || !binding ? (
           <FailureNotice
             state={preparationState}
@@ -978,14 +959,14 @@ function PrivateKnowledgeEditor({
                 subjectIds={[address.subjectId]}
               />
               <section
-                className="min-w-0 space-y-3 rounded-lg border border-border/70 p-3 sm:p-4"
+                className="min-w-0 space-y-3 border-t border-border pt-5"
                 aria-labelledby="knowledge-private-document-review"
               >
                 <h3 id="knowledge-private-document-review" className="font-medium">
                   {m.knowledge_private_review({}, options)}
                 </h3>
                 <ReviewMetadata draft={documentDraft} subjectIds={[address.subjectId]} locale={locale} />
-                <div className="min-w-0 rounded-lg bg-muted/40 p-3">
+                <div className="min-w-0 border-t border-border pt-3">
                   <DocumentBody document={documentDraft.body} locale={locale} />
                 </div>
               </section>
@@ -1041,11 +1022,7 @@ function PrivateKnowledgeEditor({
   if (!canRead || readState !== 'ready' || !head || !draft || !binding) {
     const state = !canRead ? (access.read === 'unknown' ? 'preparing' : access.read) : readState;
     return (
-      <PrivatePageFrame
-        title={m.knowledge_private_heading({}, options)}
-        kind={m.knowledge_private_resume_kind({}, options)}
-        locale={locale}
-      >
+      <PrivatePageFrame title={m.knowledge_private_heading({}, options)} locale={locale}>
         <FailureNotice
           state={state}
           locale={locale}
@@ -1067,7 +1044,7 @@ function PrivateKnowledgeEditor({
   const showRevisionFailure = !['idle', 'pending', 'acknowledged'].includes(revisionState);
   const formLocked = !!revisionIntent || revisionBusy;
   return (
-    <PrivatePageFrame title={head.title} kind={m.knowledge_private_resume_kind({}, options)} locale={locale}>
+    <PrivatePageFrame title={head.title} locale={locale}>
       <div className="min-w-0 space-y-6 rounded-xl border border-border bg-card p-4 sm:p-6">
         <p className="text-sm text-muted-foreground">{m.knowledge_private_current_head({}, options)}</p>
         <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
@@ -1086,7 +1063,7 @@ function PrivateKnowledgeEditor({
           />
           {access.revise !== 'available' ? <FailureNotice state={access.revise} locale={locale} /> : null}
           {requiresHeadReview ? (
-            <p role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm leading-relaxed">
+            <p role="status" className="border-t border-border pt-3 text-sm leading-relaxed">
               {m.knowledge_private_draft_retained({}, options)}
             </p>
           ) : null}
@@ -1110,7 +1087,7 @@ function PrivateKnowledgeEditor({
           ) : null}
           {requiresHeadReview && reviewHead ? (
             <section
-              className="min-w-0 space-y-4 rounded-lg border border-border p-3 sm:p-4"
+              className="min-w-0 space-y-4 border-t border-border pt-5"
               aria-labelledby="knowledge-private-head-review"
             >
               <h2 id="knowledge-private-head-review" className="text-base font-semibold">
@@ -1358,11 +1335,7 @@ export function KnowledgePrivatePage({
           operations={operations}
         />
       ) : (
-        <PrivatePageFrame
-          title={m.knowledge_private_heading({}, localeOptions(locale))}
-          kind={m.knowledge_private_heading({}, localeOptions(locale))}
-          locale={locale}
-        >
+        <PrivatePageFrame title={m.knowledge_private_heading({}, localeOptions(locale))} locale={locale}>
           <AccessNotice state={access.state} locale={locale} returnPath={returnPath} retry={retrySession} />
         </PrivatePageFrame>
       )}
@@ -1388,11 +1361,7 @@ export function KnowledgePrivateAccessEntry({
       : `/knowledge/notebooks/${encodeURIComponent(address.notebookId)}/documents/${encodeURIComponent(address.documentId)}`;
   if (access.state !== 'ready')
     return (
-      <PrivatePageFrame
-        title={m.knowledge_private_heading({}, localeOptions(locale))}
-        kind={m.knowledge_private_heading({}, localeOptions(locale))}
-        locale={locale}
-      >
+      <PrivatePageFrame title={m.knowledge_private_heading({}, localeOptions(locale))} locale={locale}>
         <AccessNotice state={access.state} locale={locale} returnPath={returnPath} retry={() => undefined} />
       </PrivatePageFrame>
     );
