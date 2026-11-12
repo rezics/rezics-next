@@ -228,7 +228,7 @@ export async function nativeFixture(
       return bindings;
     },
     get authPool() {
-      return authPool;
+      return authPool!;
     },
     get proofs() {
       return proofs;
