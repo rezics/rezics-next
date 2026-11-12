@@ -869,7 +869,7 @@ function mountKernel(dependencies: KernelDependencies): Kernel {
             clock,
             access: resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
           });
-          const { zone } = await runtime.reads.read(actor, id, false, deadline);
+          const { zone } = await runtime.reads.metadata(actor, id, deadline);
           const label = pickZoneName(zone, zone.primaryLanguage ?? '').text;
           return label ? { id: zone.id, revision: zone.revision, visibility: zone.visibility, label } : null;
         } catch (error) {

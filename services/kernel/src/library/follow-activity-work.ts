@@ -128,7 +128,8 @@ export function registerFollowActivityWork(context: WorkContext): void {
         const { targetId } = event.data as { targetId: string };
         const source = await feedEventSource(context.pool, event, accountId, workStepDeadline());
         const follow = await nativeFollow(accountId, targetId);
-        if (!follow) return;
+        // Zones expose subscription destinations without an activity inventory.
+        if (!follow || follow.targetType === 'zone') return;
         await enqueue({
           accountId,
           target: { type: follow.targetType, id: targetId },

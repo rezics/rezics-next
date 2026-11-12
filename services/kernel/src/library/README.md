@@ -3090,6 +3090,7 @@ Zone replacements use the existing source hook, owner outgoing counter, negative
 terminal-follower cleanup. Their internal target total is initialized at its first native delivery, so existing
 partition bootstrap coverage is unchanged. The private target-count HTTP vocabulary remains Subject,
 Collection and Space; Zones add no public counts, recommendation or ranking projection.
+Zone follows do not enqueue activity backfill; the existing activity inventory remains Subject, Collection and Space.
 
 Focused deferred acceptance: native publish/follow/replay, selected-kind and mixed FULL pages with bounded
 cursors, current label changes, revoked/private/withheld/deleted concealment, unfollow after read loss,
