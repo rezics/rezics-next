@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import { createElement } from 'react';
-import { DefinitionReadError, fetchGuideRelease } from './definition-guide';
+import { pageDataBinding } from './page-data-binding';
 import { mangaObservedOrigin } from './manga-public-visit';
 import { conceptPublicReturnHref } from './source-concept-explorer/public-visit';
 import { WorkTagReading } from './work-tag-reading/entry';
@@ -18,25 +18,21 @@ import {
   gameClassificationReturnStorageKey,
 } from './game-current-visit-descriptor';
 import { zoneVisitReturn } from '../../zones/visit';
-import { supportsReleasedWorkNames } from './work-names/model';
-import { gameGroups, gameType } from './game-profile';
-import { gameReaderEntry } from './game-reader/model';
 import { storyArcPublicOrigin } from './story-arc-public-visit';
-import { readTermsPageAuthority } from './subject-terms-request';
-import { albumCurrentVisitSourceAddress, createAlbumCurrentVisitLink } from './album-current-visit-model';
 import {
   parseRecipeCurrentReturn,
   recipeCorrectionHref,
   recipeCurrentReturnState,
   recipePublicSubjectHref,
 } from './recipe-current-visit';
+import { albumCurrentVisitSourceAddress, createAlbumCurrentVisitLink } from './album-current-visit-model';
 import type { SemanticPageComponent, SemanticRenderPort } from '../pages/semantic-render-port';
 
 function component<P extends object>(value: ComponentType<P>): SemanticPageComponent<P> {
   return (props) => createElement(value, props as P);
 }
 
-/** Concrete catalogue implementations installed by the Web composition root. */
+/** Concrete catalogue implementations installed by the Subject page's React composition boundary. */
 export const pageRenderBinding: SemanticRenderPort = {
   components: {
     workTagReading: component(WorkTagReading),
@@ -44,21 +40,14 @@ export const pageRenderBinding: SemanticRenderPort = {
     albumCurrentVisitReturn: component(AlbumCurrentVisitReturn),
     characterAssociationBridge: component(CharacterAssociationBridge),
   },
-  definitions: {
-    readGuideRelease: fetchGuideRelease,
-    isGuideReadError: (error) => error instanceof DefinitionReadError,
-  },
+  definitions: pageDataBinding.definitions,
   frames: {
     mangaObservedOrigin,
     conceptPublicReturnHref,
   },
   subjects: {
-    supportsReleasedWorkNames,
-    gameReaderEntry,
-    gameGroups,
-    gameType,
+    ...pageDataBinding.subjects,
     storyArcPublicOrigin,
-    readTermsPageAuthority,
     parseRecipeCurrentReturn,
     recipeCurrentReturnState,
     recipePublicSubjectHref,

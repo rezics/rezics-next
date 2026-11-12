@@ -27,6 +27,15 @@ plugin-hook entry/exit, and the actual listener event. It omits environment valu
 installed before message preparation so its owned compiler can settle; each Vite or preparation child uses the
 existing process-tree owner, forwarding interruption, escalating ignored termination and awaiting descendants.
 
+Decision: interactive Web uses the installed TanStack Start route splitter with `codeSplittingOptions` for loaders and
+page components; route-safe Subject data helpers stay outside React view modules, and the Semantic renderer installs
+only from the lazy Subject component. The root shell imports Inbox and Settings adapters from their view-free leaves.
+Ordinary serve disables optimizer discovery and prebundles the pinned shell graph. The client resolves Base UI's
+CommonJS `use-sync-external-store/shim` to React's `useSyncExternalStore` export, and that alias is part of the shared
+cache identity.
+The authored cold `/en` gate asserts hydration, Home mount and shell interaction; browser acceptance remains unverified
+until the deferred owner run.
+
 Causal record: retained boot `1794067367118-boot.log` reached Vite SSR dependency re-optimization and logged
 `bundling dependencies...` without completion. Later boot `1794074596302-boot.log` recorded the second message-readiness
 check from Vite's localization config hook, but omitted the Vite child identity and next hook, so its exact pending
@@ -258,6 +267,7 @@ live ESM TypeBox stubs, so workerd never resolves `typebox/type` as `elysia/dist
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.
 Subject page reads and public collections work without JavaScript; Library writes use JavaScript and stay disabled until the page hydrates.
+
 The settings page at `/settings` presents one category at a time using the existing hashes: `reading`, `display`,
 `notifications`, `privacy`, `verification`, `profile`, `public-activity` and `account`. Reading is the default, including
 unknown or unavailable hashes; a managed-account query without a hash opens Account. Explicit category hashes,

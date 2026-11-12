@@ -43,7 +43,7 @@ const canonicalIdentifiers = createServerFn({ method: 'GET', strict: false })
     let origin = visit.origin;
     if (origin?.kind === 'realm') {
       const { kernelClient: pageClient } = await import('../../kernel/client');
-      const { loadSubjectPage, PageReadError } = await import('../../features/pages/subject');
+      const { loadSubjectPage, PageReadError } = await import('../../features/pages/subject-page-load');
       try {
         const loaded = await loadSubjectPage(pageClient(data.locale), canonical.value.id, undefined, data.locale, {
           realm: origin.realm,

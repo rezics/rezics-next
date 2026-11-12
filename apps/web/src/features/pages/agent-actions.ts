@@ -6,7 +6,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import { relationLabels } from '../../subject/definitions';
 import { loadPublicAccountJourney, type AccountView } from '../../accounts/public-profile/page-read';
-import { pageRelationProperties } from './subject';
+import { pageRelationProperties } from './subject-page-summary';
 
 /** The page read of one agent, with the tab bar the overview's previews decide. */
 export const readAgentPage = createServerFn({ method: 'GET', strict: false })

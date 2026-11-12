@@ -7,9 +7,10 @@ import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@ta
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
-import { pageRelationProperties, subjectPageType } from '../../features/pages/subject';
+import { pageRelationProperties, subjectPageType } from '../../features/pages/subject-page-summary';
 import { WorkFranchiseReading } from '../../features/pages/showcase-work';
-import { SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/pages/subject-frame';
+import { SubjectFrame, SubjectViewPage } from '../../features/pages/subject-frame';
+import { subjectFrame } from '../../features/pages/subject-frame-model';
 import { SubjectLibraryLeaf } from '../../features/pages/subject-library-leaf';
 import { subjectTabs } from '../../features/pages/views';
 import {

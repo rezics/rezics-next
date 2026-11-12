@@ -372,9 +372,14 @@ test('a walk stack compiles the visited client page on demand instead of crawlin
     expect(webViteClientOptimizeDepsFor({ REZICS_WALK_STACK_SLOT: '2' })).toEqual(webViteWalkClientOptimizeDeps);
     expect(webViteWalkClientOptimizeDeps.holdUntilCrawlEnd).toBe(false);
     expect(webViteWalkClientOptimizeDeps.entries).toEqual([]);
+    expect(webViteWalkClientOptimizeDeps.noDiscovery).toBe(true);
+    expect(webViteWalkClientOptimizeDeps.include).toContain('@base-ui/react/*');
+    expect(webViteWalkClientOptimizeDeps.include).toContain('lucide-react');
     const config = await resolveWebViteConfig({ command: 'serve', mode: 'development' }, appRoot);
+    expect(config.optimizeDeps?.noDiscovery).toBe(true);
     expect(config.optimizeDeps?.holdUntilCrawlEnd).toBe(false);
     expect(config.optimizeDeps?.entries).toEqual([]);
+    expect(config.optimizeDeps?.include).toContain('@base-ui/react/*');
     expect(config.cacheDir).toBe(resolve(workspaceRoot, '.temp/web-vite', '2'));
   } finally {
     if (previousSlot === undefined) delete process.env.REZICS_WALK_STACK_SLOT;

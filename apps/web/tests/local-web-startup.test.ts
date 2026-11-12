@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { resolve } from 'node:path';
 import { ownBunProcess } from './support/server-custody.ts';
+import { observeColdHomeStartup } from '../scripts/web-startup-evidence.ts';
 
 test('ordinary Web starts the real listener with an empty Vite cache and settles its owned process tree', async () => {
   const app = resolve(import.meta.dir, '..');
@@ -51,7 +52,17 @@ test('ordinary Web starts the real listener with an empty Vite cache and settles
     const response = await fetch(`http://127.0.0.1:${port}/@vite/client`, { signal: AbortSignal.timeout(10_000) });
     expect(response.status, owner.diagnostics()).toBe(200);
     expect(await response.text()).toContain('WebSocket');
-    console.error(`web: cold listener ready elapsedMs=${Math.round(performance.now() - started)}`);
+    const evidence = await observeColdHomeStartup(`http://127.0.0.1:${port}`);
+    console.error(`web: cold /en first-mount ${JSON.stringify(evidence)}`);
+    expect(evidence.documentStatus, JSON.stringify(evidence)).toBe(200);
+    expect(evidence.documentPath, JSON.stringify(evidence)).toBe('/en');
+    expect(evidence.hydrated, JSON.stringify(evidence)).toBe(true);
+    expect(evidence.homePresent, JSON.stringify(evidence)).toBe(true);
+    expect(evidence.homeMounted, JSON.stringify(evidence)).toBe(true);
+    expect(evidence.shellControlWorked, JSON.stringify(evidence)).toBe(true);
+    expect(evidence.semanticBindingRequested, JSON.stringify(evidence)).toBe(false);
+    expect(evidence.clientErrors, JSON.stringify(evidence)).toBe(0);
+    console.error(`web: cold listener and /en settled elapsedMs=${Math.round(performance.now() - started)}`);
   } finally {
     await owner.close();
     expect(owner.settled).toBe(true);

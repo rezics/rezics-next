@@ -6,8 +6,9 @@ import { getRequest, setResponseHeader, setResponseStatus } from '@tanstack/reac
 import { env } from 'cloudflare:workers';
 import type { ReadCredentialMode } from '../kernel/credential';
 import type { SessionEnv } from '../session/client';
-import { loadSubjectPage, type SubjectPageData } from '../features/pages/subject';
-import { loadViewPages } from '../features/pages/subject-frame';
+import { loadSubjectPage } from '../features/pages/subject-page-load';
+import type { SubjectPageData } from '../features/pages/page-model';
+import { loadViewPages } from '../features/pages/subject-frame-model';
 import { locales } from '../paraglide/runtime.js';
 import type { ZonePageQuery, ZonePageReadProgress, ZonePageRequest, ZonePageResponse } from './appearance.ts';
 import { isolatePublicZonePage, receiveZonePage, type ReceivedZonePage } from './receive.ts';
@@ -50,7 +51,7 @@ export type ZonePageRouteOutcome =
         page: SubjectPageData;
         overview: SubjectPageData;
         view: View;
-        frame?: import('../features/pages/subject-frame').SubjectFrameData;
+        frame?: import('../features/pages/subject-frame-model').SubjectFrameData;
         tabs?: readonly import('../features/pages/views').ViewTab[];
         type?: { label?: string; ratio?: import('@rezics/ui/cover').CoverRatio };
         relations?: Record<string, import('../subject/relations').RelationDefinition>;
@@ -257,8 +258,8 @@ async function readForRequest(input: ZonePageInput, followContinuations: boolean
   });
   if (outcome.kind === 'page' && outcome.common) {
     const { page, overview, view } = outcome.common;
-    const { pageRelationProperties, subjectPageType } = await import('../features/pages/subject');
-    const { subjectFrame } = await import('../features/pages/subject-frame');
+    const { pageRelationProperties, subjectPageType } = await import('../features/pages/subject-page-summary');
+    const { subjectFrame } = await import('../features/pages/subject-frame-model');
     const { subjectTabs } = await import('../features/pages/views');
     const { relationLabels, typeFrame } = await import('../subject/definitions');
     const type = subjectPageType(overview);

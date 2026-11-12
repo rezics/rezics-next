@@ -222,3 +222,12 @@ export type SemanticRenderPort = {
     consumeGameClassificationReturn(storage: Pick<Storage, 'getItem' | 'removeItem'>, address: string): boolean;
   };
 };
+
+/** The loader-only slice, which must not import the Subject page's React components. */
+export type SemanticDataPort = {
+  definitions: SemanticRenderPort['definitions'];
+  subjects: Pick<
+    SemanticRenderPort['subjects'],
+    'supportsReleasedWorkNames' | 'gameReaderEntry' | 'gameGroups' | 'gameType' | 'readTermsPageAuthority'
+  >;
+};

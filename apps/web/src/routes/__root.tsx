@@ -37,13 +37,9 @@ import { LibraryApplicationBoundary } from '../session/library-application';
 import { PageVisitBinding } from '../subject/page-visit-binding';
 import { RecentSearchBinding } from '../session/recent-search-binding';
 import { OwnVotesReturnProvider } from '../ratings/own-votes/return';
-import { pageRenderBinding } from '../features/catalogue/page-render-binding';
-import { installSemanticRenderPort } from '../features/pages/subject-page-application';
 import { InboxAmbientProvider } from '../inbox/adapters/ambient-view.tsx';
 import { SettingsAmbientProvider } from '../settings/adapters/ambient-view.tsx';
 import { createPerformanceAmbient } from '../session/performance-ambient';
-
-installSemanticRenderPort(pageRenderBinding);
 
 const performanceAmbient = createPerformanceAmbient();
 

@@ -77,6 +77,20 @@ test('the installed Elysia graph fails first on typebox/type and resolves it thr
   );
 });
 
+test('walk optimizer inputs and the browser shim mapping are part of the shared cache identity', () => {
+  expect(webViteOptimizerIdentity.walkClient.noDiscovery).toBe(true);
+  expect(webViteOptimizerIdentity.walkClient.include).toContain('@base-ui/react/*');
+  expect(webViteOptimizerIdentity.clientResolveAliases).toHaveLength(1);
+  expect(webViteOptimizerIdentity.clientResolveAliases[0]?.replacement).toBe('react');
+  const withoutShimAlias = {
+    ...webViteOptimizerIdentity,
+    clientResolveAliases: [],
+  };
+  expect(hashViteDepCacheIdentity({ lockBytes: 'lock', optimizer: webViteOptimizerIdentity })).not.toBe(
+    hashViteDepCacheIdentity({ lockBytes: 'lock', optimizer: withoutShimAlias }),
+  );
+});
+
 test('a lock hash reuses one published cache and a changed lock builds its own directory', async () => {
   const home = cacheHome();
   const workspaceRoot = join(temporary, 'workspace');

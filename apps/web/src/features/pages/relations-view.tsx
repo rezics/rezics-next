@@ -9,7 +9,7 @@ import { CoverList } from './cover-list';
 import { GROUP_TITLES, holderItems, yearText, type Item, type RowValue } from './overview';
 import { formatCount } from '../count';
 import { ViewHeading } from './subject-frame';
-import { loadSubjectPage } from './subject';
+import { loadSubjectPage } from './subject-page-load';
 import { subjectViewHref, type SubjectHrefInput } from '../../subject/subject-href';
 import { fieldLabel } from './shared';
 

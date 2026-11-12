@@ -12,7 +12,7 @@ import { CharacterRelationshipsEntry } from '../catalogue/character-relationship
 import { CharacterRelationshipsGroups } from './character-relationships';
 import type { CharacterRelationshipsRead } from '../catalogue/character-relationships/reading';
 import { ClassificationAssessmentSection } from './subject-classification-assessment-view';
-import { renderWorkTagReading } from './subject-page-application';
+import { renderWorkTagReading } from './subject-page-composition';
 import type { WorkTagReadingProps } from './semantic-render-port';
 import type { ClassificationAssessmentHandlers } from './subject-classification-assessment-view';
 import type { ClassificationAssessmentSession } from './subject-classification-assessment-controller';

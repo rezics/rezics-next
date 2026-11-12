@@ -5,7 +5,8 @@ import { readPageAuthors, type PageAuthors } from '../../identity/read';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../../kernel/platform-closed';
 import type { ReactionKind } from '../../threads/reaction-request';
 import { GLOBAL } from './subject-ratings';
-import { pageContext, type SubjectPageData, type SubjectPageLoad } from './subject';
+import { pageContext, type SubjectPageData } from './page-model';
+import type { SubjectPageLoad } from './subject-page-load';
 import { assertSubjectPageReadActive, type SubjectPageReadLifetime } from './subject-page-read-lifetime';
 import { isRecord } from './shared';
 import {

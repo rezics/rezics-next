@@ -95,7 +95,7 @@ test('mounted route carries the learned epoch into body reads and a late readbac
     },
   };
   try {
-    const { DraftsRoute } = await import('../src/routes/drafts');
+    const { DraftsRoute } = await import('../src/threads/drafts-route');
     await fixture.renderComponent(
       createElement(DraftsRoute, { reader, localWritingReader, transport }),
     );
@@ -153,7 +153,7 @@ test('signed-in null-CSRF route still lists and inspects but does not mount writ
   };
   try {
     fixture.client.setQueryData(['session'], { state: 'signed-in', subject: accountId, csrfToken: null });
-    const { DraftsRoute } = await import('../src/routes/drafts');
+    const { DraftsRoute } = await import('../src/threads/drafts-route');
     await fixture.renderComponent(createElement(DraftsRoute, { reader, localWritingReader, transport }));
     expect(listed).toEqual([accountId]);
     await fixture.click('Inspect draft privately');

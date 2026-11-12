@@ -23,7 +23,8 @@ import { CoverList } from './cover-list';
 import { SpoilerGate } from './values';
 import { OverviewContext, holderItems, statementItems } from './overview';
 import { formatCount } from '../count';
-import { subjectBody, type SubjectPageData } from './subject';
+import { subjectBody } from './subject-read';
+import type { SubjectPageData } from './page-model';
 import {
   connectionGroups,
   connectionCreditVisit,

@@ -19,6 +19,7 @@ import {
   alignViteLockfileHashes,
   bindViteDepCacheAlign,
   elysiaTypeboxLiveModuleCode,
+  webViteClientShimAliases,
   webViteClientOptimizeDepsFor,
   webViteTypeboxWorkerGraph,
   webViteWarmSsrEnvName,
@@ -417,10 +418,13 @@ export default defineConfig((context) => {
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
     build: { assetsInlineLimit: 0 },
     optimizeDeps: {
-      // Interactive serve discovers client dependencies as pages are visited so a route catalogue crawl does not
-      // hold Vite's listener. The test cache still prebuilds its full optimizer identity before checks start.
+      // Keep client optimization bounded: Vite's cold scanner follows generated route chunks and walks every reader,
+      // swapping dependency hashes while the first page is loading. Known optimizer dependencies are explicit;
+      // unoptimized ESM modules remain available when a later route is visited.
+      noDiscovery: testRuntime ? false : clientOptimizeDeps.noDiscovery,
       entries: testRuntime ? ['src/server.ts', 'src/session/routes.ts'] : [...clientOptimizeDeps.entries],
       holdUntilCrawlEnd: testRuntime ? false : clientOptimizeDeps.holdUntilCrawlEnd,
+      include: testRuntime ? [] : [...clientOptimizeDeps.include],
       exclude: [...clientOptimizeDeps.exclude],
     },
     ssr: {
@@ -522,8 +526,8 @@ export default defineConfig((context) => {
         : [paraglideVitePlugin({ project: './project.inlang', outputStructure: 'message-modules' })]),
       messageImports(appRoot),
       generatedMessageSourceMaps(appRoot),
-      // Export inspection imports every route reference before Cloudflare opens the listener. Keep each route's
-      // feature reads with its visited loader instead of loading every feature while discovering Worker exports.
+      // The generated client route tree references every route. Split loaders and page components so their feature
+      // graphs load with the visited route instead of blocking the root shell.
       tanstackStart({
         router: {
           codeSplittingOptions: {
@@ -559,7 +563,9 @@ export default defineConfig((context) => {
           };
         },
         configEnvironment(name: string) {
-          if (name === 'client') return;
+          if (name === 'client') {
+            return { resolve: { alias: [...workerResolveAliases, ...webViteClientShimAliases] } };
+          }
           return {
             resolve: { alias: [...workerResolveAliases] },
             optimizeDeps: { ...workerSsrOptimizeDeps, entries: [] },
@@ -584,6 +590,8 @@ export default defineConfig((context) => {
                 ...client.optimizeDeps,
                 entries: [],
                 holdUntilCrawlEnd: false,
+                noDiscovery: clientOptimizeDeps.noDiscovery,
+                include: [...clientOptimizeDeps.include],
               };
             }
           }

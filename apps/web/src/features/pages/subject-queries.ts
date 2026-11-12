@@ -11,7 +11,9 @@ import type { SessionEnv } from '../../session/client';
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { typeFrame as TypeFrame } from '../../subject/definitions';
 import { validatePageBoard, validatePageRealm, validatePageNode, validateViewCursor } from './view-cursor';
-import { loadSubjectPage, PageReadError, subjectRead, type SubjectPageData } from './subject';
+import { loadSubjectPage, PageReadError } from './subject-page-load';
+import { subjectRead } from './subject-read';
+import type { SubjectPageData } from './page-model';
 import { loadContextSubject } from './context-subject';
 import {
   readRatings,
@@ -27,7 +29,7 @@ import { projectShareCardPage } from '../../media/share-card-page';
 import { locales } from '../../paraglide/runtime.js';
 import { assertSubjectPageReadActive } from './subject-page-read-lifetime';
 import type { KernelClient } from '@rezics/client';
-import { includeReleasedWorkCatalogue } from './subject-page-application';
+import { includeReleasedWorkCatalogue } from './subject-page-composition';
 
 export const subjectKernelClient = createServerOnlyFn(
   async (locale: string, realm?: string, expectedReader?: string | null, signal?: AbortSignal, board?: string) => {
@@ -210,7 +212,7 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
     capturePageRead(async () => {
       const signal = getRequest().signal;
       setResponseHeader('cache-control', 'private, no-store');
-      const { loadViewPages } = await import('./subject-frame');
+      const { loadViewPages } = await import('./subject-frame-model');
       assertSubjectPageReadActive(signal);
       const { client, authorization } = await subjectKernelClient(
         data.locale,

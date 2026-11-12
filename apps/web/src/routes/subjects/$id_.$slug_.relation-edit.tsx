@@ -1,8 +1,9 @@
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
-import { SubjectFrame, subjectFrame } from '../../features/pages/subject-frame';
+import { SubjectFrame } from '../../features/pages/subject-frame';
+import { subjectFrame } from '../../features/pages/subject-frame-model';
 import { SubjectLink, viewTabLabels } from '../../features/pages/route-support';
-import { loadSubjectPage } from '../../features/pages/subject';
+import { loadSubjectPage } from '../../features/pages/subject-page-load';
 import { subjectTabs } from '../../features/pages/views';
 import { validatePageRealm } from '../../features/pages/view-cursor';
 import { RelationEditorSession } from '../../features/catalogue/relation-editor-session';

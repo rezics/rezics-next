@@ -29,8 +29,8 @@ import { PageHeading } from './page-heading';
 import { RouteState } from './route-state';
 import { ShellSearch } from '../search/header-search/shell-search';
 import { HeaderSearchFilterProvider } from '../search/header-search/filter-region';
-import { createInboxShellPort, InboxShellProvider } from '../inbox';
-import { createSettingsShellPort, SettingsShellProvider } from '../settings';
+import { createInboxShellPort, InboxShellProvider } from '../inbox/adapters/shell';
+import { createSettingsShellPort, SettingsShellProvider } from '../settings/adapters/shell';
 import {
   Folders,
   Globe,
