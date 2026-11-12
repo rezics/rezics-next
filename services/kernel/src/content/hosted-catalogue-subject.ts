@@ -73,8 +73,9 @@ async function discloseCatalogue(
   if (!isCurrentPublicCatalogueCandidate(row) || routeOf(row.catalogue_id) !== row.route) return null;
   const cataloguePartition = partitionOf(row.route);
   const observation: { current?: Parameters<RetainContentRead<PostEntry>>[0] } = {};
+  let initial: Awaited<ReturnType<typeof readPost>>;
   try {
-    const initial = await readPost(deps, row.thread_id, row.catalogue_id, context, undefined, (current) => {
+    initial = await readPost(deps, row.thread_id, row.catalogue_id, context, undefined, (current) => {
       observation.current = current;
     });
     if (
