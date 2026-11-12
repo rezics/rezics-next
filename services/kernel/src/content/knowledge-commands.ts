@@ -868,7 +868,7 @@ export async function moveKnowledgePlacement(
               notebookId,
               structureRevisionId,
               revisionNumber: nextRevisionNumber.toString(),
-              action: moved.action,
+              action: sameParent ? 'placement_reordered' : 'placement_moved',
               placementId,
             },
           },

@@ -693,6 +693,8 @@ type PrivateRevisionBodyRow = Readonly<{
   body_sha256: Buffer;
   licence: string;
   subject_ids: string[];
+  reference_manifest: readonly KnowledgeReference[];
+  copy_provenance: KnowledgeProvenance | null;
 }>;
 type PrivateRevisionSelection<Row> = Readonly<{ subjectId: string; revisions: Row[] }> | null;
 
@@ -769,7 +771,8 @@ async function exactPrivateRevisions(
 
     const revisions = revisionIds
       ? await client.query<PrivateRevisionBodyRow>(
-          `SELECT document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids
+          `SELECT document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids,
+                  reference_manifest,copy_provenance
            FROM content.knowledge_revision
            WHERE route=$1 AND document_id=$2 AND revision_id=ANY($3::uuid[])`,
           [sourceRoute, documentId, revisionIds],

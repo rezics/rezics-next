@@ -4755,6 +4755,9 @@ controller-deferred under the implementation sprint policy.
 
 ### Notebook reorganization and revision recovery
 
+Decision: preserve current adjacency reads and record each revision with a copy-on-write AVL sibling root; keep bounded
+order-key rebalancing local and body/publication history independent from structural moves.
+
 `POST /v1/knowledge/notebooks/{id}/placements/{placementId}:move` moves or reorders one stable placement with a
 structure-revision precondition and optional sibling anchor. Each successful structural write records an immutable
 revision and a copy-on-write AVL sibling root; bounded order-key rebalancing touches only nearby siblings. Historical
