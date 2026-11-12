@@ -71,6 +71,7 @@ async function ready(body: unknown): Promise<HttpResponse> {
     const response = await fixture.request('anonymous', 'POST', '/v1/subjects:search', body);
     if (response.status === 200) return response;
     status(response, 503);
+    assert(typeof response.body.code === 'string');
     expect(['index_not_ready', 'semantic_not_ready']).toContain(response.body.code);
     if (Date.now() >= deadline) throw new Error(`Current Search never became ready: ${JSON.stringify(response.body)}`);
     await Bun.sleep(25);
