@@ -11,6 +11,7 @@ export type KnowledgePrivateHead = Readonly<{
   notebookId: string;
   documentId: string;
   revisionId: string;
+  publicationId: string | null;
   title: string;
   language: string | null;
   licence: string;
@@ -131,6 +132,7 @@ export async function admitKnowledgePrivateHead(
   const documentId = member(document, 'documentId');
   const notebookId = member(document, 'notebookId');
   const revisionId = member(document, 'revisionId');
+  const publicationId = member(document, 'publicationId');
   const title = member(document, 'title');
   const language = member(document, 'language');
   const licence = member(document, 'licence');
@@ -142,6 +144,7 @@ export async function admitKnowledgePrivateHead(
     !isKnowledgeId(documentId) ||
     !isKnowledgeId(notebookId) ||
     !isKnowledgeId(revisionId) ||
+    !(publicationId === null || isKnowledgeId(publicationId)) ||
     documentId !== address.documentId ||
     notebookId !== address.notebookId ||
     !text(title, 1, 512) ||
@@ -164,6 +167,7 @@ export async function admitKnowledgePrivateHead(
         notebookId,
         documentId,
         revisionId,
+        publicationId,
         title,
         language,
         licence,

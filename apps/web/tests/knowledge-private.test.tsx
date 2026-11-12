@@ -35,6 +35,7 @@ const access: Extract<KnowledgePrivatePageAccess, { state: 'ready' }> = {
   createNotebook: 'available',
   createDocument: 'available',
   revise: 'available',
+  publication: 'available',
 };
 
 function head(
@@ -47,6 +48,7 @@ function head(
     notebookId,
     documentId,
     revisionId,
+    publicationId: null,
     title,
     language: 'en',
     licence: 'LicenseRef-rezics-terms',
@@ -60,6 +62,7 @@ test('creation retains the acknowledged notebook, then retries only the frozen r
   const calls: Array<{ kind: string; input: unknown }> = [];
   let documentAttempt = 0;
   const operations: KnowledgePrivateOperations = {
+    selectPublication: async () => ({ state: 'unavailable', status: 503 }),
     prepare: async () => ({ state: 'ready', viewer, csrfToken, credential }),
     read: async () => ({ state: 'unavailable', status: 503 }),
     createNotebook: async (intent) => {
@@ -112,6 +115,7 @@ test('conflict keeps the draft, explicit reread supplies the next CAS head, and 
   let reviseCount = 0;
   const revisions: Array<Parameters<KnowledgePrivateOperations['revise']>[0]> = [];
   const operations: KnowledgePrivateOperations = {
+    selectPublication: async () => ({ state: 'unavailable', status: 503 }),
     prepare: async () => ({ state: 'ready', viewer, csrfToken, credential }),
     read: async () => {
       readCount++;
@@ -167,6 +171,7 @@ test('viewer, exposure, locale, source and exact-address replacement retire late
   const page = await harness();
   const pending = deferred<Awaited<ReturnType<KnowledgePrivateOperations['read']>>>();
   const first: KnowledgePrivateOperations = {
+    selectPublication: async () => ({ state: 'unavailable', status: 503 }),
     prepare: async () => ({ state: 'ready', viewer, csrfToken, credential }),
     read: async () => pending.promise,
     createNotebook: async () => ({ state: 'unavailable', status: 503 }),
@@ -267,6 +272,7 @@ async function harness() {
   let entry: Entry = {
     address: { kind: 'create', subjectId: knowledgeSubjectId },
     operations: {
+      selectPublication: async () => ({ state: 'unavailable', status: 503 }),
       prepare: async () => ({ state: 'ready', viewer, csrfToken, credential }),
       read: async () => ({ state: 'unavailable', status: 503 }),
       createNotebook: async () => ({ state: 'unavailable', status: 503 }),

@@ -22,6 +22,7 @@ import {
   prepareKnowledgePrivateVisit,
   readKnowledgePrivateVisit,
   reviseKnowledgePrivateDocumentRequest,
+  selectKnowledgePublicationRequest,
   type KnowledgePrivatePreparation,
   type KnowledgePrivateVisitRead,
 } from './private-server';
@@ -34,6 +35,9 @@ import {
   type KnowledgePrivateHead,
   type KnowledgeRevisionReceipt,
 } from './private-knowledge';
+
+import { KnowledgePublicationPanel } from './publication-panel';
+import type { KnowledgePublicationIntent, KnowledgePublicationResult } from './publication';
 
 const controlClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words px-4 py-2 leading-snug focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -60,6 +64,7 @@ export type KnowledgePrivatePageAccess =
       createNotebook: KnowledgePrivateAdmission;
       createDocument: KnowledgePrivateAdmission;
       revise: KnowledgePrivateAdmission;
+      publication: KnowledgePrivateAdmission;
     };
 
 type Binding = Readonly<{ viewer: string; csrfToken: string; credential: string }>;
@@ -107,6 +112,7 @@ export type KnowledgePrivateOperations = Readonly<{
   createNotebook: (intent: NotebookIntent) => Promise<PrivateOperationResult<KnowledgeNotebookReceipt>>;
   createDocument: (intent: DocumentIntent) => Promise<PrivateOperationResult<KnowledgeDocumentReceipt>>;
   revise: (intent: RevisionIntent) => Promise<PrivateOperationResult<KnowledgeRevisionReceipt>>;
+  selectPublication: (intent: KnowledgePublicationIntent) => Promise<KnowledgePublicationResult>;
 }>;
 
 function operationSourceId(operations: KnowledgePrivateOperations): number {
@@ -119,6 +125,12 @@ function operationSourceId(operations: KnowledgePrivateOperations): number {
 }
 
 const nativeOperations: KnowledgePrivateOperations = {
+  selectPublication(intent) {
+    return selectKnowledgePublicationRequest({
+      data: { ...intent, ...intent.binding },
+      headers: { 'X-CSRF-Token': intent.binding.csrfToken },
+    });
+  },
   prepare(subjectId, expectedViewer) {
     return prepareKnowledgePrivateVisit({ data: { subjectId, expectedViewer } });
   },
@@ -445,6 +457,7 @@ function PrivateKnowledgeEditor({
   const [retired, setRetired] = useState(false);
   const [unresolved, setUnresolved] = useState(false);
   const [pending, setPending] = useState(false);
+  const [publicationBusy, setPublicationBusy] = useState(false);
   const [retirementState, setRetirementState] = useState<'retired' | 'denied' | 'signed-out'>('retired');
   const notebookIntentRef = useRef(notebookIntent);
   const documentIntentRef = useRef(documentIntent);
@@ -721,7 +734,7 @@ function PrivateKnowledgeEditor({
 
   async function submitRevision(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || !active.current) return;
+    if (pending || publicationBusy || !active.current) return;
     const intent = startRevisionIntent();
     if (!intent) return;
     setPending(true);
@@ -771,7 +784,7 @@ function PrivateKnowledgeEditor({
 
   async function replayRevision() {
     const intent = revisionIntentRef.current;
-    if (!intent || pending || !active.current) return;
+    if (!intent || pending || publicationBusy || !active.current) return;
     setPending(true);
     setRevisionState('pending');
     try {
@@ -1038,9 +1051,10 @@ function PrivateKnowledgeEditor({
     access.revise === 'available' &&
     dirty &&
     !pending &&
+    !publicationBusy &&
     !requiresHeadReview &&
     (!revisionReceipt || readbackState === 'ready');
-  const canReplay = !!revisionIntent && !pending;
+  const canReplay = !!revisionIntent && !pending && !publicationBusy;
   const showRevisionFailure = !['idle', 'pending', 'acknowledged'].includes(revisionState);
   const formLocked = !!revisionIntent || revisionBusy;
   return (
@@ -1136,6 +1150,26 @@ function PrivateKnowledgeEditor({
             </Button>
           </div>
         </form>
+        <KnowledgePublicationPanel
+          head={reviewHead ?? head}
+          binding={binding}
+          admission={access.publication}
+          locale={locale}
+          blocked={pending || !!revisionIntent || readBusy}
+          operations={operations}
+          onRetire={retire}
+          onBusyChange={setPublicationBusy}
+          onObservation={(observed, nextBinding) => {
+            setBinding(nextBinding);
+            if (observed.revisionId === head.revisionId) {
+              setHead(observed);
+              setReviewHead(null);
+            } else {
+              setReviewHead(observed);
+              setRequiresHeadReview(true);
+            }
+          }}
+        />
       </div>
     </PrivatePageFrame>
   );
@@ -1264,6 +1298,7 @@ export function KnowledgePrivatePage({
   const createNotebook = useOperationAdmission('knowledge_notebook.create');
   const createDocument = useOperationAdmission('knowledge_document.create');
   const revise = useOperationAdmission('knowledge_document.revise');
+  const publication = useOperationAdmission('knowledge_document.select_publication');
 
   const viewer = session.state === 'signed-in' && typeof session.subject === 'string' ? session.subject : null;
   let exposureRevision = 'closed';
@@ -1305,12 +1340,14 @@ export function KnowledgePrivatePage({
         createNotebook,
         createDocument,
         revise,
+        publication,
         operationSourceId(operations),
       ]),
       read,
       createNotebook,
       createDocument,
       revise,
+      publication,
     };
   } else access = { state: 'preparing' };
 
@@ -1368,7 +1405,7 @@ export function KnowledgePrivateAccessEntry({
   return (
     <KnowledgePrivateVisitBoundary>
       <PrivateKnowledgeEditorOwner
-        owner={JSON.stringify([access.owner, locale, address, operationSourceId(operations)])}
+        owner={JSON.stringify([access, locale, address, operationSourceId(operations)])}
         address={address}
         locale={locale}
         returnPath={returnPath}

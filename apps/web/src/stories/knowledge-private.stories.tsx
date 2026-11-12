@@ -39,12 +39,14 @@ const session: Extract<KnowledgePrivatePageAccess, { state: 'ready' }> = {
   createNotebook: 'available',
   createDocument: 'available',
   revise: 'available',
+  publication: 'denied',
 };
 const head: KnowledgePrivateHead = {
   accountId: viewer,
   notebookId,
   documentId: knowledgeDocumentId,
   revisionId: knowledgeRevisionId,
+  publicationId: null,
   title: 'A private field note',
   language: 'en',
   licence: 'LicenseRef-rezics-terms',
@@ -57,6 +59,7 @@ let uncertainAttempt = 0;
 
 function scenarioOperations(scenario: string): KnowledgePrivateOperations {
   return {
+    selectPublication: async () => ({ state: 'unavailable', status: 503 }),
     prepare: async (_subjectId) => ({ state: 'ready', viewer, csrfToken: session.csrfToken, credential }),
     read: async () =>
       scenario === 'retired'

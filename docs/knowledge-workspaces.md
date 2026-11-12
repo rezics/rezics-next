@@ -106,6 +106,16 @@ Decision: Web’s first public consumer is the localized `/knowledge/documents/$
 
 Decision: Web creates a private notebook only after the writer reviews and submits its title, then holds the acknowledged notebook receipt separately while creating a root document. Private bodies, drafts, command intents and receipts live only in the current page visit; exact private heads are read directly by the prepared viewer and revision writes compare against that observed head.
 
+Decision: Web reviews only a captured saved current head before explicit single-document publication or update;
+withdrawal reviews the observed current publication identity. Confirmation freezes the document, expected head,
+expected publication, selected revision and prepared-session credential with one idempotency key. A changed private
+observation retires confirmation; conflict requires reread and fresh review while retaining the draft. Uncertain
+commands permit explicit exact replay only, and a matching read never acknowledges them. Native receipts, private
+current-head readback and independently admitted public reading remain separate. Acknowledged live and exact links
+retain the selected revision through later private saves and retire on withdrawal or changed publication identity.
+The fewest wire and mounted tests cover publish A, save B privately, update B, withdrawal, conflict, immutable replay
+and visit retirement; native, browser and visual proof remain with integration's seeded lane.
+
 Primary placements form a forest under one notebook root. A document has one primary placement there. Later reference
 placements can show the same document elsewhere without moving or copying it; they do not recursively acquire its
 children. Their placement IDs remain different. First-release reuse uses ordinary document references. A deep copy

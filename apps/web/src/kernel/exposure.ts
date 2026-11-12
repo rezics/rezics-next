@@ -10,6 +10,7 @@ export const operationGroups = {
   'knowledge_notebook.create': 'knowledge_notebook.create',
   'knowledge_document.create': 'knowledge_document.create',
   'knowledge_document.revise': 'knowledge_document.revise',
+  'knowledge_document.select_publication': 'knowledge_document.select_publication',
   'subject.create': 'subject.create',
   'realm.create': 'realm.create',
   'provider_review.list': 'provider_review.list',

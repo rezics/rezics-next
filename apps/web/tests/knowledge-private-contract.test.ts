@@ -37,6 +37,7 @@ async function privateDocument(overrides: Record<string, unknown> = {}) {
       notebookId,
       documentId,
       revisionId,
+      publicationId: null,
       title: 'A private note',
       language: 'en',
       canonicalBytes: bytes.toString('base64'),
@@ -108,6 +109,8 @@ test('exact private head uses account-derived native route, no-store and canonic
     await privateDocument({ sha256: '0'.repeat(64) }),
     await privateDocument({ title: '' }),
     await privateDocument({ language: 1 }),
+    await privateDocument({ publicationId: 'invalid' }),
+    await privateDocument({ publicationId: undefined }),
     await privateDocument({ subjectIds: ['not-a-uuid'] }),
     { document: null },
   ]) {
