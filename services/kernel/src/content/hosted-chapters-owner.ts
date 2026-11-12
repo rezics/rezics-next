@@ -5,7 +5,13 @@ import type { CursorBinding } from '../tokens/cursor.ts';
 import { accessCheck } from './access-port.ts';
 import { decodeAuthorItemKey, encodeAuthorItemKey } from './author-item-cursor.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
-import { ContentNotFoundError, readPost, snapshot, type PostEntry, type RetainContentRead } from './reads.ts';
+import {
+  ContentNotFoundError,
+  readPostMetadata,
+  snapshot,
+  type NativePostMetadata,
+  type RetainContentRead,
+} from './reads.ts';
 import {
   HOSTED_PAGE_LIMIT,
   InvalidHostedCursorError,
@@ -86,13 +92,13 @@ async function prepareEntry(
   source: AnchoredPosition,
   anchors: AnchoredPosition[],
 ) {
-  const observation: { current?: Parameters<RetainContentRead<PostEntry>>[0] } = {};
-  const initial = await readPost(deps, row.thread_id, row.catalogue_id, context, undefined, (current) => {
+  const observation: { current?: Parameters<RetainContentRead<NativePostMetadata>>[0] } = {};
+  const initial = await readPostMetadata(deps, row.thread_id, row.catalogue_id, context, undefined, (current) => {
     observation.current = current;
   });
   anchors.push(initial.anchor);
   if (
-    initial.value?.availability !== 'available' ||
+    !initial.value ||
     initial.value.authorId !== accountId ||
     initial.anchor.partition.partitionNo !== source.partition.partitionNo ||
     initial.anchor.epoch !== source.epoch ||
@@ -108,7 +114,8 @@ async function prepareEntry(
   );
   const retained = observation.current;
   const revisionId = initial.value.revisionId;
-  // Keep metadata and native authority handles, never a page of document bodies.
+  // Retain the original metadata and prepared Access/ancestry proof. A fresh
+  // head read would replace that baseline after account/coverage observations.
   return async () => {
     const final = await retained(async (client) => {
       // Structure heads are private, even when a catalogue already has a release.
@@ -126,7 +133,7 @@ async function prepareEntry(
     anchors.push(final.anchor);
     const post = final.value;
     if (
-      post?.availability !== 'available' ||
+      !post ||
       post.authorId !== accountId ||
       post.threadId !== row.thread_id ||
       post.revisionId !== revisionId ||

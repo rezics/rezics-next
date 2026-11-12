@@ -69,6 +69,20 @@ nullable publication ID. They contain no titles, manuscript bodies or placement 
 pending source projection for that author; otherwise `crossHome='partial'`. Exact foreign selection also uses all-homes
 scope and reports current coverage, even when its exact record is already available before recovery finishes.
 
+Decision: owner list and exact get share native `readPostMetadata` and its retained original Access/ancestry
+observation, selecting zero revision body bytes. After account and coverage work, that observation closes with current
+`post:revise` and catalogue thread, creation time, structure head and publication pointer checks in the same source
+transaction. The originally observed Post revision, author and partition/epoch remain the disclosure fences; taken-down
+Posts remain omitted. A fresh head read cannot replace the original proof. Scope, coverage, raw-key continuation and
+native session anchors retain the same contract.
+
+Later native proof: `hosted-owner-inventory-metadata.test.ts` observes metadata-only chain selections for same-home
+and all-homes paging and exact owner get, including partial/complete coverage and private/no-store session responses.
+It also changes a Post after the initial metadata read and requires the original retained observation to withhold it;
+fresh requests can observe the new revision. Existing owner acceptance keeps its authority, pointer, erasure and cursor
+assertions; its dependency-error injection targets the metadata reader. Run both owner test files in the dev verifier
+after landing; native acceptance is deferred in this source pass.
+
 All-homes pages seek at most `limit+1` hosted author-item keys ordered by original creation time descending, then ID
 ascending, preserving microseconds and ties. At most `limit` sources are hydrated; denied slots are never refilled.
 The encrypted continuation uses the last consumed raw key even for an empty sparse page. It binds the original scope,

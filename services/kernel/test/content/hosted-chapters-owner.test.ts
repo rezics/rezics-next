@@ -258,7 +258,7 @@ test('sparse pages consume hidden candidates without exposing boundaries; curren
   } finally {
     denied.mockRestore();
   }
-  const failed = spyOn(reads, 'readPost').mockRejectedValue(new Error('source dependency unavailable'));
+  const failed = spyOn(reads, 'readPostMetadata').mockRejectedValue(new Error('source dependency unavailable'));
   try {
     await expect(
       listOwnHostedCatalogues(deps(), f.author.actor.accountId, context(), { scope: 'all-homes' }),
