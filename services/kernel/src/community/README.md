@@ -23,6 +23,10 @@ route construction. `createKernel` remains the low-level mount: catalogue and HT
 composition, which binds Content's existing Realm image schema before Community response factories run. Repeated
 default composition reuses the bound ambient; each Kernel mount still supplies its own deadline clock.
 
+Decision: Realm board fixtures pass one dedicated `testReceiptKeys()` ring to both `createKernel` and the native
+worker's `WorkerConfig.receiptKeys`, keeping genuine receipt verification in force through membership publication
+and cleanup.
+
 `adapters/index.ts` also exports `createRealmScopeEvidence`. Its producer contract in `contract/index.ts` borrows
 the caller's released snapshot and accounted exact-point executor. The original Realm/Space binding, native read
 eligibility and current ban plans retain their keys, Source bounds and native time. Publication confers no authority;
