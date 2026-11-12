@@ -6,12 +6,22 @@ export const KNOWLEDGE_ANCESTOR_LIMIT = 31;
 export const KNOWLEDGE_REFERENCE_LIMIT = 64;
 export const KNOWLEDGE_PAGE_LIMIT = 50;
 export const KNOWLEDGE_OUTLINE_SCAN_LIMIT = 128;
+export const KNOWLEDGE_ORDER_GAP = 1_000_000n;
+export const KNOWLEDGE_REBALANCE_SIDE_LIMIT = 64;
+export const KNOWLEDGE_REBALANCE_CHANGE_LIMIT = KNOWLEDGE_REBALANCE_SIDE_LIMIT * 2 + 1;
 
 export type KnowledgeDependencies = ContentCommandDependencies & ContentReadDependencies;
 export type KnowledgeCommandContext = Readonly<{ idempotencyKey: string; deadline: number; requestId: string }>;
 export type KnowledgeReadContext = Readonly<{ actor: import('../request/access.ts').Actor; deadline: number }>;
 export type KnowledgePageInput = Readonly<{ limit?: number; cursor?: string }>;
-export type KnowledgeOutlinePageInput = KnowledgePageInput & Readonly<{ parentPlacementId?: string }>;
+export type KnowledgeOutlinePageInput = KnowledgePageInput &
+  Readonly<{ parentPlacementId?: string; revisionId?: string }>;
+export type KnowledgeStructureHistoryInput = KnowledgePageInput;
+export type KnowledgeMovePlacementInput = Readonly<{
+  expectedStructureRevisionId: string;
+  destinationParentPlacementId: string | null;
+  beforePlacementId: string | null;
+}>;
 export type KnowledgeDocumentInput = Readonly<{
   title: string;
   language?: string | null;

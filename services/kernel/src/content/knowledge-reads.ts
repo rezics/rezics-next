@@ -19,6 +19,7 @@ import {
   knowledgeSubjectTargets,
   type KnowledgeOutlinePageInput,
   type KnowledgePageInput,
+  type KnowledgeStructureHistoryInput,
   type KnowledgeDependencies,
 } from './knowledge-model.ts';
 import {
@@ -31,6 +32,7 @@ import {
   knowledgePublicSelection,
 } from './knowledge-store.ts';
 import { admitsKnowledgeAncestorPath } from './knowledge-tree.ts';
+import { readKnowledgeOrderPage } from './knowledge-order.ts';
 
 function route(id: string): number {
   const value = routeOf(id);
@@ -94,9 +96,11 @@ function validRoutedKey(value: unknown, expectedRoute: number): value is string 
 }
 
 function validCursorPosition(value: unknown): value is string {
-  return (
-    typeof value === 'string' && /^(?:0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= 9_223_372_036_854_775_807n
-  );
+  return typeof value === 'string' && /^(?:0|[1-9][0-9]{0,37})$/.test(value) && BigInt(value) < 10n ** 38n;
+}
+
+function validStructureRevisionNumber(value: unknown): value is string {
+  return typeof value === 'string' && /^[1-9][0-9]{0,18}$/.test(value) && BigInt(value) <= 9_223_372_036_854_775_807n;
 }
 
 /** A public read selects only the document's current publication pointer. Search may be behind or paused;
@@ -420,5 +424,480 @@ export async function readKnowledgeOutline(
       next,
     },
     anchors: [result.anchor],
+  };
+}
+
+export async function readKnowledgeHistoricalOutline(
+  deps: KnowledgeDependencies,
+  accountId: string,
+  notebookId: string,
+  revisionId: string,
+  query: KnowledgeOutlinePageInput,
+  context: ReadContext,
+) {
+  const sourceRoute = route(notebookId);
+  const accountRoute = route(accountId);
+  if (
+    context.actor.kind !== 'account' ||
+    context.actor.accountId !== accountId ||
+    accountRoute !== sourceRoute ||
+    route(revisionId) !== sourceRoute ||
+    (query.parentPlacementId !== undefined && route(query.parentPlacementId) !== sourceRoute)
+  )
+    throw new KnowledgeNotFoundError();
+  const parentId = query.parentPlacementId ?? null;
+  const limit = query.limit ?? KNOWLEDGE_PAGE_LIMIT;
+  const binding = knowledgeCursorBinding(
+    'GET /v1/accounts/:accountId/knowledge/notebooks/:notebookId/outline@revision',
+    accountId,
+    { limit, notebookId, parentPlacementId: parentId, revisionId },
+  );
+  const cursor = await readCursor(deps, binding, query.cursor);
+  if (
+    cursor &&
+    (cursor.after.length !== 2 ||
+      !validCursorPosition(cursor.after[0]) ||
+      !validRoutedKey(cursor.after[1], sourceRoute))
+  )
+    invalidCursor();
+  const after = cursor?.after as readonly string[] | undefined;
+  const check = await accessCheck(
+    deps.access,
+    context.actor,
+    'account:read',
+    { route: sourceRoute, id: accountId },
+    { pool: deps.pool, deadline: context.deadline },
+  );
+  const result = await snapshot(deps, notebookId, context, async (client) => {
+    if (!(await check(client))) return null;
+    const notebook = await knowledgeNotebookSelection(client, sourceRoute, notebookId);
+    if (!notebook || notebook.owner_account_id !== accountId) return null;
+    const selected = await client.query<{ revision_number: string; history_complete: boolean }>(
+      `SELECT revision_number::text AS revision_number,history_complete
+       FROM content.knowledge_structure_revision
+       WHERE route=$1 AND notebook_id=$2 AND revision_id=$3`,
+      [sourceRoute, notebookId, revisionId],
+    );
+    const structure = selected.rows[0];
+    if (!structure?.history_complete) return null;
+
+    const root = await client.query<{ root_page_id: string | null }>(
+      `SELECT root_page_id FROM content.knowledge_structure_parent_root
+       WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3 AND revision_number <= $4
+       ORDER BY revision_number DESC LIMIT 1`,
+      [sourceRoute, notebookId, parentId, structure.revision_number],
+    );
+    if (root.rowCount === 0) return null;
+    const candidates = await readKnowledgeOrderPage(
+      client,
+      sourceRoute,
+      notebookId,
+      root.rows[0]!.root_page_id,
+      after ? { position: BigInt(after[0]!), placementId: after[1]! } : null,
+      limit + 1,
+    );
+    const titles =
+      candidates.length === 0
+        ? { rows: [] as { document_id: string; title: string }[] }
+        : await client.query<{ document_id: string; title: string }>(
+            `SELECT document.document_id,revision.title
+             FROM content.knowledge_document document
+             JOIN content.knowledge_revision revision
+               ON revision.route=document.route AND revision.document_id=document.document_id
+              AND revision.revision_id=document.head_revision_id
+             WHERE document.route=$1 AND document.notebook_id=$2 AND document.document_id=ANY($3::uuid[])`,
+            [sourceRoute, notebookId, candidates.map(({ documentId }) => documentId)],
+          );
+    const titleByDocument = new Map(titles.rows.map(({ document_id, title }) => [document_id, title]));
+    return {
+      revisionNumber: structure.revision_number,
+      rootPageId: root.rows[0]!.root_page_id,
+      placements: candidates.map((placement) => ({
+        ...placement,
+        title: titleByDocument.get(placement.documentId)!,
+      })),
+    };
+  });
+  if (!result.value) throw new KnowledgeNotFoundError();
+  if (cursor && cursor.epoch !== result.anchor.epoch) throw new KnowledgeStaleCursorError();
+  const hasMore = result.value.placements.length > limit;
+  const page = result.value.placements.slice(0, limit);
+  const last = page.at(-1);
+  const next =
+    hasMore && last
+      ? encodeCursor(
+          deps.tokens,
+          binding,
+          { epoch: result.anchor.epoch, after: [last.position.toString(), last.placementId] },
+          deps.clock().getTime(),
+        )
+      : null;
+  return {
+    value: {
+      notebookId,
+      structureRevisionId: revisionId,
+      revisionNumber: result.value.revisionNumber,
+      parentPlacementId: parentId,
+      placements: page.map((row) => ({
+        placementId: row.placementId,
+        documentId: row.documentId,
+        parentPlacementId: row.parentId,
+        position: row.position.toString(),
+        title: row.title,
+      })),
+      next,
+    },
+    anchors: [result.anchor],
+  };
+}
+
+export async function readKnowledgeStructureHistory(
+  deps: KnowledgeDependencies,
+  accountId: string,
+  notebookId: string,
+  query: KnowledgeStructureHistoryInput,
+  context: ReadContext,
+) {
+  const sourceRoute = route(notebookId);
+  if (context.actor.kind !== 'account' || context.actor.accountId !== accountId || route(accountId) !== sourceRoute)
+    throw new KnowledgeNotFoundError();
+  const limit = query.limit ?? KNOWLEDGE_PAGE_LIMIT;
+  const binding = knowledgeCursorBinding(
+    'GET /v1/accounts/:accountId/knowledge/notebooks/:notebookId/history',
+    accountId,
+    { limit, notebookId },
+  );
+  const cursor = await readCursor(deps, binding, query.cursor);
+  if (cursor && (cursor.after.length !== 1 || !validStructureRevisionNumber(cursor.after[0]))) invalidCursor();
+  const after = cursor?.after[0];
+  const check = await accessCheck(
+    deps.access,
+    context.actor,
+    'account:read',
+    { route: sourceRoute, id: accountId },
+    { pool: deps.pool, deadline: context.deadline },
+  );
+  const result = await snapshot(deps, notebookId, context, async (client) => {
+    if (!(await check(client))) return null;
+    const notebook = await knowledgeNotebookSelection(client, sourceRoute, notebookId);
+    if (!notebook || notebook.owner_account_id !== accountId) return null;
+    const revisions = await client.query<{
+      revision_id: string;
+      revision_number: string;
+      history_complete: boolean;
+      change_kind: string;
+      created_at: Date;
+    }>(
+      `SELECT revision_id,revision_number::text AS revision_number,history_complete,change_kind,created_at
+       FROM content.knowledge_structure_revision
+       WHERE route=$1 AND notebook_id=$2 AND ($3::bigint IS NULL OR revision_number < $3::bigint)
+       ORDER BY revision_number DESC LIMIT $4`,
+      [sourceRoute, notebookId, after ?? null, limit + 1],
+    );
+    const page = revisions.rows.slice(0, limit);
+    const revisionNumbers = page.map(({ revision_number }) => revision_number);
+    const changes =
+      revisionNumbers.length === 0
+        ? {
+            rows: [] as {
+              revision_number: string;
+              placement_id: string;
+              action: string;
+              previous_parent_id: string | null;
+              previous_position: string | null;
+              parent_id: string | null;
+              position: string;
+            }[],
+          }
+        : await client.query<{
+            revision_number: string;
+            placement_id: string;
+            action: string;
+            previous_parent_id: string | null;
+            previous_position: string | null;
+            parent_id: string | null;
+            position: string;
+          }>(
+            `SELECT revision_number::text AS revision_number,placement_id,action,previous_parent_id,
+                    previous_position::text AS previous_position,parent_id,position::text AS position
+             FROM content.knowledge_structure_change
+             WHERE route=$1 AND notebook_id=$2 AND revision_number=ANY($3::bigint[])
+             ORDER BY revision_number DESC,placement_id`,
+            [sourceRoute, notebookId, revisionNumbers],
+          );
+    return {
+      rows: page.map((revision) => ({
+        ...revision,
+        changes: changes.rows
+          .filter((change) => change.revision_number === revision.revision_number)
+          .map((change) => ({
+            placementId: change.placement_id,
+            action: change.action,
+            previousParentPlacementId: change.previous_parent_id,
+            previousPosition: change.previous_position,
+            parentPlacementId: change.parent_id,
+            position: change.position,
+          })),
+      })),
+      hasMore: revisions.rows.length > limit,
+    };
+  });
+  if (!result.value) throw new KnowledgeNotFoundError();
+  if (cursor && cursor.epoch !== result.anchor.epoch) throw new KnowledgeStaleCursorError();
+  const last = result.value.rows.at(-1);
+  const next =
+    result.value.hasMore && last
+      ? encodeCursor(
+          deps.tokens,
+          binding,
+          { epoch: result.anchor.epoch, after: [last.revision_number] },
+          deps.clock().getTime(),
+        )
+      : null;
+  return {
+    value: {
+      notebookId,
+      revisions: result.value.rows.map((revision) => ({
+        structureRevisionId: revision.revision_id,
+        revisionNumber: revision.revision_number,
+        historyAvailable: revision.history_complete,
+        changeKind: revision.change_kind,
+        createdAt: revision.created_at.toISOString(),
+        changes: revision.changes,
+      })),
+      next,
+    },
+    anchors: [result.anchor],
+  };
+}
+
+async function exactPrivateRevisions(
+  deps: KnowledgeDependencies,
+  accountId: string,
+  notebookId: string,
+  documentId: string,
+  revisionIds: readonly string[] | null,
+  after: Readonly<{ createdAt: string; revisionId: string }> | null,
+  limit: number,
+  context: ReadContext,
+) {
+  const sourceRoute = route(documentId);
+  if (
+    context.actor.kind !== 'account' ||
+    context.actor.accountId !== accountId ||
+    route(accountId) !== sourceRoute ||
+    route(notebookId) !== sourceRoute ||
+    revisionIds?.some((revisionId) => route(revisionId) !== sourceRoute)
+  )
+    throw new KnowledgeNotFoundError();
+  const check = await accessCheck(
+    deps.access,
+    context.actor,
+    'account:read',
+    { route: sourceRoute, id: accountId },
+    { pool: deps.pool, deadline: context.deadline },
+  );
+  return snapshot(deps, documentId, context, async (client) => {
+    if (!(await check(client))) return null;
+    const identity = await client.query<{ subject_id: string; placement_id: string }>(
+      `SELECT notebook.subject_id,placement.placement_id
+       FROM content.knowledge_document document
+       JOIN content.knowledge_notebook notebook
+         ON notebook.route=document.route AND notebook.notebook_id=document.notebook_id
+       JOIN content.knowledge_placement placement
+         ON placement.route=document.route AND placement.notebook_id=document.notebook_id
+        AND placement.document_id=document.document_id
+       WHERE document.route=$1 AND document.notebook_id=$2 AND document.document_id=$3
+         AND notebook.owner_account_id=$4`,
+      [sourceRoute, notebookId, documentId, accountId],
+    );
+    const selected = identity.rows[0];
+    if (!selected) return null;
+    const path = await knowledgeAncestorPath(client, sourceRoute, notebookId, selected.placement_id);
+    const stablePath = path.map(({ placement_id, parent_id }) => ({ placementId: placement_id, parentId: parent_id }));
+    if (
+      path.length > KNOWLEDGE_ANCESTOR_LIMIT + 1 ||
+      path[0]?.placement_id !== selected.placement_id ||
+      !admitsKnowledgeAncestorPath(stablePath)
+    )
+      return null;
+
+    const revisions = revisionIds
+      ? await client.query<{
+          document_id: string;
+          revision_id: string;
+          title: string;
+          language: string | null;
+          canonical_bytes: Buffer;
+          body_sha256: Buffer;
+          licence: string;
+          subject_ids: string[];
+        }>(
+          `SELECT document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids
+           FROM content.knowledge_revision
+           WHERE route=$1 AND document_id=$2 AND revision_id=ANY($3::uuid[])`,
+          [sourceRoute, documentId, revisionIds],
+        )
+      : await client.query<{
+          document_id: string;
+          revision_id: string;
+          title: string;
+          language: string | null;
+          body_sha256: Buffer;
+          licence: string;
+          created_at: Date;
+          created_at_key: string;
+        }>(
+          `SELECT document_id,revision_id,title,language,body_sha256,licence,created_at,
+                  to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_key
+           FROM content.knowledge_revision
+           WHERE route=$1 AND document_id=$2
+             AND ($3::timestamptz IS NULL OR (created_at,revision_id) < ($3::timestamptz,$4::uuid))
+           ORDER BY created_at DESC,revision_id DESC LIMIT $5`,
+          [sourceRoute, documentId, after?.createdAt ?? null, after?.revisionId ?? null, limit],
+        );
+    return { subjectId: selected.subject_id, revisions: revisions.rows };
+  });
+}
+
+function revisionBytesAreSound(row: { canonical_bytes: Buffer; body_sha256: Buffer }): void {
+  const digest = createHash('sha256').update(row.canonical_bytes).digest();
+  if (!digest.equals(row.body_sha256)) throw new Error('Knowledge revision digest does not match its immutable bytes');
+}
+
+async function verifyKnowledgeSubjects(
+  deps: KnowledgeDependencies,
+  notebookSubjectId: string,
+  revisions: readonly Readonly<{ subject_ids: string[] }>[],
+  context: ReadContext,
+) {
+  const subjectIds = new Set<string>();
+  for (const revision of revisions) {
+    for (const subjectId of knowledgeSubjectTargets(notebookSubjectId, revision.subject_ids)) subjectIds.add(subjectId);
+  }
+  if (revisions.length === 0) subjectIds.add(notebookSubjectId);
+  const subjects = [...subjectIds];
+  const readSubjects = await prepareEditionSubjectIdentities(deps, subjects, {
+    actor: context.actor,
+    deadline: context.deadline,
+  });
+  const verify = async () => {
+    const current = await readSubjects();
+    return subjects.every((subjectId) => current.get(subjectId)?.kind === 'available');
+  };
+  if (!(await verify())) throw new KnowledgeNotFoundError();
+  return verify;
+}
+
+export async function readKnowledgeDocumentHistory(
+  deps: KnowledgeDependencies,
+  accountId: string,
+  notebookId: string,
+  documentId: string,
+  query: KnowledgePageInput,
+  context: ReadContext,
+) {
+  const sourceRoute = route(documentId);
+  if (route(accountId) !== sourceRoute || route(notebookId) !== sourceRoute) throw new KnowledgeNotFoundError();
+  const limit = query.limit ?? KNOWLEDGE_PAGE_LIMIT;
+  const binding = knowledgeCursorBinding(
+    'GET /v1/accounts/:accountId/knowledge/notebooks/:notebookId/documents/:documentId/history',
+    accountId,
+    { documentId, limit, notebookId },
+  );
+  const cursor = await readCursor(deps, binding, query.cursor);
+  if (
+    cursor &&
+    (cursor.after.length !== 2 ||
+      typeof cursor.after[0] !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(cursor.after[0]) ||
+      !validRoutedKey(cursor.after[1], sourceRoute))
+  )
+    invalidCursor();
+  const after = cursor?.after as readonly string[] | undefined;
+  const first = await exactPrivateRevisions(
+    deps,
+    accountId,
+    notebookId,
+    documentId,
+    null,
+    after ? { createdAt: after[0]!, revisionId: after[1]! } : null,
+    limit + 1,
+    context,
+  );
+  if (!first.value) throw new KnowledgeNotFoundError();
+  const verifySubjects = await verifyKnowledgeSubjects(deps, first.value.subjectId, [], context);
+  const second = await exactPrivateRevisions(
+    deps,
+    accountId,
+    notebookId,
+    documentId,
+    null,
+    after ? { createdAt: after[0]!, revisionId: after[1]! } : null,
+    limit + 1,
+    context,
+  );
+  if (!second.value || !(await verifySubjects())) throw new KnowledgeNotFoundError();
+  if (cursor && (cursor.epoch !== first.anchor.epoch || cursor.epoch !== second.anchor.epoch))
+    throw new KnowledgeStaleCursorError();
+  const rows = second.value.revisions;
+  const hasMore = rows.length > limit;
+  const page = rows.slice(0, limit);
+  const last = page.at(-1);
+  const next =
+    hasMore && last
+      ? encodeCursor(
+          deps.tokens,
+          binding,
+          { epoch: second.anchor.epoch, after: [last.created_at_key, last.revision_id] },
+          deps.clock().getTime(),
+        )
+      : null;
+  return {
+    value: {
+      documentId,
+      revisions: page.map((row) => ({
+        revisionId: row.revision_id,
+        title: row.title,
+        language: row.language,
+        sha256: row.body_sha256.toString('hex'),
+        licence: row.licence,
+        createdAt: row.created_at.toISOString(),
+      })),
+      next,
+    },
+    anchors: [first.anchor, second.anchor],
+  };
+}
+
+export async function readKnowledgeDocumentCompare(
+  deps: KnowledgeDependencies,
+  accountId: string,
+  notebookId: string,
+  documentId: string,
+  revisionIds: readonly [string, string],
+  context: ReadContext,
+) {
+  if (revisionIds[0] === revisionIds[1]) throw new KnowledgeInvalidInputError();
+  const first = await exactPrivateRevisions(deps, accountId, notebookId, documentId, revisionIds, null, 2, context);
+  if (!first.value || first.value.revisions.length !== 2) throw new KnowledgeNotFoundError();
+  const byId = new Map(first.value.revisions.map((row) => [row.revision_id, row]));
+  const left = byId.get(revisionIds[0]);
+  const right = byId.get(revisionIds[1]);
+  if (!left || !right) throw new KnowledgeNotFoundError();
+  const verifySubjects = await verifyKnowledgeSubjects(deps, first.value.subjectId, [left, right], context);
+  revisionBytesAreSound(left);
+  revisionBytesAreSound(right);
+
+  const second = await exactPrivateRevisions(deps, accountId, notebookId, documentId, revisionIds, null, 2, context);
+  if (!second.value || !(await verifySubjects())) throw new KnowledgeNotFoundError();
+  if (first.anchor.epoch !== second.anchor.epoch) throw new KnowledgeStaleCursorError();
+  return {
+    value: {
+      documentId,
+      left: baseDocument(left),
+      right: baseDocument(right),
+    },
+    anchors: [first.anchor, second.anchor],
   };
 }

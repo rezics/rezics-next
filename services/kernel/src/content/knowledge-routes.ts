@@ -27,31 +27,42 @@ import type { AnchoredPosition } from './model.ts';
 import {
   createKnowledgeDocument,
   createKnowledgeNotebook,
+  moveKnowledgePlacement,
   reviseKnowledgeDocument,
   setKnowledgePublication,
 } from './knowledge-commands.ts';
 import {
+  readKnowledgeDocumentCompare,
+  readKnowledgeDocumentHistory,
+  readKnowledgeHistoricalOutline,
   readKnowledgeOutline,
   readKnowledgeOwnedNotebooks,
   readKnowledgePrivateDocument,
   readKnowledgePublicDocument,
+  readKnowledgeStructureHistory,
 } from './knowledge-reads.ts';
 import {
   KnowledgeCommandResponseSchema,
   KnowledgeCopySchema,
   KnowledgeOwnerExportQuerySchema,
+  KnowledgeDocumentCompareQuerySchema,
+  KnowledgeDocumentCompareSchema,
   KnowledgeDocumentCreateSchema,
+  KnowledgeDocumentHistorySchema,
   KnowledgeDocumentReviseSchema,
   KnowledgeExactReadQuerySchema,
   KnowledgeIdSchema,
   KnowledgeNotebookCreateSchema,
   KnowledgeOutlinePageQuerySchema,
   KnowledgeOutlineSchema,
+  KnowledgeHistoricalOutlineSchema,
   KnowledgeOwnedNotebooksSchema,
   KnowledgePageQuerySchema,
+  KnowledgePlacementMoveSchema,
   KnowledgePrivateDocumentSchema,
   KnowledgePublicationSchema,
   KnowledgePublicDocumentSchema,
+  KnowledgeStructureHistorySchema,
 } from './knowledge-schemas.ts';
 
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
@@ -147,11 +158,12 @@ function knowledgePageInput(query: Readonly<{ limit?: string | number; cursor?: 
 }
 
 function knowledgeOutlinePageInput(
-  query: Readonly<{ limit?: string | number; cursor?: string; parentPlacementId?: string }>,
+  query: Readonly<{ limit?: string | number; cursor?: string; parentPlacementId?: string; revisionId?: string }>,
 ) {
   return {
     ...knowledgePageInput(query),
     ...(query.parentPlacementId === undefined ? {} : { parentPlacementId: query.parentPlacementId }),
+    ...(query.revisionId === undefined ? {} : { revisionId: query.revisionId }),
   };
 }
 
@@ -197,12 +209,45 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
       },
     )
     .get(
+      '/v1/accounts/:accountId/knowledge/notebooks/:notebookId/history',
+      {
+        params: notebookParams(),
+        query: strictContentSchema(KnowledgePageQuerySchema),
+        response: {
+          200: withHeaders(strictContentSchema(KnowledgeStructureHistorySchema), responseHeaders),
+          ...failures(),
+        },
+        detail: {
+          operationId: 'knowledge_notebook.structure_history',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { accountId, notebookId }, query, actor, admission, job, session, set }) => {
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            readKnowledgeStructureHistory(deps, accountId, notebookId, knowledgePageInput(query), {
+              actor,
+              deadline: job.deadline,
+            }),
+          ),
+        );
+        for (const anchor of result.anchors) session.record(sessionComponent(anchor));
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .get(
       '/v1/accounts/:accountId/knowledge/notebooks/:notebookId/outline',
       {
         params: notebookParams(),
         query: strictContentSchema(KnowledgeOutlinePageQuerySchema),
         response: {
-          200: withHeaders(strictContentSchema(KnowledgeOutlineSchema), responseHeaders),
+          200: withHeaders(
+            strictContentSchema(t.Union([KnowledgeOutlineSchema, KnowledgeHistoricalOutlineSchema])),
+            responseHeaders,
+          ),
           ...failures(),
         },
         detail: {
@@ -215,10 +260,19 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
       async ({ params: { accountId, notebookId }, query, actor, admission, job, session, set }) => {
         const result = await operation(() =>
           admission.run('normal', job, () =>
-            readKnowledgeOutline(deps, accountId, notebookId, knowledgeOutlinePageInput(query), {
-              actor,
-              deadline: job.deadline,
-            }),
+            query.revisionId
+              ? readKnowledgeHistoricalOutline(
+                  deps,
+                  accountId,
+                  notebookId,
+                  query.revisionId,
+                  knowledgeOutlinePageInput(query),
+                  { actor, deadline: job.deadline },
+                )
+              : readKnowledgeOutline(deps, accountId, notebookId, knowledgeOutlinePageInput(query), {
+                  actor,
+                  deadline: job.deadline,
+                }),
           ),
         );
         for (const anchor of result.anchors) session.record(sessionComponent(anchor));
@@ -280,6 +334,70 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
               documentId,
               { actor, deadline: job.deadline },
               query.revisionId,
+            ),
+          ),
+        );
+        for (const anchor of result.anchors) session.record(sessionComponent(anchor));
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/knowledge/notebooks/:notebookId/documents/:documentId/history',
+      {
+        params: privateParams(),
+        query: strictContentSchema(KnowledgePageQuerySchema),
+        response: {
+          200: withHeaders(strictContentSchema(KnowledgeDocumentHistorySchema), responseHeaders),
+          ...failures(),
+        },
+        detail: {
+          operationId: 'knowledge_document.history',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { accountId, notebookId, documentId }, query, actor, admission, job, session, set }) => {
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            readKnowledgeDocumentHistory(deps, accountId, notebookId, documentId, knowledgePageInput(query), {
+              actor,
+              deadline: job.deadline,
+            }),
+          ),
+        );
+        for (const anchor of result.anchors) session.record(sessionComponent(anchor));
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/knowledge/notebooks/:notebookId/documents/:documentId/compare',
+      {
+        params: privateParams(),
+        query: strictContentSchema(KnowledgeDocumentCompareQuerySchema),
+        response: {
+          200: withHeaders(strictContentSchema(KnowledgeDocumentCompareSchema), responseHeaders),
+          ...failures(),
+        },
+        detail: {
+          operationId: 'knowledge_document.compare',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { accountId, notebookId, documentId }, query, actor, admission, job, session, set }) => {
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            readKnowledgeDocumentCompare(
+              deps,
+              accountId,
+              notebookId,
+              documentId,
+              [query.leftRevisionId, query.rightRevisionId],
+              { actor, deadline: job.deadline },
             ),
           ),
         );
@@ -441,6 +559,36 @@ export function knowledgeRoutes(app: ReturnType<typeof hostedChapterRoutes>, dep
         );
         session.record(result);
         set.status = 201;
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/knowledge/notebooks/:id/placements/:placementId', 'move'),
+      {
+        params: t.Object({ id: KnowledgeIdSchema, placementId: KnowledgeIdSchema }, { additionalProperties: false }),
+        headers,
+        body: strictContentSchema(KnowledgePlacementMoveSchema),
+        response: {
+          200: withHeaders(strictContentSchema(KnowledgeCommandResponseSchema), responseHeaders),
+          ...failures(),
+        },
+        detail: {
+          operationId: 'knowledge_notebook.move_placement',
+          'x-exposure': 'public',
+          'x-action': 'account:update',
+          'x-rate-limit': writeRate(),
+          security: writeSecurity,
+        },
+      },
+      async ({ actor, params: { id, placementId }, body, request, admission, job, session, set }) => {
+        requireAccount(actor);
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            moveKnowledgePlacement(deps, actor, id, placementId, body, commandContext(request, job.deadline)),
+          ),
+        );
+        session.record(result);
         set.headers['cache-control'] = 'private, no-store';
         return result.value;
       },

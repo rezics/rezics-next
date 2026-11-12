@@ -59,9 +59,17 @@ export {
   createKnowledgeNotebook,
   createKnowledgeDocument,
   reviseKnowledgeDocument,
+  moveKnowledgePlacement,
   setKnowledgePublication,
 } from './knowledge-commands.ts';
-export { readKnowledgePrivateDocument, readKnowledgePublicDocument } from './knowledge-reads.ts';
+export {
+  readKnowledgePrivateDocument,
+  readKnowledgePublicDocument,
+  readKnowledgeHistoricalOutline,
+  readKnowledgeStructureHistory,
+  readKnowledgeDocumentHistory,
+  readKnowledgeDocumentCompare,
+} from './knowledge-reads.ts';
 export type {
   KnowledgeCommandContext,
   KnowledgeCommandValue,
@@ -70,10 +78,14 @@ export type {
   KnowledgeDependencies,
   KnowledgeDocumentInput,
   KnowledgeDocumentView,
+  KnowledgeMovePlacementInput,
+  KnowledgeOutlinePageInput,
+  KnowledgePageInput,
   KnowledgePublicationInput,
   KnowledgePublicDocumentView,
   KnowledgeReadContext,
   KnowledgeReviseDocumentInput,
+  KnowledgeStructureHistoryInput,
 } from './knowledge-model.ts';
 
 export { createKnowledgeDiscoverySource } from './knowledge-discovery.ts';

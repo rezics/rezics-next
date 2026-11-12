@@ -4752,3 +4752,18 @@ reads only its notebook, parent path and indexed sibling maximum. `test/content/
 artifact validation and local remapping; `test/content/knowledge-transfer.test.ts` pins native owner/public selection,
 private copy, CAS, replay, target withdrawal and disclosure. Native acceptance and lifecycle integration remain
 controller-deferred under the implementation sprint policy.
+
+### Notebook reorganization and revision recovery
+
+`POST /v1/knowledge/notebooks/{id}/placements/{placementId}:move` moves or reorders one stable placement with a
+structure-revision precondition and optional sibling anchor. Each successful structural write records an immutable
+revision and a copy-on-write AVL sibling root; bounded order-key rebalancing touches only nearby siblings. Historical
+outline reads page that exact root, while structure history pages revision metadata and bounded placement changes.
+Private document history lists immutable revisions, and compare returns the exact bytes and digest for two owned
+revision IDs. These reads require current notebook authority and recheck current Subject eligibility. Moving a
+placement does not change ownership, body revisions, or explicit publication selection.
+
+Native recovery coverage is in `test/content/knowledge-history.test.ts`: nested moves and reorder retain identity,
+reload exact old and current structures, compare exact body revisions, preserve publication selection, exercise
+receipt replay before structure CAS, and reject cycles. The implementation worker leaves native acceptance to the
+controller.

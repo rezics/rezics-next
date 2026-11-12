@@ -48,7 +48,19 @@ export const KnowledgePageQuerySchema = t.Object(
   { additionalProperties: false },
 );
 export const KnowledgeOutlinePageQuerySchema = t.Object(
-  { ...KnowledgePageQuerySchema.properties, parentPlacementId: t.Optional(UUID) },
+  { ...KnowledgePageQuerySchema.properties, parentPlacementId: t.Optional(UUID), revisionId: t.Optional(UUID) },
+  { additionalProperties: false },
+);
+export const KnowledgeDocumentCompareQuerySchema = t.Object(
+  { leftRevisionId: UUID, rightRevisionId: UUID },
+  { additionalProperties: false },
+);
+export const KnowledgePlacementMoveSchema = t.Object(
+  {
+    expectedStructureRevisionId: UUID,
+    destinationParentPlacementId: t.Union([UUID, t.Null()]),
+    beforePlacementId: t.Union([UUID, t.Null()]),
+  },
   { additionalProperties: false },
 );
 
@@ -101,6 +113,7 @@ export const KnowledgePublicDocumentSchema = t.Object(
 );
 
 const nextSchema = t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]);
+const knowledgePosition = t.String({ pattern: '^(?:0|[1-9][0-9]{0,37})$' });
 export const KnowledgeOwnedNotebooksSchema = t.Object(
   {
     notebooks: t.Array(
@@ -131,7 +144,7 @@ export const KnowledgeOutlineSchema = t.Object(
           placementId: UUID,
           documentId: UUID,
           parentPlacementId: t.Union([UUID, t.Null()]),
-          position: t.String({ pattern: '^(?:0|[1-9][0-9]{0,18})$' }),
+          position: knowledgePosition,
           title: t.String({ minLength: 1, maxLength: 512 }),
         },
         { additionalProperties: false },
@@ -159,6 +172,103 @@ export const KnowledgeCopySchema = t.Object(
     source: KnowledgeSourceSelectionSchema,
     expectedStructureRevisionId: UUID,
     parentPlacementId: t.Union([UUID, t.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+const knowledgeHistoryChange = t.Object(
+  {
+    placementId: UUID,
+    action: t.Union([
+      t.Literal('placement_added'),
+      t.Literal('placement_moved'),
+      t.Literal('placement_reordered'),
+      t.Literal('order_rebalanced'),
+    ]),
+    previousParentPlacementId: t.Union([UUID, t.Null()]),
+    previousPosition: t.Union([knowledgePosition, t.Null()]),
+    parentPlacementId: t.Union([UUID, t.Null()]),
+    position: knowledgePosition,
+  },
+  { additionalProperties: false },
+);
+export const KnowledgeStructureHistorySchema = t.Object(
+  {
+    notebookId: UUID,
+    revisions: t.Array(
+      t.Object(
+        {
+          structureRevisionId: UUID,
+          revisionNumber: t.String({ pattern: '^[1-9][0-9]{0,18}$' }),
+          historyAvailable: t.Boolean(),
+          changeKind: t.Union([
+            t.Literal('legacy'),
+            t.Literal('baseline'),
+            t.Literal('notebook_created'),
+            t.Literal('placement_added'),
+            t.Literal('placement_moved'),
+            t.Literal('placement_reordered'),
+          ]),
+          createdAt: t.String({ format: 'date-time' }),
+          changes: t.Array(knowledgeHistoryChange, { maxItems: 129 }),
+        },
+        { additionalProperties: false },
+      ),
+      { maxItems: 50 },
+    ),
+    next: nextSchema,
+  },
+  { additionalProperties: false },
+);
+export const KnowledgeHistoricalOutlineSchema = t.Object(
+  {
+    notebookId: UUID,
+    structureRevisionId: UUID,
+    revisionNumber: t.String({ pattern: '^[1-9][0-9]{0,18}$' }),
+    parentPlacementId: t.Union([UUID, t.Null()]),
+    placements: t.Array(
+      t.Object(
+        {
+          placementId: UUID,
+          documentId: UUID,
+          parentPlacementId: t.Union([UUID, t.Null()]),
+          position: knowledgePosition,
+          title: t.String({ minLength: 1, maxLength: 512 }),
+        },
+        { additionalProperties: false },
+      ),
+      { maxItems: 50 },
+    ),
+    next: nextSchema,
+  },
+  { additionalProperties: false },
+);
+export const KnowledgeDocumentHistorySchema = t.Object(
+  {
+    documentId: UUID,
+    revisions: t.Array(
+      t.Object(
+        {
+          revisionId: UUID,
+          title: t.String({ minLength: 1, maxLength: 512 }),
+          language: t.Union([t.String({ minLength: 1, maxLength: 64 }), t.Null()]),
+          sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+          licence: t.String({ minLength: 1, maxLength: 128 }),
+          createdAt: t.String({ format: 'date-time' }),
+        },
+        { additionalProperties: false },
+      ),
+      { maxItems: 50 },
+    ),
+    next: nextSchema,
+  },
+  { additionalProperties: false },
+);
+export const KnowledgeDocumentCompareSchema = t.Object(
+  {
+    documentId: UUID,
+    left: t.Object(byteDocument, { additionalProperties: false }),
+    right: t.Object(byteDocument, { additionalProperties: false }),
   },
   { additionalProperties: false },
 );

@@ -89,6 +89,21 @@ export function CONTENT_EVENTS() {
           { documentId: UUID, previousRevisionId: UUID, revisionId: UUID },
           { additionalProperties: false },
         ),
+        'com.rezics.content.knowledge.structure.changed.v1': Type.Object(
+          {
+            notebookId: UUID,
+            structureRevisionId: UUID,
+            revisionNumber: Type.String({ pattern: '^[1-9][0-9]*$' }),
+            action: Type.Union([
+              Type.Literal('notebook_created'),
+              Type.Literal('placement_added'),
+              Type.Literal('placement_moved'),
+              Type.Literal('placement_reordered'),
+            ]),
+            placementId: Type.Union([UUID, Type.Null()]),
+          },
+          { additionalProperties: false },
+        ),
         'com.rezics.content.thread.created.v1': Type.Object(
           { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID, ...threadIndexFields },
           { additionalProperties: false },

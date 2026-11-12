@@ -9,6 +9,7 @@ import {
   noEffect,
   principalCommandIdentity,
   runCommand,
+  type AuthoritativeTime,
   type CommandAuthorization,
 } from '../command/command.ts';
 import { requestDigest } from '../command/request.ts';
@@ -19,6 +20,8 @@ import { RevisionPreconditionError, ContentForbiddenError } from './commands.ts'
 import { validateContentDocument } from './document.ts';
 import {
   KNOWLEDGE_ANCESTOR_LIMIT,
+  KNOWLEDGE_ORDER_GAP,
+  KNOWLEDGE_REBALANCE_SIDE_LIMIT,
   KnowledgeInvalidInputError,
   KnowledgeNotFoundError,
   knowledgeSubjectTargets,
@@ -27,6 +30,7 @@ import {
   type KnowledgeCreateNotebookInput,
   type KnowledgeDependencies,
   type KnowledgeDocumentInput,
+  type KnowledgeMovePlacementInput,
   type KnowledgePublicationInput,
   type KnowledgeReviseDocumentInput,
 } from './knowledge-model.ts';
@@ -37,11 +41,32 @@ import {
   knowledgeOwner,
   knowledgeSelectedSubject,
 } from './knowledge-store.ts';
+import { insertKnowledgeOrderEntry, removeKnowledgeOrderEntry } from './knowledge-order.ts';
 
 const PUBLICATION_EVENT = 'com.rezics.content.knowledge.publication.changed.v1';
 const NOTEBOOK_CREATED_EVENT = 'com.rezics.content.knowledge.notebook.created.v1';
 const DOCUMENT_CREATED_EVENT = 'com.rezics.content.knowledge.document.created.v1';
 const DOCUMENT_REVISED_EVENT = 'com.rezics.content.knowledge.document.revised.v1';
+const STRUCTURE_CHANGED_EVENT = 'com.rezics.content.knowledge.structure.changed.v1';
+const MAX_KNOWLEDGE_POSITION = 10n ** 38n - 1n;
+
+type KnowledgePlacementState = Readonly<{
+  placement_id: string;
+  document_id: string;
+  parent_id: string | null;
+  position: string;
+  subtree_height: number;
+}>;
+
+type KnowledgePositionChange = Readonly<{
+  placementId: string;
+  documentId: string;
+  oldParentId: string | null;
+  oldPosition: bigint | null;
+  parentId: string | null;
+  position: bigint;
+  action: 'placement_added' | 'placement_moved' | 'placement_reordered' | 'order_rebalanced';
+}>;
 
 function accountId(actor: Actor): string {
   if (actor.kind !== 'account') throw new KnowledgeNotFoundError();
@@ -154,6 +179,205 @@ function commandOptions(
   };
 }
 
+async function knowledgeStructureRoot(
+  tx: import('../command/command.ts').CommandTransaction,
+  route: number,
+  notebookId: string,
+  parentId: string | null,
+  revisionNumber: bigint,
+): Promise<string | null> {
+  const result = await tx.query<{ root_page_id: string | null }>(
+    `SELECT root_page_id FROM content.knowledge_structure_parent_root
+     WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3 AND revision_number <= $4
+     ORDER BY revision_number DESC LIMIT 1`,
+    [route, notebookId, parentId, revisionNumber.toString()],
+  );
+  return result.rows[0]?.root_page_id ?? null;
+}
+
+async function saveKnowledgeStructureRoot(
+  tx: import('../command/command.ts').CommandTransaction,
+  route: number,
+  notebookId: string,
+  parentId: string | null,
+  revisionNumber: bigint,
+  rootPageId: string | null,
+): Promise<void> {
+  await tx.query(
+    `INSERT INTO content.knowledge_structure_parent_root(route,notebook_id,parent_id,revision_number,root_page_id)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [route, notebookId, parentId, revisionNumber.toString(), rootPageId],
+  );
+}
+
+async function saveKnowledgeStructureRevision(
+  tx: import('../command/command.ts').CommandTransaction,
+  route: number,
+  notebookId: string,
+  revisionId: string,
+  revisionNumber: bigint,
+  transactionId: string,
+  time: AuthoritativeTime,
+  changeKind: string,
+): Promise<void> {
+  await tx.query(
+    `INSERT INTO content.knowledge_structure_revision
+      (route,notebook_id,revision_id,revision_number,history_complete,change_kind,recorded_transaction_id,created_at)
+     VALUES ($1,$2,$3,$4,true,$5,$6,$7)`,
+    [route, notebookId, revisionId, revisionNumber.toString(), changeKind, transactionId, authoritativeTimeValue(time)],
+  );
+}
+
+async function saveKnowledgeStructureChange(
+  tx: import('../command/command.ts').CommandTransaction,
+  route: number,
+  notebookId: string,
+  revisionNumber: bigint,
+  change: KnowledgePositionChange,
+): Promise<void> {
+  await tx.query(
+    `INSERT INTO content.knowledge_structure_change
+      (route,notebook_id,revision_number,placement_id,action,previous_parent_id,previous_position,parent_id,position)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      route,
+      notebookId,
+      revisionNumber.toString(),
+      change.placementId,
+      change.action,
+      change.oldParentId,
+      change.oldPosition?.toString() ?? null,
+      change.parentId,
+      change.position.toString(),
+    ],
+  );
+}
+
+async function refreshKnowledgeSubtreeHeights(
+  tx: import('../command/command.ts').CommandTransaction,
+  route: number,
+  notebookId: string,
+  ancestors: readonly (readonly Readonly<{ placement_id: string }>[])[],
+): Promise<void> {
+  for (const path of ancestors) {
+    for (const ancestor of path) {
+      const child = await tx.query<{ subtree_height: number }>(
+        `SELECT subtree_height FROM content.knowledge_placement
+         WHERE route=$1 AND notebook_id=$2 AND parent_id=$3
+         ORDER BY subtree_height DESC,placement_id LIMIT 1`,
+        [route, notebookId, ancestor.placement_id],
+      );
+      const height = child.rows[0] ? child.rows[0].subtree_height + 1 : 0;
+      if (height > KNOWLEDGE_ANCESTOR_LIMIT) throw new KnowledgeInvalidInputError();
+      await tx.query(
+        `UPDATE content.knowledge_placement SET subtree_height=$4
+         WHERE route=$1 AND notebook_id=$2 AND placement_id=$3`,
+        [route, notebookId, ancestor.placement_id, height],
+      );
+    }
+  }
+}
+
+async function siblingAtPosition(
+  tx: import('../command/command.ts').CommandTransaction,
+  route: number,
+  notebookId: string,
+  parentId: string | null,
+  movingPlacementId: string,
+  beforePosition: bigint | null,
+): Promise<Readonly<{ placement_id: string; position: string }> | null> {
+  const result = await tx.query<{ placement_id: string; position: string }>(
+    `SELECT placement_id,position::text AS position FROM content.knowledge_placement
+     WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3
+       AND placement_id<>$4 AND ($5::numeric IS NULL OR position < $5)
+     ORDER BY position DESC,placement_id DESC LIMIT 1`,
+    [route, notebookId, parentId, movingPlacementId, beforePosition?.toString() ?? null],
+  );
+  return result.rows[0] ?? null;
+}
+
+async function rebalanceKnowledgeSiblings(
+  tx: import('../command/command.ts').CommandTransaction,
+  route: number,
+  notebookId: string,
+  parentId: string | null,
+  moving: KnowledgePlacementState,
+  destinationParentId: string | null,
+  beforePlacementId: string | null,
+  beforePosition: bigint | null,
+): Promise<readonly KnowledgePositionChange[]> {
+  const parameters = [route, notebookId, parentId, moving.placement_id, beforePosition?.toString() ?? null];
+  const [leftResult, rightResult] = await Promise.all([
+    tx.query<{ placement_id: string; document_id: string; parent_id: string | null; position: string }>(
+      `SELECT placement_id,document_id,parent_id,position::text AS position FROM content.knowledge_placement
+       WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3
+         AND placement_id<>$4 AND ($5::numeric IS NULL OR position < $5)
+       ORDER BY position DESC,placement_id DESC LIMIT $6`,
+      [...parameters, KNOWLEDGE_REBALANCE_SIDE_LIMIT + 1],
+    ),
+    beforePosition === null
+      ? Promise.resolve({
+          rows: [] as { placement_id: string; document_id: string; parent_id: string | null; position: string }[],
+        })
+      : tx.query<{ placement_id: string; document_id: string; parent_id: string | null; position: string }>(
+          `SELECT placement_id,document_id,parent_id,position::text AS position FROM content.knowledge_placement
+           WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3
+             AND placement_id<>$4 AND position >= $5
+           ORDER BY position,placement_id LIMIT $6`,
+          [...parameters.slice(0, 4), beforePosition.toString(), KNOWLEDGE_REBALANCE_SIDE_LIMIT + 1],
+        ),
+  ]);
+
+  const leftRows = leftResult.rows;
+  const rightRows = rightResult.rows;
+  const selectedLeft = leftRows.slice(0, KNOWLEDGE_REBALANCE_SIDE_LIMIT).reverse();
+  const selectedRight = rightRows.slice(0, KNOWLEDGE_REBALANCE_SIDE_LIMIT);
+  const lower =
+    leftRows.length > KNOWLEDGE_REBALANCE_SIDE_LIMIT ? BigInt(leftRows[KNOWLEDGE_REBALANCE_SIDE_LIMIT]!.position) : -1n;
+  const upper =
+    rightRows.length > KNOWLEDGE_REBALANCE_SIDE_LIMIT
+      ? BigInt(rightRows[KNOWLEDGE_REBALANCE_SIDE_LIMIT]!.position)
+      : MAX_KNOWLEDGE_POSITION + 1n;
+  const ordered = [...selectedLeft, ...selectedRight];
+  const insertAt =
+    beforePlacementId === null ? ordered.length : ordered.findIndex((row) => row.placement_id === beforePlacementId);
+  if (insertAt < 0) throw new KnowledgeNotFoundError();
+  const desired = [...ordered.slice(0, insertAt), { ...moving, moving: true as const }, ...ordered.slice(insertAt)];
+  const step = (upper - lower) / BigInt(desired.length + 1);
+  if (step < 1n) throw new KnowledgeInvalidInputError();
+  return desired.flatMap((row, index) => {
+    const position = lower + step * BigInt(index + 1);
+    if (position < 0n || position > MAX_KNOWLEDGE_POSITION) throw new KnowledgeInvalidInputError();
+    if ('moving' in row) {
+      return [
+        {
+          placementId: moving.placement_id,
+          documentId: moving.document_id,
+          oldParentId: moving.parent_id,
+          oldPosition: BigInt(moving.position),
+          parentId: destinationParentId,
+          position,
+          action: moving.parent_id === destinationParentId ? 'placement_reordered' : 'placement_moved',
+        } satisfies KnowledgePositionChange,
+      ];
+    }
+    const oldPosition = BigInt(row.position);
+    return oldPosition === position
+      ? []
+      : [
+          {
+            placementId: row.placement_id,
+            documentId: row.document_id,
+            oldParentId: row.parent_id,
+            oldPosition,
+            parentId: row.parent_id,
+            position,
+            action: 'order_rebalanced' as const,
+          },
+        ];
+  });
+}
+
 export async function createKnowledgeNotebook(
   deps: KnowledgeDependencies,
   actor: Actor,
@@ -178,8 +402,8 @@ export async function createKnowledgeNotebook(
     async (tx, { transactionId, time }) => {
       const inserted = await tx.query(
         `INSERT INTO content.knowledge_notebook
-          (route,notebook_id,owner_account_id,subject_id,title,structure_revision_id,created_transaction_id,created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (route,notebook_id) DO NOTHING RETURNING notebook_id`,
+          (route,notebook_id,owner_account_id,subject_id,title,structure_revision_id,structure_revision_number,created_transaction_id,created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,1,$7,$8) ON CONFLICT (route,notebook_id) DO NOTHING RETURNING notebook_id`,
         [
           route,
           notebookId,
@@ -192,11 +416,17 @@ export async function createKnowledgeNotebook(
         ],
       );
       if (!inserted.rowCount) throw new RevisionPreconditionError();
-      await tx.query(
-        `INSERT INTO content.knowledge_structure_revision(route,notebook_id,revision_id,recorded_transaction_id,created_at)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [route, notebookId, structureRevisionId, transactionId, authoritativeTimeValue(time)],
+      await saveKnowledgeStructureRevision(
+        tx,
+        route,
+        notebookId,
+        structureRevisionId,
+        1n,
+        transactionId,
+        time,
+        'notebook_created',
       );
+      await saveKnowledgeStructureRoot(tx, route, notebookId, null, 1n, null);
       return {
         value: { notebookId, structureRevisionId },
         events: [
@@ -204,6 +434,17 @@ export async function createKnowledgeNotebook(
             type: NOTEBOOK_CREATED_EVENT,
             subject: notebookId,
             data: { notebookId, subjectId: input.subjectId, structureRevisionId },
+          },
+          {
+            type: STRUCTURE_CHANGED_EVENT,
+            subject: notebookId,
+            data: {
+              notebookId,
+              structureRevisionId,
+              revisionNumber: '1',
+              action: 'notebook_created',
+              placementId: null,
+            },
           },
         ],
       };
@@ -259,8 +500,12 @@ export async function writeKnowledgeDocument(
     deps.pool,
     commandOptions(actor, route, context, kind, notebookId, source.receiptInput, authorization),
     async (tx, { transactionId, time }) => {
-      const current = await tx.query<{ owner_account_id: string; structure_revision_id: string }>(
-        `SELECT owner_account_id,structure_revision_id FROM content.knowledge_notebook
+      const current = await tx.query<{
+        owner_account_id: string;
+        structure_revision_id: string;
+        structure_revision_number: string;
+      }>(
+        `SELECT owner_account_id,structure_revision_id,structure_revision_number FROM content.knowledge_notebook
          WHERE route=$1 AND notebook_id=$2 FOR UPDATE`,
         [route, notebookId],
       );
@@ -269,21 +514,30 @@ export async function writeKnowledgeDocument(
       if (notebook.structure_revision_id !== placement.expectedStructureRevisionId)
         throw new RevisionPreconditionError();
       const parentId = placement.parentPlacementId;
+      let parentPath: readonly Readonly<{ placement_id: string; parent_id: string | null }>[] = [];
       if (parentId !== null) {
         const path = await knowledgeAncestorPath(tx, route, notebookId, parentId);
-        const parentPath: StableAncestor[] = path.map((item) => ({
+        parentPath = path;
+        const stablePath: StableAncestor[] = path.map((item) => ({
           placementId: item.placement_id,
           parentId: item.parent_id,
         }));
-        if (!isCompleteStableAncestorPath(parentPath, KNOWLEDGE_ANCESTOR_LIMIT - 1))
+        if (
+          path[0]?.placement_id !== parentId ||
+          path.length > KNOWLEDGE_ANCESTOR_LIMIT ||
+          !isCompleteStableAncestorPath(stablePath, KNOWLEDGE_ANCESTOR_LIMIT - 1)
+        )
           throw new KnowledgeInvalidInputError();
       }
+      const currentRevisionNumber = BigInt(notebook.structure_revision_number);
+      const nextRevisionNumber = currentRevisionNumber + 1n;
       const nextPosition = await tx.query<{ position: string }>(
-        `SELECT COALESCE(MAX(position)+1,0)::text AS position
+        `SELECT COALESCE(MAX(position)+$4::numeric,0)::text AS position
          FROM content.knowledge_placement
          WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3`,
-        [route, notebookId, parentId],
+        [route, notebookId, parentId, KNOWLEDGE_ORDER_GAP.toString()],
       );
+      const position = BigInt(nextPosition.rows[0]!.position);
       await tx.query(
         `INSERT INTO content.knowledge_document(route,document_id,notebook_id,head_revision_id,created_transaction_id,created_at)
          VALUES ($1,$2,$3,$4,$5,$6)`,
@@ -313,17 +567,41 @@ export async function writeKnowledgeDocument(
       await tx.query(
         `INSERT INTO content.knowledge_placement(route,notebook_id,placement_id,document_id,parent_id,position)
          VALUES ($1,$2,$3,$4,$5,$6)`,
-        [route, notebookId, placementId, documentId, parentId, nextPosition.rows[0]!.position],
+        [route, notebookId, placementId, documentId, parentId, position.toString()],
       );
-      await tx.query(
-        `INSERT INTO content.knowledge_structure_revision(route,notebook_id,revision_id,recorded_transaction_id,created_at)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [route, notebookId, structureRevisionId, transactionId, authoritativeTimeValue(time)],
+      await saveKnowledgeStructureRevision(
+        tx,
+        route,
+        notebookId,
+        structureRevisionId,
+        nextRevisionNumber,
+        transactionId,
+        time,
+        'placement_added',
       );
+      const currentRoot = await knowledgeStructureRoot(tx, route, notebookId, parentId, currentRevisionNumber);
+      const rootPageId = await insertKnowledgeOrderEntry(tx, route, notebookId, currentRoot, {
+        placementId,
+        documentId,
+        parentId,
+        position,
+      });
+      await saveKnowledgeStructureRoot(tx, route, notebookId, parentId, nextRevisionNumber, rootPageId);
+      await saveKnowledgeStructureRoot(tx, route, notebookId, placementId, nextRevisionNumber, null);
+      await saveKnowledgeStructureChange(tx, route, notebookId, nextRevisionNumber, {
+        placementId,
+        documentId,
+        oldParentId: null,
+        oldPosition: null,
+        parentId,
+        position,
+        action: 'placement_added',
+      });
+      await refreshKnowledgeSubtreeHeights(tx, route, notebookId, [parentPath]);
       await tx.query(
-        `UPDATE content.knowledge_notebook SET structure_revision_id=$3
+        `UPDATE content.knowledge_notebook SET structure_revision_id=$3,structure_revision_number=$4
          WHERE route=$1 AND notebook_id=$2`,
-        [route, notebookId, structureRevisionId],
+        [route, notebookId, structureRevisionId, nextRevisionNumber.toString()],
       );
       return {
         value: { notebookId, documentId, placementId, revisionId, structureRevisionId },
@@ -332,6 +610,260 @@ export async function writeKnowledgeDocument(
             type: DOCUMENT_CREATED_EVENT,
             subject: documentId,
             data: { notebookId, documentId, placementId, revisionId, structureRevisionId },
+          },
+          {
+            type: STRUCTURE_CHANGED_EVENT,
+            subject: notebookId,
+            data: {
+              notebookId,
+              structureRevisionId,
+              revisionNumber: nextRevisionNumber.toString(),
+              action: 'placement_added',
+              placementId,
+            },
+          },
+        ],
+      };
+    },
+  );
+}
+
+export async function moveKnowledgePlacement(
+  deps: KnowledgeDependencies,
+  actor: Actor,
+  notebookId: string,
+  placementId: string,
+  input: KnowledgeMovePlacementInput,
+  context: KnowledgeCommandContext,
+) {
+  const route = routed(notebookId);
+  if (
+    routed(placementId) !== route ||
+    (input.destinationParentPlacementId !== null && routed(input.destinationParentPlacementId) !== route) ||
+    (input.beforePlacementId !== null && routed(input.beforePlacementId) !== route)
+  )
+    throw new KnowledgeNotFoundError();
+  if (input.beforePlacementId === placementId) throw new KnowledgeInvalidInputError();
+
+  const notebookOwner = await knowledgeNotebookOwner(deps.pool, notebookId);
+  if (!notebookOwner || notebookOwner.route !== route) throw new KnowledgeNotFoundError();
+  const authorization = await accountUpdateAuthorization(deps, actor, notebookOwner.owner_account_id, context);
+  const verifySubject = await preparePublicSubjects(deps, notebookOwner.subject_id, [], context.deadline);
+  authorization.prepare = async () => {
+    if (!(await verifySubject())) throw new KnowledgeNotFoundError();
+  };
+
+  const structureRevisionId = newId(route);
+  const kind = 'content.knowledge.placement.move';
+  return runCommand(
+    deps.pool,
+    commandOptions(actor, route, context, kind, placementId, { notebookId, ...input }, authorization),
+    async (tx, { transactionId, time }) => {
+      const current = await tx.query<{
+        owner_account_id: string;
+        structure_revision_id: string;
+        structure_revision_number: string;
+      }>(
+        `SELECT owner_account_id,structure_revision_id,structure_revision_number FROM content.knowledge_notebook
+         WHERE route=$1 AND notebook_id=$2 FOR UPDATE`,
+        [route, notebookId],
+      );
+      const notebook = current.rows[0];
+      if (!notebook || notebook.owner_account_id !== notebookOwner.owner_account_id) throw new KnowledgeNotFoundError();
+      if (notebook.structure_revision_id !== input.expectedStructureRevisionId) throw new RevisionPreconditionError();
+
+      const selected = await tx.query<KnowledgePlacementState>(
+        `SELECT placement_id,document_id,parent_id,position::text AS position,subtree_height
+         FROM content.knowledge_placement WHERE route=$1 AND notebook_id=$2 AND placement_id=$3`,
+        [route, notebookId, placementId],
+      );
+      const moving = selected.rows[0];
+      if (!moving) throw new KnowledgeNotFoundError();
+      const sourcePath = await knowledgeAncestorPath(tx, route, notebookId, placementId);
+      const stableSourcePath: StableAncestor[] = sourcePath.map(({ placement_id, parent_id }) => ({
+        placementId: placement_id,
+        parentId: parent_id,
+      }));
+      if (
+        sourcePath[0]?.placement_id !== placementId ||
+        sourcePath.length > KNOWLEDGE_ANCESTOR_LIMIT + 1 ||
+        !isCompleteStableAncestorPath(stableSourcePath, KNOWLEDGE_ANCESTOR_LIMIT)
+      )
+        throw new KnowledgeInvalidInputError();
+      const sourceParentPath = sourcePath.slice(1);
+
+      const destinationPath =
+        input.destinationParentPlacementId === null
+          ? []
+          : await knowledgeAncestorPath(tx, route, notebookId, input.destinationParentPlacementId);
+      if (
+        (input.destinationParentPlacementId !== null &&
+          (destinationPath[0]?.placement_id !== input.destinationParentPlacementId ||
+            destinationPath.length > KNOWLEDGE_ANCESTOR_LIMIT + 1 ||
+            !isCompleteStableAncestorPath(
+              destinationPath.map(({ placement_id, parent_id }) => ({
+                placementId: placement_id,
+                parentId: parent_id,
+              })),
+              KNOWLEDGE_ANCESTOR_LIMIT,
+            ))) ||
+        destinationPath.some(({ placement_id }) => placement_id === placementId) ||
+        destinationPath.length > KNOWLEDGE_ANCESTOR_LIMIT + 1
+      )
+        throw new KnowledgeInvalidInputError();
+      if (destinationPath.length + moving.subtree_height > KNOWLEDGE_ANCESTOR_LIMIT)
+        throw new KnowledgeInvalidInputError();
+
+      let beforePosition: bigint | null = null;
+      if (input.beforePlacementId !== null) {
+        const anchor = await tx.query<{ parent_id: string | null; position: string }>(
+          `SELECT parent_id,position::text AS position FROM content.knowledge_placement
+           WHERE route=$1 AND notebook_id=$2 AND placement_id=$3`,
+          [route, notebookId, input.beforePlacementId],
+        );
+        const row = anchor.rows[0];
+        if (!row || row.parent_id !== input.destinationParentPlacementId) throw new KnowledgeNotFoundError();
+        beforePosition = BigInt(row.position);
+      }
+
+      const sameParent = moving.parent_id === input.destinationParentPlacementId;
+      if (sameParent) {
+        const next = await tx.query<{ placement_id: string }>(
+          `SELECT placement_id FROM content.knowledge_placement
+           WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3
+             AND (position,placement_id) > ($4,$5)
+           ORDER BY position,placement_id LIMIT 1`,
+          [route, notebookId, moving.parent_id, moving.position, placementId],
+        );
+        const currentNext = next.rows[0]?.placement_id ?? null;
+        if (currentNext === input.beforePlacementId)
+          return noEffect({ notebookId, placementId, structureRevisionId: notebook.structure_revision_id });
+      }
+
+      const currentRevisionNumber = BigInt(notebook.structure_revision_number);
+      const nextRevisionNumber = currentRevisionNumber + 1n;
+      const currentPosition = BigInt(moving.position);
+      const left = await siblingAtPosition(
+        tx,
+        route,
+        notebookId,
+        input.destinationParentPlacementId,
+        placementId,
+        beforePosition,
+      );
+      const leftPosition = left ? BigInt(left.position) : null;
+      let nextPosition: bigint | null = null;
+      if (beforePosition === null) {
+        if (leftPosition === null) nextPosition = 0n;
+        else if (leftPosition + KNOWLEDGE_ORDER_GAP <= MAX_KNOWLEDGE_POSITION)
+          nextPosition = leftPosition + KNOWLEDGE_ORDER_GAP;
+      } else if (leftPosition === null) {
+        if (beforePosition >= KNOWLEDGE_ORDER_GAP) nextPosition = beforePosition - KNOWLEDGE_ORDER_GAP;
+      } else if (beforePosition - leftPosition > 1n) {
+        nextPosition = leftPosition + (beforePosition - leftPosition) / 2n;
+      }
+
+      let changes: readonly KnowledgePositionChange[];
+      if (nextPosition === null) {
+        changes = await rebalanceKnowledgeSiblings(
+          tx,
+          route,
+          notebookId,
+          input.destinationParentPlacementId,
+          moving,
+          input.destinationParentPlacementId,
+          input.beforePlacementId,
+          beforePosition,
+        );
+      } else {
+        changes = [
+          {
+            placementId,
+            documentId: moving.document_id,
+            oldParentId: moving.parent_id,
+            oldPosition: currentPosition,
+            parentId: input.destinationParentPlacementId,
+            position: nextPosition,
+            action: sameParent ? 'placement_reordered' : 'placement_moved',
+          },
+        ];
+      }
+      const moved = changes.find(({ placementId: changedId }) => changedId === placementId);
+      if (!moved) throw new Error('Knowledge move did not produce the selected placement change');
+
+      await saveKnowledgeStructureRevision(
+        tx,
+        route,
+        notebookId,
+        structureRevisionId,
+        nextRevisionNumber,
+        transactionId,
+        time,
+        moved.action,
+      );
+
+      const roots = new Map<string, { parentId: string | null; rootPageId: string | null }>();
+      const rootKey = (parentId: string | null) => parentId ?? '';
+      const ensureRoot = async (parentId: string | null) => {
+        const key = rootKey(parentId);
+        const existing = roots.get(key);
+        if (existing) return existing;
+        const rootPageId = await knowledgeStructureRoot(tx, route, notebookId, parentId, currentRevisionNumber);
+        const root = { parentId, rootPageId };
+        roots.set(key, root);
+        return root;
+      };
+      for (const change of changes) {
+        const root = await ensureRoot(change.oldParentId);
+        const removed = await removeKnowledgeOrderEntry(tx, route, notebookId, root.rootPageId, {
+          placementId: change.placementId,
+          position: change.oldPosition!,
+        });
+        if (!removed.removed) throw new Error('Knowledge move could not find its previous ordered placement');
+        root.rootPageId = removed.rootPageId;
+      }
+      for (const change of changes) {
+        const root = await ensureRoot(change.parentId);
+        root.rootPageId = await insertKnowledgeOrderEntry(tx, route, notebookId, root.rootPageId, {
+          placementId: change.placementId,
+          documentId: change.documentId,
+          parentId: change.parentId,
+          position: change.position,
+        });
+      }
+
+      for (const change of changes) {
+        await tx.query(
+          `UPDATE content.knowledge_placement SET parent_id=$4,position=$5
+           WHERE route=$1 AND notebook_id=$2 AND placement_id=$3`,
+          [route, notebookId, change.placementId, change.parentId, change.position.toString()],
+        );
+        await saveKnowledgeStructureChange(tx, route, notebookId, nextRevisionNumber, change);
+      }
+      if (!sameParent) {
+        await refreshKnowledgeSubtreeHeights(tx, route, notebookId, [sourceParentPath, destinationPath]);
+      }
+      for (const root of roots.values())
+        await saveKnowledgeStructureRoot(tx, route, notebookId, root.parentId, nextRevisionNumber, root.rootPageId);
+
+      await tx.query(
+        `UPDATE content.knowledge_notebook SET structure_revision_id=$3,structure_revision_number=$4
+         WHERE route=$1 AND notebook_id=$2`,
+        [route, notebookId, structureRevisionId, nextRevisionNumber.toString()],
+      );
+      return {
+        value: { notebookId, placementId, structureRevisionId },
+        events: [
+          {
+            type: STRUCTURE_CHANGED_EVENT,
+            subject: notebookId,
+            data: {
+              notebookId,
+              structureRevisionId,
+              revisionNumber: nextRevisionNumber.toString(),
+              action: moved.action,
+              placementId,
+            },
           },
         ],
       };

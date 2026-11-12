@@ -122,14 +122,14 @@ export async function knowledgeOwner(
 export async function knowledgeNotebookOwner(
   pool: Pool,
   notebookId: string,
-): Promise<Readonly<{ route: number; owner_account_id: string }> | null> {
+): Promise<Readonly<{ route: number; owner_account_id: string; subject_id: string }> | null> {
   const route = routeOf(notebookId);
   if (route === null) return null;
   return withReadTransaction(pool, async (client) => {
     const partition = await readPartition(client, partitionOf(route));
     if (!partition) return null;
-    const result = await client.query<{ owner_account_id: string }>(
-      `SELECT owner_account_id FROM content.knowledge_notebook WHERE route=$1 AND notebook_id=$2`,
+    const result = await client.query<{ owner_account_id: string; subject_id: string }>(
+      `SELECT owner_account_id,subject_id FROM content.knowledge_notebook WHERE route=$1 AND notebook_id=$2`,
       [route, notebookId],
     );
     const row = result.rows[0];
