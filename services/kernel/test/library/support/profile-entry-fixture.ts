@@ -54,11 +54,12 @@ import { stepIdentityEpochMapping } from '../../../src/semantic/identity-epoch-m
 import { subjectTarget } from '../../../src/semantic/subject.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
 import { testRouteKey, testTokens } from '../../support/test-kernel.ts';
+import { workerTestEnv } from '../../support/worker-env.ts';
 import {
   createProfileHistoricalNativeFixture,
   createProfileReceiptObservations,
 } from './profile-historical-native-fixture.ts';
-import { testReceiptKeys } from '../../support/receipt-keys.ts';
+import { testReceiptKeys, testReceiptKeysEnv } from '../../support/receipt-keys.ts';
 export type ProfileVertical = 'game' | 'recipe' | 'record' | 'unprofiled';
 export const entryTypes = { game: 'ex:Child', recipe: 'ex:Recipe', record: 'ex:Record', unprofiled: 'ex:Person' };
 export const entryStates = { game: 'playing', recipe: 'cooking', record: 'listening' };
@@ -161,10 +162,19 @@ export async function compileEntryRelease(
 
 export type NativeProfileFixture = Awaited<ReturnType<typeof createProfileEntryFixture>>;
 
-export function profileEntryWorkerEnvironment(routeKey: Uint8Array) {
+export function profileEntryWorkerEnvironment(
+  routeKey: Uint8Array,
+  environment: NodeJS.ProcessEnv = process.env,
+  receiptKeys = testReceiptKeys(),
+) {
+  const referenceKey = Buffer.alloc(32, 44).toString('base64url');
   return {
-    ...process.env,
-    KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
+    ...environment,
+    ...workerTestEnv({
+      KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
+      KERNEL_WORKFLOW_REFERENCE_KEYS: JSON.stringify({ current: 1, keys: { 1: referenceKey } }),
+      ...testReceiptKeysEnv(receiptKeys),
+    }),
   };
 }
 
@@ -177,13 +187,15 @@ export async function composeProfileEntryLibrary(options: { pool: Pool; clock?: 
   const { pool } = options;
   const tokens = testTokens();
   const routeKey = options.routeKey ?? testRouteKey();
+  const receiptKeys = testReceiptKeys();
   const clock = options.clock;
+  const workerEnv = profileEntryWorkerEnvironment(routeKey, process.env, receiptKeys);
   let access!: Access;
   const kernel = createKernel({
     pool,
     tokens,
     routeKey,
-    receiptKeys: testReceiptKeys(),
+    receiptKeys,
     ...(clock === undefined ? {} : { clock }),
     requestDeadlineMs: 30_000,
     access(config) {
@@ -200,7 +212,7 @@ export async function composeProfileEntryLibrary(options: { pool: Pool; clock?: 
   // Resolve Access through the full mounted action catalogue before worker registration.
   await kernel.handle(new Request('http://kernel.test/v1/definitions/active'));
   expect(access).toBeDefined();
-  return { access, kernel, tokens, routeKey, workerEnv: profileEntryWorkerEnvironment(routeKey) };
+  return { access, kernel, tokens, routeKey, workerEnv };
 }
 
 /** No server, remote driver, policy map or raw account/subject/grant inserts. */
