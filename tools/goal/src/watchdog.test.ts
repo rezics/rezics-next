@@ -11,6 +11,7 @@ import { readControlPolicy } from './policy.ts';
 import { processIdentity } from './process.ts';
 import { workerMigrations, WorkerStore } from './store.ts';
 import type { Attempt, RetryIntent, Task } from './types.ts';
+import { brief } from './test-support.ts';
 
 const now = Date.parse('2026-10-26T12:00:00.000Z');
 const minutesAgo = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
@@ -742,7 +743,7 @@ test('a retry waits for check hosts only when every performance-approved placeme
     options: { awaitCheckHosts: true },
     status: 'pending',
   };
-  const task = { brief: { after: [] } } as Task;
+  const task = { brief: { ...brief(), after: [] } };
   try {
     writeFileSync(join(root, 'remote-check-hosts.json'), JSON.stringify({ hosts }));
     writeFileSync(join(root, 'watchdog.json'), JSON.stringify({ hostProbeFailures: { b: 1, d: 1 } }));
